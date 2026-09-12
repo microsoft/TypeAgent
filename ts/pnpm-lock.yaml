@@ -2819,7 +2819,7 @@ importers:
     dependencies:
       '@milkdown/core':
         specifier: ^7.3.6
-        version: 7.13.1(supports-color@8.1.1)
+        version: 7.13.1
       '@milkdown/crepe':
         specifier: ^7.3.6
         version: 7.13.1(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(typescript@5.4.5)
@@ -12352,8 +12352,8 @@ packages:
   browser-stdout@1.3.1:
     resolution: {integrity: sha512-qhAVI1+Av2X7qelOfAIYwXONood6XlZE/fXaBSmW/T5SzLAmCgzi+eiWE7fUvbHaeNBQH13UftjpXxsfLkMpgw==}
 
-  browserslist@4.28.8:
-    resolution: {integrity: sha512-V2NpofLblG64mfOtSgDhOJESZEGogzDMBv/q+W6oc4LXWP/q75eOXoOaaOu1EOadB9U4Bwx/e0yzbvwKH8zalA==}
+  browserslist@4.28.9:
+    resolution: {integrity: sha512-EWazOblFYUvlGZcfGhPUPmYh3nikUxBVb+y9MJun5f3hBi812X+8MSQTujLBtgK3cf51fJWbWfOjyeO954d+Eg==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
@@ -18552,12 +18552,12 @@ packages:
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
-  undici@6.28.0:
-    resolution: {integrity: sha512-LIY910g9TI13YS95lrMFrs8Rm/u/irgHeTWoKCoteeJ04CUJ92eEfj0rVn+7VKMPBpUPiUoBKfhNyLI23EE/KA==}
+  undici@6.28.1:
+    resolution: {integrity: sha512-zWpdTVD54H48CIybL0rWQ3ukpb9d23wM7eH5RtfdmeP70cWHNjtfo7P4vZX+5CoDcO53J4Pu5uXp7lNfjc6DRA==}
     engines: {node: '>=18.17'}
 
-  undici@7.29.0:
-    resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
+  undici@7.29.1:
+    resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
     engines: {node: '>=20.18.1'}
 
   unicode-emoji-modifier-base@1.0.0:
@@ -19315,7 +19315,7 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.26.0(zod@4.1.13))(zod@4.1.13)':
     dependencies:
       '@anthropic-ai/sdk': 0.93.0(zod@4.1.13)
-      '@modelcontextprotocol/sdk': 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.1.13)
       zod: 4.1.13
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.162
@@ -20406,7 +20406,7 @@ snapshots:
     dependencies:
       '@babel/compat-data': 7.29.7
       '@babel/helper-validator-option': 7.29.7
-      browserslist: 4.28.8
+      browserslist: 4.28.9
       lru-cache: 5.1.1
       semver: 6.3.1
 
@@ -20941,7 +20941,7 @@ snapshots:
       ms: 2.1.3
       secure-json-parse: 4.1.0
       tslib: 2.8.1
-      undici: 7.29.0
+      undici: 7.29.1
     transitivePeerDependencies:
       - supports-color
 
@@ -20990,7 +20990,7 @@ snapshots:
       semver: 7.8.5
       sumchecker: 3.0.1(supports-color@8.1.1)
     optionalDependencies:
-      undici: 7.29.0
+      undici: 7.29.1
     transitivePeerDependencies:
       - supports-color
 
@@ -22823,7 +22823,7 @@ snapshots:
       '@codemirror/state': 6.5.2
       '@codemirror/view': 6.37.2
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/plugin-tooltip': 7.13.1
@@ -22846,13 +22846,13 @@ snapshots:
       - supports-color
       - typescript
 
-  '@milkdown/core@7.13.1(supports-color@8.1.1)':
+  '@milkdown/core@7.13.1':
     dependencies:
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/transformer': 7.13.1
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       tslib: 2.8.1
       unified: 11.0.5
@@ -22898,7 +22898,7 @@ snapshots:
   '@milkdown/kit@7.13.1(@codemirror/language@6.11.1)(@codemirror/state@6.5.2)(@codemirror/view@6.37.2)(typescript@5.4.5)':
     dependencies:
       '@milkdown/components': 7.13.1(@codemirror/language@6.11.1)(@codemirror/state@6.5.2)(@codemirror/view@6.37.2)(typescript@5.4.5)
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/plugin-block': 7.13.1
       '@milkdown/plugin-clipboard': 7.13.1
@@ -22926,7 +22926,7 @@ snapshots:
   '@milkdown/plugin-block@7.13.1':
     dependencies:
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -22939,7 +22939,7 @@ snapshots:
 
   '@milkdown/plugin-clipboard@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -22949,7 +22949,7 @@ snapshots:
 
   '@milkdown/plugin-collab@7.13.1(y-prosemirror@1.3.5(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27))(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27)':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -22963,7 +22963,7 @@ snapshots:
 
   '@milkdown/plugin-cursor@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -22973,7 +22973,7 @@ snapshots:
 
   '@milkdown/plugin-history@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -22983,7 +22983,7 @@ snapshots:
 
   '@milkdown/plugin-indent@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -22993,7 +22993,7 @@ snapshots:
 
   '@milkdown/plugin-listener@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23006,7 +23006,7 @@ snapshots:
   '@milkdown/plugin-slash@7.13.1':
     dependencies:
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23020,7 +23020,7 @@ snapshots:
   '@milkdown/plugin-tooltip@7.13.1':
     dependencies:
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23033,7 +23033,7 @@ snapshots:
 
   '@milkdown/plugin-trailing@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23043,7 +23043,7 @@ snapshots:
 
   '@milkdown/plugin-upload@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23054,7 +23054,7 @@ snapshots:
 
   '@milkdown/preset-commonmark@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23069,7 +23069,7 @@ snapshots:
 
   '@milkdown/preset-gfm@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/preset-commonmark': 7.13.1
@@ -23102,7 +23102,7 @@ snapshots:
 
   '@milkdown/theme-nord@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       clsx: 2.1.1
@@ -23115,7 +23115,7 @@ snapshots:
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
       remark: 15.0.1
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       tslib: 2.8.1
       unified: 11.0.5
@@ -23124,7 +23124,7 @@ snapshots:
 
   '@milkdown/utils@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23192,6 +23192,28 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@modelcontextprotocol/sdk@1.26.0(zod@4.1.13)':
+    dependencies:
+      '@hono/node-server': 1.19.17(hono@4.13.5)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.0
+      express: 5.2.1(supports-color@8.1.1)
+      express-rate-limit: 8.5.2(express@5.2.1)
+      hono: 4.13.5
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.1.13
+      zod-to-json-schema: 3.25.2(zod@4.1.13)
+    transitivePeerDependencies:
+      - supports-color
+
   '@modelcontextprotocol/sdk@1.26.0(zod@4.3.6)':
     dependencies:
       '@hono/node-server': 1.19.17(hono@4.13.5)
@@ -23238,7 +23260,7 @@ snapshots:
 
   '@modelcontextprotocol/server-filesystem@2026.1.14(zod@4.1.13)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.1.13)
       diff: 5.2.2
       glob: 10.5.0
       minimatch: 10.2.5
@@ -26591,13 +26613,13 @@ snapshots:
 
   browser-stdout@1.3.1: {}
 
-  browserslist@4.28.8:
+  browserslist@4.28.9:
     dependencies:
       baseline-browser-mapping: 2.11.21
       caniuse-lite: 1.0.30001810
       electron-to-chromium: 1.5.422
       node-releases: 2.0.54
-      update-browserslist-db: 1.3.2(browserslist@4.28.8)
+      update-browserslist-db: 1.3.2(browserslist@4.28.9)
 
   bs-logger@0.2.6:
     dependencies:
@@ -26809,7 +26831,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 7.29.0
+      undici: 7.29.1
       whatwg-mimetype: 4.0.0
 
   cheerio@1.2.0:
@@ -26823,7 +26845,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 7.29.0
+      undici: 7.29.1
       whatwg-mimetype: 4.0.0
 
   chokidar@3.6.0:
@@ -30973,7 +30995,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.1
-      undici: 7.29.0
+      undici: 7.29.1
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -31579,14 +31601,14 @@ snapshots:
       unist-util-is: 6.0.1
       unist-util-visit-parents: 6.0.2
 
-  mdast-util-from-markdown@2.0.2(supports-color@8.1.1):
+  mdast-util-from-markdown@2.0.2:
     dependencies:
       '@types/mdast': 4.0.4
       '@types/unist': 3.0.3
       decode-named-character-reference: 1.1.0
       devlop: 1.1.0
       mdast-util-to-string: 4.0.0
-      micromark: 4.0.2(supports-color@8.1.1)
+      micromark: 4.0.2
       micromark-util-decode-numeric-character-reference: 2.0.2
       micromark-util-decode-string: 2.0.1
       micromark-util-normalize-identifier: 2.0.1
@@ -31603,7 +31625,7 @@ snapshots:
       decode-named-character-reference: 1.3.0
       devlop: 1.1.0
       mdast-util-to-string: 4.0.0
-      micromark: 4.0.2(supports-color@8.1.1)
+      micromark: 4.0.2
       micromark-util-decode-numeric-character-reference: 2.0.2
       micromark-util-decode-string: 2.0.1
       micromark-util-normalize-identifier: 2.0.1
@@ -31953,7 +31975,7 @@ snapshots:
 
   micromark-util-types@2.0.2: {}
 
-  micromark@4.0.2(supports-color@8.1.1):
+  micromark@4.0.2:
     dependencies:
       '@types/debug': 4.1.12
       debug: 4.4.1(supports-color@8.1.1)
@@ -32267,7 +32289,7 @@ snapshots:
       semver: 7.7.4
       tar: 7.5.22
       tinyglobby: 0.2.17
-      undici: 6.28.0
+      undici: 6.28.1
       which: 6.0.1
 
   node-int64@0.4.0: {}
@@ -33540,7 +33562,7 @@ snapshots:
       '@types/mdast': 4.0.4
       mdast-util-gfm: 3.1.0
       micromark-extension-gfm: 3.0.0
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       unified: 11.0.5
     transitivePeerDependencies:
@@ -33561,10 +33583,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  remark-parse@11.0.0(supports-color@8.1.1):
+  remark-parse@11.0.0:
     dependencies:
       '@types/mdast': 4.0.4
-      mdast-util-from-markdown: 2.0.2(supports-color@8.1.1)
+      mdast-util-from-markdown: 2.0.2
       micromark-util-types: 2.0.2
       unified: 11.0.5
     transitivePeerDependencies:
@@ -33579,7 +33601,7 @@ snapshots:
   remark@15.0.1:
     dependencies:
       '@types/mdast': 4.0.4
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       unified: 11.0.5
     transitivePeerDependencies:
@@ -35261,9 +35283,9 @@ snapshots:
 
   undici-types@8.3.0: {}
 
-  undici@6.28.0: {}
+  undici@6.28.1: {}
 
-  undici@7.29.0: {}
+  undici@7.29.1: {}
 
   unicode-emoji-modifier-base@1.0.0: {}
 
@@ -35339,9 +35361,9 @@ snapshots:
 
   untildify@4.0.0: {}
 
-  update-browserslist-db@1.3.2(browserslist@4.28.8):
+  update-browserslist-db@1.3.2(browserslist@4.28.9):
     dependencies:
-      browserslist: 4.28.8
+      browserslist: 4.28.9
       escalade: 3.2.0
       picocolors: 1.1.1
 
@@ -35634,7 +35656,7 @@ snapshots:
       '@webassemblyjs/wasm-parser': 1.14.1
       acorn: 8.18.0
       acorn-import-phases: 1.0.4(acorn@8.18.0)
-      browserslist: 4.28.8
+      browserslist: 4.28.9
       chrome-trace-event: 1.0.4
       enhanced-resolve: 5.24.5
       es-module-lexer: 2.3.2
@@ -35675,7 +35697,7 @@ snapshots:
       '@webassemblyjs/wasm-parser': 1.14.1
       acorn: 8.18.0
       acorn-import-phases: 1.0.4(acorn@8.18.0)
-      browserslist: 4.28.8
+      browserslist: 4.28.9
       chrome-trace-event: 1.0.4
       enhanced-resolve: 5.24.5
       es-module-lexer: 2.3.2
