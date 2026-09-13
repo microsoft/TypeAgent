@@ -138,9 +138,10 @@ openAI:
 # ╚═══════════════════════════════════════════════════════════════════╝
 #
 # For machines WITHOUT AI Systems Key Vault access, TypeAgent can run entirely
-# against a local (Ollama) or Copilot-SDK chat backend. The install scripts and
-# MSI generate one of these config.local.yaml shapes automatically via
-# `typeagent-serve.mjs provision --provider ollama|copilot`
+# against a local (Ollama) or Copilot-SDK chat backend. The script installers
+# and provisioning CLI can generate either config.local.yaml shape via
+# `typeagent-serve.mjs provision --provider ollama|copilot`; the MSI exposes
+# Copilot only and selects local embeddings automatically
 # (tools/scripts/generate-selfhost-config.mjs). The blocks below are the
 # equivalent hand-written config; omit the `vault:` section in these modes.
 #

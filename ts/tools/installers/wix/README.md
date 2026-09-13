@@ -328,55 +328,49 @@ On uninstall the MSI removes the extension only when the installed version
 still matches the version originally installed by TypeAgent, so it does not
 delete an independently upgraded extension.
 
-## Endpoint provider selection (self-host)
+## Endpoint provider selection
 
 TypeAgent needs an LLM endpoint configuration (`config.local.yaml`) at runtime.
-By default it is downloaded from the AI Systems Key Vault, but machines without
-Key Vault access can instead run against a local **Ollama** server or the
-**Copilot** SDK.
+The MSI supports two completion providers:
 
-During an **interactive** install the MSI shows a provider-selection dialog
-(after the license page) with radio-button groups for the chat provider
-(AI Systems / Ollama / Copilot), the embedding provider (Local / Ollama / OpenAI
-/ None), and an Ollama host field. The same choices can be driven **silently**
-through public properties:
+- **AI Systems** downloads configuration from the AI Systems Key Vault.
+- **GitHub Copilot** uses the authenticated Copilot CLI for chat and
+  automatically configures TypeAgent's local embedding provider.
 
-| Property     | Values                              | Default                  | Notes                                                                           |
-| ------------ | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------- |
-| `PROVIDER`   | `AISYSTEMS`, `OLLAMA`, `COPILOT`    | `AISYSTEMS`              | `OLLAMA`/`COPILOT` generate `config.local.yaml` during install (no Key Vault).  |
-| `EMBEDDING`  | `LOCAL`, `OLLAMA`, `OPENAI`, `NONE` | `LOCAL`                  | Embedding source for the self-host providers. `LOCAL` = bundled CPU-only model. |
-| `OLLAMAHOST` | any URL                             | `http://localhost:11434` | Ollama base URL (used for `OLLAMA` chat and/or embeddings).                     |
+During an **interactive** install the provider-selection dialog appears after
+the license page. The same choice can be driven **silently** through the public
+`PROVIDER` property:
+
+| Property   | Values                 | Default     | Notes                                                                  |
+| ---------- | ---------------------- | ----------- | ---------------------------------------------------------------------- |
+| `PROVIDER` | `AISYSTEMS`, `COPILOT` | `AISYSTEMS` | `COPILOT` generates `config.local.yaml` with local embeddings enabled. |
 
 ```powershell
 # AI Systems (default) — provisions via az login + getKeys after install
 msiexec /i TypeAgent-<version>-win32-x64.msi
 
-# Local Ollama chat with the bundled local embedding model
-msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=OLLAMA
-
-# Copilot SDK chat (requires an authenticated `copilot` CLI) + local embeddings
+# Copilot chat (requires an authenticated `copilot` CLI) + local embeddings
 msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT
 
-# Fully silent
-msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=OLLAMA EMBEDDING=LOCAL
+# Fully silent Copilot install
+msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=COPILOT
 ```
 
 The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → **ProviderDlg** →
-VerifyReadyDlg. For `OLLAMA`/`COPILOT`, a deferred, impersonated custom action
-runs `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider [PROVIDER]
---embedding [EMBEDDING] --ollama-host [OLLAMAHOST] --force` as the installing
-user, writing `config.local.yaml` to `~/.typeagent`. For `AISYSTEMS`
-(the default), the MSI **attempts** provisioning during install via a deferred,
-impersonated (interactive) custom action `ProvisionAiSystemsConfig` that runs
-`node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in as
-the installing user). It is **non-fatal**: if sign-in is unavailable during the
-install, the final page (ExitDialog) reminds the user to run `provision`
-manually. Because the embedding config for `AISYSTEMS` comes from Key Vault, the
-embedding radio and Ollama host field are **disabled** in the dialog when
-`PROVIDER=AISYSTEMS` (they apply only to the self-host providers). Fine-grained
-overrides (chat model, embedding endpoint, API keys) are available on the
-`provision`/`generate-selfhost-config` CLI; re-run provisioning post-install to
-adjust them.
+VerifyReadyDlg. For `COPILOT`, a deferred, impersonated custom action runs
+`node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider COPILOT
+--embedding LOCAL --force` as the installing user, writing
+`config.local.yaml` to `~/.typeagent`. For `AISYSTEMS` (the default), the MSI
+**attempts** provisioning during install via a deferred, impersonated
+(interactive) custom action `ProvisionAiSystemsConfig` that runs
+`node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in
+as the installing user). It is **non-fatal**: if sign-in is unavailable during
+the install, the final page (ExitDialog) reminds the user to run `provision`
+manually.
+
+The MSI rejects `PROVIDER=OLLAMA` and the legacy `EMBEDDING` and `OLLAMAHOST`
+properties. Ollama and custom embedding configurations remain available through
+the script installers and the `provision`/`generate-selfhost-config` CLI.
 
 ## Agent-server prerequisites & lifecycle
 
