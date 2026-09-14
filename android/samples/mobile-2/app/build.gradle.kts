@@ -14,6 +14,14 @@ val tunnelTokenFromEnv = providers.environmentVariable("TYPEAGENT_TUNNEL_TOKEN")
     .orElse("")
     .get()
     .escapeForBuildConfig()
+val wearPromptAutoExecute = providers.gradleProperty("typeagent.wear.autoexecute")
+    .orElse("true")
+    .get()
+    .also { value ->
+        require(value == "true" || value == "false") {
+            "typeagent.wear.autoexecute must be true or false"
+        }
+    }
 
 android {
     namespace = "com.example.typeagentchat"
@@ -33,6 +41,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "TYPEAGENT_SERVER_URL", "\"$tunnelUrlFromEnv\"")
         buildConfigField("String", "TYPEAGENT_TUNNEL_TOKEN", "\"$tunnelTokenFromEnv\"")
+        buildConfigField("boolean", "WEAR_PROMPT_AUTOEXECUTE", wearPromptAutoExecute)
     }
 
     buildTypes {
@@ -69,6 +78,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.commonmark)
     implementation(libs.squareup.okhttp)

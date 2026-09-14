@@ -5,24 +5,19 @@ package com.microsoft.typeagent.wearos.presentation
 
 import android.Manifest
 import android.app.Activity
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaPlayer
-import android.speech.RecognizerIntent
-import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.compose.foundation.MutatorMutex
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.microsoft.typeagent.wearos.R
 import java.time.Duration
-import java.util.Locale
 import kotlin.coroutines.resume
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -34,10 +29,10 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  */
 class MainViewModel(
     val activity: MainActivity,
-    private val requestPermission: () -> Unit
+    private val requestPermission: () -> Unit,
+    private val requestSpeechRecognition: (overrideText: String) -> Unit,
+    private val remotePromptSender: RemotePromptSender
 ) {
-    private val REQUEST_CODE_SPEECH_INPUT = 1
-
     private val playbackStateMutatorMutex = MutatorMutex()
 
     var playbackState by mutableStateOf<PlaybackState>(PlaybackState.Ready)
@@ -53,12 +48,19 @@ class MainViewModel(
 
     var showSpeakerNotSupported by mutableStateOf(false)
 
+    var promptDeliveryStatus by mutableStateOf("")
+        private set
+
     private val soundRecorder = Recorder(activity, "audio.opus")
 
     suspend fun onStopped() {
         playbackStateMutatorMutex.mutate {
             playbackState = PlaybackState.Ready
         }
+    }
+
+    fun requestAudioPermission() {
+        requestPermission()
     }
 
     suspend fun onMicClicked() {
@@ -160,7 +162,6 @@ class MainViewModel(
     }
 
     suspend fun onSTTClicked(reason: String) {
-        activity.speechToTextOverride = reason
         playbackStateMutatorMutex.mutate {
             when (playbackState) {
                 is PlaybackState.Ready,
@@ -170,36 +171,23 @@ class MainViewModel(
                 PlaybackState.TakePicture,
                 PlaybackState.EmailPicture,
                 PlaybackState.SpeechToText -> {
-                    speechToText()
+                    requestSpeechRecognition(reason)
                 }
             }
         }
     }
-    private fun speechToText() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
 
-        intent.putExtra(
-            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-        )
-
-        intent.putExtra(
-            RecognizerIntent.EXTRA_LANGUAGE,
-            Locale.getDefault()
-        )
-
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Speech to text")
-
-        try {
-            ActivityCompat.startActivityForResult(
-                activity,
-                intent,
-                REQUEST_CODE_SPEECH_INPUT,
-                null
-            )
-        } catch (e: Exception) {
-            Log.e("viewModel", e.toString())
+    suspend fun onSpeechRecognized(text: String) {
+        promptDeliveryStatus = activity.getString(R.string.prompt_sending)
+        promptDeliveryStatus = when (remotePromptSender.send(text)) {
+            RemotePromptResult.Sent -> activity.getString(R.string.prompt_sent)
+            RemotePromptResult.PhoneUnreachable ->
+                activity.getString(R.string.phone_unavailable)
         }
+    }
+
+    fun onSpeechRecognitionUnavailable() {
+        promptDeliveryStatus = activity.getString(R.string.speech_recognition_unavailable)
     }
 }
 

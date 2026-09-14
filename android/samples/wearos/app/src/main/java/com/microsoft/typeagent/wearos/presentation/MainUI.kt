@@ -3,18 +3,9 @@
 
 package com.microsoft.typeagent.wearos.presentation
 
-import android.Manifest
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import androidx.activity.compose.ManagedActivityResultLauncher
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -28,29 +19,9 @@ import com.microsoft.typeagent.wearos.R
 import kotlinx.coroutines.launch
 
 @Composable
-fun MainUI() {
+fun MainUI(mainState: MainViewModel) {
     MaterialTheme {
-        lateinit var permissionsLauncher: ManagedActivityResultLauncher<String, Boolean>
-
-        val context = LocalContext.current
-        val activity = context.findActivity()
         val scope = rememberCoroutineScope()
-
-        val mainState = remember(activity) {
-            MainViewModel(
-                activity = activity as MainActivity,
-                requestPermission = {
-                    permissionsLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            )
-        }
-
-        permissionsLauncher = rememberLauncherForActivityResult(RequestPermission()) {
-            // We ignore the direct result here, since we're going to check anyway.
-            scope.launch {
-                //mainState.permissionResultReturned()
-            }
-        }
 
         val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -104,7 +75,7 @@ fun MainUI() {
                     mainState.onSTTClicked("e-mail Ted that I'm going to be late")
                 }
             },
-            (mainState.activity as MainActivity).speechToTextText
+            mainState.promptDeliveryStatus
         )
 
         if (mainState.showPermissionRationale) {
@@ -115,7 +86,7 @@ fun MainUI() {
                 positiveButton = {
                     Button(
                         onClick = {
-                            permissionsLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            mainState.requestAudioPermission()
                             mainState.showPermissionRationale = false
                         }
                     ) {
@@ -143,15 +114,3 @@ fun MainUI() {
         }
     }
 }
-
-/**
- * Find the closest Activity in a given Context.
- */
-private tailrec fun Context.findActivity(): Activity =
-    when (this) {
-        is Activity -> this
-        is ContextWrapper -> baseContext.findActivity()
-        else -> throw IllegalStateException(
-            "findActivity() should be called in the context of an Activity"
-        )
-    }

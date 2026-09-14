@@ -14,9 +14,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * A client action that the agent asked the app to perform and that can only be
@@ -150,6 +152,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     private val clientActionEvents = Channel<ClientAction>(Channel.UNLIMITED)
     internal val clientActions: Flow<ClientAction> = clientActionEvents.receiveAsFlow()
+    private val externalPromptEvents = Channel<ExternalPrompt>(Channel.UNLIMITED)
 
     private var hasConnected = false
 
@@ -303,6 +306,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         observeConversationForPersistence()
         observeConversationIdForPersistence()
+        viewModelScope.launch {
+            for (prompt in externalPromptEvents) {
+                deliverExternalPrompt(prompt)
+            }
+        }
     }
 
     /**
@@ -467,6 +475,47 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return sendText(merged)
     }
 
+    fun submitExternalPrompt(prompt: String, autoExecute: Boolean) {
+        val text = prompt.trim()
+        if (text.isEmpty()) {
+            return
+        }
+        if (!autoExecute) {
+            parkInInput(text)
+            return
+        }
+        if (externalPromptEvents.trySend(ExternalPrompt(text)).isFailure) {
+            Log.w(TAG, "Could not queue external prompt: the chat screen is gone")
+            parkInInput(text)
+        }
+    }
+
+    private suspend fun deliverExternalPrompt(prompt: ExternalPrompt) {
+        if (
+            !awaitExternalPromptConnection() ||
+            !webSocketManager.trySendExternalCommand(prompt.text)
+        ) {
+            parkInInput(prompt.text)
+        }
+    }
+
+    private suspend fun awaitExternalPromptConnection(): Boolean {
+        if (isConnected) {
+            return true
+        }
+        val settled = withTimeoutOrNull(EXTERNAL_PROMPT_CONNECT_TIMEOUT_MILLIS) {
+            connectionStatus.first {
+                it.state == ConnectionStatus.State.CONNECTED ||
+                    it.state == ConnectionStatus.State.ERROR
+            }
+        }
+        return settled?.state == ConnectionStatus.State.CONNECTED
+    }
+
+    private fun parkInInput(text: String) {
+        _inputText.value = mergeSpeechInputText(_inputText.value, text)
+    }
+
     fun respondToPendingYesNo(yes: Boolean): Boolean = webSocketManager.respondToPendingYesNo(yes)
 
     /**
@@ -515,6 +564,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         webSocketManager.setStaleConversationHandler(null)
         webSocketManager.disconnect()
         clientActionEvents.close()
+        externalPromptEvents.close()
         flushConversationToDisk()
         super.onCleared()
     }
@@ -546,6 +596,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         private const val TAG = "ChatViewModel"
+        private const val EXTERNAL_PROMPT_CONNECT_TIMEOUT_MILLIS = 15_000L
 
         /**
          * Long enough to collapse a burst of streamed display chunks into one
@@ -555,6 +606,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         private const val SAVE_DEBOUNCE_MS = 400L
     }
 }
+
+private data class ExternalPrompt(val text: String)
 
 internal fun mergeSpeechInputText(
     currentText: String,

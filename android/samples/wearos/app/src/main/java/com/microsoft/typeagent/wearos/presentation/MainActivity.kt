@@ -3,76 +3,94 @@
 
 package com.microsoft.typeagent.wearos.presentation
 
+import android.Manifest
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.wear.remote.interactions.RemoteActivityHelper
-import java.util.Objects
-import java.util.concurrent.Executors
+import com.microsoft.typeagent.wearos.R
+import java.util.Locale
+import kotlinx.coroutines.launch
 
-/**
- * MainActivty for this application.
- */
 class MainActivity : ComponentActivity() {
 
-    private val REQUEST_CODE_SPEECH_INPUT = 1
+    private var speechToTextOverride = ""
 
-    /**
-     * The speech to text result
-     */
-    var speechToTextText: String = ""
+    private val requestAudioPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
 
-    /**
-     * The speech to text override
-     */
-    var speechToTextOverride: String by mutableStateOf("")
+    private val recognizeSpeech = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) {
+            speechToTextOverride = ""
+            return@registerForActivityResult
+        }
+
+        val recognizedText = speechToTextOverride.ifBlank {
+            result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                .orEmpty()
+        }
+        speechToTextOverride = ""
+        if (recognizedText.isBlank()) {
+            return@registerForActivityResult
+        }
+
+        lifecycleScope.launch {
+            mainState.onSpeechRecognized(recognizedText)
+        }
+    }
+
+    private lateinit var mainState: MainViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            MainUI()
-        }
-    }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        if (requestCode == REQUEST_CODE_SPEECH_INPUT) {
-            if (resultCode == RESULT_OK && data != null) {
-
-                val res: ArrayList<String> =
-                    data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS) as ArrayList<String>
-
-                // Do we use a baked in shortcut/text or the one that was recognized?
-                if (speechToTextOverride.isNotBlank()) {
-                    this.speechToTextText = this.speechToTextOverride
-                } else {
-                    this.speechToTextText = Objects.requireNonNull(res)[0]
+        val remoteActivityHelper = RemoteActivityHelper(
+            this,
+            ContextCompat.getMainExecutor(this)
+        )
+        mainState = MainViewModel(
+            activity = this,
+            requestPermission = {
+                requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+            },
+            requestSpeechRecognition = { overrideText ->
+                speechToTextOverride = overrideText
+                try {
+                    recognizeSpeech.launch(
+                        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(
+                                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                            )
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                            putExtra(
+                                RecognizerIntent.EXTRA_PROMPT,
+                                getString(R.string.speech_to_text_prompt)
+                            )
+                        }
+                    )
+                } catch (_: ActivityNotFoundException) {
+                    speechToTextOverride = ""
+                    mainState.onSpeechRecognitionUnavailable()
                 }
-
-                remoteLaunch()
-            }
-        }
-    }
-
-    private fun remoteLaunch() {
-
-        val remoteActivityHelper = RemoteActivityHelper(this, Executors.newSingleThreadExecutor())
-
-        val result = remoteActivityHelper.startRemoteActivity(
-            Intent(Intent.ACTION_VIEW)
-                .setData(Uri.parse("typeagent://main?execute=true&prompt=${this.speechToTextText}"))
-                .putExtra("prompt", this.speechToTextText)
-                .addCategory(Intent.CATEGORY_BROWSABLE),
-            null
+            },
+            remotePromptSender = RemotePromptSender(remoteActivityHelper)
         )
 
-        println("wearsample $result")
+        setContent {
+            MainUI(mainState)
+        }
     }
 }
