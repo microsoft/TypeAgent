@@ -15,7 +15,7 @@ val tunnelTokenFromEnv = providers.environmentVariable("TYPEAGENT_TUNNEL_TOKEN")
     .get()
     .escapeForBuildConfig()
 val wearPromptAutoExecute = providers.gradleProperty("typeagent.wear.autoexecute")
-    .orElse("true")
+    .orElse("false")
     .get()
     .also { value ->
         require(value == "true" || value == "false") {

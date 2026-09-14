@@ -153,6 +153,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val clientActionEvents = Channel<ClientAction>(Channel.UNLIMITED)
     internal val clientActions: Flow<ClientAction> = clientActionEvents.receiveAsFlow()
     private val externalPromptEvents = Channel<ExternalPrompt>(Channel.UNLIMITED)
+    private val externalPromptDrafts = ExternalPromptDrafts()
 
     private var hasConnected = false
 
@@ -444,7 +445,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onInputTextChange(text: String) {
-        _inputText.value = text
+        _inputText.value = if (text.isBlank()) {
+            externalPromptDrafts.currentRemoved("")
+        } else {
+            text
+        }
     }
 
     private val isConnected: Boolean
@@ -455,7 +460,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** @return true when the message was handed to the socket and the input was cleared. */
     fun submitMessage(): Boolean {
-        return sendText(_inputText.value)
+        return submitComposerText(_inputText.value)
     }
 
     /**
@@ -472,7 +477,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _inputText.value = merged
             return false
         }
-        return sendText(merged)
+        return submitComposerText(merged)
     }
 
     fun submitExternalPrompt(prompt: String, autoExecute: Boolean) {
@@ -513,7 +518,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun parkInInput(text: String) {
-        _inputText.value = mergeSpeechInputText(_inputText.value, text)
+        _inputText.value = externalPromptDrafts.park(_inputText.value, text)
     }
 
     fun respondToPendingYesNo(yes: Boolean): Boolean = webSocketManager.respondToPendingYesNo(yes)
@@ -549,13 +554,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun sendText(text: String): Boolean {
+    private fun submitComposerText(text: String): Boolean {
         val message = text.trim()
         if (!isConnected || message.isBlank()) {
             return false
         }
-        webSocketManager.sendMessage(message)
-        _inputText.value = ""
+        if (externalPromptDrafts.isShowingExternalPrompt) {
+            if (!webSocketManager.trySendExternalCommand(message)) {
+                return false
+            }
+        } else {
+            webSocketManager.sendMessage(message)
+        }
+        _inputText.value = externalPromptDrafts.currentRemoved("")
         return true
     }
 
@@ -608,6 +619,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 }
 
 private data class ExternalPrompt(val text: String)
+
+internal class ExternalPromptDrafts {
+    private val queuedPrompts = ArrayDeque<String>()
+
+    var isShowingExternalPrompt = false
+        private set
+
+    fun park(currentText: String, prompt: String): String {
+        queuedPrompts.addLast(prompt)
+        return showNextIfAvailable(currentText)
+    }
+
+    fun currentRemoved(currentText: String): String {
+        isShowingExternalPrompt = false
+        return showNextIfAvailable(currentText)
+    }
+
+    private fun showNextIfAvailable(currentText: String): String {
+        if (isShowingExternalPrompt || currentText.isNotBlank()) {
+            return currentText
+        }
+        val nextPrompt = queuedPrompts.removeFirstOrNull() ?: return currentText
+        isShowingExternalPrompt = true
+        return nextPrompt
+    }
+}
 
 internal fun mergeSpeechInputText(
     currentText: String,

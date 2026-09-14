@@ -15,8 +15,8 @@ the TypeAgent connection; the watch is a thin input peripheral.
 The watch displays whether Android accepted the remote launch. TypeAgent's
 response is shown on the phone; this POC has no response path back to the watch.
 
-The phone accepts `typeagentchat://main` links and auto-executes them by default
-for controlled POC testing. `RemoteActivityHelper` requires a browsable link,
-which is not an authentication boundary. For production, use the Wear Data
-Layer or disable phone-side auto-execution with
-`-Ptypeagent.wear.autoexecute=false`.
+The phone accepts `typeagentchat://main` links and places them in the composer
+for an explicit Send tap by default. `RemoteActivityHelper` requires a browsable
+link, which is not an authentication boundary. Automatic execution can be
+enabled with `-Ptypeagent.wear.autoexecute=true` only for controlled POC testing.
+For production, use the Wear Data Layer.

@@ -180,9 +180,14 @@ class MainViewModel(
     suspend fun onSpeechRecognized(text: String) {
         promptDeliveryStatus = activity.getString(R.string.prompt_sending)
         promptDeliveryStatus = when (remotePromptSender.send(text)) {
-            RemotePromptResult.Sent -> activity.getString(R.string.prompt_sent)
+            RemotePromptResult.HandedToPhone ->
+                activity.getString(R.string.prompt_handed_to_phone)
             RemotePromptResult.PhoneUnreachable ->
                 activity.getString(R.string.phone_unavailable)
+            RemotePromptResult.PromptTooLong ->
+                activity.getString(R.string.prompt_too_long)
+            RemotePromptResult.Failed ->
+                activity.getString(R.string.prompt_send_failed)
         }
     }
 

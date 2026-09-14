@@ -4,6 +4,7 @@ const val WEAR_LINK_SCHEME = "typeagentchat"
 const val WEAR_LINK_HOST = "main"
 const val WEAR_PROMPT_PARAM = "prompt"
 const val WEAR_EXECUTE_PARAM = "execute"
+// Keep this limit and link contract in sync with wearos/RemotePromptSender.kt.
 const val WEAR_PROMPT_MAX_LENGTH = 1_000
 
 data class WearLinkFields(

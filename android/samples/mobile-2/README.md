@@ -32,11 +32,11 @@ This is intentionally a fire-and-forget POC. The watch reports whether Android
 handed the prompt to the paired phone, but TypeAgent responses remain in the
 phone chat.
 
-Automatic execution is enabled by default for the POC. To make external prompts
-fill the composer and wait for an explicit Send tap instead, build with:
+External prompts fill the composer and wait for an explicit Send tap by default.
+To enable automatic execution for controlled POC testing, build with:
 
 ```powershell
-.\gradlew.bat -Ptypeagent.wear.autoexecute=false assembleDebug
+.\gradlew.bat -Ptypeagent.wear.autoexecute=true assembleDebug
 ```
 
 The deep link is `BROWSABLE`, as required by `RemoteActivityHelper`, and can
@@ -198,7 +198,7 @@ The app connects automatically on launch. Tap **Retry** in the status bar if the
 
 - **Token storage**: `TYPEAGENT_TUNNEL_TOKEN` is compiled into `BuildConfig`. Do not distribute APKs built with a sensitive or long-lived token.
 - **Token transmission**: The token is sent only as an HTTP upgrade header and is never logged.
-- **Wear prompt transport**: The POC deep link is externally reachable. Disable automatic execution with `-Ptypeagent.wear.autoexecute=false` outside controlled testing.
+- **Wear prompt transport**: The POC deep link is externally reachable. Only enable automatic execution with `-Ptypeagent.wear.autoexecute=true` on controlled test devices.
 
 [devtunnel]: https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/
 [devtunnel-cli]: https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/get-started
