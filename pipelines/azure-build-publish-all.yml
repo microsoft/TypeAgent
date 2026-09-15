@@ -972,6 +972,17 @@ stages:
             artifact: vscode-shell
             displayName: "Download vscode-shell"
 
+          - pwsh: |
+              $agentDir = "$(Pipeline.Workspace)/agent-server-win32-x64"
+              node "$agentDir/tools/copilotRuntime.mjs" verify-feed --non-interactive
+              if ($LASTEXITCODE -ne 0) {
+                Write-Error "The exact Copilot runtime packages are unavailable through the TypeAgent npm feed."
+                exit $LASTEXITCODE
+              }
+            displayName: "Verify Copilot runtime packages in TypeAgent feed"
+            env:
+              TYPEAGENT_FEED_TOKEN: $(System.AccessToken)
+
           # Set up internal npm registry (required by org policy).
           - bash: |
               echo "registry=$INSTALL_REGISTRY" > .npmrc

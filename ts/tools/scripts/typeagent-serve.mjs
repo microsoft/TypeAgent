@@ -19,6 +19,8 @@
  * Usage (from the artifact root):
  *   node typeagent-serve.mjs [start]   # ensure the daemon is up (default)
  *   node typeagent-serve.mjs provision # run getKeys to write config.local.yaml
+ *   node typeagent-serve.mjs setup --provider copilot
+ *                                      # install and authenticate Copilot
  *   node typeagent-serve.mjs status    # report whether the daemon is listening
  *   node typeagent-serve.mjs stop       # stop the daemon (best effort)
  *   node typeagent-serve.mjs autostart [enable|disable|status]  # register a
@@ -48,6 +50,11 @@ const generateConfigEntry = path.join(
     artifactDir,
     "tools",
     "generate-selfhost-config.mjs",
+);
+const copilotRuntimeEntry = path.join(
+    artifactDir,
+    "tools",
+    "copilotRuntime.mjs",
 );
 
 // Profile recorded by deployAgentServer when the artifact was profile-pruned.
@@ -123,6 +130,30 @@ function runInline(entry, extraArgs) {
         });
         child.on("exit", (code) => resolve(code ?? 0));
     });
+}
+
+function configureManagedCopilotRuntime() {
+    if (
+        process.env.TYPEAGENT_COPILOT_CLI_PATH ||
+        process.env.COPILOT_CLI_PATH ||
+        !fs.existsSync(copilotRuntimeEntry)
+    ) {
+        return;
+    }
+    const result = spawnSync(process.execPath, [copilotRuntimeEntry, "path"], {
+        encoding: "utf8",
+        env: process.env,
+        windowsHide: true,
+    });
+    if (result.status === 0) {
+        const executable = result.stdout
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .find(Boolean);
+        if (executable) {
+            process.env.TYPEAGENT_COPILOT_CLI_PATH = executable;
+        }
+    }
 }
 
 function daemonLogPath() {
@@ -250,6 +281,30 @@ async function cmdStart() {
             logHint,
     );
     return 1;
+}
+
+async function cmdSetup() {
+    const provider = (arg("--provider") ?? "").toLowerCase();
+    if (provider !== "copilot") {
+        console.error("Setup currently supports only '--provider copilot'.");
+        return 1;
+    }
+    if (!fs.existsSync(copilotRuntimeEntry)) {
+        console.error(
+            `Copilot runtime setup tool not found at ${copilotRuntimeEntry}.`,
+        );
+        return 1;
+    }
+    const passthrough = [];
+    const rest = process.argv.slice(3);
+    for (let i = 0; i < rest.length; i++) {
+        if (rest[i] === "--provider") {
+            i++;
+            continue;
+        }
+        passthrough.push(rest[i]);
+    }
+    return runInline(copilotRuntimeEntry, ["setup", ...passthrough]);
 }
 
 async function cmdProvision() {
@@ -875,7 +930,10 @@ async function main() {
             : "start";
     switch (cmd) {
         case "start":
+            configureManagedCopilotRuntime();
             return cmdStart();
+        case "setup":
+            return cmdSetup();
         case "provision":
         case "getkeys":
             return cmdProvision();

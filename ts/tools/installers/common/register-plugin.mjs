@@ -6,6 +6,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const scriptPath = fileURLToPath(import.meta.url);
 
 function parseArgs(argv) {
     const opts = {
@@ -111,6 +114,12 @@ function findListedEntry(output, identifier) {
 
 function hasListedEntry(output, identifier) {
     return findListedEntry(output, identifier) !== undefined;
+}
+
+export function listedEntryState(output, identifier) {
+    const entry = findListedEntry(output, identifier);
+    if (!entry) return "absent";
+    return /\(disabled\)/i.test(entry) ? "disabled" : "enabled";
 }
 
 function quoteCmdArgument(value) {
@@ -501,7 +510,11 @@ function installPlugin(opts, logger) {
         logger,
     );
     const pluginIdentifier = `${opts.pluginName}@${opts.marketplaceName}`;
-    if (hasListedEntry(pluginListResult.output, pluginIdentifier)) {
+    const pluginState = listedEntryState(
+        pluginListResult.output,
+        pluginIdentifier,
+    );
+    if (pluginState === "enabled") {
         const update = runCopilot(
             opts.copilotPath,
             ["plugin", "update", pluginIdentifier],
@@ -521,6 +534,11 @@ function installPlugin(opts, logger) {
             retryUpdateFromCleanSnapshot(opts, logger, pluginIdentifier);
         }
     } else {
+        if (pluginState === "disabled") {
+            logger.write(
+                `Plugin '${pluginIdentifier}' is available but disabled; installing it to enable the plugin.`,
+            );
+        }
         runCopilot(
             opts.copilotPath,
             ["plugin", "install", pluginIdentifier],
@@ -533,9 +551,13 @@ function installPlugin(opts, logger) {
         ["plugin", "list"],
         logger,
     );
-    if (!hasListedEntry(verifyListResult.output, pluginIdentifier)) {
+    const verifiedState = listedEntryState(
+        verifyListResult.output,
+        pluginIdentifier,
+    );
+    if (verifiedState !== "enabled") {
         throw new Error(
-            `Plugin verification failed: '${pluginIdentifier}' not found in copilot plugin list.`,
+            `Plugin verification failed: '${pluginIdentifier}' is ${verifiedState}.`,
         );
     }
 
@@ -580,10 +602,12 @@ function main() {
     process.exit(0);
 }
 
-try {
-    main();
-} catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[TypeAgent] Registration failed: ${message}`);
-    process.exit(1);
+if (path.resolve(process.argv[1] ?? "") === scriptPath) {
+    try {
+        main();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[TypeAgent] Registration failed: ${message}`);
+        process.exit(1);
+    }
 }
