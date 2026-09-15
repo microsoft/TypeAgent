@@ -186,6 +186,7 @@
       <ComponentRef Id="InstallVsCodeChatPs1Component" />
       <ComponentRef Id="ExtractPayloadPs1Component" />
       <ComponentRef Id="InstallPrereqsPs1Component" />
+      <ComponentRef Id="LaunchCopilotSetupPs1Component" />
       <ComponentRef Id="ResolveNodePs1Component" />
       <ComponentRef Id="RunServePs1Component" />
       <ComponentRef Id="InstallShellPs1Component" />
@@ -263,6 +264,10 @@
       <Component Id="InstallPrereqsPs1Component" Guid="*">
         <File Id="InstallPrereqsPs1" Name="install-prereqs.ps1"
               Source="$(var.InstallerSourceDir)\install-prereqs.ps1" />
+      </Component>
+      <Component Id="LaunchCopilotSetupPs1Component" Guid="*">
+        <File Id="LaunchCopilotSetupPs1" Name="launch-copilot-setup.ps1"
+              Source="$(var.InstallerSourceDir)\launch-copilot-setup.ps1" />
       </Component>
       <Component Id="ResolveNodePs1Component" Guid="*">
         <File Id="ResolveNodePs1" Name="resolve-node.ps1"
@@ -449,22 +454,31 @@
                   Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
-         Custom action — external-CLI + Node prerequisites
-         The MSI ships the 'external' agent-server variant, which resolves the
-         claude/copilot CLIs from PATH. Install them per-user (npm i -g) and warn
-         on a missing/old Node. Impersonated (writes the user's npm prefix) and
-         non-fatal (Return="ignore") — a prerequisite hiccup must not roll back
-         the agent-server install; issues surface as warnings + the ExitDialog.
+         Custom action — external-runtime + Node prerequisites
+         Claude is installed from the authenticated TypeAgent feed when it is
+         absent. For the Copilot provider, the exact SDK-compatible runtime is
+         installed into TypeAgent's per-user cache. Impersonated and non-fatal
+         (Return="ignore") so a prerequisite hiccup never rolls back the MSI.
          ═══════════════════════════════════════════════ -->
     <SetProperty Id="InstallPrereqs"
            Before="InstallPrereqs"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-prereqs.ps1&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-prereqs.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-prereqs.ps1&quot; -Provider &quot;[PROVIDER]&quot; -AgentServerDir &quot;[INSTALLFOLDER].&quot; -PluginInstallDir &quot;[TYPEAGENTROOT].&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-prereqs.log&quot;" />
 
     <CustomAction Id="InstallPrereqs"
                   BinaryKey="WixCA"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <!-- Launch the interactive Copilot bootstrap only after the MSI transaction
+         commits. Quiet/basic-UI installs remain non-interactive and can run the
+         same setup command later. -->
+    <CustomAction Id="LaunchCopilotSetup"
+                  Directory="TYPEAGENTROOT"
+                  ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]launch-copilot-setup.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\copilot-setup-launch.log&quot;"
+                  Execute="immediate"
                   Return="ignore"
                   Impersonate="yes" />
 
@@ -679,8 +693,8 @@
       <Custom Action="MainProgress5"            After="InstallVsCodeShell">NOT REMOVE~="ALL"</Custom>
       <Custom Action="ProvisionCopilotConfig" After="MainProgress5">(NOT REMOVE~="ALL") AND (PROVIDER="COPILOT")</Custom>
       <Custom Action="ProvisionAiSystemsConfig" After="ProvisionCopilotConfig">(NOT REMOVE~="ALL") AND (PROVIDER="AISYSTEMS")</Custom>
-      <!-- Prereqs (claude/copilot from the feed) run AFTER provisioning so the
-           AISYSTEMS az login has established a session the feed token reuses. -->
+      <!-- Runtime prerequisites run after provisioning so an existing Azure
+           session can be reused for authenticated TypeAgent feed access. -->
       <Custom Action="MainProgress6"           After="ProvisionAiSystemsConfig">NOT REMOVE~="ALL"</Custom>
       <Custom Action="InstallPrereqs"          After="MainProgress6">NOT REMOVE~="ALL"</Custom>
       <Custom Action="MainProgress7"           After="InstallPrereqs">NOT REMOVE~="ALL"</Custom>
@@ -695,6 +709,7 @@
       <Custom Action="InstallTypeAgentShell"   After="ShellProgress2">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
       <Custom Action="ShellProgress3"          After="InstallTypeAgentShell">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
       <Custom Action="VerifyTypeAgentShell"    After="ShellProgress3">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
+      <Custom Action="LaunchCopilotSetup"      After="InstallFinalize">(NOT Installed) AND (PROVIDER="COPILOT") AND (UILevel &gt;= 4)</Custom>
       <Custom Action="DisableAutostart"        Before="UninstallVsCodeShell">REMOVE~="ALL"</Custom>
       <Custom Action="UninstallVsCodeShell"    Before="UninstallVsCodeChat">REMOVE~="ALL"</Custom>
       <Custom Action="UninstallVsCodeChat"     Before="UnregisterCopilotPlugin">REMOVE~="ALL"</Custom>
