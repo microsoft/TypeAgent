@@ -287,7 +287,42 @@ class WebSocketManager internal constructor(
             return
         }
 
-        sendInvoke(
+        submitCommand(message, currentConversationId)
+    }
+
+    /**
+     * Sends a new command from an external input without allowing it to answer
+     * an interaction that is waiting for the phone user.
+     *
+     * The decision and socket handoff share the same lock used by inbound
+     * interaction updates. The caller retains the prompt when this returns false.
+     */
+    fun trySendExternalCommand(text: String): Boolean {
+        val message = text.trim()
+        if (message.isEmpty()) {
+            return false
+        }
+
+        synchronized(lock) {
+            val currentConversationId = conversationId
+            if (
+                webSocket == null ||
+                currentConversationId.isNullOrBlank() ||
+                pendingUserInteraction != null
+            ) {
+                return false
+            }
+
+            if (!submitCommand(message, currentConversationId)) {
+                return false
+            }
+            appendUserMessage(message)
+            return true
+        }
+    }
+
+    private fun submitCommand(message: String, currentConversationId: String): Boolean {
+        return sendInvoke(
             channelName = dispatcherChannelName(currentConversationId),
             methodName = "submitCommand",
             args = listOf(message),
@@ -1175,11 +1210,11 @@ class WebSocketManager internal constructor(
         args: List<Any?>,
         onResult: (Any?) -> Unit,
         onError: (String) -> Unit
-    ) {
+    ): Boolean {
         val socket = webSocket
         if (socket == null) {
             onError("WebSocket is not connected.")
-            return
+            return false
         }
 
         val callId = nextCallId.getAndIncrement()
@@ -1208,7 +1243,9 @@ class WebSocketManager internal constructor(
                 pendingInvokes.remove(callId)
             }
             onError("Failed to send RPC invoke for $methodName.")
+            return false
         }
+        return true
     }
 
     private fun sendRpcResult(channelName: String, callId: Int, result: Any?) {
