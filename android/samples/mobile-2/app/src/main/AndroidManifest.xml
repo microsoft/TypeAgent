@@ -139,12 +139,29 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.TypeAgentChat"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!--
+              POC entry point for the paired Wear OS sample. BROWSABLE is required
+              by RemoteActivityHelper, so other apps can invoke it too. Automatic
+              execution is therefore controlled by a build flag and must not be
+              treated as a trusted production transport.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="main"
+                    android:scheme="typeagentchat" />
             </intent-filter>
         </activity>
     </application>

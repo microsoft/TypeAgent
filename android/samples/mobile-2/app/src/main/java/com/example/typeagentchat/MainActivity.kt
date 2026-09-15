@@ -105,6 +105,9 @@ class MainActivity : ComponentActivity() {
             tunnelToken = tunnelToken,
             schemaContent = agentSchemaContent
         )
+        if (savedInstanceState == null) {
+            handleExternalPrompt(intent)
+        }
 
         // Collected for the Activity's whole lifetime rather than only while
         // RESUMED. An agent-driven action has an `executeAction` RPC waiting on
@@ -167,6 +170,37 @@ class MainActivity : ComponentActivity() {
                     tunnelToken = tunnelToken,
                     schemaContent = agentSchemaContent
                 )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleExternalPrompt(intent)
+    }
+
+    private fun handleExternalPrompt(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) {
+            return
+        }
+
+        when (val result = parseWearPrompt(intent.toWearLinkFields())) {
+            is WearPromptResult.Accepted -> {
+                val autoExecute =
+                    BuildConfig.WEAR_PROMPT_AUTOEXECUTE && result.prompt.requestsExecute
+                Log.d(
+                    TAG,
+                    "External prompt accepted length=${result.prompt.text.length} " +
+                        "autoExecute=$autoExecute"
+                )
+                viewModel.submitExternalPrompt(result.prompt.text, autoExecute)
+            }
+
+            is WearPromptResult.Rejected -> {
+                if (result.reason != WearPromptRejection.NOT_A_PROMPT_LINK) {
+                    Log.w(TAG, "External prompt rejected: ${result.reason}")
+                }
             }
         }
     }
