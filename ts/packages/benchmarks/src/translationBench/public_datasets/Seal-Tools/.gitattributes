@@ -1,0 +1,2 @@
+# The processed dataset can be large; track it with Git LFS.
+seal-tools-validation.jsonl filter=lfs diff=lfs merge=lfs -text

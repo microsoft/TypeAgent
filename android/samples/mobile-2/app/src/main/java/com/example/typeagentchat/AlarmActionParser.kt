@@ -60,7 +60,6 @@ internal fun parseSetAlarmActionPayload(data: Any?): SetAlarmAction? {
         days = days
     )
 }
-
 /**
  * Reads the optional `days` array.
  *
@@ -102,4 +101,3 @@ internal fun formatAlarmDays(days: List<Int>): String {
         .filter { it in days }
         .joinToString(", ") { labels.getValue(it) }
 }
-

@@ -14,7 +14,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./translationBench": "./dist/translationBench/index.js",
-    "./internal": "./dist/index.js"
+    "./internal": "./dist/index.js",
+    "./translationBench/runner": "./dist/translationBench/runner/index.js"
   },
   "files": [
     "dist",
@@ -24,18 +25,28 @@
     "build": "tsc -b && node ./scripts/copyAssets.mjs",
     "clean": "node ./scripts/clean.mjs",
     "download-seal-tools": "pnpm run build && node dist/translationBench/public_datasets/Seal-Tools/getDataset.js seal-tools-validation.jsonl",
-    "gen-action-parameters-grader": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
-    "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
+    "droidcall-eval": "node ./dist/translationBench/public_datasets/DroidCall/eval/runEval.js",
+    "droidcall-eval-smoke": "node ./dist/translationBench/public_datasets/DroidCall/eval/test-run.js",
+    "droidcall-rescore": "node ./dist/translationBench/public_datasets/DroidCall/eval/rescoreResults.js",
+    "gen-action-parameters-grader": "pnpm run gen-policy",
+    "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genPolicy.js && node --max-old-space-size=4096 dist/translationBench/scripts/pickEligibleActions.js --model ${TB_PICKER_MODEL:-azure/gpt-5.6-sol} && node ./scripts/copyAssets.mjs",
+    "gen-policy": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genPolicy.js && node ./scripts/copyAssets.mjs",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "merge-checkpoints": "pnpm run build && node dist/translationBench/scripts/mergeCheckpoints.js",
+    "pick-eligible-actions": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/pickEligibleActions.js --model ${TB_PICKER_MODEL:-azure/gpt-5.6-sol} && node ./scripts/copyAssets.mjs",
     "prettier": "prettier --check package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
+    "seal-eval": "node ./dist/translationBench/public_datasets/Seal-Tools/eval/runEval.js",
+    "seal-eval-smoke": "node ./dist/translationBench/public_datasets/Seal-Tools/eval/test-run.js",
+    "tb-eval": "node ./dist/translationBench/scripts/tbEval.js",
+    "tb-generate": "node ./dist/translationBench/scripts/tbGenerate.js",
     "test": "npm run test:local",
     "test:local": "pnpm run build && pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/agent-cache": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "agent-dispatcher": "workspace:*",
