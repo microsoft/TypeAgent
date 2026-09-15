@@ -10,8 +10,8 @@
  * Safe ONLY when:
  *   (1) every runtime `query()` caller passes pathToClaudeCodeExecutable (we wire
  *       them via claudeExecutableOption()), AND
- *   (2) `claude` and `copilot` are guaranteed on PATH in the target environment
- *       (managed machines; the standalone installer provisions them).
+ *   (2) `claude` is available on PATH and Copilot is resolved from TypeAgent's
+ *       managed runtime cache or an explicit compatible path.
  * Otherwise the SDKs lose their bundled binary with no fallback. This is why it
  * is opt-in (deployAgentServer --external-cli), never the default artifact.
  *
@@ -111,7 +111,7 @@ function main() {
     }
     console.log(
         `${args.dryRun ? "Would free" : "Freed"} ${fmt(freed)} across ${removed.length} bundled-runtime package(s). ` +
-            `(claude/copilot must be on PATH in the target environment.)`,
+            `(external Claude and managed Copilot runtimes are required.)`,
     );
 }
 

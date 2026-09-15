@@ -160,6 +160,12 @@ export interface CopilotClientOptions {
 }
 
 function findCopilotPath(): string {
+    const configuredPath =
+        process.env.TYPEAGENT_COPILOT_CLI_PATH ?? process.env.COPILOT_CLI_PATH;
+    if (configuredPath) {
+        debug(`Using configured copilot CLI: ${configuredPath}`);
+        return configuredPath;
+    }
     try {
         const isWindows = process.platform === "win32";
         const command = isWindows ? "where copilot" : "which copilot";
@@ -207,7 +213,7 @@ async function getClient(
                 `Failed to start GitHub Copilot CLI client (${target}). ` +
                     (cliUrl
                         ? `Ensure a Copilot CLI server is running and reachable at '${cliUrl}'.\n`
-                        : `Ensure 'copilot' is installed and authenticated (try 'copilot auth login').\n`) +
+                        : `Run 'node typeagent-serve.mjs setup --provider copilot', or install and authenticate a compatible 'copilot' CLI.\n`) +
                     `Underlying error: ${err instanceof Error ? err.message : String(err)}`,
             );
         }

@@ -13,10 +13,11 @@
     3. Azure CLI (Microsoft.AzureCLI via winget when missing)
     4. Azure DevOps az extension
     5. Optional: az login
-    6. For Variant=external: claude + copilot CLIs via npm -g
-    7. Optional: devtunnel CLI when -DevTunnel is specified
+    6. Optional: devtunnel CLI when -DevTunnel is specified
 
   This script is standalone and does not require a local TypeAgent repository.
+  External runtime packages are installed later by install-typeagent.ps1 after
+  the artifact supplies its exact compatibility manifest and package feed.
 
 .EXAMPLE
   pwsh ./setup-typeagent-prereqs.ps1
@@ -298,38 +299,6 @@ function Ensure-AzureCli {
     }
 }
 
-function Ensure-NpmGlobalCli {
-    param(
-        [Parameter(Mandatory = $true)][string]$Command,
-        [Parameter(Mandatory = $true)][string]$PackageName,
-        [Parameter(Mandatory = $true)][string]$FriendlyName
-    )
-
-    $shouldInstall = $ForceReinstallCli -or -not (Test-Command $Command)
-
-    if ($shouldInstall) {
-        Write-Info "Installing $FriendlyName (npm i -g $PackageName)"
-        & npm install -g $PackageName
-        if ($LASTEXITCODE -ne 0) {
-            Fail "npm global install failed for $PackageName"
-        }
-        Refresh-Path
-    }
-
-    if (-not (Test-Command $Command)) {
-        Fail "$FriendlyName command '$Command' was not found on PATH after install."
-    }
-
-    Write-Ok "${FriendlyName}: $((Get-Command $Command).Source)"
-}
-
-function Ensure-ExternalClis {
-    Write-Step "Ensuring external CLIs (claude, copilot)"
-    Ensure-NpmGlobalCli -Command "claude" -PackageName "@anthropic-ai/claude-code" -FriendlyName "Claude Code CLI"
-    Ensure-NpmGlobalCli -Command "copilot" -PackageName "@github/copilot" -FriendlyName "GitHub Copilot CLI"
-    Write-WarnMsg "Remember to sign in once: run 'claude' and 'copilot' interactively."
-}
-
 function Ensure-DevTunnel {
     Write-Step "Ensuring devtunnel CLI"
 
@@ -372,7 +341,10 @@ Ensure-Node
 Ensure-AzureCli
 
 if ($Variant -eq "external") {
-    Ensure-ExternalClis
+    Write-Info "External runtimes will be installed from the TypeAgent package feed after the agent-server artifact is downloaded."
+}
+if ($ForceReinstallCli) {
+    Write-WarnMsg "-ForceReinstallCli is deprecated; install-typeagent.ps1 now owns exact runtime installation."
 }
 
 if ($DevTunnel) {

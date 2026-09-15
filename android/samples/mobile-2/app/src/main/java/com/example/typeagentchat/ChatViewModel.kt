@@ -77,6 +77,31 @@ internal sealed interface ClientAction {
         val action: OpenWebPageAction,
         val completion: (AndroidDeviceExecutionResult) -> Unit
     ) : ClientAction
+
+    data class ComposeEmail(
+        val action: ComposeEmailAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class ShareText(
+        val action: ShareTextAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class OpenSettings(
+        val action: OpenSettingsAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class CreateCalendarEvent(
+        val action: CreateCalendarEventAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class PlayMusicFromSearch(
+        val action: PlayMusicFromSearchAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
 }
 
 /**
@@ -207,6 +232,47 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 completion: (AndroidDeviceExecutionResult) -> Unit
             ) {
                 dispatchClientAction(ClientAction.OpenWebPage(action, completion), completion)
+            }
+
+            override fun onComposeEmail(
+                action: ComposeEmailAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.ComposeEmail(action, completion), completion)
+            }
+
+            override fun onShareText(
+                action: ShareTextAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.ShareText(action, completion), completion)
+            }
+
+            override fun onOpenSettings(
+                action: OpenSettingsAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.OpenSettings(action, completion), completion)
+            }
+
+            override fun onCreateCalendarEvent(
+                action: CreateCalendarEventAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(
+                    ClientAction.CreateCalendarEvent(action, completion),
+                    completion
+                )
+            }
+
+            override fun onPlayMusicFromSearch(
+                action: PlayMusicFromSearchAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(
+                    ClientAction.PlayMusicFromSearch(action, completion),
+                    completion
+                )
             }
         })
 
