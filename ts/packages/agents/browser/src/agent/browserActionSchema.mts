@@ -141,6 +141,9 @@ export type StopReadPageContent = {
     actionName: "stopReadPageContent";
 };
 
+// Capture only the visible contents of the current browser or web page.
+// Examples: "take a screenshot of this browser page" and "capture the current
+// web page". Do not use for the whole screen, entire display, or desktop.
 export type CaptureScreenshot = {
     actionName: "captureScreenshot";
 };

@@ -25,6 +25,42 @@
     actionName: "takeScreenshot",
     parameters: {}
 }
+  | capture the whole screen to a file -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | capture the whole screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | screenshot my entire display -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | screenshot the entire display -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | capture the entire display -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | capture the entire screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | capture my whole screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | screenshot the whole screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | take a screenshot of my entire display -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
   | screenshot the screen -> {
     actionName: "takeScreenshot",
     parameters: {}
