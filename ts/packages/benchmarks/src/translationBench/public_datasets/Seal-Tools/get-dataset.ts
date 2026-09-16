@@ -55,6 +55,7 @@ async function fetchRowsPage(
 ): Promise<{ rows: SealToolsHfRow[]; total: number }> {
     const url = new URL(SEAL_TOOLS_HF.rowsApi);
     url.searchParams.set("dataset", SEAL_TOOLS_HF.dataset);
+    url.searchParams.set("revision", SEAL_TOOLS_HF.revision);
     url.searchParams.set("config", SEAL_TOOLS_HF.config);
     url.searchParams.set("split", SEAL_TOOLS_HF.split);
     url.searchParams.set("offset", String(offset));
