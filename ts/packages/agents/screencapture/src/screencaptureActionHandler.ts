@@ -66,49 +66,15 @@ const FULL_SCREEN_ALIASES = new Set([
     "everything",
     "the whole screen",
     "whole screen",
-    "the whole screen to a file",
-    "whole screen to a file",
-    "my whole screen",
-    "the entire screen",
-    "entire screen",
-    "my entire display",
-    "the entire display",
-    "entire display",
     "monitor",
     "the monitor",
     "primary monitor",
 ]);
 
-const NON_WINDOW_SCREENSHOT_TARGETS = new Set([
-    ...FULL_SCREEN_ALIASES,
-    "this browser page",
-    "the browser page",
-    "browser page",
-    "this web page",
-    "the current web page",
-    "current web page",
-    "web page",
-    "this page",
-    "the current page",
-    "current page",
-]);
-
-async function validateScreencaptureWildcardMatch(
-    action: ScreencaptureAction,
-    _context: SessionContext,
-) {
-    if (action.actionName !== "takeScreenshot") {
-        return true;
-    }
-    const target = action.parameters.target?.trim().toLowerCase();
-    return target === undefined || !NON_WINDOW_SCREENSHOT_TARGETS.has(target);
-}
-
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: async () => createInitialContext(),
         executeAction,
-        validateWildcardMatch: validateScreencaptureWildcardMatch,
         getDynamicDisplay,
         checkReadiness,
         setup: async (actionContext) =>

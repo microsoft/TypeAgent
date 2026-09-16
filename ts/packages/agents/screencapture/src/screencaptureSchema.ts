@@ -9,12 +9,9 @@ export type ScreencaptureAction =
 
 export type ScreencaptureActivity = RecordingActivity;
 
-// Capture the whole primary screen, entire display, desktop, or a named OS
-// window. "Capture the whole screen to a file" and "screenshot my entire
-// display" both use takeScreenshot with an empty parameters object; the handler
-// chooses the output file. If `target` is present, it is a program or window
-// name to fuzzy-match (e.g. "Chrome", "Visual Studio"). Do not use this action
-// for only the current browser or web page; use browser.captureScreenshot.
+// Take a screenshot. If `target` is omitted the whole primary screen is
+// captured; otherwise `target` is a program or window name to fuzzy-match
+// against the currently visible windows (e.g. "Chrome", "Visual Studio").
 export type TakeScreenshotAction = {
     actionName: "takeScreenshot";
     parameters: {
