@@ -73,11 +73,6 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
             body.max_output_tokens = cs.max_completion_tokens;
         }
         if (cs.reasoning_effort !== undefined) {
-            if (cs.reasoning_effort === "max") {
-                throw new Error(
-                    "responses wireApi does not support reasoning effort 'max'",
-                );
-            }
             body.reasoning = { effort: cs.reasoning_effort };
         }
         if (request.stream) {

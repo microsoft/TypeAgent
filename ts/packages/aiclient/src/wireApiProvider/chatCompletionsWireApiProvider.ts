@@ -173,11 +173,6 @@ export class ChatCompletionsWireApiProvider implements ProviderAdapter {
     }
 
     buildRequestBody(request: ModelRequest): unknown {
-        if (request.completionSettings.reasoning_effort === "max") {
-            throw new Error(
-                "chat_completions wireApi does not support reasoning effort 'max'",
-            );
-        }
         const params: any = {
             ...request.defaultParams,
             messages: request.messages,

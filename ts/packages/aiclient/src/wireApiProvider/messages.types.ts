@@ -110,7 +110,15 @@ export type ToolChoice =
     | { type: "none" };
 
 export interface OutputConfig {
-    effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+    effort?:
+        | "none"
+        | "minimal"
+        | "low"
+        | "medium"
+        | "high"
+        | "xhigh"
+        | "max"
+        | null;
 }
 
 export interface MessageCreateParamsBase {
