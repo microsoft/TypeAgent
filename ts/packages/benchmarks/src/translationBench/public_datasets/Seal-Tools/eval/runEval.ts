@@ -136,7 +136,6 @@ function createImplementationDigest(dispatcherOptions: unknown): string {
 
 type ReasoningEffort = NonNullable<TranslationBenchScenario["reasoningEffort"]>;
 const VALID_EFFORTS: ReadonlySet<string> = new Set<ReasoningEffort>([
-    "",
     "minimal",
     "low",
     "medium",
@@ -229,8 +228,8 @@ function createModelRunState(
             ? [
                   {
                       ...getDefaultTranslationBenchScenario(),
-                      id: `baseline-${effort === "" ? "default" : effort}`,
-                      ...(effort ? { reasoningEffort: effort } : {}),
+                      id: `baseline-${effort}`,
+                      reasoningEffort: effort,
                   },
               ]
             : (suite.scenarios ?? [getDefaultTranslationBenchScenario()]);
