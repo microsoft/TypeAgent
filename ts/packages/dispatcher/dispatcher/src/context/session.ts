@@ -98,6 +98,15 @@ export type DispatcherConfig = {
     translation: {
         enabled: boolean;
         model: string;
+        reasoningEffort:
+            | ""
+            | "minimal"
+            | "low"
+            | "medium"
+            | "high"
+            | "none"
+            | "xhigh"
+            | "max";
         stream: boolean;
         promptConfig: {
             additionalInstructions: boolean;
@@ -126,6 +135,7 @@ export type DispatcherConfig = {
                 jsonSchemaFunction: boolean;
                 jsonSchemaWithTs: boolean; // only applies when jsonSchema or jsonSchemaFunction is true
                 jsonSchemaValidate: boolean; // only applies when jsonSchema or jsonSchemaFunction is true
+                validate: boolean;
             };
             optimize: {
                 enabled: boolean;
@@ -411,6 +421,7 @@ const defaultSessionConfig: SessionConfig = {
         // config, keeping local dev and CI on the same model. Override per
         // session with `@config translation model <name>`.
         model: "GPT_4_1",
+        reasoningEffort: "",
         stream: true,
         promptConfig: {
             additionalInstructions: true,
@@ -438,6 +449,7 @@ const defaultSessionConfig: SessionConfig = {
                 jsonSchemaFunction: false,
                 jsonSchemaWithTs: false,
                 jsonSchemaValidate: true,
+                validate: true,
             },
             optimize: {
                 enabled: false,
