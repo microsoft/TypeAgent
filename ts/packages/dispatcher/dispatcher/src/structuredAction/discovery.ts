@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { getActionDescription } from "@typeagent/action-schema";
 import {
     structuredActionProtocolVersion,
-    type ActionAvailability,
     type ActionContractResult,
     type ActionIdentity,
     type ActionSearchRequest,
@@ -70,45 +69,6 @@ function validateSearch(request: ActionSearchRequest): void {
     }
 }
 
-function getAvailability(
-    agents: AppAgentManager,
-    schemaName: string,
-): ActionAvailability {
-    const agentName = getAppAgentName(schemaName);
-    const readiness = agents.getReadinessSnapshot(agentName);
-    const availability: ActionAvailability = {
-        state: "available",
-        schemaEnabled: agents.isSchemaEnabled(schemaName),
-        actionEnabled: agents.isActionEnabled(schemaName),
-        schemaActive: agents.isSchemaActive(schemaName),
-        actionActive: agents.isActionActive(schemaName),
-        readiness,
-        authorization: "checked-at-execution",
-    };
-    const loadError = agents.getLoadError(agentName);
-    if (agents.isSchemaLoading(schemaName)) {
-        availability.state = "loading";
-    } else if (loadError !== undefined) {
-        availability.state = "error";
-        availability.message = loadError.message;
-    } else if (!availability.schemaEnabled || !availability.actionEnabled) {
-        availability.state = "disabled";
-    } else if (!availability.schemaActive || !availability.actionActive) {
-        availability.state = "inactive";
-    } else if (readiness.report === undefined) {
-        availability.state = "unknown";
-    } else if (readiness.report.state !== "ready") {
-        availability.state = readiness.report.state;
-    }
-    if (
-        availability.message === undefined &&
-        readiness.report?.message !== undefined
-    ) {
-        availability.message = readiness.report.message;
-    }
-    return availability;
-}
-
 export class StructuredActionDiscovery {
     private readonly anonymousScope = {};
 
@@ -150,16 +110,14 @@ export class StructuredActionDiscovery {
                     request.schemaName !== config.schemaName) ||
                 (request.agentName !== undefined &&
                     request.agentName !== getAppAgentName(config.schemaName)) ||
-                policy?.canDiscoverSchema(config.schemaName) === false
+                policy?.canDiscoverSchema(config.schemaName) === false ||
+                !this.context.agents.isSchemaActive(config.schemaName) ||
+                !this.context.agents.isActionActive(config.schemaName)
             ) {
                 continue;
             }
             const schema =
                 this.context.agents.getActionSchemaFileForConfig(config);
-            const availability = getAvailability(
-                this.context.agents,
-                config.schemaName,
-            );
             for (const [actionName, definition] of schema.parsedActionSchema
                 .actionSchemas) {
                 const description = getActionDescription(definition) ?? "";
@@ -175,7 +133,6 @@ export class StructuredActionDiscovery {
                     schemaName: config.schemaName,
                     actionName,
                     description,
-                    availability,
                 });
             }
         }
@@ -228,6 +185,12 @@ export class StructuredActionDiscovery {
         if (config === undefined) {
             return { ...envelope, status: "not-found" };
         }
+        if (
+            !this.context.agents.isSchemaActive(identity.schemaName) ||
+            !this.context.agents.isActionActive(identity.schemaName)
+        ) {
+            return { ...envelope, status: "not-found" };
+        }
         const schema = this.context.agents.getActionSchemaFileForConfig(config);
         const definition = schema.parsedActionSchema.actionSchemas.get(
             identity.actionName,
@@ -245,7 +208,6 @@ export class StructuredActionDiscovery {
                 },
                 definition,
                 config,
-                getAvailability(this.context.agents, identity.schemaName),
             ),
         };
     }

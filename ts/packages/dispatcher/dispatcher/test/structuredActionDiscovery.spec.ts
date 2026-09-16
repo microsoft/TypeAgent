@@ -2,11 +2,7 @@
 // Licensed under the MIT License.
 
 import { jest } from "@jest/globals";
-import type {
-    ActionPolicy,
-    AppAgent,
-    ReadinessReport,
-} from "@typeagent/agent-sdk";
+import type { ActionPolicy, AppAgent } from "@typeagent/agent-sdk";
 import type {
     ActionContractResult,
     ActionIdentity,
@@ -60,9 +56,6 @@ function fixture(content = source, policies?: Record<string, ActionPolicy>) {
     const state = agents as unknown as {
         agents: Map<string, AgentFixture>;
         actionConfigs: Map<string, ActionConfig>;
-        readiness: Map<string, ReadinessReport>;
-        loadErrors: Map<string, Error>;
-        loadingSchemas: Set<string>;
         transientAgents: Record<string, boolean>;
     };
     const configs = convertToActionConfig("test", {
@@ -110,7 +103,6 @@ function fixture(content = source, policies?: Record<string, ActionPolicy>) {
         sessionContext: {},
     };
     state.agents.set("test", agent);
-    state.readiness.set("test", { state: "ready" });
     const context = { agents, session: {} };
     return {
         agents,
@@ -166,6 +158,7 @@ describe("structured action contracts", () => {
             resultEntity: { type: "Entity", optional: true },
             entities: { type: "Entity[]", optional: true },
         });
+        expect(contract).not.toHaveProperty("availability");
     });
 
     it("distinguishes duplicate action names and rejects case-insensitive guesses", async () => {
@@ -324,6 +317,7 @@ describe("structured action discovery", () => {
         ]);
         expect(page.nextOffset).toBe(2);
         expect(page.actions[0]).not.toHaveProperty("input");
+        expect(page.actions[0]).not.toHaveProperty("availability");
         if (page.nextOffset === undefined) {
             throw new Error("Expected another page");
         }
@@ -365,91 +359,48 @@ describe("structured action discovery", () => {
         ).rejects.toThrow();
     });
 
-    it("keeps semantic fingerprints stable across readiness and enablement changes", async () => {
-        const { service, state, agent } = fixture();
-        const first = await service.getActionContract(identity);
-        const original = found(first);
-        state.readiness.set("test", {
-            state: "setup-required",
-            message: "Sign in first",
-        });
-        const needsSetup = await service.getActionContract(identity);
-        expect(found(needsSetup).availability.state).toBe("setup-required");
-        expect(found(needsSetup).fingerprint).toBe(original.fingerprint);
-        expect(needsSetup.scopeId).toBe(first.scopeId);
-        agent.actions.delete(identity.schemaName);
-        expect(found(await service.getActionContract(identity))).toMatchObject({
-            fingerprint: original.fingerprint,
-            availability: { state: "disabled", actionEnabled: false },
-        });
-    });
+    it("excludes actions unless their schema and action are active", async () => {
+        const { service, state, agent, hooks } = fixture();
+        const assertHidden = async () => {
+            expect(
+                (await service.searchActions()).actions.some(
+                    (action) => action.schemaName === identity.schemaName,
+                ),
+            ).toBe(false);
+            expect(await service.getActionContract(identity)).toMatchObject({
+                status: "not-found",
+            });
+        };
 
-    it("reports exact schema/action state, not command enablement", async () => {
-        const { service, state, agent } = fixture();
-        agent.actions.clear();
-        expect(
-            found(await service.getActionContract(identity)).availability.state,
-        ).toBe("disabled");
+        agent.actions.delete(identity.schemaName);
+        await assertHidden();
         agent.actions.add(identity.schemaName);
-        agent.schemas.clear();
-        expect(
-            found(await service.getActionContract(identity)).availability.state,
-        ).toBe("disabled");
+        agent.schemas.delete(identity.schemaName);
+        await assertHidden();
         agent.schemas.add(identity.schemaName);
         state.transientAgents[identity.schemaName] = false;
-        expect(
-            found(await service.getActionContract(identity)).availability.state,
-        ).toBe("inactive");
-    });
+        await assertHidden();
 
-    it("reports loading, failures, unsupported and unknown readiness without probing", async () => {
-        const { service, state, agent, hooks } = fixture();
-        state.loadingSchemas.add(identity.schemaName);
-        expect(
-            found(await service.getActionContract(identity)).availability.state,
-        ).toBe("loading");
-        state.loadingSchemas.clear();
-        state.loadErrors.set("test", new Error("load failed"));
-        expect(
-            found(await service.getActionContract(identity)).availability.state,
-        ).toBe("error");
-        state.loadErrors.clear();
-        state.readiness.set("test", {
-            state: "unsupported",
-            message: "unsupported OS",
-        });
-        expect(
-            found(await service.getActionContract(identity)).availability.state,
-        ).toBe("unsupported");
-        state.readiness.clear();
-        expect(
-            found(await service.getActionContract(identity)).availability
-                .readiness.source,
-        ).toBe("not-checked");
-        delete agent.sessionContext;
-        expect(
-            found(await service.getActionContract(identity)).availability,
-        ).toMatchObject({
-            state: "unknown",
-            readiness: { source: "uninitialized" },
-        });
-        await service.searchActions();
         for (const hook of Object.values(hooks)) {
             expect(hook).not.toHaveBeenCalled();
         }
     });
 
-    it("does not claim verified authentication for an agent without readiness support", async () => {
-        const { service, state, agent } = fixture();
-        state.readiness.clear();
-        agent.appAgent = {};
+    it("filters inactive schemas before parsing them", async () => {
+        const { service, agents, agent } = fixture();
+        agents.getActionConfig("test.other").schemaFile = {
+            format: "ts",
+            content: "invalid schema",
+        };
+        agent.actions.delete("test.other");
+
+        expect((await service.searchActions()).total).toBe(3);
         expect(
-            found(await service.getActionContract(identity)).availability,
-        ).toMatchObject({
-            state: "available",
-            readiness: { source: "not-supported" },
-            authorization: "checked-at-execution",
-        });
+            await service.getActionContract({
+                schemaName: "test.other",
+                actionName: "select",
+            }),
+        ).toMatchObject({ status: "not-found" });
     });
 
     it("binds scope to the facade, live session, and trusted permission revision", async () => {

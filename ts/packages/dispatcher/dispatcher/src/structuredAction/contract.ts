@@ -13,7 +13,6 @@ import type {
 } from "@typeagent/action-schema";
 import {
     structuredActionProtocolVersion,
-    type ActionAvailability,
     type ActionContract,
     type ActionExecutionPolicy,
     type ActionIdentity,
@@ -122,7 +121,6 @@ export function createActionContract(
     identity: ActionIdentity,
     definition: ActionSchemaTypeDefinition,
     config: ActionConfig,
-    availability: ActionAvailability,
 ): ActionContract {
     const policy = getPolicy(config, identity.actionName);
     const output: ActionContract["output"] = {
@@ -165,7 +163,6 @@ export function createActionContract(
     return {
         ...identity,
         description: getActionDescription(definition) ?? "",
-        availability,
         fingerprint,
         input: {
             format: "typescript",

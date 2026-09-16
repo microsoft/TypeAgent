@@ -159,21 +159,6 @@ describe("dispatcher RPC structured discovery", () => {
         const summary = {
             ...identity,
             description: "Select",
-            availability: {
-                state: "setup-required" as const,
-                schemaEnabled: true,
-                actionEnabled: true,
-                schemaActive: true,
-                actionActive: true,
-                readiness: {
-                    source: "cached" as const,
-                    report: {
-                        state: "setup-required" as const,
-                        message: "Configure first",
-                    },
-                },
-                authorization: "checked-at-execution" as const,
-            },
         };
         const searchResult: ActionSearchResult = {
             protocolVersion: 1,

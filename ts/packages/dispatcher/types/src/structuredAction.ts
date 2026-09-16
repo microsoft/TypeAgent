@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { ActionEffect, ReadinessReport } from "@typeagent/agent-sdk";
+import type { ActionEffect } from "@typeagent/agent-sdk";
 
 export const structuredActionProtocolVersion = 1;
 
@@ -10,32 +10,8 @@ export type ActionIdentity = {
     actionName: string;
 };
 
-export type ActionAvailability = {
-    state:
-        | "available"
-        | "disabled"
-        | "inactive"
-        | "loading"
-        | "setup-required"
-        | "unsupported"
-        | "unknown"
-        | "error";
-    schemaEnabled: boolean;
-    actionEnabled: boolean;
-    schemaActive: boolean;
-    actionActive: boolean;
-    readiness: {
-        source: "cached" | "not-supported" | "uninitialized" | "not-checked";
-        report?: ReadinessReport;
-    };
-    message?: string;
-    // Discovery is not an authentication or resource-authorization check.
-    authorization: "checked-at-execution";
-};
-
 export type ActionSummary = ActionIdentity & {
     description: string;
-    availability: ActionAvailability;
 };
 
 export type ActionSearchRequest = {
