@@ -10,7 +10,15 @@ describe("JSON translator completion settings", () => {
         });
     });
 
-    it.each(["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const)(
+    it.each([
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+    ] as const)(
         "passes reasoning effort %s to the chat model",
         (reasoningEffort) => {
             expect(
