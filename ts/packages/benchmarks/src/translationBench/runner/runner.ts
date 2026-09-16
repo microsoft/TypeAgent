@@ -23,7 +23,6 @@ import {
     withModelCallSink,
     type ModelCallRecord,
 } from "@typeagent/aiclient";
-import { equalNormalizedObject } from "@typeagent/agent-cache";
 import { ActionSchemaFileCache } from "agent-dispatcher/internal";
 import {
     type ActionConfig,
@@ -59,6 +58,16 @@ import { translateRequest } from "agent-dispatcher/internal";
 import type { RateLimiter } from "../../core/rateLimiter.js";
 import { estimatePromptTokens } from "../../core/tokenEstimate.js";
 import { DEFAULT_EST_TOKENS_PER_CALL } from "../runConfig.js";
+
+function equalNormalizedObject(a: object = {}, b: object = {}): boolean {
+    const normalize = (value: object) =>
+        JSON.stringify(value)
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/\s+/g, " ")
+            .toLowerCase();
+    return normalize(a) === normalize(b);
+}
 
 // TranslationBenchOrder / OpenAIFunctionTool are defined in benchmark/translationBenchBenchmark
 // and imported above for suite/seed contracts (not re-exported — avoids barrel clash).
