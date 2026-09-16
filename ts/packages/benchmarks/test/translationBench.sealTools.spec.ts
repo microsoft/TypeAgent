@@ -8,19 +8,11 @@ import {
     type TypeAgentEvalRow,
 } from "../src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.js";
 import { getSealToolsTypeAgentOverride } from "../src/translationBench/public_datasets/Seal-Tools/typeAgentOverrides.js";
-import fs from "node:fs";
-import path from "node:path";
-
 import { buildSealToolsSuite } from "../src/translationBench/public_datasets/Seal-Tools/eval/buildSuite.js";
 import {
     parametersMatch,
     validateTranslationBenchSuite,
 } from "../src/translationBench/runner/runner.js";
-import {
-    assertSuccessfulTrajectoryCoverage,
-    reconcileSealToolsTrajectories,
-} from "../src/translationBench/public_datasets/Seal-Tools/eval/trajectoryJournal.js";
-
 it("preserves IDs after malformed inner quotes in task instructions", () => {
     const row = toTypeAgentEvalRow(
         {
@@ -194,48 +186,4 @@ it("scores Seal required and optional parameters with normalized values", () => 
             { ...spec, acceptedValues: { id: ["nineteen"] } },
         ),
     ).toBe(true);
-});
-
-it("recovers the trajectory journal without losing completed work", () => {
-    const root = "src/translationBench/public_datasets/Seal-Tools/eval/results";
-    fs.mkdirSync(root, { recursive: true });
-    const dir = fs.mkdtempSync(path.join(root, "journal-test-"));
-    const file = path.join(dir, "trajectories.jsonl");
-    const record = (setupid: string, rowid: string, data: string) => ({
-        setupid,
-        rowid,
-        scenarioId: "baseline",
-        callIndex: 0,
-        response: { success: true, data },
-    });
-    try {
-        fs.writeFileSync(
-            file,
-            [
-                record("prior", "prior-row", "prior"),
-                record("current", "done", "stale"),
-                record("current", "done", "accepted"),
-                record("current", "orphan", "orphan"),
-            ]
-                .map((value) => JSON.stringify(value))
-                .join("\n") + "\n{truncated",
-        );
-        const responses = reconcileSealToolsTrajectories(
-            file,
-            "current",
-            new Set(["done"]),
-        );
-        expect(responses.get("done")).toEqual(["accepted"]);
-        expect(fs.readFileSync(file, "utf8").trim().split("\n")).toHaveLength(
-            2,
-        );
-        expect(() =>
-            assertSuccessfulTrajectoryCoverage(new Set(["done"]), responses),
-        ).not.toThrow();
-        expect(() =>
-            assertSuccessfulTrajectoryCoverage(new Set(["missing"]), responses),
-        ).toThrow(/without raw trajectories/);
-    } finally {
-        fs.rmSync(dir, { recursive: true });
-    }
 });

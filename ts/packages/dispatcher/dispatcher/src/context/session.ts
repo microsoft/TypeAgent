@@ -98,8 +98,7 @@ export type DispatcherConfig = {
     translation: {
         enabled: boolean;
         model: string;
-        reasoningEffort:
-            | ""
+        reasoningEffort?:
             | "minimal"
             | "low"
             | "medium"
@@ -420,7 +419,6 @@ const defaultSessionConfig: SessionConfig = {
         // config, keeping local dev and CI on the same model. Override per
         // session with `@config translation model <name>`.
         model: "GPT_4_1",
-        reasoningEffort: "",
         stream: true,
         promptConfig: {
             additionalInstructions: true,

@@ -71,15 +71,9 @@ import {
 } from "../toTypeAgentSchema.js";
 import { buildSealToolsSuite } from "./buildSuite.js";
 import {
-    restoreSealToolsRawActions,
     scoreSealToolsOfficial,
     type SealToolsOfficialScore,
 } from "./sealToolsGrader.js";
-import {
-    assertSuccessfulTrajectoryCoverage,
-    reconcileSealToolsTrajectories,
-    sealToolsResponseText,
-} from "./trajectoryJournal.js";
 import {
     rescoreSealToolsTypeAgentRows,
     summarizeSealToolsTypeAgentRows,
@@ -317,7 +311,6 @@ async function runOneModel(
             implementationDigest,
             outDir,
         );
-    const trajectoryPath = path.join(outDir, "trajectories.jsonl");
     const outPath = path.join(outDir, `results-${slug}.json`);
     const htmlPath = path.join(outDir, `report-${slug}.html`);
 
@@ -344,19 +337,6 @@ async function runOneModel(
             `  [${model}] resuming ${seedRows.length} row(s) from checkpoint`,
         );
     }
-    const completedCaseIds = new Set(seedRows.map((row) => row.caseId));
-    const rawResponsesByCase = reconcileSealToolsTrajectories(
-        trajectoryPath,
-        slug,
-        completedCaseIds,
-    );
-    assertSuccessfulTrajectoryCoverage(
-        seedRows.filter((row) => row.error === undefined),
-        rawResponsesByCase,
-        (row, responses) =>
-            restoreSealToolsRawActions(row, responses) !== undefined,
-    );
-
     // Per-model shared TPM limiter (respects run-config tpmLimit + headroom).
     const rateLimiter = createRunnerRateLimiter(resolved.tpmLimits, {
         disabled: opts.rateLimit === false,
@@ -388,15 +368,6 @@ async function runOneModel(
                 }),
             ),
         onRowComplete: async (row) => {
-            if (row.error === undefined) {
-                assertSuccessfulTrajectoryCoverage(
-                    [row],
-                    rawResponsesByCase,
-                    (completedRow, responses) =>
-                        restoreSealToolsRawActions(completedRow, responses) !==
-                        undefined,
-                );
-            }
             const ckptRow = createTranslationBenchTranslationCheckpointRow(row);
             checkpointState = appendTranslationBenchCheckpointRows(
                 checkpointPath,
@@ -405,46 +376,6 @@ async function runOneModel(
                 checkpointState,
             );
             completed.add(translationBenchResumeKey(ckptRow));
-        },
-        // Full LLM calls per row → one shared trajectories.jsonl, one line per
-        // call, keyed by {caseId}-{slug} (rowid-setupid).
-        onModelCalls: (work, calls) => {
-            if (calls.length === 0) {
-                return;
-            }
-            const lines =
-                calls
-                    .map((call, callIndex) =>
-                        JSON.stringify({
-                            id: `${work.caseId}-${slug}`,
-                            rowid: work.caseId,
-                            setupid: slug,
-                            model,
-                            scenarioId: work.scenarioId,
-                            callIndex,
-                            name: call.name,
-                            atMs: call.atMs,
-                            durationMs: call.durationMs,
-                            request: call.request,
-                            response: call.response,
-                            usage: call.usage,
-                        }),
-                    )
-                    .join("\n") + "\n";
-            const trajectoryFd = fs.openSync(trajectoryPath, "a");
-            try {
-                fs.writeFileSync(trajectoryFd, lines, "utf8");
-                fs.fsyncSync(trajectoryFd);
-            } finally {
-                fs.closeSync(trajectoryFd);
-            }
-            for (const call of calls) {
-                const text = sealToolsResponseText(call.response);
-                if (text === undefined) continue;
-                const responses = rawResponsesByCase.get(work.caseId) ?? [];
-                responses.push(text);
-                rawResponsesByCase.set(work.caseId, responses);
-            }
         },
     };
     if (
@@ -496,17 +427,11 @@ async function runOneModel(
         settings: result.settings,
     });
 
-    const sealToolsOfficial = scoreSealToolsOfficial(
-        result.rows,
-        goldByCaseId,
-        {
-            rawResponsesByCase,
-        },
-    );
+    const sealToolsOfficial = scoreSealToolsOfficial(result.rows, goldByCaseId);
     const sealToolsCaseInsensitive = scoreSealToolsOfficial(
         result.rows,
         goldByCaseId,
-        { ignoreStringCase: true, rawResponsesByCase },
+        { ignoreStringCase: true },
     );
     const outputResult = {
         ...result,
@@ -718,9 +643,8 @@ async function main(): Promise<void> {
         opts.outDir ?? path.join(SEAL_DIR, "eval", "results"),
     );
     fs.mkdirSync(outDir, { recursive: true });
-    const trajectoryPath = path.join(outDir, "trajectories.jsonl");
     for (const model of models) {
-        const { slug, checkpointPath, header } = createModelRunState(
+        const { checkpointPath, header } = createModelRunState(
             model,
             suite,
             sourceManifest,
@@ -729,26 +653,6 @@ async function main(): Promise<void> {
             outDir,
         );
         assertCompatibleCheckpoint(checkpointPath, header);
-        const completedRows =
-            fs.existsSync(checkpointPath) &&
-            fs.statSync(checkpointPath).size > 0
-                ? readTranslationBenchCheckpoint<TranslationBenchRow>(
-                      checkpointPath,
-                  ).rows.filter((row) => row.phase === "translation")
-                : [];
-        const responsesByCase = reconcileSealToolsTrajectories(
-            trajectoryPath,
-            slug,
-            new Set(completedRows.map((row) => row.caseId)),
-        );
-        assertSuccessfulTrajectoryCoverage(
-            completedRows
-                .filter((row) => row.value.error === undefined)
-                .map((row) => row.value),
-            responsesByCase,
-            (row, responses) =>
-                restoreSealToolsRawActions(row, responses) !== undefined,
-        );
     }
     fs.mkdirSync(opts.instanceDir, { recursive: true });
 

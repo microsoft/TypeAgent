@@ -43,22 +43,13 @@ numeric formatting such as `"19.0"` versus `19`. Action names, parameter names,
 arrays, and object structure remain significant. The official Seal score still
 uses the untouched source gold for all 700 rows.
 
-After changing only the TypeAgent scoring contract, rescore saved results
-without making provider calls:
-
-```sh
-node dist/translationBench/public_datasets/Seal-Tools/eval/rescoreResults.js \
-  src/translationBench/public_datasets/Seal-Tools/eval/results/full
-```
-
 The primary score is the case-insensitive variant requested for this run. It
 folds API names, parameter names, and all nested string values. The report also
 keeps the creator's official case-sensitive score as a reference.
 
 The implementation preserves the creator's matching behavior, including its
 first-gold match for duplicate tool names and omission of P/R/F1 when any count
-is zero. Raw model responses preserve numeric lexemes so Python distinctions
-such as `1` versus `1.0` survive TypeAgent's JSON parser.
+is zero.
 
 ## Models and reasoning effort
 

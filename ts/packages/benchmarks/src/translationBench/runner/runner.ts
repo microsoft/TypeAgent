@@ -17,12 +17,7 @@ import type {
     AppAgentManifest,
     SchemaTypeNames,
 } from "@typeagent/agent-sdk";
-import {
-    getChatModelNames,
-    openai as ai,
-    withModelCallSink,
-    type ModelCallRecord,
-} from "@typeagent/aiclient";
+import { getChatModelNames, openai as ai } from "@typeagent/aiclient";
 import { equalNormalizedObject } from "@typeagent/agent-cache";
 import { ActionSchemaFileCache } from "agent-dispatcher/internal";
 import {
@@ -355,15 +350,6 @@ export interface TranslationBenchRunnerOptions {
      * concurrent workers can safely append JSONL trajectory checkpoints.
      */
     onRowComplete?: (row: TranslationBenchRow) => void | Promise<void>;
-    /**
-     * Invoked once per newly computed row with the full LLM calls made for it
-     * (prompt in, provider response out, usage). Serialized like onRowComplete.
-     * Not called for seed/resumed rows (their calls were made in a prior run).
-     */
-    onModelCalls?: (
-        work: { model: string; scenarioId: string; caseId: string },
-        calls: readonly ModelCallRecord[],
-    ) => void | Promise<void>;
     /**
      * Optional cross-process TPM limiter. When set, each translate call is
      * reserved/settled against the shared ledger for `model`.
@@ -2609,24 +2595,6 @@ export async function runTranslationBench(
         );
         await run;
     };
-    let modelCallsChain: Promise<void> = Promise.resolve();
-    const emitModelCalls = async (
-        work: { model: string; scenarioId: string; caseId: string },
-        calls: readonly ModelCallRecord[],
-    ): Promise<void> => {
-        if (options.onModelCalls === undefined) {
-            return;
-        }
-        const run = modelCallsChain.then(
-            () => options.onModelCalls!(work, calls),
-            () => options.onModelCalls!(work, calls),
-        );
-        modelCallsChain = run.then(
-            () => undefined,
-            () => undefined,
-        );
-        await run;
-    };
     const bumpProgress = () => {
         progress++;
         onProgress?.(progress, total);
@@ -2660,7 +2628,6 @@ export async function runTranslationBench(
         let error: string | undefined;
         let score: TranslationBenchScore;
         let elapsedMs: number;
-        const modelCalls: ModelCallRecord[] = [];
         try {
             const invokeTranslate = async () =>
                 translateRequest(
@@ -2711,14 +2678,7 @@ export async function runTranslationBench(
                         },
                     );
                 }, options.translateRetry);
-            // Collect the full LLM calls this row makes when a sink is wanted.
-            const translated =
-                options.onModelCalls === undefined
-                    ? await runTranslate()
-                    : await withModelCallSink(
-                          (rec) => modelCalls.push(rec),
-                          runTranslate,
-                      );
+            const translated = await runTranslate();
             elapsedMs = performance.now() - started;
             const raw = translated.requestAction.actions.map(
                 (entry) => entry.action,
@@ -2777,10 +2737,6 @@ export async function runTranslationBench(
             usage: usage.finish(suite.pricing?.[model]),
             ...(error ? { error } : {}),
         };
-        await emitModelCalls(
-            { model, scenarioId: scenario.id, caseId: evalCase.id },
-            modelCalls,
-        );
         return row;
     }
 

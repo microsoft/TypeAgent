@@ -145,16 +145,6 @@ export function isSwitchEnabled(config: DispatcherConfig) {
     );
 }
 
-export function resolveTranslatedActionSchemaName(
-    action: TranslatedAction,
-    translator: Pick<TypeAgentTranslator, "getSchemaName">,
-): string | undefined {
-    // UnknownAction belongs to the dispatcher and is absent from translator maps.
-    return isUnknownAction(action)
-        ? DispatcherName
-        : translator.getSchemaName(action.actionName);
-}
-
 export function getTranslatorForSchema(
     context: CommandHandlerContext,
     schemaName: string,
@@ -216,7 +206,7 @@ export function getTranslatorForSchema(
         context.promptLogger,
         sessionConfig.execution.entityPromptShape,
         sessionConfig.translation.entity.pathNavigation !== "off",
-        config.reasoningEffort || undefined,
+        config.reasoningEffort,
     );
     if (useCache) {
         context.translatorCache.set(translatorName, newTranslator);
@@ -1078,12 +1068,12 @@ async function finalizeAction(
     }
 
     // A translator may combine actions from multiple schemas (inline, selected actions)
-    const currentActionSchemaName = resolveTranslatedActionSchemaName(
-        currentAction,
-        currentTranslator,
+    const currentActionSchemaName = currentTranslator.getSchemaName(
+        currentAction.actionName,
     );
 
     if (currentActionSchemaName === undefined) {
+        // Should not happen
         throw new Error(
             `Internal Error: Unable to match schema name for action ${currentAction.actionName}`,
         );
