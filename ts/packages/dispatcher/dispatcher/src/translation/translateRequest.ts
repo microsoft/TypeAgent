@@ -202,7 +202,6 @@ export function getTranslatorForSchema(
         jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
         jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
         jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
-        validate: config.schema.generation.validate,
     };
     const newTranslator = loadAgentJsonTranslator(
         actionConfigs,
@@ -1085,17 +1084,6 @@ async function finalizeAction(
     );
 
     if (currentActionSchemaName === undefined) {
-        if (
-            !context.sessionContext.agentContext.session.getConfig().translation
-                .schema.generation.validate
-        ) {
-            return createExecutableAction(
-                currentSchemaName,
-                currentAction.actionName,
-                currentAction.parameters,
-                resultEntityId,
-            );
-        }
         throw new Error(
             `Internal Error: Unable to match schema name for action ${currentAction.actionName}`,
         );
