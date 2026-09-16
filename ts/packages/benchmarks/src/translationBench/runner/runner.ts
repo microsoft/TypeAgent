@@ -2231,7 +2231,9 @@ export function createTranslationBenchConfig(
         model,
         // Inherit gateway/model default unless the scenario names an explicit
         // effort; never force a prompt cache key or effort implicitly.
-        reasoningEffort: scenario.reasoningEffort ?? "",
+        ...(scenario.reasoningEffort
+            ? { reasoningEffort: scenario.reasoningEffort }
+            : {}),
         stream: false,
         promptConfig: {
             additionalInstructions: scenario.additionalInstructions,
