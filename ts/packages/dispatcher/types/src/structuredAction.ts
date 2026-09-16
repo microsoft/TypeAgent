@@ -10,28 +10,14 @@ export type ActionIdentity = {
     actionName: string;
 };
 
-export type ActionSummary = ActionIdentity & {
-    description: string;
-};
-
 export type ActionSearchRequest = {
-    query?: string;
-    agentName?: string;
-    schemaName?: string;
-    offset?: number;
-    limit?: number;
+    query: string;
 };
 
 export type StructuredActionEnvelope = {
     protocolVersion: typeof structuredActionProtocolVersion;
     // Server-issued reuse boundary, not a bearer token or authorization grant.
     scopeId: string;
-};
-
-export type ActionSearchResult = StructuredActionEnvelope & {
-    actions: ActionSummary[];
-    total: number;
-    nextOffset?: number;
 };
 
 export type ActionExecutionPolicy = {
@@ -53,7 +39,8 @@ export type ActionInteractionContract = {
     kinds: ("question" | "choice" | "form" | "action-proposal")[];
 };
 
-export type ActionContract = ActionSummary & {
+export type ActionContract = ActionIdentity & {
+    description: string;
     fingerprint: string;
     input: {
         format: "typescript";
@@ -65,9 +52,6 @@ export type ActionContract = ActionSummary & {
     interactions: ActionInteractionContract;
 };
 
-export type ActionContractResult = StructuredActionEnvelope &
-    (
-        | { status: "found"; contract: ActionContract }
-        // Deliberately does not distinguish absent and unauthorized identities.
-        | { status: "not-found" }
-    );
+export type ActionSearchResult = StructuredActionEnvelope & {
+    actions: ActionContract[];
+};

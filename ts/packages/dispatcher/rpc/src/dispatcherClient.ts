@@ -214,9 +214,6 @@ export function createDispatcherRpcClient(
         async searchActions(...args) {
             return rpc.invoke("searchActions", ...args);
         },
-        async getActionContract(...args) {
-            return rpc.invoke("getActionContract", ...args);
-        },
         async respondToChoice(...args) {
             return rpc.invoke("respondToChoice", ...args);
         },

@@ -111,7 +111,7 @@ Discovery should provide enough information for Copilot to determine:
 - Input schema
 - Relevant constraints
 - Expected outputs and any authorization, confirmation, or interaction requirements
-- Whether the action is currently available, and what setup is missing if it is not
+- Only actions that are currently active and enabled
 
 **Conceptually:**
 
@@ -127,30 +127,27 @@ Discovery should provide enough information for Copilot to determine:
         input schema        input schema
 ```
 
-For large action catalogs, discovery should preferably support search and progressive disclosure rather than requiring the entire TypeAgent action catalog to be loaded into Copilot's context.
+For large action catalogs, discovery should support search and progressive disclosure rather than requiring the entire TypeAgent action catalog to be registered as MCP tools or loaded into Copilot's context.
 
-Use two required levels of progressive disclosure:
+Search accepts one natural-language query and returns closed contracts for every matching action. Until discovery has a relevance ranker, it must not silently truncate the matching set. Callers should use a focused query when the active catalog is large.
 
-1. **Action summary:** Search or list compact action identifiers, descriptions, and current availability.
-2. **Action contract:** Retrieve one closed, self-contained contract with its parameters, referenced types, constraints, outputs, and interaction requirements.
-
-Server status and capability or schema names may be returned as metadata and search filters, but they should not be mandatory retrieval stages. Treating them as required levels would add round trips without improving the contract boundary. The action is the unit of selection, caching, and compatibility.
+Each result is a closed, self-contained action contract with its identity, description, parameters, referenced types, constraints, outputs, and interaction requirements. This combines candidate discovery and contract hydration so the normal structured path requires only discovery and execution. The action remains the unit of selection, caching, and compatibility.
 
 The normal flow is:
 
 ```text
-search actions → get selected action contract → execute action
+search action contracts → execute selected action
 ```
 
-A caller that already knows the action should be able to fetch its contract directly; a caller with a current contract should not need to repeat discovery. A contract must include referenced enums and nested types without loading unrelated actions from the same schema.
+A caller with a current contract should not need to repeat discovery. A contract must include referenced enums and nested types without loading unrelated actions from the same schema.
 
-Contracts may be reused within the same server and session/permission scope. TypeAgent must detect an outdated contract before execution and ask the caller to refresh it using the exact-match mechanism below.
+Contracts may be reused within the same server and session/permission scope. TypeAgent must detect an outdated contract before execution and ask the caller to refresh it with a new search.
 
-Discovery must respect the caller's permissions. It neither enables actions nor grants permission to execute them. No match or an ambiguous match should lead to clarification or natural-language handling, not guessed action parameters.
+Discovery must respect the caller's permissions. It neither enables actions nor grants permission to execute them. Disabled and inactive actions are excluded. No match or an ambiguous match should lead to clarification or natural-language handling, not guessed action parameters.
 
 ### Contract Versioning
 
-Discovery responses include a protocol version for the structured-action envelope and an opaque fingerprint for each action contract. Execution must supply the fingerprint returned with the selected contract.
+Discovery responses include a protocol version for the structured-action envelope and an opaque fingerprint for each returned action contract. Execution must supply the fingerprint returned with the selected contract.
 
 TypeAgent compares the supplied fingerprint with the current contract before any effect is possible. A mismatch returns `contract_stale` without executing the action. The caller must fetch the current contract and construct a new request; TypeAgent must not reinterpret parameters under the changed contract.
 
@@ -162,8 +159,7 @@ Version 1 uses exact fingerprint matching rather than attempting semantic compat
 
 Expose a small, fixed set of operations through the existing TypeAgent MCP server:
 
-- Search or list action summaries.
-- Retrieve one complete action contract.
+- Search complete action contracts with a natural-language query.
 - Execute one action against that contract.
 - Continue or cancel a pending interaction when the transport cannot represent that interaction directly.
 

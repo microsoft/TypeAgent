@@ -19,8 +19,6 @@ import type {
 import type { PendingInteractionResponse } from "./pendingInteraction.js";
 import type { CancelResult, QueueSnapshot, SubmitResult } from "./queue.js";
 import type {
-    ActionContractResult,
-    ActionIdentity,
     ActionSearchRequest,
     ActionSearchResult,
 } from "./structuredAction.js";
@@ -514,9 +512,7 @@ export interface Dispatcher {
      */
     getAgentSchemas(agentName?: string): Promise<AgentSchemaInfo[]>;
 
-    searchActions(request?: ActionSearchRequest): Promise<ActionSearchResult>;
-
-    getActionContract(identity: ActionIdentity): Promise<ActionContractResult>;
+    searchActions(request: ActionSearchRequest): Promise<ActionSearchResult>;
 
     /**
      * Respond to a pending choice from an agent.

@@ -9,8 +9,6 @@ import type {
 } from "@typeagent/agent-sdk";
 import type {
     AgentSchemaInfo,
-    ActionContractResult,
-    ActionIdentity,
     ActionSearchRequest,
     ActionSearchResult,
     CancelResult,
@@ -103,9 +101,7 @@ export type DispatcherInvokeFunctions = {
 
     getAgentSchemas(agentName?: string): Promise<AgentSchemaInfo[]>;
 
-    searchActions(request?: ActionSearchRequest): Promise<ActionSearchResult>;
-
-    getActionContract(identity: ActionIdentity): Promise<ActionContractResult>;
+    searchActions(request: ActionSearchRequest): Promise<ActionSearchResult>;
 
     respondToChoice(
         choiceId: string,

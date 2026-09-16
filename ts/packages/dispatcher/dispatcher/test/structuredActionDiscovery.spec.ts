@@ -3,10 +3,7 @@
 
 import { jest } from "@jest/globals";
 import type { ActionPolicy, AppAgent } from "@typeagent/agent-sdk";
-import type {
-    ActionContractResult,
-    ActionIdentity,
-} from "@typeagent/dispatcher-types";
+import type { ActionIdentity } from "@typeagent/dispatcher-types";
 import { parseActionSchemaSource } from "@typeagent/action-schema";
 import { AppAgentManager } from "../src/context/appAgentManager.js";
 import { PortRegistrar } from "../src/context/portRegistrar.js";
@@ -114,11 +111,17 @@ function fixture(content = source, policies?: Record<string, ActionPolicy>) {
     };
 }
 
-function found(result: ActionContractResult) {
-    if (result.status !== "found") {
-        throw new Error("Expected contract");
+async function getContract(
+    service: StructuredActionDiscovery,
+    actionIdentity: ActionIdentity = identity,
+) {
+    const result = await service.searchActions({
+        query: `${actionIdentity.schemaName} ${actionIdentity.actionName}`,
+    });
+    if (result.actions.length !== 1) {
+        throw new Error(`Expected one contract, got ${result.actions.length}`);
     }
-    return result.contract;
+    return result.actions[0];
 }
 
 async function fingerprint(content = source, policy?: ActionPolicy) {
@@ -126,16 +129,18 @@ async function fingerprint(content = source, policy?: ActionPolicy) {
         content,
         policy ? { select: policy } : undefined,
     );
-    return found(await service.getActionContract(identity)).fingerprint;
+    return (await getContract(service)).fingerprint;
 }
 
 describe("structured action contracts", () => {
-    it("retrieves exactly one action directly, with a closed dependency graph", async () => {
+    it("hydrates an exact action with a closed dependency graph", async () => {
         const { service, agents } = fixture();
         const enumerate = jest.spyOn(agents, "getActionConfigs");
-        const result = await service.getActionContract(identity);
-        const contract = found(result);
-        expect(enumerate).not.toHaveBeenCalled();
+        const result = await service.searchActions({
+            query: `${identity.schemaName} ${identity.actionName}`,
+        });
+        const contract = result.actions[0];
+        expect(enumerate).toHaveBeenCalledTimes(1);
         expect(result.protocolVersion).toBe(1);
         expect(result.scopeId).toEqual(expect.any(String));
         expect(contract.input.format).toBe("typescript");
@@ -161,42 +166,40 @@ describe("structured action contracts", () => {
         expect(contract).not.toHaveProperty("availability");
     });
 
-    it("distinguishes duplicate action names and rejects case-insensitive guesses", async () => {
+    it("preserves exact identities for duplicate action names", async () => {
         const { service } = fixture();
-        const other = found(
-            await service.getActionContract({
-                schemaName: "test.other",
-                actionName: "select",
-            }),
-        );
+        const matches = await service.searchActions({ query: "select" });
+        expect(
+            matches.actions.map(({ schemaName, actionName }) => ({
+                schemaName,
+                actionName,
+            })),
+        ).toEqual([
+            { schemaName: "test.items", actionName: "select" },
+            { schemaName: "test.other", actionName: "select" },
+        ]);
+        const other = await getContract(service, {
+            schemaName: "test.other",
+            actionName: "select",
+        });
         expect(other.input.schemaText).toContain("id: number");
-        for (const missing of [
-            { schemaName: "test", actionName: "select" },
-            { schemaName: "TEST.items", actionName: "select" },
-            { schemaName: "test.items", actionName: "SELECT" },
-        ]) {
-            expect((await service.getActionContract(missing)).status).toBe(
-                "not-found",
-            );
-        }
     });
 
     it("handles no parameters and an optional parameter object", async () => {
         const { service } = fixture();
         expect(
-            found(
-                await service.getActionContract({
+            (
+                await getContract(service, {
                     ...identity,
                     actionName: "ping",
-                }),
+                })
             ).input.schemaText,
         ).not.toContain("parameters");
         const optional = fixture(
             source.replace("parameters: {", "parameters?: {"),
         );
         expect(
-            found(await optional.service.getActionContract(identity)).input
-                .schemaText,
+            (await getContract(optional.service)).input.schemaText,
         ).toContain("parameters?:");
     });
 
@@ -207,9 +210,7 @@ describe("structured action contracts", () => {
                 "color: Color;\n    children?: Item[];",
             ),
         );
-        const contract = found(
-            await recursive.service.getActionContract(identity),
-        );
+        const contract = await getContract(recursive.service);
         expect(contract.input.schemaText).toContain("children?: Item[]");
         expect(contract.input.schemaText.match(/type Item =/g)).toHaveLength(1);
         expect(contract.input.schemaText).not.toContain("type Clear");
@@ -287,7 +288,7 @@ describe("structured action contracts", () => {
                 source,
                 policy ? { select: policy } : undefined,
             );
-            const contract = found(await service.getActionContract(identity));
+            const contract = await getContract(service);
             expect(contract.policy).toEqual({ effects, confirmation });
             expect(contract.interactions.mode).toBe("may-require-interaction");
         },
@@ -300,62 +301,57 @@ describe("structured action contracts", () => {
                 select: { effects: "read-only", confirmation: "never" },
             },
         });
-        await expect(service.getActionContract(identity)).rejects.toThrow(
-            "Invalid structured action policy",
-        );
+        await expect(
+            service.searchActions({
+                query: `${identity.schemaName} ${identity.actionName}`,
+            }),
+        ).rejects.toThrow("Invalid structured action policy");
     });
 });
 
 describe("structured action discovery", () => {
-    it("lists compact action summaries with filters and pagination", async () => {
+    it("returns every matching action as a complete contract", async () => {
         const { service } = fixture();
-        const page = await service.searchActions({ limit: 2 });
-        expect(page.total).toBe(4);
-        expect(page.actions.map((a) => a.actionName)).toEqual([
+        const result = await service.searchActions({ query: "test" });
+        expect(result.actions.map((a) => a.actionName)).toEqual([
             "clear",
             "ping",
+            "select",
+            "select",
         ]);
-        expect(page.nextOffset).toBe(2);
-        expect(page.actions[0]).not.toHaveProperty("input");
-        expect(page.actions[0]).not.toHaveProperty("availability");
-        if (page.nextOffset === undefined) {
-            throw new Error("Expected another page");
-        }
-        const remaining = await service.searchActions({
-            offset: page.nextOffset,
-            limit: 2,
-        });
-        expect(remaining.actions.map((a) => a.schemaName)).toEqual([
-            "test.items",
-            "test.other",
-        ]);
-        expect(remaining.nextOffset).toBeUndefined();
-        expect((await service.searchActions({ query: "SELECT" })).total).toBe(
-            2,
-        );
         expect(
-            (await service.searchActions({ schemaName: "test.other" })).total,
-        ).toBe(1);
+            result.actions.every((action) => action.input !== undefined),
+        ).toBe(true);
+        expect(result.actions[0]).not.toHaveProperty("availability");
         expect(
-            (await service.searchActions({ agentName: "missing" })).total,
-        ).toBe(0);
-        expect((await service.searchActions({ query: "an item" })).total).toBe(
-            1,
-        );
-        expect((await service.searchActions({ offset: 50 })).actions).toEqual(
-            [],
-        );
+            (await service.searchActions({ query: "SELECT" })).actions,
+        ).toHaveLength(2);
+        expect(
+            (await service.searchActions({ query: "test.other select" }))
+                .actions,
+        ).toHaveLength(1);
+        expect(
+            (await service.searchActions({ query: "missing" })).actions,
+        ).toEqual([]);
+        expect(
+            (await service.searchActions({ query: "an item" })).actions,
+        ).toHaveLength(1);
     });
 
-    it.each([
-        { limit: 0 },
-        { limit: 201 },
-        { offset: -1 },
-        { offset: 0.5 },
-        { schemaName: "" },
-    ])("rejects malformed search %j", async (request) => {
+    it.each([{ query: "" }, { query: "   " }])(
+        "rejects malformed search %j",
+        async (request) => {
+            await expect(
+                fixture().service.searchActions(request),
+            ).rejects.toThrow();
+        },
+    );
+
+    it("rejects a missing search request", async () => {
         await expect(
-            fixture().service.searchActions(request),
+            fixture().service.searchActions(
+                undefined as unknown as { query: string },
+            ),
         ).rejects.toThrow();
     });
 
@@ -363,13 +359,9 @@ describe("structured action discovery", () => {
         const { service, state, agent, hooks } = fixture();
         const assertHidden = async () => {
             expect(
-                (await service.searchActions()).actions.some(
-                    (action) => action.schemaName === identity.schemaName,
-                ),
-            ).toBe(false);
-            expect(await service.getActionContract(identity)).toMatchObject({
-                status: "not-found",
-            });
+                (await service.searchActions({ query: identity.schemaName }))
+                    .actions,
+            ).toEqual([]);
         };
 
         agent.actions.delete(identity.schemaName);
@@ -394,42 +386,49 @@ describe("structured action discovery", () => {
         };
         agent.actions.delete("test.other");
 
-        expect((await service.searchActions()).total).toBe(3);
         expect(
-            await service.getActionContract({
-                schemaName: "test.other",
-                actionName: "select",
-            }),
-        ).toMatchObject({ status: "not-found" });
+            (await service.searchActions({ query: "test" })).actions,
+        ).toHaveLength(3);
+        expect(
+            (await service.searchActions({ query: "test.other select" }))
+                .actions,
+        ).toEqual([]);
     });
 
     it("binds scope to the facade, live session, and trusted permission revision", async () => {
         const { context, service } = fixture();
-        const first = await service.getActionContract(identity);
-        expect((await service.searchActions()).scopeId).toBe(first.scopeId);
+        const first = await service.searchActions({ query: "select" });
+        expect((await service.searchActions({ query: "test" })).scopeId).toBe(
+            first.scopeId,
+        );
         expect(
-            (await new StructuredActionDiscovery(context).searchActions())
-                .scopeId,
+            (
+                await new StructuredActionDiscovery(context).searchActions({
+                    query: "test",
+                })
+            ).scopeId,
         ).not.toBe(first.scopeId);
         context.session = {};
-        expect((await service.searchActions()).scopeId).not.toBe(first.scopeId);
+        expect(
+            (await service.searchActions({ query: "test" })).scopeId,
+        ).not.toBe(first.scopeId);
         let scope = {};
         const restricted = new StructuredActionDiscovery(context, () => ({
             scope,
             canDiscoverSchema: () => true,
         }));
-        const before = await restricted.searchActions();
+        const before = await restricted.searchActions({ query: "test" });
         const reconnected = new StructuredActionDiscovery(context, () => ({
             scope,
             canDiscoverSchema: () => true,
         }));
-        expect((await reconnected.searchActions()).scopeId).toBe(
-            before.scopeId,
-        );
+        expect(
+            (await reconnected.searchActions({ query: "test" })).scopeId,
+        ).toBe(before.scopeId);
         scope = {};
-        expect((await restricted.searchActions()).scopeId).not.toBe(
-            before.scopeId,
-        );
+        expect(
+            (await restricted.searchActions({ query: "test" })).scopeId,
+        ).not.toBe(before.scopeId);
     });
 
     it("filters denied schemas before parsing and does not reveal their existence", async () => {
@@ -443,23 +442,22 @@ describe("structured action discovery", () => {
             scope,
             canDiscoverSchema: (name) => name === identity.schemaName,
         }));
-        expect((await service.searchActions()).total).toBe(3);
         expect(
-            await service.getActionContract({
-                schemaName: "test.other",
-                actionName: "select",
-            }),
-        ).toEqual(
-            await service.getActionContract({
-                schemaName: "secret",
-                actionName: "select",
-            }),
-        );
+            (await service.searchActions({ query: "test" })).actions,
+        ).toHaveLength(3);
+        expect(
+            (await service.searchActions({ query: "test.other select" }))
+                .actions,
+        ).toEqual([]);
+        expect(
+            (await service.searchActions({ query: "secret select" })).actions,
+        ).toEqual([]);
     });
 
     it("propagates visible schema failures rather than returning empty success", async () => {
         const { service } = fixture("invalid schema");
-        await expect(service.getActionContract(identity)).rejects.toThrow();
-        await expect(service.searchActions()).rejects.toThrow();
+        await expect(
+            service.searchActions({ query: "test" }),
+        ).rejects.toThrow();
     });
 });

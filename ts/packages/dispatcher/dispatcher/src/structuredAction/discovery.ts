@@ -5,15 +5,12 @@ import { randomUUID } from "node:crypto";
 import { getActionDescription } from "@typeagent/action-schema";
 import {
     structuredActionProtocolVersion,
-    type ActionContractResult,
-    type ActionIdentity,
+    type ActionContract,
     type ActionSearchRequest,
     type ActionSearchResult,
-    type ActionSummary,
     type StructuredActionEnvelope,
 } from "@typeagent/dispatcher-types";
 import type { AppAgentManager } from "../context/appAgentManager.js";
-import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createActionContract } from "./contract.js";
 
 // Host-only policy. Never deserialize this from a discovery/RPC request.
@@ -45,28 +42,7 @@ function validateSearch(request: ActionSearchRequest): void {
     ) {
         throw new Error("Action search request must be an object");
     }
-    if (request.query !== undefined && typeof request.query !== "string") {
-        throw new Error("query must be a string");
-    }
-    for (const key of ["agentName", "schemaName"] as const) {
-        if (request[key] !== undefined) {
-            validateString(request[key], key);
-        }
-    }
-    if (
-        request.offset !== undefined &&
-        (!Number.isSafeInteger(request.offset) || request.offset < 0)
-    ) {
-        throw new Error("offset must be a nonnegative safe integer");
-    }
-    if (
-        request.limit !== undefined &&
-        (!Number.isSafeInteger(request.limit) ||
-            request.limit < 1 ||
-            request.limit > 200)
-    ) {
-        throw new Error("limit must be an integer between 1 and 200");
-    }
+    validateString(request.query, "query");
 }
 
 export class StructuredActionDiscovery {
@@ -98,18 +74,14 @@ export class StructuredActionDiscovery {
     }
 
     public async searchActions(
-        request: ActionSearchRequest = {},
+        request: ActionSearchRequest,
     ): Promise<ActionSearchResult> {
         validateSearch(request);
         const { envelope, policy } = this.bindScope();
-        const query = request.query?.trim().toLowerCase();
-        const matches: ActionSummary[] = [];
+        const query = request.query.trim().toLowerCase();
+        const matches: ActionContract[] = [];
         for (const config of this.context.agents.getActionConfigs()) {
             if (
-                (request.schemaName !== undefined &&
-                    request.schemaName !== config.schemaName) ||
-                (request.agentName !== undefined &&
-                    request.agentName !== getAppAgentName(config.schemaName)) ||
                 policy?.canDiscoverSchema(config.schemaName) === false ||
                 !this.context.agents.isSchemaActive(config.schemaName) ||
                 !this.context.agents.isActionActive(config.schemaName)
@@ -122,18 +94,19 @@ export class StructuredActionDiscovery {
                 .actionSchemas) {
                 const description = getActionDescription(definition) ?? "";
                 if (
-                    query &&
                     !`${config.schemaName} ${actionName} ${description}`
                         .toLowerCase()
                         .includes(query)
                 ) {
                     continue;
                 }
-                matches.push({
-                    schemaName: config.schemaName,
-                    actionName,
-                    description,
-                });
+                matches.push(
+                    createActionContract(
+                        { schemaName: config.schemaName, actionName },
+                        definition,
+                        config,
+                    ),
+                );
             }
         }
         matches.sort((a, b) => {
@@ -152,63 +125,9 @@ export class StructuredActionDiscovery {
                       : 0)
             );
         });
-        const offset = request.offset ?? 0;
-        const end = offset + (request.limit ?? 50);
         return {
             ...envelope,
-            actions: matches.slice(offset, end),
-            total: matches.length,
-            ...(end < matches.length ? { nextOffset: end } : {}),
-        };
-    }
-
-    public async getActionContract(
-        identity: ActionIdentity,
-    ): Promise<ActionContractResult> {
-        if (
-            identity === null ||
-            typeof identity !== "object" ||
-            Array.isArray(identity)
-        ) {
-            throw new Error("Action identity must be an object");
-        }
-        validateString(identity.schemaName, "schemaName");
-        validateString(identity.actionName, "actionName");
-        const { envelope, policy } = this.bindScope();
-        // Check visibility before looking up or parsing the schema.
-        if (policy?.canDiscoverSchema(identity.schemaName) === false) {
-            return { ...envelope, status: "not-found" };
-        }
-        const config = this.context.agents.tryGetActionConfig(
-            identity.schemaName,
-        );
-        if (config === undefined) {
-            return { ...envelope, status: "not-found" };
-        }
-        if (
-            !this.context.agents.isSchemaActive(identity.schemaName) ||
-            !this.context.agents.isActionActive(identity.schemaName)
-        ) {
-            return { ...envelope, status: "not-found" };
-        }
-        const schema = this.context.agents.getActionSchemaFileForConfig(config);
-        const definition = schema.parsedActionSchema.actionSchemas.get(
-            identity.actionName,
-        );
-        if (definition === undefined) {
-            return { ...envelope, status: "not-found" };
-        }
-        return {
-            ...envelope,
-            status: "found",
-            contract: createActionContract(
-                {
-                    schemaName: identity.schemaName,
-                    actionName: identity.actionName,
-                },
-                definition,
-                config,
-            ),
+            actions: matches,
         };
     }
 }
