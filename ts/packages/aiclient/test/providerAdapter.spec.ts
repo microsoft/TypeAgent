@@ -265,6 +265,34 @@ describe("MessagesWireApiProvider", () => {
         expect(body.messages).toEqual([{ role: "user", content: "Hello" }]);
     });
 
+    test("maps supported reasoning effort to Anthropic output_config", () => {
+        const body = adapter.buildRequestBody(
+            makeRequest({
+                completionSettings: {
+                    max_completion_tokens: 256,
+                    reasoning_effort: "max",
+                },
+            }),
+        ) as Record<string, unknown>;
+        expect(body.output_config).toEqual({ effort: "max" });
+    });
+
+    test.each(["none", "minimal"] as const)(
+        "rejects unsupported Anthropic reasoning effort %s",
+        (reasoningEffort) => {
+            expect(() =>
+                adapter.buildRequestBody(
+                    makeRequest({
+                        completionSettings: {
+                            max_completion_tokens: 256,
+                            reasoning_effort: reasoningEffort,
+                        },
+                    }),
+                ),
+            ).toThrow(/does not support reasoning effort/);
+        },
+    );
+
     test("buildRequestBody throws when max_completion_tokens is missing", () => {
         const req = makeRequest({ completionSettings: {} });
         expect(() => adapter.buildRequestBody(req)).toThrow(

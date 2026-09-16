@@ -18,8 +18,6 @@ import {
     CompleteUsageStatsCallback,
     CompletionJsonSchema,
     CompletionSettings,
-    getModelCallSink,
-    withModelCallSink,
 } from "@typeagent/aiclient";
 import {
     createIncrementalJsonParser,
@@ -353,57 +351,13 @@ export function createJsonTranslatorWithValidator<T extends object>(
         if (jsonSchema !== undefined) {
             debugJsonSchema(jsonSchema);
         }
-        const sink = getModelCallSink();
-        if (sink === undefined) {
-            return originalComplete(
-                actualPrompt,
-                actualUsageCallback,
-                jsonSchema,
-                logFnOverride ?? options?.promptLogger?.logModelRequest,
-                actualSignal,
-            );
-        }
-        // Snapshot the input before the model can mutate it.
-        let capturedRequest: unknown = actualPrompt;
-        try {
-            capturedRequest = structuredClone(actualPrompt);
-        } catch {
-            // Keep capture best-effort for non-cloneable custom prompts.
-        }
-
-        // Capture the ChatModel.complete input and result for benchmark trajectories.
-        let usage: unknown;
-        const captureUsage: CompleteUsageStatsCallback = (stats) => {
-            usage = stats;
-            actualUsageCallback?.(stats);
-        };
-        const atMs = Date.now();
-        const startedPerf = performance.now();
-        const response = await originalComplete(
+        return originalComplete(
             actualPrompt,
-            captureUsage,
+            actualUsageCallback,
             jsonSchema,
             logFnOverride ?? options?.promptLogger?.logModelRequest,
             actualSignal,
         );
-        try {
-            const record = structuredClone({
-                name,
-                request: capturedRequest,
-                response,
-                usage,
-                atMs,
-                durationMs: performance.now() - startedPerf,
-            });
-            const sinkResult: unknown = withModelCallSink(undefined, () =>
-                sink(record),
-            );
-            // Async sinks are unsupported, but contain accidental rejections.
-            void Promise.resolve(sinkResult).catch(() => {});
-        } catch {
-            // Trajectory capture must never break translation.
-        }
-        return response;
     };
 
     if (ai.supportsStreaming(model)) {

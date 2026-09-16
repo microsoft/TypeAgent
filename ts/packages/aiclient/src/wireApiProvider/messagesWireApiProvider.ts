@@ -142,6 +142,17 @@ export class MessagesWireApiProvider implements ProviderAdapter {
         if (cs.top_p !== undefined) {
             body.top_p = cs.top_p;
         }
+        if (cs.reasoning_effort !== undefined) {
+            if (
+                cs.reasoning_effort === "none" ||
+                cs.reasoning_effort === "minimal"
+            ) {
+                throw new Error(
+                    `messages wireApi does not support reasoning effort '${cs.reasoning_effort}'`,
+                );
+            }
+            body.output_config = { effort: cs.reasoning_effort };
+        }
         if (request.stream) {
             body.stream = true;
         }
