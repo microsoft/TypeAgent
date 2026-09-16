@@ -34,18 +34,33 @@ async function ensureActiveTab() {
 }
 
 async function getWindowIdByTitle(title: string): Promise<number> {
-    const normalizedTitle = title.trim().toLowerCase();
-    if (normalizedTitle.length === 0) {
+    const trimmedTitle = title.trim();
+    if (trimmedTitle.length === 0) {
         throw new Error("Browser window title is empty.");
     }
+
+    const { caseInsensitiveWindowTitleMatching = true } =
+        await chrome.storage.sync.get({
+            caseInsensitiveWindowTitleMatching: true,
+        });
+    const normalizeTitle = (value: string) =>
+        caseInsensitiveWindowTitleMatching
+            ? value.trim().toLowerCase()
+            : value.trim();
+    const normalizedTitle = normalizeTitle(trimmedTitle);
 
     const windows = await chrome.windows.getAll({ populate: true });
     const matchingWindows = windows.filter((window) => {
         if (window.type !== "normal" || window.id === undefined) {
             return false;
         }
+        // A browser window's visible title comes from its active tab. Inactive
+        // tab titles identify tabs, not separate windows.
         const activeTab = window.tabs?.find((tab) => tab.active);
-        return activeTab?.title?.trim().toLowerCase() === normalizedTitle;
+        return (
+            activeTab?.title !== undefined &&
+            normalizeTitle(activeTab.title) === normalizedTitle
+        );
     });
 
     if (matchingWindows.length === 0) {

@@ -33,7 +33,7 @@ export type CloseTab = {
 export type CloseWindow = {
     actionName: "closeWindow";
     parameters: {
-        title?: string; // case-insensitive exact title of the active tab in the target window, ignoring surrounding whitespace; omit to close the current window
+        title?: string; // full title of the active tab in the target window, ignoring surrounding whitespace; matching ignores case by default but can be configured as case-sensitive
     };
 };
 
