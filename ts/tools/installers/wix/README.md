@@ -360,7 +360,11 @@ The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg â†’ **ProviderDlg** â†
 VerifyReadyDlg. For `COPILOT`, a deferred, impersonated custom action runs
 `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider COPILOT
 --embedding LOCAL --force` as the installing user, writing
-`config.local.yaml` to `~/.typeagent`. For `AISYSTEMS` (the default), the MSI
+`config.local.yaml` to `~/.typeagent`. The action explicitly pins
+`TYPEAGENT_CONFIG_DIR` and `TYPEAGENT_USER_DATA_DIR` because deferred MSI
+actions can retain the Windows Installer service environment even while
+impersonating the user. Copilot provisioning is local and must succeed; it does
+not contact Key Vault. For `AISYSTEMS` (the default), the MSI
 **attempts** provisioning during install via a deferred, impersonated
 (interactive) custom action `ProvisionAiSystemsConfig` that runs
 `node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in

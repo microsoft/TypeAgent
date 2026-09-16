@@ -29,6 +29,9 @@
 param(
     [Parameter(Mandatory = $true)][string]$ServePath,
     [string]$LogPath,
+    [string]$UserDataDir,
+    [string]$RuntimeRoot,
+    [switch]$FailOnError,
     [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
 
@@ -39,6 +42,14 @@ $ServerPort = 8999
 $StartTimeoutSeconds = 45
 
 $ErrorActionPreference = "Continue"
+
+if ($UserDataDir) {
+    $env:TYPEAGENT_USER_DATA_DIR = $UserDataDir
+    $env:TYPEAGENT_CONFIG_DIR = $UserDataDir
+}
+if ($RuntimeRoot) {
+    $env:TYPEAGENT_RUNTIME_ROOT = $RuntimeRoot
+}
 
 function Write-Log([string]$message) {
     $line = "{0} {1}" -f (Get-Date -Format "s"), $message
@@ -63,16 +74,24 @@ $label = ($serveArgs -join ' ')
 
 if (-not (Test-Path $ServePath)) {
     Write-Log "WARNING: agent-server launcher not found: $ServePath. Skipping 'typeagent-serve $label'."
+    if ($FailOnError) { exit 1 }
     exit 0
 }
 
 $node = Resolve-NodeExe
 if (-not $node) {
     Write-Log "WARNING: Node.js was not found; cannot run 'typeagent-serve $label'. Install Node.js >= 22 and run it manually from '$ServePath'."
+    if ($FailOnError) { exit 1 }
     exit 0
 }
 
 Write-Log "Using node: $node"
+if ($UserDataDir) {
+    Write-Log "Using TypeAgent user data: $UserDataDir"
+}
+if ($RuntimeRoot) {
+    Write-Log "Using TypeAgent runtime root: $RuntimeRoot"
+}
 Write-Log "Running: typeagent-serve $label"
 
 # The 'start' subcommand launches a DETACHED daemon that must outlive this
@@ -125,11 +144,17 @@ if ($isStart) {
         Write-Log "WARNING: 'typeagent-serve $label' launch failed: $($_.Exception.Message)."
     }
 } else {
+    $serveExitCode = 0
     try {
         & $node $ServePath @serveArgs 2>&1 | ForEach-Object { Write-Log "  $_" }
-        Write-Log "typeagent-serve $label exited with code $LASTEXITCODE."
+        $serveExitCode = $LASTEXITCODE
+        Write-Log "typeagent-serve $label exited with code $serveExitCode."
     } catch {
+        $serveExitCode = 1
         Write-Log "WARNING: 'typeagent-serve $label' failed: $($_.Exception.Message)."
+    }
+    if ($FailOnError -and $serveExitCode -ne 0) {
+        exit $serveExitCode
     }
 }
 

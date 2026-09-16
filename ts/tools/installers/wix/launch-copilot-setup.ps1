@@ -4,6 +4,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$ServePath,
+    [string]$RuntimeRoot,
     [string]$LogPath = "$env:LOCALAPPDATA\TypeAgent\logs\copilot-setup-launch.log"
 )
 
@@ -34,7 +35,13 @@ try {
 
     $escapedNode = $nodeExe.Replace("'", "''")
     $escapedServe = $ServePath.Replace("'", "''")
+    $runtimeRootSetup = if ($RuntimeRoot) {
+        "`$env:TYPEAGENT_RUNTIME_ROOT = '$($RuntimeRoot.Replace("'", "''"))'`r`n"
+    } else {
+        ""
+    }
     $setupCommand = @"
+$runtimeRootSetup
 `$Host.UI.RawUI.WindowTitle = 'TypeAgent GitHub Copilot Setup'
 & '$escapedNode' '$escapedServe' setup --provider copilot --device-code
 if (`$LASTEXITCODE -eq 0) {

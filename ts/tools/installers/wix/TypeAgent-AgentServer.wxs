@@ -150,7 +150,7 @@
          at the manual provisioning/sign-in steps the MSI can only attempt, so a
          fresh machine knows what to finish if agents don't respond. -->
     <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Secure="yes"
-              Value="Finish setup: the claude and copilot CLIs need a one-time sign-in (run 'claude' then 'copilot'). If agents don't respond, provision config with: node &quot;%LOCALAPPDATA%\TypeAgent\agent-server\typeagent-serve.mjs&quot; provision  (sign in when prompted)." />
+              Value="Finish setup: the claude and copilot CLIs need a one-time sign-in. For Copilot config, run: node &quot;%LOCALAPPDATA%\TypeAgent\agent-server\typeagent-serve.mjs&quot; provision --provider copilot --embedding local --force. AI Systems users can run the same command with only 'provision' and sign in to Azure." />
 
     <!-- ═══════════════════════════════════════════════
          Directory layout
@@ -444,13 +444,13 @@
     <SetProperty Id="ProvisionCopilotConfig"
            Before="ProvisionCopilotConfig"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; provision --provider COPILOT --embedding LOCAL --force" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -UserDataDir &quot;[UserProfileFolder].typeagent&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -FailOnError provision --provider COPILOT --embedding LOCAL --force" />
 
     <CustomAction Id="ProvisionCopilotConfig"
                   BinaryKey="WixCA"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
-                  Return="ignore"
+                  Return="check"
                   Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
@@ -463,7 +463,7 @@
     <SetProperty Id="InstallPrereqs"
            Before="InstallPrereqs"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-prereqs.ps1&quot; -Provider &quot;[PROVIDER]&quot; -AgentServerDir &quot;[INSTALLFOLDER].&quot; -PluginInstallDir &quot;[TYPEAGENTROOT].&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-prereqs.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-prereqs.ps1&quot; -Provider &quot;[PROVIDER]&quot; -AgentServerDir &quot;[INSTALLFOLDER].&quot; -PluginInstallDir &quot;[TYPEAGENTROOT].&quot; -UserDataDir &quot;[UserProfileFolder].typeagent&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-prereqs.log&quot;" />
 
     <CustomAction Id="InstallPrereqs"
                   BinaryKey="WixCA"
@@ -477,7 +477,7 @@
          same setup command later. -->
     <CustomAction Id="LaunchCopilotSetup"
                   Directory="TYPEAGENTROOT"
-                  ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]launch-copilot-setup.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\copilot-setup-launch.log&quot;"
+                  ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]launch-copilot-setup.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\copilot-setup-launch.log&quot;"
                   Execute="immediate"
                   Return="ignore"
                   Impersonate="yes" />
@@ -492,7 +492,7 @@
     <SetProperty Id="ProvisionAiSystemsConfig"
            Before="ProvisionAiSystemsConfig"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; provision" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -UserDataDir &quot;[UserProfileFolder].typeagent&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; provision" />
 
     <CustomAction Id="ProvisionAiSystemsConfig"
                   BinaryKey="WixCA"
@@ -511,7 +511,7 @@
     <SetProperty Id="StartAgentServer"
            Before="StartAgentServer"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; start" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -UserDataDir &quot;[UserProfileFolder].typeagent&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; start" />
 
     <CustomAction Id="StartAgentServer"
                   BinaryKey="WixCA"
@@ -529,7 +529,7 @@
     <SetProperty Id="EnableAutostart"
            Before="EnableAutostart"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; autostart enable" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -UserDataDir &quot;[UserProfileFolder].typeagent&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; autostart enable" />
 
     <CustomAction Id="EnableAutostart"
                   BinaryKey="WixCA"
@@ -541,7 +541,7 @@
     <SetProperty Id="DisableAutostart"
            Before="DisableAutostart"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; autostart disable" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -UserDataDir &quot;[UserProfileFolder].typeagent&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; autostart disable" />
 
     <CustomAction Id="DisableAutostart"
                   BinaryKey="WixCA"

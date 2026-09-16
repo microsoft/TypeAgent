@@ -68,7 +68,12 @@ test("Copilot provisioning always uses local embeddings", () => {
             "provision --provider COPILOT --embedding LOCAL --force",
         ),
     );
+    assert.ok(command.includes("-FailOnError"));
     assert.ok(!command.includes("--ollama-host"));
+    assert.match(
+        wxs,
+        /<CustomAction Id="ProvisionCopilotConfig"[\s\S]*?Return="check"/,
+    );
 });
 
 test("provider-specific provisioning actions use exact provider gates", () => {
@@ -80,4 +85,40 @@ test("provider-specific provisioning actions use exact provider gates", () => {
         wxs,
         /<Custom Action="ProvisionAiSystemsConfig"[^>]*>\(NOT REMOVE~="ALL"\) AND \(PROVIDER="AISYSTEMS"\)<\/Custom>/,
     );
+});
+
+test("MSI lifecycle actions pin user config and runtime directories", () => {
+    const commands = [
+        "ProvisionCopilotConfig",
+        "ProvisionAiSystemsConfig",
+        "StartAgentServer",
+        "EnableAutostart",
+        "DisableAutostart",
+    ].map((id) => {
+        const command = wxs.match(
+            new RegExp(`<SetProperty Id="${id}"[\\s\\S]*?Value="([^"]*)"`),
+        )?.[1];
+        assert.ok(command, `${id} command must exist`);
+        return command;
+    });
+
+    for (const command of commands) {
+        assert.ok(
+            command.includes(
+                "-UserDataDir &quot;[UserProfileFolder].typeagent&quot;",
+            ),
+        );
+        assert.ok(
+            command.includes(
+                "-RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\\runtimes&quot;",
+            ),
+        );
+    }
+
+    const prereqs = wxs.match(
+        /<SetProperty Id="InstallPrereqs"[\s\S]*?Value="([^"]*)"/,
+    )?.[1];
+    assert.ok(prereqs, "InstallPrereqs command must exist");
+    assert.ok(prereqs.includes("-UserDataDir"));
+    assert.ok(prereqs.includes("-RuntimeRoot"));
 });

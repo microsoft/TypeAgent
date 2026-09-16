@@ -25,10 +25,20 @@ param(
     [string]$Provider = "AISYSTEMS",
     [string]$AgentServerDir = "$env:LOCALAPPDATA\TypeAgent\agent-server",
     [string]$PluginInstallDir = "$env:LOCALAPPDATA\TypeAgent",
-    [string]$FeedRegistry = ""
+    [string]$FeedRegistry = "",
+    [string]$UserDataDir,
+    [string]$RuntimeRoot
 )
 
 $ErrorActionPreference = "Continue"
+
+if ($UserDataDir) {
+    $env:TYPEAGENT_USER_DATA_DIR = $UserDataDir
+    $env:TYPEAGENT_CONFIG_DIR = $UserDataDir
+}
+if ($RuntimeRoot) {
+    $env:TYPEAGENT_RUNTIME_ROOT = $RuntimeRoot
+}
 
 # Azure DevOps resource GUID (audience for the npm feed bearer token). Matches
 # packages/defaultAgentProvider/src/installSources/feedAuth.ts.
@@ -190,6 +200,12 @@ function Invoke-PluginRegistration([string]$copilotPath) {
 }
 
 Write-Log "Provisioning external runtime prerequisites for provider $Provider."
+if ($UserDataDir) {
+    Write-Log "  TypeAgent user data: $UserDataDir"
+}
+if ($RuntimeRoot) {
+    Write-Log "  TypeAgent runtime root: $RuntimeRoot"
+}
 
 # Resolve node from an MSI service context (refreshes PATH + probes managers),
 # so a bare `node`/`npm` on the interactive PATH is found here too.
