@@ -24,6 +24,9 @@
   "scripts": {
     "build": "tsc -b && node ./scripts/copyAssets.mjs",
     "clean": "node ./scripts/clean.mjs",
+    "droidcall-eval": "node ./dist/translationBench/public_datasets/DroidCall/eval/runEval.js",
+    "droidcall-eval-smoke": "node ./dist/translationBench/public_datasets/DroidCall/eval/test-run.js",
+    "droidcall-rescore": "node ./dist/translationBench/public_datasets/DroidCall/eval/rescoreResults.js",
     "download-seal-tools": "pnpm run build && node dist/translationBench/public_datasets/Seal-Tools/index.js",
     "gen-action-parameters-grader": "pnpm run gen-policy",
     "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genPolicy.js && node --max-old-space-size=4096 dist/translationBench/scripts/pickEligibleActions.js --model ${TB_PICKER_MODEL:-azure/gpt-5.6-sol} && node ./scripts/copyAssets.mjs",
