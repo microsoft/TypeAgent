@@ -217,6 +217,7 @@ export function getTranslatorForSchema(
         context.promptLogger,
         sessionConfig.execution.entityPromptShape,
         sessionConfig.translation.entity.pathNavigation !== "off",
+        config.reasoningEffort || undefined,
     );
     if (useCache) {
         context.translatorCache.set(translatorName, newTranslator);

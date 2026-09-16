@@ -426,6 +426,15 @@ describe("ResponsesWireApiProvider", () => {
         expect(body.input[0].content[0].text).toBe("Hello");
     });
 
+    test("maps reasoning effort to the Responses API reasoning object", () => {
+        const body = adapter.buildRequestBody(
+            makeRequest({
+                completionSettings: { reasoning_effort: "high" },
+            }),
+        ) as Record<string, unknown>;
+        expect(body.reasoning).toEqual({ effort: "high" });
+    });
+
     test("parseResponse prefers a flat output_text", () => {
         const r = adapter.parseResponse({ output_text: "done" }, makeRequest());
         expect(r.success).toBe(true);
