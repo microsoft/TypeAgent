@@ -2238,8 +2238,20 @@ async function executeBrowserActionImpl(
             switch (action.actionName) {
                 case "closeWindow": {
                     const control = getActionBrowserControl(context);
-                    await control.closeWindow();
-                    return;
+                    try {
+                        if (action.parameters.title === undefined) {
+                            await control.closeWindow();
+                        } else {
+                            await control.closeWindow(action.parameters.title);
+                        }
+                        return;
+                    } catch (error) {
+                        return createActionResultFromError(
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                        );
+                    }
                 }
             }
             break;
