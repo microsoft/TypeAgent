@@ -11,7 +11,6 @@ import {
     type ParsedActionSchema,
     type ParsedActionSchemaJSON,
 } from "@typeagent/action-schema";
-import { validateTranslationBenchGoldAction } from "./actionValidation.js";
 import type { SchemaTypeNames } from "@typeagent/agent-sdk";
 import { z } from "zod";
 
@@ -33,8 +32,10 @@ import {
 } from "./actionShape.js";
 import {
     countEligibleTranslationBenchActions,
-    getPackagedLlmJudgeExcludedActions,
+    getPackagedEligibleGoldActionIds,
+    getPackagedScheduleExcludedActionIds,
 } from "./eligibleActions.js";
+import { validateTranslationBenchGoldAction } from "./actionValidation.js";
 
 export type TranslationBenchOrder = "strict" | "any";
 // Closed transform set: source import (1) vs generated/canonical (2).
@@ -68,10 +69,13 @@ export interface TranslationBenchBenchmarkProbePayload {
 export interface TranslationBenchParameterScoreSpec {
     defaultMode: TranslationBenchParamFieldMode;
     fields: Record<string, TranslationBenchParamFieldMode>;
+    acceptedValues?: Record<string, unknown[]>;
 }
 
 export type TranslationBenchParamFieldMode =
     | "exact"
+    | "normalized"
+    | "optionalNormalized"
     | "exists"
     | "nonempty"
     | "ignore";
@@ -288,6 +292,11 @@ export interface TranslationBenchBenchmarkConstruction {
             catalogDigest: string;
         };
         runFingerprint: string;
+        /** Packaged allowlist content hash used for this generation (required for new runs). */
+        eligibleGoldActionsHash?: string;
+        applyEligibleGoldAllowlist?: boolean;
+        /** When true, removedActions exact ids may be missing from the gen catalog (tests). */
+        allowMissingRemovedActions?: boolean;
     };
 }
 
@@ -432,11 +441,21 @@ const actionSchema = z
         parameters: z.record(z.string(), z.unknown()).optional(),
     })
     .strict();
-const paramFieldModeSchema = z.enum(["exact", "exists", "nonempty", "ignore"]);
+const paramFieldModeSchema = z.enum([
+    "exact",
+    "normalized",
+    "optionalNormalized",
+    "exists",
+    "nonempty",
+    "ignore",
+]);
 const parameterScoreSpecSchema = z
     .object({
         defaultMode: paramFieldModeSchema,
         fields: z.record(z.string(), paramFieldModeSchema),
+        acceptedValues: z
+            .record(z.string().trim().min(1), z.array(z.unknown()))
+            .optional(),
     })
     .strict();
 const probePayloadShape = {
@@ -798,6 +817,9 @@ const metadataSchemaV1 = z
                         maxAttempts: z.number().int().positive().max(5),
                         coverage: generationCoverageSchema,
                         runFingerprint: sha256Schema,
+                        eligibleGoldActionsHash: sha256Schema.optional(),
+                        applyEligibleGoldAllowlist: z.boolean().optional(),
+                        allowMissingRemovedActions: z.boolean().optional(),
                     })
                     .strict()
                     .optional(),
@@ -1952,6 +1974,38 @@ export function assertTranslationBenchBenchmarkReadyForEvaluation(
             "Translation-bench evaluation requires complete LLM-assisted construction provenance",
         );
     }
+    // Synthesizer-generated benches pin eligible-gold; builder-path fixtures omit generation.
+    const generation = construction.generation;
+    if (generation !== undefined) {
+        if (generation.applyEligibleGoldAllowlist === false) {
+            throw new Error(
+                "Translation-bench evaluation forbids applyEligibleGoldAllowlist=false",
+            );
+        }
+        if (generation.allowMissingRemovedActions === true) {
+            throw new Error(
+                "Translation-bench evaluation forbids allowMissingRemovedActions=true",
+            );
+        }
+        const packaged = getPackagedEligibleGoldActionIds();
+        if (
+            generation.eligibleGoldActionsHash === undefined ||
+            generation.eligibleGoldActionsHash !== packaged.contentHash
+        ) {
+            throw new Error(
+                `Translation-bench evaluation eligibleGoldActionsHash drift ` +
+                    `(bench=${generation.eligibleGoldActionsHash ?? "missing"}, packaged=${packaged.contentHash})`,
+            );
+        }
+        for (const evalCase of benchmark.cases) {
+            const id = `${evalCase.targetAction.schemaName}.${evalCase.targetAction.actionName}`;
+            if (!packaged.allowlist.has(id)) {
+                throw new Error(
+                    `Translation-bench evaluation schedules non-allowlisted gold target '${id}'`,
+                );
+            }
+        }
+    }
     if (
         construction.sourceManifestHash === undefined ||
         !SHA256_PATTERN.test(construction.sourceManifestHash)
@@ -2213,11 +2267,43 @@ function validateGenerationCoverage(
                 ]),
             ),
         ).size;
-        // complete = every eligible (non-llmAsAJudge-excluded) action was scheduled.
-        // actionCount stays the full catalog size; exclusions only affect eligibility.
+        const scheduledIds = [
+            ...new Set(
+                benchmark.cases.map(
+                    (evalCase) =>
+                        `${evalCase.targetAction.schemaName}.${evalCase.targetAction.actionName}`,
+                ),
+            ),
+        ];
+        // Fail closed: generation always consumes the packaged allowlist unless
+        // metadata explicitly records applyEligibleGoldAllowlist=false (tests).
+        const applyAllowlist = generation.applyEligibleGoldAllowlist !== false;
+        if (applyAllowlist) {
+            const packaged = getPackagedEligibleGoldActionIds();
+            if (
+                generation.eligibleGoldActionsHash === undefined ||
+                generation.eligibleGoldActionsHash !== packaged.contentHash
+            ) {
+                throw new Error(
+                    `Generated benchmark eligibleGoldActionsHash drift ` +
+                        `(bench=${generation.eligibleGoldActionsHash ?? "missing"}, packaged=${packaged.contentHash})`,
+                );
+            }
+            for (const id of scheduledIds) {
+                if (!packaged.allowlist.has(id)) {
+                    throw new Error(
+                        `Generated benchmark schedules non-allowlisted gold target '${id}'`,
+                    );
+                }
+            }
+        }
         const eligibleActionCount = countEligibleTranslationBenchActions(
             benchmark.metadata.schemas,
-            getPackagedLlmJudgeExcludedActions(),
+            getPackagedScheduleExcludedActionIds(benchmark.metadata.schemas, {
+                allowMissingExactIds:
+                    generation.allowMissingRemovedActions === true,
+                applyEligibleGoldAllowlist: applyAllowlist,
+            }),
         );
         if (
             generation.coverage.scheduledActionCount !== scheduledActionCount ||
