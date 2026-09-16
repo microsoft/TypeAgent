@@ -8,6 +8,8 @@ import {
     type TypeAgentEvalRow,
 } from "../src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.js";
 import { getSealToolsTypeAgentOverride } from "../src/translationBench/public_datasets/Seal-Tools/typeAgentOverrides.js";
+import fs from "node:fs";
+
 import { buildSealToolsSuite } from "../src/translationBench/public_datasets/Seal-Tools/eval/buildSuite.js";
 import {
     parametersMatch,
