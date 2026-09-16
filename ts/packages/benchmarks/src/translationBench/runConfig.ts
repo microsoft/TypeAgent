@@ -41,7 +41,6 @@ export interface EvalConfig {
     modelConcurrency?: number;
     maxCases?: number | null;
     headroom?: number;
-    caseOrder?: "any" | "strict";
 }
 
 export interface BatchConfig {
@@ -75,7 +74,6 @@ export interface ResolvedRunConfig {
     concurrencyByModel: Record<string, number>;
     modelConcurrency: number;
     maxCases: number | undefined;
-    caseOrder: "any" | "strict" | undefined;
     tpmLimits: TpmLimits;
 }
 
@@ -120,7 +118,6 @@ const evalConfigSchema = z
         modelConcurrency: positiveIntegerSchema.optional(),
         maxCases: nonNegativeIntegerSchema.nullable().optional(),
         headroom: z.number().finite().min(0).max(1).optional(),
-        caseOrder: z.enum(["any", "strict"]).optional(),
     })
     .strict()
     .superRefine((config, context) => {
@@ -283,6 +280,7 @@ function optionalMaxCases(
     }
     return maxCases;
 }
+
 export function resolveRunConfig(
     file: RunConfigFile,
     options: ResolveOptions = {},
@@ -336,7 +334,6 @@ export function resolveRunConfig(
             evalCfg.modelConcurrency ?? evalModels.length,
         ),
         maxCases: optionalMaxCases(evalCfg.maxCases),
-        caseOrder: evalCfg.caseOrder,
         tpmLimits: tpmLimitsFromModels(models),
     };
 }

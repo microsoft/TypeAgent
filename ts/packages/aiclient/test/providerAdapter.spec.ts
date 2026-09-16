@@ -65,15 +65,6 @@ describe("ChatCompletionsWireApiProvider (default path is byte-identical)", () =
         expect(body.stream_options).toBeUndefined();
     });
 
-    test("passes max reasoning effort through unchanged", () => {
-        const body = adapter.buildRequestBody(
-            makeRequest({
-                completionSettings: { reasoning_effort: "max" },
-            }),
-        ) as Record<string, unknown>;
-        expect(body.reasoning_effort).toBe("max");
-    });
-
     test("buildRequestBody adds stream + stream_options when streaming", () => {
         const req = makeRequest({
             stream: true,
@@ -274,33 +265,6 @@ describe("MessagesWireApiProvider", () => {
         expect(body.messages).toEqual([{ role: "user", content: "Hello" }]);
     });
 
-    test("maps supported reasoning effort to Anthropic output_config", () => {
-        const body = adapter.buildRequestBody(
-            makeRequest({
-                completionSettings: {
-                    max_completion_tokens: 256,
-                    reasoning_effort: "max",
-                },
-            }),
-        ) as Record<string, unknown>;
-        expect(body.output_config).toEqual({ effort: "max" });
-    });
-
-    test.each(["none", "minimal"] as const)(
-        "passes reasoning effort %s through output_config",
-        (reasoningEffort) => {
-            const body = adapter.buildRequestBody(
-                makeRequest({
-                    completionSettings: {
-                        max_completion_tokens: 256,
-                        reasoning_effort: reasoningEffort,
-                    },
-                }),
-            ) as Record<string, unknown>;
-            expect(body.output_config).toEqual({ effort: reasoningEffort });
-        },
-    );
-
     test("buildRequestBody throws when max_completion_tokens is missing", () => {
         const req = makeRequest({ completionSettings: {} });
         expect(() => adapter.buildRequestBody(req)).toThrow(
@@ -460,24 +424,6 @@ describe("ResponsesWireApiProvider", () => {
         expect(body.input[0].role).toBe("user");
         expect(body.input[0].content[0].type).toBe("input_text");
         expect(body.input[0].content[0].text).toBe("Hello");
-    });
-
-    test("maps reasoning effort to the Responses API reasoning object", () => {
-        const body = adapter.buildRequestBody(
-            makeRequest({
-                completionSettings: { reasoning_effort: "high" },
-            }),
-        ) as Record<string, unknown>;
-        expect(body.reasoning).toEqual({ effort: "high" });
-    });
-
-    test("passes max reasoning effort through the reasoning object", () => {
-        const body = adapter.buildRequestBody(
-            makeRequest({
-                completionSettings: { reasoning_effort: "max" },
-            }),
-        ) as Record<string, unknown>;
-        expect(body.reasoning).toEqual({ effort: "max" });
     });
 
     test("parseResponse prefers a flat output_text", () => {

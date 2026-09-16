@@ -17,7 +17,6 @@ import {
     openai as ai,
     CompleteUsageStatsCallback,
     CompletionJsonSchema,
-    CompletionSettings,
 } from "@typeagent/aiclient";
 import {
     createIncrementalJsonParser,
@@ -256,28 +255,12 @@ async function attachAttachments(
     }
 }
 
-export type JsonTranslatorReasoningEffort = NonNullable<
-    CompletionSettings["reasoning_effort"]
->;
-
 export type JsonTranslatorOptions<T extends object> = {
     validateInstance?: (instance: T) => Result<T>; // Optional
     instructions?: PromptSection[] | undefined; // Instructions before the per request preamble
     model?: string | undefined; // optional
-    reasoningEffort?: JsonTranslatorReasoningEffort | undefined;
     promptLogger?: PromptLogger | undefined; // optional prompt logger for model requests
 };
-
-export function createJsonTranslatorCompletionSettings(
-    reasoningEffort?: JsonTranslatorReasoningEffort,
-): CompletionSettings {
-    return {
-        response_format: { type: "json_object" },
-        ...(reasoningEffort !== undefined
-            ? { reasoning_effort: reasoningEffort }
-            : {}),
-    };
-}
 
 /**
  *
@@ -321,7 +304,9 @@ export function createJsonTranslatorWithValidator<T extends object>(
 ): TypeChatJsonTranslatorWithSignal<T> {
     const model = ai.createChatModel(
         options?.model,
-        createJsonTranslatorCompletionSettings(options?.reasoningEffort),
+        {
+            response_format: { type: "json_object" },
+        },
         undefined,
         ["translate", name],
     );

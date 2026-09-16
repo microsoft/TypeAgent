@@ -52,7 +52,7 @@ node dist/translationBench/public_datasets/Seal-Tools/index.js
 
 Outputs land in this folder:
 
-- `seal-tools-validation.jsonl` — one self-contained eval row per line (utterance
-  - its own tools + gold actions). Committed via **Git LFS** (`.gitattributes`).
-- `seal-tools-validation.hf.jsonl` — the raw HuggingFace download cache;
-  **gitignored** and reused on the next run to skip re-downloading.
+- `seal-tools-validation.jsonl` — generated TypeAgent rows; kept local.
+- `seal-tools-validation.hf.jsonl` — raw HuggingFace cache reused on the next run.
+
+Both generated files are gitignored.

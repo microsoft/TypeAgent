@@ -109,23 +109,10 @@ export type ToolChoice =
     | { type: "tool"; name: string; disable_parallel_tool_use?: boolean }
     | { type: "none" };
 
-export interface OutputConfig {
-    effort?:
-        | "none"
-        | "minimal"
-        | "low"
-        | "medium"
-        | "high"
-        | "xhigh"
-        | "max"
-        | null;
-}
-
 export interface MessageCreateParamsBase {
     max_tokens: number;
     messages: Array<MessageParam>;
     model: Model;
-    output_config?: OutputConfig;
     stream?: boolean;
     system?: string | Array<TextBlockParam>;
     temperature?: number;

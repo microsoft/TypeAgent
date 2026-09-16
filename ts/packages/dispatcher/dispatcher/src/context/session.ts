@@ -98,14 +98,6 @@ export type DispatcherConfig = {
     translation: {
         enabled: boolean;
         model: string;
-        reasoningEffort?:
-            | "minimal"
-            | "low"
-            | "medium"
-            | "high"
-            | "none"
-            | "xhigh"
-            | "max";
         stream: boolean;
         promptConfig: {
             additionalInstructions: boolean;
