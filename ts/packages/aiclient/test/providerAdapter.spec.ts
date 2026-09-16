@@ -65,6 +65,16 @@ describe("ChatCompletionsWireApiProvider (default path is byte-identical)", () =
         expect(body.stream_options).toBeUndefined();
     });
 
+    test("rejects Anthropic-only max reasoning effort", () => {
+        expect(() =>
+            adapter.buildRequestBody(
+                makeRequest({
+                    completionSettings: { reasoning_effort: "max" },
+                }),
+            ),
+        ).toThrow(/does not support reasoning effort 'max'/);
+    });
+
     test("buildRequestBody adds stream + stream_options when streaming", () => {
         const req = makeRequest({
             stream: true,
@@ -461,6 +471,16 @@ describe("ResponsesWireApiProvider", () => {
             }),
         ) as Record<string, unknown>;
         expect(body.reasoning).toEqual({ effort: "high" });
+    });
+
+    test("rejects Anthropic-only max reasoning effort", () => {
+        expect(() =>
+            adapter.buildRequestBody(
+                makeRequest({
+                    completionSettings: { reasoning_effort: "max" },
+                }),
+            ),
+        ).toThrow(/does not support reasoning effort 'max'/);
     });
 
     test("parseResponse prefers a flat output_text", () => {
