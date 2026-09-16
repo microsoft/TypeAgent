@@ -242,6 +242,14 @@ async function main(): Promise<void> {
     console.log(`using approved → ${approvedPath}`);
 
     let { suite, sourceManifest } = translationBenchBenchmarkToSuite(benchmark);
+    if (resolved.caseOrder !== undefined) {
+        suite = {
+            ...suite,
+            cases: suite.cases.filter(
+                (testCase) => testCase.seed.order === resolved.caseOrder,
+            ),
+        };
+    }
     const maxCases = opts.maxCases ?? resolved.maxCases;
     if (maxCases !== undefined) {
         suite = {
