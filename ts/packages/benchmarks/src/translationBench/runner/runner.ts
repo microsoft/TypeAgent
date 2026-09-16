@@ -322,8 +322,6 @@ export interface TranslationBenchRunResult {
 export interface TranslationBenchRunnerOptions {
     models: string[];
     scenarios?: TranslationBenchScenario[];
-    /** Keep parseable actions even when their parameters violate the schema. */
-    validateActions?: boolean;
     /** Validate gold actions against candidate schemas. Disable for externally scored corpora. */
     validateExpectedActions?: boolean;
     /** Default per-model case concurrency when not listed in concurrencyByModel. */
@@ -2239,7 +2237,6 @@ export function createTranslationBenchConfig(
     sessionConfig: DispatcherConfig,
     model: string,
     scenario: TranslationBenchScenario = getDefaultTranslationBenchScenario(),
-    validateActions = true,
 ): DispatcherConfig {
     validateTranslationBenchScenarios([scenario]);
     const config = structuredClone(sessionConfig);
@@ -2272,7 +2269,6 @@ export function createTranslationBenchConfig(
                 jsonSchemaFunction: false,
                 jsonSchemaWithTs: false,
                 jsonSchemaValidate: true,
-                validate: validateActions,
             },
             optimize: structuredClone(scenario.schemaOptimization),
         },
@@ -2297,17 +2293,11 @@ export function createTranslationBenchRunSettings(
     scenarios: TranslationBenchScenario[],
     concurrency: number,
     sourceManifest: TranslationBenchSuiteSourceIndex,
-    validateActions = true,
 ): TranslationBenchRunResult["settings"] {
     validateTranslationBenchScenarios(scenarios);
     const configs = scenarios.map((scenario) => ({
         scenario,
-        config: createTranslationBenchConfig(
-            priorConfig,
-            models[0]!,
-            scenario,
-            validateActions,
-        ),
+        config: createTranslationBenchConfig(priorConfig, models[0]!, scenario),
     }));
     return {
         models: [...models],
@@ -2819,7 +2809,6 @@ export async function runTranslationBench(
                 priorConfig,
                 model,
                 scenario,
-                options.validateActions ?? true,
             );
             modelRows.push(
                 ...(await pmap(
@@ -2881,7 +2870,6 @@ export async function runTranslationBench(
             scenarios,
             concurrency,
             options.sourceManifest,
-            options.validateActions ?? true,
         ),
     };
 }

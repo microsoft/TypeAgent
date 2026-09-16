@@ -247,7 +247,6 @@ function createModelRunState(
         scenarios,
         suiteCaseCount: suite.cases.length,
         caseIds: suite.cases.map((c) => c.id),
-        validateActions: false,
         validateExpectedActions: false,
         modelProvider: process.env.TYPEAGENT_MODEL_PROVIDER,
         modelEndpointDigest: hashText(process.env.OPENAI_ENDPOINT ?? ""),
@@ -369,7 +368,6 @@ async function runOneModel(
     const runnerOptions: TranslationBenchRunnerOptions = {
         models: [baseId],
         scenarios,
-        validateActions: false,
         validateExpectedActions: false,
         sourceManifest,
         concurrencyByModel:
