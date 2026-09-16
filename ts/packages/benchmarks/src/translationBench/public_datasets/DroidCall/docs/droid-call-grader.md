@@ -1,8 +1,9 @@
 # DroidCall scoring audit
 
 The DroidCall paper and its released scorer define different soft-accuracy
-metrics. We keep both. Neither score makes the current TypeAgent run directly
-comparable with Table 2 in the paper.
+metrics. We retain structural variants of both, using token overlap rather than
+BERTScore for semantic fields. Neither score makes the current TypeAgent run
+directly comparable with Table 2 in the paper.
 
 ## Paper-described contract
 
@@ -17,7 +18,8 @@ exact accuracy = perfect samples / samples
 ```
 
 It uses case-insensitive string matching and BERTScore for semantic fields. The
-paper sets the semantic threshold to 0.75.
+paper sets the semantic threshold to 0.75. The TypeScript `paper-described`
+variant applies that threshold to token overlap instead of BERTScore.
 
 The prose is not a complete executable specification. It does not define extra
 predictions, repeated calls to the same tool, default arguments, unordered
@@ -41,9 +43,11 @@ The repository's `result_checker.py` at commit
   last prediction;
 - no penalty for extra predicted tools.
 
-`droidCallReleased` reproduces this code path. `droidCallPaperDescribed` records
-the literal paper interpretation. `droidCallAdjusted` records the TypeAgent
-change in [droid-call-grader-improvement.md](droid-call-grader-improvement.md).
+`droidCallReleased` reproduces these structural rules with token-overlap
+semantics. `droidCallPaperDescribed` records the paper's aggregation and
+threshold using the same token-overlap scorer. `droidCallAdjusted` records the
+TypeAgent change in
+[droid-call-grader-improvement.md](droid-call-grader-improvement.md).
 
 ## Why this run is not paper-comparable
 

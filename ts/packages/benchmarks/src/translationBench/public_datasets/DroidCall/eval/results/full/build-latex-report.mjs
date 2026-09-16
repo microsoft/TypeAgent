@@ -518,7 +518,7 @@ ${listing(exampleTypeAgent)}
 \end{lstlisting}
 
 \section{Scoring contracts}
-The paper says to average parameter accuracy across function calls and sets the BERTScore threshold to ${paperContract.semanticThreshold}. The released \code{result_checker.py} at commit ${digest(releasedContract.scorerRevision)} instead averages one combined parameter score per sample and uses a threshold of ${releasedContract.semanticThreshold}. It trims and lowercases strings, applies catalog defaults, permits jointly omitted optional arguments, compares lists without order, collapses repeated tool names to the last prediction, and ignores extra predicted tools. BERTScore is pinned to ${tex(releasedContract.bertScore)} and Transformers to ${tex(releasedContract.transformers)}.
+The paper says to average parameter accuracy across function calls and sets its semantic threshold to ${paperContract.semanticThreshold}. The released \code{result_checker.py} at commit ${digest(releasedContract.scorerRevision)} instead averages one combined parameter score per sample and uses a threshold of ${releasedContract.semanticThreshold}. It trims and lowercases strings, applies catalog defaults, permits jointly omitted optional arguments, compares lists without order, collapses repeated tool names to the last prediction, and ignores extra predicted tools. This report uses the TypeScript contract grader's ${tex(releasedContract.semanticScorer)} semantic comparison, not the Python reference grader's BERTScore implementation.
 
 The paper does not specify repeated calls, defaults, lists, malformed output, or extra predictions. The paper-described column uses the released behavior for those cases, then applies the paper's threshold and function-call mean. It is a literal interpretation of the text, not an exact reproduction of unpublished evaluation logic.
 
@@ -543,7 +543,7 @@ The examples use ${modelLabel(scoreExample.model)} so each percentage can be tie
 \item[TypeAgent tool and parameter scores.] The tool score is ${integer(scoreSupplemental.routed)}/${integer(scoreSupplemental.expectedCount)}=${pct2(scoreSupplemental.toolScore)}. Among routed actions, ${integer(scoreSupplemental.paramMatches)}/${integer(scoreSupplemental.routed)} match normalized parameters, giving ${pct2(scoreSupplemental.paramScore)}.
 \end{description}
 
-All string comparisons in this report are case insensitive. The adjusted grader also trims strings, treats lists as unordered, applies catalog defaults, and uses BERTScore for semantic fields. The audit found a few source defects: ${integer(unknownGoldArguments)} gold arguments are absent from the API catalog and ${integer(missingRequiredArguments)} gold calls omit a required catalog argument. The pinned upstream scorer inherits them.
+All string comparisons in this report are case insensitive. The adjusted grader also trims strings, treats lists as unordered, applies catalog defaults, and uses token overlap for semantic fields. The audit found a few source defects: ${integer(unknownGoldArguments)} gold arguments are absent from the API catalog and ${integer(missingRequiredArguments)} gold calls omit a required catalog argument. The pinned upstream scorer inherits them.
 
 \section{Results}
 \tocsub{DroidCall contracts and diagnostics}
@@ -576,7 +576,7 @@ TypeAgent pass uses ${integer(independentRows)} independent rows. These suppleme
 
 \begin{landscape}
 \section{Soft-accuracy failure examples}
-These are the three lowest fully deterministic row scores for each model. Semantic mismatches that require BERTScore are excluded so every fraction below can be reproduced from the printed expected and predicted values.
+These are the three lowest fully deterministic row scores for each model. Semantic mismatches are excluded so every fraction below can be reproduced from the printed expected and predicted values without recomputing token overlap.
 
 \begingroup
 \tiny

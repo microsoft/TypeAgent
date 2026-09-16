@@ -114,10 +114,11 @@ Tests:       1 passed, 1 total
 
 ## Released grader audit
 
-The released score follows upstream `result_checker.py` at commit
-`3f7ba458bee480a86c602edff6cc7ec9cfd555db`. The worker pins BERTScore 0.3.13
-and Transformers 4.48.1. Transformers 5 is not compatible with that BERTScore
-release.
+The contract score follows the structural rules from upstream
+`result_checker.py` at commit
+`3f7ba458bee480a86c602edff6cc7ec9cfd555db`. The TypeScript grader uses token
+overlap for semantic fields; the bundled Python reference retains BERTScore but
+was not used to produce the saved scores below.
 
 The full converted corpus resolves to the 24 APIs in the annotated catalog.
 The audit found the source defects that the official scorer inherits.
@@ -129,16 +130,6 @@ reference_rows=1151 reference_values=1724 embedded_references=92
 semantic_gold_arguments=1709 optional_gold_arguments=3229
 missing_apis=0 unknown_gold_arguments=7
 missing_required_gold_arguments=2 invalid_reference_targets=1
-```
-
-A direct comparison used the same three string pairs with upstream
-`bert_score.score()` and the persistent `BERTScorer` used by the local worker.
-The floating-point scores and threshold decisions matched exactly.
-
-```text
-[(0.9320355653762817, 0.9320355653762817, True, True),
- (0.995942234992981, 0.995942234992981, True, True),
- (0.8961057066917419, 0.8961057066917419, True, True)]
 ```
 
 The saved 240 trajectories were rescored without new model calls. The result
