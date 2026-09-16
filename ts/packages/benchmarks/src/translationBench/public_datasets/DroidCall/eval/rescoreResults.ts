@@ -74,9 +74,7 @@ const summaryPath = path.join(outDir, "summary.json");
 const summary = JSON.parse(fs.readFileSync(summaryPath, "utf8")) as {
     byModel: Record<string, Record<string, unknown>>;
 };
-const grader = new DroidCallContractGrader(
-    path.join(droidCallDir, "eval", "officialDroidCallGrader.py"),
-);
+const grader = new DroidCallContractGrader();
 
 try {
     for (const [model, modelSummary] of Object.entries(summary.byModel)) {

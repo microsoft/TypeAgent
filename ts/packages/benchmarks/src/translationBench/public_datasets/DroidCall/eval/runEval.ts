@@ -107,11 +107,6 @@ const DEFAULT_API_CATALOG = path.join(
     "raw",
     "annotated_api.jsonl",
 );
-const OFFICIAL_GRADER_SCRIPT = path.join(
-    DROIDCALL_DIR,
-    "eval",
-    "officialDroidCallGrader.py",
-);
 const CHECKPOINT_CONTRACT = "droid-call-eval-v1";
 
 function hashText(value: string): string {
@@ -327,6 +322,7 @@ async function runOneModel(
     actionContext: ActionContext<CommandHandlerContext>,
     resolved: ReturnType<typeof loadResolvedConfig>["resolved"],
     outDir: string,
+    rawResponsesByCase: Map<string, string[]>,
     opts: { rateLimit?: boolean; rateLimiterDb?: string },
 ): Promise<{
     result: TranslationBenchRunResult;
@@ -374,12 +370,6 @@ async function runOneModel(
             `  [${model}] resuming ${seedRows.length} row(s) from checkpoint`,
         );
     }
-    const completedCaseIds = new Set(seedRows.map((row) => row.caseId));
-    const rawResponsesByCase = reconcileDroidCallTrajectories(
-        trajectoryPath,
-        slug,
-        completedCaseIds,
-    );
     assertSuccessfulTrajectoryCoverage(
         seedRows.filter((row) => row.error === undefined),
         rawResponsesByCase,
@@ -848,6 +838,7 @@ async function main(): Promise<void> {
     );
     fs.mkdirSync(outDir, { recursive: true });
     const trajectoryPath = path.join(outDir, "trajectories.jsonl");
+    const rawResponsesByModel = new Map<string, Map<string, string[]>>();
     for (const model of models) {
         const { slug, checkpointPath, header } = createModelRunState(
             model,
@@ -870,6 +861,7 @@ async function main(): Promise<void> {
             slug,
             new Set(completedRows.map((row) => row.caseId)),
         );
+        rawResponsesByModel.set(model, responsesByCase);
         assertSuccessfulTrajectoryCoverage(
             completedRows
                 .filter((row) => row.value.error === undefined)
@@ -896,7 +888,7 @@ async function main(): Promise<void> {
         },
     );
     const actionContext = createHeadlessActionContext(handlerContext);
-    const contractGrader = new DroidCallContractGrader(OFFICIAL_GRADER_SCRIPT);
+    const contractGrader = new DroidCallContractGrader();
 
     const summaryByModel: Record<string, unknown> = {};
     const modelGroups = groupModelSpecsByBaseId(models);
@@ -919,6 +911,10 @@ async function main(): Promise<void> {
         await mapConcurrent(modelGroups, modelConcurrency, async (group) => {
             for (const model of group) {
                 console.log(`\n=== ${model} ===`);
+                const rawResponsesByCase = rawResponsesByModel.get(model);
+                if (rawResponsesByCase === undefined) {
+                    throw new Error(`Missing trajectory state for ${model}`);
+                }
                 const {
                     droidCallCaseSensitive,
                     droidCallCaseInsensitive,
@@ -939,6 +935,7 @@ async function main(): Promise<void> {
                     actionContext,
                     resolved,
                     outDir,
+                    rawResponsesByCase,
                     {
                         ...(opts.rateLimit !== undefined
                             ? { rateLimit: opts.rateLimit }

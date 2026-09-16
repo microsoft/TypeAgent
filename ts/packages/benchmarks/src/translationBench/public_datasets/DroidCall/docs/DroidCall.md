@@ -75,18 +75,19 @@ object schemas.
 
 ## Scoring
 
-The primary grader matches DroidCall's upstream `result_checker.py` at commit
+The primary grader implements DroidCall's released structural contract from
+`result_checker.py` at commit
 `3f7ba458bee480a86c602edff6cc7ec9cfd555db`. It reports soft accuracy and exact
 row accuracy. The contract checks every argument in the API catalog, applies
-documented defaults, trims and lowercases strings, treats lists as unordered,
-and uses BERTScore 0.3.13 with a threshold of 0.85 for semantic fields.
-Transformers is pinned to 4.48.1 because BERTScore 0.3.13 is incompatible with
-Transformers 5.
+documented defaults, trims and lowercases strings, and treats lists as
+unordered. For semantic fields, this TypeScript implementation uses token
+overlap with a threshold of 0.85; it does not invoke BERTScore. The bundled
+Python reference grader retains the upstream BERTScore behavior for comparison,
+but the scores below were produced by the TypeScript contract grader.
 
 The grader converts TypeAgent result references back to DroidCall's `#N`
-notation before comparison. A persistent Python worker keeps the BERT model in
-memory across models. The old Seal-style tool and parameter F1 scores remain
-in the output as secondary diagnostics and are labeled as such.
+notation before comparison. The old Seal-style tool and parameter F1 scores
+remain in the output as secondary diagnostics and are labeled as such.
 
 TypeAgent pass/fail remains supplemental. It excludes result-dependent rows
 because `#N` values describe runtime dependencies rather than literal final
@@ -119,7 +120,7 @@ The run on 2026-08-19 used the first 30 converted rows. The slice contains 15
 nested rows and 15 independent rows. All eight model specs used the same
 dataset, raw-response restoration, and grader.
 
-| Model spec                | Official soft accuracy | Official exact accuracy | Seal parameter F1 |
+| Model spec                | Contract soft accuracy | Contract exact accuracy | Seal parameter F1 |
 | ------------------------- | ---------------------: | ----------------------: | ----------------: |
 | `azure/gpt-4.1`           |                  76.9% |                   36.7% |             53.5% |
 | `azure/gpt-4.1-mini`      |                  73.9% |                   33.3% |             53.8% |
@@ -139,8 +140,8 @@ points. Nested rows scored 43.6% to 49.7% before those adjustments, while
 independent rows scored 64.6% to 71.8%. Only three gold parameters are null,
 so null and default handling did not cause the low F1.
 
-The official score also gives credit when optional arguments are jointly
-omitted and uses semantic comparison for generated text. On this slice it
+The contract score also gives credit when optional arguments are jointly
+omitted and uses token-overlap comparison for generated text. On this slice it
 raises soft accuracy to 70.6% to 81.4%. Exact row accuracy remains 33.3% to
 40.0%, so the models still make real parameter errors after the grader
 contract is corrected.
@@ -157,7 +158,7 @@ the row limit. It contains no strict-order rows and no result references, so it
 excludes all 1,151 nested or dependent rows. Each model evaluated the same
 1,000 cases and 2,400 gold calls.
 
-| Model spec                | Official soft | Official exact | Tool F1 | Parameter F1 | Errors |
+| Model spec                | Contract soft | Contract exact | Tool F1 | Parameter F1 | Errors |
 | ------------------------- | ------------: | -------------: | ------: | -----------: | -----: |
 | `azure/gpt-4.1`           |         88.2% |          56.9% |   99.4% |        78.2% |      0 |
 | `azure/gpt-4.1-mini`      |         88.7% |          57.7% |   99.3% |        78.9% |      0 |
@@ -168,8 +169,9 @@ excludes all 1,151 nested or dependent rows. Each model evaluated the same
 | `azure/gpt-5.6-luna#low`  |         88.2% |          55.8% |   98.0% |        76.2% |      0 |
 | `azure/gpt-4o`            |         88.2% |          56.5% |   99.5% |        77.6% |      0 |
 
-Official soft and exact accuracy use the pinned upstream DroidCall contract.
-Tool and parameter F1 are case-insensitive Seal-compatible diagnostics. The
+Contract soft and exact accuracy use the pinned structural rules with the
+TypeScript token-overlap semantic scorer described above. Tool and parameter
+F1 are case-insensitive Seal-compatible diagnostics. The
 full run has eight 1,000-row result files, eight complete checkpoints, and
 8,000 unique raw trajectory records under
 `output/droidcall/multi-action-1000/`. A no-op rerun restored all checkpoints

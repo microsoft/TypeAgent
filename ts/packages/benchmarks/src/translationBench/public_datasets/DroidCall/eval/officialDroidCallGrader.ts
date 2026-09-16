@@ -351,7 +351,6 @@ export function scoreDroidCallContract(
 
 export class DroidCallContractGrader {
     public constructor(
-        _legacyScriptPath?: string,
         private readonly semanticScorer: DroidCallSemanticScorer = tokenOverlap,
     ) {}
 
