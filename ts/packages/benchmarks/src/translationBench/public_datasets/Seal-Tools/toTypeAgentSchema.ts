@@ -13,7 +13,6 @@ import type {
     OpenAIFunctionTool,
     TranslationBenchBenchmarkAction,
     TranslationBenchOrder,
-    TranslationBenchParameterScoreSpec,
     TranslationBenchPublicTurnLineage,
     TranslationBenchTargetAction,
 } from "../../synthesizer/benchmark.js";
@@ -25,7 +24,10 @@ import {
     parsePythonLiteral,
     type PyValue,
 } from "./pythonLiteral.js";
-import { getSealToolsTypeAgentOverride } from "./typeAgentOverrides.js";
+import {
+    getSealToolsTypeAgentOverride,
+    type SealToolsParameterScoreSpec,
+} from "./typeAgentOverrides.js";
 
 export const SEAL_SCHEMA_NAME = "sealtools";
 export const DATASET_NAME = "seal-tools-validation";
@@ -260,7 +262,7 @@ function toExpectedActions(calls: SealCall[]): {
 export function createSealToolsParameterScore(
     actions: TranslationBenchBenchmarkAction[],
     tools: OpenAIFunctionTool[],
-): TranslationBenchParameterScoreSpec[] {
+): SealToolsParameterScoreSpec[] {
     const toolsByName = new Map(
         tools.map((tool) => [tool.function.name, tool]),
     );
@@ -309,7 +311,7 @@ export interface TypeAgentEvalRow {
     sealToolsGoldActions: SealToolsGoldAction[];
     expectedActions: TranslationBenchBenchmarkAction[];
     order: TranslationBenchOrder;
-    parameterScore: TranslationBenchParameterScoreSpec[];
+    parameterScore: SealToolsParameterScoreSpec[];
     targetAction: TranslationBenchTargetAction;
     dimensions: Record<string, string | number | boolean>;
     typeAgentScoring?: {
