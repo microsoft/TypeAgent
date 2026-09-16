@@ -260,7 +260,7 @@ function buildAzureOpenAI(flat: Map<string, string>): AzureOpenAIConfig {
     };
     const finalDefaultChat =
         defaultChat ??
-        synthDefault(["gpt_4_o", "gpt_4_1", "gpt_5"]) ??
+        synthDefault(["gpt_5_6_luna", "gpt_4_o", "gpt_4_1", "gpt_5"]) ??
         synthAnyChat();
     const finalDefaultEmbedding =
         defaultEmbedding ?? synthDefault(["embedding", "embedding_3_large"]);

@@ -16,7 +16,7 @@ azureOpenAI:
   defaultAuth: <service key or "identity" for keyless>
   deployments:
     default:
-      endpoint: <endpoint URL for an LLM model, e.g. GPT-4o>
+      endpoint: <endpoint URL for an LLM model, e.g. GPT-5.6 Luna>
   responseFormat: true
   endpoints:
     embedding:
@@ -31,7 +31,7 @@ openAI:
     organization: <organization id>
     apiKey: <service key>
     endpoint: https://api.openai.com/v1/chat/completions
-    model: gpt-4o
+    model: gpt-5.6-luna
     responseFormat: true
   embedding:
     endpoint: https://api.openai.com/v1/embeddings

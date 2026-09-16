@@ -465,11 +465,11 @@ The daily run is the GitHub Actions workflow
 (`schedule` + `workflow_dispatch`). It authors via GitHub Models, so no Azure
 or federated credentials are involved. Dispatch inputs:
 
-| Input     | Default         | Effect                                                                |
-| --------- | --------------- | --------------------------------------------------------------------- |
-| `dry-run` | `false`         | Generate and report only; do not write, push, or open a PR.           |
-| `since`   | `""`            | Override the diff baseline (blank = last `README.AUTOGEN.md` commit). |
-| `model`   | `openai/gpt-4o` | GitHub Models model id used for authoring.                            |
+| Input     | Default               | Effect                                                                |
+| --------- | --------------------- | --------------------------------------------------------------------- |
+| `dry-run` | `false`               | Generate and report only; do not write, push, or open a PR.           |
+| `since`   | `""`                  | Override the diff baseline (blank = last `README.AUTOGEN.md` commit). |
+| `model`   | `openai/gpt-5.6-luna` | GitHub Models model id used for authoring.                            |
 
 The job pushes the regenerated `README.AUTOGEN.md` files to a per-run branch
 with the native `GITHUB_TOKEN`, then opens the PR with the TypeAgent-Bot App
@@ -513,7 +513,7 @@ one pre-existing GitHub App — no federated credentials, no stored secrets:
 - **LLM authoring -> GitHub Models.** aiclient's generic OpenAI-compatible path
   is pointed at GitHub Models: `OPENAI_ENDPOINT` =
   `https://models.github.ai/inference/chat/completions`, `OPENAI_API_KEY` =
-  the job's `GITHUB_TOKEN`, `OPENAI_MODEL` = `openai/gpt-4o`, under
+  the job's `GITHUB_TOKEN`, `OPENAI_MODEL` = `openai/gpt-5.6-luna`, under
   `permissions: models: read`. No Azure OpenAI, Key Vault, or Workload
   Identity Federation.
 - **Branch push -> `GITHUB_TOKEN`.** `permissions: contents: write`. Pushing a

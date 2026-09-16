@@ -73,7 +73,7 @@ export function usesProviderDefault(canonical: string): boolean {
 const COPILOT_MAP: Record<CanonicalName, string> = {
     DEFAULT: DEFAULT_COPILOT_MODEL,
     GPT_35_TURBO: "gpt-5.6-luna",
-    GPT_4_O: "gpt-5.6-sol",
+    GPT_4_O: "gpt-5.6-luna",
     GPT_5: "gpt-5.6-sol",
     GPT_5_MINI: "gpt-5.6-terra",
     GPT_5_NANO: "gpt-5.6-luna",
