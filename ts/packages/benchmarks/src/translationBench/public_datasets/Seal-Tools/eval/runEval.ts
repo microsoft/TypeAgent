@@ -230,7 +230,7 @@ function createModelRunState(
                   {
                       ...getDefaultTranslationBenchScenario(),
                       id: `baseline-${effort === "" ? "default" : effort}`,
-                      reasoningEffort: effort,
+                      ...(effort ? { reasoningEffort: effort } : {}),
                   },
               ]
             : (suite.scenarios ?? [getDefaultTranslationBenchScenario()]);

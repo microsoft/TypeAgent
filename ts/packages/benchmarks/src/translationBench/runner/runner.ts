@@ -387,7 +387,6 @@ export interface TranslationBenchScenario {
      * same model id through a distinct effort (e.g. "none" vs "low").
      */
     reasoningEffort?:
-        | ""
         | "minimal"
         | "low"
         | "medium"
