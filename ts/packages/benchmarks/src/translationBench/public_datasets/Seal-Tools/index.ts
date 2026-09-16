@@ -19,9 +19,8 @@ import {
     DATASET_NAME,
 } from "./toTypeAgentSchema.js";
 
-// Default output dir: the committed dataset folder (this source directory). The
-// processed `.jsonl` is LFS-tracked there; the raw `.hf.jsonl` cache is
-// gitignored. Override with argv[2].
+// Default output dir: this source directory. The processed `.jsonl` and raw
+// `.hf.jsonl` cache are gitignored. Override with argv[2].
 const DEFAULT_OUTPUT_DIR = join(
     process.cwd(),
     "src/translationBench/public_datasets/Seal-Tools",
