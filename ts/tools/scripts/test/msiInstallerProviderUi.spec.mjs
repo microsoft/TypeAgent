@@ -2,7 +2,13 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+    mkdtempSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -246,7 +252,11 @@ test(
             ]);
             assert.equal(
                 invocation.userDataDir,
-                path.join(tempDir, "profile", ".typeagent"),
+                path.join(
+                    realpathSync.native(tempDir),
+                    "profile",
+                    ".typeagent",
+                ),
             );
         } finally {
             rmSync(tempDir, { recursive: true, force: true });
