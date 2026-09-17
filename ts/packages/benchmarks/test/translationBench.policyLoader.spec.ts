@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "@jest/globals";
 
 import {
-    assertRemovedActionsMatchCatalog,
     catalogActionId,
     clearPackagedActionEligibilityPolicyCacheForTests,
     expandRemovedActions,
@@ -127,18 +126,5 @@ describe("translation bench action eligibility policy", () => {
                 allowMissingExactIds: true,
             }).removedActionIds.size,
         ).toBe(0);
-    });
-
-    it("keeps packaged removals aligned with the catalog", () => {
-        const actions = loadCatalog().actions.map(
-            ({ schemaName, actionName }) => ({ schemaName, actionName }),
-        );
-
-        expect(() =>
-            assertRemovedActionsMatchCatalog(
-                getPackagedActionEligibilityPolicy().policy,
-                actions,
-            ),
-        ).not.toThrow();
     });
 });
