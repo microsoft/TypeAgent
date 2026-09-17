@@ -167,6 +167,16 @@ export async function confirmYesNo(question: string): Promise<boolean> {
 // Active custom prompt renderer (set by questionWithCompletion)
 let activePromptRenderer: PromptRenderer | null = null;
 
+type RawPromptOwner = {
+    suspend(): void;
+    resume(): void;
+};
+
+// A server-pushed interaction temporarily takes stdin from the normal queue
+// prompt. Keep the prompt state alive, but detach its input and layout until
+// the interaction has finished.
+let activeRawPromptOwner: RawPromptOwner | null = null;
+
 /**
  * Manages an ANSI scroll region so the prompt is anchored to the
  * bottom of the terminal.  Content written via writeContent() scrolls
@@ -2319,7 +2329,39 @@ async function questionWithCompletion(
             }
         };
 
+        let suspended = false;
+        const owner: RawPromptOwner = {
+            suspend: () => {
+                if (suspended) return;
+                suspended = true;
+                stdin.removeListener("data", onData);
+                if (controller) {
+                    controller.setOnUpdate(() => {});
+                }
+                panel?.setPromptRenderer(null);
+                activePromptRenderer = null;
+                layout.cleanup();
+                terminalLayout = null;
+            },
+            resume: () => {
+                if (!suspended) return;
+                suspended = false;
+                terminalLayout = layout;
+                layout.setup(prevInputRows + EXTRA_ROWS);
+                if (controller) {
+                    controller.setOnUpdate(() => render());
+                }
+                panel?.setPromptRenderer(promptRenderer);
+                activePromptRenderer = promptRenderer;
+                stdin.on("data", onData);
+                render();
+            },
+        };
+
         const cleanup = () => {
+            if (activeRawPromptOwner === owner) {
+                activeRawPromptOwner = null;
+            }
             layout.cleanup();
             terminalLayout = null;
             panel?.setPromptRenderer(null);
@@ -2334,9 +2376,12 @@ async function questionWithCompletion(
             stdin.pause();
         };
 
+        activeRawPromptOwner = owner;
         stdin.on("data", onData);
     });
 }
+
+export const __testQuestionWithCompletion = questionWithCompletion;
 
 async function question_internal(
     message: string,
@@ -2352,6 +2397,8 @@ async function question_internal(
     if (signal?.aborted) {
         return Promise.reject(signal.reason);
     }
+    const suspendedPrompt = activeRawPromptOwner;
+    suspendedPrompt?.suspend();
     return new Promise<string>((resolve, reject) => {
         const stdin = process.stdin;
         // If the scroll region is active (e.g. secondary client waiting at the
@@ -2377,6 +2424,7 @@ async function question_internal(
             if (stdin.isTTY) {
                 stdin.setRawMode(wasRaw || false);
             }
+            suspendedPrompt?.resume();
         };
 
         const onAbort = () => {
