@@ -44,7 +44,9 @@ import {
 } from "./ambiguityProbe.js";
 
 export type TranslationBenchQualityStage =
-    "format_checker" | "semantic_checker" | "ambiguity_probe";
+    | "format_checker"
+    | "semantic_checker"
+    | "ambiguity_probe";
 
 export interface TranslationBenchFormatCheckResult {
     stage: "format_checker";

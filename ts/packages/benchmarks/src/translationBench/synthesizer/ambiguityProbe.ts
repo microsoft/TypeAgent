@@ -56,7 +56,10 @@ export interface TranslationBenchAmbiguityProbeTranslator {
 }
 
 export type TranslationBenchAmbiguityAgreement =
-    "unanimous_gold" | "unanimous_other" | "split" | "all_errors";
+    | "unanimous_gold"
+    | "unanimous_other"
+    | "split"
+    | "all_errors";
 
 export interface TranslationBenchAmbiguityProbeCaseResult {
     path: string;
