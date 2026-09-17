@@ -129,7 +129,7 @@ Discovery should provide enough information for Copilot to determine:
 
 For large action catalogs, discovery should support search and progressive disclosure rather than requiring the entire TypeAgent action catalog to be registered as MCP tools or loaded into Copilot's context.
 
-Search accepts one natural-language query and returns closed contracts for every matching action. Until discovery has a relevance ranker, it must not silently truncate the matching set. Callers should use a focused query when the active catalog is large.
+`searchActions` accepts one required free-text query. The current implementation performs case-insensitive contiguous substring matching against each action's schema name, action name, and description; it does not interpret the query as natural language. It returns closed contracts for every matching action. Until discovery has a relevance ranker, it must not silently truncate the matching set. Callers should use a specific substring likely to occur in one of the matched fields when the active catalog is large.
 
 Each result is a closed, self-contained action contract with its identity, description, parameters, referenced types, constraints, outputs, and interaction requirements. This combines candidate discovery and contract hydration so the normal structured path requires only discovery and execution. The action remains the unit of selection, caching, and compatibility.
 
@@ -143,7 +143,7 @@ A caller with a current contract should not need to repeat discovery. A contract
 
 Contracts may be reused within the same server and session/permission scope. TypeAgent must detect an outdated contract before execution and ask the caller to refresh it with a new search.
 
-Discovery must respect the caller's permissions. It neither enables actions nor grants permission to execute them. Disabled and inactive actions are excluded. No match or an ambiguous match should lead to clarification or natural-language handling, not guessed action parameters.
+Discovery must respect the caller's permissions. It neither enables actions nor grants permission to execute them. Disabled and inactive actions are excluded. A query with no substring match should lead to clarification or natural-language handling, not guessed action parameters. When multiple actions match, the caller must select from the returned contracts or clarify if it cannot do so confidently.
 
 ### Contract Versioning
 
@@ -159,7 +159,7 @@ Version 1 uses exact fingerprint matching rather than attempting semantic compat
 
 Expose a small, fixed set of operations through the existing TypeAgent MCP server:
 
-- Search complete action contracts with a natural-language query.
+- Search complete action contracts with a required free-text substring query.
 - Execute one action against that contract.
 - Continue or cancel a pending interaction when the transport cannot represent that interaction directly.
 
@@ -217,11 +217,11 @@ Direct and MCP integration modes share the same transport-neutral structured-act
 
 MCP maps the service to MCP tools and structured content. Direct mode calls it through the dispatcher interface. This does not change ordinary Direct-mode prompts: user-originated natural language continues through TypeAgent's intent resolution, and only callers that already know the action and concrete parameters use the shared structured interface.
 
-Delivery is layered. Layer 1 is the query-only `searchActions`, which returns complete contracts for every current match. Layer 2 adds `executeAction`. Layer 3 adds the MCP and Direct adapters over the shared service. The target foreground path remains two calls: discovery followed by execution.
+Delivery is layered. Layer 1 is the query-only `searchActions`, which returns complete contracts for every current case-insensitive contiguous substring match across schema name, action name, and description. Layer 2 adds `executeAction`. Layer 3 adds the MCP and Direct adapters over the shared service. The target foreground path remains two calls: discovery followed by execution.
 
 ## Future Considerations
 
-- Replace substring matching with a measured relevance ranker such as BM25. Reuse action metadata, use stable identity ordering for ties, and evaluate retrieval quality before imposing a result limit. Until then, `searchActions` returns every substring match.
+- Replace the current case-insensitive contiguous substring matching over schema name, action name, and description with a measured relevance ranker such as BM25. Reuse action metadata, use stable identity ordering for ties, and evaluate retrieval quality before imposing a result limit. Until then, `searchActions` treats its required free-text query as a literal substring and returns every match.
 - A TypeAgent-aware Copilot plugin or adapter could prefetch a compact, permission-filtered agent catalog when it connects. Optional server-issued agent hints may boost ranking, but must not authorize an action or act as strict filters.
 - Cache catalog data on the host outside model context where possible, with catalog version or change signals for invalidation. The server may also keep search documents, contracts, and fingerprints warm.
 - Query-only discovery remains correct without prefetch, hints, or warm caches. Generic MCP hosts are not guaranteed to prefetch, so the fixed discovery operation remains the fallback.
