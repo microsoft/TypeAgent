@@ -37,32 +37,32 @@ azureOpenAI:
   # Named model deployments.  Each deployment has one or more regional
   # endpoints that form a routing pool.
   deployments:
-    gpt_5_6_luna:
+    gpt_4_o:
       # Per-deployment defaultCapacity overrides the section-level value.
       # defaultCapacity: 200
       endpoints:
         # PTU (provisioned throughput) endpoints get priority 1 by default.
-        - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-5.6-luna/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
           mode: PTU
           capacity: 300
 
         # PAYG endpoints get priority 2 by default.  Capacity is optional.
-        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/gpt-5.6-luna/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://my-resource-eastus.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
           capacity: 450
 
         # Region is auto-derived from the hostname (e.g. "eastus" from
         # "my-resource-eastus").  Override when the hostname is ambiguous:
-        - endpoint: https://custom-resource.cognitiveservices.azure.com/openai/deployments/gpt-5.6-luna/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://custom-resource.cognitiveservices.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
           region: eastus2
 
         # Use `capacity: null` to explicitly opt out of capacity
         # inheritance for this endpoint.
-        - endpoint: https://my-resource-france.openai.azure.com/openai/deployments/gpt-5.6-luna/chat/completions?api-version=2025-01-01-preview
+        - endpoint: https://my-resource-france.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
           capacity: null
 
         # Per-endpoint auth override (uses an API key instead of identity):
-        - endpoint: https://partner-resource.openai.azure.com/openai/deployments/gpt-5.6-luna/chat/completions?api-version=2025-01-01-preview
-          auth: <service-key>
+        - endpoint: https://partner-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+          auth: sk-abc123...
 
     gpt_4_o_mini:
       endpoints:
@@ -113,10 +113,10 @@ azureOpenAI:
 # or any local OpenAI-compatible server.
 
 openAI:
-  apiKey: <service-key>
+  apiKey: sk-proj-...
   endpoint: https://api.openai.com/v1/chat/completions
   endpointEmbedding: https://api.openai.com/v1/embeddings
-  model: gpt-5.6-luna
+  model: gpt-4o
   modelEmbedding: text-embedding-3-small
   organization: org-...
   responseFormat: true
@@ -201,11 +201,11 @@ speech:
 
 msGraph:
   clientId: 00000000-0000-0000-0000-000000000000
-  clientSecret: <client-secret>
+  clientSecret: your-client-secret
   tenantId: 00000000-0000-0000-0000-000000000000
   # Optional — for username/password (ROPC) auth flow:
   # username: user@contoso.com
-  # password: <password>
+  # password: your-password
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Google Calendar                                                 ║
@@ -215,7 +215,7 @@ msGraph:
 
 googleCalendar:
   clientId: 123456789-abc.apps.googleusercontent.com
-  clientSecret: <client-secret>
+  clientSecret: GOCSPX-...
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Spotify                                                         ║
@@ -225,7 +225,7 @@ googleCalendar:
 
 spotify:
   clientId: your-spotify-client-id
-  clientSecret: <client-secret>
+  clientSecret: your-spotify-client-secret
   port: 9998 # local callback port for OAuth flow
 
 # ╔═══════════════════════════════════════════════════════════════════╗
@@ -304,7 +304,7 @@ storage:
     bucketName: my-typeagent-bucket
     region: us-east-1
     accessKeyId: AKIA...
-    secretAccessKey: <secret-access-key>
+    secretAccessKey: wJalr...
 
   # Databases (telemetry sinks).
   database:
@@ -313,7 +313,7 @@ storage:
 
   # Elasticsearch (memory provider).
   elastic:
-    apiKey: <elastic-api-key>
+    apiKey: your-elastic-api-key
     uri: https://my-cluster.es.us-east-1.aws.elastic.cloud
 
 # ╔═══════════════════════════════════════════════════════════════════╗
@@ -330,7 +330,7 @@ maps:
 
 wikipedia:
   clientId: your-wikimedia-client-id
-  clientSecret: <client-secret>
+  clientSecret: your-wikimedia-client-secret
   endpoint: https://api.wikimedia.org/core/v1/wikipedia/
 
 # ╔═══════════════════════════════════════════════════════════════════╗

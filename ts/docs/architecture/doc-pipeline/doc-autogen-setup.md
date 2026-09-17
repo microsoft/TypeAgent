@@ -10,12 +10,12 @@
 >
 > What it actually needs — all already present on `microsoft/TypeAgent`:
 >
-> | Need            | How it's satisfied                                                                                                                                                                                                                                            |
-> | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-> | LLM authoring   | **GitHub Models** via `permissions: models: read` + the job's `GITHUB_TOKEN`. aiclient is pointed at it with `OPENAI_ENDPOINT=https://models.github.ai/inference/chat/completions`, `OPENAI_API_KEY=${{ github.token }}`, `OPENAI_MODEL=openai/gpt-5.6-luna`. |
-> | PR identity     | The **existing TypeAgent-Bot** GitHub App — reuses `vars.DEPENDABOT_APP_ID` and `secrets.DEPENDABOT_APP_PRIVATE_KEY` already configured for `fix-dependabot-alerts.yml`. No new App or secret.                                                                |
-> | Branch push     | Native `GITHUB_TOKEN` (`contents: write`). Pushing is not gated by the org "Actions can't create PRs" policy.                                                                                                                                                 |
-> | Change baseline | The last `README.AUTOGEN.md` commit on the branch (computed in-workflow). No watermark tag to seed or advance.                                                                                                                                                |
+> | Need            | How it's satisfied                                                                                                                                                                                                                                      |
+> | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | LLM authoring   | **GitHub Models** via `permissions: models: read` + the job's `GITHUB_TOKEN`. aiclient is pointed at it with `OPENAI_ENDPOINT=https://models.github.ai/inference/chat/completions`, `OPENAI_API_KEY=${{ github.token }}`, `OPENAI_MODEL=openai/gpt-4o`. |
+> | PR identity     | The **existing TypeAgent-Bot** GitHub App — reuses `vars.DEPENDABOT_APP_ID` and `secrets.DEPENDABOT_APP_PRIVATE_KEY` already configured for `fix-dependabot-alerts.yml`. No new App or secret.                                                          |
+> | Branch push     | Native `GITHUB_TOKEN` (`contents: write`). Pushing is not gated by the org "Actions can't create PRs" policy.                                                                                                                                           |
+> | Change baseline | The last `README.AUTOGEN.md` commit on the branch (computed in-workflow). No watermark tag to seed or advance.                                                                                                                                          |
 >
 > **Validated (no action needed):** the `microsoft` tenant grants the
 > Actions `GITHUB_TOKEN` (with `models: read`) enterprise-grade GitHub
@@ -49,7 +49,7 @@ Before starting, confirm:
 - You have access to an **Azure OpenAI** resource with at least one
   chat deployment provisioned. The pipeline currently calls the
   default model exposed by `@typeagent/aiclient`; a deployment of
-  `gpt-5.6-luna` (or an equivalent reasoning model) is sufficient.
+  `gpt-4o` (or an equivalent reasoning model) is sufficient.
 - You have permission to create a **GitHub App** in the same
   organization (or in your personal account if running against a
   personal fork). Installing the App into the target repo also
@@ -225,7 +225,7 @@ equally well in either scope.
 
 | Name                                                              | Value                                                                                                                         |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `DOCS_BOT_APP_PRIVATE_KEY`                                        | Full contents of the `.pem` file from Step 1, including its PEM boundary lines |
+| `DOCS_BOT_APP_PRIVATE_KEY`                                        | Full contents of the `.pem` file from Step 1, including the `-----BEGIN PRIVATE KEY-----` / `-----END PRIVATE KEY-----` lines |
 | `AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD`       | **Already present** in the `development-fork` environment — created when the build pipeline was wired                         |
 | `AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA`       | **Already present** — same source                                                                                             |
 | `AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30` | **Already present** — same source                                                                                             |
@@ -341,7 +341,7 @@ body; the most important assertion is that no hand-written
 
 - Confirm `DOCS_BOT_APP_ID` is the numeric App ID (not the App name).
 - Confirm `DOCS_BOT_APP_PRIVATE_KEY` contains the full
-  complete PEM block, including its boundary lines
+  `-----BEGIN PRIVATE KEY-----` … `-----END PRIVATE KEY-----` block
   with original newlines.
 - Confirm the App is **installed** on the target repo
   (App → Install App → check the target repo is listed).

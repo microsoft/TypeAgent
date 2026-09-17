@@ -72,7 +72,7 @@ on:
       model:
         description: "GitHub Models model id used for authoring"
         type: string
-        default: "openai/gpt-5.6-luna"
+        default: "openai/gpt-4o"
 
 # Never cancel an in-flight run; let it finish so a half-written PR is not
 # left behind. Only one docs PR is ever in flight at a time.
@@ -154,7 +154,7 @@ jobs:
         with:
           since: ${{ steps.baseline.outputs.since }}
           github-token: ${{ github.token }}
-          model: ${{ inputs.model || 'openai/gpt-5.6-luna' }}
+          model: ${{ inputs.model || 'openai/gpt-4o' }}
           dry-run: ${{ inputs.dry-run }}
 
       # Decide whether anything changed. README.md is never touched, so we
@@ -263,7 +263,7 @@ jobs:
 
           ### Summary
           - **Files updated:** ${{ steps.detect.outputs.changed_files }} \`README.AUTOGEN.md\` file(s)
-          - **Model:** \`${{ inputs.model || 'openai/gpt-5.6-luna' }}\` (GitHub Models)
+          - **Model:** \`${{ inputs.model || 'openai/gpt-4o' }}\` (GitHub Models)
           - **Per-run cap:** none (every drifted package regenerated)
           - **Trigger:** ${{ github.event_name }}
 
@@ -304,7 +304,7 @@ jobs:
             echo "|--------|-------|"
             echo "| Trigger | ${{ github.event_name }} |"
             echo "| Dry run | ${{ inputs.dry-run || 'false' }} |"
-            echo "| Model | ${{ inputs.model || 'openai/gpt-5.6-luna' }} (GitHub Models) |"
+            echo "| Model | ${{ inputs.model || 'openai/gpt-4o' }} (GitHub Models) |"
             echo "| Diff baseline | ${{ steps.baseline.outputs.since || '(full sweep)' }} |"
             echo "| Per-run cap | none |"
             echo "| Changes detected | ${{ steps.detect.outputs.changes || 'false' }} |"

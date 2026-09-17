@@ -6,7 +6,7 @@ export GROQ_API_KEY=""
 export OPENAI_API_KEY=""
 # LLM Models
 export GROQ_MODEL="mixtral-8x7b-32768"
-export OPENAI_MODEL="gpt-5.6-luna"
+export OPENAI_MODEL="gpt-4o"
 # Emebedding Models
 # export EMBEDDING_MODEL="text-embedding-3-small"
 export EMBEDDING_MODEL="text-embedding-ada-002"

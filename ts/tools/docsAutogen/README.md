@@ -140,11 +140,11 @@ Regeneration and PR creation run in one self-contained workflow,
 on a daily `cron` plus manual `workflow_dispatch`. It needs **no federated
 credentials and no stored secrets**:
 
-| Stage                   | How                                                                                                                                                                                                                                                                                             |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Author the docs (LLM)   | **GitHub Models** via aiclient's OpenAI-compatible path (`OPENAI_ENDPOINT` = `https://models.github.ai/inference/chat/completions`, `OPENAI_API_KEY` = the job's `GITHUB_TOKEN`, `OPENAI_MODEL` = `openai/gpt-5.6-luna`) under `permissions: models: read`. No Azure OpenAI, Key Vault, or WIF. |
-| Push the branch         | Native `GITHUB_TOKEN` (`contents: write`); pushing is not blocked by the org "Actions can't create PRs" policy.                                                                                                                                                                                 |
-| Open / supersede the PR | The **TypeAgent-Bot** GitHub App, reusing the existing `DEPENDABOT_APP_ID` / `DEPENDABOT_APP_PRIVATE_KEY` already configured for `fix-dependabot-alerts.yml`. An App-authored PR is exempt from the policy and triggers downstream CI.                                                          |
+| Stage                   | How                                                                                                                                                                                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Author the docs (LLM)   | **GitHub Models** via aiclient's OpenAI-compatible path (`OPENAI_ENDPOINT` = `https://models.github.ai/inference/chat/completions`, `OPENAI_API_KEY` = the job's `GITHUB_TOKEN`, `OPENAI_MODEL` = `openai/gpt-4o`) under `permissions: models: read`. No Azure OpenAI, Key Vault, or WIF. |
+| Push the branch         | Native `GITHUB_TOKEN` (`contents: write`); pushing is not blocked by the org "Actions can't create PRs" policy.                                                                                                                                                                           |
+| Open / supersede the PR | The **TypeAgent-Bot** GitHub App, reusing the existing `DEPENDABOT_APP_ID` / `DEPENDABOT_APP_PRIVATE_KEY` already configured for `fix-dependabot-alerts.yml`. An App-authored PR is exempt from the policy and triggers downstream CI.                                                    |
 
 Selection is change-scoped: the workflow computes `--since` from the last
 `README.AUTOGEN.md` commit, so only packages modified since their docs were
@@ -159,7 +159,7 @@ From the Actions UI or `gh workflow run docs-generate.yml`:
 
 - `dry-run` -- analyse and render only, never write or open a PR.
 - `since` -- git ref to diff against, overriding the last-commit baseline.
-- `model` -- GitHub Models model id (default `openai/gpt-5.6-luna`).
+- `model` -- GitHub Models model id (default `openai/gpt-4o`).
 
 ### `--since` baseline and the watermark tag
 
@@ -181,7 +181,7 @@ git push origin docs-bot/last-run --force
 The microsoft-tenant GitHub Models limits are ample (tens of thousands of
 requests / 10s, 10M tokens / min), so even a full ~100-package sweep runs
 comfortably within quota. With `--llm` on, each package is roughly one
-`gpt-5.6-luna` chat completion (~6-10k input tokens forwarding the
+`gpt-4o`-class chat completion (~6-10k input tokens forwarding the
 hand-written `README.md`, source samples, action list, and the deterministic
 Reference; ~1000-1500 output tokens) plus up to one retry on validation
 failure. Placeholder runs (`--llm` off) make zero LLM calls.

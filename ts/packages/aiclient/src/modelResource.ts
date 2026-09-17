@@ -90,7 +90,7 @@ export function isMultiModalContentSupported(modelName: string | undefined) {
     ) {
         return true;
     } else if (modelName == "") {
-        // The default model supports image input.
+        // default model is now 4_O
         return true;
     }
 
