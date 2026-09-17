@@ -60,6 +60,35 @@ silently falling through to later sources.
   caches) before resolving; a fetch failure fails the command rather than acting
   on stale data.
 
+### `@package group list | show | install`
+
+```text
+@package group list
+@package group show <group>
+@package group install <group> [--source <sourceName>] [--dry-run] [--refresh] [--yes]
+```
+
+Agent groups bundle related agents together under a product-defined name (such
+as `developer` or `media`) for discovery and sequential installation.
+
+- `group list` lists configured groups. `group show` reports each member as
+  bundled, installed, installed but unavailable, transitioning, or missing.
+- `group install` refreshes the selected source once when `--refresh` is used,
+  previews every missing member, and makes no changes if any missing member
+  cannot resolve or any member is transitioning.
+- The plan displays the winning source, match identity, and lower-priority
+  source shadows. `--source` applies to every preview and install.
+- `--dry-run` stops after the plan. Otherwise one confirmation covers the whole
+  group; `--yes` skips that prompt.
+- Installation runs in catalog order. An isolated failure does not roll back
+  earlier successful installs, and rerunning safely skips completed members.
+  Cancellation stops new installs and reports remaining members as not
+  attempted.
+- An unresolved durable record is not installed again. It is reported as
+  installed but unavailable and requires repair or uninstall.
+- Installing a group does not enable its agents in the current session.
+  Provider propagation to other connected sessions is asynchronous.
+
 ### `@package update <name> [<range>]`
 
 Updates re-resolve the installed record against its recorded source. Feed agents
