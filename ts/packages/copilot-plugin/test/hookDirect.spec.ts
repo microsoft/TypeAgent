@@ -79,7 +79,7 @@ function setDisplay(content: DisplayContent): EmitDisplay {
 const forced = { forceHandled: true };
 
 describe("direct TypeAgent hook", () => {
-    it("returns a persistent warning for forced execution", async () => {
+    it("returns a warning without duplicating it as persistent progress", async () => {
         const { dependencies, close, emitProgress } = createDependencies(
             {},
             appendDisplay({
@@ -96,8 +96,28 @@ describe("direct TypeAgent hook", () => {
             responseContent: "No change",
             handledBy: "typeagent",
         });
-        expect(emitProgress).toHaveBeenCalledWith("No change");
+        expect(emitProgress).not.toHaveBeenCalledWith("No change");
         expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns an error without duplicating it as persistent progress", async () => {
+        const { dependencies, emitProgress } = createDependencies(
+            {},
+            appendDisplay({
+                type: "text",
+                content: "Command error",
+                kind: "error",
+            }),
+        );
+
+        await expect(
+            handleDirect(input, forced, dependencies),
+        ).resolves.toEqual({
+            handled: true,
+            responseContent: "Command error",
+            handledBy: "typeagent",
+        });
+        expect(emitProgress).not.toHaveBeenCalledWith("Command error");
     });
 
     it("preserves line and table structure for forced execution", async () => {
@@ -152,6 +172,38 @@ describe("direct TypeAgent hook", () => {
         expect(close).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+        [
+            {
+                disposition: {
+                    status: "notHandled",
+                    reason: "unknown",
+                },
+            } as CommandResult,
+            "TypeAgent did not handle the command.",
+        ],
+        [
+            {
+                disposition: {
+                    status: "failed",
+                    path: "command",
+                    mayHaveSideEffects: false,
+                },
+            } as CommandResult,
+            "TypeAgent could not complete the command.",
+        ],
+    ])("reports a %s disposition", async (result, responseContent) => {
+        const { dependencies } = createDependencies(result);
+
+        await expect(
+            handleDirect(input, forced, dependencies),
+        ).resolves.toEqual({
+            handled: true,
+            responseContent,
+            handledBy: "typeagent",
+        });
+    });
+
     it("reports an undefined completion result", async () => {
         const { dependencies, close } = createDependencies(undefined);
 
@@ -202,6 +254,27 @@ describe("direct TypeAgent hook", () => {
         expect(close).toHaveBeenCalledTimes(1);
     });
 
+    it("prioritizes the last error over collected table output", async () => {
+        const { dependencies } = createDependencies(
+            { lastError: "Command failed" },
+            setDisplay({
+                type: "text",
+                content: [
+                    ["Group", "Members"],
+                    ["developer", "coding-agent"],
+                ],
+            }),
+        );
+
+        await expect(
+            handleDirect(input, forced, dependencies),
+        ).resolves.toEqual({
+            handled: true,
+            responseContent: "Command failed",
+            handledBy: "typeagent",
+        });
+    });
+
     it("returns a handled error and closes the dispatcher on failure", async () => {
         const consoleError = jest
             .spyOn(console, "error")
@@ -243,6 +316,23 @@ describe("direct TypeAgent hook", () => {
         await expect(handleDirect(input, {}, dependencies)).resolves.toEqual(
             {},
         );
+        expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("preserves ordinary successful direct output", async () => {
+        const result = {
+            actions: [{ actionName: "testAction" }],
+        } as CommandResult;
+        const { dependencies, close } = createDependencies(
+            result,
+            setDisplay("TypeAgent answer"),
+        );
+
+        await expect(handleDirect(input, {}, dependencies)).resolves.toEqual({
+            handled: true,
+            responseContent: "TypeAgent answer",
+            handledBy: "typeagent",
+        });
         expect(close).toHaveBeenCalledTimes(1);
     });
 

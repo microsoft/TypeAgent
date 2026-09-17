@@ -49,14 +49,15 @@ function toForcedCommandOutput(
         responseContent = result.lastError;
     } else {
         const collected = messages.join("\n\n");
-        responseContent =
-            collected.trim().length > 0
-                ? collected
-                : result.disposition?.status === "notHandled"
-                  ? "TypeAgent did not handle the command."
-                  : result.disposition?.status === "failed"
-                    ? "TypeAgent could not complete the command."
-                    : "TypeAgent completed the command.";
+        if (collected.trim().length > 0) {
+            responseContent = collected;
+        } else if (result.disposition?.status === "notHandled") {
+            responseContent = "TypeAgent did not handle the command.";
+        } else if (result.disposition?.status === "failed") {
+            responseContent = "TypeAgent could not complete the command.";
+        } else {
+            responseContent = "TypeAgent completed the command.";
+        }
     }
 
     return {
@@ -92,8 +93,9 @@ export async function handleDirect(
                 return;
             }
 
-            // Route reasoning display by message kind. These are all progress —
-            // never part of the final response — so we return before collecting.
+            // Route reasoning display by message kind. Status and info remain
+            // progress-only. Forced commands keep warnings and errors for the
+            // final response instead of duplicating them as persistent progress.
             const msg = message?.message;
             if (typeof msg === "object" && msg && "kind" in msg) {
                 const kind = (msg as { kind: unknown }).kind;
@@ -113,10 +115,10 @@ export async function handleDirect(
                     return;
                 }
                 if (kind === "warning" || kind === "error") {
-                    if (text) {
-                        dependencies.emitProgress(text);
-                    }
                     if (!options.forceHandled) {
+                        if (text) {
+                            dependencies.emitProgress(text);
+                        }
                         return;
                     }
                 }
