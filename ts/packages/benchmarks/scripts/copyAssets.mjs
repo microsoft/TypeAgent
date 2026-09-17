@@ -90,6 +90,21 @@ if (existsSync(yamlSrc)) {
     }
 }
 
+const policyYamlSrc = path.join(root, "src/translationBench/policy");
+const policyYamlDst = path.join(root, "dist/translationBench/policy");
+if (existsSync(policyYamlSrc)) {
+    for (const name of readdirSync(policyYamlSrc, { withFileTypes: true })) {
+        if (!name.isFile()) continue;
+        if (!name.name.endsWith(".yaml") && !name.name.endsWith(".yml")) {
+            continue;
+        }
+        copyFileFast(
+            path.join(policyYamlSrc, name.name),
+            path.join(policyYamlDst, name.name),
+        );
+    }
+}
+
 const seedSrc = path.join(root, "src/translationBench/synthesizer/seed");
 const seedDst = path.join(root, "dist/translationBench/synthesizer/seed");
 if (existsSync(seedSrc)) {
