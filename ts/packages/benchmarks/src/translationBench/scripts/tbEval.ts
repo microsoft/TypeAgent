@@ -405,7 +405,13 @@ async function main(): Promise<void> {
             }
             // Every model's rows live in the shared checkpoint; `last` only
             // supplies schemaHashes/settings for the rebuild below.
-            result = last!;
+            result = {
+                ...last!,
+                settings: {
+                    ...last!.settings,
+                    models: [...models],
+                },
+            };
         } else {
             result = await runTranslationBench(
                 suite,
