@@ -34,18 +34,26 @@ type Entry = {
     definition: ActionSchemaTypeDefinition;
 };
 
+type PendingEntry = {
+    key: string;
+    actionName: string;
+    definition: ActionSchemaTypeDefinition;
+};
+
 export type EmbeddingCache = Map<string, NormalizedEmbedding>;
 
 export class ActionSchemaSemanticMap implements ActionCandidateRanker {
     private readonly actionSemanticMaps = new Map<string, Map<string, Entry>>();
+    private readonly schemaVersions = new Map<string, number>();
     private readonly model: TextEmbeddingModel | undefined;
     // Set when no embedding provider is configured, or when embedding
     // generation fails at load time. In that state semantic schema
     // selection is unavailable and callers fall back to inline/search
     // routing instead of the daemon failing to start.
     private disabled: boolean;
-    public constructor(model?: TextEmbeddingModel) {
-        this.model = model ?? tryCreateEmbeddingModel();
+    public constructor(model?: TextEmbeddingModel | null) {
+        this.model =
+            model === null ? undefined : (model ?? tryCreateEmbeddingModel());
         this.disabled = this.model === undefined;
         if (this.disabled) {
             debug(
@@ -70,8 +78,6 @@ export class ActionSchemaSemanticMap implements ActionCandidateRanker {
         if (!this.enabled) {
             return;
         }
-        const keys: string[] = [];
-        const definitions: ActionSchemaTypeDefinition[] = [];
 
         if (this.actionSemanticMaps.has(config.schemaName)) {
             throw new Error(
@@ -79,8 +85,68 @@ export class ActionSchemaSemanticMap implements ActionCandidateRanker {
             );
         }
 
+        const version = this.beginSchemaUpdate(config.schemaName);
+        const actionSemanticMap = await this.createActionSemanticMap(
+            config,
+            actionSchemaFile,
+            cache,
+        );
+        if (
+            actionSemanticMap !== undefined &&
+            this.enabled &&
+            this.schemaVersions.get(config.schemaName) === version
+        ) {
+            if (this.actionSemanticMaps.has(config.schemaName)) {
+                throw new Error(
+                    `Internal Error: Duplicate schemaName ${config.schemaName}`,
+                );
+            }
+            this.actionSemanticMaps.set(config.schemaName, actionSemanticMap);
+        }
+    }
+
+    /**
+     * Rebuilds a schema's entries off to the side and swaps them in together.
+     * Searches continue to see the previous complete schema until the new
+     * embeddings are ready.
+     */
+    public async replaceActionSchemaFile(
+        config: ActionConfig,
+        actionSchemaFile: ActionSchemaFile,
+        cache?: EmbeddingCache,
+    ): Promise<void> {
+        if (!this.enabled) {
+            return;
+        }
+        const version = this.beginSchemaUpdate(config.schemaName);
+        const actionSemanticMap = await this.createActionSemanticMap(
+            config,
+            actionSchemaFile,
+            cache,
+        );
+        if (
+            actionSemanticMap !== undefined &&
+            this.enabled &&
+            this.schemaVersions.get(config.schemaName) === version
+        ) {
+            this.actionSemanticMaps.set(config.schemaName, actionSemanticMap);
+        }
+    }
+
+    private beginSchemaUpdate(schemaName: string): number {
+        const version = (this.schemaVersions.get(schemaName) ?? 0) + 1;
+        this.schemaVersions.set(schemaName, version);
+        return version;
+    }
+
+    private async createActionSemanticMap(
+        config: ActionConfig,
+        actionSchemaFile: ActionSchemaFile,
+        cache?: EmbeddingCache,
+    ): Promise<Map<string, Entry> | undefined> {
         const actionSemanticMap = new Map<string, Entry>();
-        this.actionSemanticMaps.set(config.schemaName, actionSemanticMap);
+        const keys: string[] = [];
+        const pendingEntries: PendingEntry[] = [];
         let reuseCount = 0;
         for (const [name, definition] of actionSchemaFile.parsedActionSchema
             .actionSchemas) {
@@ -96,7 +162,11 @@ export class ActionSchemaSemanticMap implements ActionCandidateRanker {
                 reuseCount++;
             } else {
                 keys.push(key);
-                definitions.push(definition);
+                pendingEntries.push({
+                    key,
+                    actionName: name,
+                    definition,
+                });
             }
         }
 
@@ -116,24 +186,26 @@ export class ActionSchemaSemanticMap implements ActionCandidateRanker {
                 debug(
                     `Received ${embeddings.length} embeddings for ${config.schemaName} in ${Date.now() - start}ms`,
                 );
-                for (let i = 0; i < keys.length; i++) {
-                    actionSemanticMap.set(keys[i], {
+                for (let i = 0; i < pendingEntries.length; i++) {
+                    const pending = pendingEntries[i];
+                    actionSemanticMap.set(pending.key, {
                         embedding: embeddings[i],
                         schemaName: config.schemaName,
-                        actionName: definitions[i].name,
-                        definition: definitions[i],
+                        actionName: pending.actionName,
+                        definition: pending.definition,
                     });
                 }
             } catch (e: any) {
+                const reason = `Failed to get embeddings for ${config.schemaName} after ${Date.now() - start}ms: ${e?.message ?? e}`;
                 // Do not fail agent initialization (which would exit the
                 // daemon) when embeddings are unavailable at load time.
                 // Disable semantic schema selection and fall back to
                 // inline/search routing instead.
-                this.disable(
-                    `Failed to get embeddings for ${config.schemaName} after ${Date.now() - start}ms: ${e?.message ?? e}`,
-                );
+                this.disable(reason);
+                return undefined;
             }
         }
+        return actionSemanticMap;
     }
 
     private disable(reason: string): void {
@@ -151,6 +223,7 @@ export class ActionSchemaSemanticMap implements ActionCandidateRanker {
     }
 
     public removeActionSchemaFile(schemaName: string) {
+        this.beginSchemaUpdate(schemaName);
         this.actionSemanticMaps.delete(schemaName);
     }
 

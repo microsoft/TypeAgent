@@ -130,13 +130,26 @@ export class StructuredActionDiscovery {
                 (a, b) =>
                     b.score - a.score || compareActionCandidateIdentity(a, b),
             )
-            .map(({ schemaName, actionName, definition }) =>
-                createActionContract(
-                    { schemaName, actionName },
-                    definition,
-                    this.context.agents.getActionConfig(schemaName),
-                ),
-            );
+            .flatMap(({ schemaName, actionName }) => {
+                const config =
+                    this.context.agents.tryGetActionConfig(schemaName);
+                if (config === undefined) {
+                    return [];
+                }
+                const definition = this.context.agents
+                    .getActionSchemaFileForConfig(config)
+                    .parsedActionSchema.actionSchemas.get(actionName);
+                if (definition === undefined) {
+                    return [];
+                }
+                return [
+                    createActionContract(
+                        { schemaName, actionName },
+                        definition,
+                        config,
+                    ),
+                ];
+            });
     }
 
     private findLiteralMatches(

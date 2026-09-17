@@ -822,7 +822,10 @@ export class AppAgentManager
         await Promise.all(semanticMapP);
         debug("Finish action embeddings");
 
-        if (provider.onSchemaReady && stateRefreshFn) {
+        if (
+            stateRefreshFn &&
+            (provider.onSchemaReady || provider.onSchemaFailed)
+        ) {
             // Mark only the agents that are actually loading asynchronously (e.g.
             // serverCommand MCP agents with slow startup).  Agents that failed
             // synchronously should show ❌, not ⏳.
@@ -843,7 +846,7 @@ export class AppAgentManager
                 }
             }
 
-            provider.onSchemaReady(async (agentName, manifest) => {
+            provider.onSchemaReady?.(async (agentName, manifest) => {
                 try {
                     const refreshSemanticMapP: Promise<void>[] = [];
                     this.refreshAgentSchema(
@@ -861,9 +864,33 @@ export class AppAgentManager
                     debugError(
                         `Failed to refresh schema for agent '${agentName}': ${e}`,
                     );
+                } finally {
+                    this.clearLoadingSchemasForAgent(agentName);
+                }
+            });
+            provider.onSchemaFailed?.(async (agentName, error) => {
+                this.clearLoadingSchemasForAgent(agentName);
+                debugError(
+                    `Failed to load schema for agent '${agentName}': ${error.message}`,
+                );
+                try {
+                    await stateRefreshFn();
+                } catch (e) {
+                    debugError(
+                        `Failed to refresh state after schema load failure for agent '${agentName}': ${e}`,
+                    );
                 }
             });
         }
+    }
+
+    private clearLoadingSchemasForAgent(appAgentName: string): void {
+        for (const schemaName of this.loadingSchemas) {
+            if (getAppAgentName(schemaName) === appAgentName) {
+                this.loadingSchemas.delete(schemaName);
+            }
+        }
+        this.notifyReadyIfDone();
     }
 
     private refreshAgentSchema(
@@ -1629,8 +1656,16 @@ export class AppAgentManager
 
         // Invalidate cached parsed schema so it gets re-parsed from new content
         this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+        const actionSchemaFile =
+            this.actionSchemaFileCache.getActionSchemaFile(config);
 
-        // Clear translator cache so next translation uses the updated schema
+        // Replace the semantic entries only after all new embeddings are ready.
+        await this.actionSemanticMap?.replaceActionSchemaFile(
+            config,
+            actionSchemaFile,
+        );
+
+        // Clear translator cache so next translation uses the updated schema.
         context.translatorCache.clear();
 
         debug(`Loaded dynamic schema for ${schemaName}`);

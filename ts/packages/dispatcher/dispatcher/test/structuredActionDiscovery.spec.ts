@@ -15,6 +15,7 @@ import type {
     ActionCandidateRanker,
     ActionCandidateResult,
 } from "../src/translation/actionCandidateRanker.js";
+import type { AppAgentProvider } from "../src/agentProvider/agentProvider.js";
 import { StructuredActionDiscovery } from "../src/structuredAction/discovery.js";
 
 const source = `
@@ -111,7 +112,11 @@ function fixture(content = source, policies?: Record<string, ActionPolicy>) {
         agent,
         hooks,
         context,
-        service: new StructuredActionDiscovery(context),
+        service: new StructuredActionDiscovery(
+            context,
+            undefined,
+            createRanker(async () => undefined),
+        ),
     };
 }
 
@@ -380,6 +385,36 @@ describe("structured action discovery", () => {
         expect(result.actions[0]).not.toHaveProperty("score");
     });
 
+    it("hydrates ranked identities from the current schema definition", async () => {
+        const { agents, context } = fixture();
+        const stale = candidate(agents, "test.items", "select", 1);
+        const config = agents.getActionConfig("test.items");
+        config.schemaFile = {
+            format: "ts",
+            content: source.replace("note?: string;", "note: number;"),
+        };
+        (
+            agents as unknown as {
+                actionSchemaFileCache: {
+                    unloadActionSchemaFile(schemaName: string): void;
+                };
+            }
+        ).actionSchemaFileCache.unloadActionSchemaFile("test.items");
+        const service = new StructuredActionDiscovery(
+            context,
+            undefined,
+            createRanker(async () => [stale]),
+        );
+
+        const result = await service.searchActions({ query: "select" });
+
+        expect(result.actions).toHaveLength(1);
+        expect(result.actions[0].input.schemaText).toContain("note: number");
+        expect(result.actions[0].input.schemaText).not.toContain(
+            "note?: string",
+        );
+    });
+
     it("does not use literal fallback after a successful zero-candidate ranking", async () => {
         const { agents, context } = fixture();
         const enumerate = jest.spyOn(agents, "getActionConfigs");
@@ -498,6 +533,59 @@ describe("structured action discovery", () => {
         pendingState.notifyReadyIfDone();
         await expect(result).resolves.toMatchObject({ actions: [] });
         expect(ranker.rankActionCandidates).toHaveBeenCalledTimes(1);
+    });
+
+    it("settles readiness when a provider reports background schema failure", async () => {
+        const agents = new AppAgentManager(undefined, new PortRegistrar());
+        let reportFailure:
+            | ((agentName: string, error: Error) => void)
+            | undefined;
+        const provider: AppAgentProvider = {
+            getAppAgentNames: () => ["slow"],
+            getAppAgentManifest: async () => ({
+                emojiChar: "",
+                description: "Slow agent",
+                schema: {
+                    description: "Loading",
+                    schemaType: "Actions",
+                    schemaFile: { format: "ts", content: "" },
+                },
+            }),
+            loadAppAgent: async () => ({}),
+            unloadAppAgent: async () => {},
+            getLoadingAgentNames: () => ["slow"],
+            onSchemaFailed: (callback) => {
+                reportFailure = callback;
+            },
+        };
+        await agents.addProvider(
+            provider,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            async () => {},
+        );
+        expect(agents.isSchemaLoading("slow")).toBe(true);
+
+        let settled = false;
+        const ready = agents.waitUntilReady().then(() => {
+            settled = true;
+        });
+        await Promise.resolve();
+        expect(settled).toBe(false);
+
+        reportFailure?.("slow", new Error("server startup failed"));
+        await ready;
+
+        expect(settled).toBe(true);
+        expect(agents.isSchemaLoading("slow")).toBe(false);
+        const record = (
+            agents as unknown as {
+                agents: Map<string, { schemaErrors: Map<string, Error> }>;
+            }
+        ).agents.get("slow");
+        expect(record?.schemaErrors.has("slow")).toBe(true);
     });
 
     it("returns every matching action as a complete contract", async () => {

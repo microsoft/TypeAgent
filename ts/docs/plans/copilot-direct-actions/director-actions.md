@@ -221,6 +221,8 @@ MCP maps the service to MCP tools and structured content. Direct mode calls it t
 
 Delivery is layered. Layer 1 is the query-only `searchActions`, which uses the shared semantic candidate index when available and hydrates complete contracts only for the permitted ranked candidates. Literal matching remains the offline fallback when ranking is unavailable or fails. Layer 2 adds `executeAction`. Layer 3 adds the MCP and Direct adapters over the shared service. The target foreground path remains two calls: discovery followed by execution.
 
+Dynamic schema updates rebuild their semantic entries from the final parsed schema and replace the prior entries only when the new index is ready. Discovery resolves each ranked identity against the current parsed definition before creating a contract, so a concurrent schema update cannot hydrate a stale definition. Background schema startup failures settle readiness while retaining the schema error for existing status and enablement behavior.
+
 This reuse is intentionally limited to candidate ranking. Structured discovery does not reuse the ordinary dispatcher pipeline's grammar matching, translator cache, conversation context, LLM schema/action selection, or parameter translation. Copilot still selects one returned contract and supplies its structured parameters in the separate execution call.
 
 ## Future Considerations
