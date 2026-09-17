@@ -40,7 +40,7 @@ export type BrowserControlInvokeFunctions = {
         position: number,
         openInNewTab?: boolean,
     ): Promise<string | undefined>;
-    closeWindow(): Promise<void>;
+    closeWindow(title?: string): Promise<void>;
     search(
         query?: string,
         sites?: string[],
