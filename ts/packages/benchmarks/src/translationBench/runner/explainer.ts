@@ -192,7 +192,8 @@ export interface TranslationBenchExplainerAggregate {
     rubricScore: number | undefined;
     rubricCriterionSums: Omit<TranslationBenchRuleRubricInput, "rationale">;
     rubricCriteria:
-        Omit<TranslationBenchRuleRubricInput, "rationale"> | undefined;
+        | Omit<TranslationBenchRuleRubricInput, "rationale">
+        | undefined;
     diagnostics: TranslationBenchDiagnosticCounts;
     avgExplanationLatencyMs: number;
     avgCacheReplayLatencyMs: number;

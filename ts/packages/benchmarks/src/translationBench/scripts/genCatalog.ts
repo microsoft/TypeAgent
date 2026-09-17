@@ -55,7 +55,8 @@ interface ActionTypeNode {
 interface ActionConfigLike {
     schemaName: string;
     schemaType:
-        string | { action?: string; activity?: string; entity?: string };
+        | string
+        | { action?: string; activity?: string; entity?: string };
     schemaFile:
         | { format: string; content: string; config?: string }
         | (() => { format: string; content: string; config?: string });
@@ -170,7 +171,8 @@ function parseActionConfig(config: ActionConfigLike): ParsedActionSchema {
 
 function parameterSpec(actionType: ActionTypeNode): ParamSpec {
     const params = actionType.type?.fields?.parameters?.type as
-        SchemaTypeNode | undefined;
+        | SchemaTypeNode
+        | undefined;
     if (!params) return { kind: "object", fields: {} };
     return schemaTypeToParamSpec(params);
 }

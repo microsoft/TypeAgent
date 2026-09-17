@@ -60,7 +60,11 @@ export const HARDCODE_RULE_IDS = [
 
 /** Runner soft-score modes (must stay aligned with runner.ts). */
 export type ActionParamVerifyMode =
-    "exact" | "exists" | "nonempty" | "ignore" | "llmAsAJudge";
+    | "exact"
+    | "exists"
+    | "nonempty"
+    | "ignore"
+    | "llmAsAJudge";
 
 export type ActionParamCreatePolicy =
     | "enum_literal"
@@ -1488,7 +1492,8 @@ export function loadActionParametersGraderCatalogFile(
 
 const requireFromHere = createRequire(import.meta.url);
 let cachedPackagedActionParametersGrader:
-    ActionParametersGraderCatalog | undefined;
+    | ActionParametersGraderCatalog
+    | undefined;
 
 /**
  * Packaged deterministic parameter grader, loaded from the generated JSON that

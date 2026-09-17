@@ -284,7 +284,8 @@ async function main(): Promise<void> {
 
     let seedRows: TranslationBenchRow[] = [];
     let checkpointState:
-        TranslationBenchCheckpoint<TranslationBenchRow> | undefined;
+        | TranslationBenchCheckpoint<TranslationBenchRow>
+        | undefined;
     const completed = new Set<string>();
 
     if (fs.existsSync(checkpointPath) && fs.statSync(checkpointPath).size > 0) {

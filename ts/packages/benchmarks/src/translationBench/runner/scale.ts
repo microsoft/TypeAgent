@@ -22,9 +22,8 @@ export interface TranslationBenchWorkIdentity {
     caseId: string;
 }
 
-export interface TranslationBenchCheckpointRow<
-    T = unknown,
-> extends TranslationBenchWorkIdentity {
+export interface TranslationBenchCheckpointRow<T = unknown>
+    extends TranslationBenchWorkIdentity {
     kind: "translation-bench-row";
     value: T;
 }
@@ -78,9 +77,10 @@ export type TranslationBenchRunMetadata = Pick<
     "schemaHashes" | "settings"
 >;
 
-export interface TranslationBenchExecutionMergeResult extends TranslationBenchMergeResult<
-    TranslationBenchRow | TranslationBenchExplainerCaseResult
-> {
+export interface TranslationBenchExecutionMergeResult
+    extends TranslationBenchMergeResult<
+        TranslationBenchRow | TranslationBenchExplainerCaseResult
+    > {
     runResult: TranslationBenchRunResult;
     explainerRows: TranslationBenchExplainerCaseResult[];
 }

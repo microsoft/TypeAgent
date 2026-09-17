@@ -111,24 +111,26 @@ export function translationBenchBenchmarkToSuite(
             };
             const translationNegatives = evalCase.generalizations
                 .filter((probe) => probe.selection.role === "negative")
-                .map((probe): TranslationBenchCase => ({
-                    id: `${evalCase.id}:translation-negative:${probe.lineage.rowId}:${probe.lineage.sourcePart}${
-                        probe.lineage.transformVersion >= 2
-                            ? `:${probe.lineage.canonicalPayloadHash}`
-                            : ""
-                    }`,
-                    lineage: toRunnerLineage(probe.lineage),
-                    activeSchemas: structuredClone(evalCase.activeSchemas),
-                    seed: {
-                        utterance: probe.utterance,
-                        expectedActions: [],
-                        order: probe.order,
-                        ...(probe.history !== undefined
-                            ? { history: structuredClone(probe.history) }
-                            : {}),
-                    },
-                    dimensions: structuredClone(probe.selection.dimensions),
-                }));
+                .map(
+                    (probe): TranslationBenchCase => ({
+                        id: `${evalCase.id}:translation-negative:${probe.lineage.rowId}:${probe.lineage.sourcePart}${
+                            probe.lineage.transformVersion >= 2
+                                ? `:${probe.lineage.canonicalPayloadHash}`
+                                : ""
+                        }`,
+                        lineage: toRunnerLineage(probe.lineage),
+                        activeSchemas: structuredClone(evalCase.activeSchemas),
+                        seed: {
+                            utterance: probe.utterance,
+                            expectedActions: [],
+                            order: probe.order,
+                            ...(probe.history !== undefined
+                                ? { history: structuredClone(probe.history) }
+                                : {}),
+                        },
+                        dimensions: structuredClone(probe.selection.dimensions),
+                    }),
+                );
             return [primary, ...translationNegatives];
         }),
         ...(benchmark.metadata.scenarios !== undefined
