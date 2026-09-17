@@ -16,6 +16,7 @@ import {
     normalizeEntryPath,
     openDaemonLog,
     rotateDaemonLog,
+    spawnDaemon,
 } from "../typeagent-serve.mjs";
 
 const privateFatalDetail = "SIMULATED_PRIVATE_FATAL_DETAIL";
@@ -275,7 +276,10 @@ test("reports a live daemon readiness timeout", async () => {
 
         assert.equal(output.result, 1);
         assert.match(output.stderr, /did not begin listening/);
-        assert.match(output.stderr, /had not reported an exit/);
+        assert.match(
+            output.stderr,
+            /had not reported an exit and was left running/,
+        );
         assert.doesNotMatch(output.stderr, /provision --provider/);
     } finally {
         await stopChild(spawned.child);
@@ -516,6 +520,38 @@ test("records stable rotation and permission-hardening error codes", () => {
         assert.equal(state.permissionErrorCode, "EPERM");
         assert.notEqual(state.fd, undefined);
         fs.closeSync(state.fd);
+    } finally {
+        fs.rmSync(fixture.root, { recursive: true, force: true });
+    }
+});
+
+test("spawns Node directly with hidden detached Windows options", () => {
+    const fixture = makeFixture("process.exit(0);\n");
+    const child = new EventEmitter();
+    let invocation;
+    try {
+        spawnDaemon(8999, {
+            serverPath: fixture.serverPath,
+            logPath: fixture.logPath,
+            platform: "win32",
+            spawnImpl: (command, args, options) => {
+                invocation = { command, args, options };
+                return child;
+            },
+        });
+
+        assert.notEqual(invocation, undefined);
+        assert.equal(invocation.command, process.execPath);
+        assert.deepEqual(invocation.args, [
+            fixture.serverPath,
+            "--port",
+            "8999",
+        ]);
+        assert.equal(invocation.options.detached, true);
+        assert.equal(invocation.options.windowsHide, true);
+        assert.equal(invocation.options.stdio[0], "ignore");
+        assert.equal(typeof invocation.options.stdio[1], "number");
+        assert.equal(invocation.options.stdio[2], invocation.options.stdio[1]);
     } finally {
         fs.rmSync(fixture.root, { recursive: true, force: true });
     }

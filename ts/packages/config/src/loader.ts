@@ -122,10 +122,15 @@ function resolveConfigPaths(options: LoadConfigOptions): ResolvedConfigPaths {
 }
 
 function readYamlFile(filePath: string): ConfigTree | null {
-    if (!fs.existsSync(filePath)) {
-        return null;
+    let text: string;
+    try {
+        text = fs.readFileSync(filePath, "utf8");
+    } catch (error) {
+        if (systemErrorCode(error) === "ENOENT") {
+            return null;
+        }
+        throw error;
     }
-    const text = fs.readFileSync(filePath, "utf8");
     const data = yaml.load(text, { filename: filePath });
     if (data === null || data === undefined) {
         return null;
@@ -166,15 +171,33 @@ export interface ConfigProblem {
 export type ConfigFileInspection =
     | { status: "missing"; path: string }
     | { status: "valid"; path: string }
-    | { status: "invalid"; path: string; error: Error };
+    | { status: "invalid"; path: string; error: Error }
+    | { status: "unknown"; path: string; errorCode?: string };
+
+function systemErrorCode(error: unknown): string | undefined {
+    return typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        typeof error.code === "string"
+        ? error.code
+        : undefined;
+}
 
 export function inspectConfigFile(filePath: string): ConfigFileInspection {
     const resolvedPath = path.resolve(filePath);
-    if (!fs.existsSync(resolvedPath)) {
-        return { status: "missing", path: resolvedPath };
-    }
 
     try {
+        const stats = fs.statSync(resolvedPath);
+        if (!stats.isFile()) {
+            return stats.isDirectory()
+                ? {
+                      status: "unknown",
+                      path: resolvedPath,
+                      errorCode: "EISDIR",
+                  }
+                : { status: "unknown", path: resolvedPath };
+        }
+
         const tree = readYamlFile(resolvedPath);
         if (tree === null) {
             return fs.existsSync(resolvedPath)
@@ -182,9 +205,20 @@ export function inspectConfigFile(filePath: string): ConfigFileInspection {
                 : { status: "missing", path: resolvedPath };
         }
 
-        flatten(tree);
+        flatten(tree, { onSectionError: () => {} });
         return { status: "valid", path: resolvedPath };
     } catch (error) {
+        const errorCode = systemErrorCode(error);
+        if (errorCode === "ENOENT") {
+            return { status: "missing", path: resolvedPath };
+        }
+        if (errorCode !== undefined) {
+            return {
+                status: "unknown",
+                path: resolvedPath,
+                errorCode,
+            };
+        }
         return {
             status: "invalid",
             path: resolvedPath,

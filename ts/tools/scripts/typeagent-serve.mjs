@@ -424,7 +424,7 @@ function reportStartupFailure({ outcome, configInspection, logState, port }) {
         case "timeout":
             console.error(
                 `Agent server process did not begin listening on port ${port} within ${outcome.timeoutMs / 1000} seconds. ` +
-                    "The process had not reported an exit.",
+                    "The process had not reported an exit and was left running.",
             );
             break;
     }

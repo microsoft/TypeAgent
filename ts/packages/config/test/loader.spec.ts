@@ -300,11 +300,45 @@ describe("inspectConfigFile", () => {
         }
     });
 
+    test("uses the loader's recovery rules for invalid sections", () => {
+        const root = makeTempWorkspace();
+        try {
+            const file = path.join(root, "config.local.yaml");
+            fs.writeFileSync(
+                file,
+                [
+                    "openai:",
+                    "  api_key: good",
+                    "spotify:",
+                    "  port: <value>",
+                ].join("\n"),
+            );
+            expect(inspectConfigFile(file)).toEqual({
+                status: "valid",
+                path: path.resolve(file),
+            });
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test("reports filesystem inspection failures as unknown", () => {
+        const root = makeTempWorkspace();
+        try {
+            expect(inspectConfigFile(root)).toEqual({
+                status: "unknown",
+                path: path.resolve(root),
+                errorCode: "EISDIR",
+            });
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
     test.each([
         ["invalid YAML", "openai:\n  api_key: [unclosed\n"],
         ["a top-level scalar", "not-a-mapping\n"],
         ["a top-level array", "- not\n- a\n- mapping\n"],
-        ["a value that cannot be flattened", "spotify:\n  port: <value>\n"],
     ])("reports %s as invalid", (_name, contents) => {
         const root = makeTempWorkspace();
         try {
