@@ -4,6 +4,7 @@
 import {
     createJsonTranslator,
     MultimodalPromptContent,
+    Result,
     TypeChatJsonTranslator,
 } from "typechat";
 import { ChatModelWithStreaming, openai as ai } from "@typeagent/aiclient";
@@ -21,7 +22,7 @@ import { MarkdownUpdateResult } from "./markdownOperationSchema.js";
 const debug = registerDebug("typeagent:markdown:translator");
 
 export async function createMarkdownAgent(
-    model: "GPT_35_TURBO" | "GPT_4" | "GPT-v" | "GPT_4o",
+    model: ai.AzureChatModelName = "GPT_4_O",
 ) {
     const packageRoot = path.join("../../");
     const schemaText = await fs.promises.readFile(
@@ -58,14 +59,13 @@ export class MarkdownAgent<T extends object> {
         total_tokens: number;
     };
 
-    constructor(schema: string, schemaName: string, fastModelName: string) {
+    constructor(
+        schema: string,
+        schemaName: string,
+        modelName: ai.AzureChatModelName,
+    ) {
         this.schema = schema;
-        const apiSettings = ai.apiSettingsFromEnv(
-            ai.ModelType.Chat,
-            undefined,
-            fastModelName,
-        );
-        this.model = ai.createChatModel(apiSettings, undefined, undefined, [
+        this.model = ai.createChatModel(modelName, undefined, undefined, [
             "markdown",
         ]);
 
@@ -133,6 +133,11 @@ export class MarkdownAgent<T extends object> {
             ...positionPrompt,
             {
                 type: "text",
+                text: `Operations use zero-based character offsets into the original raw Markdown string, not ProseMirror positions or rendered text. The original document length is ${currentMarkdown?.length ?? 0}; append content at position ${currentMarkdown?.length ?? 0}. All operations refer to that same original string. Preserve existing content unless the user asks to change it. When adding a paragraph without an explicit location, append it at the end. Include Markdown separators as needed.
+The exact original string, JSON-encoded to make whitespace unambiguous, is: ${JSON.stringify(currentMarkdown ?? "")}`,
+            },
+            {
+                type: "text",
                 text: `
             Create operations to update the markdown document based on the user's request below. Format your response as a "MarkdownUpdateResult" 
             object using the typescript schema below.
@@ -186,7 +191,7 @@ export class MarkdownAgent<T extends object> {
         onChunk: (chunk: string) => void,
         cursorPosition?: number,
         context?: any, // Already deserialized from JSON string
-    ) {
+    ): Promise<Result<MarkdownUpdateResult>> {
         debug("Starting streaming updateDocument");
 
         // For streaming commands, we'll use a simpler approach that generates text content
@@ -198,98 +203,38 @@ export class MarkdownAgent<T extends object> {
             context,
         );
 
-        try {
-            let accumulatedContent = "";
-
-            // Use the ChatModel's complete method with proper parameters
-            const response = await this.model.complete(
-                streamingPrompt,
-                undefined,
-                undefined,
-                promptLogger.logModelRequest,
-            );
-
-            // Extract content from response
-            let content = "";
-            if (typeof response === "string") {
-                content = response;
-            } else if (response && typeof response === "object") {
-                // Handle different response formats
-                content =
-                    (response as any)?.choices?.[0]?.message?.content ||
-                    (response as any)?.content ||
-                    (response as any)?.text ||
-                    "Generated content for: " + intent;
-            } else {
-                content = "Generated content for: " + intent;
-            }
-
-            // Simulate streaming by sending chunks with delays
-            debug(`Simulating streaming for ${content.length} chars`);
-            const words = content.split(" ");
-
-            for (let i = 0; i < words.length; i += 3) {
-                const chunk =
-                    words.slice(i, i + 3).join(" ") +
-                    (i + 3 < words.length ? " " : "");
-                accumulatedContent += chunk;
-                onChunk(chunk);
-
-                // Small delay to simulate streaming
-                await new Promise((resolve) => setTimeout(resolve, 150));
-            }
-
-            debug(
-                `Streaming complete, accumulated ${accumulatedContent.length} chars`,
-            );
-
-            // Convert the accumulated content to operations
-            const operations = this.convertContentToOperations(
-                accumulatedContent,
-                intent,
-                cursorPosition,
-            );
-
-            return {
-                success: true,
-                data: {
-                    operations: operations,
-                    operationSummary: `Generated ${accumulatedContent.length} characters of content`,
-                },
-            };
-        } catch (error) {
-            console.error("[TRANSLATOR] Streaming failed:", error);
-
-            // Fallback: generate simple content and stream it
-            const fallbackContent = `Generated content for: ${intent}\n\nThis is AI-generated content based on your request.`;
-
-            // Stream the fallback content
-            const words = fallbackContent.split(" ");
-            let accumulatedContent = "";
-
-            for (let i = 0; i < words.length; i += 3) {
-                const chunk =
-                    words.slice(i, i + 3).join(" ") +
-                    (i + 3 < words.length ? " " : "");
-                accumulatedContent += chunk;
-                onChunk(chunk);
-                await new Promise((resolve) => setTimeout(resolve, 150));
-            }
-
-            const operations = this.convertContentToOperations(
-                accumulatedContent,
-                intent,
-                cursorPosition,
-            );
-
-            return {
-                success: true,
-                data: {
-                    operations: operations,
-                    operationSummary: `Generated fallback content (${accumulatedContent.length} characters)`,
-                },
-            };
+        const response = await this.model.complete(
+            streamingPrompt,
+            undefined,
+            undefined,
+            promptLogger.logModelRequest,
+        );
+        if (!response.success) {
+            return response;
         }
+
+        const content = response.data;
+        debug(`Simulating streaming for ${content.length} chars`);
+        const words = content.split(" ");
+        for (let i = 0; i < words.length; i += 3) {
+            const chunk =
+                words.slice(i, i + 3).join(" ") +
+                (i + 3 < words.length ? " " : "");
+            onChunk(chunk);
+            await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+
+        return {
+            success: true,
+            data: {
+                operations: this.convertContentToOperations(
+                    content,
+                    intent,
+                    cursorPosition,
+                ),
+                operationSummary: `Generated ${content.length} characters of content`,
+            },
+        };
     }
 
     getStreamingPrompts(
@@ -325,7 +270,7 @@ export class MarkdownAgent<T extends object> {
         // Convert generated content to operations format
         const operations = [
             {
-                type: "insert",
+                type: "insert" as const,
                 position: cursorPosition || 0, // Use the actual cursor position
                 content: [
                     {
