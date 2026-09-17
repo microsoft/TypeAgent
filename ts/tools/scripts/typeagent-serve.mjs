@@ -277,7 +277,8 @@ async function cmdStart() {
         : `\nRe-run with TYPEAGENT_DEBUG=1 (or --debug) to capture daemon output to ${logPath}`;
     console.error(
         `Agent server did not start. If this is a fresh install, run ` +
-            `'node typeagent-serve.mjs provision' first to write config.local.yaml.` +
+            `'node typeagent-serve.mjs provision --provider copilot --embedding local --force' ` +
+            `for GitHub Copilot, or 'node typeagent-serve.mjs provision' for AI Systems.` +
             logHint,
     );
     return 1;
@@ -608,6 +609,10 @@ function autostartEnv() {
     const env = { TYPEAGENT_CONFIG_DIR: pinnedConfigDir() };
     if (process.env.TYPEAGENT_USER_DATA_DIR) {
         env.TYPEAGENT_USER_DATA_DIR = process.env.TYPEAGENT_USER_DATA_DIR;
+    }
+    if (process.env.TYPEAGENT_COPILOT_RUNTIME_ROOT) {
+        env.TYPEAGENT_COPILOT_RUNTIME_ROOT =
+            process.env.TYPEAGENT_COPILOT_RUNTIME_ROOT;
     }
     return env;
 }
