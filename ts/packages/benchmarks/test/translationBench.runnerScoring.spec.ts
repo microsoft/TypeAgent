@@ -6,7 +6,6 @@ import {
     isNonEvalTranslationBenchAction,
     scoreTranslationBench,
     scoreTranslationBenchTranslationOutcome,
-    toScoredTranslationBenchActions,
     TRANSLATION_BENCH_NON_EVAL_ACTION_IDS,
 } from "../src/translationBench/runner/runner.js";
 import { HARDCODED_NON_EVAL_ACTION_IDS } from "../src/translationBench/synthesizer/eligibleActions.js";

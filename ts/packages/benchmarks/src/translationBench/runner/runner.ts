@@ -383,7 +383,14 @@ export interface TranslationBenchScenario {
      * same model id through a distinct effort (e.g. "none" vs "low").
      */
     reasoningEffort?:
-        "" | "minimal" | "low" | "medium" | "high" | "none" | "xhigh" | "max";
+        | ""
+        | "minimal"
+        | "low"
+        | "medium"
+        | "high"
+        | "none"
+        | "xhigh"
+        | "max";
 }
 
 /**
@@ -924,7 +931,8 @@ const TRANSLATION_BENCH_PARAM_FIELD_MODES =
 function validateParameterScoreSpecs(
     evalCase: TranslationBenchCase,
     parameterScore:
-        Array<TranslationBenchParameterScoreSpec | undefined> | undefined,
+        | Array<TranslationBenchParameterScoreSpec | undefined>
+        | undefined,
 ): void {
     if (parameterScore === undefined) return;
     if (!Array.isArray(parameterScore)) {
@@ -2166,7 +2174,10 @@ export function createTranslationBenchConfig(
         model,
         // Inherit gateway/model default unless the scenario names an explicit
         // effort; never force a prompt cache key or effort implicitly.
-        reasoningEffort: scenario.reasoningEffort ?? "",
+        ...(scenario.reasoningEffort !== undefined &&
+        scenario.reasoningEffort !== ""
+            ? { reasoningEffort: scenario.reasoningEffort }
+            : {}),
         stream: false,
         promptConfig: {
             additionalInstructions: scenario.additionalInstructions,
