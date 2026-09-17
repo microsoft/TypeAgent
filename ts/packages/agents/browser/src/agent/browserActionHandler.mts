@@ -604,8 +604,7 @@ async function updateBrowserContext(
 
         // Initialize fuzzy matching model for website search
         if (!context.agentContext.fuzzyMatchingModel) {
-            context.agentContext.fuzzyMatchingModel =
-                tryCreateEmbeddingModel();
+            context.agentContext.fuzzyMatchingModel = tryCreateEmbeddingModel();
         }
 
         if (!context.agentContext.viewProcess) {
