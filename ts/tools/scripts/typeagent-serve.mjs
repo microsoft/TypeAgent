@@ -56,6 +56,8 @@ const copilotRuntimeEntry = path.join(
     "tools",
     "copilotRuntime.mjs",
 );
+const MAX_DAEMON_LOG_BYTES = 1024 * 1024;
+const PREVIOUS_DAEMON_LOG_FILE = "agent-server.previous.log";
 
 // Profile recorded by deployAgentServer when the artifact was profile-pruned.
 function readProfileMarker() {
@@ -112,15 +114,6 @@ function isPortListening(port, timeoutMs = 1500) {
     });
 }
 
-async function waitForPort(port, timeoutMs = 60000, intervalMs = 500) {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-        if (await isPortListening(port)) return true;
-        await new Promise((r) => setTimeout(r, intervalMs));
-    }
-    return false;
-}
-
 function runInline(entry, extraArgs) {
     // Inherit stdio so interactive flows (getKeys browser login) work.
     return new Promise((resolve) => {
@@ -160,6 +153,103 @@ function daemonLogPath() {
     return path.join(userDataDir(), "agent-server.log");
 }
 
+function previousDaemonLogPath(logPath = daemonLogPath()) {
+    return path.join(path.dirname(logPath), PREVIOUS_DAEMON_LOG_FILE);
+}
+
+function systemErrorCode(error) {
+    return typeof error === "object" &&
+        error !== null &&
+        typeof error.code === "string"
+        ? error.code
+        : undefined;
+}
+
+function fallbackLocalConfigPath() {
+    if (process.env.TYPEAGENT_CONFIG_LOCAL) {
+        return path.resolve(process.env.TYPEAGENT_CONFIG_LOCAL);
+    }
+    return path.join(pinnedConfigDir(), "config.local.yaml");
+}
+
+async function inspectLocalConfig(configPath) {
+    try {
+        const config = await import("@typeagent/config");
+        const resolvedPath = configPath ?? config.resolveLocalConfigPath();
+        return config.inspectConfigFile(resolvedPath);
+    } catch (error) {
+        return {
+            status: "unknown",
+            path: configPath ?? fallbackLocalConfigPath(),
+            errorCode: systemErrorCode(error),
+        };
+    }
+}
+
+function rotateDaemonLog(logPath, { fileSystem = fs } = {}) {
+    try {
+        if (
+            !fileSystem.existsSync(logPath) ||
+            fileSystem.statSync(logPath).size <= MAX_DAEMON_LOG_BYTES
+        ) {
+            return undefined;
+        }
+        const previousPath = previousDaemonLogPath(logPath);
+        fileSystem.rmSync(previousPath, { force: true });
+        fileSystem.renameSync(logPath, previousPath);
+        return undefined;
+    } catch (error) {
+        return systemErrorCode(error);
+    }
+}
+
+function openDaemonLog(
+    logPath,
+    port,
+    { fileSystem = fs, platform = process.platform } = {},
+) {
+    let fd;
+    const rotationErrorCode = rotateDaemonLog(logPath, { fileSystem });
+    try {
+        fileSystem.mkdirSync(path.dirname(logPath), { recursive: true });
+        fd = fileSystem.openSync(logPath, "a", 0o600);
+        let permissionErrorCode;
+        if (platform !== "win32") {
+            try {
+                fileSystem.chmodSync(logPath, 0o600);
+            } catch (error) {
+                permissionErrorCode = systemErrorCode(error);
+            }
+        }
+        fileSystem.writeSync(
+            fd,
+            `\n=== typeagent-serve startup ${new Date().toISOString()} port=${port} ===\n`,
+        );
+        return {
+            fd,
+            path: logPath,
+            opened: true,
+            openErrorCode: undefined,
+            rotationErrorCode,
+            permissionErrorCode,
+        };
+    } catch (error) {
+        if (fd !== undefined) {
+            try {
+                fileSystem.closeSync(fd);
+            } catch {}
+        }
+        return {
+            fd: undefined,
+            path: logPath,
+            opened: false,
+            openErrorCode: systemErrorCode(error),
+            rotationErrorCode,
+            permissionErrorCode: undefined,
+        };
+    }
+}
+
 function isDebugMode() {
     const v = process.env.TYPEAGENT_DEBUG;
     return (
@@ -168,9 +258,19 @@ function isDebugMode() {
     );
 }
 
-function spawnDaemon(port) {
+function spawnDaemon(
+    port,
+    {
+        serverPath = serverEntry,
+        logPath = daemonLogPath(),
+        spawnImpl = spawn,
+        env: processEnvironment = process.env,
+        fileSystem = fs,
+        platform = process.platform,
+    } = {},
+) {
     const idle = arg("--idle-timeout");
-    const args = [serverEntry, "--port", String(port)];
+    const args = [serverPath, "--port", String(port)];
     if (idle) args.push("--idle-timeout", idle);
     // Agent profile: a reduced provider config (e.g. "inbox" ->
     // data/config.inbox.json) so the daemon loads only the agents this
@@ -180,68 +280,233 @@ function spawnDaemon(port) {
     // required for it to start). Unset everywhere = the full default config.json.
     const profile =
         arg("--config") ??
-        process.env.TYPEAGENT_AGENT_PROFILE ??
+        processEnvironment.TYPEAGENT_AGENT_PROFILE ??
         readProfileMarker();
     if (profile) args.push("--config", profile);
-    const isWindows = process.platform === "win32";
+    const logState = openDaemonLog(logPath, port, { fileSystem, platform });
+    const env = { ...processEnvironment };
+    if (isDebugMode() && !env.DEBUG) {
+        env.DEBUG = "typeagent:*";
+    }
 
-    const debugMode = isDebugMode();
-
-    // In debug mode redirect daemon stdout/stderr to a log file and enable the
-    // debug namespace so startup failures are captured instead of silently lost.
-    let stdio = "ignore";
-    const env = { ...process.env };
-    if (debugMode) {
-        const logPath = daemonLogPath();
-        fs.mkdirSync(path.dirname(logPath), { recursive: true });
-        const logFd = fs.openSync(logPath, "a");
-        stdio = ["ignore", logFd, logFd];
-        if (!env.DEBUG) env.DEBUG = "typeagent:*";
-        console.log(`[debug] Daemon log: ${logPath}`);
-        // Close our copy of the fd after spawn so the child owns it.
-        setTimeout(() => {
+    let child;
+    try {
+        child = spawnImpl(process.execPath, args, {
+            detached: true,
+            windowsHide: true,
+            stdio:
+                logState.fd === undefined
+                    ? "ignore"
+                    : ["ignore", logState.fd, logState.fd],
+            env,
+        });
+    } catch (error) {
+        return {
+            child: undefined,
+            lifecyclePromise: Promise.resolve({
+                status: "spawn-error",
+                errorCode: systemErrorCode(error),
+            }),
+            logState,
+        };
+    } finally {
+        if (logState.fd !== undefined) {
             try {
-                fs.closeSync(logFd);
+                fileSystem.closeSync(logState.fd);
             } catch {}
-        }, 1000);
+        }
     }
 
-    if (isWindows && !debugMode) {
-        // Detached node processes on Windows can create visible console windows
-        // (including for spawned descendants). Use cmd `start /B` to keep the
-        // daemon backgrounded without opening extra windows.
-        const child = spawn(
-            "cmd.exe",
-            ["/d", "/c", "start", "", "/B", process.execPath, ...args],
-            {
-                windowsHide: true,
-                stdio: "ignore",
-                env,
-            },
+    const lifecyclePromise = new Promise((resolve) => {
+        let settled = false;
+        const settle = (outcome) => {
+            if (!settled) {
+                settled = true;
+                resolve(outcome);
+            }
+        };
+        child.once("error", (error) =>
+            settle({
+                status: "spawn-error",
+                errorCode: systemErrorCode(error),
+            }),
         );
-        child.unref();
-        return;
-    }
-
-    const child = spawn(process.execPath, args, {
-        // The launcher is short-lived. Detach on all platforms so the daemon
-        // survives after this process exits; otherwise on Windows it can die
-        // immediately after reporting startup success.
-        detached: true,
-        windowsHide: true,
-        stdio,
-        env,
+        child.once("exit", (code, signal) =>
+            settle({ status: "exited", code, signal }),
+        );
     });
-    child.unref();
+    return { child, lifecyclePromise, logState };
 }
 
-async function cmdStart() {
-    const port = resolvePort();
-    if (await isPortListening(port)) {
-        console.log(`Agent server already running on port ${port}.`);
+async function waitForStartup(
+    port,
+    daemon,
+    { timeoutMs = 60000, intervalMs = 500, isListening = isPortListening } = {},
+) {
+    const deadline = Date.now() + timeoutMs;
+    let lifecycleOutcome;
+    const lifecycleResult = daemon.lifecyclePromise.then((outcome) => {
+        lifecycleOutcome = outcome;
+        return { kind: "lifecycle", outcome };
+    });
+
+    while (Date.now() < deadline) {
+        if (lifecycleOutcome !== undefined) {
+            return lifecycleOutcome;
+        }
+
+        const probeResult = await Promise.race([
+            Promise.resolve(isListening(port)).then((listening) => ({
+                kind: "probe",
+                listening,
+            })),
+            lifecycleResult,
+        ]);
+        if (probeResult.kind === "lifecycle") {
+            return probeResult.outcome;
+        }
+        if (probeResult.listening) {
+            const confirmation = await Promise.race([
+                new Promise((resolve) =>
+                    setImmediate(() => resolve({ kind: "ready" })),
+                ),
+                lifecycleResult,
+            ]);
+            if (confirmation.kind === "lifecycle") {
+                return confirmation.outcome;
+            }
+            return lifecycleOutcome ?? { status: "ready" };
+        }
+
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) {
+            break;
+        }
+        const intervalResult = await Promise.race([
+            new Promise((resolve) =>
+                setTimeout(
+                    () => resolve({ kind: "interval" }),
+                    Math.min(intervalMs, remainingMs),
+                ),
+            ),
+            lifecycleResult,
+        ]);
+        if (intervalResult.kind === "lifecycle") {
+            return intervalResult.outcome;
+        }
+    }
+
+    return lifecycleOutcome ?? { status: "timeout", timeoutMs };
+}
+
+function reportStartupFailure({ outcome, configInspection, logState, port }) {
+    switch (outcome.status) {
+        case "spawn-error":
+            console.error(
+                outcome.errorCode
+                    ? `Agent server could not be launched (system error: ${outcome.errorCode}).`
+                    : "Agent server could not be launched.",
+            );
+            break;
+        case "exited":
+            if (outcome.code !== null) {
+                console.error(
+                    `Agent server exited during startup (exit code ${outcome.code}).`,
+                );
+            } else if (outcome.signal !== null) {
+                console.error(
+                    `Agent server exited during startup (signal ${outcome.signal}).`,
+                );
+            } else {
+                console.error("Agent server exited during startup.");
+            }
+            break;
+        case "timeout":
+            console.error(
+                `Agent server process did not begin listening on port ${port} within ${outcome.timeoutMs / 1000} seconds. ` +
+                    "The process had not reported an exit.",
+            );
+            break;
+    }
+
+    switch (configInspection.status) {
+        case "missing":
+            console.error(
+                `No local configuration file was found at ${configInspection.path}.`,
+            );
+            console.error(
+                `If this installation has not been configured through another source, run ` +
+                    `'node typeagent-serve.mjs provision --provider copilot --embedding local --force' ` +
+                    `for GitHub Copilot, or 'node typeagent-serve.mjs provision' for AI Systems.`,
+            );
+            break;
+        case "invalid":
+            console.error(
+                `The local configuration file at ${configInspection.path} could not be parsed or validated.`,
+            );
+            console.error(
+                "Inspect or regenerate the file and consult the daemon log.",
+            );
+            break;
+        case "valid":
+            console.error(
+                `A structurally valid local configuration file exists at ${configInspection.path}.`,
+            );
+            console.error(
+                "Provisioning is not being recommended automatically.",
+            );
+            break;
+        case "unknown":
+            console.error(
+                configInspection.errorCode
+                    ? `The local configuration state at ${configInspection.path} could not be inspected ` +
+                          `(system error: ${configInspection.errorCode}).`
+                    : `The local configuration state at ${configInspection.path} could not be inspected.`,
+            );
+            break;
+    }
+
+    if (!logState.opened) {
+        console.error(
+            logState.openErrorCode
+                ? `Daemon logging was unavailable (system error: ${logState.openErrorCode}).`
+                : "Daemon logging was unavailable.",
+        );
+        return;
+    }
+    console.error(`Daemon log: ${logState.path}`);
+    if (logState.rotationErrorCode) {
+        console.error(
+            `Previous log rotation was unavailable (system error: ${logState.rotationErrorCode}).`,
+        );
+    }
+    if (logState.permissionErrorCode) {
+        console.error(
+            `Daemon log permissions could not be tightened (system error: ${logState.permissionErrorCode}).`,
+        );
+    }
+}
+
+async function cmdStart({
+    port = resolvePort(),
+    timeoutMs = 60000,
+    intervalMs = 500,
+    serverPath = serverEntry,
+    configPath,
+    logPath = daemonLogPath(),
+    isListening = isPortListening,
+    spawnImpl = spawn,
+    inspectConfig = inspectLocalConfig,
+} = {}) {
+    if (await isListening(port)) {
+        console.log(
+            `A process is already listening on port ${port} ` +
+                `(possibly an existing TypeAgent agent server). ` +
+                "No new server was started.",
+        );
         return 0;
     }
-    if (!fs.existsSync(serverEntry)) {
+    if (!fs.existsSync(serverPath)) {
         // Detect running from the repo source tree (not a deployed artifact).
         const inRepo = fs.existsSync(
             path.join(artifactDir, "..", "..", "package.json"),
@@ -255,13 +520,23 @@ async function cmdStart() {
                     `Tunnel host commands (tunnel start/stop/status) work from here.`,
             );
         } else {
-            console.error(`Server entry not found at ${serverEntry}.`);
+            console.error(`Server entry not found at ${serverPath}.`);
         }
         return 1;
     }
     console.log(`Starting agent server (port ${port})...`);
-    spawnDaemon(port);
-    if (await waitForPort(port)) {
+    const daemon = spawnDaemon(port, {
+        serverPath,
+        logPath,
+        spawnImpl,
+    });
+    const outcome = await waitForStartup(port, daemon, {
+        timeoutMs,
+        intervalMs,
+        isListening,
+    });
+    if (outcome.status === "ready") {
+        daemon.child?.unref();
         console.log(`Agent server is up at ws://localhost:${port}.`);
         // Opt-in: also bring up the dev-tunnel host so remote devices can reach
         // the service. Only when --tunnel/$TYPEAGENT_TUNNEL is set AND a tunnel
@@ -271,16 +546,25 @@ async function cmdStart() {
         }
         return 0;
     }
-    const logPath = daemonLogPath();
-    const logHint = fs.existsSync(logPath)
-        ? `\nDaemon log: ${logPath}`
-        : `\nRe-run with TYPEAGENT_DEBUG=1 (or --debug) to capture daemon output to ${logPath}`;
-    console.error(
-        `Agent server did not start. If this is a fresh install, run ` +
-            `'node typeagent-serve.mjs provision --provider copilot --embedding local --force' ` +
-            `for GitHub Copilot, or 'node typeagent-serve.mjs provision' for AI Systems.` +
-            logHint,
-    );
+    if (outcome.status === "timeout") {
+        daemon.child?.unref();
+    }
+    let configInspection;
+    try {
+        configInspection = await inspectConfig(configPath);
+    } catch (error) {
+        configInspection = {
+            status: "unknown",
+            path: configPath ?? fallbackLocalConfigPath(),
+            errorCode: systemErrorCode(error),
+        };
+    }
+    reportStartupFailure({
+        outcome,
+        configInspection,
+        logState: daemon.logState,
+        port,
+    });
     return 1;
 }
 
@@ -542,10 +826,7 @@ async function cmdStatus() {
         if (fs.existsSync(logPath)) {
             console.log(`Daemon log: ${logPath}`);
         } else {
-            console.log(
-                `No daemon log found. Re-run 'node typeagent-serve.mjs start --debug' ` +
-                    `(or set TYPEAGENT_DEBUG=1) to capture daemon output to ${logPath}`,
-            );
+            console.log(`No daemon log found at ${logPath}.`);
         }
     }
     return up ? 0 : 1;
@@ -555,11 +836,11 @@ function cmdLogs() {
     const logPath = daemonLogPath();
     if (!fs.existsSync(logPath)) {
         console.log(`No daemon log found at ${logPath}.`);
-        console.log(
-            `Start with 'node typeagent-serve.mjs start --debug' or set TYPEAGENT_DEBUG=1 to enable logging.`,
-        );
         return 0;
     }
+    console.log(
+        "This command displays raw daemon output, which may contain sensitive diagnostic information.",
+    );
     console.log(`=== Daemon log: ${logPath} ===`);
     const lines = fs.readFileSync(logPath, "utf8").split("\n");
     // Print last 200 lines by default; --all to show everything.
@@ -965,4 +1246,26 @@ async function main() {
     }
 }
 
-main().then((code) => process.exit(code));
+function normalizeEntryPath(value, platform = process.platform) {
+    const resolved = path.resolve(value);
+    return platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+const invokedAsMain =
+    process.argv[1] !== undefined &&
+    normalizeEntryPath(process.argv[1]) === normalizeEntryPath(selfPath);
+
+if (invokedAsMain) {
+    main().then((code) => process.exit(code));
+}
+
+export {
+    cmdStart,
+    inspectLocalConfig,
+    normalizeEntryPath,
+    openDaemonLog,
+    reportStartupFailure,
+    rotateDaemonLog,
+    spawnDaemon,
+    waitForStartup,
+};

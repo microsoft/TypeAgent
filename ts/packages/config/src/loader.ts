@@ -163,6 +163,36 @@ export interface ConfigProblem {
     readonly message: string;
 }
 
+export type ConfigFileInspection =
+    | { status: "missing"; path: string }
+    | { status: "valid"; path: string }
+    | { status: "invalid"; path: string; error: Error };
+
+export function inspectConfigFile(filePath: string): ConfigFileInspection {
+    const resolvedPath = path.resolve(filePath);
+    if (!fs.existsSync(resolvedPath)) {
+        return { status: "missing", path: resolvedPath };
+    }
+
+    try {
+        const tree = readYamlFile(resolvedPath);
+        if (tree === null) {
+            return fs.existsSync(resolvedPath)
+                ? { status: "valid", path: resolvedPath }
+                : { status: "missing", path: resolvedPath };
+        }
+
+        flatten(tree);
+        return { status: "valid", path: resolvedPath };
+    } catch (error) {
+        return {
+            status: "invalid",
+            path: resolvedPath,
+            error: error instanceof Error ? error : new Error(String(error)),
+        };
+    }
+}
+
 let configProblems: ConfigProblem[] = [];
 const warnedProblems = new Set<string>();
 
