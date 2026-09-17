@@ -32,6 +32,24 @@ export {
     ambiguousCrossSchemaActionIds,
 };
 
+let cachedPackagedLlmJudgeExcludedActions: ReadonlySet<string> | undefined;
+
+export function getPackagedLlmJudgeExcludedActions(): ReadonlySet<string> {
+    if (cachedPackagedLlmJudgeExcludedActions === undefined) {
+        cachedPackagedLlmJudgeExcludedActions = new Set([
+            ...listActionsWithLlmJudgeFields(
+                loadPackagedGraderForEligibility(),
+            ),
+            ...HARDCODED_NON_EVAL_ACTION_IDS,
+        ]);
+    }
+    return cachedPackagedLlmJudgeExcludedActions;
+}
+
+export function clearPackagedLlmJudgeExcludedActionsCacheForTests(): void {
+    cachedPackagedLlmJudgeExcludedActions = undefined;
+}
+
 function catalogRefsFromSchemas(
     schemas: ReadonlyArray<{
         schemaName: string;
