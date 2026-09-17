@@ -18,16 +18,41 @@ import {
     isOnboardingSchemaName,
     type CatalogActionRef,
 } from "./loadPolicy.js";
-import {
-    listActionsWithLlmJudgeFields,
-    type GraderByAction,
-} from "./graderInspect.js";
 import type {
     ActionParametersGraderCatalog,
     GeneratedActionCatalog,
 } from "../synthesizer/catalogGenerator/index.js";
 
 const require = createRequire(import.meta.url);
+
+export type GraderFieldNode = {
+    verify?: string;
+    item?: GraderFieldNode;
+};
+
+export type GraderByAction = {
+    byAction: Record<string, { fields: Record<string, GraderFieldNode> }>;
+    rulesFingerprint?: string;
+};
+
+export function fieldTreeIsLlmAsAJudge(field: GraderFieldNode): boolean {
+    return (
+        field.verify === "llmAsAJudge" ||
+        (field.item !== undefined && fieldTreeIsLlmAsAJudge(field.item))
+    );
+}
+
+export function listActionsWithLlmJudgeFields(
+    catalog: GraderByAction,
+): string[] {
+    return Object.keys(catalog.byAction)
+        .sort()
+        .filter((id) =>
+            Object.values(catalog.byAction[id]!.fields).some(
+                fieldTreeIsLlmAsAJudge,
+            ),
+        );
+}
 
 export const ELIGIBLE_GOLD_ACTIONS_FILE =
     "eligible-gold-actions.generated.json";

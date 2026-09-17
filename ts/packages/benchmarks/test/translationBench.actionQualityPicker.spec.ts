@@ -8,13 +8,11 @@ import { fileURLToPath } from "node:url";
 import {
     clearPackagedEligibleGoldActionsCacheForTests,
     getPackagedEligibleGoldActionIds,
+    fieldTreeIsLlmAsAJudge,
+    listActionsWithLlmJudgeFields,
     loadPackagedGraderForEligibility,
     pickEligibleGoldActions,
 } from "../src/translationBench/policy/actionQualityPicker.js";
-import {
-    fieldTreeIsLlmAsAJudge,
-    listActionsWithLlmJudgeFields,
-} from "../src/translationBench/policy/graderInspect.js";
 import {
     loadActionParametersGraderCatalogFile,
     type ActionParametersGraderCatalog,
