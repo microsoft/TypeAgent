@@ -120,10 +120,8 @@ export function classifyTranslationBenchAmbiguityAgreement(
 } {
     const gold = goldRouteKey(expected);
     const okRoutes: string[] = [];
-    let errors = 0;
     for (const obs of observations) {
         if (obs.error !== undefined && obs.error.trim().length > 0) {
-            errors += 1;
             continue;
         }
         okRoutes.push(routeKey(obs.actions));

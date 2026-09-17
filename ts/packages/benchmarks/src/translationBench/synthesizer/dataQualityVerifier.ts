@@ -492,11 +492,13 @@ export async function runTranslationBenchDataQualityVerifier(
         judgeLlm: options.ambiguityJudgeLlm ?? options.semanticLlm,
     });
 
+    const accepted =
+        ambiguity.passed || !pack.acceptance.requireAmbiguityProbePass;
     return {
-        accepted: ambiguity.passed,
+        accepted,
         format,
         semantic,
         ambiguity,
-        feedback: ambiguity.passed ? [] : ambiguity.issues,
+        feedback: accepted ? [] : ambiguity.issues,
     };
 }
