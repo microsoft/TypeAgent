@@ -131,6 +131,8 @@ For large action catalogs, discovery should support search and progressive discl
 
 Search accepts one natural-language query and returns closed contracts for every matching action. Until discovery has a relevance ranker, it must not silently truncate the matching set. Callers should use a focused query when the active catalog is large.
 
+**TODO:** Replace the initial substring matcher with a relevance ranker such as BM25. The ranker should reuse TypeAgent's action metadata, return the most relevant contracts for the supplied intent, use stable identity ordering for ties, and preserve the two-call discovery-then-execution flow. Define and measure retrieval quality before introducing a result limit; until then, return every substring match so discovery does not silently omit the intended action.
+
 Each result is a closed, self-contained action contract with its identity, description, parameters, referenced types, constraints, outputs, and interaction requirements. This combines candidate discovery and contract hydration so the normal structured path requires only discovery and execution. The action remains the unit of selection, caching, and compatibility.
 
 The normal flow is:
