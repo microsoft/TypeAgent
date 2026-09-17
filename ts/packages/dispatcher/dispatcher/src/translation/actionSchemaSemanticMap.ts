@@ -9,29 +9,34 @@ import {
     generateEmbeddingWithRetry,
     generateTextEmbeddingsWithRetry,
     NormalizedEmbedding,
-    ScoredItem,
     similarity,
     SimilarityType,
-    TopNCollection,
 } from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
     tryCreateEmbeddingModel,
 } from "@typeagent/aiclient";
 import registerDebug from "debug";
+import {
+    compareActionCandidateIdentity,
+    type ActionCandidateFilter,
+    type ActionCandidateRanker,
+    type ActionCandidateResult,
+} from "./actionCandidateRanker.js";
 
 const debug = registerDebug("typeagent:dispatcher:semantic");
 const debugError = registerDebug("typeagent:dispatcher:semantic:error");
 
 type Entry = {
     embedding: NormalizedEmbedding;
-    actionSchemaFile: ActionSchemaFile;
+    schemaName: string;
+    actionName: string;
     definition: ActionSchemaTypeDefinition;
 };
 
 export type EmbeddingCache = Map<string, NormalizedEmbedding>;
 
-export class ActionSchemaSemanticMap {
+export class ActionSchemaSemanticMap implements ActionCandidateRanker {
     private readonly actionSemanticMaps = new Map<string, Map<string, Entry>>();
     private readonly model: TextEmbeddingModel | undefined;
     // Set when no embedding provider is configured, or when embedding
@@ -84,7 +89,8 @@ export class ActionSchemaSemanticMap {
             if (embedding) {
                 actionSemanticMap.set(key, {
                     embedding,
-                    actionSchemaFile,
+                    schemaName: config.schemaName,
+                    actionName: name,
                     definition,
                 });
                 reuseCount++;
@@ -113,7 +119,8 @@ export class ActionSchemaSemanticMap {
                 for (let i = 0; i < keys.length; i++) {
                     actionSemanticMap.set(keys[i], {
                         embedding: embeddings[i],
-                        actionSchemaFile,
+                        schemaName: config.schemaName,
+                        actionName: definitions[i].name,
                         definition: definitions[i],
                     });
                 }
@@ -147,14 +154,14 @@ export class ActionSchemaSemanticMap {
         this.actionSemanticMaps.delete(schemaName);
     }
 
-    public async nearestNeighbors(
+    public async rankActionCandidates(
         request: string,
-        maxMatches: number,
-        filter: (schemaName: string) => boolean,
+        maxCandidates: number,
+        filter: ActionCandidateFilter,
         minScore: number = 0,
-    ): Promise<ScoredItem<Entry>[]> {
+    ): Promise<ActionCandidateResult[] | undefined> {
         if (!this.enabled) {
-            return [];
+            return undefined;
         }
         let embedding: NormalizedEmbedding;
         try {
@@ -163,25 +170,35 @@ export class ActionSchemaSemanticMap {
             this.disable(
                 `Failed to embed request for semantic schema selection: ${e?.message ?? e}`,
             );
-            return [];
+            return undefined;
         }
-        const matches = new TopNCollection<Entry>(maxMatches, {} as Entry);
-        for (const [name, actionSemanticMap] of this.actionSemanticMaps) {
-            if (!filter(name)) {
-                continue;
-            }
+        const matches: ActionCandidateResult[] = [];
+        for (const actionSemanticMap of this.actionSemanticMaps.values()) {
             for (const entry of actionSemanticMap.values()) {
+                if (!filter(entry.schemaName, entry.actionName)) {
+                    continue;
+                }
                 const score = similarity(
                     entry.embedding,
                     embedding,
                     SimilarityType.Dot,
                 );
                 if (score >= minScore) {
-                    matches.push(entry, score);
+                    matches.push({
+                        schemaName: entry.schemaName,
+                        actionName: entry.actionName,
+                        score,
+                        definition: entry.definition,
+                    });
                 }
             }
         }
-        return matches.byRank();
+        return matches
+            .sort(
+                (a, b) =>
+                    b.score - a.score || compareActionCandidateIdentity(a, b),
+            )
+            .slice(0, maxCandidates);
     }
 
     public embeddings(): [string, NormalizedEmbedding][] {

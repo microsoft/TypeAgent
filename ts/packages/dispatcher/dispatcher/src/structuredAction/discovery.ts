@@ -11,7 +11,19 @@ import {
     type StructuredActionEnvelope,
 } from "@typeagent/dispatcher-types";
 import type { AppAgentManager } from "../context/appAgentManager.js";
+import {
+    compareActionCandidateIdentity,
+    type ActionCandidateFilter,
+    type ActionCandidateRanker,
+    type ActionCandidateResult,
+} from "../translation/actionCandidateRanker.js";
 import { createActionContract } from "./contract.js";
+import registerDebug from "debug";
+
+const debugError = registerDebug(
+    "typeagent:dispatcher:structuredActionDiscovery:error",
+);
+const rankedCandidateLimit = 5;
 
 // Host-only policy. Never deserialize this from a discovery/RPC request.
 // Reuse scope only for the same authorized logical caller/conversation binding,
@@ -51,6 +63,7 @@ export class StructuredActionDiscovery {
     public constructor(
         private readonly context: DiscoveryContext,
         private readonly access?: StructuredActionAccess,
+        private readonly candidateRanker: ActionCandidateRanker = context.agents,
     ) {}
 
     private bindScope() {
@@ -77,15 +90,63 @@ export class StructuredActionDiscovery {
         request: ActionSearchRequest,
     ): Promise<ActionSearchResult> {
         validateSearch(request);
+        await this.context.agents.waitUntilReady();
         const { envelope, policy } = this.bindScope();
-        const query = request.query.trim().toLowerCase();
+        const canUseCandidate: ActionCandidateFilter = (schemaName) =>
+            policy?.canDiscoverSchema(schemaName) !== false &&
+            this.context.agents.isSchemaActive(schemaName) &&
+            this.context.agents.isActionActive(schemaName);
+
+        let candidates: ActionCandidateResult[] | undefined;
+        try {
+            candidates = await this.candidateRanker.rankActionCandidates(
+                request.query.trim(),
+                rankedCandidateLimit,
+                canUseCandidate,
+            );
+        } catch (error) {
+            debugError("Action candidate ranking failed: %O", error);
+        }
+
+        const actions =
+            candidates === undefined
+                ? this.findLiteralMatches(request.query, canUseCandidate)
+                : this.hydrateRankedCandidates(candidates, canUseCandidate);
+        return {
+            ...envelope,
+            actions,
+        };
+    }
+
+    private hydrateRankedCandidates(
+        candidates: ActionCandidateResult[],
+        canUseCandidate: ActionCandidateFilter,
+    ): ActionContract[] {
+        return candidates
+            .filter(({ schemaName, actionName }) =>
+                canUseCandidate(schemaName, actionName),
+            )
+            .sort(
+                (a, b) =>
+                    b.score - a.score || compareActionCandidateIdentity(a, b),
+            )
+            .map(({ schemaName, actionName, definition }) =>
+                createActionContract(
+                    { schemaName, actionName },
+                    definition,
+                    this.context.agents.getActionConfig(schemaName),
+                ),
+            );
+    }
+
+    private findLiteralMatches(
+        request: string,
+        canUseCandidate: ActionCandidateFilter,
+    ): ActionContract[] {
+        const query = request.trim().toLowerCase();
         const matches: ActionContract[] = [];
         for (const config of this.context.agents.getActionConfigs()) {
-            if (
-                policy?.canDiscoverSchema(config.schemaName) === false ||
-                !this.context.agents.isSchemaActive(config.schemaName) ||
-                !this.context.agents.isActionActive(config.schemaName)
-            ) {
+            if (!canUseCandidate(config.schemaName, "")) {
                 continue;
             }
             const schema =
@@ -109,25 +170,6 @@ export class StructuredActionDiscovery {
                 );
             }
         }
-        matches.sort((a, b) => {
-            const schemaOrder =
-                a.schemaName < b.schemaName
-                    ? -1
-                    : a.schemaName > b.schemaName
-                      ? 1
-                      : 0;
-            return (
-                schemaOrder ||
-                (a.actionName < b.actionName
-                    ? -1
-                    : a.actionName > b.actionName
-                      ? 1
-                      : 0)
-            );
-        });
-        return {
-            ...envelope,
-            actions: matches,
-        };
+        return matches.sort(compareActionCandidateIdentity);
     }
 }

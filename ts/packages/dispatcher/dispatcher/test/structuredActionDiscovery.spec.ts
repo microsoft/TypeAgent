@@ -11,6 +11,10 @@ import {
     convertToActionConfig,
     type ActionConfig,
 } from "../src/translation/actionConfig.js";
+import type {
+    ActionCandidateRanker,
+    ActionCandidateResult,
+} from "../src/translation/actionCandidateRanker.js";
 import { StructuredActionDiscovery } from "../src/structuredAction/discovery.js";
 
 const source = `
@@ -130,6 +134,34 @@ async function fingerprint(content = source, policy?: ActionPolicy) {
         policy ? { select: policy } : undefined,
     );
     return (await getContract(service)).fingerprint;
+}
+
+function candidate(
+    agents: AppAgentManager,
+    schemaName: string,
+    actionName: string,
+    score: number,
+): ActionCandidateResult {
+    const schema = agents.getActionSchemaFileForConfig(
+        agents.getActionConfig(schemaName),
+    );
+    const definition = schema.parsedActionSchema.actionSchemas.get(actionName);
+    if (definition === undefined) {
+        throw new Error(`Missing test action ${schemaName}.${actionName}`);
+    }
+    return { schemaName, actionName, score, definition };
+}
+
+function createRanker(
+    implementation: ActionCandidateRanker["rankActionCandidates"],
+): ActionCandidateRanker & {
+    rankActionCandidates: jest.MockedFunction<
+        ActionCandidateRanker["rankActionCandidates"]
+    >;
+} {
+    return {
+        rankActionCandidates: jest.fn(implementation),
+    };
 }
 
 describe("structured action contracts", () => {
@@ -310,6 +342,164 @@ describe("structured action contracts", () => {
 });
 
 describe("structured action discovery", () => {
+    it("hydrates ranked candidates by score with stable identity ties", async () => {
+        const { agents, context } = fixture();
+        const ranker = createRanker(async () => [
+            candidate(agents, "test.items", "ping", 0.7),
+            candidate(agents, "test.other", "select", 0.9),
+            candidate(agents, "test.items", "select", 0.7),
+            candidate(agents, "test.items", "clear", 0.7),
+        ]);
+        const service = new StructuredActionDiscovery(
+            context,
+            undefined,
+            ranker,
+        );
+
+        const result = await service.searchActions({ query: "  choose item " });
+
+        expect(ranker.rankActionCandidates).toHaveBeenCalledWith(
+            "choose item",
+            5,
+            expect.any(Function),
+        );
+        expect(
+            result.actions.map(({ schemaName, actionName }) => ({
+                schemaName,
+                actionName,
+            })),
+        ).toEqual([
+            { schemaName: "test.other", actionName: "select" },
+            { schemaName: "test.items", actionName: "clear" },
+            { schemaName: "test.items", actionName: "ping" },
+            { schemaName: "test.items", actionName: "select" },
+        ]);
+        expect(
+            result.actions.every((action) => action.input !== undefined),
+        ).toBe(true);
+        expect(result.actions[0]).not.toHaveProperty("score");
+    });
+
+    it("does not use literal fallback after a successful zero-candidate ranking", async () => {
+        const { agents, context } = fixture();
+        const enumerate = jest.spyOn(agents, "getActionConfigs");
+        const ranker = createRanker(async () => []);
+        const service = new StructuredActionDiscovery(
+            context,
+            undefined,
+            ranker,
+        );
+
+        expect(
+            (await service.searchActions({ query: "select" })).actions,
+        ).toEqual([]);
+        expect(enumerate).not.toHaveBeenCalled();
+    });
+
+    it.each(["unavailable", "failure"] as const)(
+        "uses stable literal fallback when ranking is %s",
+        async (condition) => {
+            const { context } = fixture();
+            const ranker = createRanker(async () => {
+                if (condition === "failure") {
+                    throw new Error("ranking failed");
+                }
+                return undefined;
+            });
+            const service = new StructuredActionDiscovery(
+                context,
+                undefined,
+                ranker,
+            );
+
+            expect(
+                (
+                    await service.searchActions({
+                        query: "select",
+                    })
+                ).actions.map(({ schemaName, actionName }) => ({
+                    schemaName,
+                    actionName,
+                })),
+            ).toEqual([
+                { schemaName: "test.items", actionName: "select" },
+                { schemaName: "test.other", actionName: "select" },
+            ]);
+        },
+    );
+
+    it("passes trusted permission filtering into ranking", async () => {
+        const { agents, context } = fixture();
+        const candidates = [
+            candidate(agents, "test.items", "select", 0.8),
+            candidate(agents, "test.other", "select", 0.9),
+        ];
+        const filterResults = new Map<string, boolean>();
+        const ranker = createRanker(async (_request, maxCandidates, filter) =>
+            candidates
+                .filter(({ schemaName, actionName }) => {
+                    const allowed = filter(schemaName, actionName);
+                    filterResults.set(schemaName, allowed);
+                    return allowed;
+                })
+                .slice(0, maxCandidates),
+        );
+        agents.getActionConfig("test.other").schemaFile = {
+            format: "ts",
+            content: "invalid denied schema",
+        };
+        const service = new StructuredActionDiscovery(
+            context,
+            () => ({
+                scope: {},
+                canDiscoverSchema: (schemaName) => schemaName !== "test.other",
+            }),
+            ranker,
+        );
+
+        expect(
+            (await service.searchActions({ query: "select" })).actions.map(
+                ({ schemaName }) => schemaName,
+            ),
+        ).toEqual(["test.items"]);
+        expect(filterResults).toEqual(
+            new Map([
+                ["test.items", true],
+                ["test.other", false],
+            ]),
+        );
+    });
+
+    it("waits for pending schemas before ranking or catalog access", async () => {
+        const { agents, context } = fixture();
+        const pendingState = agents as unknown as {
+            loadingSchemas: Set<string>;
+            notifyReadyIfDone(): void;
+        };
+        pendingState.loadingSchemas.add("test.pending");
+        const enumerate = jest.spyOn(agents, "getActionConfigs");
+        const ranker = createRanker(async () => []);
+        const service = new StructuredActionDiscovery(
+            context,
+            undefined,
+            ranker,
+        );
+
+        const result = service.searchActions({ query: "select" });
+        await Promise.resolve();
+        expect(ranker.rankActionCandidates).not.toHaveBeenCalled();
+        expect(enumerate).not.toHaveBeenCalled();
+
+        await expect(
+            service.searchActions(undefined as unknown as { query: string }),
+        ).rejects.toThrow("Action search request must be an object");
+
+        pendingState.loadingSchemas.delete("test.pending");
+        pendingState.notifyReadyIfDone();
+        await expect(result).resolves.toMatchObject({ actions: [] });
+        expect(ranker.rankActionCandidates).toHaveBeenCalledTimes(1);
+    });
+
     it("returns every matching action as a complete contract", async () => {
         const { service } = fixture();
         const result = await service.searchActions({ query: "test" });

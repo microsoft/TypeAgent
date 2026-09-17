@@ -30,6 +30,10 @@ import {
     ActionSchemaSemanticMap,
     EmbeddingCache,
 } from "../translation/actionSchemaSemanticMap.js";
+import {
+    type ActionCandidateFilter,
+    type ActionCandidateRanker,
+} from "../translation/actionCandidateRanker.js";
 import { ActionSchemaFileCache } from "../translation/actionSchemaFileCache.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -190,7 +194,9 @@ function loadGrammar(
     );
 }
 
-export class AppAgentManager implements ActionConfigProvider {
+export class AppAgentManager
+    implements ActionConfigProvider, ActionCandidateRanker
+{
     // TODO: the per-agent routing artifacts below - action schemas
     // (`actionConfigs` / `actionSchemaFileCache`), grammars (built per record in
     // `agents`), and action embeddings (`actionSemanticMap`) - are built and
@@ -760,9 +766,30 @@ export class AppAgentManager implements ActionConfigProvider {
         filter: (schemaName: string) => boolean = (schemaName) =>
             this.isSchemaActive(schemaName),
     ) {
-        return this.actionSemanticMap?.nearestNeighbors(
+        const candidates = await this.rankActionCandidates(
             request,
             maxMatches,
+            (schemaName) => filter(schemaName),
+        );
+        return candidates?.map(({ schemaName, score, definition }) => ({
+            score,
+            item: {
+                actionSchemaFile: this.getActionSchemaFileForConfig(
+                    this.getActionConfig(schemaName),
+                ),
+                definition,
+            },
+        }));
+    }
+
+    public async rankActionCandidates(
+        request: string,
+        maxCandidates: number,
+        filter: ActionCandidateFilter,
+    ) {
+        return this.actionSemanticMap?.rankActionCandidates(
+            request,
+            maxCandidates,
             filter,
         );
     }
