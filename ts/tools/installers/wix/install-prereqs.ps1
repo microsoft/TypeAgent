@@ -27,24 +27,24 @@ param(
     [string]$PluginInstallDir = "$env:LOCALAPPDATA\TypeAgent",
     [string]$FeedRegistry = "",
     [string]$UserDataDir,
+    [string]$LocalAppDataDir,
     [string]$RuntimeRoot
 )
 
 $ErrorActionPreference = "Continue"
-
-if ($UserDataDir) {
-    $env:TYPEAGENT_USER_DATA_DIR = $UserDataDir
-    $env:TYPEAGENT_CONFIG_DIR = $UserDataDir
-}
-if ($RuntimeRoot) {
-    $env:TYPEAGENT_RUNTIME_ROOT = $RuntimeRoot
-}
 
 # Azure DevOps resource GUID (audience for the npm feed bearer token). Matches
 # packages/defaultAgentProvider/src/installSources/feedAuth.ts.
 $AdoResource = "499b84ac-1321-427f-aa17-267ca6975798"
 
 . (Join-Path $PSScriptRoot "resolve-node.ps1")
+
+$UserDataDir = Resolve-TypeAgentUserDataDir $UserDataDir $LocalAppDataDir
+$env:TYPEAGENT_USER_DATA_DIR = $UserDataDir
+$env:TYPEAGENT_CONFIG_DIR = $UserDataDir
+if ($RuntimeRoot) {
+    $env:TYPEAGENT_COPILOT_RUNTIME_ROOT = [System.IO.Path]::GetFullPath($RuntimeRoot)
+}
 
 function Write-Log([string]$message) {
     $line = "{0} {1}" -f (Get-Date -Format "s"), $message
@@ -204,7 +204,7 @@ if ($UserDataDir) {
     Write-Log "  TypeAgent user data: $UserDataDir"
 }
 if ($RuntimeRoot) {
-    Write-Log "  TypeAgent runtime root: $RuntimeRoot"
+    Write-Log "  TypeAgent Copilot runtime root: $RuntimeRoot"
 }
 
 # Resolve node from an MSI service context (refreshes PATH + probes managers),

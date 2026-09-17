@@ -11,8 +11,8 @@ import { z } from "zod";
  *
  * - The top-level document is a map (not a scalar or array).
  * - Leaf values are strings, numbers, booleans, or null.
- * - Arrays are allowed, but only as arrays of objects (used for
- *   `azureOpenAI.deployments.<name>[].endpoints`).
+ * - Arrays of objects are allowed for structured sections.
+ * - `copilot.fallbackModels` is the one supported scalar-array field.
  */
 const scalarSchema: z.ZodType<string | number | boolean | null> = z.union([
     z.string(),
@@ -21,11 +21,31 @@ const scalarSchema: z.ZodType<string | number | boolean | null> = z.union([
     z.null(),
 ]);
 
-const treeSchema: z.ZodType<unknown> = z.lazy(() =>
-    z.record(z.union([scalarSchema, treeSchema, z.array(treeSchema)])),
+const treeWithScalarArraysSchema: z.ZodType<unknown> = z.lazy(() =>
+    z.record(
+        z.union([
+            scalarSchema,
+            treeWithScalarArraysSchema,
+            z.array(z.union([scalarSchema, treeWithScalarArraysSchema])),
+        ]),
+    ),
 );
 
-export const configTreeSchema = treeSchema;
+export const configTreeSchema = treeWithScalarArraysSchema.superRefine(
+    (data, context) => {
+        const unsupportedArrayPath = findUnsupportedScalarArray(data);
+        if (unsupportedArrayPath !== undefined) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path:
+                    unsupportedArrayPath === "<root>"
+                        ? []
+                        : unsupportedArrayPath.split("."),
+                message: "Scalar arrays are not supported at this path",
+            });
+        }
+    },
+);
 
 /**
  * Validate a parsed YAML document against the Phase 1 schema.
@@ -37,9 +57,7 @@ export const configTreeSchema = treeSchema;
  */
 export function validateConfigTree(data: unknown, sourceLabel: string): void {
     const result = configTreeSchema.safeParse(data);
-    if (result.success) {
-        return;
-    }
+    if (result.success) return;
     const issues = result.error.issues
         .map((i) => {
             const path = i.path.length > 0 ? i.path.join(".") : "<root>";
@@ -47,4 +65,40 @@ export function validateConfigTree(data: unknown, sourceLabel: string): void {
         })
         .join("\n");
     throw new Error(`Invalid TypeAgent config in ${sourceLabel}:\n${issues}`);
+}
+
+function findUnsupportedScalarArray(
+    node: unknown,
+    path: string[] = [],
+): string | undefined {
+    if (Array.isArray(node)) {
+        const containsScalar = node.some(
+            (item) => item === null || typeof item !== "object",
+        );
+        if (containsScalar && path.join(".") !== "copilot.fallbackModels") {
+            return path.join(".") || "<root>";
+        }
+        for (let i = 0; i < node.length; i++) {
+            const unsupported = findUnsupportedScalarArray(node[i], [
+                ...path,
+                String(i),
+            ]);
+            if (unsupported !== undefined) {
+                return unsupported;
+            }
+        }
+        return undefined;
+    }
+    if (node !== null && typeof node === "object") {
+        for (const [key, value] of Object.entries(node)) {
+            const unsupported = findUnsupportedScalarArray(value, [
+                ...path,
+                key,
+            ]);
+            if (unsupported !== undefined) {
+                return unsupported;
+            }
+        }
+    }
+    return undefined;
 }

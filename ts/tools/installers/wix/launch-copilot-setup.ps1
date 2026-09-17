@@ -4,6 +4,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$ServePath,
+    [string]$UserDataDir,
+    [string]$LocalAppDataDir,
     [string]$RuntimeRoot,
     [string]$LogPath = "$env:LOCALAPPDATA\TypeAgent\logs\copilot-setup-launch.log"
 )
@@ -11,6 +13,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "resolve-node.ps1")
+
+$UserDataDir = Resolve-TypeAgentUserDataDir $UserDataDir $LocalAppDataDir
 
 function Write-LaunchLog([string]$Message) {
     try {
@@ -35,12 +39,18 @@ try {
 
     $escapedNode = $nodeExe.Replace("'", "''")
     $escapedServe = $ServePath.Replace("'", "''")
+    $escapedUserDataDir = $UserDataDir.Replace("'", "''")
+    $userDataSetup = @"
+`$env:TYPEAGENT_USER_DATA_DIR = '$escapedUserDataDir'
+`$env:TYPEAGENT_CONFIG_DIR = '$escapedUserDataDir'
+"@
     $runtimeRootSetup = if ($RuntimeRoot) {
-        "`$env:TYPEAGENT_RUNTIME_ROOT = '$($RuntimeRoot.Replace("'", "''"))'`r`n"
+        "`$env:TYPEAGENT_COPILOT_RUNTIME_ROOT = '$($RuntimeRoot.Replace("'", "''"))'`r`n"
     } else {
         ""
     }
     $setupCommand = @"
+$userDataSetup
 $runtimeRootSetup
 `$Host.UI.RawUI.WindowTitle = 'TypeAgent GitHub Copilot Setup'
 & '$escapedNode' '$escapedServe' setup --provider copilot --device-code

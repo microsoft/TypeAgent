@@ -31,7 +31,16 @@ export const PROVIDER_MODES: readonly ProviderMode[] = [
 let active: ProviderMode | undefined;
 
 export function getActiveModelProvider(): ProviderMode | undefined {
-    return active;
+    if (active !== undefined) {
+        return active;
+    }
+    const configured = process.env.TYPEAGENT_MODEL_PROVIDER
+        ?.trim()
+        .toLowerCase();
+    return configured !== undefined &&
+        (PROVIDER_MODES as readonly string[]).includes(configured)
+        ? (configured as ProviderMode)
+        : undefined;
 }
 
 export function setActiveModelProvider(mode: ProviderMode | undefined): void {

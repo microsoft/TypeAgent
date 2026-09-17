@@ -23,15 +23,19 @@
   Optional log file; output is also written to stdout (captured by the MSI log).
 
 .PARAMETER Rest
-  The serve subcommand and its arguments, e.g. `start`, `provision`,
-  `autostart enable`.
+  Additional options passed after the named serve command.
 #>
 param(
     [Parameter(Mandatory = $true)][string]$ServePath,
     [string]$LogPath,
     [string]$UserDataDir,
+    [string]$LocalAppDataDir,
     [string]$RuntimeRoot,
     [switch]$FailOnError,
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("provision", "start", "autostart")]
+    [string]$ServeCommand,
+    [string]$ServeCommandArg,
     [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
 
@@ -42,14 +46,6 @@ $ServerPort = 8999
 $StartTimeoutSeconds = 45
 
 $ErrorActionPreference = "Continue"
-
-if ($UserDataDir) {
-    $env:TYPEAGENT_USER_DATA_DIR = $UserDataDir
-    $env:TYPEAGENT_CONFIG_DIR = $UserDataDir
-}
-if ($RuntimeRoot) {
-    $env:TYPEAGENT_RUNTIME_ROOT = $RuntimeRoot
-}
 
 function Write-Log([string]$message) {
     $line = "{0} {1}" -f (Get-Date -Format "s"), $message
@@ -69,7 +65,18 @@ function Write-Log([string]$message) {
 
 . (Join-Path $PSScriptRoot "resolve-node.ps1")
 
-$serveArgs = @($Rest)
+$UserDataDir = Resolve-TypeAgentUserDataDir $UserDataDir $LocalAppDataDir
+$env:TYPEAGENT_USER_DATA_DIR = $UserDataDir
+$env:TYPEAGENT_CONFIG_DIR = $UserDataDir
+if ($RuntimeRoot) {
+    $env:TYPEAGENT_COPILOT_RUNTIME_ROOT = [System.IO.Path]::GetFullPath($RuntimeRoot)
+}
+
+$serveArgs = @($ServeCommand)
+if ($ServeCommandArg) {
+    $serveArgs += $ServeCommandArg
+}
+$serveArgs += @($Rest)
 $label = ($serveArgs -join ' ')
 
 if (-not (Test-Path $ServePath)) {
@@ -90,7 +97,7 @@ if ($UserDataDir) {
     Write-Log "Using TypeAgent user data: $UserDataDir"
 }
 if ($RuntimeRoot) {
-    Write-Log "Using TypeAgent runtime root: $RuntimeRoot"
+    Write-Log "Using TypeAgent Copilot runtime root: $RuntimeRoot"
 }
 Write-Log "Running: typeagent-serve $label"
 

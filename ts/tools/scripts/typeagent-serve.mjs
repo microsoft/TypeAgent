@@ -610,8 +610,9 @@ function autostartEnv() {
     if (process.env.TYPEAGENT_USER_DATA_DIR) {
         env.TYPEAGENT_USER_DATA_DIR = process.env.TYPEAGENT_USER_DATA_DIR;
     }
-    if (process.env.TYPEAGENT_RUNTIME_ROOT) {
-        env.TYPEAGENT_RUNTIME_ROOT = process.env.TYPEAGENT_RUNTIME_ROOT;
+    if (process.env.TYPEAGENT_COPILOT_RUNTIME_ROOT) {
+        env.TYPEAGENT_COPILOT_RUNTIME_ROOT =
+            process.env.TYPEAGENT_COPILOT_RUNTIME_ROOT;
     }
     return env;
 }
