@@ -119,7 +119,7 @@ import {
     BrowserControl,
     defaultSearchProviders,
 } from "@typeagent/browser-control-rpc/types";
-import { openai } from "@typeagent/aiclient";
+import { openai, tryCreateEmbeddingModel } from "@typeagent/aiclient";
 import {
     SearchProviderCommandHandlerTable,
     SetCommandHandler,
@@ -604,8 +604,7 @@ async function updateBrowserContext(
 
         // Initialize fuzzy matching model for website search
         if (!context.agentContext.fuzzyMatchingModel) {
-            context.agentContext.fuzzyMatchingModel =
-                openai.createEmbeddingModel();
+            context.agentContext.fuzzyMatchingModel = tryCreateEmbeddingModel();
         }
 
         if (!context.agentContext.viewProcess) {
