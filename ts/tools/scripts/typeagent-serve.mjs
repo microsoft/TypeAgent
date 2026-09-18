@@ -436,7 +436,7 @@ function reportStartupFailure({ outcome, configInspection, logState, port }) {
             );
             console.error(
                 `If this installation has not been configured through another source, run ` +
-                    `'node typeagent-serve.mjs provision --provider copilot --embedding local --force' ` +
+                    `'node typeagent-serve.mjs provision --provider copilot --force' ` +
                     `for GitHub Copilot, or 'node typeagent-serve.mjs provision' for AI Systems.`,
             );
             break;

@@ -81,6 +81,19 @@ export interface CopilotEndpointProvider {
     getEndpoint(force?: boolean): Promise<CopilotEndpoint>;
 }
 
+/** A CAPI endpoint bound to one requested model. */
+export interface CopilotModelEndpoint {
+    baseUrl: string;
+    model: string;
+    headers: Record<string, string>;
+    expiresAt?: number | undefined;
+}
+
+/** Acquires and refreshes a model-specific CAPI endpoint. */
+export interface CopilotModelEndpointProvider {
+    getEndpoint(force?: boolean): Promise<CopilotModelEndpoint>;
+}
+
 /**
  * Thrown by an endpoint provider when an endpoint can't be minted for the
  * requested model (e.g. the tenant doesn't offer it and only "auto" is left, or
@@ -625,7 +638,7 @@ const ENDPOINT_EXPIRY_SKEW_MS = 60_000;
 const endpointCache = new Map<string, CopilotEndpoint>();
 const endpointInflight = new Map<string, Promise<CopilotEndpoint>>();
 
-function endpointExpired(ep: CopilotEndpoint): boolean {
+function endpointExpired(ep: { expiresAt?: number | undefined }): boolean {
     return (
         ep.expiresAt !== undefined &&
         Date.now() >= ep.expiresAt - ENDPOINT_EXPIRY_SKEW_MS
@@ -660,6 +673,37 @@ function mapEndpoint(ep: SdkProviderEndpoint, model: string): CopilotEndpoint {
         }
     }
     return { url, model, wireApi, headers, expiresAt };
+}
+
+function mapModelEndpoint(
+    ep: SdkProviderEndpoint,
+    model: string,
+): CopilotModelEndpoint {
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(ep.headers ?? {})) {
+        if (value !== undefined) headers[key] = value;
+    }
+    if (
+        ep.apiKey &&
+        headers.Authorization === undefined &&
+        headers.authorization === undefined
+    ) {
+        headers.Authorization = `Bearer ${ep.apiKey}`;
+    }
+    let expiresAt: number | undefined;
+    if (ep.sessionToken) {
+        headers[ep.sessionToken.header] = ep.sessionToken.token;
+        if (ep.sessionToken.expiresAt) {
+            const milliseconds = Date.parse(ep.sessionToken.expiresAt);
+            if (!Number.isNaN(milliseconds)) expiresAt = milliseconds;
+        }
+    }
+    return {
+        baseUrl: ep.baseUrl.replace(/\/+$/, ""),
+        model,
+        headers,
+        expiresAt,
+    };
 }
 
 // Acquire a fresh endpoint snapshot through a short-lived SDK session. Passing a
@@ -756,6 +800,69 @@ export function createCopilotEndpointProvider(
             return inflight;
         },
     };
+}
+
+/**
+ * Create an endpoint provider for a non-chat CAPI model. The SDK session uses
+ * the configured chat model, while getEndpoint binds returned credentials to
+ * `modelId`.
+ */
+export function createCopilotModelEndpointProvider(
+    settings: CopilotApiSettings,
+    modelId: string,
+): CopilotModelEndpointProvider {
+    let cached: CopilotModelEndpoint | undefined;
+    let inflight: Promise<CopilotModelEndpoint> | undefined;
+
+    return {
+        async getEndpoint(force = false): Promise<CopilotModelEndpoint> {
+            if (!force && cached && !endpointExpired(cached)) {
+                return cached;
+            }
+            if (force) cached = undefined;
+            if (inflight === undefined) {
+                inflight = acquireModelEndpoint(settings, modelId)
+                    .then((endpoint) => {
+                        cached = endpoint;
+                        return endpoint;
+                    })
+                    .finally(() => {
+                        inflight = undefined;
+                    });
+            }
+            return inflight;
+        },
+    };
+}
+
+async function acquireModelEndpoint(
+    settings: CopilotApiSettings,
+    modelId: string,
+): Promise<CopilotModelEndpoint> {
+    if (!process.env.COPILOT_ALLOW_GET_PROVIDER_ENDPOINT) {
+        process.env.COPILOT_ALLOW_GET_PROVIDER_ENDPOINT = "true";
+    }
+    const client = await getClient({
+        cliPath: settings.cliPath,
+        cliUrl: settings.cliUrl,
+    });
+    const resolved = await resolveModel(client, settings);
+    if (resolved === undefined) {
+        throw new CopilotEndpointUnavailableError(
+            `No Copilot chat model is available to acquire endpoint credentials for "${modelId}".`,
+        );
+    }
+    const session = await client.createSession(
+        buildSessionConfig(settings, {}, false, resolved),
+    );
+    try {
+        const endpoint = (await session.rpc.provider.getEndpoint({
+            modelId,
+        })) as SdkProviderEndpoint;
+        return mapModelEndpoint(endpoint, modelId);
+    } finally {
+        session.disconnect().catch(() => {});
+    }
 }
 
 // The copilot provider registers its chat-model factory here so that
