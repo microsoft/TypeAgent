@@ -40,19 +40,23 @@ There are two intentional entry paths:
   strings, parse contracts, hash schemas, determine effect policy, or translate
   natural language locally.
 
-The normal sequence is **search summaries -> get selected contract -> execute**.
-A known action can skip search; a current contract can be reused within its
-binding. `getStatus` and `listAgents` remain available but are not prerequisite
-stages. If an identity or input remains unresolved ("it", "that one"), clarify
-with the user or use the natural-language path rather than guessing.
+The normal sequence is **search complete action contracts -> execute**.
+Search requires one free-text `query` and returns `protocolVersion`, `scopeId`
+and `actions`: complete contracts with exact identities, closed TypeScript input
+schemas including referenced types, policy, outputs and interactions. The shared
+service uses its semantic top-five ranking when available, or literal matching
+when ranking is unavailable. The adapter does not rank or truncate results.
+A current contract can be reused within its binding without another search.
+`getStatus` and `listAgents` remain available but are not prerequisite stages.
+If an identity or input remains unresolved ("it", "that one"), clarify with the
+user or use the natural-language path rather than guessing.
 
-| Tool                          | Input / behavior                                                                                                                                                     |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `typeagent-searchActions`     | Optional `query`, `agentName`, `schemaName`, `offset`, `limit`; compact summaries and live availability metadata                                                     |
-| `typeagent-getActionContract` | Separate exact `schemaName` and `actionName`; returns one closed TypeScript contract including nested types, output/interaction shape, policy, fingerprint and scope |
-| `typeagent-executeAction`     | `protocolVersion`, `scopeId`, `schemaName`, `actionName`, exact `fingerprint`, optional typed `parameters` object                                                    |
-| `typeagent-continueAction`    | `protocolVersion`, `scopeId`, `operationId`, `interactionId`, and the actual user's typed `response`                                                                 |
-| `typeagent-cancelAction`      | `protocolVersion`, `scopeId`, `operationId`, and optional exact `interactionId`; cancel at the user's request                                                        |
+| Tool                       | Input / behavior                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `typeagent-searchActions`  | Required nonempty `query`; complete candidate contracts and the binding scope                                 |
+| `typeagent-executeAction`  | `protocolVersion`, `scopeId`, exact `schemaName` and `actionName`, optional typed `parameters` object         |
+| `typeagent-continueAction` | `protocolVersion`, `scopeId`, `operationId`, `interactionId`, and the actual user's typed `response`          |
+| `typeagent-cancelAction`   | `protocolVersion`, `scopeId`, `operationId`, and optional exact `interactionId`; cancel at the user's request |
 
 Lists, IDs, paths, Unicode, quotes and newlines remain JSON values, not command
 arguments or prose. The shared service owns contract generation, exact-match
@@ -61,12 +65,18 @@ execution and single-use interaction state. Unknown and state-changing effect
 policy requires user confirmation; only explicitly read-only policy can be
 exempt (agents can still ask questions). Choosing an action is not user consent.
 Discovery neither enables an action nor authorizes execution.
+Execution resolves the exact identity internally, independently of the latest
+search ranking, and rechecks current schema, parameters, scope, visibility,
+active state, readiness, authorization and confirmation policy before effects.
+There is no public single-contract lookup, fingerprint, or stale-contract
+status. Removed actions return `unavailable`; invalid current parameters return
+a validation failure. A prior search result is not execution approval.
 
 ### A reachable Direct structured bridge
 
 Direct's `userPromptSubmitted` hook is a **one-shot natural-language process**,
 not a structured protocol endpoint. The existing long-lived `typeagent` MCP
-server therefore exposes the five structured tools in **both Direct and MCP
+server therefore exposes the four structured tools in **both Direct and MCP
 modes**, and calls the same transport-neutral `StructuredActionClient` /
 Dispatcher interface. This is the Direct structured caller; it is not a claim
 that Copilot can inject structured requests into the one-shot prompt hook.
@@ -78,7 +88,7 @@ Workspace and macro server registrations and their mode behavior are unchanged.
 `StructuredActionClient` is a public export of
 `@typeagent/agent-server-client`, shared with other consumers such as command
 executor. The plugin wrapper only supplies its URL, public conversation ID,
-ClientIO and unique conversation name. The shared client exposes the five
+ClientIO and unique conversation name. The shared client exposes the four
 Dispatcher-shaped methods (with an optional `AbortSignal`), `close()`, and
 public `binding` metadata. A `StructuredActionClientError.dispatched` flag
 distinguishes a pre-dispatch failure from uncertain delivery; raw transport
@@ -97,11 +107,11 @@ with readable, untruncated JSON in `content`. Actual nested `ActionResult`
 values, `resultEntity`, `entities`, IDs, display content, collected output and
 child results are retained. Text output is not treated as the action's data.
 
-Execution has seven distinct statuses: `completed`, `failed`, `cancelled`,
-`requires_interaction`, `contract_stale`, `unavailable`, `execution_uncertain`.
+Execution has six distinct statuses: `completed`, `failed`, `cancelled`,
+`requires_interaction`, `unavailable`, `execution_uncertain`.
 Pending interactions are not MCP tool errors: `completed`, `requires_interaction`
-and found contracts omit `isError`; unsuccessful terminal results and missing
-contracts set `isError: true` while preserving the complete service envelope.
+and successful searches omit `isError`; unsuccessful terminal results set
+`isError: true` while preserving the complete service envelope.
 Responses also include public `binding` metadata (conversation ID and connection
 state), never the private resume capability.
 Connection/caller failures use a separately marked `source: copilot-transport`
@@ -120,8 +130,8 @@ Cancellation remains available after switching to Dev or Bypass mode; new
 execution and continuation remain disabled there. Switching mode never supplies
 an answer or implies that pending work was cancelled.
 
-On `contract_stale`, refresh the selected contract and reassess parameters and
-consent before constructing a new request; **no automatic replay**. On timeout,
+On a validation or availability failure, reassess the current action and inputs
+before constructing a new request; **no automatic replay**. On timeout,
 disconnect or uncertain execution, effects may already have happened. Surface
 that uncertainty and do not rerun the effect call. The service supports typed
 flows through its guarded executor; **raw PowerShell flow steps are unsupported**
@@ -129,13 +139,13 @@ on this structured path. Do not present an unsupported flow as completed.
 
 Two legacy setup-capable actions are also unsupported on the structured path:
 `system.config.toggleAgent` and `system.config.enterAgentPriorityMode`. Their
-unquoted argument bridges can enter agent setup, so discovery marks these exact
-actions unsupported and execution rejects them before handler entry. Other
+unquoted argument bridges can enter agent setup, so their candidate descriptions
+explain this limitation and execution rejects them before handler entry. Other
 deterministic internal command bridges remain supported. A runtime guard also
 rejects unsupported nested setup before invoking agent setup hooks. Ordinary
 natural-language routing, including legacy setup choices, is unchanged. A
 guarded failure, including one crossing agent RPC, retains the authoritative
-service status such as `contract_stale` or `unavailable`; do not reinterpret it
+service status such as `failed` or `unavailable`; do not reinterpret it
 as completion or retry it through a command string.
 
 The legacy natural-language ClientIO cannot continue its prompts through these
@@ -147,7 +157,7 @@ pending prompts/unsupported interaction rather than pretending completion.
 Stdio provides no intrinsic Copilot session identity. Each structured MCP
 process finds/creates a dedicated named conversation with a random process-local
 name, then explicitly joins its **concrete conversation ID** with
-`structuredActions: {}`. All five operations share that one owner and concurrent
+`structuredActions: {}`. All four operations share that one owner and concurrent
 connection attempts are singleflight. This does not implicitly share context
 with the ordinary Direct NL hook's conversation.
 
@@ -611,19 +621,19 @@ macro traces and TypeAgent history, injects PowerShell guidance with an
 The plugin starts three logical MCP servers from the same bundled entry point and
 single-file release executable:
 
-| Server                | Tool                         | Description                                                                                                 |
-| --------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `typeagent`           | `typeagent-processCommand`   | Send a command to the TypeAgent agent-server                                                                |
-| `typeagent`           | `typeagent-listAgents`       | List available TypeAgent agents                                                                             |
-| `typeagent`           | `typeagent-getStatus`        | Get TypeAgent server status                                                                                 |
-| `typeagent`           | five structured-action tools | Search summaries, retrieve a contract, execute, continue, and cancel through Dispatcher in Direct/MCP modes |
-| `typeagent-workspace` | `read`                       | Read bounded text under approved workspace roots                                                            |
-| `typeagent-workspace` | `glob`                       | Find bounded, deterministically ordered workspace files                                                     |
-| `typeagent-workspace` | `grep`                       | Search bounded workspace text                                                                               |
-| `typeagent-workspace` | `fetch`                      | Fetch bounded public HTTP(S) text without ambient credentials or private-network access                     |
-| `typeagent-macros`    | `list_macros`                | List and search reusable captured procedures                                                                |
-| `typeagent-macros`    | `run_macro`                  | Replay an approved macro or return an agent-runner handoff                                                  |
-| `typeagent-macros`    | lifecycle tools              | Capture-derived draft validation, approval, disablement, and candidate submission                           |
+| Server                | Tool                         | Description                                                                                     |
+| --------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| `typeagent`           | `typeagent-processCommand`   | Send a command to the TypeAgent agent-server                                                    |
+| `typeagent`           | `typeagent-listAgents`       | List available TypeAgent agents                                                                 |
+| `typeagent`           | `typeagent-getStatus`        | Get TypeAgent server status                                                                     |
+| `typeagent`           | four structured-action tools | Search complete contracts, execute, continue, and cancel through Dispatcher in Direct/MCP modes |
+| `typeagent-workspace` | `read`                       | Read bounded text under approved workspace roots                                                |
+| `typeagent-workspace` | `glob`                       | Find bounded, deterministically ordered workspace files                                         |
+| `typeagent-workspace` | `grep`                       | Search bounded workspace text                                                                   |
+| `typeagent-workspace` | `fetch`                      | Fetch bounded public HTTP(S) text without ambient credentials or private-network access         |
+| `typeagent-macros`    | `list_macros`                | List and search reusable captured procedures                                                    |
+| `typeagent-macros`    | `run_macro`                  | Replay an approved macro or return an agent-runner handoff                                      |
+| `typeagent-macros`    | lifecycle tools              | Capture-derived draft validation, approval, disablement, and candidate submission               |
 
 Workspace tools are available in direct, MCP, and dev modes. In bypass mode
 they remain discoverable because Copilot fixes the MCP catalog when the session

@@ -9,7 +9,6 @@ export class ExecutionFailure extends Error {
         message: string,
         readonly status:
             | "failed"
-            | "contract_stale"
             | "unavailable"
             | "cancelled"
             | "execution_uncertain" = "failed",
@@ -20,3 +19,14 @@ export class ExecutionFailure extends Error {
 
 export const nestedSetupUnavailable =
     "This action can enter legacy agent setup without a structured setup contract or resumable result path. Use the natural-language interface to configure agents.";
+
+export function getStructuredActionUnsupportedReason(identity: {
+    schemaName: string;
+    actionName: string;
+}): string | undefined {
+    return identity.schemaName === "system.config" &&
+        (identity.actionName === "toggleAgent" ||
+            identity.actionName === "enterAgentPriorityMode")
+        ? nestedSetupUnavailable
+        : undefined;
+}

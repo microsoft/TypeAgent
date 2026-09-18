@@ -61,13 +61,20 @@ describe("staged plugin artifact", () => {
             expect(catalog.tools.map((tool) => tool.name)).toEqual(
                 expect.arrayContaining([
                     "typeagent-searchActions",
-                    "typeagent-getActionContract",
                     "typeagent-executeAction",
                     "typeagent-continueAction",
                     "typeagent-cancelAction",
                     "typeagent-processCommand",
                 ]),
             );
+            expect(catalog.tools.map((tool) => tool.name)).not.toContain(
+                "typeagent-getActionContract",
+            );
+            expect(
+                catalog.tools.find(
+                    (tool) => tool.name === "typeagent-searchActions",
+                )?.inputSchema.required,
+            ).toEqual(["query"]);
         } finally {
             await client.close();
         }

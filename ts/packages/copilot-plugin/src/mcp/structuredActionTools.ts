@@ -5,7 +5,6 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type {
-    ActionSearchRequest,
     ExecuteActionRequest,
     ContinueActionRequest,
     CancelActionRequest,
@@ -86,8 +85,7 @@ function result(data: Record<string, unknown>): CallToolResult {
         content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
         ...(data.status !== undefined &&
         data.status !== "completed" &&
-        data.status !== "requires_interaction" &&
-        data.status !== "found"
+        data.status !== "requires_interaction"
             ? { isError: true }
             : {}),
     };
@@ -167,39 +165,16 @@ export function registerStructuredActionTools(
         "typeagent-searchActions",
         {
             description:
-                "Search compact TypeAgent action summaries and availability. Then get the selected action contract. Skip search if the identity is known; no status/schema-list stage is required. Unresolved references belong on the natural-language path.",
+                "Search complete TypeAgent action contracts with a required free-text query. Each candidate includes its exact identity, closed input types, effects, output and interaction requirements. Select a candidate and execute with concrete parameters; no separate contract/status/schema-list stage. Reuse a current contract in the same scope without repeating discovery. Discovery does not authorize execution. Clarify unresolved inputs or use natural language.",
             inputSchema: z
                 .object({
-                    query: z.string().optional(),
-                    agentName: z.string().optional(),
-                    schemaName: z.string().optional(),
-                    offset: z.number().optional(),
-                    limit: z.number().optional(),
+                    query: z.string().trim().min(1),
                 })
                 .strict(),
         },
         (request, extra) =>
             invoke(
-                (dispatcher) =>
-                    dispatcher.searchActions(
-                        request as ActionSearchRequest,
-                        extra.signal,
-                    ),
-                false,
-            ),
-    );
-
-    server.registerTool(
-        "typeagent-getActionContract",
-        {
-            description:
-                "Get one closed TypeAgent action contract including nested types, effects, availability and interactions. Use exact separate schemaName/actionName. Reuse its fingerprint and scopeId only in the same binding. Refresh contract_stale, but never automatically replay.",
-            inputSchema: z.object(identity).strict(),
-        },
-        (request, extra) =>
-            invoke(
-                (dispatcher) =>
-                    dispatcher.getActionContract(request, extra.signal),
+                (dispatcher) => dispatcher.searchActions(request, extra.signal),
                 false,
             ),
     );
@@ -208,12 +183,11 @@ export function registerStructuredActionTools(
         "typeagent-executeAction",
         {
             description:
-                "Execute one Copilot-selected typed action through Dispatcher using its exact current fingerprint, scopeId and concrete parameters. No command strings or NL translation. Unknown/state-changing effects require USER confirmation; selection is not consent. Preserve all seven result statuses and true nested results. For requires_interaction show the full prompt/form and ask the USER, then continue or cancel. Never invent/default/autoapprove a response or replay an uncertain call. Recording directives stay on processCommand with exact prefixes.",
+                "Execute one Copilot-selected typed action through Dispatcher using its exact schemaName/actionName, scopeId and concrete parameters. The service resolves the current definition and revalidates parameters, availability and confirmation policy before effects, independently of discovery ranking. No command strings or NL translation. Unknown/state-changing effects require USER confirmation; selection is not consent. Preserve all six result statuses and true nested results. For requires_interaction show the full prompt/form and ask the USER, then continue or cancel. Never invent/default/autoapprove a response or replay an uncertain call. Recording directives stay on processCommand with exact prefixes.",
             inputSchema: z
                 .object({
                     ...identity,
                     ...envelope,
-                    fingerprint: z.string(),
                     parameters: z.record(z.unknown()).optional(),
                 })
                 .strict(),

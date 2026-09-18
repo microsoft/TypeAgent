@@ -15,7 +15,6 @@ function fakeConnection() {
             protocolVersion: 1,
             scopeId: "scope",
             actions: [],
-            total: 0,
         }),
     } as unknown as ConversationDispatcher["dispatcher"];
     const joinConversation = jest.fn<AgentServerConnection["joinConversation"]>(
@@ -62,8 +61,8 @@ describe("private structured connector binding lifecycle", () => {
             createConversationName,
         });
         try {
-            await client.searchActions();
-            await client.searchActions();
+            await client.searchActions({ query: "read" });
+            await client.searchActions({ query: "read" });
             expect(createConversationName).toHaveBeenCalledTimes(1);
             expect(fake.createConversation).toHaveBeenCalledWith(
                 "Dedicated embedded caller",
@@ -76,7 +75,7 @@ describe("private structured connector binding lifecycle", () => {
             await client.close();
         }
     });
-    it("forwards all five operations unchanged and never calls the NL command path", async () => {
+    it("forwards all four operations unchanged and never calls the NL command path", async () => {
         const fake = fakeConnection();
         const result = {
             protocolVersion: 1 as const,
@@ -87,13 +86,6 @@ describe("private structured connector binding lifecycle", () => {
             results: [],
         };
         const search = jest.fn(fake.dispatcher.searchActions);
-        const contract = jest.fn<
-            ConversationDispatcher["dispatcher"]["getActionContract"]
-        >(async () => ({
-            protocolVersion: 1,
-            scopeId: "scope",
-            status: "not-found",
-        }));
         const execute = jest.fn<
             ConversationDispatcher["dispatcher"]["executeAction"]
         >(async () => result);
@@ -105,7 +97,6 @@ describe("private structured connector binding lifecycle", () => {
         >(async () => result);
         Object.assign(fake.dispatcher, {
             searchActions: search,
-            getActionContract: contract,
             executeAction: execute,
             continueAction: continuation,
             cancelAction: cancellation,
@@ -124,7 +115,6 @@ describe("private structured connector binding lifecycle", () => {
         const request = {
             ...identity,
             ...envelope,
-            fingerprint: "fingerprint",
             parameters: {
                 ids: ["007", '東京\n"quoted"'],
                 nested: { value: [null, true] },
@@ -137,13 +127,11 @@ describe("private structured connector binding lifecycle", () => {
             response: { type: "confirmation" as const, approved: true },
         };
         try {
-            await client.searchActions({ query: "exact", limit: 2 });
-            await client.getActionContract(identity);
+            await client.searchActions({ query: "exact" });
             expect(await client.executeAction(request)).toBe(result);
             expect(await client.continueAction(response)).toBe(result);
             expect(await client.cancelAction(response)).toBe(result);
-            expect(search).toHaveBeenCalledWith({ query: "exact", limit: 2 });
-            expect(contract).toHaveBeenCalledWith(identity);
+            expect(search).toHaveBeenCalledWith({ query: "exact" });
             expect(execute).toHaveBeenCalledWith(request);
             expect(continuation).toHaveBeenCalledWith(response);
             expect(cancellation).toHaveBeenCalledWith(response);
@@ -165,13 +153,13 @@ describe("private structured connector binding lifecycle", () => {
             },
         });
         try {
-            await client.searchActions();
+            await client.searchActions({ query: "read" });
             disconnect!();
             expect(client.binding).toEqual({
                 conversationId: "public-id",
                 connected: false,
             });
-            await client.searchActions();
+            await client.searchActions({ query: "read" });
             expect(fake.joinConversation.mock.calls[1][1]).toEqual({
                 conversationId: "public-id",
                 structuredActions: { resumeToken: "private-test-capability" },
@@ -184,7 +172,7 @@ describe("private structured connector binding lifecycle", () => {
                 new Error("Bad capability private-test-capability"),
             );
             const error: unknown = await client
-                .searchActions()
+                .searchActions({ query: "read" })
                 .catch((failure: unknown) => failure);
             expect(error).toBeInstanceOf(StructuredActionClientError);
             expect((error as StructuredActionClientError).dispatched).toBe(
@@ -232,13 +220,13 @@ describe("private structured connector binding lifecycle", () => {
                 },
             });
             try {
-                await client.searchActions();
+                await client.searchActions({ query: "read" });
                 disconnect!();
                 fake.joinConversation.mockRejectedValue(
                     new Error(serverMessage),
                 );
                 const outcome = await client
-                    .searchActions()
+                    .searchActions({ query: "read" })
                     .catch((error: unknown) => error);
                 expect(outcome).toMatchObject({
                     dispatched: false,
@@ -268,7 +256,7 @@ describe("private structured connector binding lifecycle", () => {
         const abort = new AbortController();
         abort.abort();
         await expect(
-            client.searchActions({}, abort.signal),
+            client.searchActions({ query: "read" }, abort.signal),
         ).rejects.toMatchObject({ dispatched: false });
         expect(connect).not.toHaveBeenCalled();
         await client.close();
@@ -299,7 +287,6 @@ describe("private structured connector binding lifecycle", () => {
             {
                 protocolVersion: 1,
                 scopeId: "scope",
-                fingerprint: "fingerprint",
                 schemaName: "schema",
                 actionName: "action",
             },
@@ -323,13 +310,13 @@ describe("private structured connector binding lifecycle", () => {
         const second = new StructuredActionClient({ connect });
         try {
             await Promise.all([
-                first.searchActions(),
-                first.searchActions(),
-                first.searchActions(),
+                first.searchActions({ query: "read" }),
+                first.searchActions({ query: "read" }),
+                first.searchActions({ query: "read" }),
             ]);
             expect(connect).toHaveBeenCalledTimes(1);
             expect(fake.joinConversation).toHaveBeenCalledTimes(1);
-            await second.searchActions();
+            await second.searchActions({ query: "read" });
             const firstOptions = fake.joinConversation.mock.calls[0][1]!;
             const secondOptions = fake.joinConversation.mock.calls[1][1]!;
             expect(firstOptions.conversationId).not.toBe(
@@ -354,8 +341,10 @@ describe("private structured connector binding lifecycle", () => {
             connect,
             conversationId: "explicit",
         });
-        await expect(client.searchActions()).rejects.toThrow("not dispatched");
-        await expect(client.searchActions()).rejects.toThrow(
+        await expect(client.searchActions({ query: "read" })).rejects.toThrow(
+            "not dispatched",
+        );
+        await expect(client.searchActions({ query: "read" })).rejects.toThrow(
             "No replacement owner was created",
         );
         expect(connect).toHaveBeenCalledTimes(1);
@@ -372,7 +361,9 @@ describe("private structured connector binding lifecycle", () => {
             connect: async () => fake.connection,
             conversationId: "configured",
         });
-        await expect(client.searchActions()).rejects.toMatchObject({
+        await expect(
+            client.searchActions({ query: "read" }),
+        ).rejects.toMatchObject({
             dispatched: false,
             reason: "conversation_not_found",
         });
@@ -385,12 +376,12 @@ describe("private structured connector binding lifecycle", () => {
         const client = new StructuredActionClient({
             connect: async () => fake.connection,
         });
-        await client.searchActions();
+        await client.searchActions({ query: "read" });
         await client.close();
         await client.close();
-        await expect(client.searchActions()).rejects.toBeInstanceOf(
-            StructuredActionClientError,
-        );
+        await expect(
+            client.searchActions({ query: "read" }),
+        ).rejects.toBeInstanceOf(StructuredActionClientError);
         expect(fake.close).toHaveBeenCalledTimes(1);
     });
 });

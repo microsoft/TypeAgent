@@ -328,6 +328,19 @@ export async function structuredFixture() {
             };
             agents.agents.get("fixture")!.actions.delete("fixture");
         },
+        removeAction: (actionName: string) => {
+            const config = context.agents.getActionConfig("fixture");
+            context.agents
+                .getActionSchemaFileForConfig(config)
+                .parsedActionSchema.actionSchemas.delete(actionName);
+        },
+        requireReadConfirmation: () => {
+            const config = context.agents.getActionConfig("fixture");
+            config.actionPolicies = {
+                ...config.actionPolicies,
+                read: { effects: "state-changing" },
+            };
+        },
         close: () => closeCommandHandlerContext(context),
     };
 }
