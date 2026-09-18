@@ -157,7 +157,7 @@ openAI:
 #   provider: local           # bundled CPU-only model; no GPU / key / network
 #   model: Xenova/all-MiniLM-L6-v2
 #
-# --- Copilot (Copilot SDK chat + local embeddings) -------------------------
+# --- Copilot (Copilot SDK chat + Copilot embeddings) -----------------------
 # modelProvider: copilot
 # copilot:
 #   defaultModel: gpt-5.6-luna       # requires an authenticated `copilot` CLI
@@ -172,10 +172,10 @@ openAI:
 #   # server/headless mode first, then point cliUrl at it.
 #   # cliUrl: 127.0.0.1:8123
 # embedding:
-#   provider: local
-#   model: Xenova/all-MiniLM-L6-v2
+#   provider: copilot
+#   model: text-embedding-3-small
 #
-# To use Ollama for embeddings instead of the bundled local model, set
+# To use Ollama for embeddings instead of Copilot, set
 # `embedding.provider: openai` and add
 # `openAI.endpointEmbedding: http://localhost:11434/v1/embeddings` (FULL path)
 # plus `openAI.modelEmbedding: nomic-embed-text`. Set `embedding.provider: none`

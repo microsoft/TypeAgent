@@ -218,7 +218,7 @@ export class AppAgentManager
     private readonly flowRegistry = new Map<string, FlowDefinition>();
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readyWaiters: Array<() => void> = [];
-    private readonly actionSemanticMap?: ActionSchemaSemanticMap;
+    private actionSemanticMap: ActionSchemaSemanticMap | undefined;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
 
     // Static collision diagnostics. Populated by scanActionNameCollisions on
@@ -792,6 +792,38 @@ export class AppAgentManager
             maxCandidates,
             filter,
         );
+    }
+
+    public async rebuildActionSemanticMap(): Promise<void> {
+        let nextMap: ActionSchemaSemanticMap | undefined;
+        try {
+            nextMap = new ActionSchemaSemanticMap();
+        } catch (e) {
+            debugError(`Failed to rebuild action semantic map: ${e}`);
+        }
+
+        if (nextMap !== undefined) {
+            const pending: Promise<void>[] = [];
+            for (const config of this.actionConfigs.values()) {
+                try {
+                    pending.push(
+                        nextMap.addActionSchemaFile(
+                            config,
+                            this.actionSchemaFileCache.getActionSchemaFile(
+                                config,
+                            ),
+                        ),
+                    );
+                } catch (e) {
+                    debugError(
+                        `Failed to rebuild embeddings for ${config.schemaName}: ${e}`,
+                    );
+                }
+            }
+            await Promise.all(pending);
+        }
+
+        this.actionSemanticMap = nextMap;
     }
 
     public async addProvider(
