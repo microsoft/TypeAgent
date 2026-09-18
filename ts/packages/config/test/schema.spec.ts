@@ -42,7 +42,20 @@ describe("validateConfigTree", () => {
         ).not.toThrow();
     });
 
-    test("rejects arrays", () => {
+    test("accepts copilot fallback model arrays", () => {
+        expect(() =>
+            validateConfigTree(
+                {
+                    copilot: {
+                        fallbackModels: ["gpt-5-mini", "gpt-5.4"],
+                    },
+                },
+                "test.yaml",
+            ),
+        ).not.toThrow();
+    });
+
+    test("rejects unsupported scalar arrays", () => {
         expect(() =>
             validateConfigTree({ deployments: ["a", "b"] }, "test.yaml"),
         ).toThrow(/Invalid TypeAgent config in test\.yaml/);
@@ -58,11 +71,7 @@ describe("validateConfigTree", () => {
         } catch (e) {
             const msg = (e as Error).message;
             expect(msg).toContain("myfile.yaml");
-            // zod's recursive-union error reports the outermost
-            // failing path; the deeper path is captured in the
-            // surrounding tree but not always surfaced. We just
-            // require that *some* key path appears.
-            expect(msg).toMatch(/- (azure|<root>):/);
+            expect(msg).toContain("- azure.openai.extras:");
         }
     });
 });

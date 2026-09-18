@@ -85,6 +85,9 @@ export function readCopilotRuntimeManifest(manifestPath) {
 }
 
 export function defaultRuntimeRoot(env = process.env) {
+    if (env.TYPEAGENT_COPILOT_RUNTIME_ROOT) {
+        return path.resolve(env.TYPEAGENT_COPILOT_RUNTIME_ROOT);
+    }
     if (env.TYPEAGENT_RUNTIME_ROOT) {
         return path.resolve(env.TYPEAGENT_RUNTIME_ROOT);
     }
