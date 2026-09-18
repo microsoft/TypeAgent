@@ -15,6 +15,8 @@ import {
     parseTranslationBenchReviewerDecision,
     runTranslationBenchGenerationQualityLoop,
 } from "../src/translationBench/synthesizer/datasetGenerator.js";
+import { runTranslationBenchDataQualityVerifier } from "../src/translationBench/synthesizer/dataQualityVerifier.js";
+import { loadTranslationBenchQualityVerifierPromptPack } from "../src/translationBench/synthesizer/synthesizerPrompts.js";
 import type {
     TranslationBenchBenchmarkAction,
     TranslationBenchBenchmarkCaseRecord,
@@ -632,6 +634,78 @@ describe("translation bench generation quality loop", () => {
         expect(generatorPrompt).toContain("{user, assistant:{text, source}}");
         expect(JSON.stringify(generationSchema)).toContain(
             '\"history\":{\"type\":\"array\",\"minItems\":1',
+        );
+    });
+
+    describe("translation bench data quality verifier", () => {
+        it.each([
+            [true, false, 1],
+            [false, true, 0],
+        ])(
+            "treats a failed ambiguity probe as required=%s",
+            async (requireAmbiguityProbePass, accepted, feedbackCount) => {
+                const loop = qualityLoopOptions(
+                    async () => JSON.stringify(generatedCandidate()),
+                    async () => "",
+                );
+                const pack = loadTranslationBenchQualityVerifierPromptPack();
+                const result = await runTranslationBenchDataQualityVerifier({
+                    synthesizerOutput: generatedCandidate(),
+                    loop,
+                    candidateHash: HASH,
+                    semanticLlm: {
+                        model: "semantic-model",
+                        async complete(prompt) {
+                            return JSON.stringify(
+                                reviewerDecision(
+                                    candidateHashFromPrompt(prompt),
+                                    "approve",
+                                ),
+                            );
+                        },
+                    },
+                    ambiguityProbe: {
+                        models: ["probe-model"],
+                        async translate(request) {
+                            return {
+                                model: request.model,
+                                actions: [],
+                                error: "probe unavailable",
+                            };
+                        },
+                    },
+                    ambiguityJudgeLlm: {
+                        model: "ambiguity-judge",
+                        async complete() {
+                            return JSON.stringify({
+                                candidateHash: HASH,
+                                decision: "reject",
+                                ambiguous: true,
+                                issues: [
+                                    {
+                                        code: "OTHER",
+                                        path: "$",
+                                        message: "The ambiguity probe failed",
+                                        suggestedFix: "Retry the probe",
+                                    },
+                                ],
+                                summary: "The probe result is inconclusive",
+                            });
+                        },
+                    },
+                    promptPack: {
+                        ...pack,
+                        acceptance: {
+                            ...pack.acceptance,
+                            requireAmbiguityProbePass,
+                        },
+                    },
+                });
+
+                expect(result.ambiguity?.passed).toBe(false);
+                expect(result.accepted).toBe(accepted);
+                expect(result.feedback).toHaveLength(feedbackCount);
+            },
         );
     });
 
