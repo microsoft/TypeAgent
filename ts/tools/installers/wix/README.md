@@ -358,15 +358,18 @@ During an **interactive** install the provider-selection dialog appears after
 the license page. The same choice can be driven **silently** through the public
 `PROVIDER` property:
 
-| Property   | Values                 | Default     | Notes                                                                  |
-| ---------- | ---------------------- | ----------- | ---------------------------------------------------------------------- |
-| `PROVIDER` | `AISYSTEMS`, `COPILOT` | `AISYSTEMS` | `COPILOT` generates `config.local.yaml` with local embeddings enabled. |
+| Property   | Values                 | Default   | Notes                                                                  |
+| ---------- | ---------------------- | --------- | ---------------------------------------------------------------------- |
+| `PROVIDER` | `AISYSTEMS`, `COPILOT` | `COPILOT` | `COPILOT` generates `config.local.yaml` with local embeddings enabled. |
 
 ```powershell
-# AI Systems (default) — provisions via az login + getKeys after install
+# Copilot chat (default; requires an authenticated `copilot` CLI) + local embeddings
 msiexec /i TypeAgent-<version>-win32-x64.msi
 
-# Copilot chat (requires an authenticated `copilot` CLI) + local embeddings
+# AI Systems — provisions via az login + getKeys after install
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=AISYSTEMS
+
+# Explicit Copilot selection
 msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT
 
 # Fully silent Copilot install
@@ -376,12 +379,15 @@ msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=COPILOT
 The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → **ProviderDlg** →
 VerifyReadyDlg. For `COPILOT`, a deferred, impersonated custom action runs
 `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider COPILOT
---embedding LOCAL --force` as the installing user, writing
-`config.local.yaml` to `~/.typeagent`. The action explicitly pins
+--embedding LOCAL --local-embedding-cache-dir
+"%LOCALAPPDATA%\TypeAgent\embedding-cache" --force` as the installing user,
+writing `config.local.yaml` to `~/.typeagent`. Keeping model weights outside
+the MSI-managed `agent-server` directory preserves the cache across upgrades
+and ensures it inherits the user's per-user cache permissions. The action explicitly pins
 `TYPEAGENT_CONFIG_DIR` and `TYPEAGENT_USER_DATA_DIR` because deferred MSI
 actions can retain the Windows Installer service environment even while
 impersonating the user. Copilot provisioning is local and must succeed; it does
-not contact Key Vault. For `AISYSTEMS` (the default), the MSI
+not contact Key Vault. For `AISYSTEMS`, the MSI
 **attempts** provisioning during install via a deferred, impersonated
 (interactive) custom action `ProvisionAiSystemsConfig` that runs
 `node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in
