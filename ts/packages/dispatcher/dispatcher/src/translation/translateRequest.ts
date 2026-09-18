@@ -88,18 +88,8 @@ import {
 const debugTranslate = registerDebug("typeagent:translate");
 const debugTranslateInfo = registerDebug("typeagent:translate:info");
 
-// Fallback deployment when the configured translation model has no
-// endpoint. GPT_4_1 was the guaranteed-present default before the Luna
-// migration; partner configs synced without a GPT_5_6_LUNA endpoint (or
-// access to our key vault) would otherwise be left unrecoverable.
 const TRANSLATION_MODEL_FALLBACK = ai.GPT_4_1;
 
-/**
- * Resolve the translation model name to one that actually has a
- * configured endpoint. Falls back to GPT_4_1 when the requested model
- * (e.g. the GPT_5_6_LUNA default) is not provisioned in this config, so
- * translation keeps working for partner configs that predate it.
- */
 function resolveTranslationModel(model: string): string {
     if (ai.hasChatModelEndpoint(model)) {
         return model;
@@ -110,8 +100,6 @@ function resolveTranslationModel(model: string): string {
         );
         return TRANSLATION_MODEL_FALLBACK;
     }
-    // Neither is configured — keep the original so the model layer throws
-    // its descriptive "No Azure OpenAI endpoint configured" error.
     return model;
 }
 

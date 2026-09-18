@@ -369,26 +369,14 @@ export function getChatModelSettings(endpoint?: string): ApiSettings {
 
 /**
  * True if the given chat model has an explicitly configured endpoint.
- *
- * For Azure/OpenAI mode this checks the *named* deployment, not the
- * synthesized bare default: a config that defines only gpt_4_o still
- * yields a default chat endpoint, but asking for "GPT_5_6_LUNA" there
- * must report false so callers can fall back. Copilot/Ollama modes map
- * every canonical name to a concrete target, so those always report true.
- *
- * Used by callers that fall back to another model when the preferred one
- * is not provisioned — e.g. a partner config synced before a new
- * deployment (GPT_5_6_LUNA) was added, without key-vault access.
  */
 export function hasChatModelEndpoint(endpoint?: string): boolean {
     const { provider, name } = parseEndPointName(endpoint);
 
-    // Copilot / Ollama: canonical names always resolve to a target.
     if (provider === "copilot" || provider === "ollama") {
         return true;
     }
 
-    // No specific name → the bare/default endpoint; defer to pool build.
     if (name === undefined || name === "") {
         try {
             getChatModelPool(endpoint);
@@ -402,7 +390,6 @@ export function hasChatModelEndpoint(endpoint?: string): boolean {
         return getRuntimeConfig().openAI?.endpoint !== undefined;
     }
 
-    // Azure: require the named deployment to actually exist.
     const dep = getRuntimeConfig().azureOpenAI.deployments.get(
         name.toLowerCase(),
     );
