@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2787d4ae1307df74aa6e352806f8288e3096106e625aab4bae1304a92c6c5b14 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2b1f1b909ce7d5a90840f0d9bbeea1cc9960efe426ccadb78a37bbf32cc4fdc3 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -23,12 +23,14 @@ TypeAgent translation bench: catalog, action-parameters grader, simple-action da
 - default → `./dist/index.js` _(not found on disk)_
 - `./translationBench` → `./dist/translationBench/index.js` _(not found on disk)_
 - `./internal` → `./dist/index.js` _(not found on disk)_
+- `./translationBench/runner` → `./dist/translationBench/runner/index.js` _(not found on disk)_
 
 ### Dependencies
 
 Workspace:
 
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
+- [@typeagent/agent-cache](../../packages/cache/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
@@ -44,18 +46,26 @@ _None._
 
 - [./src/index.ts](./src/index.ts)
 - [./src/translationBench/index.ts](./src/translationBench/index.ts)
+- [./src/translationBench/policy/index.ts](./src/translationBench/policy/index.ts)
+- [./src/translationBench/runner/index.ts](./src/translationBench/runner/index.ts)
 - [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
 - [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
 - [./src/core/paths.ts](./src/core/paths.ts)
 - [./src/core/prices.ts](./src/core/prices.ts)
-- [./src/core/rateLimiter.ts](./src/core/rateLimiter.ts)
-- [./src/core/tokenEstimate.ts](./src/core/tokenEstimate.ts)
-- _…and 55 more under `./src/`._
+- _…and 72 more under `./src/`._
+
+### Environment variables
+
+_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+
+- `OPENAI_ENDPOINT`
+- `OPENAI_MODEL`
+- `TYPEAGENT_MODEL_PROVIDER`
 
 ---
 
-_Auto-generated against commit `844c37a32436d74cec201a1aab2d98944f6363f2` on `2026-08-28T06:40:41.825Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `b3ce7b09fad73d8000e21507a976afce040bc249` on `2026-09-18T17:42:00.907Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
