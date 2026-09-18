@@ -33,6 +33,7 @@ import {
     DispatcherOptions,
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
+import { cancelQueuedRequest } from "./queue/requestQueue.js";
 import { randomUUID } from "node:crypto";
 import { context as otelContext } from "@opentelemetry/api";
 import { getAgentSchemas } from "./context/system/describe/agentSchemaInfo.js";
@@ -413,17 +414,7 @@ export function createDispatcherFromContext(
             structuredExecution.continueAction(request),
         cancelAction: (request) => structuredExecution.cancelAction(request),
         async cancelCommand(requestId: string): Promise<CancelResult> {
-            const kind = context.requestQueue.classifyCancel(requestId, "user");
-            if (kind === "queued") {
-                return { kind: "cancelled_queued", requestId };
-            }
-            if (kind === "running") {
-                context.requestQueue.cancelRunning(requestId, "user");
-                const controller = context.activeRequests.get(requestId);
-                controller?.abort();
-                return { kind: "cancelled_running", requestId };
-            }
-            return { kind: "not_found", requestId };
+            return cancelQueuedRequest(context, requestId, "user");
         },
         async promoteCommand(requestId: string): Promise<boolean> {
             return context.requestQueue.promote(requestId);

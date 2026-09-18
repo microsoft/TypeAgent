@@ -750,5 +750,31 @@ export function entryCompletion(
     return entry.completion;
 }
 
+type RequestCancellationContext = {
+    requestQueue: RequestQueue;
+    activeRequests: ReadonlyMap<string, AbortController>;
+};
+
+/**
+ * Cancel a queue-managed request by its server request id.
+ * Running cancellation is published before its controller is aborted.
+ */
+export function cancelQueuedRequest(
+    context: RequestCancellationContext,
+    requestId: string,
+    reason: QueueCancelReason,
+): CancelResult {
+    const kind = context.requestQueue.classifyCancel(requestId, reason);
+    if (kind === "queued") {
+        return { kind: "cancelled_queued", requestId };
+    }
+    if (kind === "running") {
+        context.requestQueue.cancelRunning(requestId, reason);
+        context.activeRequests.get(requestId)?.abort();
+        return { kind: "cancelled_running", requestId };
+    }
+    return { kind: "not_found", requestId };
+}
+
 /** Re-export for consumers that build CancelResult without going via the queue. */
 export type { CancelResult };

@@ -14,6 +14,7 @@ import {
 import { context, createContextKey, type Context } from "@opentelemetry/api";
 
 import {
+    cancelQueuedRequest,
     RequestQueue,
     MAX_QUEUE_DEPTH,
     QueueBroadcaster,
@@ -242,6 +243,87 @@ describe("RequestQueue", () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);
         expect(queue.cancelQueued("does-not-exist", "user")).toBe(false);
+    });
+
+    it("cancelQueuedRequest maps queued and unknown request ids", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue } = makeQueue(dispatcher);
+        const activeRequests = new Map<string, AbortController>();
+        const running = queue.submit({
+            text: "running",
+            originatorConnectionId: "c1",
+        });
+        const queued = queue.submit({
+            text: "queued",
+            originatorConnectionId: "c1",
+        });
+        await flush();
+
+        expect(
+            cancelQueuedRequest(
+                { requestQueue: queue, activeRequests },
+                queued.requestId,
+                "user",
+            ),
+        ).toEqual({
+            kind: "cancelled_queued",
+            requestId: queued.requestId,
+        });
+        expect(
+            cancelQueuedRequest(
+                { requestQueue: queue, activeRequests },
+                queued.requestId,
+                "user",
+            ),
+        ).toEqual({ kind: "not_found", requestId: queued.requestId });
+
+        dispatcher.calls[0].resolve({});
+        await running.completion;
+    });
+
+    it("cancelQueuedRequest broadcasts before abort and is idempotent", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue, events } = makeQueue(dispatcher);
+        const running = queue.submit({
+            text: "running",
+            originatorConnectionId: "c1",
+        });
+        await flush();
+        const controller = new AbortController();
+        const activeRequests = new Map([[running.requestId, controller]]);
+        let cancelEventsAtAbort = 0;
+        controller.signal.addEventListener("abort", () => {
+            cancelEventsAtAbort = events.filter(
+                (event) =>
+                    event.type === "cancelled" &&
+                    event.requestId === running.requestId,
+            ).length;
+        });
+
+        const context = { requestQueue: queue, activeRequests };
+        expect(cancelQueuedRequest(context, running.requestId, "user")).toEqual(
+            {
+                kind: "cancelled_running",
+                requestId: running.requestId,
+            },
+        );
+        expect(cancelEventsAtAbort).toBe(1);
+        expect(cancelQueuedRequest(context, running.requestId, "user")).toEqual(
+            {
+                kind: "cancelled_running",
+                requestId: running.requestId,
+            },
+        );
+        expect(
+            events.filter(
+                (event) =>
+                    event.type === "cancelled" &&
+                    event.requestId === running.requestId,
+            ),
+        ).toHaveLength(1);
+
+        dispatcher.calls[0].resolve({});
+        await running.completion;
     });
 
     it("promote moves a queued entry to the front so it runs next", async () => {
