@@ -25,7 +25,10 @@ param(
     [string]$Provider = "AISYSTEMS",
     [string]$AgentServerDir = "$env:LOCALAPPDATA\TypeAgent\agent-server",
     [string]$PluginInstallDir = "$env:LOCALAPPDATA\TypeAgent",
-    [string]$FeedRegistry = ""
+    [string]$FeedRegistry = "",
+    [string]$UserDataDir,
+    [string]$LocalAppDataDir,
+    [string]$RuntimeRoot
 )
 
 $ErrorActionPreference = "Continue"
@@ -35,6 +38,13 @@ $ErrorActionPreference = "Continue"
 $AdoResource = "499b84ac-1321-427f-aa17-267ca6975798"
 
 . (Join-Path $PSScriptRoot "resolve-node.ps1")
+
+$UserDataDir = Resolve-TypeAgentUserDataDir $UserDataDir $LocalAppDataDir
+$env:TYPEAGENT_USER_DATA_DIR = $UserDataDir
+$env:TYPEAGENT_CONFIG_DIR = $UserDataDir
+if ($RuntimeRoot) {
+    $env:TYPEAGENT_COPILOT_RUNTIME_ROOT = [System.IO.Path]::GetFullPath($RuntimeRoot)
+}
 
 function Write-Log([string]$message) {
     $line = "{0} {1}" -f (Get-Date -Format "s"), $message
@@ -190,6 +200,12 @@ function Invoke-PluginRegistration([string]$copilotPath) {
 }
 
 Write-Log "Provisioning external runtime prerequisites for provider $Provider."
+if ($UserDataDir) {
+    Write-Log "  TypeAgent user data: $UserDataDir"
+}
+if ($RuntimeRoot) {
+    Write-Log "  TypeAgent Copilot runtime root: $RuntimeRoot"
+}
 
 # Resolve node from an MSI service context (refreshes PATH + probes managers),
 # so a bare `node`/`npm` on the interactive PATH is found here too.

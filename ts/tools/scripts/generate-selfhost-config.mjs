@@ -133,6 +133,15 @@ function renderYaml(node, indent = 0) {
                 continue;
             }
             out += `${pad}${key}:\n${nested}`;
+        } else if (Array.isArray(value)) {
+            if (value.length === 0) {
+                out += `${pad}${key}: []\n`;
+                continue;
+            }
+            out += `${pad}${key}:\n`;
+            for (const item of value) {
+                out += `${pad}  - ${yamlScalar(item)}\n`;
+            }
         } else {
             out += `${pad}${key}: ${yamlScalar(value)}\n`;
         }
