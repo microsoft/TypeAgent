@@ -55,6 +55,18 @@ describe("authModeFromString", () => {
 });
 
 describe("buildConfig: Copilot", () => {
+    test("accepts Copilot as the embedding provider", () => {
+        const config = buildConfig({
+            TYPEAGENT_EMBEDDING_PROVIDER: "COPILOT",
+            TYPEAGENT_EMBEDDING_MODEL: "text-embedding-3-small",
+        });
+
+        expect(config.embedding).toEqual({
+            provider: "copilot",
+            model: "text-embedding-3-small",
+        });
+    });
+
     test("parses fallback models from the flattened JSON array", () => {
         const config = buildConfig({
             COPILOT_DEFAULT_MODEL: "gpt-5.6-luna",

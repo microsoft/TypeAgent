@@ -277,7 +277,7 @@ async function cmdStart() {
         : `\nRe-run with TYPEAGENT_DEBUG=1 (or --debug) to capture daemon output to ${logPath}`;
     console.error(
         `Agent server did not start. If this is a fresh install, run ` +
-            `'node typeagent-serve.mjs provision --provider copilot --embedding local --force' ` +
+            `'node typeagent-serve.mjs provision --provider copilot --force' ` +
             `for GitHub Copilot, or 'node typeagent-serve.mjs provision' for AI Systems.` +
             logHint,
     );
