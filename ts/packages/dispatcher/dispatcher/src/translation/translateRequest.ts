@@ -87,6 +87,34 @@ import {
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugTranslateInfo = registerDebug("typeagent:translate:info");
+
+// Fallback deployment when the configured translation model has no
+// endpoint. GPT_4_1 was the guaranteed-present default before the Luna
+// migration; partner configs synced without a GPT_5_6_LUNA endpoint (or
+// access to our key vault) would otherwise be left unrecoverable.
+const TRANSLATION_MODEL_FALLBACK = ai.GPT_4_1;
+
+/**
+ * Resolve the translation model name to one that actually has a
+ * configured endpoint. Falls back to GPT_4_1 when the requested model
+ * (e.g. the GPT_5_6_LUNA default) is not provisioned in this config, so
+ * translation keeps working for partner configs that predate it.
+ */
+function resolveTranslationModel(model: string): string {
+    if (ai.hasChatModelEndpoint(model)) {
+        return model;
+    }
+    if (ai.hasChatModelEndpoint(TRANSLATION_MODEL_FALLBACK)) {
+        debugTranslate(
+            `Translation model '${model}' has no endpoint; falling back to '${TRANSLATION_MODEL_FALLBACK}'`,
+        );
+        return TRANSLATION_MODEL_FALLBACK;
+    }
+    // Neither is configured — keep the original so the model layer throws
+    // its descriptive "No Azure OpenAI endpoint configured" error.
+    return model;
+}
+
 const debugSemanticSearchInfo = registerDebug(
     "typeagent:translate:semantic:info",
 );
@@ -202,7 +230,7 @@ export function getTranslatorForSchema(
             multiple: config.multiple,
         },
         generateOptions,
-        config.model,
+        resolveTranslationModel(config.model),
         context.promptLogger,
         sessionConfig.execution.entityPromptShape,
         sessionConfig.translation.entity.pathNavigation !== "off",
@@ -259,7 +287,7 @@ async function getTranslatorForSelectedActions(
             activity: context.agents.isSchemaEnabled(DispatcherActivityName),
             multiple: config.multiple,
         },
-        config.model,
+        resolveTranslationModel(config.model),
         context.promptLogger,
         sessionConfig.execution.entityPromptShape,
         sessionConfig.translation.entity.pathNavigation !== "off",
@@ -908,7 +936,9 @@ async function findAssistantForRequest(
         schemaNames,
         provider,
         systemContext.promptLogger,
-        systemContext.session.getConfig().translation.model,
+        resolveTranslationModel(
+            systemContext.session.getConfig().translation.model,
+        ),
     );
 
     const result = await withChatModelTelemetryPurpose("schema-selection", () =>

@@ -367,6 +367,48 @@ export function getChatModelSettings(endpoint?: string): ApiSettings {
     return pool.members[0].settings;
 }
 
+/**
+ * True if the given chat model has an explicitly configured endpoint.
+ *
+ * For Azure/OpenAI mode this checks the *named* deployment, not the
+ * synthesized bare default: a config that defines only gpt_4_o still
+ * yields a default chat endpoint, but asking for "GPT_5_6_LUNA" there
+ * must report false so callers can fall back. Copilot/Ollama modes map
+ * every canonical name to a concrete target, so those always report true.
+ *
+ * Used by callers that fall back to another model when the preferred one
+ * is not provisioned — e.g. a partner config synced before a new
+ * deployment (GPT_5_6_LUNA) was added, without key-vault access.
+ */
+export function hasChatModelEndpoint(endpoint?: string): boolean {
+    const { provider, name } = parseEndPointName(endpoint);
+
+    // Copilot / Ollama: canonical names always resolve to a target.
+    if (provider === "copilot" || provider === "ollama") {
+        return true;
+    }
+
+    // No specific name → the bare/default endpoint; defer to pool build.
+    if (name === undefined || name === "") {
+        try {
+            getChatModelPool(endpoint);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    if (provider === "openai") {
+        return getRuntimeConfig().openAI?.endpoint !== undefined;
+    }
+
+    // Azure: require the named deployment to actually exist.
+    const dep = getRuntimeConfig().azureOpenAI.deployments.get(
+        name.toLowerCase(),
+    );
+    return dep !== undefined && dep.endpoints.length > 0;
+}
+
 export function supportsStreaming(
     model: TypeChatLanguageModel,
 ): model is ChatModelWithStreaming {
@@ -793,9 +835,11 @@ export type AzureChatModelName =
     | "GPT_5_MINI"
     | "GPT_5_NANO"
     | "GPT_5_CHAT"
+    | "GPT_4_1"
     | "GPT_5_6_LUNA";
 
 export const GPT_5_6_LUNA: AzureChatModelName = "GPT_5_6_LUNA";
+export const GPT_4_1: AzureChatModelName = "GPT_4_1";
 export const GPT_5: AzureChatModelName = "GPT_5";
 export const GPT_5_NANO: AzureChatModelName = "GPT_5_NANO";
 export const GPT_5_MINI: AzureChatModelName = "GPT_5_MINI";
