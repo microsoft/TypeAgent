@@ -40,6 +40,8 @@
  *   --embedding-endpoint <url>  Embedding endpoint (openai mode; full path).
  *   --embedding-model <name>    Embedding model name.
  *   --local-embedding-model <n> transformers.js model (default Xenova/all-MiniLM-L6-v2).
+ *   --local-embedding-cache-dir <path>
+ *                               Persistent cache for local model files.
  *   --openai-key <key>          API key for openai embedding mode.
  *   --dry-run                   Print the YAML to stdout without writing.
  */
@@ -159,6 +161,7 @@ function buildConfigTree(options) {
         embeddingEndpoint,
         embeddingModel,
         localEmbeddingModel,
+        localEmbeddingCacheDir,
         openaiKey,
     } = options;
 
@@ -191,6 +194,11 @@ function buildConfigTree(options) {
             embeddingSection.provider = "local";
             embeddingSection.model =
                 localEmbeddingModel || DEFAULT_LOCAL_EMBEDDING_MODEL;
+            if (localEmbeddingCacheDir) {
+                embeddingSection.cacheDir = path.resolve(
+                    localEmbeddingCacheDir,
+                );
+            }
             break;
         case "ollama":
             openAI.apiKey ??= "ollama";
@@ -267,6 +275,7 @@ function main() {
         embeddingEndpoint: arg("--embedding-endpoint"),
         embeddingModel: arg("--embedding-model"),
         localEmbeddingModel: arg("--local-embedding-model"),
+        localEmbeddingCacheDir: arg("--local-embedding-cache-dir"),
         openaiKey: arg("--openai-key"),
     };
 
