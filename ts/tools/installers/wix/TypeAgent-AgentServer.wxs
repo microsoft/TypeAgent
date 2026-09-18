@@ -59,14 +59,14 @@
          Endpoint provider selection
          Public property (pass uppercase on the msiexec command line, e.g.
            msiexec /i TypeAgent.msi PROVIDER=COPILOT
-         COPILOT (default) synthesizes config.local.yaml with the bundled local
-         embedding model. AISYSTEMS provisions through az login + getKeys.
+         COPILOT (default) synthesizes config.local.yaml with Copilot chat and
+         embedding providers. AISYSTEMS provisions through az login + getKeys.
          ═══════════════════════════════════════════════ -->
     <Property Id="PROVIDER" Value="COPILOT" Secure="yes" />
     <Condition Message="PROVIDER must be AISYSTEMS or COPILOT. Ollama is not supported by this MSI; use the TypeAgent provisioning tools for Ollama.">
       PROVIDER="AISYSTEMS" OR PROVIDER="COPILOT"
     </Condition>
-    <Condition Message="EMBEDDING and OLLAMAHOST are no longer supported MSI properties. GitHub Copilot uses local embeddings automatically.">
+    <Condition Message="EMBEDDING and OLLAMAHOST are no longer supported MSI properties. GitHub Copilot embeddings are configured automatically.">
       NOT EMBEDDING AND NOT OLLAMAHOST
     </Condition>
 
@@ -150,7 +150,7 @@
          at the manual provisioning/sign-in steps the MSI can only attempt, so a
          fresh machine knows what to finish if agents don't respond. -->
     <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Secure="yes"
-              Value="Finish setup: the claude and copilot CLIs need a one-time sign-in. For Copilot config, run: node &quot;%LOCALAPPDATA%\TypeAgent\agent-server\typeagent-serve.mjs&quot; provision --provider copilot --embedding local --force. AI Systems users can run the same command with only 'provision' and sign in to Azure." />
+              Value="Finish setup: the claude and copilot CLIs need a one-time sign-in. For Copilot config, run: node &quot;%LOCALAPPDATA%\TypeAgent\agent-server\typeagent-serve.mjs&quot; provision --provider copilot --force. AI Systems users can run the same command with only 'provision' and sign in to Azure." />
 
     <!-- ═══════════════════════════════════════════════
          Directory layout
@@ -435,8 +435,8 @@
 
     <!-- ═══════════════════════════════════════════════
          Custom action — Copilot config provisioning
-         For PROVIDER=COPILOT, synthesize config.local.yaml with the local
-         embedding provider via generate-selfhost-config (bundled under
+          For PROVIDER=COPILOT, synthesize config.local.yaml with the Copilot
+          embedding provider via generate-selfhost-config (bundled under
          agent-server\tools). Runs as the installing user so it writes to the
          user's ~/.typeagent config dir and 'node' resolves from the user PATH.
          AISYSTEMS mode is skipped here; it uses az login + getKeys below.
@@ -444,7 +444,7 @@
     <SetProperty Id="ProvisionCopilotConfig"
            Before="ProvisionCopilotConfig"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -FailOnError -ServeCommand provision --provider COPILOT --embedding LOCAL --local-embedding-cache-dir &quot;[LocalAppDataFolder]TypeAgent\embedding-cache&quot; --force" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -FailOnError -ServeCommand provision --provider COPILOT --embedding COPILOT --embedding-model text-embedding-3-small --force" />
 
     <CustomAction Id="ProvisionCopilotConfig"
                   BinaryKey="WixCA"

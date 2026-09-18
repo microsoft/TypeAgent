@@ -968,7 +968,13 @@ function buildEmbedding(
     let provider: EmbeddingProviderMode | undefined;
     if (providerRaw !== undefined) {
         const v = providerRaw.toLowerCase();
-        if (v === "local" || v === "openai" || v === "azure" || v === "none") {
+        if (
+            v === "local" ||
+            v === "openai" ||
+            v === "azure" ||
+            v === "copilot" ||
+            v === "none"
+        ) {
             provider = v;
         } else {
             // Unknown value — leave it in extra rather than emitting a
