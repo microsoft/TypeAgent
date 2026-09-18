@@ -74,7 +74,7 @@ import {
     getPackagedActionParametersGraderCatalog,
     hasUsableParameterScoreSpecs,
     parameterScoreSpecsForExpectedActions,
-} from "./catalogGenerator/actionParametersGrader.js";
+} from "./catalogGenerator/index.js";
 
 export function getTranslationBenchLlmJudgeExcludedActions(): ReadonlySet<string> {
     return getPackagedLlmJudgeExcludedActions();
