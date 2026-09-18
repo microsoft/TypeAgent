@@ -197,7 +197,7 @@ export const DEFAULT_MODELS = {
      *  resolves to. We don't pick; just record. */
     translator: "default",
     /** Model used for hypothesis generation prompts. */
-    propose: "gpt-5.6-luna",
+    propose: "gpt-4o",
     /** Model used for case-analyzer classification refinement. */
-    classify: "gpt-5.6-luna",
+    classify: "gpt-4o",
 } as const;
