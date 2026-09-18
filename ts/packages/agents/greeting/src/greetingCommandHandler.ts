@@ -32,6 +32,7 @@ import { exec } from "child_process";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:greeting");
+const debugError = registerDebug("typeagent:greeting:error");
 
 export function instantiate(): AppAgent {
     return {
@@ -404,7 +405,7 @@ async function handlePersonalizedGreetingAction(
 //     return answer?.generatedText;
 // }
 
-async function getRecentChatHistory(
+export async function getRecentChatHistory(
     context: ActionContext<GreetingAgentContext>,
 ): Promise<string[]> {
     const conversationManager: Conversation.ConversationManager = (
@@ -414,48 +415,46 @@ async function getRecentChatHistory(
     const chatHistory: string[] = [];
 
     if (conversationManager !== undefined) {
-        const searchResponse = await conversationManager.getSearchResponse(
-            "What were we talking about most recently?",
-            [{ terms: ["last conversation", "project"] }],
-            { maxMatches: 5 },
-            5,
-        );
-        if (searchResponse && searchResponse.response?.hasHits()) {
-            chatHistory.push(
-                "The following is a summary of the last conversation:",
+        try {
+            const searchResponse = await conversationManager.getSearchResponse(
+                "What were we talking about most recently?",
+                [{ terms: ["last conversation", "project"] }],
+                { maxMatches: 5 },
+                5,
             );
-            chatHistory.push("###");
-            chatHistory.push(
-                "Recent entities found in chat history, in order, oldest first, most recent last:",
-            );
-            searchResponse.response?.entities.map((ee) => {
-                ee.entities?.map((e) => {
-                    chatHistory.push(`${e.name} (${e.type})`);
+            if (searchResponse && searchResponse.response?.hasHits()) {
+                chatHistory.push(
+                    "The following is a summary of the last conversation:",
+                );
+                chatHistory.push("###");
+                chatHistory.push(
+                    "Recent entities found in chat history, in order, oldest first, most recent last:",
+                );
+                searchResponse.response?.entities.map((ee) => {
+                    ee.entities?.map((e) => {
+                        chatHistory.push(`${e.name} (${e.type})`);
+                    });
                 });
-            });
 
-            // chatHistory.push("###");
-            // chatHistory.push("Information about the lastest assistant action.");
-            // searchResponse.response?.actions?.map((aa) => {
-            //     aa.actions?.map((a) => {
-            //         a.
-            //     });
-            // });
+                chatHistory.push("###");
+                chatHistory.push("Here are the last few user messages:");
+                searchResponse.response?.messages?.map((msg) => {
+                    chatHistory.push(`- \"${msg.value.value}\"`);
+                });
 
-            chatHistory.push("###");
-            chatHistory.push("Here are the last few user messages:");
-            searchResponse.response?.messages?.map((msg) => {
-                chatHistory.push(`- \"${msg.value.value}\"`);
-            });
-
-            if (debug.enabled) {
-                const matches =
-                    await conversationManager.generateAnswerForSearchResponse(
-                        "What were we talking about last?",
-                        searchResponse,
-                    );
-                debug(matches);
+                if (debug.enabled) {
+                    const matches =
+                        await conversationManager.generateAnswerForSearchResponse(
+                            "What were we talking about last?",
+                            searchResponse,
+                        );
+                    debug(matches);
+                }
             }
+        } catch (error) {
+            debugError(
+                `Unable to load recent conversation context; continuing without it. ${error}`,
+            );
         }
     }
 

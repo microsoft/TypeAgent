@@ -466,3 +466,5 @@ ts/packages/agentSdkWrapper/plans/
 /ts/msi-out
 ts/config.local.yaml.bak
 /ts/tmp/bundled-agent-server
+/ts/msi-test-stage
+/ts/msi-test-output

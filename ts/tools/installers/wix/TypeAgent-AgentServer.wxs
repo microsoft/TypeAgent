@@ -59,10 +59,10 @@
          Endpoint provider selection
          Public property (pass uppercase on the msiexec command line, e.g.
            msiexec /i TypeAgent.msi PROVIDER=COPILOT
-         AISYSTEMS (default) provisions through az login + getKeys. COPILOT
-         synthesizes config.local.yaml with the bundled local embedding model.
+         COPILOT (default) synthesizes config.local.yaml with the bundled local
+         embedding model. AISYSTEMS provisions through az login + getKeys.
          ═══════════════════════════════════════════════ -->
-    <Property Id="PROVIDER" Value="AISYSTEMS" Secure="yes" />
+    <Property Id="PROVIDER" Value="COPILOT" Secure="yes" />
     <Condition Message="PROVIDER must be AISYSTEMS or COPILOT. Ollama is not supported by this MSI; use the TypeAgent provisioning tools for Ollama.">
       PROVIDER="AISYSTEMS" OR PROVIDER="COPILOT"
     </Condition>
@@ -444,7 +444,7 @@
     <SetProperty Id="ProvisionCopilotConfig"
            Before="ProvisionCopilotConfig"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -FailOnError -ServeCommand provision --provider COPILOT --embedding LOCAL --force" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -FailOnError -ServeCommand provision --provider COPILOT --embedding LOCAL --local-embedding-cache-dir &quot;[LocalAppDataFolder]TypeAgent\embedding-cache&quot; --force" />
 
     <CustomAction Id="ProvisionCopilotConfig"
                   BinaryKey="WixCA"
