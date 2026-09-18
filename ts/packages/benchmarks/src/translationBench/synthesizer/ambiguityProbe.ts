@@ -59,6 +59,7 @@ export type TranslationBenchAmbiguityAgreement =
     | "unanimous_gold"
     | "unanimous_other"
     | "split"
+    | "partial_errors"
     | "all_errors";
 
 export interface TranslationBenchAmbiguityProbeCaseResult {
@@ -132,6 +133,10 @@ export function classifyTranslationBenchAmbiguityAgreement(
     }
     if (unique.length > 1) {
         return { agreement: "split", routes: unique };
+    }
+    if (okRoutes.length !== observations.length) {
+        // Some probes failed: survivor agreement is not unanimity.
+        return { agreement: "partial_errors", routes: unique };
     }
     const only = unique[0]!;
     if (only === gold) {
@@ -466,6 +471,21 @@ export function deterministicAmbiguityIssues(
                     `'${goldRouteKey(c.expectedActions)}' for '${c.utterance.slice(0, 80)}'.`,
                 suggestedFix:
                     "Either fix gold to the model-agreed action or rewrite the utterance so gold is the only reading.",
+            });
+            continue;
+        }
+        if (c.agreement === "partial_errors") {
+            const failed = c.observations.filter(
+                (o) => o.error !== undefined && o.error.trim().length > 0,
+            ).length;
+            issues.push({
+                code: "OTHER",
+                path: c.path,
+                message:
+                    `${failed} of ${c.observations.length} ambiguity probe models ` +
+                    `failed to translate '${c.utterance.slice(0, 80)}'`,
+                suggestedFix:
+                    "Retry generation; if probes keep failing, check translator wiring.",
             });
             continue;
         }

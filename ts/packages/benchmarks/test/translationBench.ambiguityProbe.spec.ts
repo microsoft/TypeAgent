@@ -169,6 +169,22 @@ describe("translation bench ambiguity probe classification", () => {
                 { model: "terra", actions: [], error: "boom" },
             ]).agreement,
         ).toBe("all_errors");
+
+        // One failed probe must not count survivor agreement as unanimous.
+        expect(
+            classifyTranslationBenchAmbiguityAgreement(gold, [
+                {
+                    model: "sol",
+                    actions: [
+                        {
+                            schemaName: "browser.actionDiscovery",
+                            actionName: "getWebFlowsForDomain",
+                        },
+                    ],
+                },
+                { model: "terra", actions: [], error: "boom" },
+            ]).agreement,
+        ).toBe("partial_errors");
     });
 
     it("lists seed + positives only", () => {
