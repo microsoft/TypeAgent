@@ -440,12 +440,16 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 
 ### Hooks (`hooks.json`)
 
-| Hook                  | File                 | Purpose                                                      |
-| --------------------- | -------------------- | ------------------------------------------------------------ |
-| `userPromptSubmitted` | `hook-router.js`     | Route action requests to TypeAgent or Copilot                |
-| `agentStop`           | `hook-agent-stop.js` | Track Copilot interactions in TypeAgent history              |
-| `postToolUse`         | `hook-post-tool.js`  | Track Copilot tool results in TypeAgent history              |
-| `preToolUse`          | `hook-powershell.js` | Inject TypeAgent PowerShell guidance for PowerShell commands |
+| Hook                  | File             | Purpose                                       |
+| --------------------- | ---------------- | --------------------------------------------- |
+| `userPromptSubmitted` | `hook-router.js` | Route action requests to TypeAgent or Copilot |
+
+### Extension (`extensions/typeagent/extension.mjs`)
+
+The plugin extension registers `/typeagent-status`, `/typeagent-mode`, and
+`/typeagent-macro-record`. It consumes typed Copilot session events to capture
+macro traces and TypeAgent history, injects PowerShell guidance with an
+`onPreToolUse` hook, and emits turn-completion state for the demo driver.
 
 ### MCP Servers (`.mcp.json`)
 
@@ -478,19 +482,19 @@ that may be used by a macro in any of those modes. A separate macro mode would
 couple tool availability to a catalog that was already registered at session
 startup and would become stale after `@typeagent mode` changes.
 
-The hooks therefore behave as follows:
+The plugin therefore behaves as follows:
 
 - `userPromptSubmitted` keeps its existing direct/MCP/dev routing behavior;
-- `postToolUse` records workspace MCP calls because they execute in the plugin,
-  not in agent-server;
-- `agentStop` does not classify a workspace-only turn as already handled by
-  TypeAgent, so the completed Copilot turn remains available to history and
-  future trace induction; and
-- `preToolUse` keeps its existing PowerShell guidance policy.
+- the extension records live workspace MCP calls because they execute in the
+  plugin, not in agent-server;
+- the extension preserves completed Copilot turns for history and future trace
+  induction; and
+- the extension applies the existing PowerShell guidance policy before tool
+  execution.
 
 The workspace MCP server is local to the plugin and does not require
 agent-server. Agent-server receives bounded tool and turn history from the
-hooks and owns macro recording state, catalog management, validation,
+extension and owns macro recording state, catalog management, validation,
 immutable approval, replay orchestration, handoff records, and persisted run
 evidence.
 

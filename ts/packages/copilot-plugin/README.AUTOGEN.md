@@ -93,12 +93,11 @@ The `@typeagent/copilot-plugin` package is organized into several key files and 
 
 - **[src/hooks](./src/hooks)**: Contains the main hook implementations for the plugin. Key files include:
 
-  - [hook-agent-stop.ts](./src/hooks/hook-agent-stop.ts): Handles the `agentStop` event and updates TypeAgent history.
   - [hook-debug.ts](./src/hooks/hook-debug.ts): Logs input for debugging purposes.
   - [hook-direct.ts](./src/hooks/hook-direct.ts): Processes commands directly via TypeAgent, bypassing the Copilot LLM.
   - [hook-mcp-redirect.ts](./src/hooks/hook-mcp-redirect.ts): Redirects action requests to the MCP server.
-  - [hook-post-tool.ts](./src/hooks/hook-post-tool.ts): Tracks non-TypeAgent tool results in TypeAgent history.
-  - [hook-powershell.ts](./src/hooks/hook-powershell.ts): Integrates TypeAgent PowerShell guidance for Windows.
+
+- **[src/extension](./src/extension)**: Contains the Copilot extension entry point, native commands, PowerShell guidance, and event-based history and macro capture.
 
 - **[src/shared](./src/shared)**: Contains shared utilities and helper functions used across hooks, such as `typeagent-client.js` for managing connections to the TypeAgent server.
 
@@ -158,11 +157,11 @@ Workspace:
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
 
-External: `@modelcontextprotocol/sdk`, `html-to-text`, `zod`
+External: `@github/copilot-sdk`, `@modelcontextprotocol/sdk`, `html-to-text`, `zod`
 
 ### Files of interest
 
-`./src/hooks/demo-state.ts`, `./src/hooks/hook-agent-stop.ts`, `./src/hooks/hook-debug.ts`, …and 13 more under `./src/`.
+`./src/extension/extension.ts`, `./src/extension/session-capture.ts`, `./src/hooks/demo-state.ts`, `./src/hooks/hook-router.ts`, and supporting files under `./src/`.
 
 ### Environment variables
 
