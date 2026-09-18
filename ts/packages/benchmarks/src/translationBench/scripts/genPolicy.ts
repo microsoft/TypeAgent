@@ -16,15 +16,17 @@ import { getChatModelNames, openai as llmClient } from "@typeagent/aiclient";
 
 import {
     assertRemovedActionsMatchCatalog,
-    buildActionParametersGraderCatalog,
-    diffActionParametersGrader,
     getPackagedActionEligibilityPolicy,
     listActionsWithLlmJudgeFields,
+} from "../policy/index.js";
+import {
+    buildActionParametersGraderCatalog,
+    diffActionParametersGrader,
     loadActionParametersGraderCatalogFile,
     type ActionParametersGraderCatalog,
     type GeneratedActionCatalog,
     type ParameterGraderLlm,
-} from "../policy/index.js";
+} from "../synthesizer/catalogGenerator/index.js";
 import {
     completionSettingsFromModelConfiguration,
     loadTranslationBenchParameterGraderPromptPack,
@@ -47,7 +49,7 @@ export function parseCli(argv: string[]) {
         )
         .option("--out <path>", "grader output path", DEFAULT_OUT)
         .option("--force", "full rebuild (default is incremental)", false)
-        .option("--model <name>", "chat model for regex-miss LLM fallback")
+        .option("--model <name>", "chat model for hardcode-miss LLM fallback")
         .argument("[catalog]", "optional positional catalog path")
         .argument("[out]", "optional positional out path")
         .allowExcessArguments(false)
@@ -242,7 +244,7 @@ export async function main(
         `[genPolicy] wrote ${outPath}: ` +
             `${Object.keys(grader.byAction).length} actions ` +
             `(+${d.added.length} ~${d.updated.length} -${d.removed.length} =${d.unchanged.length}); ` +
-            `regexFields=${grader.hardcodeMatchCount} llmFields=${grader.llmFallbackCount}; ` +
+            `hardcodeFields=${grader.hardcodeMatchCount} llmFields=${grader.llmFallbackCount}; ` +
             `actionsWithLlmJudgeFields=${llmJudgeActions.length}; ` +
             `policyHash=${policy.contentHash.slice(0, 16)}; ` +
             `rulesFingerprint=${grader.rulesFingerprint ?? "none"}; ` +
