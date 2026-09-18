@@ -21,9 +21,7 @@ import { MarkdownUpdateResult } from "./markdownOperationSchema.js";
 
 const debug = registerDebug("typeagent:markdown:translator");
 
-export async function createMarkdownAgent(
-    model: ai.AzureChatModelName = "GPT_4_O",
-) {
+export async function createMarkdownAgent() {
     const packageRoot = path.join("../../");
     const schemaText = await fs.promises.readFile(
         fileURLToPath(
@@ -41,7 +39,6 @@ export async function createMarkdownAgent(
     const agent = new MarkdownAgent<MarkdownUpdateResult>(
         schemaText,
         "MarkdownUpdateResult",
-        model,
     );
     return agent;
 }
@@ -59,13 +56,9 @@ export class MarkdownAgent<T extends object> {
         total_tokens: number;
     };
 
-    constructor(
-        schema: string,
-        schemaName: string,
-        modelName: ai.AzureChatModelName,
-    ) {
+    constructor(schema: string, schemaName: string) {
         this.schema = schema;
-        this.model = ai.createChatModel(modelName, undefined, undefined, [
+        this.model = ai.createChatModel(undefined, undefined, undefined, [
             "markdown",
         ]);
 

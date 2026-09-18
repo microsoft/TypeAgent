@@ -23,9 +23,9 @@ describe("markdown editor model responses", () => {
     beforeAll(() => {
         setRuntimeConfig(
             configFromEnvRecord({
-                AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS:
+                AZURE_OPENAI_ENDPOINT_GPT_5_MINI_EASTUS:
                     "https://markdown-editor-test.invalid/chat/completions",
-                AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS: "test-key",
+                AZURE_OPENAI_API_KEY_GPT_5_MINI_EASTUS: "test-key",
             }),
         );
         setActiveModelProvider("azure");

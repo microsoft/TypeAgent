@@ -146,7 +146,7 @@ describe("markdown document creation", () => {
             ),
         ),
     )(
-        "$actionName handles HTTP $status with the configured model and $target target",
+        "$actionName handles HTTP $status with the default model and $target target",
         async ({ actionName, status, target }) => {
             const savedConfig = getRuntimeConfig();
             const savedProvider = getActiveModelProvider();
@@ -205,8 +205,8 @@ describe("markdown document creation", () => {
             try {
                 setRuntimeConfig(
                     configFromEnvRecord({
-                        AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: endpoint,
-                        AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS: "test-key",
+                        AZURE_OPENAI_ENDPOINT_GPT_5_MINI_EASTUS: endpoint,
+                        AZURE_OPENAI_API_KEY_GPT_5_MINI_EASTUS: "test-key",
                     }),
                 );
                 setActiveModelProvider(undefined);

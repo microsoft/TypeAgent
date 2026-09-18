@@ -5,7 +5,7 @@ Markdown Agent is **sample code** that explores editing scenarios for markdown d
 ## Model configuration
 
 Document updates and editor streaming commands use the shared AI client model
-resolver with the canonical `GPT_4_O` model name. Configure the deployment in
+resolver without specifying a model name. The default model is selected by
 TypeAgent's runtime configuration; a bare `AZURE_OPENAI_ENDPOINT` is not required.
 The shared resolver honors the active model provider and configured endpoint pools.
 Creating or opening a document does not require model initialization.
