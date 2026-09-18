@@ -75,8 +75,11 @@ import {
     resolveAskUserSource,
 } from "./askUserSource.js";
 import {
-    findInstallableAgents,
-    formatInstallableAgents,
+    findAgentAvailabilityOptions,
+    formatAgentAvailabilityOptions,
+    getReasoningActionSchemas,
+    FIND_UNAVAILABLE_AGENT_TOOL_DESCRIPTION,
+    FIND_UNAVAILABLE_AGENT_SYSTEM_PROMPT,
 } from "./installableAgents.js";
 import {
     emitReasoningToolCall,
@@ -1384,7 +1387,7 @@ function getCopilotSessionConfig(
     // routing can prefer THIS client's editor context over other clients on
     // the same conversation.
     const originatorRequestId = systemContext.currentRequestId;
-    const activeSchemas = systemContext.agents.getActiveSchemas();
+    const activeSchemas = getReasoningActionSchemas(systemContext);
 
     // Build validators for action schemas (same as Claude)
     const schemaDescriptions: string[] = [];
@@ -1892,21 +1895,16 @@ function getCopilotSessionConfig(
     });
 
     const findInstallableAgentTool = defineTool("find_installable_agent", {
-        description: [
-            "List agents that are NOT currently installed but can be installed on demand from the configured sources.",
-            "Call this when no active agent (from discover_actions) can fulfill the user's request, to check whether an installable agent could.",
-            "Returns each candidate's name, description, and exact `@package install` command.",
-            "If one clearly matches the request, tell the user it exists and give them the install command - do NOT install it yourself.",
-        ].join("\n"),
+        description: FIND_UNAVAILABLE_AGENT_TOOL_DESCRIPTION,
         parameters: {
             type: "object",
             properties: {},
             required: [],
         },
         handler: async () => {
-            const agents = await findInstallableAgents(systemContext);
+            const options = await findAgentAvailabilityOptions(systemContext);
             return {
-                textResultForLlm: formatInstallableAgents(agents),
+                textResultForLlm: formatAgentAvailabilityOptions(options),
                 resultType: "success" as const,
             };
         },
@@ -2204,7 +2202,7 @@ function getCopilotSessionConfig(
                 "For TypeAgent-specific actions like music playback, calendar management, email:",
                 "- `discover_actions`: Find available TypeAgent actions by schema name",
                 "- `execute_action`: Execute TypeAgent actions conforming to discovered schemas",
-                "- `find_installable_agent`: List agents not installed yet that can be installed on demand. Call it when no active agent can fulfill the request; if a candidate matches, tell the user the exact `@package install` command (never install it yourself)",
+                FIND_UNAVAILABLE_AGENT_SYSTEM_PROMPT,
                 "",
                 "## Conversation Memory Tools",
                 "- `search_memory`: Recall information from earlier in this or prior conversations",
