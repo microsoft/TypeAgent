@@ -767,11 +767,7 @@ export class StructuredActionExecution {
     ): Promise<StructuredActionExecutionResult> {
         let operation: Operation | undefined;
         try {
-            requestEnvelope(input, [
-                "schemaName",
-                "actionName",
-                "parameters",
-            ]);
+            requestEnvelope(input, ["schemaName", "actionName", "parameters"]);
             nonempty(input.schemaName, "schemaName");
             nonempty(input.actionName, "actionName");
             if (input.parameters !== undefined) {

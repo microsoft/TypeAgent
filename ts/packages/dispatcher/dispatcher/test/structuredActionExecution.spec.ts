@@ -504,6 +504,27 @@ describe("real structured dispatcher execution", () => {
         });
     }
 
+    function replaceSchema(from: string, to: string) {
+        const config = context.agents.getActionConfig("guarded");
+        const schemaFile =
+            typeof config.schemaFile === "function"
+                ? config.schemaFile()
+                : config.schemaFile;
+        if (schemaFile.format !== "ts")
+            throw new Error("Expected TypeScript schema fixture");
+        config.schemaFile = {
+            ...schemaFile,
+            content: schemaFile.content.replace(from, to),
+        };
+        (
+            context.agents as unknown as {
+                actionSchemaFileCache: {
+                    unloadActionSchemaFile(schemaName: string): void;
+                };
+            }
+        ).actionSchemaFileCache.unloadActionSchemaFile("guarded");
+    }
+
     it("confirms an immutable action, preserves real result data, and never broadcasts prompts", async () => {
         const input = await request();
         const pending = dispatcher.executeAction(input);
@@ -531,26 +552,55 @@ describe("real structured dispatcher execution", () => {
         expect(broadcasts).toEqual([]);
     });
 
-    it.each([
-        "scope",
-        "parameter",
-        "approval",
-        "reference",
-        "resultReference",
-    ])("rejects %s before any agent effect", async (kind) => {
-        const input = await request();
-        if (kind === "scope") input.scopeId = "wrong";
-        if (kind === "parameter") input.parameters = { value: 1 };
-        if (kind === "approval") Object.assign(input, { approved: true });
-        if (kind === "reference") input.parameters!.value = "${entity-1}";
-        if (kind === "resultReference")
-            input.parameters!.value = { $result: "1" };
-        const result = await dispatcher.executeAction(input);
-        expect(result.status).not.toBe("completed");
-        expect(result.status).not.toBe("requires_interaction");
+    it.each(["scope", "parameter", "approval", "reference", "resultReference"])(
+        "rejects %s before any agent effect",
+        async (kind) => {
+            const input = await request();
+            if (kind === "scope") input.scopeId = "wrong";
+            if (kind === "parameter") input.parameters = { value: 1 };
+            if (kind === "approval") Object.assign(input, { approved: true });
+            if (kind === "reference") input.parameters!.value = "${entity-1}";
+            if (kind === "resultReference")
+                input.parameters!.value = { $result: "1" };
+            const result = await dispatcher.executeAction(input);
+            expect(result.status).not.toBe("completed");
+            expect(result.status).not.toBe("requires_interaction");
+            expect(entered).toEqual([]);
+            expect(setup).not.toHaveBeenCalled();
+            expect(resolutions).toBe(0);
+        },
+    );
+
+    it("resolves execution by exact identity without semantic search", async () => {
+        const input = await request("read");
+        input.actionName = "write";
+        const rank = jest.spyOn(context.agents, "rankActionCandidates");
+        const prompt = await dispatcher.executeAction(input);
+        expect(prompt.status).toBe("requires_interaction");
+        expect(rank).not.toHaveBeenCalled();
         expect(entered).toEqual([]);
-        expect(setup).not.toHaveBeenCalled();
-        expect(resolutions).toBe(0);
+        rank.mockRestore();
+    });
+
+    it("allows compatible schema changes after confirmation", async () => {
+        const prompt = await dispatcher.executeAction(await request());
+        replaceSchema("mode?: string", "mode?: string | number");
+        expect(
+            (await answer(prompt, { type: "confirmation", approved: true }))
+                .status,
+        ).toBe("completed");
+        expect(entered).toEqual(["original"]);
+    });
+
+    it("rejects parameters invalid under the current schema after confirmation", async () => {
+        const prompt = await dispatcher.executeAction(await request());
+        replaceSchema("value: string", "value: number");
+        const result = await answer(prompt, {
+            type: "confirmation",
+            approved: true,
+        });
+        expect(result.status).toBe("failed");
+        expect(entered).toEqual([]);
     });
 
     it.each(["read", "write", "resolve"])(
@@ -596,6 +646,32 @@ describe("real structured dispatcher execution", () => {
                 .status,
         ).toBe("completed");
         expect(entered).toEqual(["original"]);
+    });
+
+    it("requires confirmation when read-only policy escalates during a choice", async () => {
+        const choice = await dispatcher.executeAction(
+            await request("read", "yesNo"),
+        );
+        const config = context.agents.getActionConfig("guarded");
+        config.actionPolicies = {
+            ...config.actionPolicies,
+            read: { effects: "state-changing" },
+        };
+        const confirmation = await answer(choice, {
+            type: "yesNo",
+            value: true,
+        });
+        expect(confirmation.status).toBe("requires_interaction");
+        expect(callbacks).toBe(0);
+        expect(
+            (
+                await answer(confirmation, {
+                    type: "confirmation",
+                    approved: true,
+                })
+            ).status,
+        ).toBe("completed");
+        expect(callbacks).toBe(1);
     });
 
     it("rechecks execution access after asynchronous entity preparation", async () => {

@@ -11,6 +11,7 @@ import type {
     Dispatcher,
     QueuedRequest,
     SubmitResult,
+    StructuredActionExecutionResult,
 } from "@typeagent/dispatcher-types";
 import { ServerStoppingError } from "@typeagent/dispatcher-types";
 import type { PendingInteractionResponse } from "@typeagent/dispatcher-types";
@@ -229,6 +230,7 @@ describe("dispatcher RPC structured discovery", () => {
                         },
                         result: {
                             resultValue: { id: "stable" },
+                            entities: [],
                             resultEntity: {
                                 name: "item",
                                 type: ["Item"],
@@ -277,13 +279,15 @@ describe("dispatcher RPC structured discovery", () => {
                 scopeId: "scope",
                 operationId: "operation",
             };
-            await expect(dispatcher.executeAction(request)).resolves.toEqual(result);
+            await expect(dispatcher.executeAction(request)).resolves.toEqual(
+                result,
+            );
             await expect(
                 dispatcher.continueAction(continuation),
             ).resolves.toEqual(result);
-            await expect(dispatcher.cancelAction(cancellation)).resolves.toEqual(
-                result,
-            );
+            await expect(
+                dispatcher.cancelAction(cancellation),
+            ).resolves.toEqual(result);
             expect(seen).toEqual([request, continuation, cancellation]);
         });
     });
