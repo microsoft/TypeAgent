@@ -74,10 +74,10 @@ test("MSI provider selection is limited to AI Systems and GitHub Copilot", () =>
     assert.doesNotMatch(providerRadio, /<RadioButton Value="OLLAMA"/);
 });
 
-test("MSI defaults to AI Systems and rejects unsupported provider values", () => {
+test("MSI defaults to GitHub Copilot and rejects unsupported provider values", () => {
     assert.match(
         wxs,
-        /<Property Id="PROVIDER" Value="AISYSTEMS" Secure="yes" \/>/,
+        /<Property Id="PROVIDER" Value="COPILOT" Secure="yes" \/>/,
     );
     assert.match(wxs, /PROVIDER="AISYSTEMS" OR PROVIDER="COPILOT"/);
     assert.match(wxs, /Ollama is not supported by this MSI/);
@@ -100,9 +100,15 @@ test("Copilot provisioning always uses local embeddings", () => {
     assert.ok(command, "ProvisionCopilotConfig command must exist");
     assert.ok(
         command.includes(
-            "-ServeCommand provision --provider COPILOT --embedding LOCAL --force",
+            "-ServeCommand provision --provider COPILOT --embedding LOCAL",
         ),
     );
+    assert.ok(
+        command.includes(
+            "--local-embedding-cache-dir &quot;[LocalAppDataFolder]TypeAgent\\embedding-cache&quot;",
+        ),
+    );
+    assert.ok(command.includes("--force"));
     assert.ok(command.includes("-FailOnError"));
     assert.ok(!command.includes("--ollama-host"));
     assert.match(
@@ -270,6 +276,7 @@ test("generated Copilot config passes strict loading with local embeddings", () 
     );
     try {
         const configPath = path.join(tempDir, "config.local.yaml");
+        const embeddingCacheDir = path.join(tempDir, "embedding-cache");
         const generatorPath = path.resolve(
             scriptsDir,
             "..",
@@ -283,6 +290,8 @@ test("generated Copilot config passes strict loading with local embeddings", () 
                 "copilot",
                 "--embedding",
                 "local",
+                "--local-embedding-cache-dir",
+                embeddingCacheDir,
                 "--out",
                 configPath,
                 "--force",
@@ -307,6 +316,10 @@ test("generated Copilot config passes strict loading with local embeddings", () 
         assert.equal(
             loaded.env.TYPEAGENT_EMBEDDING_MODEL,
             "Xenova/all-MiniLM-L6-v2",
+        );
+        assert.equal(
+            loaded.env.TYPEAGENT_EMBEDDING_CACHE_DIR,
+            embeddingCacheDir,
         );
     } finally {
         rmSync(tempDir, { recursive: true, force: true });
