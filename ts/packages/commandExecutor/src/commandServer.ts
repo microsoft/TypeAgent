@@ -14,7 +14,7 @@ import {
 } from "@typeagent/agent-server-client";
 import { discoverPort } from "@typeagent/agent-server-client/discovery";
 import type {
-    ActionContractResult,
+    ActionSearchResult,
     ClientIO,
     IAgentMessage,
     RequestId,
@@ -344,9 +344,8 @@ function createMcpClientIO(
  *
  * Tools:
  *   execute_command      - natural-language pass-through to dispatcher
- *   discover_agents      - search structured action summaries
- *   get_action_contract  - fetch one closed structured contract
- *   execute_action       - execute an exact contract
+ *   discover_agents      - search complete structured action contracts
+ *   execute_action       - execute an exact action identity
  *   continue_action      - answer a pending interaction
  *   cancel_action        - cancel a pending operation
  *
@@ -602,11 +601,11 @@ export class CommandServer {
                     "- 'what's the weather in Berkeley'\n" +
                     "- 'show seconds in the clock' / 'left align the taskbar'\n" +
                     "- 'add milk to my shopping list'\n\n" +
-                    "For actions already selected during orchestration, use discover_agents + get_action_contract + execute_action:\n" +
+                    "For actions already selected during orchestration, use discover_agents + execute_action:\n" +
                     "- Tasks requiring web search + an agent action (e.g. 'find top jazz songs and make a playlist')\n" +
                     "- Tasks requiring multiple sequential agent actions\n" +
                     "- Tasks where you need to reason about parameters before calling\n" +
-                    "Search for an action, get its exact contract, gather concrete inputs, then call execute_action with that contract's fingerprint and scope. Reuse a known current contract without rediscovery. Keep unresolved references on this natural-language path or clarify them first. Preserve learn:, dev:, record:, and dev: learn: prefixes exactly.\n\n" +
+                    "Search for an action, select its exact identity and complete contract, gather concrete inputs, then call execute_action with that identity and scope. Known exact identities may execute directly after establishing scope; execution does not depend on appearing in search results. Keep unresolved references on this natural-language path or clarify them first. Preserve learn:, dev:, record:, and dev: learn: prefixes exactly.\n\n" +
                     "Parameters:\n" +
                     "- request: The command to execute\n" +
                     "- cacheCheck: (optional) Check cache before executing\n" +
@@ -882,32 +881,34 @@ export class CommandServer {
         parameters: Record<string, unknown>,
         signal?: AbortSignal,
     ): Promise<CallToolResult> {
-        const contractResult = await invokeStructuredAction(
+        const searchResult = await invokeStructuredAction(
             this.structuredActionClient,
             (client, requestSignal) =>
-                client.getActionContract(
-                    { schemaName, actionName },
+                client.searchActions(
+                    { query: `${schemaName}.${actionName}` },
                     requestSignal,
                 ),
             false,
             signal,
         );
-        const contract = contractResult.structuredContent as
-            | ActionContractResult
+        const search = searchResult.structuredContent as
+            | ActionSearchResult
             | undefined;
-        if (contract?.status !== "found") {
-            return contractResult;
+        if (
+            search?.protocolVersion === undefined ||
+            search.scopeId === undefined
+        ) {
+            return searchResult;
         }
         return invokeStructuredAction(
             this.structuredActionClient,
             (client, requestSignal) =>
                 client.executeAction(
                     {
-                        protocolVersion: contract.protocolVersion,
-                        scopeId: contract.scopeId,
+                        protocolVersion: search.protocolVersion,
+                        scopeId: search.scopeId,
                         schemaName,
                         actionName,
-                        fingerprint: contract.contract.fingerprint,
                         parameters,
                     },
                     requestSignal,

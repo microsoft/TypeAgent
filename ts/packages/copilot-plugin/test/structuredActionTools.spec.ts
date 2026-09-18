@@ -3,8 +3,8 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { jest } from "@jest/globals";
 import type {
-    ActionContractResult,
     ActionSearchResult,
     ExecuteActionRequest,
     StructuredActionExecutionResult,
@@ -86,7 +86,7 @@ describe("real MCP protocol over the shared real structured Dispatcher", () => {
         )?.status;
         expect(response.isError).toBe(
             status !== undefined &&
-                !["completed", "requires_interaction", "found"].includes(status)
+                !["completed", "requires_interaction"].includes(status)
                 ? true
                 : undefined,
         );
@@ -102,18 +102,22 @@ describe("real MCP protocol over the shared real structured Dispatcher", () => {
         actionName = "read",
         mode?: string,
     ): Promise<ExecuteActionRequest> {
-        const found = await call<ActionContractResult>("getActionContract", {
-            schemaName: "fixture",
-            actionName,
+        const found = await call<ActionSearchResult>("searchActions", {
+            query: actionName,
         });
-        if (found.status !== "found")
+        if (
+            !found.actions.some(
+                (action) =>
+                    action.schemaName === "fixture" &&
+                    action.actionName === actionName,
+            )
+        )
             throw new Error("Missing fixture contract");
         return {
             protocolVersion: 1,
             scopeId: found.scopeId,
             schemaName: "fixture",
             actionName,
-            fingerprint: found.contract.fingerprint,
             ...(actionName === "clear"
                 ? {}
                 : { parameters: { ...parameters, ...(mode ? { mode } : {}) } }),
@@ -139,38 +143,53 @@ describe("real MCP protocol over the shared real structured Dispatcher", () => {
                 expect.arrayContaining([
                     "typeagent-processCommand",
                     "typeagent-searchActions",
-                    "typeagent-getActionContract",
                     "typeagent-executeAction",
                     "typeagent-continueAction",
                     "typeagent-cancelAction",
                 ]),
             );
-            const summaries = await call<ActionSearchResult>("searchActions", {
+            expect(tools.tools.map((tool) => tool.name)).not.toContain(
+                "typeagent-getActionContract",
+            );
+            const searchTool = tools.tools.find(
+                (tool) => tool.name === "typeagent-searchActions",
+            )!;
+            expect(searchTool.inputSchema.required).toEqual(["query"]);
+            expect(Object.keys(searchTool.inputSchema.properties!)).toEqual([
+                "query",
+            ]);
+            const executionTool = tools.tools.find(
+                (tool) => tool.name === "typeagent-executeAction",
+            )!;
+            expect(executionTool.inputSchema.properties).not.toHaveProperty(
+                "fingerprint",
+            );
+            const candidates = await call<ActionSearchResult>("searchActions", {
                 query: "write",
-                limit: 1,
             });
-            expect(summaries.actions).toHaveLength(1);
-            expect(summaries).toMatchObject({
+            expect(candidates.actions).toHaveLength(1);
+            expect(candidates).toMatchObject({
                 binding: {
                     conversationId: "explicit-public-conversation",
                     connected: true,
                 },
             });
-            expect(summaries.actions[0]).toMatchObject({
+            expect(candidates.actions[0]).toMatchObject({
                 schemaName: "fixture",
                 actionName: "write",
             });
-            const found = await call<ActionContractResult>(
-                "getActionContract",
-                {
-                    schemaName: "fixture",
-                    actionName: "write",
-                },
-            );
-            if (found.status !== "found") throw new Error("Missing contract");
-            expect(found.contract.input.schemaText).toContain("Nested");
-            expect(found.contract.input.schemaText).not.toContain("unrelated");
-            const input = await request("write");
+            const contract = candidates.actions[0];
+            expect(contract.input.schemaText).toContain("Nested");
+            expect(contract.input.schemaText).not.toContain("unrelated");
+            expect(contract).not.toHaveProperty("fingerprint");
+            expect(contract).not.toHaveProperty("availability");
+            const input: ExecuteActionRequest = {
+                protocolVersion: candidates.protocolVersion,
+                scopeId: candidates.scopeId,
+                schemaName: contract.schemaName,
+                actionName: contract.actionName,
+                parameters,
+            };
             const confirmation = pending(await execute(input));
             expect(confirmation.prompt.type).toBe("confirmation");
             expect(fixture.effects).toBe(0);
@@ -224,11 +243,11 @@ describe("real MCP protocol over the shared real structured Dispatcher", () => {
         expect(fixture.effects).toBe(0);
     });
 
-    it.each(["stale", "invalid", "disabled", "readiness", "scope"] as const)(
+    it.each(["removed", "invalid", "disabled", "readiness", "scope"] as const)(
         "%s rejects before any handler or effect",
         async (kind) => {
             const input = await request();
-            if (kind === "stale") input.fingerprint += "stale";
+            if (kind === "removed") fixture.removeAction(input.actionName);
             if (kind === "invalid")
                 input.parameters = { ...parameters, ids: 42 };
             if (kind === "disabled") fixture.disable();
@@ -236,16 +255,70 @@ describe("real MCP protocol over the shared real structured Dispatcher", () => {
             if (kind === "scope") input.scopeId += "foreign";
             const actual = await execute(input);
             expect(actual.status).toBe(
-                kind === "stale"
-                    ? "contract_stale"
-                    : kind === "disabled" || kind === "readiness"
-                      ? "unavailable"
-                      : "failed",
+                kind === "removed" ||
+                    kind === "disabled" ||
+                    kind === "readiness"
+                    ? "unavailable"
+                    : "failed",
             );
             expect(fixture.handlers).toBe(0);
             expect(fixture.effects).toBe(0);
         },
     );
+
+    it.each([{}, { query: "" }, { query: "   " }, { query: "read", limit: 1 }])(
+        "rejects invalid query-only discovery arguments before connecting: %j",
+        async (arguments_) => {
+            const result = await client.callTool({
+                name: "typeagent-searchActions",
+                arguments: arguments_,
+            });
+            expect(result.isError).toBe(true);
+            expect(fixture.joins).toHaveLength(0);
+            expect(fixture.handlers).toBe(0);
+        },
+    );
+
+    it("executes a known contract independently of the latest semantic candidate set", async () => {
+        const input = await request();
+        const rank = jest
+            .spyOn(fixture.context.agents, "rankActionCandidates")
+            .mockResolvedValue([]);
+        try {
+            const search = await call<ActionSearchResult>("searchActions", {
+                query: "read",
+            });
+            expect(search.actions).toEqual([]);
+            expect(search.scopeId).toBe(input.scopeId);
+            expect((await execute(input)).status).toBe("completed");
+            expect(rank).toHaveBeenCalledTimes(1);
+            expect(fixture.handlers).toBe(1);
+        } finally {
+            rank.mockRestore();
+        }
+    });
+
+    it("rechecks current confirmation policy rather than trusting discovery-time policy", async () => {
+        const input = await request();
+        fixture.requireReadConfirmation();
+        const interaction = pending(await execute(input));
+        expect(interaction.prompt).toMatchObject({
+            type: "confirmation",
+            contract: {
+                policy: { effects: "state-changing", confirmation: "required" },
+            },
+        });
+        expect(fixture.handlers).toBe(0);
+        expect(
+            (
+                await answer(interaction, {
+                    type: "confirmation",
+                    approved: true,
+                })
+            ).status,
+        ).toBe("completed");
+        expect(fixture.effects).toBe(1);
+    });
 
     it.each(["question", "choice", "form", "blockingForm"] as const)(
         "returns full %s prompt and resumes only a USER response",
@@ -363,7 +436,9 @@ describe("real MCP protocol over the shared real structured Dispatcher", () => {
     it("reconnects with the SAME id and private token, preserving scope and pending operations", async () => {
         const interaction = pending(await execute(await request("write")));
         fixture.disconnect();
-        const resumed = await call<ActionSearchResult>("searchActions", {});
+        const resumed = await call<ActionSearchResult>("searchActions", {
+            query: "write",
+        });
         expect(resumed.scopeId).toBe(interaction.scopeId);
         expect(fixture.joins[1].conversationId).toBe(
             fixture.joins[0].conversationId,
@@ -391,7 +466,7 @@ describe("real MCP protocol over the shared real structured Dispatcher", () => {
         fixture.rejectResume();
         const actual = await client.callTool({
             name: "typeagent-searchActions",
-            arguments: {},
+            arguments: { query: "read" },
         });
         expect(actual.isError).toBe(true);
         expect(fixture.owners).toBe(1);
@@ -410,7 +485,7 @@ describe("real MCP protocol over the shared real structured Dispatcher", () => {
         );
         const actual = await client.callTool({
             name: "typeagent-searchActions",
-            arguments: {},
+            arguments: { query: "read" },
         });
         expect(actual.structuredContent).toMatchObject({
             status: "unavailable",
@@ -521,7 +596,7 @@ describe("real MCP protocol over the shared real structured Dispatcher", () => {
             process.env.TYPEAGENT_MODE = mode;
             const actual = await client.callTool({
                 name: "typeagent-searchActions",
-                arguments: {},
+                arguments: { query: "read" },
             });
             expect(actual.isError).toBe(true);
             expect(fixture.joins).toHaveLength(0);

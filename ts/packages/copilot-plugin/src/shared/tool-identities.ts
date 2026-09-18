@@ -3,7 +3,6 @@
 
 const TYPEAGENT_AGENT_SERVER_TOOLS = [
     "typeagent-searchactions",
-    "typeagent-getactioncontract",
     "typeagent-executeaction",
     "typeagent-continueaction",
     "typeagent-cancelaction",

@@ -11,7 +11,6 @@ import type {
     ClientIO,
     Dispatcher,
     ActionSearchRequest,
-    ActionIdentity,
     ExecuteActionRequest,
     ContinueActionRequest,
     CancelActionRequest,
@@ -181,16 +180,9 @@ export class StructuredActionClient {
         };
     }
 
-    searchActions(request?: ActionSearchRequest, signal?: AbortSignal) {
+    searchActions(request: ActionSearchRequest, signal?: AbortSignal) {
         return this.invoke(
             (dispatcher) => dispatcher.searchActions(request),
-            signal,
-        );
-    }
-
-    getActionContract(identity: ActionIdentity, signal?: AbortSignal) {
-        return this.invoke(
-            (dispatcher) => dispatcher.getActionContract(identity),
             signal,
         );
     }

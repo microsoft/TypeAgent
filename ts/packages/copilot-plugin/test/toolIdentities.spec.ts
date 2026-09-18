@@ -7,7 +7,6 @@ import { isTypeAgentAgentServerTool } from "../src/shared/tool-identities.js";
 describe("TypeAgent MCP tool identity", () => {
     it.each([
         "searchActions",
-        "getActionContract",
         "executeAction",
         "continueAction",
         "cancelAction",

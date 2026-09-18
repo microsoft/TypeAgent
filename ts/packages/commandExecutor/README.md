@@ -100,13 +100,14 @@ a separate structured-action path:
 
 See the [canonical structured-action design](../../docs/plans/copilot-direct-actions/director-actions.md).
 
-1. `discover_agents` searches compact action summaries and availability.
-2. `get_action_contract` returns one closed contract, its fingerprint, and its
-   conversation scope.
-3. `execute_action` accepts the exact protocol version, scope, identity,
-   fingerprint, and structured parameters.
-4. `continue_action` sends the user's exact response to a pending interaction.
-5. `cancel_action` cancels a pending structured operation.
+1. `discover_agents` requires one nonempty free-text query and returns complete
+   candidate contracts plus the conversation scope. The service uses semantic
+   top-five ranking when available, otherwise literal matching.
+2. `execute_action` accepts the exact protocol version, scope, action identity,
+   and structured parameters. Execution resolves the current contract directly
+   and does not depend on the action appearing in search results.
+3. `continue_action` sends the user's exact response to a pending interaction.
+4. `cancel_action` cancels a pending structured operation.
 
 Structured calls return the complete service result in both readable JSON text
 and `structuredContent`. `requires_interaction` is pending, not a tool error.
@@ -154,8 +155,10 @@ Execute user commands including music playback, list management, calendar operat
 
 The generic structured path does not translate natural language, populate the
 natural-language cache, remap aliases, infer a scope, or retry calls. A caller
-that already knows an action may request its contract directly without a
-mandatory discovery chain.
+with a current contract and scope may execute its exact identity directly without
+repeating discovery. Known editor/workspace convenience tools use search to
+establish scope, then execute their fixed identity even if it is absent from
+the returned candidates.
 
 `system.config.toggleAgent` and
 `system.config.enterAgentPriorityMode` are intentionally reported as

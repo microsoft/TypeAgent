@@ -8,8 +8,6 @@ import {
     type StructuredActionClient as SharedStructuredActionClient,
 } from "@typeagent/agent-server-client";
 import type {
-    ActionSearchRequest,
-    ActionContractResult,
     ActionSearchResult,
     CancelActionRequest,
     ContinueActionRequest,
@@ -22,7 +20,6 @@ export type StructuredActionClient = Pick<
     SharedStructuredActionClient,
     | "binding"
     | "searchActions"
-    | "getActionContract"
     | "executeAction"
     | "continueAction"
     | "cancelAction"
@@ -31,7 +28,6 @@ export type StructuredActionClient = Pick<
 
 type StructuredActionResult =
     | ActionSearchResult
-    | ActionContractResult
     | StructuredActionExecutionResult;
 
 type StructuredOperation = (
@@ -123,7 +119,7 @@ function hasErrorStatus(result: Record<string, unknown>): boolean {
     if (!("status" in result)) {
         return false;
     }
-    return !["completed", "requires_interaction", "found"].includes(
+    return !["completed", "requires_interaction"].includes(
         String(result.status),
     );
 }
@@ -185,41 +181,17 @@ export function registerStructuredActionTools(
         {
             inputSchema: z
                 .object({
-                    query: z.string().optional(),
-                    agentName: z.string().optional(),
-                    schemaName: z.string().optional(),
-                    offset: z.number().int().nonnegative().optional(),
-                    limit: z.number().int().positive().optional(),
+                    query: z.string().trim().min(1),
                 })
                 .strict(),
             description:
-                "Search compact TypeAgent action summaries and availability. Select an exact schemaName/actionName, then get_action_contract. Skip search when the exact identity is already known. Discovery does not enable agents.",
+                "Search TypeAgent actions with a required nonempty free-text query and return complete candidate contracts. The service uses semantic ranking when available or literal matching otherwise. Select an exact schemaName/actionName from the results when discovering an action. Discovery does not enable agents or authorize execution.",
         },
         (request, extra) =>
             invokeStructuredAction(
                 client,
                 (structuredClient, signal) =>
-                    structuredClient.searchActions(
-                        request as ActionSearchRequest,
-                        signal,
-                    ),
-                false,
-                extra.signal,
-            ),
-    );
-
-    server.registerTool(
-        "get_action_contract",
-        {
-            inputSchema: z.object(identity).strict(),
-            description:
-                "Get one closed TypeScript action contract, referenced types, fingerprint, scope, availability, output, and interaction requirements. A known action can be fetched directly; reuse a current contract only in this binding.",
-        },
-        (request, extra) =>
-            invokeStructuredAction(
-                client,
-                (structuredClient, signal) =>
-                    structuredClient.getActionContract(request, signal),
+                    structuredClient.searchActions(request, signal),
                 false,
                 extra.signal,
             ),
@@ -232,12 +204,11 @@ export function registerStructuredActionTools(
                 .object({
                     ...envelope,
                     ...identity,
-                    fingerprint: z.string(),
                     parameters: z.record(z.string(), z.unknown()).optional(),
                 })
                 .strict(),
             description:
-                "Execute one known action with concrete structured parameters and its exact current contract fingerprint and scope. No natural-language translation, cache training, alias remapping, default bindings, or replay. Copilot selecting an action is not user consent. On requires_interaction show the full prompt and ask the USER, then continue_action with their exact response or cancel_action. Never auto-answer. Do not replay after timeout, disconnect, or execution_uncertain. Returns the complete service status and ActionResult data.",
+                "Execute one known action with its exact schemaName/actionName identity, scope, and concrete structured parameters. No natural-language translation, cache training, alias remapping, default bindings, or replay. The current contract is resolved at execution and execution does not depend on search ranking. Copilot selecting an action is not user consent. On requires_interaction show the full prompt and ask the USER, then continue_action with their exact response or cancel_action. Never auto-answer. Do not replay after timeout, disconnect, or execution_uncertain. Returns the complete service status and ActionResult data.",
         },
         (request, extra) =>
             invokeStructuredAction(

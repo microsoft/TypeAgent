@@ -24,8 +24,6 @@ function createCaller(
         binding: { conversationId: "conversation-1", connected: true },
         searchActions:
             implementations.searchActions ?? missing("searchActions"),
-        getActionContract:
-            implementations.getActionContract ?? missing("getActionContract"),
         executeAction:
             implementations.executeAction ?? missing("executeAction"),
         continueAction:
@@ -61,58 +59,39 @@ function asToolResult(result: Awaited<ReturnType<Client["callTool"]>>) {
     return result as CallToolResult;
 }
 
-function foundContract(
-    schemaName: string,
-    actionName: string,
-    scopeId = "scope-1",
-) {
+function actionContract(schemaName: string, actionName: string) {
     return {
-        protocolVersion: 1 as const,
-        scopeId,
-        status: "found" as const,
-        contract: {
-            schemaName,
-            actionName,
-            description: `Contract for ${schemaName}.${actionName}`,
-            availability: {
-                state: "available" as const,
-                schemaEnabled: true,
-                actionEnabled: true,
-                schemaActive: true,
-                actionActive: true,
-                readiness: { source: "not-checked" as const },
-                authorization: "checked-at-execution" as const,
-            },
-            fingerprint: `${actionName}-fingerprint`,
-            input: {
-                format: "typescript" as const,
-                typeName: `${actionName}Action`,
-                schemaText: `type ${actionName}Action = {};`,
-            },
-            policy: {
-                effects: "read-only" as const,
-                confirmation: "not-required" as const,
-            },
-            output: {
-                envelope: "ActionResult" as const,
+        schemaName,
+        actionName,
+        description: `Contract for ${schemaName}.${actionName}`,
+        input: {
+            format: "typescript" as const,
+            typeName: `${actionName}Action`,
+            schemaText: `type ${actionName}Action = {};`,
+        },
+        policy: {
+            effects: "read-only" as const,
+            confirmation: "not-required" as const,
+        },
+        output: {
+            envelope: "ActionResult" as const,
+            optional: true as const,
+            resultValue: {
+                type: "unknown" as const,
                 optional: true as const,
-                resultValue: {
-                    type: "unknown" as const,
-                    optional: true as const,
-                },
-                resultEntity: {
-                    type: "Entity" as const,
-                    optional: true as const,
-                },
-                entities: {
-                    type: "Entity[]" as const,
-                    optional: true as const,
-                },
             },
-            interactions: {
-                mode: "may-require-interaction" as const,
-                kinds: [],
+            resultEntity: {
+                type: "Entity" as const,
+                optional: true as const,
             },
+            entities: {
+                type: "Entity[]" as const,
+                optional: true as const,
+            },
+        },
+        interactions: {
+            mode: "may-require-interaction" as const,
+            kinds: [],
         },
     };
 }
@@ -121,23 +100,22 @@ describe("structured action MCP tools", () => {
     test.each([
         ["completed", false],
         ["requires_interaction", false],
-        ["found", false],
         ["failed", true],
         ["cancelled", true],
-        ["contract_stale", true],
         ["unavailable", true],
         ["execution_uncertain", true],
-        ["not-found", true],
     ])("maps service status %s to isError=%s", (status, expectedError) => {
         const result = structuredToolResult({ status });
         expect(result.isError === true).toBe(expectedError);
         expect(result.structuredContent).toEqual({ status });
     });
 
-    test("CommandServer routes get_user_context through contract and structured execution", async () => {
-        const getActionContract = jest.fn(async () =>
-            foundContract("code", "getActiveEditor", "scope-context"),
-        );
+    test("CommandServer executes the known get_user_context identity even when search returns no candidates", async () => {
+        const searchActions = jest.fn(async () => ({
+            protocolVersion: 1 as const,
+            scopeId: "scope-context",
+            actions: [],
+        }));
         const executionResult = {
             protocolVersion: 1 as const,
             scopeId: "scope-context",
@@ -148,7 +126,7 @@ describe("structured action MCP tools", () => {
         };
         const executeAction = jest.fn(async () => executionResult);
         const structuredClient = createCaller({
-            getActionContract,
+            searchActions,
             executeAction,
         });
         const commandServer = new CommandServer(
@@ -167,7 +145,6 @@ describe("structured action MCP tools", () => {
             expect(tools.tools.map((tool) => tool.name)).toEqual(
                 expect.arrayContaining([
                     "discover_agents",
-                    "get_action_contract",
                     "execute_action",
                     "continue_action",
                     "cancel_action",
@@ -193,11 +170,8 @@ describe("structured action MCP tools", () => {
                     arguments: {},
                 }),
             );
-            expect(getActionContract).toHaveBeenCalledWith(
-                {
-                    schemaName: "code",
-                    actionName: "getActiveEditor",
-                },
+            expect(searchActions).toHaveBeenCalledWith(
+                { query: "code.getActiveEditor" },
                 expect.anything(),
             );
             expect(executeAction).toHaveBeenCalledWith(
@@ -206,7 +180,6 @@ describe("structured action MCP tools", () => {
                     scopeId: "scope-context",
                     schemaName: "code",
                     actionName: "getActiveEditor",
-                    fingerprint: "getActiveEditor-fingerprint",
                     parameters: {},
                 },
                 expect.anything(),
@@ -264,15 +237,15 @@ describe("structured action MCP tools", () => {
             ],
         };
         const executeAction = jest.fn(async () => executionResult);
+        const searchActions = jest.fn(async () => ({
+            protocolVersion: 1 as const,
+            scopeId: "scope-workspace",
+            actions: [],
+        }));
         const commandServer = new CommandServer(
             "ws://unused.invalid",
             createCaller({
-                getActionContract: async () =>
-                    foundContract(
-                        "code.code-workbench",
-                        "runWorkspaceCommand",
-                        "scope-workspace",
-                    ),
+                searchActions,
                 executeAction,
             }),
         );
@@ -299,7 +272,6 @@ describe("structured action MCP tools", () => {
                     scopeId: "scope-workspace",
                     schemaName: "code.code-workbench",
                     actionName: "runWorkspaceCommand",
-                    fingerprint: "runWorkspaceCommand-fingerprint",
                     parameters: {
                         command: "pnpm test",
                         executionId: "workspace-1",
@@ -336,17 +308,15 @@ describe("structured action MCP tools", () => {
                     scopeId: "scope-workspace",
                     schemaName: "code.code-workbench",
                     actionName: "runWorkspaceCommand",
-                    fingerprint: "runWorkspaceCommand-fingerprint",
                     parameters: {
                         command: "pnpm test",
                         executionId: "workspace-2",
                     },
                 },
-                contract: foundContract(
+                contract: actionContract(
                     "code.code-workbench",
                     "runWorkspaceCommand",
-                    "scope-workspace",
-                ).contract,
+                ),
             },
         };
         const continueAction =
@@ -354,12 +324,11 @@ describe("structured action MCP tools", () => {
         const commandServer = new CommandServer(
             "ws://unused.invalid",
             createCaller({
-                getActionContract: async () =>
-                    foundContract(
-                        "code.code-workbench",
-                        "runWorkspaceCommand",
-                        "scope-workspace",
-                    ),
+                searchActions: async () => ({
+                    protocolVersion: 1,
+                    scopeId: "scope-workspace",
+                    actions: [],
+                }),
                 executeAction: async () => pendingResult,
                 continueAction,
             }),
@@ -398,27 +367,33 @@ describe("structured action MCP tools", () => {
             const tools = await harness.client.listTools();
             expect(tools.tools.map((tool) => tool.name)).toEqual([
                 "discover_agents",
-                "get_action_contract",
                 "execute_action",
                 "continue_action",
                 "cancel_action",
             ]);
+            const discover = tools.tools.find(
+                (tool) => tool.name === "discover_agents",
+            );
+            expect(discover?.inputSchema).toMatchObject({
+                required: ["query"],
+                properties: { query: { type: "string" } },
+            });
+            const execute = tools.tools.find(
+                (tool) => tool.name === "execute_action",
+            );
+            expect(execute?.inputSchema).not.toHaveProperty(
+                "properties.fingerprint",
+            );
         } finally {
             await harness.close();
         }
     });
 
-    test("preserves search, contract, and pending execution results", async () => {
+    test("preserves complete search contracts and pending execution results", async () => {
         const searchResult = {
             protocolVersion: 1 as const,
             scopeId: "scope-1",
-            actions: [],
-            total: 0,
-        };
-        const contractResult = {
-            protocolVersion: 1 as const,
-            scopeId: "scope-1",
-            status: "not-found" as const,
+            actions: [actionContract("email", "send")],
         };
         const pendingResult = {
             protocolVersion: 1 as const,
@@ -461,7 +436,6 @@ describe("structured action MCP tools", () => {
         const harness = await createHarness(
             createCaller({
                 searchActions: async () => searchResult,
-                getActionContract: async () => contractResult,
                 executeAction,
                 continueAction,
             }),
@@ -476,24 +450,11 @@ describe("structured action MCP tools", () => {
             expect(search.structuredContent).toEqual(searchResult);
             expect(search.isError).toBeUndefined();
 
-            const contract = asToolResult(
-                await harness.client.callTool({
-                    name: "get_action_contract",
-                    arguments: {
-                        schemaName: "email",
-                        actionName: "send",
-                    },
-                }),
-            );
-            expect(contract.structuredContent).toEqual(contractResult);
-            expect(contract.isError).toBe(true);
-
             const request = {
                 protocolVersion: 1,
                 scopeId: "scope-1",
                 schemaName: "email",
                 actionName: "send",
-                fingerprint: "fingerprint-1",
                 parameters: {
                     recipients: ["person@example.com"],
                     metadata: {
@@ -521,6 +482,108 @@ describe("structured action MCP tools", () => {
                 },
             ]);
             expect(continueAction).not.toHaveBeenCalled();
+        } finally {
+            await harness.close();
+        }
+    });
+
+    test.each([
+        {},
+        { query: "" },
+        { query: "   " },
+        { query: "read", limit: 1 },
+    ])(
+        "rejects invalid discovery arguments without dispatch: %j",
+        async (arguments_) => {
+            const searchActions =
+                jest.fn<StructuredActionClient["searchActions"]>();
+            const harness = await createHarness(
+                createCaller({ searchActions }),
+            );
+            try {
+                const result = asToolResult(
+                    await harness.client.callTool({
+                        name: "discover_agents",
+                        arguments: arguments_,
+                    }),
+                );
+                expect(result.isError).toBe(true);
+                expect(searchActions).not.toHaveBeenCalled();
+            } finally {
+                await harness.close();
+            }
+        },
+    );
+
+    test("executes an exact identity without discovery and preserves nested failure data", async () => {
+        const failedResult = {
+            protocolVersion: 1 as const,
+            scopeId: "scope-1",
+            operationId: "operation-1",
+            status: "failed" as const,
+            output: ["The action reported a detailed failure."],
+            results: [
+                {
+                    action: {
+                        schemaName: "calendar",
+                        actionName: "addEvent",
+                        parameters: {
+                            event: {
+                                title: "Review",
+                                attendees: ["person@example.com"],
+                            },
+                        },
+                    },
+                    result: {
+                        error: "The calendar rejected the event.",
+                        errorCode: "calendar_rejected",
+                        resultValue: {
+                            provider: {
+                                code: "invalid_attendee",
+                                retryable: false,
+                            },
+                        },
+                    },
+                },
+            ],
+            error: {
+                code: "execution_failed" as const,
+                message: "The selected action failed.",
+            },
+        };
+        const executeAction = jest.fn(async () => failedResult);
+        const harness = await createHarness(createCaller({ executeAction }));
+        const request = {
+            protocolVersion: 1,
+            scopeId: "scope-1",
+            schemaName: "calendar",
+            actionName: "addEvent",
+            parameters: {
+                event: {
+                    title: "Review",
+                    attendees: ["person@example.com"],
+                },
+            },
+        };
+        try {
+            const result = asToolResult(
+                await harness.client.callTool({
+                    name: "execute_action",
+                    arguments: request,
+                }),
+            );
+            expect(executeAction).toHaveBeenCalledWith(
+                request,
+                expect.anything(),
+            );
+            expect(result.structuredContent).toEqual(failedResult);
+            expect(result.content).toEqual([
+                {
+                    type: "text",
+                    text: JSON.stringify(failedResult, null, 2),
+                },
+            ]);
+            expect(result.isError).toBe(true);
         } finally {
             await harness.close();
         }
@@ -654,7 +717,7 @@ describe("structured action MCP tools", () => {
             const result = asToolResult(
                 await harness.client.callTool({
                     name: "discover_agents",
-                    arguments: {},
+                    arguments: { query: "resume search" },
                 }),
             );
             expect(result.isError).toBe(true);
@@ -685,7 +748,6 @@ describe("structured action MCP tools", () => {
                         scopeId: "scope-1",
                         schemaName: "list",
                         actionName: "addItems",
-                        fingerprint: "fingerprint-1",
                         parameters: { items: ["milk"] },
                     },
                 }),

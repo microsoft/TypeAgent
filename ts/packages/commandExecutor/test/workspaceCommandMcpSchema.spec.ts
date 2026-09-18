@@ -49,6 +49,15 @@ describe("workspace command MCP schemas", () => {
         });
     });
 
+    test.each(["contract_stale", "not-found"])(
+        "rejects obsolete structured-action status %s",
+        (status) => {
+            expect(() =>
+                WorkspaceCommandToolResultSchema.parse({ status }),
+            ).toThrow();
+        },
+    );
+
     test("rejects an invalid timeout, oversized UTF-8 command, and empty execution ID", () => {
         expect(() =>
             WorkspaceCommandInputSchema.parse({

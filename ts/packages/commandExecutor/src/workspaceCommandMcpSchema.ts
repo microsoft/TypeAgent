@@ -100,10 +100,8 @@ export const WorkspaceCommandToolResultSchema =
                     "completed",
                     "failed",
                     "cancelled",
-                    "contract_stale",
                     "unavailable",
                     "execution_uncertain",
-                    "not-found",
                 ])
                 .optional(),
         })
