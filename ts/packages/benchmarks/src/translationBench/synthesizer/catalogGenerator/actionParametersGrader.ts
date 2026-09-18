@@ -62,7 +62,7 @@ export type ActionParamCreatePolicy =
     | "record"
     | "opaque";
 
-export type ActionParamClassifySource = "regex" | "llm";
+export type ActionParamClassifySource = "regex" | "hardcode" | "llm";
 
 export interface ActionParameterFieldGrader {
     optional: boolean;
@@ -70,7 +70,7 @@ export interface ActionParameterFieldGrader {
     typeKind: string;
     create: ActionParamCreatePolicy;
     verify: ActionParamVerifyMode;
-    /** Reason id: regex rule name, or LLM-authored snake_case id. */
+    /** Reason id: deterministic rule name, or LLM-authored snake_case id. */
     rule: string;
     source: ActionParamClassifySource;
     /** Element policy when type is array (stored for creators; runner uses container mode). */
@@ -1122,7 +1122,7 @@ function countFieldSources(
         const label = pathPrefix ? `${pathPrefix}.${name}` : name;
         if (field.source === "llm") {
             llm += 1;
-        } else if (field.source === "regex") {
+        } else if (field.source === "regex" || field.source === "hardcode") {
             regex += 1;
         } else {
             throw new Error(`Field '${actionLabel}.${label}' missing source`);
@@ -1136,7 +1136,10 @@ function countFieldSources(
             // item is not a full field grader; check rule/source only.
             if (field.item.source === "llm") {
                 llm += 1;
-            } else if (field.item.source === "regex") {
+            } else if (
+                field.item.source === "regex" ||
+                field.item.source === "hardcode"
+            ) {
                 regex += 1;
             } else {
                 throw new Error(
@@ -1235,9 +1238,13 @@ function validateItemGrader(
             `Invalid item grader for ${actionIdLabel}.${fieldName}: legacy/default rule '${item.rule}'`,
         );
     }
-    if (item.source !== "regex" && item.source !== "llm") {
+    if (
+        item.source !== "regex" &&
+        item.source !== "hardcode" &&
+        item.source !== "llm"
+    ) {
         throw new Error(
-            `Invalid item grader for ${actionIdLabel}.${fieldName}: source must be regex|llm`,
+            `Invalid item grader for ${actionIdLabel}.${fieldName}: source must be regex|hardcode|llm`,
         );
     }
     if (item.item !== undefined) {
@@ -1290,9 +1297,13 @@ function validateFieldGrader(
             `Invalid field grader for ${actionIdLabel}.${fieldName}: legacy/default rule '${field.rule}'`,
         );
     }
-    if (field.source !== "regex" && field.source !== "llm") {
+    if (
+        field.source !== "regex" &&
+        field.source !== "hardcode" &&
+        field.source !== "llm"
+    ) {
         throw new Error(
-            `Invalid field grader for ${actionIdLabel}.${fieldName}: source must be regex|llm`,
+            `Invalid field grader for ${actionIdLabel}.${fieldName}: source must be regex|hardcode|llm`,
         );
     }
     if (field.item !== undefined) {

@@ -1015,6 +1015,36 @@ describe("loadActionParametersGraderCatalogFile", () => {
             loadActionParametersGraderCatalogFile(nestedLegacy),
         ).toThrow(/legacy|default/i);
     });
+
+    it("accepts hardcode sources from the policy generator", async () => {
+        const entry = await buildActionParametersGraderEntry(
+            "list",
+            "addItems",
+            objectSpec({
+                items: {
+                    optional: false,
+                    spec: { kind: "array", item: { kind: "string" } },
+                },
+            }),
+        );
+        entry.fields.items!.source = "hardcode";
+        entry.fields.items!.item!.source = "hardcode";
+        const dir = mkdtempSync(path.join(tmpdir(), "grader-hardcode-"));
+        const filePath = path.join(dir, "grader.json");
+        writeFileSync(
+            filePath,
+            JSON.stringify({
+                version: 1,
+                byAction: { "list.addItems": entry },
+            }),
+        );
+
+        expect(
+            loadActionParametersGraderCatalogFile(filePath)?.byAction[
+                "list.addItems"
+            ],
+        ).toEqual(entry);
+    });
 });
 
 describe("incremental grader catalog", () => {
