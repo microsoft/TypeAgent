@@ -10,7 +10,7 @@
  * the stored grammar is fully self-contained.
  *
  * Naming convention for prompt use: <CategoryName>
- * Usage in patterns: (<CategoryName>)?   (note: (<Name>)? not <Name>? — bare optional not yet supported)
+ * Usage in patterns: (<CategoryName>)? or bare <CategoryName>?
  */
 export interface BuiltInGrammarCategory {
     /** AGR rule name — used as <Name> in patterns */
