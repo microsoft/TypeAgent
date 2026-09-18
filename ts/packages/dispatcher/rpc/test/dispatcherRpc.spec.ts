@@ -152,7 +152,7 @@ describe("dispatcher RPC lifecycle options", () => {
 });
 
 describe("dispatcher RPC structured discovery", () => {
-    it("forwards filters and complete versioned contracts", async () => {
+    it("forwards queries and complete contracts", async () => {
         const identity = { schemaName: "test.sub", actionName: "select" };
         const searchResult: ActionSearchResult = {
             protocolVersion: 1,
@@ -161,7 +161,6 @@ describe("dispatcher RPC structured discovery", () => {
                 {
                     ...identity,
                     description: "Select",
-                    fingerprint: "opaque-fingerprint",
                     input: {
                         format: "typescript",
                         typeName: "Select",

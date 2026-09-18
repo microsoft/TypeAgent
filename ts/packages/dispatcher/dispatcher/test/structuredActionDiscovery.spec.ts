@@ -54,7 +54,7 @@ type AgentFixture = {
 function fixture(content = source, policies?: Record<string, ActionPolicy>) {
     const agents = new AppAgentManager(undefined, new PortRegistrar());
     // Seed only the manager's persisted/loaded state; all discovery, parsing,
-    // enablement, readiness snapshots, and fingerprinting run their real code.
+    // enablement and readiness snapshots run their real code.
     const state = agents as unknown as {
         agents: Map<string, AgentFixture>;
         actionConfigs: Map<string, ActionConfig>;
@@ -131,14 +131,6 @@ async function getContract(
         throw new Error(`Expected one contract, got ${result.actions.length}`);
     }
     return result.actions[0];
-}
-
-async function fingerprint(content = source, policy?: ActionPolicy) {
-    const { service } = fixture(
-        content,
-        policy ? { select: policy } : undefined,
-    );
-    return (await getContract(service)).fingerprint;
 }
 
 function candidate(
@@ -251,62 +243,6 @@ describe("structured action contracts", () => {
         expect(contract.input.schemaText).toContain("children?: Item[]");
         expect(contract.input.schemaText.match(/type Item =/g)).toHaveLength(1);
         expect(contract.input.schemaText).not.toContain("type Clear");
-        expect(
-            await fingerprint(
-                source.replace(
-                    "color: Color;",
-                    "color: Color;\n    children?: Item[];",
-                ),
-            ),
-        ).toBe(contract.fingerprint);
-    });
-
-    it("fingerprints execution semantics, not descriptions, ordering, or siblings", async () => {
-        const original = await fingerprint();
-        expect(
-            await fingerprint(
-                source.replace("Select an item.", "A better description."),
-            ),
-        ).toBe(original);
-        expect(
-            await fingerprint(
-                source.replace(
-                    "note?: string;",
-                    "note?: string; // explanation",
-                ),
-            ),
-        ).toBe(original);
-        expect(
-            await fingerprint(
-                source.replace(
-                    "note?: string;\n        comments?: string;",
-                    "comments?: string;\n        note?: string;",
-                ),
-            ),
-        ).toBe(original);
-        expect(
-            await fingerprint(source.replace("all: boolean", "all: string")),
-        ).toBe(original);
-        for (const changed of [
-            source.replace(
-                'type Color = "red" | "blue"',
-                'type Color = "red" | "green"',
-            ),
-            source.replace("count?: number", "count?: string"),
-            source.replace("note?: string", "note: string"),
-            source.replace("comments?: string", "comments?: boolean"),
-        ]) {
-            expect(await fingerprint(changed)).not.toBe(original);
-        }
-        expect(await fingerprint(source, { effects: "read-only" })).not.toBe(
-            original,
-        );
-        expect(
-            await fingerprint(source, {
-                effects: "read-only",
-                confirmation: "required",
-            }),
-        ).not.toBe(await fingerprint(source, { effects: "read-only" }));
     });
 
     it.each([

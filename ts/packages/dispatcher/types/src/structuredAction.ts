@@ -41,7 +41,6 @@ export type ActionInteractionContract = {
 
 export type ActionContract = ActionIdentity & {
     description: string;
-    fingerprint: string;
     input: {
         format: "typescript";
         typeName: string;

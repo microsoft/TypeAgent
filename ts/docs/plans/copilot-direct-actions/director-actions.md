@@ -143,19 +143,13 @@ search action contracts → execute selected action
 
 A caller with a current contract should not need to repeat discovery. A contract must include referenced enums and nested types without loading unrelated actions from the same schema.
 
-Contracts may be reused within the same server and session/permission scope. TypeAgent must detect an outdated contract before execution and ask the caller to refresh it with a new search.
+Contracts may be reused within the same server and session/permission scope. Execution resolves the exact action identity against the current schema and validates the submitted parameters before any effect is possible. If the action was removed or its parameters are no longer valid, execution returns the corresponding unavailable or validation failure rather than reinterpreting the request.
 
 Discovery must respect the caller's permissions. It neither enables actions nor grants permission to execute them. Denied, disabled, and inactive actions are filtered before ranking and contract hydration. A query with no candidates should lead to clarification or natural-language handling, not guessed action parameters. When multiple actions match, the caller must select from the returned contracts or clarify if it cannot do so confidently.
 
-### Contract Versioning
+### Protocol Versioning
 
-Discovery responses include a protocol version for the structured-action envelope and an opaque fingerprint for each returned action contract. Execution must supply the fingerprint returned with the selected contract.
-
-TypeAgent compares the supplied fingerprint with the current contract before any effect is possible. A mismatch returns `contract_stale` without executing the action. The caller must fetch the current contract and construct a new request; TypeAgent must not reinterpret parameters under the changed contract.
-
-The initial implementation may conservatively use the existing schema source hash. The target fingerprint should hash a canonical representation of the selected action's execution-relevant contract, including parameter types, required fields, constraints, referenced definitions, outputs, and interaction shape. Descriptions and transient availability, authentication, permission, and readiness state must not affect the fingerprint.
-
-Version 1 uses exact fingerprint matching rather than attempting semantic compatibility between arbitrary schema changes. This intentionally favors a safe refresh over complex compatibility rules for unions, nested types, constraints, and interaction results.
+Discovery responses include a protocol version for the structured-action envelope. Versioning applies to the shared request and response shapes. Execution compatibility is determined from the current action definition when the call is made.
 
 ## MCP Interface
 
@@ -169,7 +163,7 @@ These operations are normal MCP tools. Individual TypeAgent actions remain data 
 
 Use the existing `schemaName` and `actionName` as the action identity. Keep them as separate request fields even if discovery also provides a joined display identifier.
 
-The MCP package is a transport adapter over a shared structured-action service in the dispatcher or agent server. Discovery, contract generation, fingerprinting, validation, readiness checks, execution, and interaction state do not belong in the MCP adapter.
+The MCP package is a transport adapter over a shared structured-action service in the dispatcher or agent server. Discovery, contract generation, validation, readiness checks, execution, and interaction state do not belong in the MCP adapter.
 
 ## Responsibility Boundaries
 
@@ -194,14 +188,13 @@ Bind calls to the intended conversation and make any use of prior-turn context e
 For structured invocation, Copilot selecting an action does not count as user confirmation. Before execution, TypeAgent must:
 
 1. Bind the request to the correct caller, TypeAgent session, and Copilot conversation.
-2. Reject a stale contract.
-3. Resolve the current action and validate its parameters.
-4. Check that the schema and action are enabled.
-5. Run agent readiness and setup checks.
-6. Preserve authentication and resource authorization enforced by the owning service.
-7. Request user confirmation for destructive, external, costly, or sensitive effects.
+2. Resolve the current action and validate its parameters.
+3. Check that the schema and action are enabled.
+4. Run agent readiness and setup checks.
+5. Preserve authentication and resource authorization enforced by the owning service.
+6. Request user confirmation for destructive, external, costly, or sensitive effects.
 
-A required choice or form returns `requires_interaction` with an opaque, session-bound, single-use interaction ID. A later call submits the user's response or cancels the interaction. The integration must not choose a default answer on the user's behalf. Completion, failure, cancellation, `contract_stale`, unavailability, and uncertain execution after a disconnect or timeout must remain distinct result states.
+A required choice or form returns `requires_interaction` with an opaque, session-bound, single-use interaction ID. A later call submits the user's response or cancels the interaction. The integration must not choose a default answer on the user's behalf. Completion, failure, cancellation, validation failure, unavailability, and uncertain execution after a disconnect or timeout must remain distinct result states.
 
 ## Multi-Step Behavior
 
@@ -215,7 +208,7 @@ Do not expose a general-purpose structured plan API in version 1. Such an API wo
 
 ## Shared Integration Service
 
-Direct and MCP integration modes share the same transport-neutral structured-action service. It owns discovery, action identity and contracts, fingerprints, validation, readiness and authorization checks, execution, structured results, and interaction and cancellation semantics.
+Direct and MCP integration modes share the same transport-neutral structured-action service. It owns discovery, action identity and contracts, validation, readiness and authorization checks, execution, structured results, and interaction and cancellation semantics.
 
 MCP maps the service to MCP tools and structured content. Direct mode calls it through the dispatcher interface. This does not change ordinary Direct-mode prompts: user-originated natural language continues through TypeAgent's intent resolution, and only callers that already know the action and concrete parameters use the shared structured interface.
 
@@ -230,7 +223,7 @@ This reuse is intentionally limited to candidate ranking. Structured discovery d
 - Evaluate BM25 as a local fallback or retrieval improvement. It could avoid a remote embedding dependency while providing better relevance than literal substring matching. Preserve stable identity ordering for ties and measure retrieval quality before changing ranking or limits.
 - After parity validation, migrate the dispatcher's remaining `semanticSearchActionSchema` callers to the shared candidate-ranker result. Keep the compatibility wrapper while those callers still depend on the legacy semantic-search shape.
 - A TypeAgent-aware Copilot plugin or adapter could prefetch a compact, permission-filtered agent catalog when it connects. Optional server-issued agent hints may boost ranking, but must not authorize an action or act as strict filters.
-- Cache catalog data on the host outside model context where possible, with catalog version or change signals for invalidation. The server may also keep search documents, contracts, and fingerprints warm.
+- Cache catalog data on the host outside model context where possible, with catalog version or change signals for invalidation. The server may also keep search documents and contracts warm.
 - Query-only discovery remains correct without prefetch, hints, or warm caches. Generic MCP hosts are not guaranteed to prefetch, so the fixed discovery operation remains the fallback.
 - At scale, payload and model-context token cost are the primary risks; scanning the in-memory catalog is not expected to dominate.
 

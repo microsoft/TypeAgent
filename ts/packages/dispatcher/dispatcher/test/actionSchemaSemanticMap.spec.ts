@@ -126,7 +126,7 @@ export type CreateWidgetType = {
             schemaName: "test.widgets",
             actionName: "createWidget",
             policy: freshContract.policy,
-            fingerprint: freshContract.fingerprint,
+            input: freshContract.input,
         });
     });
 
