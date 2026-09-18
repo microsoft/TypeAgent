@@ -36,7 +36,7 @@
     "chalk": "^5.4.1",
     "code-processor": "workspace:*",
     "dotenv": "^16.3.1",
-    "exifreader": "^4.39.0",
+    "exifreader": "^4.45.0",
     "interactive-app": "workspace:*",
     "memory-providers": "workspace:*",
     "mongodb": "^6.15.0",
