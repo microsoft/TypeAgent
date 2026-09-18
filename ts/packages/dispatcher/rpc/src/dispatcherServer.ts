@@ -97,6 +97,9 @@ export function createDispatcherRpcServer(
         getAgentSchemas: async (...args) => {
             return dispatcher.getAgentSchemas(...args);
         },
+        searchActions: async (...args) => {
+            return dispatcher.searchActions(...args);
+        },
         respondToChoice: async (...args) => {
             return dispatcher.respondToChoice(...args);
         },
