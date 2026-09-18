@@ -18,6 +18,10 @@ import type {
 } from "./displayLogEntry.js";
 import type { PendingInteractionResponse } from "./pendingInteraction.js";
 import type { CancelResult, QueueSnapshot, SubmitResult } from "./queue.js";
+import type {
+    ActionSearchRequest,
+    ActionSearchResult,
+} from "./structuredAction.js";
 
 export const DispatcherName = "dispatcher";
 export const DispatcherEmoji = "🤖";
@@ -507,6 +511,8 @@ export interface Dispatcher {
      * @param agentName optional — if provided, returns only the named agent
      */
     getAgentSchemas(agentName?: string): Promise<AgentSchemaInfo[]>;
+
+    searchActions(request: ActionSearchRequest): Promise<ActionSearchResult>;
 
     /**
      * Respond to a pending choice from an agent.
