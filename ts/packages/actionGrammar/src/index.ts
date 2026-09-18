@@ -174,6 +174,7 @@ export {
 export {
     matchGrammarWithNFA,
     tokenizeRequest,
+    tokenizeRequestKeepingTrailingPunct,
     normalizeToken,
     type NFAGrammarMatchResult,
 } from "./nfaMatcher.js";
