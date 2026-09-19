@@ -29,6 +29,7 @@ import {
 import type { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import type { executeActions } from "../execute/actionHandlers.js";
 import type { getActionContext } from "../execute/actionContext.js";
+import { cancelQueuedRequest } from "../queue/requestQueue.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import type { StructuredActionDiscovery } from "./discovery.js";
 import {
@@ -675,11 +676,7 @@ class Operation implements StructuredExecutionHooks {
                 this.possibleEffects ? "execution_uncertain" : "cancelled",
             ),
         );
-        const queue = this.context.requestQueue;
-        if (!queue.cancelQueued(this.id, "user")) {
-            queue.cancelRunning(this.id, "user");
-            this.context.activeRequests.get(this.id)?.abort();
-        }
+        cancelQueuedRequest(this.context, this.id, "user");
     }
 
     retire(): void {
