@@ -8,6 +8,7 @@ import type {
 } from "@typeagent/dispatcher-types";
 
 type PendingEntry = {
+    rejectOnCancel?: boolean;
     type: PendingInteractionType;
     requestId?: RequestId;
     resolve: (value: any) => void;
@@ -33,6 +34,7 @@ export class PendingInteractionManager {
     create<T>(
         request: PendingInteractionRequest,
         timeoutMs?: number,
+        options?: { rejectOnCancel?: boolean },
     ): Promise<T> {
         return new Promise<T>((resolve, reject) => {
             const entry: PendingEntry = {
@@ -40,6 +42,7 @@ export class PendingInteractionManager {
                 resolve,
                 reject,
                 request,
+                ...(options?.rejectOnCancel ? { rejectOnCancel: true } : {}),
             };
 
             if (request.requestId !== undefined) {
@@ -95,6 +98,10 @@ export class PendingInteractionManager {
             clearTimeout(entry.timeoutTimer);
         }
 
+        if (entry.rejectOnCancel) {
+            entry.reject(error);
+            return true;
+        }
         // For question, resolve with defaultId if one was explicitly provided;
         // otherwise reject — no declared safe fallback exists.
         if (entry.type === "question") {

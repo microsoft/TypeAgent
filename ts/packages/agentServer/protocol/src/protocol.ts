@@ -65,6 +65,14 @@ export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
     clientType?: "shell" | "extension" | "android"; // identifies the connecting client type
     conversationId?: string; // join a specific conversation by UUID. If omitted, connects to the default conversation.
+    /**
+     * Opt into isolated structured-action ownership. Requires conversationId.
+     * Resume only with the capability returned by an earlier join of that
+     * same live conversation. Never substitute a client-supplied identity.
+     */
+    structuredActions?: {
+        resumeToken?: string;
+    };
 };
 
 /**
@@ -153,6 +161,14 @@ export type JoinConversationResult = {
     /** Server-side queue snapshot at join time. Omitted when idle/empty;
      *  older clients ignore the field. */
     queueSnapshot?: QueueSnapshot;
+    /**
+     * Private, in-memory resume capability for this logical structured caller.
+     * Keep it out of logs, model prompts, history, and persisted metadata.
+     * A resumed join revokes structured access on the previous connection.
+     */
+    structuredActions?: {
+        resumeToken: string;
+    };
 };
 
 /**

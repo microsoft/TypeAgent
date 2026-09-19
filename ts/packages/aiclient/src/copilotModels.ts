@@ -180,7 +180,7 @@ export interface CopilotClientOptions {
     cliUrl?: string | undefined;
 }
 
-function findCopilotPath(): string {
+function findCopilotPath(): string | undefined {
     const configuredPath =
         process.env.TYPEAGENT_COPILOT_CLI_PATH ?? process.env.COPILOT_CLI_PATH;
     if (configuredPath) {
@@ -195,9 +195,18 @@ function findCopilotPath(): string {
         debug(`Found copilot CLI at: ${first}`);
         return first;
     } catch {
-        debug("Could not find copilot CLI in PATH, falling back to 'copilot'");
-        return "copilot";
+        debug("Could not find copilot CLI in PATH, using SDK-managed runtime");
+        return undefined;
     }
+}
+
+export function createCopilotRuntimeConnection(
+    cliUrl: string | undefined,
+    cliPath: string | undefined,
+) {
+    return cliUrl
+        ? RuntimeConnection.forUri(cliUrl)
+        : RuntimeConnection.forStdio(cliPath ? { path: cliPath } : {});
 }
 
 async function getClient(
@@ -216,14 +225,16 @@ async function getClient(
     cachedCliPath = cliPath;
 
     startPromise = (async () => {
-        const target = cliUrl ? `server ${cliUrl}` : `CLI ${cliPath}`;
+        const target = cliUrl
+            ? `server ${cliUrl}`
+            : cliPath
+              ? `CLI ${cliPath}`
+              : "SDK-managed runtime";
         debug(`Starting CopilotClient (${target})`);
         const tStart = Date.now();
         const level = sdkLogLevel();
         const client = new CopilotClient({
-            connection: cliUrl
-                ? RuntimeConnection.forUri(cliUrl)
-                : RuntimeConnection.forStdio(cliPath ? { path: cliPath } : {}),
+            connection: createCopilotRuntimeConnection(cliUrl, cliPath),
             ...(level ? { logLevel: level } : {}),
         });
         try {

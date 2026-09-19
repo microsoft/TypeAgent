@@ -9,6 +9,8 @@ export {
     getConfigProblems,
     computeConfigDrift,
     resolveLocalConfigPath,
+    inspectConfigFile,
+    type ConfigFileInspection,
     type ConfigProblem,
 } from "./loader.js";
 export { flatten, mergeFlat } from "./flatten.js";

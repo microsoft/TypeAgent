@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    createCopilotRuntimeConnection,
     createCopilotTransportModel,
     CopilotEndpoint,
     CopilotEndpointProvider,
@@ -166,6 +167,41 @@ const RESPONSES_OK = {
     ],
     usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
 };
+
+describe("createCopilotRuntimeConnection", () => {
+    test("uses a configured runtime URI instead of an executable path", () => {
+        expect(
+            createCopilotRuntimeConnection(
+                "localhost:4321",
+                "C:\\tools\\copilot.exe",
+            ),
+        ).toEqual({
+            kind: "uri",
+            url: "localhost:4321",
+            connectionToken: undefined,
+        });
+    });
+
+    test("preserves a concrete external executable path", () => {
+        expect(
+            createCopilotRuntimeConnection(undefined, "C:\\tools\\copilot.exe"),
+        ).toEqual({
+            kind: "stdio",
+            path: "C:\\tools\\copilot.exe",
+            args: undefined,
+            env: undefined,
+        });
+    });
+
+    test("omits the path to select the SDK-managed runtime", () => {
+        expect(createCopilotRuntimeConnection(undefined, undefined)).toEqual({
+            kind: "stdio",
+            path: undefined,
+            args: undefined,
+            env: undefined,
+        });
+    });
+});
 
 describe("selectCopilotModel", () => {
     test("uses the requested model when it is available", () => {
