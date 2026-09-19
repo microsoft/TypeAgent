@@ -592,6 +592,45 @@ describe("real structured dispatcher execution", () => {
         expect(entered).toEqual(["original"]);
     });
 
+    it("keeps an in-flight operation live after trusted reconnect takeover", async () => {
+        const logicalScope = scope;
+        const input = await request("read", "hold");
+        const running = dispatcher.executeAction(input);
+        for (let ticks = 0; entered.length === 0 && ticks < 20; ticks++)
+            await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(entered).toEqual(["original"]);
+        const operationId = context.currentRequestId!.requestId;
+
+        active = false;
+        const replacement = createDispatcherFromContext(
+            context,
+            "replacement",
+            undefined,
+            () => ({
+                scope: logicalScope,
+                canDiscoverSchema: () => true,
+                isActive: () => true,
+            }),
+        );
+        expect(
+            (await replacement.searchActions({ query: "guarded read" }))
+                .scopeId,
+        ).toBe(input.scopeId);
+        expect(
+            (
+                await dispatcher.cancelAction({
+                    protocolVersion: 1,
+                    scopeId: input.scopeId,
+                    operationId,
+                })
+            ).status,
+        ).toBe("failed");
+
+        release!();
+        expect((await running).status).toBe("completed");
+        expect(entered).toEqual(["original"]);
+    });
+
     it("rejects parameters invalid under the current schema after confirmation", async () => {
         const prompt = await dispatcher.executeAction(await request());
         replaceSchema("value: string", "value: number");
@@ -690,6 +729,31 @@ describe("real structured dispatcher execution", () => {
         expect(setup).not.toHaveBeenCalled();
     });
 
+    it("cancels held entity resolution without reporting possible effects", async () => {
+        holdResolution = true;
+        const prompt = requirePrompt(
+            await dispatcher.executeAction(await request("resolve")),
+        );
+        const running = answer(prompt, {
+            type: "confirmation",
+            approved: true,
+        });
+        for (let ticks = 0; resolutions === 0 && ticks < 20; ticks++)
+            await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(resolutions).toBe(1);
+
+        const cancelled = await dispatcher.cancelAction({
+            protocolVersion: 1,
+            scopeId: prompt.scopeId,
+            operationId: prompt.operationId,
+        });
+        expect(cancelled.status).toBe("cancelled");
+        release!();
+        expect((await running).status).toBe("cancelled");
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(entered).toEqual([]);
+    });
+
     it("does not execute or run setup while unready", async () => {
         const input = await request();
         readiness = { state: "setup-required", message: "Configure fixture" };
@@ -716,7 +780,7 @@ describe("real structured dispatcher execution", () => {
         expect(entered).toEqual(["original"]);
     });
 
-    it("does not consume invalid or duplicate concurrent responses", async () => {
+    it("does not consume invalid responses or replay duplicate responses", async () => {
         const prompt = requirePrompt(
             await dispatcher.executeAction(await request()),
         );
@@ -728,8 +792,58 @@ describe("real structured dispatcher execution", () => {
             answer(prompt, { type: "confirmation", approved: true }),
         ]);
         expect(first.status).toBe("completed");
-        expect(second.status).toBe("failed");
+        expect(second.status).toBe("completed");
         expect(entered).toEqual(["original"]);
+    });
+
+    it("recovers the next interaction and terminal result from a consumed interaction", async () => {
+        const confirmation = requirePrompt(
+            await dispatcher.executeAction(await request("write", "yesNo")),
+        );
+        const continuation = {
+            protocolVersion: 1 as const,
+            scopeId: confirmation.scopeId,
+            operationId: confirmation.operationId,
+            interactionId: confirmation.interactionId,
+            response: { type: "confirmation" as const, approved: true },
+        };
+
+        await dispatcher.continueAction(continuation);
+        const recovered = requirePrompt(
+            await dispatcher.continueAction(continuation),
+        );
+        expect(recovered.prompt.type).toBe("yesNo");
+        expect(entered).toEqual(["original"]);
+        expect(callbacks).toBe(0);
+
+        const completed = await dispatcher.continueAction({
+            ...continuation,
+            interactionId: recovered.interactionId,
+            response: { type: "yesNo", value: true },
+        });
+        expect(completed.status).toBe("completed");
+        expect((await dispatcher.continueAction(continuation)).status).toBe(
+            "completed",
+        );
+        expect(
+            (
+                await dispatcher.continueAction({
+                    ...continuation,
+                    interactionId: recovered.interactionId,
+                    response: { type: "yesNo", value: false },
+                })
+            ).status,
+        ).toBe("completed");
+        expect(
+            (
+                await dispatcher.continueAction({
+                    ...continuation,
+                    interactionId: "unrelated-interaction",
+                })
+            ).status,
+        ).toBe("failed");
+        expect(entered).toEqual(["original"]);
+        expect(callbacks).toBe(1);
     });
 
     it("reconfirms changed policy before invoking the handler", async () => {

@@ -195,6 +195,7 @@ class Operation implements StructuredExecutionHooks {
         FullAction,
         ActionContract["policy"]
     >();
+    private readonly knownInteractions = new Set<string>();
     private possibleEffects = false;
     private promptTail: Promise<void> = Promise.resolve();
     private queuedPrompts = 0;
@@ -229,6 +230,15 @@ class Operation implements StructuredExecutionHooks {
                 "invalid_scope",
                 "Operation belongs to a different scope or Session",
             );
+        }
+    }
+
+    tryTakeover(discovery: StructuredActionDiscovery): void {
+        try {
+            this.authorize(discovery);
+            this.discovery = discovery;
+        } catch {
+            // Creating a foreign or inactive facade must not disturb the operation.
         }
     }
 
@@ -492,14 +502,9 @@ class Operation implements StructuredExecutionHooks {
             answer: deferred(),
         };
         this.pending = pending;
+        this.rememberInteraction(pending.id);
         this.context.requestQueue.markBlocked(this.id, "interaction");
-        this.publish({
-            ...this.envelope(),
-            status: "requires_interaction",
-            interactionId: pending.id,
-            expiresAt: this.expiresAt,
-            prompt: pending.prompt,
-        });
+        this.publish(this.pendingResult(pending));
         try {
             const response = await pending.answer.promise;
             this.checkLive();
@@ -523,10 +528,12 @@ class Operation implements StructuredExecutionHooks {
         discovery: StructuredActionDiscovery,
     ): Promise<StructuredActionExecutionResult> {
         this.authorize(discovery);
-        if (this.terminal !== undefined)
-            return Promise.resolve(structuredClone(this.terminal));
         const pending = this.pending;
-        if (pending === undefined || pending.id !== request.interactionId) {
+        if (pending?.id !== request.interactionId) {
+            if (this.knownInteractions.has(request.interactionId)) {
+                this.discovery = discovery;
+                return this.observe();
+            }
             throw new ExecutionFailure(
                 "interaction_consumed",
                 "Interaction is missing or already consumed",
@@ -544,6 +551,36 @@ class Operation implements StructuredExecutionHooks {
         const next = this.wait();
         pending.answer.resolve(answer);
         return next;
+    }
+
+    private rememberInteraction(interactionId: string): void {
+        this.knownInteractions.add(interactionId);
+        if (this.knownInteractions.size > MAX_OPERATIONS) {
+            const oldest = this.knownInteractions.values().next().value!;
+            this.knownInteractions.delete(oldest);
+        }
+    }
+
+    private pendingResult(
+        pending: PendingPrompt,
+    ): StructuredActionExecutionResult {
+        return {
+            ...this.envelope(),
+            status: "requires_interaction",
+            interactionId: pending.id,
+            expiresAt: this.expiresAt,
+            prompt: pending.prompt,
+        };
+    }
+
+    private observe(): Promise<StructuredActionExecutionResult> {
+        if (this.terminal !== undefined)
+            return Promise.resolve(structuredClone(this.terminal));
+        if (this.pending !== undefined)
+            return Promise.resolve(
+                structuredClone(this.pendingResult(this.pending)),
+            );
+        return this.wait();
     }
 
     wait(): Promise<StructuredActionExecutionResult> {
@@ -760,6 +797,8 @@ export class StructuredActionExecution {
         private readonly connectionId?: string,
     ) {
         this.registry = registryFor(context);
+        for (const operation of this.registry.live.values())
+            operation.tryTakeover(discovery);
     }
 
     async executeAction(

@@ -717,7 +717,10 @@ async function resolveEntityWithAgent(
         `Resolving ${type} entity with agent ${appAgentName}: ${value}`,
     );
     displayStatus(`Resolving ${type}: ${value}`, context);
-    getStructuredExecution(context.sessionContext.agentContext)?.effect();
+    getStructuredExecution(context.sessionContext.agentContext)?.effect(
+        undefined,
+        false,
+    );
     const result = await agent.resolveEntity(
         type,
         value,
