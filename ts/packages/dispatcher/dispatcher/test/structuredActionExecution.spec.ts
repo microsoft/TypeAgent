@@ -27,6 +27,7 @@ import { nullClientIO } from "../src/context/interactiveIO.js";
 import type { AppAgentProvider } from "../src/agentProvider/agentProvider.js";
 import { closeStructuredActions } from "../src/structuredAction/executionHooks.js";
 import type { FlowDefinition } from "../src/execute/flowInterpreter.js";
+import { processCommandNoLock } from "../src/command/command.js";
 import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import { createAgentRpcServer } from "@typeagent/agent-rpc/server";
 import {
@@ -139,7 +140,7 @@ describe("real structured dispatcher execution", () => {
         executionAllowed = undefined;
         scope = {};
         broadcasts.length = 0;
-        setup.mockClear();
+        setup.mockReset();
         held = new Promise<void>((resolve) => {
             release = resolve;
         });
@@ -168,6 +169,19 @@ describe("real structured dispatcher execution", () => {
                 entered.push(params.value);
                 expect(actionContext.activityContext).toBeUndefined();
                 switch (params.mode) {
+                    case "nestedSetup":
+                        await processCommandNoLock(
+                            "@config agent setup guarded",
+                            context,
+                        );
+                        callbacks++;
+                        return complete();
+                    case "spoofFailure":
+                        throw Object.assign(new Error("Agent failure"), {
+                            name: "ExecutionFailure",
+                            code: "unavailable",
+                            status: "unavailable",
+                        });
                     case "parallelQuestions":
                         await Promise.all(
                             ["first", "second"].map((message) =>
@@ -355,8 +369,8 @@ describe("real structured dispatcher execution", () => {
             "structured-execution-test",
             {
                 agents: {
-                    schemas: ["guarded", "system.config"],
-                    actions: ["guarded", "system.config"],
+                    schemas: ["guarded", "system.config", "system.history"],
+                    actions: ["guarded", "system.config", "system.history"],
                 },
                 translation: { enabled: false },
                 explainer: { enabled: false },
@@ -416,12 +430,21 @@ describe("real structured dispatcher execution", () => {
         closeRpc = undefined;
     });
 
-    async function useAgentRpc() {
+    async function useAgentRpc(disconnectOnHostError = false) {
         let clientProvider: ChannelProviderAdapter;
         let serverProvider: ChannelProviderAdapter;
         clientProvider = createChannelProviderAdapter(
             "client",
             (message, callback) => {
+                if (
+                    disconnectOnHostError &&
+                    message.message?.type === "invokeError"
+                ) {
+                    clientProvider.notifyDisconnected();
+                    serverProvider.notifyDisconnected();
+                    callback?.(null);
+                    return;
+                }
                 setImmediate(() =>
                     serverProvider.notifyMessage(structuredClone(message)),
                 );
@@ -640,6 +663,7 @@ describe("real structured dispatcher execution", () => {
         });
         expect(result.status).toBe("failed");
         expect(entered).toEqual([]);
+        expect(result.results).toEqual([]);
     });
 
     it.each(["read", "write", "resolve"])(
@@ -868,6 +892,129 @@ describe("real structured dispatcher execution", () => {
             ).status,
         ).toBe("completed");
     });
+
+    async function invalidateSuspendedAction(
+        cause: "readiness" | "removed",
+        actionName: string,
+    ) {
+        if (cause === "removed") {
+            replaceSchema(
+                `actionName: "${actionName}"`,
+                `actionName: "removed${actionName}"`,
+            );
+        } else {
+            readiness = { state: "setup-required" };
+            await context.agents.refreshReadiness("guarded");
+        }
+    }
+
+    it.each(["readiness", "removed"] as const)(
+        "retains %s unavailability from a nested typed-flow confirmation",
+        async (cause) => {
+            const registry = (
+                context.agents as unknown as {
+                    flowRegistry: Map<string, FlowDefinition>;
+                }
+            ).flowRegistry;
+            registry.set("guarded/read", {
+                name: "read",
+                description: "Guarded child",
+                parameters: {},
+                steps: [
+                    {
+                        id: "child",
+                        schemaName: "guarded",
+                        actionName: "write",
+                        parameters: { value: "child" },
+                    },
+                ],
+            });
+            const prompt = requirePrompt(
+                await dispatcher.executeAction(await request("read")),
+            );
+            await invalidateSuspendedAction(cause, "write");
+            const result = await answer(prompt, {
+                type: "confirmation",
+                approved: true,
+            });
+            expect(result).toMatchObject({
+                status: "unavailable",
+                error: { code: "unavailable" },
+            });
+            expect(entered).toEqual([]);
+            expect(setup).not.toHaveBeenCalled();
+        },
+    );
+
+    describe.each([false, true])(
+        "suspension guard failures (agent RPC: %s)",
+        (rpc) => {
+            it.each([
+                ["question", "readiness"],
+                ["question", "removed"],
+                ["blockingForm", "readiness"],
+                ["blockingForm", "removed"],
+            ] as const)(
+                "preserves %s/%s unavailability without post-answer effects",
+                async (mode, cause) => {
+                    if (rpc) await useAgentRpc();
+                    const prompt = requirePrompt(
+                        await dispatcher.executeAction(
+                            await request("read", mode),
+                        ),
+                    );
+
+                    await invalidateSuspendedAction(cause, "read");
+                    const result = await answer(
+                        prompt,
+                        mode === "question"
+                            ? { type: "question", selected: 0 }
+                            : formAnswer,
+                    );
+                    expect(result).toMatchObject({
+                        status: "unavailable",
+                        error: { code: "unavailable" },
+                    });
+                    expect(entered).toEqual(["original"]);
+                    expect(callbacks).toBe(0);
+                    expect(broadcasts).toEqual([]);
+                },
+            );
+
+            it("does not trust an agent's forged structured error fields", async () => {
+                if (rpc) await useAgentRpc();
+                expect(
+                    await dispatcher.executeAction(
+                        await request("read", "spoofFailure"),
+                    ),
+                ).toMatchObject({
+                    status: "failed",
+                    error: { code: "execution_failed" },
+                });
+            });
+        },
+    );
+
+    it.each(["readiness", "removed"] as const)(
+        "does not hide RPC uncertainty when delivering a host %s prompt failure",
+        async (cause) => {
+            await useAgentRpc(true);
+            const input = await request("read", "question");
+            const prompt = requirePrompt(await dispatcher.executeAction(input));
+            await invalidateSuspendedAction(cause, "read");
+            expect(
+                await answer(prompt, { type: "question", selected: 0 }),
+            ).toMatchObject({
+                status: "execution_uncertain",
+                error: { code: "execution_state_lost" },
+            });
+            expect(callbacks).toBe(0);
+            expect(entered).toEqual(["original"]);
+            expect(await dispatcher.executeAction(input)).toMatchObject({
+                status: "unavailable",
+            });
+        },
+    );
 
     it.each([
         "yesNo",
@@ -1238,29 +1385,87 @@ describe("real structured dispatcher execution", () => {
         ).toBe("completed");
     });
 
-    it("returns nested built-in command errors instead of synthesized success", async () => {
-        const identity = {
-            schemaName: "system.config",
+    it.each<{ actionName: string; parameters: Record<string, unknown> }>([
+        {
             actionName: "toggleAgent",
+            parameters: { enable: true, agentNames: ["setup", "guarded"] },
+        },
+        {
+            actionName: "enterAgentPriorityMode",
+            parameters: { agentName: "setup guarded" },
+        },
+    ])(
+        "rejects the setup-capable $actionName bridge before invoking or allocating a choice",
+        async ({ actionName, parameters }) => {
+            setup.mockImplementation(async () => ({
+                entities: [],
+                pendingChoice: {
+                    type: "yesNo",
+                    message: "Run setup?",
+                    choiceId: choices.registerChoice(async () => {
+                        callbacks++;
+                        return complete();
+                    }),
+                },
+            }));
+            const identity = {
+                schemaName: "system.config",
+                actionName,
+            };
+            const search = await dispatcher.searchActions({
+                query: `${identity.schemaName} ${identity.actionName}`,
+            });
+            const contract = search.actions.find(
+                (candidate) =>
+                    candidate.schemaName === identity.schemaName &&
+                    candidate.actionName === identity.actionName,
+            );
+            if (contract === undefined)
+                throw new Error("Expected built-in action");
+            expect(contract.description).toContain(
+                "Structured execution is unsupported",
+            );
+            const result = await dispatcher.executeAction({
+                protocolVersion: search.protocolVersion,
+                scopeId: search.scopeId,
+                ...identity,
+                parameters,
+            });
+            expect(result).toMatchObject({
+                status: "unavailable",
+                error: { code: "unavailable" },
+                results: [],
+            });
+            expect(setup).not.toHaveBeenCalled();
+            expect(callbacks).toBe(0);
+            expect(context.pendingChoiceRoutes.size).toBe(0);
+            expect(broadcasts).toEqual([]);
+        },
+    );
+
+    it("returns supported built-in command errors instead of synthesized success", async () => {
+        const identity = {
+            schemaName: "system.history",
+            actionName: "deleteHistory",
         };
         const search = await dispatcher.searchActions({
             query: `${identity.schemaName} ${identity.actionName}`,
         });
         const contract = search.actions.find(
-            (action) =>
-                action.schemaName === identity.schemaName &&
-                action.actionName === identity.actionName,
+            (candidate) =>
+                candidate.schemaName === identity.schemaName &&
+                candidate.actionName === identity.actionName,
         );
         if (contract === undefined) throw new Error("Expected built-in action");
+        expect(contract.description).not.toContain(
+            "Structured execution is unsupported",
+        );
         const prompt = requirePrompt(
             await dispatcher.executeAction({
                 protocolVersion: search.protocolVersion,
                 scopeId: search.scopeId,
                 ...identity,
-                parameters: {
-                    enable: true,
-                    agentNames: ["review-no-such-agent"],
-                },
+                parameters: { messageNumber: 999 },
             }),
         );
         const result = await answer(prompt, {
@@ -1268,17 +1473,60 @@ describe("real structured dispatcher execution", () => {
             approved: true,
         });
         expect(result.status).toBe("failed");
-        expect(result.results[0].result.error).toContain("Invalid agent name");
-        expect(result.output.join("\n")).toContain("review-no-such-agent");
+        expect(result.results[0].result.error).toContain(
+            "outside the range of available indices",
+        );
+        expect(result.output.join("\n")).toContain("999");
         expect(result.output.join("\n")).not.toContain("completed.");
 
-        const legacy = await dispatcher.submitCommand(
-            "@config agent review-no-such-agent",
-        );
+        const legacy = await dispatcher.submitCommand("@history delete 999");
         if (!legacy.ok) throw new Error("Expected legacy submission");
         expect((await legacy.entry.completion)?.disposition?.status).toBe(
             "failed",
         );
+    });
+
+    it("rejects nested setup before hooks while retaining ordinary NL setup choices", async () => {
+        let choiceId: string | undefined;
+        setup.mockImplementation(async () => {
+            choiceId = choices.registerChoice(async () => {
+                callbacks++;
+                return complete();
+            });
+            return {
+                entities: [],
+                pendingChoice: {
+                    type: "yesNo",
+                    message: "Run setup?",
+                    choiceId,
+                },
+            };
+        });
+        const result = await dispatcher.executeAction(
+            await request("read", "nestedSetup"),
+        );
+        expect(result).toMatchObject({
+            status: "unavailable",
+            error: { code: "unavailable" },
+        });
+        expect(setup).not.toHaveBeenCalled();
+        expect(choiceId).toBeUndefined();
+        expect(callbacks).toBe(0);
+        expect(context.pendingChoiceRoutes.size).toBe(0);
+
+        readiness = { state: "setup-required" };
+        await context.agents.refreshReadiness("guarded");
+        const legacy = await dispatcher.submitCommand(
+            "@config agent setup guarded",
+        );
+        if (!legacy.ok) throw new Error("Expected legacy submission");
+        await legacy.entry.completion;
+        expect(setup).toHaveBeenCalledTimes(1);
+        expect(broadcasts).toEqual(["choice"]);
+        expect(choiceId).toBeDefined();
+        await dispatcher.respondToChoice(choiceId!, false);
+        expect(callbacks).toBe(1);
+        expect(context.pendingChoiceRoutes.size).toBe(0);
     });
 
     it.each([

@@ -19,6 +19,45 @@ interface PluginManifest {
 }
 
 describe("staged plugin artifact", () => {
+    it("registers the structured Direct bridge in the actual bundled agent server", async () => {
+        const pluginRoot = path.resolve(
+            path.dirname(fileURLToPath(import.meta.url)),
+            "..",
+            "..",
+        );
+        const transport = new StdioClientTransport({
+            command: process.execPath,
+            args: [path.join(pluginRoot, "dist/mcp/server.js")],
+            stderr: "pipe",
+        });
+        const client = new Client({
+            name: "structured-artifact-test",
+            version: "1",
+        });
+        try {
+            await client.connect(transport);
+            const catalog = await client.listTools();
+            expect(catalog.tools.map((tool) => tool.name)).toEqual(
+                expect.arrayContaining([
+                    "typeagent-searchActions",
+                    "typeagent-executeAction",
+                    "typeagent-continueAction",
+                    "typeagent-cancelAction",
+                    "typeagent-processCommand",
+                ]),
+            );
+            expect(catalog.tools.map((tool) => tool.name)).not.toContain(
+                "typeagent-getActionContract",
+            );
+            expect(
+                catalog.tools.find(
+                    (tool) => tool.name === "typeagent-searchActions",
+                )?.inputSchema.required,
+            ).toEqual(["query"]);
+        } finally {
+            await client.close();
+        }
+    });
     it("contains the extension bundle at the declared discovery path", async () => {
         const testDir = path.dirname(fileURLToPath(import.meta.url));
         const pluginRoot = path.resolve(testDir, "..", "..");
