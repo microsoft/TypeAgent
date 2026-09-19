@@ -454,6 +454,12 @@ export function instantiate(): AppAgent {
                 content: _webFlowStore.generateDynamicSchemaText(),
             };
         },
+        cancelChoice: async (
+            choiceId: string,
+            context: SessionContext<BrowserActionContext>,
+        ) => {
+            context.agentContext.choiceManager?.cancelChoice(choiceId);
+        },
         handleChoice: async (
             choiceId: string,
             response: boolean | number[],

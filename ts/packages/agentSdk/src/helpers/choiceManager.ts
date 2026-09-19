@@ -39,6 +39,11 @@ export class ChoiceManager {
         return id;
     }
 
+    /** Release a suspended callback without fabricating a user answer. */
+    cancelChoice(choiceId: string): boolean {
+        return this.callbacks.delete(choiceId);
+    }
+
     async handleChoice(
         choiceId: string,
         response: ChoiceResponse,

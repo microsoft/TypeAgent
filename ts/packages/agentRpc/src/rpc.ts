@@ -92,6 +92,14 @@ export type RpcTracingOptions = {
     ) => RpcCorrelationFields | undefined;
 };
 
+/** The transport cannot establish whether an in-flight invocation completed. */
+export class RpcDisconnectedError extends Error {
+    constructor(message = "Agent channel disconnected") {
+        super(message);
+        this.name = "RpcDisconnectedError";
+    }
+}
+
 export type RpcOptions = {
     // When true, a disconnect rejects in-flight calls but leaves invoke/send
     // intact so the rpc can be reattached to a fresh channel via rebind().
@@ -185,11 +193,11 @@ export function createRpc<
     let connected = true;
     let bindGeneration = 0;
     const errorFunc = () => {
-        throw new Error("Agent channel disconnected");
+        throw new RpcDisconnectedError();
     };
     const rejectAllPending = (reason: string) => {
         for (const pendingInvoke of pending.values()) {
-            pendingInvoke.reject(new Error(reason));
+            pendingInvoke.reject(new RpcDisconnectedError(reason));
         }
         pending.clear();
     };
@@ -565,7 +573,7 @@ export function createRpc<
             methodName as string,
             nextCallId++,
         );
-        const error = new Error("Agent channel disconnected");
+        const error = new RpcDisconnectedError();
         emitStructuredStarted(options?.logger, lifecycle);
         emitStructuredCompleted(options?.logger, {
             ...lifecycle,
@@ -605,7 +613,7 @@ export function createRpc<
                 };
                 try {
                     if (!connected) {
-                        throw new Error("Agent channel disconnected");
+                        throw new RpcDisconnectedError();
                     }
                     const correlation = getOutboundCorrelation(
                         options?.tracing,
@@ -672,7 +680,7 @@ export function createRpc<
             invoke(methodName, args),
         send: (methodName: keyof CallTargetFunctions, ...args: any[]) => {
             if (!connected) {
-                throw new Error("Agent channel disconnected");
+                throw new RpcDisconnectedError();
             }
             out(
                 {

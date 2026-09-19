@@ -24,6 +24,7 @@ import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
 import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
 import { getSpeechToken } from "./speechToken.js";
+import { validateStructuredActionJoin } from "./structuredActionBindings.js";
 import registerDebug from "debug";
 
 // Disconnect cleanup is best effort, so a failure cannot be surfaced to anyone:
@@ -249,6 +250,8 @@ export function createAgentServerConnectionHandler(
             string,
             { dispatcher: Dispatcher; connectionId: string }
         >();
+        const joiningConversations = new Set<string>();
+        let disconnected = false;
 
         // Client-hosted agents this connection registered, per conversation.
         // Keyed by instance so disconnect removes only this connection's
@@ -326,23 +329,34 @@ export function createAgentServerConnectionHandler(
             getMacroRun: async (runId) => macroManager.getMacroRun(runId),
 
             joinConversation: async (options?: DispatcherConnectOptions) => {
+                validateStructuredActionJoin(options);
+                if (disconnected) {
+                    throw new Error("Agent connection is disconnected");
+                }
                 // Resolve conversation ID first (may auto-create default)
                 const conversationId =
                     await conversationManager.resolveConversationId(
                         options?.conversationId,
                     );
 
-                if (joinedConversations.has(conversationId)) {
+                if (disconnected) {
+                    throw new Error("Agent connection is disconnected");
+                }
+                if (
+                    joinedConversations.has(conversationId) ||
+                    joiningConversations.has(conversationId)
+                ) {
                     throw new Error(
                         `Already joined conversation '${conversationId}'. Call leaveConversation() before joining again.`,
                     );
                 }
 
-                // Create conversation-namespaced channels
-                const clientIOChannel = channelProvider.createChannel(
-                    getClientIOChannelName(conversationId),
-                );
+                joiningConversations.add(conversationId);
+                let acquiredConnectionId: string | undefined;
                 try {
+                    const clientIOChannel = channelProvider.createChannel(
+                        getClientIOChannelName(conversationId),
+                    );
                     const clientIORpcClient =
                         createClientIORpcClient(clientIOChannel);
 
@@ -380,6 +394,10 @@ export function createAgentServerConnectionHandler(
                         },
                         options,
                     );
+                    acquiredConnectionId = result.connectionId;
+                    if (disconnected) {
+                        throw new Error("Agent connection is disconnected");
+                    }
 
                     const dispatcherChannel = channelProvider.createChannel(
                         getDispatcherChannelName(conversationId),
@@ -490,12 +508,27 @@ export function createAgentServerConnectionHandler(
                     if (result.queueSnapshot !== undefined) {
                         joinResult.queueSnapshot = result.queueSnapshot;
                     }
+                    if (result.structuredActions !== undefined) {
+                        joinResult.structuredActions = result.structuredActions;
+                    }
                     return joinResult;
                 } catch (e) {
-                    channelProvider.deleteChannel(
-                        getClientIOChannelName(conversationId),
-                    );
+                    try {
+                        if (acquiredConnectionId !== undefined) {
+                            await conversationManager.leaveConversation(
+                                conversationId,
+                                acquiredConnectionId,
+                            );
+                        }
+                    } finally {
+                        joinedConversations.delete(conversationId);
+                        channelProvider.deleteChannel(
+                            getClientIOChannelName(conversationId),
+                        );
+                    }
                     throw e;
+                } finally {
+                    joiningConversations.delete(conversationId);
                 }
             },
 
@@ -722,6 +755,7 @@ export function createAgentServerConnectionHandler(
 
         // Clean up all conversations on disconnect
         channelProvider.on("disconnect", () => {
+            disconnected = true;
             onDisconnect?.();
             if (staleNotifier !== undefined) {
                 staleNotifiers.delete(staleNotifier);
