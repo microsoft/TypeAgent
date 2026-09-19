@@ -35,6 +35,7 @@ import {
     getAppAgentName,
     TypeAgentTranslator,
 } from "../translation/agentTranslators.js";
+import { persistProviderDisabledDefaults } from "./installedProviderDefaults.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { nullClientIO } from "./interactiveIO.js";
@@ -139,6 +140,7 @@ import { RequestQueue } from "../queue/requestQueue.js";
 import type { QueueExecutionContext } from "../queue/requestQueue.js";
 import { createSnapshotCoalescer } from "../queue/snapshotCoalescer.js";
 import { processCommand as runProcessCommand } from "../command/command.js";
+import { closeStructuredActions } from "../structuredAction/executionHooks.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -302,6 +304,14 @@ export type PendingTopicalRoute = {
 };
 
 // Command Handler Context definition.
+export type SessionTrace = {
+    traceId: string;
+    requestId: string;
+    kind: "command" | "request";
+    isTraceOpen: boolean;
+    completedAt: number;
+};
+
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
     readonly portRegistrar: IPortRegistrar;
@@ -406,6 +416,11 @@ export type CommandHandlerContext = {
      * `typeagent.trace.id` so existing logs can still be joined.
      */
     readonly traceId: string | undefined;
+    /**
+     * Canonical OpenTelemetry root traces completed in the current session.
+     * Kept in completion order for trace inspection commands.
+     */
+    readonly sessionTraceHistory: SessionTrace[];
     readonly telemetryOptions: {
         readonly joinActiveTrace: boolean;
     };
@@ -903,6 +918,10 @@ export async function installAppProvider(
         useNFAGrammar,
     );
 
+    if (provider.defaultEnabled === false) {
+        persistProviderDisabledDefaults(context, provider);
+    }
+
     await setAppAgentStates(context);
     // Re-run collision detection now that a new agent has been installed.
     // Degrade to warn — installing into a live session must never crash it.
@@ -1330,6 +1349,7 @@ export async function initializeCommandHandlerContext(
             logger,
             activationId,
             traceId,
+            sessionTraceHistory: [],
             telemetryOptions: {
                 joinActiveTrace: options?.telemetry?.joinActiveTrace ?? false,
             },
@@ -1402,6 +1422,7 @@ export async function initializeCommandHandlerContext(
                     qctx.attachments,
                     qctx.options,
                     qctx.traceContext,
+                    qctx.work,
                 );
                 try {
                     context.displayLog.logCommandResult(
@@ -1937,6 +1958,7 @@ function processSetAppAgentStateResult(
 export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
+    closeStructuredActions(context);
     // Stop accepting exclusive mutations in this closing session.
     context.appAgentProviderSetController.dispose();
     // Tear down any reasoning subagents (spawned command-executor processes and
@@ -1983,6 +2005,7 @@ export async function setSessionOnCommandHandlerContext(
     session: Session,
 ) {
     context.session = session;
+    context.sessionTraceHistory.length = 0;
     await context.agents.close();
 
     await initializeMemory(context, session.getSessionDirPath());

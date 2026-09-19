@@ -12,6 +12,7 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     ChoiceManager,
+    createActionResultFromError,
     createActionResultFromTextDisplay,
     createStructuredResult,
     createYesNoChoiceResult,
@@ -24,6 +25,11 @@ export function instantiate(): AppAgent {
         updateAgentContext: updateListContext,
         executeAction: executeListAction,
         validateWildcardMatch: listValidateWildcardMatch,
+        cancelChoice: async (choiceId, context) => {
+            (
+                context.agentContext as ListActionContext
+            ).choiceManager.cancelChoice(choiceId);
+        },
         handleChoice: (choiceId, response, context) =>
             (
                 context as ActionContext<ListActionContext>
@@ -378,6 +384,12 @@ async function handleListAction(
             }
             if (listName === "") {
                 throw new Error("List name is empty");
+            }
+
+            if (store.getList(listName) === undefined) {
+                return createActionResultFromError(
+                    `List '${listName}' not found`,
+                );
             }
 
             store.removeItems(listName, items);

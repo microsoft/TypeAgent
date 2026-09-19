@@ -124,13 +124,14 @@ const repeat = 5;
 const concurrency = 1;
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
 
-// Flow-only agent schemas turned off in these translation-stability tests via
-// `@config schema --off` (product manifests are left untouched): "utility"'s
-// generic actions (webSearch / readFile) otherwise out-compete the agents under
-// test (browser.lookupAndAnswer, mcpfilesystem). The reasoning escape hatch is
+// Flow-only capabilities turned off in these translation-stability tests
+// (product manifests are left untouched): generic utility and PowerShell actions
+// otherwise out-compete the agents under test (browser.lookupAndAnswer,
+// mcpfilesystem, player). The reasoning escape hatch is
 // handled by execution.reasoning:"none" (below), NOT by disabling its schema —
 // disabling dispatcher.reasoning regressed unrelated player/mcpfs routing.
 const disabledSchemas = ["utility"];
+const disabledAgents = ["powershell"];
 
 // Per-attempt Jest timeout budget for a single request translation.
 const perAttemptTimeoutMs = 30000;
@@ -329,6 +330,15 @@ export async function defineTranslateTest(
                             `@config schema --off ${schema}`,
                         ),
                         `Failed to disable schema '${schema}'`,
+                    );
+                }
+                for (const agent of disabledAgents) {
+                    checkResultError(
+                        await awaitCommand(
+                            dispatcher,
+                            `@config agent --off ${agent}`,
+                        ),
+                        `Failed to disable agent '${agent}'`,
                     );
                 }
                 dispatchers.push(dispatcher);

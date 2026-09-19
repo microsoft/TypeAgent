@@ -41,6 +41,7 @@ import {
 } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 import { getAppAgentName } from "../internal.js";
+import { getStructuredExecution } from "../structuredAction/executionHooks.js";
 import {
     logCommandException,
     logRequestCompleted,
@@ -438,6 +439,9 @@ export async function processCommandNoLock(
             request: originalInput,
             error: e,
         });
+        if (getStructuredExecution(context) !== undefined) {
+            throw e;
+        }
     }
 }
 
@@ -504,7 +508,9 @@ export async function processCommand(
     attachments?: string[],
     options?: ProcessCommandOptions,
     parentContext?: Context,
+    work?: { kind: "structured-action"; run(): Promise<void> },
 ): Promise<CommandResult | undefined> {
+    const isCommand = originalInput.trimStart().startsWith("@");
     // Create the AbortController *before* acquiring the lock so that a
     // cancelCommandByClientId() call that arrives while we are queued can
     // already abort the controller that will drive this command.
@@ -521,8 +527,9 @@ export async function processCommand(
     // steps in later phases; the root span carries only the values known
     // at the outermost async boundary. Everything the wrapper receives is
     // an identifier, not user text - see setTypeAgentSpanAttributes.
-    const sessionId = context.session.sessionDirPath
-        ? getSessionName(context.session.sessionDirPath)
+    const sessionAtStart = context.session;
+    const sessionId = sessionAtStart.sessionDirPath
+        ? getSessionName(sessionAtStart.sessionDirPath)
         : undefined;
     const rootAttributes: {
         -readonly [K in keyof otel.TypeAgentSpanAttributes]: otel.TypeAgentSpanAttributes[K];
@@ -550,9 +557,7 @@ export async function processCommand(
                 ...(requestId.connectionId === undefined
                     ? {}
                     : { connectionId: requestId.connectionId }),
-                kind: originalInput.trimStart().startsWith("@")
-                    ? "command"
-                    : "request",
+                kind: isCommand ? "command" : "request",
                 attachmentCount: attachments?.length ?? 0,
             });
             try {
@@ -573,11 +578,16 @@ export async function processCommand(
                         : undefined;
                     context.clientIO.setUserRequest(requestId, originalInput);
                     try {
-                        await processCommandNoLock(
-                            originalInput,
-                            context,
-                            attachments,
-                        );
+                        if (work !== undefined) {
+                            abortController.signal.throwIfAborted();
+                            await work.run();
+                        } else {
+                            await processCommandNoLock(
+                                originalInput,
+                                context,
+                                attachments,
+                            );
+                        }
                     } catch (e: any) {
                         if (e.name === "AbortError") {
                             const activeSpan = trace.getActiveSpan();
@@ -601,6 +611,25 @@ export async function processCommand(
                         const result = endProcessCommand(requestId, context);
                         if (result !== undefined && rootTraceId !== undefined) {
                             result.traceId = rootTraceId;
+                        }
+                        if (
+                            rootTraceId !== undefined &&
+                            context.session === sessionAtStart
+                        ) {
+                            context.sessionTraceHistory.push({
+                                traceId: rootTraceId,
+                                requestId: requestId.requestId,
+                                kind: isCommand ? "command" : "request",
+                                isTraceOpen:
+                                    result?.actions?.some(
+                                        (action) =>
+                                            action.schemaName ===
+                                                "system.log" &&
+                                            action.actionName ===
+                                                "openLogTrace",
+                                    ) === true,
+                                completedAt: Date.now(),
+                            });
                         }
                         logRequestCompleted(
                             context.logger,

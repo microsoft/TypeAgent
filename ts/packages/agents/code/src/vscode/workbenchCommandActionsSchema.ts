@@ -6,7 +6,9 @@ export type CodeWorkbenchActions =
     | WorkbenchActionFilesOpenFolder
     | WorkbenchActionFilesCreateFolderFromExplorer
     | WorkbenchActionBuildRelatedFolderTask
-    | WorkbenchActionOpenInIntegratedTerminal;
+    | WorkbenchActionOpenInIntegratedTerminal
+    | WorkbenchActionRunWorkspaceCommand
+    | WorkbenchActionCancelWorkspaceCommand;
 
 export type WorkbenchActionFilesOpenFile = {
     actionName: "workbenchOpenFile";
@@ -63,5 +65,32 @@ export type WorkbenchActionOpenInIntegratedTerminal = {
         commandRiskLevel?: "low" | "medium" | "high";
         // Optional: reuse current terminal or open new one, default is true
         reuseExistingTerminal?: boolean;
+    };
+};
+
+// ACTION: Directly run an explicitly requested focused test, build, lint, or diagnostic command in an open workspace and return structured output. Use this instead of opening an integrated terminal when TypeAgent needs the command result.
+export type WorkbenchActionRunWorkspaceCommand = {
+    actionName: "runWorkspaceCommand";
+    parameters: {
+        // Exact shell command to run in an open workspace.
+        command: string;
+        // Workspace-root name or absolute path. Required for ambiguous multi-root workspaces.
+        workspaceFolder?: string;
+        // Optional path relative to the selected workspace root.
+        workingDirectory?: string;
+        // Caller-declared risk level. "high" is rejected. Advisory only: the enforced limits are the focused-tool allowlist and workspace-root path confinement.
+        commandRiskLevel?: "low" | "medium" | "high";
+        // Bounded execution time in milliseconds.
+        timeoutMs?: number;
+        // Optional caller-provided identifier; Code Agent assigns one when omitted.
+        executionId?: string;
+    };
+};
+
+// ACTION: Cancel an active structured workspace command by execution ID.
+export type WorkbenchActionCancelWorkspaceCommand = {
+    actionName: "cancelWorkspaceCommand";
+    parameters: {
+        executionId: string;
     };
 };

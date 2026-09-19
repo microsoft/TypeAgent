@@ -24,7 +24,36 @@ stack, and enables local telemetry in `config.local.yaml`.
 
 If the command changes `telemetry.local`, restart TypeAgent once so it picks
 up the configuration. Send a request, then open
-[Grafana](http://127.0.0.1:24319) to inspect traces and logs.
+[Grafana](http://127.0.0.1:24319) to inspect traces and logs via Explore > Tempo.
+Traces are available in the response metadata of every request (printed by default in the CLI and on-hover for other experiences).
+
+In TypeAgent, run:
+
+```
+@trace typeagent*
+@log profile diagnostic
+```
+
+The @trace typeagent\* command enables all debug logs in the typeagent namespace.
+The @log profile diagnostic command enables all structured + debug logs to be captured locally.
+After sending a request, jump straight to its trace in Grafana Explore:
+
+```
+@log open last
+```
+
+To open a specific trace by id (for example one copied from a JSONL record or
+a colleague's bug report):
+
+```
+@log open 0123456789abcdef0123456789abcdef
+```
+
+`@log open` checks the local Grafana endpoint and waits briefly for the exact
+trace to become queryable in Tempo before launching the browser. A stopped
+stack fails fast with a clear "start with `pnpm run telemetry:grafana`"
+message, and a trace that was not captured reports an error instead of opening
+an empty Explore view.
 
 For setup details, queries, cleanup, and troubleshooting, continue below.
 
@@ -192,6 +221,17 @@ In Grafana:
 1. Open **Explore**.
 2. Select the **Tempo** data source.
 3. Search for the trace ID.
+
+From TypeAgent, you can skip the manual Explore steps and jump straight to
+the trace:
+
+```
+@log open <trace-id>      # opens a specific trace
+@log open last            # opens the previous completed request's trace
+```
+
+The natural-language forms `open trace <id> in local Grafana`, `open last
+trace`, and `view the last action result in Grafana` map to the same action.
 
 If you do not have the trace ID, search for service
 `typeagent-local` and narrow the time range to when you sent the request.

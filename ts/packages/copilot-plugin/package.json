@@ -33,12 +33,14 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "html-to-text": "^9.0.5",
     "zod": "^3.25.0"
   },
   "devDependencies": {
+    "@github/copilot-sdk": "1.0.13",
     "@jest/globals": "^29.7.0",
     "@types/html-to-text": "^9.0.4",
     "@types/jest": "^29.5.7",

@@ -63,8 +63,16 @@ export type {
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
-    clientType?: "shell" | "extension"; // identifies the connecting client type
+    clientType?: "shell" | "extension" | "android"; // identifies the connecting client type
     conversationId?: string; // join a specific conversation by UUID. If omitted, connects to the default conversation.
+    /**
+     * Opt into isolated structured-action ownership. Requires conversationId.
+     * Resume only with the capability returned by an earlier join of that
+     * same live conversation. Never substitute a client-supplied identity.
+     */
+    structuredActions?: {
+        resumeToken?: string;
+    };
 };
 
 /**
@@ -153,6 +161,14 @@ export type JoinConversationResult = {
     /** Server-side queue snapshot at join time. Omitted when idle/empty;
      *  older clients ignore the field. */
     queueSnapshot?: QueueSnapshot;
+    /**
+     * Private, in-memory resume capability for this logical structured caller.
+     * Keep it out of logs, model prompts, history, and persisted metadata.
+     * A resumed join revokes structured access on the previous connection.
+     */
+    structuredActions?: {
+        resumeToken: string;
+    };
 };
 
 /**
@@ -280,11 +296,13 @@ export type AgentServerInvokeFunctions = {
      * The agent is removed automatically when the connection drops or leaves
      * the conversation.
      *
-     * The client must create its agent-rpc server on the `agent:<name>`
-     * channel (via createAgentRpcServer over the connection channel provider)
-     * before calling this. Rejects if an agent with `name` is already
-     * registered on the target conversation (e.g. a second client trying to
-     * register the same singleton agent).
+     * The client must create its agent-rpc server before calling this. Current
+     * clients pass a `registrationId` and host it on the derived unique channel;
+     * older clients use `agent:<name>`. A client that opts in with
+     * `multiInstance` may share the agent name with other clients carrying the
+     * same schema: the server keeps one registration with an instance per
+     * client, and routes each action to one of them. Without it, a second client
+     * is rejected as before.
      */
     registerClientAgent: (param: RegisterClientAgentParams) => Promise<void>;
     /** Unregister a previously registered client-hosted agent. */
@@ -298,16 +316,45 @@ export type RegisterClientAgentParams = {
     manifest: AppAgentManifest;
     agentInterface: AgentInterfaceFunctionName[];
     /**
+     * Identifies this RPC endpoint on the connection. When supplied, the
+     * endpoint is hosted on `agent:<name>:<registrationId>`, allowing a
+     * replacement to be validated while the previous endpoint remains live.
+     */
+    registrationId?: string;
+    /**
      * Target conversation. If omitted, the server uses the connection's single
      * joined conversation (and errors if the connection has joined none or
      * more than one).
      */
     conversationId?: string;
+    /**
+     * Stable, client-generated id for the device hosting this agent.
+     * Re-registering the same `instanceId` replaces its proxy in place, which
+     * is what makes a reconnect work. Omit it and the server derives one from
+     * the connection, so the client is a single instance that does not survive
+     * a reconnect.
+     */
+    instanceId?: string;
+    /** Human readable name, used when the server has to name the devices. */
+    displayName?: string;
+    /**
+     * Opt in to sharing this agent name with other clients. Off by default, so
+     * a client that expects to be the only host of `name` (the shell) keeps
+     * getting an error when a second one registers. When the client that
+     * creates the registration opts in, later clients carrying the same schema
+     * join it as extra instances instead of being rejected.
+     */
+    multiInstance?: boolean;
 };
 
 export type UnregisterClientAgentParams = {
     name: string;
     conversationId?: string;
+    /**
+     * Which instance to remove. The server only ever removes one the calling
+     * connection owns, so a client cannot unregister another client's.
+     */
+    instanceId?: string;
 };
 
 /**

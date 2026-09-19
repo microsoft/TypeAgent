@@ -40,6 +40,12 @@ import { TokenCounter } from "./tokenCounter.js";
 import { CompletionUsageStats } from "./apiTypes.js";
 import { registerProviderChatModel } from "./providerChatModelRegistry.js";
 import { otel } from "@typeagent/telemetry";
+import type { WireApi } from "@typeagent/config";
+import {
+    adapterFor,
+    type ModelRequest,
+    type ProviderAdapter,
+} from "./wireApiProvider/index.js";
 
 const debug = registerDebug("typeagent:aiclient:copilot");
 // Per-phase latency breakdown (client start / session create / send / total)
@@ -53,10 +59,12 @@ const debugTiming = registerDebug("typeagent:aiclient:copilot:timing");
  * callers only add `Content-Type`.
  */
 export interface CopilotEndpoint {
-    /** Full chat-completions URL (baseUrl + "/chat/completions"). */
+    /** Full model endpoint URL selected from the provider's wire API. */
     url: string;
     /** Resolved model id to send in the request body. */
     model: string;
+    /** Request and response wire format advertised by the Copilot endpoint. */
+    wireApi: WireApi;
     /** HTTP headers to send on every request (credential included). */
     headers: Record<string, string>;
     /** Epoch ms when the endpoint credential expires, if known. */
@@ -71,6 +79,19 @@ export interface CopilotEndpointProvider {
      * single acquisition.
      */
     getEndpoint(force?: boolean): Promise<CopilotEndpoint>;
+}
+
+/** A CAPI endpoint bound to one requested model. */
+export interface CopilotModelEndpoint {
+    baseUrl: string;
+    model: string;
+    headers: Record<string, string>;
+    expiresAt?: number | undefined;
+}
+
+/** Acquires and refreshes a model-specific CAPI endpoint. */
+export interface CopilotModelEndpointProvider {
+    getEndpoint(force?: boolean): Promise<CopilotModelEndpoint>;
 }
 
 /**
@@ -159,7 +180,13 @@ export interface CopilotClientOptions {
     cliUrl?: string | undefined;
 }
 
-function findCopilotPath(): string {
+function findCopilotPath(): string | undefined {
+    const configuredPath =
+        process.env.TYPEAGENT_COPILOT_CLI_PATH ?? process.env.COPILOT_CLI_PATH;
+    if (configuredPath) {
+        debug(`Using configured copilot CLI: ${configuredPath}`);
+        return configuredPath;
+    }
     try {
         const isWindows = process.platform === "win32";
         const command = isWindows ? "where copilot" : "which copilot";
@@ -168,9 +195,18 @@ function findCopilotPath(): string {
         debug(`Found copilot CLI at: ${first}`);
         return first;
     } catch {
-        debug("Could not find copilot CLI in PATH, falling back to 'copilot'");
-        return "copilot";
+        debug("Could not find copilot CLI in PATH, using SDK-managed runtime");
+        return undefined;
     }
+}
+
+export function createCopilotRuntimeConnection(
+    cliUrl: string | undefined,
+    cliPath: string | undefined,
+) {
+    return cliUrl
+        ? RuntimeConnection.forUri(cliUrl)
+        : RuntimeConnection.forStdio(cliPath ? { path: cliPath } : {});
 }
 
 async function getClient(
@@ -189,14 +225,16 @@ async function getClient(
     cachedCliPath = cliPath;
 
     startPromise = (async () => {
-        const target = cliUrl ? `server ${cliUrl}` : `CLI ${cliPath}`;
+        const target = cliUrl
+            ? `server ${cliUrl}`
+            : cliPath
+              ? `CLI ${cliPath}`
+              : "SDK-managed runtime";
         debug(`Starting CopilotClient (${target})`);
         const tStart = Date.now();
         const level = sdkLogLevel();
         const client = new CopilotClient({
-            connection: cliUrl
-                ? RuntimeConnection.forUri(cliUrl)
-                : RuntimeConnection.forStdio(cliPath ? { path: cliPath } : {}),
+            connection: createCopilotRuntimeConnection(cliUrl, cliPath),
             ...(level ? { logLevel: level } : {}),
         });
         try {
@@ -207,7 +245,7 @@ async function getClient(
                 `Failed to start GitHub Copilot CLI client (${target}). ` +
                     (cliUrl
                         ? `Ensure a Copilot CLI server is running and reachable at '${cliUrl}'.\n`
-                        : `Ensure 'copilot' is installed and authenticated (try 'copilot auth login').\n`) +
+                        : `Run 'node typeagent-serve.mjs setup --provider copilot', or install and authenticate a compatible 'copilot' CLI.\n`) +
                     `Underlying error: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
@@ -372,15 +410,42 @@ function isConcreteAvailableModel(model: ModelInfo): boolean {
     return model.id !== "auto" && model.policy?.state !== "disabled";
 }
 
-function versionedFamily(
-    modelId: string,
-): { family: string; version: number[] } | undefined {
-    const match = /^(.*?)-(\d+(?:\.\d+)*)$/.exec(modelId);
-    if (match === null) return undefined;
-    return {
-        family: match[1],
-        version: match[2].split(".").map(Number),
-    };
+type VersionedModelId = {
+    family: string;
+    version: number[];
+    tier: string | undefined;
+};
+
+function parseNumericVersion(segment: string): number[] | undefined {
+    const components = segment.split(".");
+    const version: number[] = [];
+    for (const component of components) {
+        if (component.length === 0) return undefined;
+        for (let i = 0; i < component.length; i++) {
+            const code = component.charCodeAt(i);
+            if (code < 48 || code > 57) return undefined;
+        }
+        const value = Number(component);
+        if (!Number.isSafeInteger(value)) return undefined;
+        version.push(value);
+    }
+    return version;
+}
+
+function versionedFamily(modelId: string): VersionedModelId | undefined {
+    const segments = modelId.split("-");
+    for (let i = 1; i < segments.length; i++) {
+        const version = parseNumericVersion(segments[i]);
+        if (version === undefined) continue;
+        const family = segments.slice(0, i).join("-");
+        if (family.length === 0) return undefined;
+        const tier = segments
+            .slice(i + 1)
+            .join("-")
+            .toLowerCase();
+        return { family, version, tier: tier.length === 0 ? undefined : tier };
+    }
+    return undefined;
 }
 
 function compareVersionsDescending(a: number[], b: number[]): number {
@@ -390,6 +455,56 @@ function compareVersionsDescending(a: number[], b: number[]): number {
         if (difference !== 0) return difference;
     }
     return 0;
+}
+
+function modelTierClass(tier: string | undefined): number | undefined {
+    switch (tier) {
+        case undefined:
+        case "sol":
+            return 3;
+        case "terra":
+        case "mini":
+            return 2;
+        case "luna":
+        case "nano":
+            return 1;
+        default:
+            return undefined;
+    }
+}
+
+function compareFamilyCandidates(
+    a: { model: ModelInfo; parsed: VersionedModelId },
+    b: { model: ModelInfo; parsed: VersionedModelId },
+    requested: VersionedModelId,
+): number {
+    const aExactTier = a.parsed.tier === requested.tier;
+    const bExactTier = b.parsed.tier === requested.tier;
+    if (aExactTier !== bExactTier) return aExactTier ? -1 : 1;
+
+    const requestedClass = modelTierClass(requested.tier);
+    const aClass = modelTierClass(a.parsed.tier);
+    const bClass = modelTierClass(b.parsed.tier);
+    if (requestedClass !== undefined) {
+        const aDistance =
+            aClass === undefined
+                ? Number.POSITIVE_INFINITY
+                : Math.abs(requestedClass - aClass);
+        const bDistance =
+            bClass === undefined
+                ? Number.POSITIVE_INFINITY
+                : Math.abs(requestedClass - bClass);
+        if (aDistance !== bDistance) return aDistance - bDistance;
+        if (aClass !== bClass) return (aClass ?? 0) - (bClass ?? 0);
+    }
+
+    const versionOrder = compareVersionsDescending(
+        a.parsed.version,
+        b.parsed.version,
+    );
+    return versionOrder !== 0
+        ? versionOrder
+        : a.model.id.localeCompare(b.model.id);
 }
 
 export function selectCopilotModel(
@@ -413,19 +528,17 @@ export function selectCopilotModel(
         const familyModels = available
             .map((model) => ({
                 model,
-                version: versionedFamily(model.id),
+                parsed: versionedFamily(model.id),
             }))
             .filter(
                 (
                     candidate,
                 ): candidate is {
                     model: ModelInfo;
-                    version: { family: string; version: number[] };
-                } => candidate.version?.family === requestedFamily.family,
+                    parsed: VersionedModelId;
+                } => candidate.parsed?.family === requestedFamily.family,
             )
-            .sort((a, b) =>
-                compareVersionsDescending(a.version.version, b.version.version),
-            );
+            .sort((a, b) => compareFamilyCandidates(a, b, requestedFamily));
         if (familyModels.length > 0) return familyModels[0].model;
     }
 
@@ -520,6 +633,7 @@ function buildSessionConfig(
 // package root) — only the fields the HTTP transport consumes.
 type SdkProviderEndpoint = {
     baseUrl: string;
+    wireApi?: string | undefined;
     apiKey?: string | undefined;
     headers?: { [k: string]: string | undefined } | undefined;
     sessionToken?:
@@ -535,7 +649,7 @@ const ENDPOINT_EXPIRY_SKEW_MS = 60_000;
 const endpointCache = new Map<string, CopilotEndpoint>();
 const endpointInflight = new Map<string, Promise<CopilotEndpoint>>();
 
-function endpointExpired(ep: CopilotEndpoint): boolean {
+function endpointExpired(ep: { expiresAt?: number | undefined }): boolean {
     return (
         ep.expiresAt !== undefined &&
         Date.now() >= ep.expiresAt - ENDPOINT_EXPIRY_SKEW_MS
@@ -544,7 +658,12 @@ function endpointExpired(ep: CopilotEndpoint): boolean {
 
 function mapEndpoint(ep: SdkProviderEndpoint, model: string): CopilotEndpoint {
     const base = ep.baseUrl.replace(/\/+$/, "");
-    const url = `${base}/chat/completions`;
+    const wireApi: WireApi =
+        ep.wireApi === "responses" ? "responses" : "chat_completions";
+    const url =
+        wireApi === "responses"
+            ? `${base}/responses`
+            : `${base}/chat/completions`;
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(ep.headers ?? {})) {
         if (v !== undefined) headers[k] = v;
@@ -564,7 +683,38 @@ function mapEndpoint(ep: SdkProviderEndpoint, model: string): CopilotEndpoint {
             if (!Number.isNaN(ms)) expiresAt = ms;
         }
     }
-    return { url, model, headers, expiresAt };
+    return { url, model, wireApi, headers, expiresAt };
+}
+
+function mapModelEndpoint(
+    ep: SdkProviderEndpoint,
+    model: string,
+): CopilotModelEndpoint {
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(ep.headers ?? {})) {
+        if (value !== undefined) headers[key] = value;
+    }
+    if (
+        ep.apiKey &&
+        headers.Authorization === undefined &&
+        headers.authorization === undefined
+    ) {
+        headers.Authorization = `Bearer ${ep.apiKey}`;
+    }
+    let expiresAt: number | undefined;
+    if (ep.sessionToken) {
+        headers[ep.sessionToken.header] = ep.sessionToken.token;
+        if (ep.sessionToken.expiresAt) {
+            const milliseconds = Date.parse(ep.sessionToken.expiresAt);
+            if (!Number.isNaN(milliseconds)) expiresAt = milliseconds;
+        }
+    }
+    return {
+        baseUrl: ep.baseUrl.replace(/\/+$/, ""),
+        model,
+        headers,
+        expiresAt,
+    };
 }
 
 // Acquire a fresh endpoint snapshot through a short-lived SDK session. Passing a
@@ -663,6 +813,69 @@ export function createCopilotEndpointProvider(
     };
 }
 
+/**
+ * Create an endpoint provider for a non-chat CAPI model. The SDK session uses
+ * the configured chat model, while getEndpoint binds returned credentials to
+ * `modelId`.
+ */
+export function createCopilotModelEndpointProvider(
+    settings: CopilotApiSettings,
+    modelId: string,
+): CopilotModelEndpointProvider {
+    let cached: CopilotModelEndpoint | undefined;
+    let inflight: Promise<CopilotModelEndpoint> | undefined;
+
+    return {
+        async getEndpoint(force = false): Promise<CopilotModelEndpoint> {
+            if (!force && cached && !endpointExpired(cached)) {
+                return cached;
+            }
+            if (force) cached = undefined;
+            if (inflight === undefined) {
+                inflight = acquireModelEndpoint(settings, modelId)
+                    .then((endpoint) => {
+                        cached = endpoint;
+                        return endpoint;
+                    })
+                    .finally(() => {
+                        inflight = undefined;
+                    });
+            }
+            return inflight;
+        },
+    };
+}
+
+async function acquireModelEndpoint(
+    settings: CopilotApiSettings,
+    modelId: string,
+): Promise<CopilotModelEndpoint> {
+    if (!process.env.COPILOT_ALLOW_GET_PROVIDER_ENDPOINT) {
+        process.env.COPILOT_ALLOW_GET_PROVIDER_ENDPOINT = "true";
+    }
+    const client = await getClient({
+        cliPath: settings.cliPath,
+        cliUrl: settings.cliUrl,
+    });
+    const resolved = await resolveModel(client, settings);
+    if (resolved === undefined) {
+        throw new CopilotEndpointUnavailableError(
+            `No Copilot chat model is available to acquire endpoint credentials for "${modelId}".`,
+        );
+    }
+    const session = await client.createSession(
+        buildSessionConfig(settings, {}, false, resolved),
+    );
+    try {
+        const endpoint = (await session.rpc.provider.getEndpoint({
+            modelId,
+        })) as SdkProviderEndpoint;
+        return mapModelEndpoint(endpoint, modelId);
+    } finally {
+        session.disconnect().catch(() => {});
+    }
+}
+
 // The copilot provider registers its chat-model factory here so that
 // openai.ts can dispatch to it via the registry without importing this
 // module directly (breaks a circular dependency).
@@ -695,18 +908,6 @@ export function createCopilotChatModel(
     );
 }
 
-// Minimal shape of the CAPI chat-completions response we consume.
-type CapiChatCompletion = {
-    choices?: Array<{ message?: { content?: string | null } | undefined }>;
-    usage?: CompletionUsageStats | undefined;
-};
-
-// Minimal shape of a streamed CAPI chat-completions chunk.
-type CapiChatCompletionChunk = {
-    choices?: Array<{ delta?: { content?: string | null } | undefined }>;
-    usage?: CompletionUsageStats | undefined;
-};
-
 function isAbort(err: unknown, signal?: AbortSignal): boolean {
     return (
         signal?.aborted === true ||
@@ -723,15 +924,12 @@ function hasImageContent(messages: PromptSection[]): boolean {
 }
 
 /**
- * Build a Copilot chat model that issues HTTP chat/completions calls against an
- * endpoint minted by `endpointProvider`, mirroring the Azure/OpenAI HTTP path
+ * Build a Copilot chat model that issues HTTP calls against an endpoint minted
+ * by `endpointProvider`, mirroring the Azure/OpenAI HTTP path
  * (single-member endpoint pool + shared restClient primitives) so retry,
  * timeout and throttling behavior matches the rest of the stack. A single
  * reactive endpoint refresh is attempted on a non-2xx (e.g. an expired
- * credential); on continued failure the request returns an error. Vision input
- * (image_url content) is passed through natively since CAPI's chat/completions
- * is OpenAI-compatible; for streaming requests carrying images, token-usage
- * reporting is disabled (see completeStream).
+ * credential); on continued failure the request returns an error.
  *
  * Exported for tests, which inject a stub `endpointProvider`.
  */
@@ -742,10 +940,10 @@ export function createCopilotTransportModel(
     tags: string[] | undefined,
     endpointProvider: CopilotEndpointProvider,
 ): ChatModelWithStreaming {
-    completionSettings ??= {};
-    completionSettings.n ??= 1;
+    const resolvedCompletionSettings = completionSettings ?? {};
+    resolvedCompletionSettings.n ??= 1;
     // Match the Azure default; translation calls want deterministic output.
-    completionSettings.temperature ??= 0;
+    resolvedCompletionSettings.temperature ??= 0;
 
     // A one-member pool so we reuse the shared restClient retry/throttle path.
     // `endpoint` is overwritten per request from the freshly-resolved endpoint
@@ -758,38 +956,76 @@ export function createCopilotTransportModel(
     );
 
     const model: ChatModelWithStreaming = {
-        completionSettings,
+        completionSettings: resolvedCompletionSettings,
         completionCallback,
         complete,
         completeStream,
     };
     return model;
 
-    function buildRequest(params: any): BuildPoolRequest {
-        return async (member) => {
-            let ep: CopilotEndpoint;
-            try {
-                ep = await endpointProvider.getEndpoint();
-            } catch (err) {
-                return classifiedFailure(
-                    `getEndpoint failed: ${
-                        err instanceof Error ? err.message : String(err)
-                    }`,
-                    err,
-                );
-            }
-            member.settings.endpoint = ep.url;
-            return success({
-                headers: { ...ep.headers },
-                body: { ...params, model: ep.model },
-            });
-        };
-    }
-
-    function getParams(messages: PromptSection[]): any {
+    function makeRequest(
+        messages: PromptSection[],
+        stream: boolean,
+        streamOptions?: Record<string, unknown>,
+    ): {
+        build: BuildPoolRequest;
+        getAdapter: () => ProviderAdapter | undefined;
+        getModelRequest: () => ModelRequest | undefined;
+        getBody: () => unknown;
+    } {
+        let adapter: ProviderAdapter | undefined;
+        let modelRequest: ModelRequest | undefined;
+        let body: unknown;
         return {
-            messages,
-            ...completionSettings,
+            build: async (member) => {
+                let ep: CopilotEndpoint;
+                try {
+                    ep = await endpointProvider.getEndpoint();
+                } catch (err) {
+                    return classifiedFailure(
+                        `getEndpoint failed: ${
+                            err instanceof Error ? err.message : String(err)
+                        }`,
+                        err,
+                    );
+                }
+                adapter = adapterFor(ep.wireApi);
+                let wireCompletionSettings = resolvedCompletionSettings;
+                if (ep.wireApi === "responses") {
+                    const {
+                        temperature: _temperature,
+                        max_tokens,
+                        max_completion_tokens,
+                        ...remainingSettings
+                    } = resolvedCompletionSettings;
+                    const maxOutputTokens = max_completion_tokens ?? max_tokens;
+                    wireCompletionSettings = {
+                        ...remainingSettings,
+                        ...(maxOutputTokens !== undefined
+                            ? { max_completion_tokens: maxOutputTokens }
+                            : {}),
+                    };
+                }
+                const nextModelRequest: ModelRequest = {
+                    messages,
+                    completionSettings: wireCompletionSettings,
+                    defaultParams: { model: ep.model },
+                    disableResponseFormat: false,
+                    modelName: ep.model,
+                    stream,
+                    streamOptions,
+                };
+                modelRequest = nextModelRequest;
+                body = adapter.buildRequestBody(nextModelRequest);
+                member.settings.endpoint = ep.url;
+                return success({
+                    headers: { ...ep.headers },
+                    body,
+                });
+            },
+            getAdapter: () => adapter,
+            getModelRequest: () => modelRequest,
+            getBody: () => body,
         };
     }
 
@@ -816,8 +1052,7 @@ export function createCopilotTransportModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
-        const params = getParams(messages);
-        const request = buildRequest(params);
+        const request = makeRequest(messages, false);
         const options = {
             retryPauseMs: settings.retryPauseMs,
             signal,
@@ -827,7 +1062,7 @@ export function createCopilotTransportModel(
 
         let result: Result<unknown>;
         try {
-            result = await callJsonApiWithPool(pool, request, options);
+            result = await callJsonApiWithPool(pool, request.build, options);
         } catch (err) {
             return isAbort(err, signal)
                 ? cancelledFailure()
@@ -846,7 +1081,11 @@ export function createCopilotTransportModel(
                 await endpointProvider.getEndpoint(true);
             } catch {}
             try {
-                result = await callJsonApiWithPool(pool, request, options);
+                result = await callJsonApiWithPool(
+                    pool,
+                    request.build,
+                    options,
+                );
             } catch (err) {
                 return isAbort(err, signal)
                     ? cancelledFailure()
@@ -860,26 +1099,31 @@ export function createCopilotTransportModel(
             }
         }
 
-        const data = result.data as CapiChatCompletion;
-        if (!data.choices || data.choices.length === 0) {
-            return error("Copilot chat call returned no choices");
+        const adapter = request.getAdapter();
+        const modelRequest = request.getModelRequest();
+        if (adapter === undefined || modelRequest === undefined) {
+            return error("Copilot request adapter was not initialized");
         }
-        const content = data.choices[0].message?.content ?? "";
+        const data = result.data;
+        const parsed = adapter.parseResponse(data, modelRequest);
+        if (!parsed.success) return parsed;
+        const content = parsed.data;
 
         if (model.completionCallback) {
-            model.completionCallback(params, data);
+            model.completionCallback(request.getBody(), data);
         }
+        const usage = adapter.extractUsage(data);
         try {
             if (settings.enableModelRequestLogging && logFn) {
                 logFn({
                     prompt: messages,
                     response: content,
-                    tokenUsage: data.usage,
+                    tokenUsage: usage,
                     tags,
                 });
             }
         } catch {}
-        reportUsage(data.usage, usageCallback);
+        reportUsage(usage, usageCallback);
 
         debugTiming(`complete total ${Date.now() - tTotal}ms`);
         return success(content);
@@ -907,18 +1151,15 @@ export function createCopilotTransportModel(
         // prompt carries images. Vision input itself streams fine.
         const includeUsage = !hasImageContent(messages);
 
-        const params = {
-            ...getParams(messages),
-            stream: true,
-            stream_options: { include_usage: includeUsage },
-        };
-        const request = buildRequest(params);
+        const request = makeRequest(messages, true, {
+            include_usage: includeUsage,
+        });
         const options = {
             retryPauseMs: settings.retryPauseMs,
             signal,
         };
 
-        let result = await callApiWithPool(pool, request, options);
+        let result = await callApiWithPool(pool, request.build, options);
         if (!result.success) {
             debug(
                 `stream connect failed (${result.message}); refreshing endpoint`,
@@ -926,13 +1167,22 @@ export function createCopilotTransportModel(
             try {
                 await endpointProvider.getEndpoint(true);
             } catch {}
-            result = await callApiWithPool(pool, request, options);
+            result = await callApiWithPool(pool, request.build, options);
             if (!result.success) {
                 return result;
             }
         }
 
         const response = result.data;
+        const adapter = request.getAdapter();
+        const modelRequest = request.getModelRequest();
+        const decoder =
+            adapter !== undefined && modelRequest !== undefined
+                ? adapter.createStreamDecoder?.(modelRequest)
+                : undefined;
+        if (adapter === undefined || decoder === undefined) {
+            return error("Copilot streaming adapter was not initialized");
+        }
         return {
             success: true,
             data: (async function* () {
@@ -956,22 +1206,28 @@ export function createCopilotTransportModel(
                         } catch {}
                         break;
                     }
-                    let chunk: CapiChatCompletionChunk;
+                    let piece;
                     try {
-                        chunk = JSON.parse(evt.data) as CapiChatCompletionChunk;
+                        piece = decoder.push(evt.data);
                     } catch {
                         // Ignore non-JSON keep-alive/comment lines.
                         continue;
                     }
-                    const delta = chunk.choices?.[0]?.delta?.content;
-                    if (delta) {
-                        fullResponseText += delta;
-                        yield delta;
+                    if (piece.text) {
+                        fullResponseText += piece.text;
+                        yield piece.text;
                     }
-                    if (chunk.usage) {
-                        tokenUsage = chunk.usage;
-                        reportUsage(chunk.usage, usageCallback);
+                    for (const text of piece.texts ?? []) {
+                        if (text !== undefined) {
+                            fullResponseText += text;
+                            yield text;
+                        }
                     }
+                    if (piece.usage) {
+                        tokenUsage = piece.usage;
+                        reportUsage(piece.usage, usageCallback);
+                    }
+                    if (piece.error) throw piece.error;
                 }
             })(),
         };

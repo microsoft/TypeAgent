@@ -149,11 +149,14 @@ export function deriveMatchKind(m: {
 export interface InstallPreviewMatch {
     readonly source: string;
     readonly sourceKind?: string; // path / catalog / feed, for the preview message
+    readonly sourceIdentity?: string; // resolved source configuration, used only for plan drift checks
+    readonly sourceGeneration?: number; // process-local source instance, used only for plan drift checks
     readonly matchKind: InstallMatchKind;
     readonly name: string; // dispatcher name it would install as
     readonly packageName?: string;
     readonly path?: string;
     readonly ref?: string; // durable handle
+    readonly version?: string; // concrete artifact version, when the source resolves one
 }
 
 /**
@@ -237,6 +240,9 @@ export interface InstalledAgentRecord {
     // Opaque, kind-specific metadata interpreted by the loader named by `kind`
     // (e.g. npm: `{ execMode }`).
     loaderConfig?: Record<string, unknown>;
+    // Group installs persist this so every session attaches the provider
+    // disabled unless that session already has an explicit preference.
+    initiallyDisabled?: boolean;
     // Which kind of extension this record installs; absent means "agent" (the
     // historical default, so every pre-existing agents.json record keeps its
     // meaning). "mcp" records are persisted in the separate MCP server store,
@@ -264,6 +270,9 @@ export interface ResolveResult {
     record: InstalledAgentRecord; // name already assigned
     matchedByName: boolean;
     packageName?: string;
+    sourceKind: string;
+    sourceIdentity: string;
+    sourceGeneration: number;
 }
 
 /**

@@ -16,6 +16,7 @@ import {
     readJson,
     resolveExportTarget,
     runtimeDependencyVersions,
+    tsRoot,
     workspacePackages,
     writeJson,
 } from "./bundleUtils.mjs";
@@ -215,6 +216,8 @@ function writeGeneratedPackage(
     const generatedPackage = {
         name: pkg.name,
         version: pkg.version,
+        packageManager: readJson(path.join(tsRoot, "package.json"))
+            .packageManager,
         description: pkg.description,
         license: pkg.license,
         author: pkg.author,

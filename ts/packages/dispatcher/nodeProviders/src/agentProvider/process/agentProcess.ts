@@ -3,6 +3,7 @@
 
 import registerDebug from "debug";
 import { AppAgent } from "@typeagent/agent-sdk";
+import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import {
     AgentControlMessage,
     AgentInterfaceFunctionName,
@@ -11,6 +12,7 @@ import {
 import { createChannelProvider } from "@typeagent/agent-rpc/channel";
 import { otel } from "@typeagent/telemetry";
 import { loadAgentDebug } from "./agentDebug.js";
+import { selectAgentProcessTelemetry } from "./agentProcessTelemetry.js";
 
 //=================================================================
 // Get arguments from command line
@@ -41,14 +43,9 @@ let exitPromise: Promise<void> | undefined;
 
 function exitAgentProcess(exitCode: number, message: string): Promise<void> {
     debug(message);
-    exitPromise ??= otel
-        .shutdownTelemetry()
-        .catch((error) => {
-            debug(`Telemetry shutdown failed: ${error}`);
-        })
-        .then(() => {
-            process.exit(exitCode);
-        });
+    exitPromise ??= otel.shutdownTelemetry().finally(() => {
+        process.exit(exitCode);
+    });
     return exitPromise;
 }
 
@@ -73,6 +70,8 @@ process.on("SIGINT", () => {
 });
 
 async function startAgentProcess(): Promise<void> {
+    initRuntimeConfigFromProcessEnv();
+
     const loadedAgentDebug = loadAgentDebug(modulePath, registerDebug);
     const agentDebug = loadedAgentDebug?.debug;
     if (loadedAgentDebug !== undefined) {
@@ -80,13 +79,9 @@ async function startAgentProcess(): Promise<void> {
             `'${agentName}': Agent debug trace loaded. ${loadedAgentDebug.path}`,
         );
     }
-    const debugModules =
-        agentDebug === undefined
-            ? [registerDebug]
-            : [registerDebug, agentDebug];
     await otel.initTelemetry({
         processName: `agent-${agentName}`,
-        debugModules,
+        config: selectAgentProcessTelemetry(otel.resolveTelemetryConfig()),
     });
 
     //=================================================================

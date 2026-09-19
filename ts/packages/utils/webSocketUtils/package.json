@@ -14,6 +14,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./originAllowlist": "./dist/originAllowlist.js",
+    "./loopback": "./dist/loopback.js",
     "./heartbeat": "./dist/heartbeat.js",
     "./rpcChannel": "./dist/rpcChannel.js",
     "./backoff": "./dist/backoff.js"

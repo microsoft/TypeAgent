@@ -10,6 +10,7 @@ import {
 import {
     CommandHandlerContext,
     ensureCommandResult,
+    getRequestId,
 } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import {
@@ -27,7 +28,6 @@ import {
 import registerDebug from "debug";
 import os from "node:os";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { existsSync, mkdtempSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
@@ -69,8 +69,16 @@ import {
     type ReasoningFormArgs,
 } from "./askUserForm.js";
 import {
-    findInstallableAgents,
-    formatInstallableAgents,
+    ASK_USER_KIND_DESCRIPTION,
+    ASK_USER_KIND_VALUES,
+    resolveAskUserSource,
+} from "./askUserSource.js";
+import {
+    findAgentAvailabilityOptions,
+    formatAgentAvailabilityOptions,
+    getReasoningActionSchemas,
+    FIND_UNAVAILABLE_AGENT_TOOL_DESCRIPTION,
+    FIND_UNAVAILABLE_AGENT_SYSTEM_PROMPT,
 } from "./installableAgents.js";
 import {
     emitReasoningToolCall,
@@ -86,6 +94,13 @@ import {
     pruneStaleCodingSessions,
 } from "./codingSessionLifecycle.js";
 import { getCodingAttachmentPaths } from "./codingContext.js";
+import {
+    REASONING_DENY,
+    getReasoningPermissionChoices,
+    hasCachedReasoningApproval,
+    recordReasoningApprovalChoice,
+    type ReasoningPermissionPolicyRequest,
+} from "./reasoningPermissionPolicy.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -165,7 +180,7 @@ async function sendMessageAndWaitWithCancellation(
     }
 }
 
-const FALLBACK_MODEL = "claude-opus-4.8";
+const FALLBACK_MODEL = "gpt-5.6-sol";
 
 // Default reasoning effort when COPILOT_REASONING_EFFORT is unset/invalid.
 // "high" makes the model more likely to actually run verification tool calls
@@ -201,16 +216,22 @@ export function resolveReasoningTimeoutMs(): number {
         : Math.min(parsed, MAX_SETTIMEOUT_MS);
 }
 
+export function resolveCopilotReasoningModel(
+    configured: string | undefined,
+    environment: string | undefined = process.env.COPILOT_REASONING_MODEL,
+): string {
+    return configured?.trim() || environment?.trim() || FALLBACK_MODEL;
+}
+
 function resolveModel(context: ActionContext<CommandHandlerContext>): string {
     // Live @config override wins, then the COPILOT_REASONING_MODEL env var
     // (from config.yaml), then the built-in fallback.
     const configured =
         context.sessionContext.agentContext.session.getConfig().execution
             .reasoningModel;
-    return (
-        configured?.trim() ||
-        process.env.COPILOT_REASONING_MODEL?.trim() ||
-        FALLBACK_MODEL
+    return resolveCopilotReasoningModel(
+        configured,
+        process.env.COPILOT_REASONING_MODEL,
     );
 }
 
@@ -330,74 +351,6 @@ function getRepoRoot(): string {
 }
 
 /**
- * Locate the platform-specific native copilot binary bundled by the SDK.
- * Navigates pnpm's virtual store: resolve @github/copilot-sdk, find the
- * @github/copilot sibling directory, follow its symlink to the real path,
- * then locate the platform binary (@github/copilot-<platform>-<arch>)
- * among the real copilot package's siblings.
- */
-function findBundledNativeCli(): string | undefined {
-    const binaryName = process.platform === "win32" ? "copilot.exe" : "copilot";
-    const require = createRequire(import.meta.url);
-    try {
-        // Resolve our direct dependency @github/copilot-sdk. Its install
-        // location is stable across machines (always under the repo's
-        // node_modules), but its entry-point *depth* is not — copilot-sdk@0.2.0
-        // nests the entry deeper than earlier versions, which broke a
-        // hard-coded "../.." climb to the @github scope dir. Instead, walk up
-        // from the resolved entry to the enclosing "@github" directory,
-        // bounded to the repo root so we never depend on anything above it.
-        // Works for both pnpm's isolated store and a hoisted node_modules
-        // layout. (@github/copilot itself is not require.resolve-able — its
-        // package "exports" blocks both the main entry and package.json.)
-        const sdkEntry = require.resolve("@github/copilot-sdk");
-        const repoRoot = getRepoRoot();
-        let scopeDir = path.dirname(sdkEntry);
-        while (
-            path.basename(scopeDir) !== "@github" &&
-            scopeDir.startsWith(repoRoot) &&
-            path.dirname(scopeDir) !== scopeDir
-        ) {
-            scopeDir = path.dirname(scopeDir);
-        }
-        if (
-            path.basename(scopeDir) !== "@github" ||
-            !scopeDir.startsWith(repoRoot)
-        ) {
-            debug(`Could not locate @github scope dir from: ${sdkEntry}`);
-            return undefined;
-        }
-
-        // @github/copilot is a (transitive) dependency of the SDK, linked as a
-        // sibling of copilot-sdk under the @github scope. Follow the symlink to
-        // its real location; the platform binary package
-        // (@github/copilot-<platform>-<arch>) is a sibling there.
-        const copilotDir = path.join(scopeDir, "copilot");
-        if (!existsSync(copilotDir)) {
-            debug(`@github/copilot not found at: ${copilotDir}`);
-            return undefined;
-        }
-        const realGithubDir = path.dirname(realpathSync(copilotDir));
-        const candidate = path.join(
-            realGithubDir,
-            `copilot-${process.platform}-${process.arch}`,
-            binaryName,
-        );
-        if (existsSync(candidate)) {
-            debug(`Found bundled native CLI: ${candidate}`);
-            return candidate;
-        }
-        debug(`Platform binary not found at: ${candidate}`);
-    } catch (err) {
-        debug(
-            `Could not resolve bundled native CLI for ${process.platform}-${process.arch}:`,
-            err,
-        );
-    }
-    return undefined;
-}
-
-/**
  * Create + start a Copilot client. Go through getCopilotClient(), which
  * memoizes the in-flight promise so we never start two CLIs concurrently.
  */
@@ -408,15 +361,6 @@ async function createCopilotClient(
     const repoRoot = getRepoRoot();
     debug(`Repo root: ${repoRoot}`);
     debug(`Parent dir: ${path.resolve(repoRoot, "..")}`);
-
-    // When running inside Electron, process.execPath is the Electron
-    // binary — not node. The SDK's default getBundledCliPath() resolves
-    // to a .js entry point which the SDK then spawns via
-    // process.execPath, causing the CLI to exit immediately. To avoid
-    // this, resolve the platform-specific native binary from the
-    // bundled @github/copilot-<platform> package and pass it as
-    // cliPath so the SDK spawns it directly (no node needed).
-    const cliPath = await findBundledNativeCli();
 
     // Isolate the CLI from the user's ~/.claude/settings.json.
     // The Copilot CLI binary internally uses the Anthropic API and
@@ -432,17 +376,7 @@ async function createCopilotClient(
     );
 
     const client = new CopilotClient({
-        connection: RuntimeConnection.forStdio({
-            ...(cliPath ? { path: cliPath } : {}),
-            args: [
-                "--add-dir",
-                repoRoot,
-                "--add-dir",
-                path.resolve(repoRoot, ".."),
-                "--allow-all-urls",
-                "--allow-all-tools",
-            ],
-        }),
+        connection: RuntimeConnection.forStdio(),
         env: {
             ...process.env,
             CLAUDE_CONFIG_DIR: isolatedConfigDir,
@@ -476,7 +410,7 @@ async function createCopilotClient(
     } catch (err) {
         debug("Failed to start Copilot client:", err);
         throw new Error(
-            `Failed to start Copilot CLI client. Make sure 'copilot' command is available and authenticated.\n` +
+            `Failed to start the Copilot SDK runtime. Verify the SDK runtime package is installed and Copilot is authenticated.\n` +
                 `Error: ${err instanceof Error ? err.message : String(err)}`,
         );
     }
@@ -659,8 +593,8 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
             return `**Tool:** \`remember\``;
     }
 
-    // Built-in tools (shell, github/fs/*, github/search/*, ...): show the
-    // primary argument so parallel or similar calls are distinguishable
+    // Built-in tools (view, edit, create, glob, grep, powershell, bash, ...):
+    // show the primary argument so parallel or similar calls are distinguishable
     // instead of rendering as identical "Tool: <name>" bubbles. The tool name
     // is rendered as inline code so it reads as a highlighted chip (matching a
     // single tool call and the folded-batch summary).
@@ -751,11 +685,34 @@ export function getCopilotPermissionDefault(
     return undefined;
 }
 
+// Build the provider-neutral policy request from a Copilot SDK
+// PermissionRequest. Managed-policy and sandbox-bypass requests must
+// bypass every cache and every session/request-scoped grant, which the
+// policy enforces when `cacheEligible` is false.
+function buildCopilotPolicyRequest(
+    request: PermissionRequest,
+    requestId: string,
+): ReasoningPermissionPolicyRequest {
+    const mandatory =
+        request.managedApprovalRequired === true ||
+        requestsSandboxBypass(request);
+    const sessionEligible =
+        !mandatory && canOfferCopilotSessionApproval(request);
+    return {
+        requestId,
+        permissionIdentity: getCopilotPermissionIdentity(request),
+        cacheEligible: !mandatory,
+        sessionEligible,
+        blanketSessionEligible: sessionEligible,
+    };
+}
+
 function createCopilotPermissionHandler(
     context: ActionContext<CommandHandlerContext>,
     allowedRoot?: string,
 ): PermissionHandler {
     return async (request) => {
+        const agentContext = context.sessionContext.agentContext;
         const scopeViolation = getCopilotPermissionScopeViolation(
             request,
             allowedRoot,
@@ -766,26 +723,171 @@ function createCopilotPermissionHandler(
                 feedback: scopeViolation,
             };
         }
+        const requestId = getRequestId(agentContext);
+        const policyRequest = buildCopilotPolicyRequest(
+            request,
+            requestId.requestId,
+        );
+        if (hasCachedReasoningApproval(agentContext, policyRequest)) {
+            return { kind: "approve-once" };
+        }
         const safe = getCopilotPermissionDefault(request);
         if (safe !== undefined) {
             return safe;
         }
-        const identity =
-            request.kind === "mcp"
-                ? `MCP tool '${request.serverName}/${request.toolName}'`
-                : `Copilot ${request.kind} operation`;
-        const choice = await context.sessionContext.popupQuestion(
-            `${identity} requests sensitive permission. Allow this request once?`,
-            ["Allow once", "Deny"],
-            1,
+        const choices = getReasoningPermissionChoices(policyRequest);
+        const choiceIndex = await agentContext.clientIO.question(
+            requestId,
+            formatCopilotPermissionRequest(request),
+            choices,
+            choices.indexOf(REASONING_DENY),
+            `copilotPermission:${policyRequest.permissionIdentity}`,
         );
-        return choice === 0
-            ? { kind: "approve-once" }
+        const choice = choices[choiceIndex];
+        const allowed = recordReasoningApprovalChoice(
+            agentContext,
+            policyRequest,
+            choice,
+        );
+        // The Copilot SDK also offers an `approve-for-session` result that
+        // caches the decision inside the Copilot session. We don't return
+        // it because that cache is unreachable from `@allow off`; the host
+        // policy above tracks session grants instead.
+        return allowed
+            ? { kind: "approve-once", approvedInteractively: true }
             : {
                   kind: "reject",
                   feedback: "Denied by the TypeAgent host permission policy.",
               };
     };
+}
+
+// Adapter shim over the shared policy: exposed for tests and (transitively)
+// callers that need Copilot's choice list. Adapters own translation from
+// their SDK's request into the policy's normalized shape.
+export function getCopilotPermissionChoices(
+    request: PermissionRequest,
+): string[] {
+    return getReasoningPermissionChoices(
+        buildCopilotPolicyRequest(request, "__preview__"),
+    );
+}
+
+function requestsSandboxBypass(request: PermissionRequest): boolean {
+    return (
+        "requestSandboxBypass" in request &&
+        request.requestSandboxBypass === true
+    );
+}
+
+function canOfferCopilotSessionApproval(request: PermissionRequest): boolean {
+    if ("canOfferSessionApproval" in request) {
+        return request.canOfferSessionApproval === true;
+    }
+    return request.kind === "mcp" || request.kind === "custom-tool";
+}
+
+function getCopilotPermissionIdentity(request: PermissionRequest): string {
+    switch (request.kind) {
+        case "mcp":
+            return `mcp:${request.serverName}/${request.toolName}`;
+        case "custom-tool":
+            return `custom-tool:${request.toolName}`;
+        case "shell":
+            return `shell:${request.commands
+                .map(({ identifier }) => identifier)
+                .sort()
+                .join(",")}`;
+        default:
+            return request.kind;
+    }
+}
+
+export function formatCopilotPermissionRequest(
+    request: PermissionRequest,
+): string {
+    const lines: string[] = [];
+    switch (request.kind) {
+        case "mcp":
+            lines.push(
+                `Copilot wants to run MCP tool '${request.serverName}/${request.toolName}'.`,
+            );
+            if (request.args !== undefined) {
+                lines.push(
+                    `Arguments:\n${formatPermissionDetail(request.args)}`,
+                );
+            }
+            break;
+        case "custom-tool":
+            lines.push(
+                `Copilot wants to run custom tool '${request.toolName}'.`,
+            );
+            break;
+        case "shell":
+            lines.push(
+                `Copilot wants to run a shell command:\n${formatPermissionDetail(request.fullCommandText)}`,
+                `Reason: ${request.intention}`,
+            );
+            if (request.possibleUrls.length > 0) {
+                lines.push(
+                    `May access: ${request.possibleUrls.map(({ url }) => url).join(", ")}`,
+                );
+            }
+            if (request.warning) {
+                lines.push(`Warning: ${request.warning}`);
+            }
+            break;
+        case "read":
+            lines.push(
+                `Copilot wants to read:\n${request.path}`,
+                `Reason: ${request.intention}`,
+            );
+            break;
+        case "write":
+            lines.push(
+                `Copilot wants to write:\n${request.fileName}`,
+                `Reason: ${request.intention}`,
+                `Proposed change:\n${formatPermissionDetail(request.diff)}`,
+            );
+            break;
+        case "url":
+            lines.push(
+                `Copilot wants to access:\n${request.url}`,
+                `Reason: ${request.intention}`,
+            );
+            if (request.redirectedFrom) {
+                lines.push(`Redirected from: ${request.redirectedFrom}`);
+            }
+            break;
+        default:
+            lines.push(
+                `Copilot requests permission for a ${request.kind} operation.`,
+            );
+    }
+    if (
+        "requestSandboxBypass" in request &&
+        request.requestSandboxBypass === true
+    ) {
+        lines.push(
+            `ELEVATED RISK: This operation will run outside the sandbox.${
+                request.requestSandboxBypassReason
+                    ? `\nReason: ${request.requestSandboxBypassReason}`
+                    : ""
+            }`,
+        );
+    }
+    if (request.managedApprovalRequired === true) {
+        lines.push("Managed policy requires an explicit decision.");
+    }
+    return lines.join("\n\n");
+}
+
+function formatPermissionDetail(value: unknown, maxLength = 4000): string {
+    const text =
+        typeof value === "string" ? value : JSON.stringify(value, undefined, 2);
+    return text.length <= maxLength
+        ? text
+        : `${text.slice(0, maxLength)}\n… (truncated)`;
 }
 
 function isPathWithinRoot(candidatePath: string, root: string): boolean {
@@ -1125,12 +1227,67 @@ export async function executeCodingRequest(
     }
 }
 
+// These are runtime tool names, not the obsolete github/fs/* or shell aliases.
+// Restrict matches to built-ins; onPermissionRequest still authorizes each call.
+export const COPILOT_NATIVE_BUILTIN_TOOLS: readonly string[] = [
+    "builtin:view",
+    "builtin:edit",
+    "builtin:create",
+    "builtin:apply_patch",
+    "builtin:str_replace_editor",
+    "builtin:glob",
+    "builtin:grep",
+    "builtin:rg",
+    "builtin:powershell",
+    "builtin:read_powershell",
+    "builtin:stop_powershell",
+    "builtin:list_powershell",
+    "builtin:bash",
+    "builtin:read_bash",
+    "builtin:stop_bash",
+    "builtin:list_bash",
+    "builtin:web_fetch",
+];
+
+const COPILOT_ALWAYS_ON_CUSTOM_TOOLS: readonly string[] = [
+    "discover_actions",
+    "execute_action",
+    "search_memory",
+    "remember",
+    "get_conversation_info",
+    "read_conversation",
+    "list_conversations",
+    "search_conversations",
+    "get_user_context",
+    "find_installable_agent",
+    "ask_user",
+    "ask_user_form",
+];
+
+const COPILOT_SUBAGENT_CUSTOM_TOOLS: readonly string[] = [
+    "create_subagent",
+    "invoke_subagent",
+    "list_subagents",
+    "stop_subagent",
+];
+
+export function buildCopilotAvailableTools(opts: {
+    subagentsEnabled: boolean;
+}): string[] {
+    return [
+        ...COPILOT_ALWAYS_ON_CUSTOM_TOOLS,
+        ...(opts.subagentsEnabled ? COPILOT_SUBAGENT_CUSTOM_TOOLS : []),
+        ...COPILOT_NATIVE_BUILTIN_TOOLS,
+    ];
+}
+
 /**
- * Get Copilot SDK session configuration with TypeAgent tools
- * (Mirrors getClaudeOptions from claude.ts)
+ * Get Copilot SDK session configuration with TypeAgent tools.
+ * Mirrors getClaudeOptions from claude.ts.
  */
 function getCopilotSessionConfig(
     context: ActionContext<CommandHandlerContext>,
+    workingDirectory?: string,
 ): SessionConfig {
     const systemContext = context.sessionContext.agentContext;
     // Capture the request's clientIO now, before execute_action transiently
@@ -1142,7 +1299,7 @@ function getCopilotSessionConfig(
     // routing can prefer THIS client's editor context over other clients on
     // the same conversation.
     const originatorRequestId = systemContext.currentRequestId;
-    const activeSchemas = systemContext.agents.getActiveSchemas();
+    const activeSchemas = getReasoningActionSchemas(systemContext);
 
     // Build validators for action schemas (same as Claude)
     const schemaDescriptions: string[] = [];
@@ -1650,21 +1807,16 @@ function getCopilotSessionConfig(
     });
 
     const findInstallableAgentTool = defineTool("find_installable_agent", {
-        description: [
-            "List agents that are NOT currently installed but can be installed on demand from the configured sources.",
-            "Call this when no active agent (from discover_actions) can fulfill the user's request, to check whether an installable agent could.",
-            "Returns each candidate's name, description, and exact `@package install` command.",
-            "If one clearly matches the request, tell the user it exists and give them the install command - do NOT install it yourself.",
-        ].join("\n"),
+        description: FIND_UNAVAILABLE_AGENT_TOOL_DESCRIPTION,
         parameters: {
             type: "object",
             properties: {},
             required: [],
         },
         handler: async () => {
-            const agents = await findInstallableAgents(systemContext);
+            const options = await findAgentAvailabilityOptions(systemContext);
             return {
-                textResultForLlm: formatInstallableAgents(agents),
+                textResultForLlm: formatAgentAvailabilityOptions(options),
                 resultType: "success" as const,
             };
         },
@@ -1674,11 +1826,15 @@ function getCopilotSessionConfig(
         description: [
             "Ask the user ONE multiple-choice question and block until they answer.",
             "Use ONLY when you are genuinely blocked on a decision that only the user",
-            "can make - an ambiguous choice among concrete options, or a confirmation",
-            "before a destructive or irreversible action. Put the exact options in",
+            "can make - an ambiguous choice among concrete options, or a semantic",
+            "confirmation not covered by a permission-aware tool. Do not ask before",
+            "calling shell, file, URL, MCP, or custom tools; their host permission",
+            "handler is authoritative. Put the exact options in",
             '`choices` (for a yes/no question use ["Yes", "No"]). Returns the option the',
             "user picked. Prefer acting autonomously; do not ask when a reasonable safe",
             "default exists.",
+            "",
+            `\`kind\`: ${ASK_USER_KIND_DESCRIPTION}`,
         ].join("\n"),
         parameters: {
             type: "object",
@@ -1692,6 +1848,11 @@ function getCopilotSessionConfig(
                     items: { type: "string" },
                     description:
                         'The options to choose from (at least 2). For a yes/no question use ["Yes", "No"].',
+                },
+                kind: {
+                    type: "string",
+                    enum: [...ASK_USER_KIND_VALUES],
+                    description: ASK_USER_KIND_DESCRIPTION,
                 },
             },
             required: ["question", "choices"],
@@ -1718,7 +1879,7 @@ function getCopilotSessionConfig(
                 question,
                 choices,
                 undefined,
-                "reasoning",
+                resolveAskUserSource(args?.kind),
             );
             const answer = choices[selected] ?? choices[0] ?? "";
             return {
@@ -1927,33 +2088,13 @@ function getCopilotSessionConfig(
             askUserTool,
             askUserFormTool,
         ],
-        availableTools: [
-            "discover_actions",
-            "execute_action",
-            "search_memory",
-            "remember",
-            "get_conversation_info",
-            "read_conversation",
-            "list_conversations",
-            "search_conversations",
-            "get_user_context",
-            ...(subagentsEnabled
-                ? [
-                      "create_subagent",
-                      "invoke_subagent",
-                      "list_subagents",
-                      "stop_subagent",
-                  ]
-                : []),
-            "find_installable_agent",
-            "ask_user",
-            "ask_user_form",
-            "github/fs/*",
-            "github/search/*",
-            "shell",
-        ],
-        workingDirectory: getRepoRoot(),
-        onPermissionRequest: createCopilotPermissionHandler(context),
+        availableTools: buildCopilotAvailableTools({ subagentsEnabled }),
+        workingDirectory: workingDirectory ?? getRepoRoot(),
+        additionalDirectories: [path.resolve(getRepoRoot(), "..")],
+        onPermissionRequest: createCopilotPermissionHandler(
+            context,
+            workingDirectory,
+        ),
         systemMessage: {
             mode: "append" as const,
             content: [
@@ -1964,15 +2105,17 @@ function getCopilotSessionConfig(
                 "## Built-in Tools (USE THESE FIRST)",
                 "You have access to powerful built-in capabilities:",
                 "- **Web search**: Use your native web search for looking up information online",
-                "- **File operations**: `github/fs/*` for reading, writing, editing files",
-                "- **Code search**: `github/search/*` for searching code patterns",
-                "- **Shell commands**: `shell` for executing terminal commands",
+                "- **File reading**: `view` for reading a file (whole file or a line range) or listing a directory",
+                "- **File search**: `glob` for finding files by name; `grep` or `rg` for searching contents, depending on the model's available tools",
+                "- **File editing**: Use the available native editor: `edit` / `create`, `apply_patch`, or `str_replace_editor`",
+                "- **Shell commands**: `powershell` on Windows or `bash` on macOS/Linux; use the matching `read_*`, `stop_*`, and `list_*` tools for commands that continue running",
+                "- **Web pages**: `web_fetch` for retrieving a URL",
                 "",
                 "## TypeAgent Action Tools (USE WHEN NEEDED)",
                 "For TypeAgent-specific actions like music playback, calendar management, email:",
                 "- `discover_actions`: Find available TypeAgent actions by schema name",
                 "- `execute_action`: Execute TypeAgent actions conforming to discovered schemas",
-                "- `find_installable_agent`: List agents not installed yet that can be installed on demand. Call it when no active agent can fulfill the request; if a candidate matches, tell the user the exact `@package install` command (never install it yourself)",
+                FIND_UNAVAILABLE_AGENT_SYSTEM_PROMPT,
                 "",
                 "## Conversation Memory Tools",
                 "- `search_memory`: Recall information from earlier in this or prior conversations",
@@ -2003,7 +2146,7 @@ function getCopilotSessionConfig(
                       ]
                     : []),
                 "## User Interaction",
-                '- `ask_user`: Ask the user ONE multiple-choice question and block for their answer. Strongly prefer to act autonomously with a safe default; use this ONLY when genuinely blocked on a decision only the user can make (an ambiguous choice among concrete options, or confirmation before a destructive/irreversible action). Provide the exact options (for yes/no use ["Yes", "No"]), and ask at most one such question.',
+                "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer. Use it only for ambiguity or a semantic confirmation not covered by a permission-aware tool. Never ask permission before shell, file, URL, MCP, or custom-tool calls; invoke them directly and let the host permission handler prompt. Provide exact options and ask at most one question.",
                 "- `ask_user_form`: Ask SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for all answers. Prefer this over multiple `ask_user` calls when a single blocking moment needs more than one answer.",
                 "",
                 "## Guidelines",
@@ -2011,7 +2154,7 @@ function getCopilotSessionConfig(
                 "- **PREFER built-in tools** for web search, file operations, and code investigation",
                 "- **Use TypeAgent actions** only for domain-specific operations (music, calendar, email, etc.)",
                 "- For web search queries → use your native web search capability",
-                "- For code operations → use `github/fs/*` and `github/search/*` tools",
+                "- For code operations → use the available native file, search, and terminal tools directly",
                 "- For TypeAgent capabilities → use `discover_actions` then `execute_action`",
             ].join("\n"),
         },
@@ -2083,6 +2226,7 @@ async function createCopilotSession(
 async function executeReasoningWithoutPlanning(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    workingDirectory?: string,
 ): Promise<any> {
     debug(`Executing reasoning request: ${originalRequest}`);
     context.actionIO.appendDisplay("Thinking...", "temporary");
@@ -2109,7 +2253,7 @@ async function executeReasoningWithoutPlanning(
     let copilotToolLoopIteration = 0;
 
     const client = await getCopilotClient(context.sessionContext.agentContext);
-    const config = getCopilotSessionConfig(context);
+    const config = getCopilotSessionConfig(context, workingDirectory);
 
     // Check for existing session ID to enable multi-turn conversations
     let sessionId = getSessionId(context);
@@ -2415,13 +2559,18 @@ async function executeReasoningWithoutPlanning(
 async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    workingDirectory?: string,
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
     const storage = context.sessionContext.sessionStorage;
 
     if (!storage) {
         debug("No sessionStorage available, using standard reasoning");
-        return executeReasoningWithoutPlanning(originalRequest, context);
+        return executeReasoningWithoutPlanning(
+            originalRequest,
+            context,
+            workingDirectory,
+        );
     }
 
     const requestId = generateRequestId();
@@ -2464,7 +2613,7 @@ async function executeReasoningWithTracing(
         const client = await getCopilotClient(
             context.sessionContext.agentContext,
         );
-        const config = getCopilotSessionConfig(context);
+        const config = getCopilotSessionConfig(context, workingDirectory);
 
         // Check for existing session ID to enable multi-turn conversations
         let sessionId = getSessionId(context);
@@ -2960,6 +3109,9 @@ export async function executeReasoningAction(
     return executeReasoning(request, context, {
         planReuseEnabled,
         engine: "copilot",
+        ...(action.parameters.workingDirectory === undefined
+            ? {}
+            : { workingDirectory: action.parameters.workingDirectory }),
     });
 }
 
@@ -2973,6 +3125,7 @@ export async function executeReasoning(
     options?: {
         planReuseEnabled?: boolean;
         engine?: "copilot";
+        workingDirectory?: string;
     },
 ): Promise<any> {
     const engine = options?.engine ?? "copilot";
@@ -2987,10 +3140,18 @@ export async function executeReasoning(
         () => {
             if (!planReuseEnabled) {
                 // Standard reasoning without planning
-                return executeReasoningWithoutPlanning(request, context);
+                return executeReasoningWithoutPlanning(
+                    request,
+                    context,
+                    options?.workingDirectory,
+                );
             }
             // Trace capture + auto recipe generation
-            return executeReasoningWithTracing(request, context);
+            return executeReasoningWithTracing(
+                request,
+                context,
+                options?.workingDirectory,
+            );
         },
         {
             genAiSystem: "github_copilot",

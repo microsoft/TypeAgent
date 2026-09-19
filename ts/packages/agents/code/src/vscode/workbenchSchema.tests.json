@@ -94,5 +94,15 @@
       "actionName": "openInIntegratedTerminal",
       "parameters": {}
     }
+  },
+  {
+    "request": "Run command pnpm test",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "runWorkspaceCommand",
+      "parameters": {
+        "command": "pnpm test"
+      }
+    }
   }
 ]

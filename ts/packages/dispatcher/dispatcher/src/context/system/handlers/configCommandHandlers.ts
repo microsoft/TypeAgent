@@ -20,7 +20,6 @@ import {
     getChatModelNames,
     getCopilotClient,
     getActiveModelProvider,
-    setActiveModelProvider,
     setEgressSecretRedactionEnabled,
     getRuntimeConfig,
     PROVIDER_MODES,
@@ -53,6 +52,7 @@ import { getCacheFactory } from "../../../utils/cacheFactory.js";
 import { resolveCommand } from "../../../command/command.js";
 import { toggleActivityContext } from "../../../execute/activityContext.js";
 import registerDebug from "debug";
+import { applyModelProviderSelection } from "./modelProviderSelection.js";
 const debugReasoning = registerDebug("typeagent:dispatcher:reasoning:config");
 
 const enum AgentToggle {
@@ -1818,7 +1818,7 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
 
 class ConfigExecutionReasoningModelCommandHandler implements CommandHandler {
     public readonly description =
-        "Set the Copilot reasoning model (e.g. claude-opus-4.8). Omit to show the current value.";
+        "Set the Copilot reasoning model (e.g. gpt-5.6-sol). Omit to show the current value.";
     public readonly parameters = {
         args: {
             model: {
@@ -2303,10 +2303,10 @@ class ConfigModelProviderCommandHandler implements CommandHandler {
 
         // <name>: set active provider.
         const previous = getActiveModelProvider();
-        setActiveModelProvider(name);
-        // Clear cached translators so the next translation picks up the
-        // new provider mapping.
-        context.sessionContext.agentContext.translatorCache.clear();
+        await applyModelProviderSelection(
+            name,
+            context.sessionContext.agentContext,
+        );
 
         const previousLabel = previous ?? "azure (default)";
         displayResult(`Model provider: ${previousLabel} → ${name}`, context);

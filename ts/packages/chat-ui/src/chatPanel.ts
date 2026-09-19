@@ -1636,7 +1636,18 @@ export class ChatPanel {
             // Give the partial-completion (host-driven) controller first
             // crack at the keystroke so its Tab/Enter/Esc/Arrow handling
             // wins over chat-ui's local completions and history nav.
+            //
+            // When the partial-completion controller consumes Escape purely
+            // to dismiss its own popup, we also stop propagation so the
+            // host's document-level Escape handler doesn't treat this
+            // keystroke as a permission-prompt denial or a request-cancel
+            // gesture. `preventDefault` alone is not enough: hosts that
+            // register capture-phase listeners look at defaultPrevented, and
+            // hosts that don't check it would still fire on the bubble.
             if (this.partialCompletion?.handleKeyDownPreSend(e)) {
+                if (e.key === "Escape") {
+                    e.stopPropagation();
+                }
                 return;
             }
             if (e.key === "Tab" && this.completions.length > 0) {
@@ -1650,8 +1661,12 @@ export class ChatPanel {
                 this.send();
             } else if (e.key === "Escape") {
                 if (this.completions.length > 0) {
-                    // preventDefault so host's doc-level Esc handler doesn't double-handle.
+                    // Escape only closes the local completion popup here.
+                    // Stop propagation so the host's document-level Esc
+                    // handler doesn't also deny a visible permission prompt
+                    // or start the double-Esc "cancel all" clock.
                     e.preventDefault();
+                    e.stopPropagation();
                     this.clearCompletions();
                     return;
                 }
@@ -2954,6 +2969,29 @@ export class ChatPanel {
         this.extractUserMarker(this.messageDiv);
 
         this.scrollToBottom();
+    }
+
+    /**
+     * Attach compact metadata to the final agent response for a request.
+     * Returns false when the request has no rendered response bubble.
+     */
+    public appendRequestMetadata(requestId: string, text: string): boolean {
+        const threadId = this.resolveThreadId(requestId);
+        const requestContainers =
+            this.requestAgentContainers.get(threadId) ?? [];
+        const answerAnchor = this.lastStepAnchorByThread.get(threadId);
+        const target =
+            requestContainers.find(
+                (container) => container.div === answerAnchor,
+            ) ??
+            this.threadContainers.get(threadId) ??
+            requestContainers.at(-1);
+        if (target === undefined) {
+            return false;
+        }
+        target.appendMetadata(text);
+        this.scrollToBottom(false);
+        return true;
     }
 
     /**
@@ -6779,6 +6817,7 @@ class AgentMessageContainer {
     private reasoning = false;
     private readonly collapsedReasoning = new WeakSet<HTMLDetailsElement>();
     private lastAppendMode?: DisplayAppendMode;
+    private metadataDiv?: HTMLDivElement;
 
     // Invoked after this bubble renders content. ChatPanel uses it to detect
     // the `data-live-title` marker and track the bubble in the top rail.
@@ -6885,6 +6924,15 @@ class AgentMessageContainer {
 
         // Insert into DOM (column-reverse order)
         beforeElement.before(this.div);
+    }
+
+    public appendMetadata(text: string): void {
+        if (this.metadataDiv === undefined) {
+            this.metadataDiv = document.createElement("div");
+            this.metadataDiv.className = "chat-response-metadata";
+            this.messageDiv.after(this.metadataDiv);
+        }
+        this.metadataDiv.textContent = text;
     }
 
     public updateMetrics(

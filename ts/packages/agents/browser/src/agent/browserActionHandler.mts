@@ -119,7 +119,7 @@ import {
     BrowserControl,
     defaultSearchProviders,
 } from "@typeagent/browser-control-rpc/types";
-import { openai } from "@typeagent/aiclient";
+import { openai, tryCreateEmbeddingModel } from "@typeagent/aiclient";
 import {
     SearchProviderCommandHandlerTable,
     SetCommandHandler,
@@ -454,6 +454,12 @@ export function instantiate(): AppAgent {
                 content: _webFlowStore.generateDynamicSchemaText(),
             };
         },
+        cancelChoice: async (
+            choiceId: string,
+            context: SessionContext<BrowserActionContext>,
+        ) => {
+            context.agentContext.choiceManager?.cancelChoice(choiceId);
+        },
         handleChoice: async (
             choiceId: string,
             response: boolean | number[],
@@ -604,8 +610,7 @@ async function updateBrowserContext(
 
         // Initialize fuzzy matching model for website search
         if (!context.agentContext.fuzzyMatchingModel) {
-            context.agentContext.fuzzyMatchingModel =
-                openai.createEmbeddingModel();
+            context.agentContext.fuzzyMatchingModel = tryCreateEmbeddingModel();
         }
 
         if (!context.agentContext.viewProcess) {
@@ -2238,8 +2243,20 @@ async function executeBrowserActionImpl(
             switch (action.actionName) {
                 case "closeWindow": {
                     const control = getActionBrowserControl(context);
-                    await control.closeWindow();
-                    return;
+                    try {
+                        if (action.parameters.title === undefined) {
+                            await control.closeWindow();
+                        } else {
+                            await control.closeWindow(action.parameters.title);
+                        }
+                        return;
+                    } catch (error) {
+                        return createActionResultFromError(
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                        );
+                    }
                 }
             }
             break;

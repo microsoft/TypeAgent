@@ -43,7 +43,24 @@ import {
 export type AgentRpcServerOptions = {
     trustedContextPropagation?: boolean;
     logger?: RpcStructuredLogger;
+    channelName?: string;
 };
+
+function getAgentChannelName(
+    name: string,
+    options?: AgentRpcServerOptions,
+): string {
+    return options?.channelName ?? `agent:${name}`;
+}
+
+function getOptionsChannelName(
+    name: string,
+    options?: AgentRpcServerOptions,
+): string {
+    return options?.channelName === undefined
+        ? `options:${name}`
+        : `${options.channelName}:options`;
+}
 
 function getTrustedRpcOptions(
     options: AgentRpcServerOptions | undefined,
@@ -73,7 +90,7 @@ function createOptionsRpc(
     options?: AgentRpcServerOptions,
 ) {
     const optionsChannel: RpcChannel = channelProvider.createChannel(
-        `options:${name}`,
+        getOptionsChannelName(name, options),
     );
     return createRpc<OptionsFunctionCallBack>(
         name,
@@ -107,7 +124,7 @@ export function createAgentRpcServer(
     channelProvider: ChannelProvider,
     options?: AgentRpcServerOptions,
 ) {
-    const channelName = `agent:${name}`;
+    const channelName = getAgentChannelName(name, options);
     const channel = channelProvider.createChannel(channelName);
     let optionsRpc: ReturnType<typeof createOptionsRpc> | undefined;
 
@@ -294,15 +311,26 @@ export function createAgentRpcServer(
                 param.entityTypeName,
             );
         },
+        async cancelChoice(param) {
+            await agent.cancelChoice?.(
+                param.choiceId,
+                getSessionContextShim(param),
+            );
+        },
         async handleChoice(param) {
             if (agent.handleChoice === undefined) {
                 throw new Error("Invalid invocation of handleChoice");
             }
-            return agent.handleChoice(
-                param.choiceId,
-                param.response,
-                getActionContextShim(param),
-            );
+            try {
+                return await agent.handleChoice(
+                    param.choiceId,
+                    param.response,
+                    getActionContextShim(param),
+                );
+            } finally {
+                if (param.actionContextId !== undefined)
+                    actionAbortControllers.delete(param.actionContextId);
+            }
         },
         async getDynamicSchema(param) {
             if (agent.getDynamicSchema === undefined) {
@@ -482,6 +510,7 @@ export function createAgentRpcServer(
         hasInstanceStorage: boolean,
         hasSessionStorage: boolean,
         sessionContextId: string,
+        currentConnectionId: string | undefined,
         context: any,
     ): SessionContext<any> {
         const dynamicAgentRpcServer = new Map<string, () => void>();
@@ -495,6 +524,7 @@ export function createAgentRpcServer(
                 ? getStorage(contextId, false)
                 : undefined,
             sessionContextId,
+            currentConnectionId,
             notify: (
                 event: AppAgentEvent,
                 message: string | DisplayContent,
@@ -727,6 +757,7 @@ export function createAgentRpcServer(
             hasSessionStorage,
             sessionContextId,
             agentContextId,
+            currentConnectionId,
         } = param;
         if (contextId === undefined) {
             throw new Error("Invalid context param: missing contextId");
@@ -753,6 +784,7 @@ export function createAgentRpcServer(
             hasInstanceStorage,
             hasSessionStorage,
             sessionContextId,
+            currentConnectionId,
             agentContext,
         );
     }
@@ -812,6 +844,7 @@ export function createAgentRpcServer(
             streamingContext: undefined,
             activityContext: param.activityContext,
             isFromReasoningLoop: param.isFromReasoningLoop ?? false,
+            workingDirectory: param.workingDirectory,
             get abortSignal() {
                 return abortController.signal;
             },

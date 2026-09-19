@@ -81,7 +81,7 @@ jobs:
             core.setOutput("sha", headSha);
 
       - name: Upload CodeQL results to the pull request
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: ${{ runner.temp }}/codeql-sarif
           ref: refs/pull/${{ steps.pr.outputs.number }}/head

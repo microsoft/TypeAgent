@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundleProfileAgents } from "./bundleProductAgents.mjs";
+import { writeCopilotRuntimeManifest } from "./copilotRuntimeManifest.mjs";
 import {
     bundleEntry,
     copyFile,
@@ -98,11 +99,13 @@ function copyProviderAssets(out, profile) {
         path.join(sourceRoot, "package.json"),
         path.join(destinationRoot, "package.json"),
     );
-    for (const config of ["config.json", `config.${profile}.json`]) {
-        copyFile(
-            path.join(sourceRoot, "data", config),
-            path.join(destinationRoot, "data", config),
-        );
+    for (const config of [
+        "config.json",
+        `config.${profile}.json`,
+        "agentGroups.json",
+    ]) {
+        const fullSource = path.join(sourceRoot, "data", config);
+        copyFile(fullSource, path.join(destinationRoot, "data", config));
     }
     copyDirectory(
         path.join(sourceRoot, "data", "explainer"),
@@ -232,7 +235,12 @@ export async function bundleAgentServer(args) {
         path.join(scriptsDir, "typeagent-serve.mjs"),
         path.join(out, "typeagent-serve.mjs"),
     );
+    writeCopilotRuntimeManifest(path.join(out, "copilot-runtime.json"), {
+        platform: args.platform,
+        arch: args.arch,
+    });
     for (const script of [
+        "copilotRuntime.mjs",
         "getKeys.mjs",
         "generate-selfhost-config.mjs",
         "setup-devtunnel.mjs",
@@ -268,7 +276,7 @@ export async function bundleAgentServer(args) {
     if (args.externalCli) {
         fs.writeFileSync(
             path.join(out, ".typeagent-external-cli"),
-            "claude,copilot must be on PATH\n",
+            "claude must be on PATH; copilot uses the TypeAgent managed runtime\n",
         );
     }
 

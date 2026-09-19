@@ -55,24 +55,37 @@ describe("authModeFromString", () => {
 });
 
 describe("buildConfig: Copilot", () => {
+    test("accepts Copilot as the embedding provider", () => {
+        const config = buildConfig({
+            TYPEAGENT_EMBEDDING_PROVIDER: "COPILOT",
+            TYPEAGENT_EMBEDDING_MODEL: "text-embedding-3-small",
+        });
+
+        expect(config.embedding).toEqual({
+            provider: "copilot",
+            model: "text-embedding-3-small",
+        });
+    });
+
     test("parses fallback models from the flattened JSON array", () => {
         const config = buildConfig({
-            COPILOT_DEFAULT_MODEL: "claude-haiku-4.5",
-            COPILOT_FALLBACK_MODELS: '["gpt-5-mini","gpt-5.4-mini"]',
+            COPILOT_DEFAULT_MODEL: "gpt-5.6-luna",
+            COPILOT_FALLBACK_MODELS: '["gpt-5.4-mini","gpt-5-mini","gpt-5.4"]',
         });
         expect(config.copilot).toEqual({
-            defaultModel: "claude-haiku-4.5",
-            fallbackModels: ["gpt-5-mini", "gpt-5.4-mini"],
+            defaultModel: "gpt-5.6-luna",
+            fallbackModels: ["gpt-5.4-mini", "gpt-5-mini", "gpt-5.4"],
         });
     });
 
     test("accepts comma-separated fallback models from the environment", () => {
         const config = buildConfig({
-            COPILOT_FALLBACK_MODELS: "gpt-5-mini, gpt-5.4-mini",
+            COPILOT_FALLBACK_MODELS: "gpt-5.4-mini, gpt-5-mini, gpt-5.4",
         });
         expect(config.copilot?.fallbackModels).toEqual([
-            "gpt-5-mini",
             "gpt-5.4-mini",
+            "gpt-5-mini",
+            "gpt-5.4",
         ]);
     });
 });

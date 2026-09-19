@@ -22,7 +22,7 @@
 // Pre-installing the emitter as a NON-enumerable property before any test
 // module loads makes signal-exit reuse it (its `if (process.__signal_exit_emitter__)`
 // branch) instead of creating an enumerable one. Because it is never
-// enumerable, `Object.keys(process)` stays stable and the race cannot happen.
+// enumerable, it cannot change the synthetic module's export names.
 
 const { EventEmitter } = require("node:events");
 
@@ -35,6 +35,20 @@ if (!process.__signal_exit_emitter__) {
     Object.defineProperty(process, "__signal_exit_emitter__", {
         value: emitter,
         enumerable: false,
+        writable: true,
+        configurable: true,
+    });
+}
+
+// Registering a signal-exit callback also wraps process.emit. It is normally
+// inherited from EventEmitter, so that assignment adds an enumerable own key.
+// Materialize it before Jest snapshots the exports; keep it writable so real
+// signal-exit registration and cleanup still work. Preserve an existing own
+// property (including any instrumentation and its descriptor).
+if (!Object.prototype.hasOwnProperty.call(process, "emit")) {
+    Object.defineProperty(process, "emit", {
+        value: process.emit,
+        enumerable: true,
         writable: true,
         configurable: true,
     });

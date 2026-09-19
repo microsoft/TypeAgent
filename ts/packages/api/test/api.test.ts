@@ -42,7 +42,7 @@ describe("api web server", () => {
         server = new TypeAgentAPIWebServer(config, () => undefined);
 
         // Bind an ephemeral loopback port instead of calling start(), which
-        // hardcodes 3000 (and 3443) and would conflict / bind all interfaces.
+        // uses the configured port (and the secure 3443) and would conflict.
         await new Promise<void>((resolve, reject) => {
             server.server.once("error", reject);
             server.server.listen(0, "127.0.0.1", resolve);

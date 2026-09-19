@@ -167,6 +167,7 @@ export async function resolveURLWithHistory(
                 release: () => {},
             }),
             sessionContextId: "websiteMemory-mock",
+            currentConnectionId: undefined,
             indexes: async () => [],
             reloadAgentSchema: async () => {},
             notifyReadinessChanged: async () => {},

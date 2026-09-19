@@ -12,6 +12,7 @@ import {
     ConversationMatch,
     ConversationContentMatch,
     ConversationSource,
+    JoinConversationResult,
     RenameConversationOptions,
 } from "@typeagent/agent-server-protocol";
 import {
@@ -24,6 +25,7 @@ import {
     ConversationSummaryResult,
 } from "agent-dispatcher";
 import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
+import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import type {
     DisplayLogEntry,
     PendingInteractionRequest,
@@ -44,12 +46,17 @@ import {
 } from "./conversationSearchIndex.js";
 import { importCopilotSessions } from "./copilot/mirrorImporter.js";
 import {
+    ClientAgentRegistry,
+    createClientAgentRegistry,
+} from "./clientAgentRegistry.js";
+import {
     buildTranscriptTurns,
     createConversationSummaryTranslator,
     summarizeTranscript,
     type ConversationSummaryTranslator,
 } from "./conversationSummary.js";
 import { lockInstanceDir } from "agent-dispatcher/internal";
+import { validateStructuredActionJoin } from "./structuredActionBindings.js";
 
 import registerDebug from "debug";
 const debugConversation = registerDebug("agent-server:conversation");
@@ -139,6 +146,11 @@ type ConversationRecord = {
     source?: ConversationSource | undefined;
     readOnly?: boolean | undefined;
     copilot?: CopilotMirrorMetadata | undefined;
+    /**
+     * Client-hosted agents on this conversation. Outlives any one connection,
+     * and serialises its own mutations.
+     */
+    clientAgents: ClientAgentRegistry;
 };
 
 type PersistedMetadata = {
@@ -172,6 +184,7 @@ export type ConversationManager = {
         name: string;
         pendingInteractions: PendingInteractionRequest[];
         queueSnapshot?: QueueSnapshot;
+        structuredActions?: JoinConversationResult["structuredActions"];
     }>;
     leaveConversation(
         conversationId: string,
@@ -238,17 +251,59 @@ export type ConversationManager = {
     /**
      * Install a client-hosted agent (typically an agent-rpc proxy) as a dynamic
      * agent on a conversation's dispatcher. The conversation must already have a
-     * dispatcher (i.e. a client has joined). Rejects if `name` already exists.
+     * dispatcher (i.e. a client has joined).
+     *
+     * Several clients may register the same `name` as long as they carry the
+     * same schema: the dynamic agent is added once and each client becomes an
+     * instance behind it. Re-registering the same `instanceId` replaces its
+     * proxy in place, which is how a reconnect recovers. Rejects when the
+     * schema differs, when the `agentInterface` differs from what the other
+     * devices implement, or when the instance is new and multi-instance
+     * support is switched off.
      */
     addClientAgent(
         conversationId: string,
         name: string,
         manifest: AppAgentManifest,
         appAgent: AppAgent,
+        instanceId: string,
+        displayName: string,
+        connectionId: string,
+        multiInstance: boolean,
+        agentInterface: readonly AgentInterfaceFunctionName[],
     ): Promise<void>;
-    /** Remove a client-hosted agent added via {@link addClientAgent}. */
-    removeClientAgent(conversationId: string, name: string): Promise<void>;
+    /**
+     * Remove one instance added via {@link addClientAgent}. The dynamic agent
+     * itself is removed only when the last instance leaves. Returns true if
+     * the instance was removed, false if it was not there or the owner check
+     * refused, so the caller knows whether its own bookkeeping still describes
+     * a live instance.
+     */
+    removeClientAgent(
+        conversationId: string,
+        name: string,
+        instanceId: string,
+        options?: RemoveClientAgentOptions,
+    ): Promise<boolean>;
+    /**
+     * The instance a connection owns for `name`, if any. Lets a caller resolve
+     * an unregister to its own instance instead of another client's.
+     */
+    findClientAgentInstance(
+        conversationId: string,
+        name: string,
+        connectionId: string,
+    ): string | undefined;
     close(): Promise<void>;
+};
+
+export type RemoveClientAgentOptions = {
+    /**
+     * Only remove the instance if it still names this connection. Guards the
+     * sleeping phone: it reconnects and re-registers before its half-open
+     * socket is reaped, and the late disconnect must not evict it.
+     */
+    ownerConnectionId?: string | undefined;
 };
 
 /** @deprecated Use ConversationManager instead */
@@ -373,6 +428,7 @@ export async function createConversationManager(
                     sharedDispatcher: undefined, // lazy restore
                     sharedDispatcherP: undefined,
                     idleTimer: undefined,
+                    clientAgents: createClientAgentRegistry(),
                     source: entry.source,
                     readOnly: entry.readOnly,
                     copilot: entry.copilot,
@@ -912,6 +968,7 @@ export async function createConversationManager(
                 sharedDispatcher: undefined,
                 sharedDispatcherP: undefined,
                 idleTimer: undefined,
+                clientAgents: createClientAgentRegistry(),
             };
             conversations.set(conversationId, record);
             conversationNameIndex.update(conversationId, resolvedName);
@@ -980,6 +1037,7 @@ export async function createConversationManager(
                 sharedDispatcher: undefined,
                 sharedDispatcherP: undefined,
                 idleTimer: undefined,
+                clientAgents: createClientAgentRegistry(),
                 source: "copilot",
                 readOnly: true,
                 copilot: {
@@ -1074,21 +1132,46 @@ export async function createConversationManager(
             name: string;
             pendingInteractions: PendingInteractionRequest[];
             queueSnapshot?: QueueSnapshot;
+            structuredActions?: JoinConversationResult["structuredActions"];
         }> {
+            validateStructuredActionJoin(options, conversationId);
             const record = conversations.get(conversationId);
             if (record === undefined) {
                 throw new Error(`Conversation not found: ${conversationId}`);
             }
+            if (options?.structuredActions !== undefined && record.readOnly) {
+                throw new Error(
+                    "Structured execution is unavailable in a read-only conversation",
+                );
+            }
+            if (
+                options?.structuredActions?.resumeToken !== undefined &&
+                record.sharedDispatcher === undefined
+            ) {
+                throw new Error(
+                    "Structured action resume state is unavailable; do not replay an interrupted action",
+                );
+            }
 
             cancelIdleTimer(record);
             const sharedDispatcher = await ensureDispatcher(record);
-            const dispatcher = sharedDispatcher.join(
-                clientIO,
-                closeFn,
-                options,
-            );
-            touchConversation(conversationId);
-            await saveMetadata();
+            let dispatcher: Dispatcher | undefined;
+            try {
+                dispatcher = sharedDispatcher.join(clientIO, closeFn, options);
+                touchConversation(conversationId);
+                await saveMetadata();
+            } catch (error) {
+                try {
+                    if (dispatcher?.connectionId !== undefined) {
+                        await sharedDispatcher.leave(dispatcher.connectionId);
+                    }
+                } finally {
+                    if (sharedDispatcher.clientCount === 0) {
+                        startIdleTimer(record);
+                    }
+                }
+                throw error;
+            }
 
             debugConversation(
                 `Client joined conversation "${record.name}" (${conversationId}), clients: ${sharedDispatcher.clientCount}`,
@@ -1111,6 +1194,7 @@ export async function createConversationManager(
                 name: string;
                 pendingInteractions: PendingInteractionRequest[];
                 queueSnapshot?: QueueSnapshot;
+                structuredActions?: JoinConversationResult["structuredActions"];
             } = {
                 dispatcher,
                 connectionId: dispatcher.connectionId!,
@@ -1122,6 +1206,13 @@ export async function createConversationManager(
             };
             if (queueSnapshot !== undefined) {
                 result.queueSnapshot = queueSnapshot;
+            }
+            const structuredActions =
+                sharedDispatcher.getStructuredActionBinding(
+                    dispatcher.connectionId!,
+                );
+            if (structuredActions !== undefined) {
+                result.structuredActions = structuredActions;
             }
             return result;
         },
@@ -1164,32 +1255,70 @@ export async function createConversationManager(
             name: string,
             manifest: AppAgentManifest,
             appAgent: AppAgent,
+            instanceId: string,
+            displayName: string,
+            connectionId: string,
+            multiInstance: boolean,
+            agentInterface: readonly AgentInterfaceFunctionName[],
         ): Promise<void> {
             const record = conversations.get(conversationId);
             if (record === undefined) {
                 throw new Error(`Conversation not found: ${conversationId}`);
             }
             const sharedDispatcher = await ensureDispatcher(record);
-            await sharedDispatcher.addDynamicAgent(name, manifest, appAgent);
+            await record.clientAgents.add(sharedDispatcher, name, {
+                instanceId,
+                displayName,
+                connectionId,
+                appAgent,
+                manifest,
+                agentInterface,
+                multiInstance,
+            });
             debugConversation(
-                `Registered client agent "${name}" on conversation "${record.name}" (${conversationId})`,
+                `Client agent "${name}" instance ${instanceId} ("${displayName}") registered on conversation "${record.name}" (${conversationId}), instances: ${
+                    record.clientAgents.groups.get(name)?.instances.size ?? 0
+                }`,
             );
+        },
+
+        findClientAgentInstance(
+            conversationId: string,
+            name: string,
+            connectionId: string,
+        ): string | undefined {
+            return conversations
+                .get(conversationId)
+                ?.clientAgents.findInstanceIdForConnection(name, connectionId);
         },
 
         async removeClientAgent(
             conversationId: string,
             name: string,
-        ): Promise<void> {
+            instanceId: string,
+            options?: RemoveClientAgentOptions,
+        ): Promise<boolean> {
             const record = conversations.get(conversationId);
-            // If the conversation or its dispatcher is already gone, there is
-            // nothing to remove.
-            if (record?.sharedDispatcher === undefined) {
-                return;
+            if (record === undefined) {
+                return false;
             }
-            await record.sharedDispatcher.removeDynamicAgent(name);
-            debugConversation(
-                `Removed client agent "${name}" from conversation "${record.name}" (${conversationId})`,
+            // A conversation whose dispatcher is already gone has nothing to
+            // unregister, but the group bookkeeping still has to happen.
+            const removed = await record.clientAgents.remove(
+                record.sharedDispatcher,
+                name,
+                instanceId,
+                { ownerConnectionId: options?.ownerConnectionId },
             );
+            if (removed) {
+                debugConversation(
+                    `Removed client agent "${name}" instance ${instanceId} from conversation "${record.name}" (${conversationId}), instances: ${
+                        record.clientAgents.groups.get(name)?.instances.size ??
+                        0
+                    }`,
+                );
+            }
+            return removed;
         },
 
         async listConversations(name?: string): Promise<ConversationInfo[]> {

@@ -15,7 +15,8 @@
     ".": {
       "node": "./dist/indexNode.js",
       "default": "./dist/indexBrowser.js"
-    }
+    },
+    "./network": "./dist/network.js"
   },
   "files": [
     "dist",

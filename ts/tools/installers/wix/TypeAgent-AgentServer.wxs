@@ -23,6 +23,7 @@
     AgentServerZip      path to the built agent-server.zip
     CopilotPluginZip    path to the built copilot-plugin.zip
     VsCodeChatVsix      path to the packaged TypeAgent Chat VSIX
+    VsCodeShellVsix     path to the packaged TypeAgent VS Code Shell VSIX
     MarketplaceDir      path to directory containing the generated marketplace.json
     InstallerSourceDir  path to this file's directory (for register-plugin.ps1)
     ShellBaseUrl        default SHELLBASEURL (anonymous blob base for the shell); may be ""
@@ -55,16 +56,19 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of TypeAgent is already installed." />
 
     <!-- ═══════════════════════════════════════════════
-         Endpoint provider selection (self-host)
-         Public properties (pass uppercase on the msiexec command line, e.g.
-           msiexec /i TypeAgent.msi PROVIDER=OLLAMA
-         AISYSTEMS (default) leaves config provisioning to the interactive
-         post-install step (az login + getKeys). OLLAMA/COPILOT synthesize a
-         config.local.yaml during install via generate-selfhost-config.
+         Endpoint provider selection
+         Public property (pass uppercase on the msiexec command line, e.g.
+           msiexec /i TypeAgent.msi PROVIDER=COPILOT
+         COPILOT (default) synthesizes config.local.yaml with Copilot chat and
+         embedding providers. AISYSTEMS provisions through az login + getKeys.
          ═══════════════════════════════════════════════ -->
-    <Property Id="PROVIDER" Value="AISYSTEMS" Secure="yes" />
-    <Property Id="EMBEDDING" Value="LOCAL" Secure="yes" />
-    <Property Id="OLLAMAHOST" Value="http://localhost:11434" Secure="yes" />
+    <Property Id="PROVIDER" Value="COPILOT" Secure="yes" />
+    <Condition Message="PROVIDER must be AISYSTEMS or COPILOT. Ollama is not supported by this MSI; use the TypeAgent provisioning tools for Ollama.">
+      PROVIDER="AISYSTEMS" OR PROVIDER="COPILOT"
+    </Condition>
+    <Condition Message="EMBEDDING and OLLAMAHOST are no longer supported MSI properties. GitHub Copilot embeddings are configured automatically.">
+      NOT EMBEDDING AND NOT OLLAMAHOST
+    </Condition>
 
     <!-- ═══════════════════════════════════════════════
          Agent-server lifecycle
@@ -75,6 +79,14 @@
     <Property Id="STARTSERVER" Value="1" Secure="yes" />
     <Property Id="AUTOSTART" Value="1" Secure="yes" />
     <Property Id="VSCODECHAT" Value="1" Secure="yes" />
+    <!-- ═══════════════════════════════════════════════
+         Optional TypeAgent VS Code Shell extension install
+         VSCODESHELL=1 installs the bundled vscode-shell VSIX into a compatible
+         VS Code (>= 1.90). Enabled by default; pass VSCODESHELL=0 to opt out.
+         Uses the same install-vscode-typeagent.ps1 helper as the Chat extension
+         with a distinct ExtensionId, ownership key, and no desktop shortcut.
+         ═══════════════════════════════════════════════ -->
+    <Property Id="VSCODESHELL" Value="1" Secure="yes" />
     <Property Id="SHOWSTACKTRACE" Secure="yes" />
 
     <!-- ═══════════════════════════════════════════════
@@ -138,7 +150,7 @@
          at the manual provisioning/sign-in steps the MSI can only attempt, so a
          fresh machine knows what to finish if agents don't respond. -->
     <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Secure="yes"
-              Value="Finish setup: the claude and copilot CLIs need a one-time sign-in (run 'claude' then 'copilot'). If agents don't respond, provision config with: node &quot;%LOCALAPPDATA%\TypeAgent\agent-server\typeagent-serve.mjs&quot; provision  (sign in when prompted)." />
+              Value="Finish setup: the claude and copilot CLIs need a one-time sign-in. For Copilot config, run: node &quot;%LOCALAPPDATA%\TypeAgent\agent-server\typeagent-serve.mjs&quot; provision --provider copilot --force. AI Systems users can run the same command with only 'provision' and sign in to Azure." />
 
     <!-- ═══════════════════════════════════════════════
          Directory layout
@@ -149,6 +161,7 @@
           <Directory Id="INSTALLFOLDER" Name="agent-server" />
           <Directory Id="PLUGINFOLDER" Name="copilot-plugin" />
           <Directory Id="VSCODECHATFOLDER" Name="vscode-chat" />
+          <Directory Id="VSCODESHELLFOLDER" Name="vscode-shell" />
           <Directory Id="PAYLOADFOLDER" Name="payload" />
           <Directory Id="GITHUBFOLDER" Name=".github">
             <Directory Id="PLUGINREGFOLDER" Name="plugin" />
@@ -165,6 +178,7 @@
       <ComponentRef Id="AgentServerZipComponent" />
       <ComponentRef Id="CopilotPluginZipComponent" />
       <ComponentRef Id="VsCodeChatVsixComponent" />
+      <ComponentRef Id="VsCodeShellVsixComponent" />
       <!-- Static files and registry -->
       <ComponentRef Id="MarketplaceJsonComponent" />
       <ComponentRef Id="RegisterPluginPs1Component" />
@@ -172,6 +186,7 @@
       <ComponentRef Id="InstallVsCodeChatPs1Component" />
       <ComponentRef Id="ExtractPayloadPs1Component" />
       <ComponentRef Id="InstallPrereqsPs1Component" />
+      <ComponentRef Id="LaunchCopilotSetupPs1Component" />
       <ComponentRef Id="ResolveNodePs1Component" />
       <ComponentRef Id="RunServePs1Component" />
       <ComponentRef Id="InstallShellPs1Component" />
@@ -205,6 +220,14 @@
       </Component>
     </DirectoryRef>
 
+    <DirectoryRef Id="VSCODESHELLFOLDER">
+      <Component Id="VsCodeShellVsixComponent" Guid="*">
+        <File Id="VsCodeShellVsix" Name="typeagent-vscode-shell.vsix"
+              Source="$(var.VsCodeShellVsix)" KeyPath="yes" />
+        <RemoveFolder Id="RemoveVsCodeShellFolder" Directory="VSCODESHELLFOLDER" On="uninstall" />
+      </Component>
+    </DirectoryRef>
+
     <!-- marketplace.json — enables `copilot plugin marketplace add <TYPEAGENTROOT>` -->
     <DirectoryRef Id="PLUGINREGFOLDER">
       <Component Id="MarketplaceJsonComponent" Guid="*">
@@ -227,8 +250,8 @@
               Source="$(var.InstallerSourceDir)\..\common\register-plugin.mjs" />
       </Component>
       <Component Id="InstallVsCodeChatPs1Component" Guid="*">
-        <File Id="InstallVsCodeChatPs1" Name="install-vscode-chat.ps1"
-              Source="$(var.InstallerSourceDir)\..\common\install-vscode-chat.ps1" />
+        <File Id="InstallVsCodeTypeAgentPs1" Name="install-vscode-typeagent.ps1"
+              Source="$(var.InstallerSourceDir)\..\common\install-vscode-typeagent.ps1" />
       </Component>
       <Component Id="InstallShellPs1Component" Guid="*">
         <File Id="InstallShellPs1" Name="install-shell.ps1"
@@ -241,6 +264,10 @@
       <Component Id="InstallPrereqsPs1Component" Guid="*">
         <File Id="InstallPrereqsPs1" Name="install-prereqs.ps1"
               Source="$(var.InstallerSourceDir)\install-prereqs.ps1" />
+      </Component>
+      <Component Id="LaunchCopilotSetupPs1Component" Guid="*">
+        <File Id="LaunchCopilotSetupPs1" Name="launch-copilot-setup.ps1"
+              Source="$(var.InstallerSourceDir)\launch-copilot-setup.ps1" />
       </Component>
       <Component Id="ResolveNodePs1Component" Guid="*">
         <File Id="ResolveNodePs1" Name="resolve-node.ps1"
@@ -260,6 +287,7 @@
           <RegistryValue Name="AgentServerDir"    Value="[INSTALLFOLDER]"   Type="string" />
           <RegistryValue Name="CopilotPluginDir"  Value="[PLUGINFOLDER]"    Type="string" />
           <RegistryValue Name="VsCodeChatDir"     Value="[VSCODECHATFOLDER]" Type="string" />
+          <RegistryValue Name="VsCodeShellDir"    Value="[VSCODESHELLFOLDER]" Type="string" />
           <RegistryValue Name="Version"           Value="$(var.ProductVersion)" Type="string" />
         </RegistryKey>
       </Component>
@@ -351,7 +379,7 @@
     <SetProperty Id="InstallVsCodeChat"
            Before="InstallVsCodeChat"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-chat.ps1&quot; -Action Install -Owner msi -VsixPath &quot;[VSCODECHATFOLDER]typeagent-vscode-chat.vsix&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-chat-install.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-typeagent.ps1&quot; -Action Install -Owner msi -VsixPath &quot;[VSCODECHATFOLDER]typeagent-vscode-chat.vsix&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-chat-install.log&quot;" />
 
     <CustomAction Id="InstallVsCodeChat"
                   BinaryKey="WixCA"
@@ -363,7 +391,7 @@
     <SetProperty Id="UninstallVsCodeChat"
            Before="UninstallVsCodeChat"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-chat.ps1&quot; -Action Uninstall -Owner msi -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-chat-install.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-typeagent.ps1&quot; -Action Uninstall -Owner msi -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-chat-install.log&quot;" />
 
     <CustomAction Id="UninstallVsCodeChat"
                   BinaryKey="WixCA"
@@ -373,19 +401,32 @@
                   Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
-         Custom action — self-host config provisioning
-         For PROVIDER=OLLAMA/COPILOT, synthesize config.local.yaml via
-         generate-selfhost-config (bundled under agent-server\tools). Runs as the
-         installing user so it writes to the user's ~/.typeagent config dir and so
-         'node' resolves from the user PATH. AISYSTEMS mode is skipped here (its
-         provisioning is the interactive az login + getKeys post-install step).
+         Custom actions — TypeAgent VS Code Shell extension
+         Reuses the install-vscode-typeagent.ps1 helper with a different ExtensionId,
+         its own HKCU ownership subkey, and -NoShortcut (the Shell extension is
+         a webview/sidebar view; no separate desktop launcher). Minimum VS Code
+         version is 1.90 (matches the extension's engines.vscode). Missing or
+         incompatible VS Code is a non-fatal skip. Own log file so shell and
+         chat installs are diagnosable independently.
          ═══════════════════════════════════════════════ -->
-    <SetProperty Id="ProvisionSelfHostConfig"
-           Before="ProvisionSelfHostConfig"
+    <SetProperty Id="InstallVsCodeShell"
+           Before="InstallVsCodeShell"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; provision --provider &quot;[PROVIDER]&quot; --embedding &quot;[EMBEDDING]&quot; --ollama-host &quot;[OLLAMAHOST]&quot; --force" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-typeagent.ps1&quot; -Action Install -Owner msi -ExtensionId &quot;typeagent.vscode-shell&quot; -OwnershipKey &quot;HKCU:\Software\Microsoft\TypeAgent\VSCodeShell&quot; -MinimumVersion 1.90.0 -NoShortcut -VsixPath &quot;[VSCODESHELLFOLDER]typeagent-vscode-shell.vsix&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-shell-install.log&quot;" />
 
-    <CustomAction Id="ProvisionSelfHostConfig"
+    <CustomAction Id="InstallVsCodeShell"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <SetProperty Id="UninstallVsCodeShell"
+           Before="UninstallVsCodeShell"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-typeagent.ps1&quot; -Action Uninstall -Owner msi -ExtensionId &quot;typeagent.vscode-shell&quot; -OwnershipKey &quot;HKCU:\Software\Microsoft\TypeAgent\VSCodeShell&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-shell-install.log&quot;" />
+
+    <CustomAction Id="UninstallVsCodeShell"
                   BinaryKey="WixCA"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
@@ -393,22 +434,51 @@
                   Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
-         Custom action — external-CLI + Node prerequisites
-         The MSI ships the 'external' agent-server variant, which resolves the
-         claude/copilot CLIs from PATH. Install them per-user (npm i -g) and warn
-         on a missing/old Node. Impersonated (writes the user's npm prefix) and
-         non-fatal (Return="ignore") — a prerequisite hiccup must not roll back
-         the agent-server install; issues surface as warnings + the ExitDialog.
+         Custom action — Copilot config provisioning
+          For PROVIDER=COPILOT, synthesize config.local.yaml with the Copilot
+          embedding provider via generate-selfhost-config (bundled under
+         agent-server\tools). Runs as the installing user so it writes to the
+         user's ~/.typeagent config dir and 'node' resolves from the user PATH.
+         AISYSTEMS mode is skipped here; it uses az login + getKeys below.
+         ═══════════════════════════════════════════════ -->
+    <SetProperty Id="ProvisionCopilotConfig"
+           Before="ProvisionCopilotConfig"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -FailOnError -ServeCommand provision --provider COPILOT --embedding COPILOT --embedding-model text-embedding-3-small --force" />
+
+    <CustomAction Id="ProvisionCopilotConfig"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+
+    <!-- ═══════════════════════════════════════════════
+         Custom action — external-runtime + Node prerequisites
+         Claude is installed from the authenticated TypeAgent feed when it is
+         absent. For the Copilot provider, the exact SDK-compatible runtime is
+         installed into TypeAgent's per-user cache. Impersonated and non-fatal
+         (Return="ignore") so a prerequisite hiccup never rolls back the MSI.
          ═══════════════════════════════════════════════ -->
     <SetProperty Id="InstallPrereqs"
            Before="InstallPrereqs"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-prereqs.ps1&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-prereqs.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-prereqs.ps1&quot; -Provider &quot;[PROVIDER]&quot; -AgentServerDir &quot;[INSTALLFOLDER].&quot; -PluginInstallDir &quot;[TYPEAGENTROOT].&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-prereqs.log&quot;" />
 
     <CustomAction Id="InstallPrereqs"
                   BinaryKey="WixCA"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <!-- Launch the interactive Copilot bootstrap only after the MSI transaction
+         commits. Quiet/basic-UI installs remain non-interactive and can run the
+         same setup command later. -->
+    <CustomAction Id="LaunchCopilotSetup"
+                  Directory="TYPEAGENTROOT"
+                  ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]launch-copilot-setup.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\copilot-setup-launch.log&quot;"
+                  Execute="immediate"
                   Return="ignore"
                   Impersonate="yes" />
 
@@ -422,7 +492,7 @@
     <SetProperty Id="ProvisionAiSystemsConfig"
            Before="ProvisionAiSystemsConfig"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; provision" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -ServeCommand provision" />
 
     <CustomAction Id="ProvisionAiSystemsConfig"
                   BinaryKey="WixCA"
@@ -441,7 +511,7 @@
     <SetProperty Id="StartAgentServer"
            Before="StartAgentServer"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; start" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -ServeCommand start" />
 
     <CustomAction Id="StartAgentServer"
                   BinaryKey="WixCA"
@@ -459,7 +529,7 @@
     <SetProperty Id="EnableAutostart"
            Before="EnableAutostart"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; autostart enable" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -ServeCommand autostart -ServeCommandArg enable" />
 
     <CustomAction Id="EnableAutostart"
                   BinaryKey="WixCA"
@@ -471,7 +541,7 @@
     <SetProperty Id="DisableAutostart"
            Before="DisableAutostart"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; autostart disable" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -ServeCommand autostart -ServeCommandArg disable" />
 
     <CustomAction Id="DisableAutostart"
                   BinaryKey="WixCA"
@@ -619,11 +689,12 @@
       <Custom Action="RegisterCopilotPlugin"    After="MainProgress3">NOT REMOVE~="ALL"</Custom>
       <Custom Action="MainProgress4"            After="RegisterCopilotPlugin">NOT REMOVE~="ALL"</Custom>
       <Custom Action="InstallVsCodeChat"        After="MainProgress4">(NOT REMOVE~="ALL") AND (VSCODECHAT="1")</Custom>
-      <Custom Action="MainProgress5"            After="InstallVsCodeChat">NOT REMOVE~="ALL"</Custom>
-      <Custom Action="ProvisionSelfHostConfig" After="MainProgress5">(NOT REMOVE~="ALL") AND (PROVIDER&lt;&gt;"AISYSTEMS")</Custom>
-      <Custom Action="ProvisionAiSystemsConfig" After="ProvisionSelfHostConfig">(NOT REMOVE~="ALL") AND (PROVIDER="AISYSTEMS")</Custom>
-      <!-- Prereqs (claude/copilot from the feed) run AFTER provisioning so the
-           AISYSTEMS az login has established a session the feed token reuses. -->
+      <Custom Action="InstallVsCodeShell"       After="InstallVsCodeChat">(NOT Installed) AND (VSCODESHELL="1")</Custom>
+      <Custom Action="MainProgress5"            After="InstallVsCodeShell">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="ProvisionCopilotConfig" After="MainProgress5">(NOT REMOVE~="ALL") AND (PROVIDER="COPILOT")</Custom>
+      <Custom Action="ProvisionAiSystemsConfig" After="ProvisionCopilotConfig">(NOT REMOVE~="ALL") AND (PROVIDER="AISYSTEMS")</Custom>
+      <!-- Runtime prerequisites run after provisioning so an existing Azure
+           session can be reused for authenticated TypeAgent feed access. -->
       <Custom Action="MainProgress6"           After="ProvisionAiSystemsConfig">NOT REMOVE~="ALL"</Custom>
       <Custom Action="InstallPrereqs"          After="MainProgress6">NOT REMOVE~="ALL"</Custom>
       <Custom Action="MainProgress7"           After="InstallPrereqs">NOT REMOVE~="ALL"</Custom>
@@ -638,13 +709,15 @@
       <Custom Action="InstallTypeAgentShell"   After="ShellProgress2">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
       <Custom Action="ShellProgress3"          After="InstallTypeAgentShell">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
       <Custom Action="VerifyTypeAgentShell"    After="ShellProgress3">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
-      <Custom Action="DisableAutostart"        Before="UninstallVsCodeChat">REMOVE~="ALL"</Custom>
+      <Custom Action="LaunchCopilotSetup"      After="InstallFinalize">(NOT Installed) AND (PROVIDER="COPILOT") AND (UILevel &gt;= 4)</Custom>
+      <Custom Action="DisableAutostart"        Before="UninstallVsCodeShell">REMOVE~="ALL"</Custom>
+      <Custom Action="UninstallVsCodeShell"    Before="UninstallVsCodeChat">REMOVE~="ALL"</Custom>
       <Custom Action="UninstallVsCodeChat"     Before="UnregisterCopilotPlugin">REMOVE~="ALL"</Custom>
       <Custom Action="UnregisterCopilotPlugin" Before="RemoveFiles">REMOVE~="ALL"</Custom>
       <Custom Action="CleanupPayload"          After="UnregisterCopilotPlugin">REMOVE~="ALL"</Custom>
     </InstallExecuteSequence>
 
-    <!-- UI: custom sequence adding a provider/embedding selection dialog -->
+    <!-- UI: custom sequence adding a completion-provider selection dialog -->
     <UIRef Id="WixUI_TypeAgent" />
 
   </Product>
@@ -652,10 +725,10 @@
   <!-- ═══════════════════════════════════════════════
        Custom UI scheme: WixUI_TypeAgent
        WelcomeDlg → ProviderDlg → VerifyReadyDlg
-       Adds a provider/embedding selection dialog bound to the public
-       PROVIDER / EMBEDDING / OLLAMAHOST properties. Modeled on
-       WixUI_InstallDir (minus the install-directory dialog, since this
-       product installs to a fixed per-user location).
+       Adds a completion-provider selection dialog bound to the public
+       PROVIDER property. Modeled on WixUI_InstallDir (minus the
+       install-directory dialog, since this product installs to a fixed
+       per-user location).
        ═══════════════════════════════════════════════ -->
   <Fragment>
     <UI Id="WixUI_TypeAgent">
@@ -670,7 +743,8 @@
       <ProgressText Action="ExtractCopilotPluginPayload">Step 2 of 8: Extracting Copilot plugin...</ProgressText>
       <ProgressText Action="RegisterCopilotPlugin">Step 3 of 8: Registering Copilot plugin...</ProgressText>
       <ProgressText Action="InstallVsCodeChat">Step 4 of 8: Installing TypeAgent Chat for VS Code...</ProgressText>
-      <ProgressText Action="ProvisionSelfHostConfig">Step 5 of 8: Configuring TypeAgent...</ProgressText>
+      <ProgressText Action="InstallVsCodeShell">Step 4 of 8: Installing TypeAgent VS Code Shell...</ProgressText>
+      <ProgressText Action="ProvisionCopilotConfig">Step 5 of 8: Configuring TypeAgent for GitHub Copilot...</ProgressText>
       <ProgressText Action="ProvisionAiSystemsConfig">Step 5 of 8: Downloading TypeAgent configuration...</ProgressText>
       <ProgressText Action="InstallPrereqs">Step 6 of 8: Checking TypeAgent prerequisites...</ProgressText>
       <ProgressText Action="StartAgentServer">Step 7 of 8: Starting TypeAgent agent server...</ProgressText>
@@ -680,6 +754,7 @@
       <ProgressText Action="VerifyTypeAgentShell">Verifying TypeAgent Shell...</ProgressText>
       <ProgressText Action="DisableAutostart">Disabling TypeAgent automatic startup...</ProgressText>
       <ProgressText Action="UninstallVsCodeChat">Removing TypeAgent Chat from VS Code...</ProgressText>
+      <ProgressText Action="UninstallVsCodeShell">Removing TypeAgent VS Code Shell...</ProgressText>
       <ProgressText Action="UnregisterCopilotPlugin">Unregistering Copilot plugin...</ProgressText>
       <ProgressText Action="CleanupPayload">Removing TypeAgent components...</ProgressText>
 
@@ -692,87 +767,53 @@
       <DialogRef Id="ResumeDlg" />
       <DialogRef Id="UserExit" />
 
-      <!-- ═══ Provider / embedding selection dialog ═══ -->
-      <Dialog Id="ProviderDlg" Width="370" Height="310" Title="[ProductName] Setup">
+      <!-- ═══ Completion-provider selection dialog ═══ -->
+      <Dialog Id="ProviderDlg" Width="370" Height="230" Title="[ProductName] Setup">
         <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44"
                  TabSkip="no" Text="!(loc.InstallDirDlgBannerBitmap)" />
         <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
         <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15"
                  Transparent="yes" NoPrefix="yes"
-                 Text="{\WixUI_Font_Title}Endpoint providers" />
-        <Control Id="Description" Type="Text" X="25" Y="23" Width="330" Height="15"
+                 Text="{\WixUI_Font_Title}Install Options" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="330" Height="24"
                  Transparent="yes" NoPrefix="yes"
-                 Text="Choose how TypeAgent connects to language models." />
+                 Text="Choose the components to install and how TypeAgent connects to language models." />
 
         <Control Id="ProviderLabel" Type="Text" X="20" Y="55" Width="330" Height="12"
                  Transparent="yes" NoPrefix="yes"
                  Text="{\WixUI_Font_Title}Completion (chat) provider" />
         <Control Id="ProviderRadio" Type="RadioButtonGroup" X="24" Y="70"
-                 Width="326" Height="52" Property="PROVIDER">
+                 Width="326" Height="36" Property="PROVIDER">
           <RadioButtonGroup Property="PROVIDER">
             <RadioButton Value="AISYSTEMS" X="0" Y="0" Width="322" Height="16"
-                         Text="AI Systems — download config from Azure Key Vault (needs az login access)" />
-            <RadioButton Value="OLLAMA" X="0" Y="17" Width="322" Height="16"
-                         Text="Ollama — local OpenAI-compatible server (no Key Vault)" />
-            <RadioButton Value="COPILOT" X="0" Y="34" Width="322" Height="16"
-                         Text="GitHub Copilot — Copilot SDK chat via an authenticated copilot CLI" />
+                         Text="AI Systems — Azure Key Vault configuration (requires az login access)" />
+            <RadioButton Value="COPILOT" X="0" Y="18" Width="322" Height="16"
+                         Text="GitHub Copilot — authenticated copilot CLI with automatic local embeddings" />
           </RadioButtonGroup>
         </Control>
 
-        <Control Id="EmbeddingLabel" Type="Text" X="20" Y="128" Width="330" Height="12"
-                 Transparent="yes" NoPrefix="yes"
-                 Text="{\WixUI_Font_Title}Embedding provider (Ollama / Copilot only)">
-          <Condition Action="disable">PROVIDER="AISYSTEMS"</Condition>
-          <Condition Action="enable">PROVIDER&lt;&gt;"AISYSTEMS"</Condition>
-        </Control>
-        <Control Id="EmbeddingRadio" Type="RadioButtonGroup" X="24" Y="143"
-                 Width="326" Height="52" Property="EMBEDDING">
-          <RadioButtonGroup Property="EMBEDDING">
-            <RadioButton Value="LOCAL" X="0" Y="0" Width="322" Height="14"
-                         Text="Local — bundled CPU-only model (no GPU, API key or network)" />
-            <RadioButton Value="OLLAMA" X="0" Y="14" Width="322" Height="14"
-                         Text="Ollama — embeddings from the local Ollama server" />
-            <RadioButton Value="OPENAI" X="0" Y="28" Width="322" Height="14"
-                         Text="OpenAI — embeddings from an OpenAI endpoint (configure post-install)" />
-            <RadioButton Value="NONE" X="0" Y="42" Width="322" Height="14"
-                         Text="None — disable embeddings (semantic features degrade gracefully)" />
-          </RadioButtonGroup>
-          <!-- AISYSTEMS sources embeddings from Key Vault config, so this choice
-               is ignored (ProvisionSelfHostConfig runs only for self-host
-               providers). Grey it out to avoid a misleading active selection. -->
-          <Condition Action="disable">PROVIDER="AISYSTEMS"</Condition>
-          <Condition Action="enable">PROVIDER&lt;&gt;"AISYSTEMS"</Condition>
-        </Control>
-
-        <Control Id="OllamaHostLabel" Type="Text" X="20" Y="205" Width="70" Height="14"
-                 Transparent="yes" NoPrefix="yes" Text="Ollama host:">
-          <Condition Action="disable">PROVIDER="AISYSTEMS"</Condition>
-          <Condition Action="enable">PROVIDER&lt;&gt;"AISYSTEMS"</Condition>
-        </Control>
-        <Control Id="OllamaHostEdit" Type="Edit" X="92" Y="203" Width="258" Height="16"
-                 Property="OLLAMAHOST" Text="{80}">
-          <Condition Action="disable">PROVIDER="AISYSTEMS"</Condition>
-          <Condition Action="enable">PROVIDER&lt;&gt;"AISYSTEMS"</Condition>
-        </Control>
-
-        <Control Id="VsCodeChatCheckBox" Type="CheckBox" X="20" Y="221" Width="340" Height="12"
+        <Control Id="VsCodeChatCheckBox" Type="CheckBox" X="20" Y="122" Width="340" Height="12"
                  Property="VSCODECHAT" CheckBoxValue="1"
                  Text="Install TypeAgent Chat for VS Code 1.133 or newer" />
 
-        <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="237" Width="340" Height="12"
+        <Control Id="VsCodeShellCheckBox" Type="CheckBox" X="20" Y="138" Width="340" Height="12"
+                 Property="VSCODESHELL" CheckBoxValue="1"
+                 Text="Install TypeAgent Shell Extension for VS Code 1.90 or newer" />
+
+        <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="154" Width="340" Height="12"
                  Property="SHELL" CheckBoxValue="1"
                  Text="Also install the TypeAgent Shell desktop app" />
 
-        <Control Id="StackTraceCheckBox" Type="CheckBox" X="20" Y="253" Width="340" Height="12"
+        <Control Id="StackTraceCheckBox" Type="CheckBox" X="20" Y="170" Width="340" Height="12"
                  Property="SHOWSTACKTRACE" CheckBoxValue="1"
                  Text="Show full error details if setup fails" />
 
-        <Control Id="BottomLine" Type="Line" X="0" Y="274" Width="370" Height="0" />
-        <Control Id="Back" Type="PushButton" X="180" Y="283" Width="56" Height="17"
+        <Control Id="BottomLine" Type="Line" X="0" Y="194" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="203" Width="56" Height="17"
                  Text="!(loc.WixUIBack)" />
-        <Control Id="Next" Type="PushButton" X="236" Y="283" Width="56" Height="17"
+        <Control Id="Next" Type="PushButton" X="236" Y="203" Width="56" Height="17"
                  Default="yes" Text="!(loc.WixUINext)" />
-        <Control Id="Cancel" Type="PushButton" X="304" Y="283" Width="56" Height="17"
+        <Control Id="Cancel" Type="PushButton" X="304" Y="203" Width="56" Height="17"
                  Cancel="yes" Text="!(loc.WixUICancel)">
           <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
         </Control>

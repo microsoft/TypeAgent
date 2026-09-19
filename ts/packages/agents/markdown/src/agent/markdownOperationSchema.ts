@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Document operation types for incremental updates to ProseMirror documents
-// Position references should be line numbers (0-based) in the document.
+// Position references are character offsets (0-based) in the markdown text.
 export type DocumentOperation =
     | InsertOperation
     | DeleteOperation

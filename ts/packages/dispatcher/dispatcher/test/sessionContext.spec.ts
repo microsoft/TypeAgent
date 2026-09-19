@@ -48,6 +48,27 @@ function makeContext(overrides: {
     };
 }
 
+describe("createSessionContext currentConnectionId", () => {
+    test("tracks the request in flight and is undefined between requests", () => {
+        const { context } = makeContext({ persistDir: "/session/persist" });
+        const sc = createSessionContext("myAgent", {}, context, false, "cc-1");
+
+        // No request in flight.
+        expect(sc.currentConnectionId).toBeUndefined();
+
+        // A client-originated request.
+        context.currentRequestId = {
+            requestId: "r1",
+            connectionId: "conn-42",
+        };
+        expect(sc.currentConnectionId).toBe("conn-42");
+
+        // A server-initiated request carries no connection.
+        context.currentRequestId = { requestId: "r2" };
+        expect(sc.currentConnectionId).toBeUndefined();
+    });
+});
+
 describe("createSessionContext storage routing", () => {
     test("instanceStorage uses instanceDir when provided", () => {
         const { context, calls } = makeContext({

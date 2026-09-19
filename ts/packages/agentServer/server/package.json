@@ -55,6 +55,7 @@
     "@typeagent/telemetry": "workspace:*",
     "@typeagent/typechat-utils": "workspace:*",
     "@typeagent/websocket-channel-server": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "better-sqlite3": "12.8.0",
     "debug": "^4.4.0",

@@ -295,3 +295,112 @@ describe("setContent plain-text linkification", () => {
         expect(elm.querySelector("a[href]")).toBeNull();
     });
 });
+
+// Message content can carry text an agent relayed from the outside world (an
+// email body, a fetched page), so it is treated as untrusted. These pin the
+// sanitizer: the config previously allow-listed `onclick`/`onerror` via
+// ADD_ATTR and marked `href`/`src` as URI-safe, which let event handlers and
+// `javascript:` URLs reach the DOM.
+describe("setContent sanitizes untrusted message content", () => {
+    // Serialized markup, so an attribute that survived sanitization is
+    // visible even when jsdom would not fire the handler.
+    const html = (elm: HTMLElement) => elm.innerHTML.toLowerCase();
+
+    describe.each(["html", "markdown"] as const)("%s content", (type) => {
+        it("strips inline event handlers", () => {
+            const elm = render({
+                type,
+                content: `<img src="x" onerror="alert(1)">`,
+            });
+            expect(html(elm)).not.toContain("onerror");
+            // The element itself is kept; only the handler is removed.
+            expect(elm.querySelector("img")).not.toBeNull();
+        });
+
+        it("strips onclick handlers", () => {
+            const elm = render({
+                type,
+                content: `<div onclick="alert(1)">click me</div>`,
+            });
+            expect(html(elm)).not.toContain("onclick");
+        });
+
+        it("drops javascript: URLs", () => {
+            const elm = render({
+                type,
+                content: `<a href="javascript:alert(1)">link</a>`,
+            });
+            expect(html(elm)).not.toContain("javascript:");
+        });
+
+        it("drops javascript: URLs that dodge a naive scheme check", () => {
+            const elm = render({
+                type,
+                content: [
+                    `<a href="JaVaScRiPt:alert(1)">a</a>`,
+                    `<a href="&#106;avascript:alert(1)">b</a>`,
+                    `<a href=" javascript:alert(1)">c</a>`,
+                    `<img src="javascript:alert(1)">`,
+                ].join(""),
+            });
+            expect(html(elm)).not.toContain("javascript:");
+        });
+
+        it("removes script elements", () => {
+            const elm = render({
+                type,
+                content: `<script>alert(1)</script><p>after</p>`,
+            });
+            expect(elm.querySelector("script")).toBeNull();
+        });
+
+        it("survives markup that tries to break out of a parent element", () => {
+            const elm = render({
+                type,
+                content:
+                    `<math><mtext><table><mglyph><style><img src=x onerror=alert(1)>` +
+                    `<template><img src=y onerror=alert(2)></template>`,
+            });
+            expect(html(elm)).not.toContain("onerror");
+        });
+    });
+
+    // The allow-list existed to keep these working. They must survive, or the
+    // fix would be traded for a rendering regression.
+    describe("keeps legitimate content intact", () => {
+        it("keeps links to the app's own schemes", () => {
+            const elm = render({
+                type: "html",
+                content: [
+                    `<a href="https://example.com/a">https</a>`,
+                    `<a href="mailto:a@b.com">mail</a>`,
+                    `<a href="typeagent-file:/c/tmp/a.txt">file</a>`,
+                    `<a href="typeagent-browser://open">browser</a>`,
+                ].join(""),
+            });
+            expect(elm.querySelectorAll("a[href]")).toHaveLength(4);
+        });
+
+        it("keeps image sources the renderer relies on", () => {
+            const elm = render({
+                type: "html",
+                content: [
+                    `<img src="https://example.com/a.png">`,
+                    `<img src="data:image/png;base64,iVBORw0KGgo=">`,
+                    `<img src="cid:attachment-1">`,
+                ].join(""),
+            });
+            expect(elm.querySelectorAll("img[src]")).toHaveLength(3);
+        });
+
+        it("keeps target on markdown links so they open in a new tab", () => {
+            const elm = render({
+                type: "markdown",
+                content: "[docs](https://example.org/guide)",
+            });
+            expect(
+                elm.querySelector<HTMLAnchorElement>("a[href]")!.target,
+            ).toBe("_blank");
+        });
+    });
+});

@@ -119,6 +119,23 @@ function forceKillServer(port: number): boolean {
     return true;
 }
 
+/**
+ * Optional identity for a client-hosted agent, for when several clients host
+ * the same agent name on one conversation. `instanceId` must survive
+ * reconnects, so the server replaces this client's instance instead of adding
+ * another.
+ */
+export type ClientAgentIdentity = {
+    instanceId?: string;
+    displayName?: string;
+    /**
+     * Opt in to sharing the agent name with other clients hosting the same
+     * schema. Off by default: a client that expects to be the only host keeps
+     * getting an error when a second one registers.
+     */
+    multiInstance?: boolean;
+};
+
 export type ConversationDispatcher = {
     dispatcher: Dispatcher;
     conversationId: string;
@@ -128,6 +145,12 @@ export type ConversationDispatcher = {
     /** Server-side queue snapshot at join time, so clients can render correct
      *  queue state when joining mid-queue. Omitted by older servers. */
     queueSnapshot?: JoinConversationResult["queueSnapshot"];
+    /** Interactions awaiting a client response when this client joined. */
+    pendingInteractions?: NonNullable<
+        JoinConversationResult["pendingInteractions"]
+    >;
+    /** Retain only in trusted memory; pass back on an explicit resumed join. */
+    structuredActions?: JoinConversationResult["structuredActions"];
 };
 
 export type AgentServerConnection = {
@@ -220,17 +243,29 @@ export type AgentServerConnection = {
      * rpc proxy that forwards calls back over the connection. Pass
      * `conversationId` to target a specific joined conversation, or omit it when
      * exactly one conversation is joined. Re-registering the same `name` (e.g.
-     * after {@link reconnect}) replaces the previous registration. Rejects if
-     * another client already registered `name` on the target conversation.
+     * after {@link reconnect}) replaces the previous registration.
+     *
+     * Several clients may register the same `name` on one conversation if they
+     * opt in with `multiInstance` and carry the same schema; each becomes an
+     * instance. Pass a stable `instanceId` so a reconnect replaces this
+     * client's instance instead of adding another.
      */
     registerClientAgent(
         name: string,
         manifest: AppAgentManifest,
         agent: AppAgent,
         conversationId?: string,
+        identity?: ClientAgentIdentity,
     ): Promise<void>;
-    /** Unregister an agent previously registered via registerClientAgent. */
-    unregisterClientAgent(name: string, conversationId?: string): Promise<void>;
+    /**
+     * Unregister an agent previously registered via registerClientAgent. The
+     * server only removes an instance this connection owns.
+     */
+    unregisterClientAgent(
+        name: string,
+        conversationId?: string,
+        instanceId?: string,
+    ): Promise<void>;
     /**
      * Reopen the underlying transport and rebind the control rpc onto it,
      * reusing this connection object instead of building a new one. Returns
@@ -302,10 +337,40 @@ export function createAgentServerConnection(
         { dispatcher: Dispatcher; connectionId: string }
     >();
 
-    // Client-hosted agents registered on the server, name → agent-rpc server
-    // closeFn. Used to tear down the local rpc server when unregistering,
-    // re-registering, or closing the connection.
-    const clientAgentServers = new Map<string, () => void>();
+    // Client-hosted agents registered on the server. Registration details let
+    // re-registration remove the previous agent while its RPC endpoint is
+    // still alive, so dispatcher lifecycle teardown can reach it.
+    const clientAgentServers = new Map<
+        string,
+        {
+            closeFn: () => void;
+            conversationId: string;
+            instanceId?: string | undefined;
+        }
+    >();
+    let nextClientAgentRegistrationId = 0;
+
+    function resolveClientAgentConversationId(conversationId?: string): string {
+        if (conversationId !== undefined) {
+            if (!joinedConversations.has(conversationId)) {
+                throw new Error(
+                    `Not joined to conversation: ${conversationId}`,
+                );
+            }
+            return conversationId;
+        }
+        if (joinedConversations.size === 1) {
+            return joinedConversations.keys().next().value as string;
+        }
+        if (joinedConversations.size === 0) {
+            throw new Error(
+                "Cannot register client agent: no conversation joined",
+            );
+        }
+        throw new Error(
+            "Cannot register client agent: multiple conversations joined; specify conversationId",
+        );
+    }
 
     let closed = false;
 
@@ -478,6 +543,10 @@ export function createAgentServerConnection(
                 name: result.name,
                 connectionId: result.connectionId,
                 queueSnapshot: result.queueSnapshot,
+                pendingInteractions: result.pendingInteractions ?? [],
+                ...(result.structuredActions === undefined
+                    ? {}
+                    : { structuredActions: result.structuredActions }),
             };
         },
 
@@ -588,42 +657,94 @@ export function createAgentServerConnection(
             manifest: AppAgentManifest,
             agent: AppAgent,
             conversationId?: string,
+            identity?: ClientAgentIdentity,
         ): Promise<void> {
-            // Drop any previous rpc server for this name (e.g. re-registering
-            // after a reconnect, where the old server sat on a stale channel).
-            clientAgentServers.get(name)?.();
-            clientAgentServers.delete(name);
+            const resolvedConversationId =
+                resolveClientAgentConversationId(conversationId);
+            const previous = clientAgentServers.get(name);
+            const registrationId = String(++nextClientAgentRegistrationId);
+            const channelName = `agent:${name}:${registrationId}`;
 
             const { closeFn, agentInterface } = createAgentRpcServer(
                 name,
                 agent,
                 currentChannel,
+                { channelName },
             );
             try {
                 await rpc.invoke("registerClientAgent", {
                     name,
                     manifest,
                     agentInterface,
-                    ...(conversationId !== undefined ? { conversationId } : {}),
+                    conversationId: resolvedConversationId,
+                    registrationId,
+                    ...(identity?.instanceId !== undefined
+                        ? { instanceId: identity.instanceId }
+                        : {}),
+                    ...(identity?.displayName !== undefined
+                        ? { displayName: identity.displayName }
+                        : {}),
+                    ...(identity?.multiInstance !== undefined
+                        ? { multiInstance: identity.multiInstance }
+                        : {}),
                 });
             } catch (e) {
                 closeFn();
                 throw e;
             }
-            clientAgentServers.set(name, closeFn);
+            if (
+                previous !== undefined &&
+                previous.conversationId !== resolvedConversationId
+            ) {
+                try {
+                    await rpc.invoke("unregisterClientAgent", {
+                        name,
+                        conversationId: previous.conversationId,
+                        ...(previous.instanceId !== undefined
+                            ? { instanceId: previous.instanceId }
+                            : {}),
+                    });
+                } catch (e) {
+                    try {
+                        await rpc.invoke("unregisterClientAgent", {
+                            name,
+                            conversationId: resolvedConversationId,
+                            ...(identity?.instanceId !== undefined
+                                ? { instanceId: identity.instanceId }
+                                : {}),
+                        });
+                    } catch (rollbackError) {
+                        closeFn();
+                        throw new AggregateError(
+                            [e, rollbackError],
+                            `Failed to move client agent '${name}' and roll back the new registration`,
+                        );
+                    }
+                    closeFn();
+                    throw e;
+                }
+            }
+            previous?.closeFn();
+            clientAgentServers.set(name, {
+                closeFn,
+                conversationId: resolvedConversationId,
+                instanceId: identity?.instanceId,
+            });
         },
 
         async unregisterClientAgent(
             name: string,
             conversationId?: string,
+            instanceId?: string,
         ): Promise<void> {
             try {
                 await rpc.invoke("unregisterClientAgent", {
                     name,
                     ...(conversationId !== undefined ? { conversationId } : {}),
+                    ...(instanceId !== undefined ? { instanceId } : {}),
                 });
             } finally {
-                clientAgentServers.get(name)?.();
+                clientAgentServers.get(name)?.closeFn();
                 clientAgentServers.delete(name);
             }
         },
@@ -643,7 +764,7 @@ export function createAgentServerConnection(
             joinedConversations.clear();
             // Client-agent rpc servers were bound to the old channel; drop them
             // so the caller re-registers them on the new channel after re-join.
-            for (const closeFn of clientAgentServers.values()) {
+            for (const { closeFn } of clientAgentServers.values()) {
                 closeFn();
             }
             clientAgentServers.clear();
@@ -656,7 +777,7 @@ export function createAgentServerConnection(
             }
             closed = true;
             debug("Closing agent server connection");
-            for (const closeFn of clientAgentServers.values()) {
+            for (const { closeFn } of clientAgentServers.values()) {
                 closeFn();
             }
             clientAgentServers.clear();
@@ -716,7 +837,8 @@ export async function connectAgentServer(
                 createChannelProviderAdapter(
                     "agent-server:client",
                     (message: any) => {
-                        debug("Sending message to server:", message);
+                        // Join payloads can carry private resume capabilities.
+                        debug("Sending message to server");
                         ws.send(JSON.stringify(message));
                     },
                 );
@@ -727,7 +849,7 @@ export async function connectAgentServer(
                 settle(channel);
             };
             ws.onmessage = (event: WebSocket.MessageEvent) => {
-                debug("Received message from server:", event.data);
+                debug("Received message from server");
                 channel.notifyMessage(JSON.parse(event.data.toString()));
             };
             ws.onclose = (event: WebSocket.CloseEvent) => {

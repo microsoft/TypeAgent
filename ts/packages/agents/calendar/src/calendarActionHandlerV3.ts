@@ -1403,6 +1403,9 @@ export function instantiate(): AppAgent {
             action: AppAction,
             context: ActionContext<CalendarActionContext>,
         ) => handler.executeAction(action, context),
+        cancelChoice: async (choiceId: string) => {
+            handler.choiceManager.cancelChoice(choiceId);
+        },
         handleChoice: (
             choiceId: string,
             response: boolean | number[],

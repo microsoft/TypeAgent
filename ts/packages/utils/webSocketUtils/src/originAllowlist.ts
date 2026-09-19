@@ -63,6 +63,85 @@ export type OriginAllowlistOptions = {
 };
 
 /**
+ * Origin of the Visual Studio chat panel. The extension maps its bundled
+ * WebView2 content to a virtual host
+ * (`SetVirtualHostNameToFolderMapping("typeagent.local", ...)` in
+ * `dotnet/visualStudioTypeAgent/ChatToolWindowControl.xaml.cs`) and navigates
+ * to `https://typeagent.local/index.html`, so the panel's WebSocket upgrade
+ * carries this Origin rather than a loopback one.
+ *
+ * It is matched exactly, never as a prefix: a prefix test would also accept
+ * `https://typeagent.local.example.com`, a domain an attacker can register.
+ */
+export const VISUAL_STUDIO_WEBVIEW_ORIGIN = "https://typeagent.local";
+
+/**
+ * Reduce an origin to the `scheme://host[:port]` form browsers send, so a
+ * configured entry with a trailing slash or stray case still matches.
+ * Returns undefined for anything that isn't a usable absolute http(s)
+ * origin.
+ */
+export function normalizeOrigin(value: string): string | undefined {
+    const trimmed = value.trim();
+    if (trimmed === "") {
+        return undefined;
+    }
+    try {
+        const url = new URL(trimmed);
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+            return undefined;
+        }
+        return url.origin.toLowerCase();
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Split a comma separated configuration value into normalized origins,
+ * dropping entries that aren't usable absolute http(s) origins.
+ */
+export function parseAllowedOrigins(raw: string | undefined): string[] {
+    if (raw === undefined) {
+        return [];
+    }
+    return raw
+        .split(",")
+        .map((entry) => normalizeOrigin(entry))
+        .filter((entry): entry is string => entry !== undefined);
+}
+
+/**
+ * The baseline allowlist widened by origins an operator named explicitly.
+ *
+ * A server that binds beyond loopback serves its page from some other
+ * hostname, so the browser sends that hostname as `Origin` and the loopback
+ * baseline alone would refuse it. Naming the origins reopens exactly those
+ * deployments while still refusing a DNS rebinding attacker, whose Origin is
+ * its own domain rather than one listed here. Comparing `Origin` against the
+ * request's `Host` would not: a rebinding attacker's request has the two
+ * agree.
+ */
+export function createConfiguredOriginAllowlist(
+    options: OriginAllowlistOptions,
+    allowedOrigins: readonly string[],
+): (origin: string | string[] | undefined) => boolean {
+    const baseline = createAgentOriginAllowlist(options);
+    const configured = new Set(allowedOrigins);
+    return (origin: string | string[] | undefined): boolean => {
+        if (baseline(origin)) {
+            return true;
+        }
+        if (configured.size === 0 || Array.isArray(origin)) {
+            return false;
+        }
+        const normalized =
+            origin === undefined ? undefined : normalizeOrigin(origin);
+        return normalized !== undefined && configured.has(normalized);
+    };
+}
+
+/**
  * Returns a predicate that decides whether an incoming WebSocket
  * upgrade's `Origin` header should be accepted. See
  * {@link OriginAllowlistOptions} for the shared policy.

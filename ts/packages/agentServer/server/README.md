@@ -29,11 +29,29 @@ node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js --conf
 
 Listens on `ws://localhost:8999`. The server also starts automatically when clients call `ensureAgentServer()`.
 
+### Network exposure
+
+The listener binds loopback (`127.0.0.1`), so only this machine can reach it,
+and refuses WebSocket upgrades whose `Origin` is neither a loopback page nor a
+TypeAgent browser extension. This matters because the server has no
+authentication: a client that connects can join conversations, read the signed-in
+user's identity, and run agent commands with the local user's permissions.
+
+For cross-device access use the [dev tunnel](#dev-tunnel-cross-device-access) -
+the tunnel host runs on this machine and reaches the server over loopback, so it
+works unchanged.
+
+`--host <address>` (or `AGENT_SERVER_HOST`) widens the bind for deployments that
+must publish the port, such as a container that isolates the workspace. The
+server prints a warning banner whenever it binds anything but loopback; only do
+this behind a network boundary you control.
+
 ### Server flags
 
 | Flag                       | Description                                                                                                                             |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `--port <port>`            | Port to listen on (default: 8999)                                                                                                       |
+| `--host <address>`         | Address to bind (default: `127.0.0.1`). Also settable via `AGENT_SERVER_HOST`.                                                          |
 | `--config <name>`          | Load `config.<name>.json` instead of the default config                                                                                 |
 | `--idle-timeout <seconds>` | Exit after this many seconds with no connected clients (default: disabled). The CLI passes 600 (10 min) when it auto-spawns the server. |
 

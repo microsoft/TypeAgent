@@ -150,6 +150,29 @@ describe("JsonlLogExporter", () => {
         expect(lines.map((line) => line.body)).toEqual(["first", "second"]);
     });
 
+    it("creates and announces the file only when the first record is written", async () => {
+        const dir = makeTempDir();
+        tempDirs.push(dir);
+        const diagnostics: string[] = [];
+        const exporter = new JsonlLogExporter({
+            filePath: path.join(dir, "lazy-{pid}.jsonl"),
+            serviceName: "test",
+            pid: 1010,
+            diagnostic: (message) => diagnostics.push(message),
+        });
+
+        expect(fs.existsSync(exporter.filePath)).toBe(false);
+        expect(diagnostics).toEqual([]);
+
+        await exportRecords(exporter, [createRecord("first")]);
+
+        expect(fs.existsSync(exporter.filePath)).toBe(true);
+        expect(diagnostics).toEqual([
+            `OpenTelemetry JSONL logs: ${exporter.filePath}`,
+        ]);
+        await exporter.shutdown();
+    });
+
     it("writes the reduced local envelope", async () => {
         const dir = makeTempDir();
         tempDirs.push(dir);

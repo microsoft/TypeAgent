@@ -128,6 +128,39 @@ The Coda VSCode extension connects to TypeAgent's dispatcher and can execute var
 - "open terminal in src folder"
 - "open terminal and run npm install"
 
+### Structured workspace commands
+
+For an explicit focused command, call the direct MCP tool instead of
+`execute_command`:
+
+```json
+{
+  "tool": "run_workspace_command",
+  "arguments": {
+    "command": "pnpm test -- --runInBand",
+    "workingDirectory": "ts/packages/coda",
+    "timeoutMs": 120000,
+    "executionId": "coda-tests-1"
+  }
+}
+```
+
+The tool bypasses natural-language translation and terminal UI. It returns
+structured stdout, stderr, exit code, duration, success, timeout, cancellation,
+and stream-truncation metadata. In a multi-root workspace, pass
+`workspaceFolder` by root name or absolute path unless the active editor
+identifies the target root. Use `cancel_workspace_command` with an
+`executionId` to terminate a running command. The caller must provide this ID
+when starting a command. Coda accepts focused build, test, lint, and diagnostic
+tools only; shell composition is rejected. A cancellation issued while the
+command is still in transit reports `pendingCancellation: true` and prevents
+that command from starting.
+
+Commands with distinct IDs can run concurrently in Coda. Each Code Agent only
+routes structured commands when exactly one Coda workspace is connected. The
+command result remains synchronous; when a caller sets a timeout, Code Agent
+uses its cleanup allowance to send Coda an out-of-band cancellation request.
+
 ### Tasks & Build
 
 **Run Tasks:**
@@ -281,6 +314,8 @@ Here are the internal action names (useful for understanding the code):
 - `workbenchCreateFolderFromExplorer`
 - `workbenchBuildRelatedTask`
 - `openInIntegratedTerminal`
+- `runWorkspaceCommand`
+- `cancelWorkspaceCommand`
 
 ## Prerequisites
 

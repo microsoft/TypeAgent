@@ -37,6 +37,7 @@
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "npm run test:local",
+    "test:live": "pnpm run jest-esm --testPathPattern=\".*[.]test[.]js\"",
     "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "test:local:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "tsc": "tsc -b"
@@ -47,7 +48,7 @@
     "@azure/core-rest-pipeline": "^1.22.0",
     "@azure/cosmos": "^4.2.1",
     "@azure/identity": "^4.10.0",
-    "@github/copilot-sdk": "1.0.9",
+    "@github/copilot-sdk": "1.0.13",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@opentelemetry/api": "1.9.0",
     "@typeagent/action-grammar": "workspace:*",

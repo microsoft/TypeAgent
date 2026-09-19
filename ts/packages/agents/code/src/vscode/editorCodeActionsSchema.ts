@@ -411,11 +411,19 @@ export type EditorActionSaveCurrentFile = {
     };
 };
 
+// Save all matching files.
+// Example: "quietly save every modified named file" means onlyDirty=true,
+// excludeUntitled=true, logResult=false.
 export type EditorActionSaveAllFiles = {
     actionName: "saveAllFiles";
     parameters: {
-        onlyDirty?: boolean;
-        excludeUntitled?: boolean;
+        // Whether to show a result notification.
+        // Set false when the user asks to save silently, quietly, or without a notification.
+        // Set true only when the user explicitly asks for a notification; otherwise omit.
         logResult?: boolean;
+        // Set true for unsaved or dirty files only.
+        onlyDirty?: boolean;
+        // Set true when untitled files are excluded or only named files are requested.
+        excludeUntitled?: boolean;
     };
 };

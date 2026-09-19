@@ -16,7 +16,7 @@
  * Usage:
  *   node build-msi.mjs --rid win32-x64 --version 0.0.1-12345 --output ./out
  *   node build-msi.mjs --rid win32-x64 --version 0.0.1-12345 --plugin-version 0.0.1-12345
- *   node build-msi.mjs --skip-download --agent-dir ./agent-server --plugin-dir ./copilot-plugin --vscode-chat-vsix ./typeagent-vscode-chat.vsix --version 0.0.1-test --plugin-version 0.0.1-test --output ./out
+ *   node build-msi.mjs --skip-download --agent-dir ./agent-server --plugin-dir ./copilot-plugin --vscode-chat-vsix ./typeagent-vscode-chat.vsix --vscode-shell-vsix ./typeagent-vscode-shell.vsix --version 0.0.1-test --plugin-version 0.0.1-test --output ./out
  */
 
 import fs from "node:fs";
@@ -36,7 +36,9 @@ let skipDownload = false;
 let stagedAgentDir = "";
 let stagedPluginDir = "";
 let stagedVsCodeChatVsix = "";
+let stagedVsCodeShellVsix = "";
 let vscodeChatVersion = "latest";
+let vscodeShellVersion = "latest";
 // Optional TypeAgent Shell download coordinates, baked into the MSI as the
 // SHELLBASEURL / SHELLSTORAGE / SHELLCONTAINER / SHELLCHANNEL property defaults
 // so the "install the shell" option has a location on a fresh machine.
@@ -64,6 +66,10 @@ for (let i = 0; i < args.length; i++) {
     else if (args[i] === "--plugin-dir") stagedPluginDir = args[++i];
     else if (args[i] === "--vscode-chat-vsix") stagedVsCodeChatVsix = args[++i];
     else if (args[i] === "--vscode-chat-version") vscodeChatVersion = args[++i];
+    else if (args[i] === "--vscode-shell-vsix")
+        stagedVsCodeShellVsix = args[++i];
+    else if (args[i] === "--vscode-shell-version")
+        vscodeShellVersion = args[++i];
     else if (args[i] === "--shell-base-url") shellBaseUrl = args[++i];
     else if (args[i] === "--shell-storage") shellStorage = args[++i];
     else if (args[i] === "--shell-container") shellContainer = args[++i];
@@ -77,17 +83,21 @@ for (let i = 0; i < args.length; i++) {
         skipShellFeedResolution = true;
 }
 if (vscodeChatVersion === "latest") vscodeChatVersion = version;
+if (vscodeShellVersion === "latest") vscodeShellVersion = version;
 
 console.log(`📦 Building TypeAgent MSI`);
 console.log(`   RID:            ${rid}`);
 console.log(`   Agent version:  ${version}`);
 console.log(`   Plugin version: ${pluginVersion}`);
 console.log(`   VS Code Chat:   ${vscodeChatVersion}`);
+console.log(`   VS Code Shell:  ${vscodeShellVersion}`);
 console.log(`   Output:         ${outputDir}`);
 if (stagedAgentDir) console.log(`   Agent dir:      ${stagedAgentDir}`);
 if (stagedPluginDir) console.log(`   Plugin dir:     ${stagedPluginDir}`);
 if (stagedVsCodeChatVsix)
     console.log(`   VS Code VSIX:   ${stagedVsCodeChatVsix}`);
+if (stagedVsCodeShellVsix)
+    console.log(`   Shell VSIX:     ${stagedVsCodeShellVsix}`);
 
 // The shell download is authenticated: install-shell.ps1 uses `az storage blob
 // download --auth-mode login` first, then the Azure Artifacts feed as a
@@ -122,6 +132,11 @@ const outputPath = path.resolve(outputDir);
 const agentArtifactDir = path.join(outputPath, "artifact", "agent-server");
 const pluginArtifactDir = path.join(outputPath, "artifact", "copilot-plugin");
 const vscodeChatArtifactDir = path.join(outputPath, "artifact", "vscode-chat");
+const vscodeShellArtifactDir = path.join(
+    outputPath,
+    "artifact",
+    "vscode-shell",
+);
 const marketplaceDir = path.join(outputPath, "marketplace");
 const payloadDir = path.join(outputPath, "payload");
 const agentZipFile = path.join(payloadDir, "agent-server.zip");
@@ -129,6 +144,10 @@ const pluginZipFile = path.join(payloadDir, "copilot-plugin.zip");
 const vscodeChatVsixFile = path.join(
     vscodeChatArtifactDir,
     "typeagent-vscode-chat.vsix",
+);
+const vscodeShellVsixFile = path.join(
+    vscodeShellArtifactDir,
+    "typeagent-vscode-shell.vsix",
 );
 
 if (!fs.existsSync(outputPath)) fs.mkdirSync(outputPath, { recursive: true });
@@ -301,19 +320,19 @@ function prepareFromStagedDir(sourceDir, targetDir, label) {
     console.log(`✅ Using staged ${label}: ${resolvedSource}`);
 }
 
-function prepareVsix(sourceFile, targetFile) {
+function prepareVsix(sourceFile, targetFile, label = "VS Code Chat") {
     const resolvedSource = path.resolve(sourceFile);
     if (
         !fs.existsSync(resolvedSource) ||
         !fs.statSync(resolvedSource).isFile() ||
         path.extname(resolvedSource).toLowerCase() !== ".vsix"
     ) {
-        console.error(`❌ VS Code Chat VSIX not found: ${resolvedSource}`);
+        console.error(`❌ ${label} VSIX not found: ${resolvedSource}`);
         process.exit(1);
     }
     fs.mkdirSync(path.dirname(targetFile), { recursive: true });
     fs.copyFileSync(resolvedSource, targetFile);
-    console.log(`✅ Using staged VS Code Chat VSIX: ${resolvedSource}`);
+    console.log(`✅ Using staged ${label} VSIX: ${resolvedSource}`);
 }
 
 function findSingleVsix(directory) {
@@ -417,6 +436,19 @@ if (!skipDownload) {
     if (path.resolve(downloadedVsix) !== path.resolve(vscodeChatVsixFile)) {
         fs.renameSync(downloadedVsix, vscodeChatVsixFile);
     }
+
+    console.log(`\n📥 Downloading typeagent-vscode-shell...`);
+    downloadArtifact(
+        "typeagent-vscode-shell",
+        vscodeShellVersion,
+        vscodeShellArtifactDir,
+    );
+    const downloadedShellVsix = findSingleVsix(vscodeShellArtifactDir);
+    if (
+        path.resolve(downloadedShellVsix) !== path.resolve(vscodeShellVsixFile)
+    ) {
+        fs.renameSync(downloadedShellVsix, vscodeShellVsixFile);
+    }
 } else {
     if (stagedAgentDir) {
         prepareFromStagedDir(stagedAgentDir, agentArtifactDir, "agent-server");
@@ -429,7 +461,14 @@ if (!skipDownload) {
         );
     }
     if (stagedVsCodeChatVsix) {
-        prepareVsix(stagedVsCodeChatVsix, vscodeChatVsixFile);
+        prepareVsix(stagedVsCodeChatVsix, vscodeChatVsixFile, "VS Code Chat");
+    }
+    if (stagedVsCodeShellVsix) {
+        prepareVsix(
+            stagedVsCodeShellVsix,
+            vscodeShellVsixFile,
+            "VS Code Shell",
+        );
     }
 
     for (const [label, dir] of [
@@ -452,6 +491,15 @@ if (!skipDownload) {
     }
     console.log(
         `⏭️  Skipping download, using VS Code Chat VSIX: ${vscodeChatVsixFile}`,
+    );
+    if (!fs.existsSync(vscodeShellVsixFile)) {
+        console.error(
+            `❌ --skip-download set but VS Code Shell VSIX was not provided: ${vscodeShellVsixFile}`,
+        );
+        process.exit(1);
+    }
+    console.log(
+        `⏭️  Skipping download, using VS Code Shell VSIX: ${vscodeShellVsixFile}`,
     );
 }
 
@@ -562,6 +610,7 @@ runCommand(candleExe, [
     `-dAgentServerZip=${agentZipFile}`,
     `-dCopilotPluginZip=${pluginZipFile}`,
     `-dVsCodeChatVsix=${vscodeChatVsixFile}`,
+    `-dVsCodeShellVsix=${vscodeShellVsixFile}`,
     `-dMarketplaceDir=${marketplaceDir}`,
     `-dInstallerSourceDir=${wxsDir}`,
     `-dShellBaseUrl=${shellBaseUrl}`,

@@ -205,6 +205,7 @@ export function loadAssistantSelectionJsonTranslator(
     schemaNames: Iterable<string>,
     provider: ActionConfigProvider,
     promptLogger?: PromptLogger,
+    model?: string,
 ) {
     const schemas = getAssistantSelectionSchemas(schemaNames, provider);
 
@@ -242,6 +243,7 @@ export function loadAssistantSelectionJsonTranslator(
                                 "Select the assistant to handle the request",
                         },
                     ],
+                    model,
                     promptLogger,
                 },
             );

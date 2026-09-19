@@ -75,7 +75,7 @@ describe("wrapReasoningSpan", () => {
 
         await runInReasoningSpan(context, async () => undefined, {
             genAiSystem: "github_copilot",
-            genAiRequestModel: "claude-opus-4.8",
+            genAiRequestModel: "gpt-5.6-sol",
         });
 
         const span = getOnlySpan(manager, "typeagent.reasoning");
@@ -87,7 +87,7 @@ describe("wrapReasoningSpan", () => {
         );
         expect(span.attributes["typeagent.trace.id"]).toBe("trace-production");
         expect(span.attributes["gen_ai.system"]).toBe("github_copilot");
-        expect(span.attributes["gen_ai.request.model"]).toBe("claude-opus-4.8");
+        expect(span.attributes["gen_ai.request.model"]).toBe("gpt-5.6-sol");
     });
 
     it("creates a child of the active request span", async () => {

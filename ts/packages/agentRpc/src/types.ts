@@ -276,6 +276,9 @@ export type AgentInvokeFunctions = {
                 | QuestionFormResponse;
         },
     ): Promise<ActionResult | undefined>;
+    cancelChoice(
+        param: Partial<ContextParams> & { choiceId: string },
+    ): Promise<void>;
     getDynamicSchema(
         param: Partial<ContextParams> & { schemaName: string },
     ): Promise<SchemaContent | undefined>;
@@ -294,12 +297,17 @@ export type ContextParams = {
     hasSessionStorage: boolean;
     agentContextId: number | undefined;
     sessionContextId: string;
+    // Snapshot of SessionContext.currentConnectionId taken when the call is
+    // made. Optional: older agent processes and server-initiated calls have
+    // none.
+    currentConnectionId?: string | undefined;
 };
 
 export type ActionContextParams = ContextParams & {
     actionContextId: number;
     activityContext: ActivityContext | undefined;
     isFromReasoningLoop: boolean;
+    workingDirectory: string | undefined;
 };
 
 export type OptionsFunctionCallBack = {

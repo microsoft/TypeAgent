@@ -74,6 +74,7 @@ function writeRuntimeInstallWorkspace(directory) {
         '  "@azure/msal-node-runtime": true',
         "  better-sqlite3: true",
         "  keytar: true",
+        "  koffi: true",
         "  onnxruntime-node: true",
         "  puppeteer: false",
         "  sharp: true",

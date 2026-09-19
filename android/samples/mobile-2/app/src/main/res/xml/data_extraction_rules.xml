@@ -12,9 +12,22 @@
            Path must track ConversationStore.PREFS_NAME + ".xml".
         -->
         <exclude domain="sharedpref" path="typeagent_chat_session.xml" />
+        <!--
+           The device id identifies one physical device to the server, which
+           routes actions by it. Restoring it onto a second device would give
+           both the same id, and the server would then treat them as one
+           device and run actions on whichever registered last.
+           Path must track StoredDeviceIdentity.PREFS_NAME + ".xml".
+        -->
+        <exclude domain="sharedpref" path="typeagent_device_identity.xml" />
     </cloud-backup>
     <!--
        device-transfer is a direct device-to-device migration with no cloud
        copy, so the transcript is allowed to follow the user to a new phone.
+       The device id still must not: a transfer leaves the old phone working,
+       so copying it would put two live devices behind one id.
     -->
+    <device-transfer>
+        <exclude domain="sharedpref" path="typeagent_device_identity.xml" />
+    </device-transfer>
 </data-extraction-rules>

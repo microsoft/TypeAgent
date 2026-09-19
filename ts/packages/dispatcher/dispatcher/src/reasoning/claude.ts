@@ -34,6 +34,7 @@ import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
 import {
     CommandHandlerContext,
     getCommandResult,
+    getRequestId,
 } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import { nullClientIO } from "../context/interactiveIO.js";
@@ -42,6 +43,11 @@ import {
     formatReasoningFormResponse,
     presentReasoningForm,
 } from "./askUserForm.js";
+import {
+    ASK_USER_KIND_DESCRIPTION,
+    ASK_USER_KIND_VALUES,
+    resolveAskUserSource,
+} from "./askUserSource.js";
 import { executeAction } from "../execute/actionHandlers.js";
 import {
     composeActionSchema,
@@ -68,14 +74,27 @@ import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import {
-    findInstallableAgents,
-    formatInstallableAgents,
+    findAgentAvailabilityOptions,
+    formatAgentAvailabilityOptions,
+    getReasoningActionSchemas,
+    FIND_UNAVAILABLE_AGENT_TOOL_DESCRIPTION,
+    FIND_UNAVAILABLE_AGENT_SYSTEM_PROMPT,
 } from "./installableAgents.js";
 import {
     emitReasoningToolCall,
     runInReasoningSpan,
 } from "../otel/reasoningSpan.js";
 import { getReasoningProfileGuidance } from "./reasoningProfile.js";
+import {
+    REASONING_DENY,
+    getReasoningPermissionChoices,
+    hasCachedReasoningApproval,
+    recordReasoningApprovalChoice,
+} from "./reasoningPermissionPolicy.js";
+import {
+    buildClaudePolicyRequest,
+    formatClaudePermissionRequest,
+} from "./claudePermission.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 // Separate channel for MCP tool invocations (discover_actions / execute_action)
 // so call counts can be traced without enabling the full messages channel.
@@ -142,7 +161,11 @@ export async function prewarmClaudeReasoning(
 }
 
 const mcpServerName = "action-executor";
-const allowedTools = [
+// Built-in Claude tools we make available to the reasoning loop. Under the
+// permission-aware setup below these are AVAILABLE tools, not auto-allowed
+// ones - decisions flow through `canUseTool` and the shared reasoning
+// permission policy.
+const availableBuiltInTools = [
     "Read",
     "Write",
     "Edit",
@@ -154,8 +177,6 @@ const allowedTools = [
     "Task",
     "NotebookEdit",
     "TodoWrite",
-    // Allow all tools from the command-executor MCP server
-    `mcp__${mcpServerName}__*`,
 ];
 
 /**
@@ -415,8 +436,65 @@ async function subagentToolResult(fn: () => Promise<string> | string): Promise<{
     }
 }
 
+function createClaudeCanUseTool(context: ActionContext<CommandHandlerContext>) {
+    return async (
+        toolName: string,
+        input: Record<string, unknown>,
+        options: {
+            signal: AbortSignal;
+            suggestions?: Array<{
+                behavior?: string;
+                destination: string;
+            }>;
+            title?: string;
+            displayName?: string;
+            description?: string;
+            blockedPath?: string;
+            decisionReason?: string;
+            toolUseID: string;
+        },
+    ) => {
+        const agentContext = context.sessionContext.agentContext;
+        const requestId = getRequestId(agentContext);
+        const policyRequest = buildClaudePolicyRequest(
+            toolName,
+            options,
+            requestId.requestId,
+        );
+        if (hasCachedReasoningApproval(agentContext, policyRequest)) {
+            return { behavior: "allow" as const };
+        }
+        const choices = getReasoningPermissionChoices(policyRequest);
+        const message = formatClaudePermissionRequest(toolName, input, options);
+        const choiceIndex = await agentContext.clientIO.question(
+            requestId,
+            message,
+            choices,
+            choices.indexOf(REASONING_DENY),
+            `claudePermission:${policyRequest.permissionIdentity}`,
+        );
+        const choice = choices[choiceIndex];
+        const allowed = recordReasoningApprovalChoice(
+            agentContext,
+            policyRequest,
+            choice,
+        );
+        // Do not surface `updatedPermissions` back to the SDK - the host
+        // policy is the single source of truth and must remain resettable
+        // via `@allow off`. Persisting rules inside Claude would put a
+        // session grant out of the host's reach.
+        return allowed
+            ? { behavior: "allow" as const }
+            : {
+                  behavior: "deny" as const,
+                  message: "Denied by the TypeAgent host permission policy.",
+              };
+    };
+}
+
 function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,
+    workingDirectory?: string,
 ): Options {
     const systemContext = context.sessionContext.agentContext;
     // Stable clientIO reference for get_user_context (see copilot.ts).
@@ -425,7 +503,7 @@ function getClaudeOptions(
     // can prefer this client's editor context (see copilot.ts).
     const originatorRequestId = systemContext.currentRequestId;
     const config = systemContext.session.getConfig();
-    const activeSchemas = systemContext.agents.getActiveSchemas();
+    const activeSchemas = getReasoningActionSchemas(systemContext);
     const schemaDescriptions: string[] = [];
     const validatorSchemas = new Set<string>();
     for (const schemaName of activeSchemas) {
@@ -964,24 +1042,23 @@ function getClaudeOptions(
     const askUserSchema = {
         question: z.string(),
         choices: z.array(z.string()).min(2),
+        kind: z.enum(ASK_USER_KIND_VALUES).optional(),
     };
     const findInstallableAgentSchema = {};
     const findInstallableAgentTool: SdkMcpToolDefinition<
         typeof findInstallableAgentSchema
     > = {
         name: "find_installable_agent",
-        description: [
-            "List agents that are NOT currently installed but can be installed on demand from the configured sources.",
-            "Call this when no active agent (from discover_actions) can fulfill the user's request, to check whether an installable agent could.",
-            "Returns each candidate's name, description, and exact `@package install` command.",
-            "If one clearly matches the request, tell the user it exists and give them the install command - do NOT install it yourself.",
-        ].join("\n"),
+        description: FIND_UNAVAILABLE_AGENT_TOOL_DESCRIPTION,
         inputSchema: findInstallableAgentSchema,
         handler: async () => {
-            const agents = await findInstallableAgents(systemContext);
+            const options = await findAgentAvailabilityOptions(systemContext);
             return {
                 content: [
-                    { type: "text", text: formatInstallableAgents(agents) },
+                    {
+                        type: "text",
+                        text: formatAgentAvailabilityOptions(options),
+                    },
                 ],
             };
         },
@@ -991,11 +1068,15 @@ function getClaudeOptions(
         description: [
             "Ask the user ONE multiple-choice question and block until they answer.",
             "Use ONLY when you are genuinely blocked on a decision that only the",
-            "user can make - an ambiguous choice among concrete options, or a",
-            "confirmation before a destructive or irreversible action. Put the exact",
+            "user can make - an ambiguous choice among concrete options, or a semantic",
+            "confirmation not covered by a permission-aware tool. Do not ask before",
+            "calling shell, file, URL, MCP, or custom tools; their host permission",
+            "handler is authoritative. Put the exact",
             'options in `choices` (for a yes/no question use ["Yes", "No"]). Returns',
             "the option the user picked. Prefer acting autonomously; do not ask when",
             "a reasonable safe default exists.",
+            "",
+            `\`kind\`: ${ASK_USER_KIND_DESCRIPTION}`,
         ].join("\n"),
         inputSchema: askUserSchema,
         handler: async (args) => {
@@ -1010,7 +1091,7 @@ function getClaudeOptions(
                 args.question,
                 choices,
                 undefined,
-                "reasoning",
+                resolveAskUserSource(args.kind),
             );
             const answer = choices[selected] ?? choices[0] ?? "";
             return {
@@ -1096,11 +1177,13 @@ function getClaudeOptions(
 
     const claudeOptions: Options = {
         model,
-        permissionMode: "acceptEdits",
-        // Auto-allow all tool calls — we've already curated allowedTools
-        canUseTool: async () => ({ behavior: "allow" as const }),
-        allowedTools,
-        cwd: getRepoRoot(),
+        permissionMode: "default",
+        // Tool decisions flow through the shared reasoning permission
+        // policy so behavior matches the Copilot adapter. `tools` restricts
+        // AVAILABILITY; `canUseTool` decides ALLOW/DENY per call.
+        canUseTool: createClaudeCanUseTool(context),
+        tools: availableBuiltInTools,
+        cwd: workingDirectory ?? getRepoRoot(),
         settingSources: [],
         maxTurns: 20,
         thinking: { type: "adaptive" },
@@ -1130,7 +1213,7 @@ function getClaudeOptions(
                 "- `list_conversations`: List ALL conversations (id + name) across the session store — use to resolve a conversation the user names",
                 "- `search_conversations`: Search the CONTENT of ALL conversations and read back matching snippets (use for 'what did we discuss in X')",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file, language, cursor/selection ranges, workspace, open editors, the active file's diagnostic messages) and the user's selected text (bounded) when present; use the code agent's read actions for full file contents",
-                "- `find_installable_agent`: List agents that are not installed yet but can be installed on demand. Call it when no active agent can fulfill the request; if a candidate matches, tell the user the exact `@package install` command (never install it yourself)",
+                FIND_UNAVAILABLE_AGENT_SYSTEM_PROMPT,
                 "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer - only when genuinely blocked on a decision only they can make (see Autonomous Execution Policy)",
                 "- `ask_user_form`: Ask the user SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for their answers - prefer over repeated `ask_user` when you need more than one answer",
                 "",
@@ -1154,7 +1237,7 @@ function getClaudeOptions(
                 "",
                 "When the user asks about agent capabilities, use discover_actions first.",
                 "When the user asks to perform an action, discover the schema then execute_action.",
-                "When no active agent can perform the request, call find_installable_agent to check whether an on-demand agent could, and if one matches tell the user the exact install command.",
+                "When no active agent can perform the request, call find_installable_agent to check whether an on-demand or disabled agent could, and if one matches tell the user how to enable or install it.",
                 "",
                 ...(config.execution.entityPromptShape === "facets-with-schema"
                     ? [
@@ -1188,7 +1271,7 @@ function getClaudeOptions(
                 "Strongly prefer to act autonomously. When information is ambiguous or missing, make a reasonable safe default choice and proceed.",
                 "Prefer non-destructive defaults: add rather than replace, use conservative values. Do NOT ask routine clarifying questions you can reasonably resolve yourself.",
                 "",
-                'The `ask_user` tool is available for the rare cases where you are genuinely blocked on a decision only the user can make: an ambiguous choice among concrete options, or confirmation before a destructive or irreversible action. It blocks until the user answers and returns their choice. Provide the exact options (for yes/no use ["Yes", "No"]). Ask at most one such question, and only when a wrong default would be costly to undo.',
+                "The `ask_user` tool is available only for ambiguity or a semantic confirmation not covered by a permission-aware tool. Never ask permission before shell, file, URL, MCP, or custom-tool calls; invoke them directly and let the host permission handler prompt. It blocks until the user answers. Ask at most one question, only when a wrong default would be costly to undo.",
                 "When a single blocking moment genuinely needs more than one answer from the user, use `ask_user_form` to ask them together in one form rather than a sequence of `ask_user` prompts.",
                 "Only stop without a result if you are truly unable to proceed — in that case, emit a clear error message explaining what is missing.",
                 "",
@@ -1870,6 +1953,7 @@ async function executeReasoningWithoutPlanning(
     fallbackContext?: ReasoningFallbackContext,
     abortController?: AbortController,
     requireToolUse: boolean = false,
+    workingDirectory?: string,
 ): Promise<any> {
     const abortSignal = abortController?.signal;
     // Display initial message
@@ -1882,7 +1966,7 @@ async function executeReasoningWithoutPlanning(
             fallbackContext,
         ),
         options: {
-            ...getClaudeOptions(context),
+            ...getClaudeOptions(context, workingDirectory),
             ...claudeExecutableOption(),
             ...(abortController === undefined ? {} : { abortController }),
         },
@@ -1915,12 +1999,14 @@ async function executeReasoningWithoutPlanning(
 /**
  * Execute reasoning action with trace capture (no plan execution)
  */
+// code-complexity-allow: reasoning-session orchestration with tracing, fallback, and cancellation paths
 async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
     abortController?: AbortController,
     requireToolUse: boolean = false,
+    workingDirectory?: string,
 ): Promise<any> {
     const abortSignal = abortController?.signal;
     const systemContext = context.sessionContext.agentContext;
@@ -1935,6 +2021,7 @@ async function executeReasoningWithTracing(
             undefined,
             abortController,
             requireToolUse,
+            workingDirectory,
         );
     }
 
@@ -1963,7 +2050,7 @@ async function executeReasoningWithTracing(
                 fallbackContext,
             ),
             options: {
-                ...getClaudeOptions(context),
+                ...getClaudeOptions(context, workingDirectory),
                 ...claudeExecutableOption(),
                 ...(abortController === undefined ? {} : { abortController }),
             },
@@ -2211,6 +2298,9 @@ export async function executeReasoningAction(
         planReuseEnabled: planReuseEnabled || scriptReuseEnabled,
         engine: "claude",
         requireToolUse: true,
+        ...(action.parameters.workingDirectory === undefined
+            ? {}
+            : { workingDirectory: action.parameters.workingDirectory }),
         ...(fallbackContext ? { fallbackContext } : {}),
     });
 }
@@ -2583,6 +2673,7 @@ export async function executeReasoning(
         // (reasoningAction). Conversation-answer callers leave it false, since
         // answering a question with text only is a valid result.
         requireToolUse?: boolean;
+        workingDirectory?: string;
     },
 ) {
     const engine = options?.engine ?? "claude";
@@ -2592,6 +2683,7 @@ export async function executeReasoning(
     const planReuseEnabled = options?.planReuseEnabled ?? false;
     const fallbackContext = options?.fallbackContext;
     const requireToolUse = options?.requireToolUse ?? false;
+    const workingDirectory = options?.workingDirectory;
     const controller = new AbortController();
     return runInReasoningSpan(
         context,
@@ -2604,6 +2696,7 @@ export async function executeReasoning(
                         fallbackContext,
                         controller,
                         requireToolUse,
+                        workingDirectory,
                     );
                 }
                 // Trace capture + auto recipe generation
@@ -2613,6 +2706,7 @@ export async function executeReasoning(
                     fallbackContext,
                     controller,
                     requireToolUse,
+                    workingDirectory,
                 );
             }),
         {

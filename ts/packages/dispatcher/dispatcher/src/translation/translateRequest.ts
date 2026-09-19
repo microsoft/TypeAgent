@@ -87,6 +87,22 @@ import {
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugTranslateInfo = registerDebug("typeagent:translate:info");
+
+const TRANSLATION_MODEL_FALLBACK = ai.GPT_4_1;
+
+function resolveTranslationModel(model: string): string {
+    if (ai.hasChatModelEndpoint(model)) {
+        return model;
+    }
+    if (ai.hasChatModelEndpoint(TRANSLATION_MODEL_FALLBACK)) {
+        debugTranslate(
+            `Translation model '${model}' has no endpoint; falling back to '${TRANSLATION_MODEL_FALLBACK}'`,
+        );
+        return TRANSLATION_MODEL_FALLBACK;
+    }
+    return model;
+}
+
 const debugSemanticSearchInfo = registerDebug(
     "typeagent:translate:semantic:info",
 );
@@ -202,10 +218,11 @@ export function getTranslatorForSchema(
             multiple: config.multiple,
         },
         generateOptions,
-        config.model,
+        resolveTranslationModel(config.model),
         context.promptLogger,
         sessionConfig.execution.entityPromptShape,
         sessionConfig.translation.entity.pathNavigation !== "off",
+        config.reasoningEffort,
     );
     if (useCache) {
         context.translatorCache.set(translatorName, newTranslator);
@@ -258,7 +275,7 @@ async function getTranslatorForSelectedActions(
             activity: context.agents.isSchemaEnabled(DispatcherActivityName),
             multiple: config.multiple,
         },
-        config.model,
+        resolveTranslationModel(config.model),
         context.promptLogger,
         sessionConfig.execution.entityPromptShape,
         sessionConfig.translation.entity.pathNavigation !== "off",
@@ -907,6 +924,9 @@ async function findAssistantForRequest(
         schemaNames,
         provider,
         systemContext.promptLogger,
+        resolveTranslationModel(
+            systemContext.session.getConfig().translation.model,
+        ),
     );
 
     const result = await withChatModelTelemetryPurpose("schema-selection", () =>

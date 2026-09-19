@@ -14,9 +14,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * A client action that the agent asked the app to perform and that can only be
@@ -77,6 +79,31 @@ internal sealed interface ClientAction {
         val action: OpenWebPageAction,
         val completion: (AndroidDeviceExecutionResult) -> Unit
     ) : ClientAction
+
+    data class ComposeEmail(
+        val action: ComposeEmailAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class ShareText(
+        val action: ShareTextAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class OpenSettings(
+        val action: OpenSettingsAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class CreateCalendarEvent(
+        val action: CreateCalendarEventAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class PlayMusicFromSearch(
+        val action: PlayMusicFromSearchAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
 }
 
 /**
@@ -100,7 +127,8 @@ internal sealed interface ClientAction {
  */
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val webSocketManager = WebSocketManager()
+    private val deviceIdentity = StoredDeviceIdentity(application)
+    private val webSocketManager = WebSocketManager(deviceIdentity)
     private val conversationStore = ConversationStore(application)
 
     val messages: StateFlow<List<Message>> = webSocketManager.messages
@@ -124,6 +152,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     private val clientActionEvents = Channel<ClientAction>(Channel.UNLIMITED)
     internal val clientActions: Flow<ClientAction> = clientActionEvents.receiveAsFlow()
+    private val externalPromptEvents = Channel<ExternalPrompt>(Channel.UNLIMITED)
+    private val externalPromptDrafts = ExternalPromptDrafts()
 
     private var hasConnected = false
 
@@ -207,6 +237,47 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             ) {
                 dispatchClientAction(ClientAction.OpenWebPage(action, completion), completion)
             }
+
+            override fun onComposeEmail(
+                action: ComposeEmailAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.ComposeEmail(action, completion), completion)
+            }
+
+            override fun onShareText(
+                action: ShareTextAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.ShareText(action, completion), completion)
+            }
+
+            override fun onOpenSettings(
+                action: OpenSettingsAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.OpenSettings(action, completion), completion)
+            }
+
+            override fun onCreateCalendarEvent(
+                action: CreateCalendarEventAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(
+                    ClientAction.CreateCalendarEvent(action, completion),
+                    completion
+                )
+            }
+
+            override fun onPlayMusicFromSearch(
+                action: PlayMusicFromSearchAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(
+                    ClientAction.PlayMusicFromSearch(action, completion),
+                    completion
+                )
+            }
         })
 
         webSocketManager.setStaleConversationHandler {
@@ -236,6 +307,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         observeConversationForPersistence()
         observeConversationIdForPersistence()
+        viewModelScope.launch {
+            for (prompt in externalPromptEvents) {
+                deliverExternalPrompt(prompt)
+            }
+        }
     }
 
     /**
@@ -369,7 +445,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onInputTextChange(text: String) {
-        _inputText.value = text
+        _inputText.value = if (text.isBlank()) {
+            externalPromptDrafts.currentRemoved("")
+        } else {
+            text
+        }
     }
 
     private val isConnected: Boolean
@@ -380,7 +460,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** @return true when the message was handed to the socket and the input was cleared. */
     fun submitMessage(): Boolean {
-        return sendText(_inputText.value)
+        return submitComposerText(_inputText.value)
     }
 
     /**
@@ -397,7 +477,48 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _inputText.value = merged
             return false
         }
-        return sendText(merged)
+        return submitComposerText(merged)
+    }
+
+    fun submitExternalPrompt(prompt: String, autoExecute: Boolean) {
+        val text = prompt.trim()
+        if (text.isEmpty()) {
+            return
+        }
+        if (!autoExecute) {
+            parkInInput(text)
+            return
+        }
+        if (externalPromptEvents.trySend(ExternalPrompt(text)).isFailure) {
+            Log.w(TAG, "Could not queue external prompt: the chat screen is gone")
+            parkInInput(text)
+        }
+    }
+
+    private suspend fun deliverExternalPrompt(prompt: ExternalPrompt) {
+        if (
+            !awaitExternalPromptConnection() ||
+            !webSocketManager.trySendExternalCommand(prompt.text)
+        ) {
+            parkInInput(prompt.text)
+        }
+    }
+
+    private suspend fun awaitExternalPromptConnection(): Boolean {
+        if (isConnected) {
+            return true
+        }
+        val settled = withTimeoutOrNull(EXTERNAL_PROMPT_CONNECT_TIMEOUT_MILLIS) {
+            connectionStatus.first {
+                it.state == ConnectionStatus.State.CONNECTED ||
+                    it.state == ConnectionStatus.State.ERROR
+            }
+        }
+        return settled?.state == ConnectionStatus.State.CONNECTED
+    }
+
+    private fun parkInInput(text: String) {
+        _inputText.value = externalPromptDrafts.park(_inputText.value, text)
     }
 
     fun respondToPendingYesNo(yes: Boolean): Boolean = webSocketManager.respondToPendingYesNo(yes)
@@ -433,13 +554,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun sendText(text: String): Boolean {
+    private fun submitComposerText(text: String): Boolean {
         val message = text.trim()
         if (!isConnected || message.isBlank()) {
             return false
         }
-        webSocketManager.sendMessage(message)
-        _inputText.value = ""
+        if (externalPromptDrafts.isShowingExternalPrompt) {
+            if (!webSocketManager.trySendExternalCommand(message)) {
+                return false
+            }
+        } else {
+            webSocketManager.sendMessage(message)
+        }
+        _inputText.value = externalPromptDrafts.currentRemoved("")
         return true
     }
 
@@ -448,6 +575,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         webSocketManager.setStaleConversationHandler(null)
         webSocketManager.disconnect()
         clientActionEvents.close()
+        externalPromptEvents.close()
         flushConversationToDisk()
         super.onCleared()
     }
@@ -479,6 +607,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         private const val TAG = "ChatViewModel"
+        private const val EXTERNAL_PROMPT_CONNECT_TIMEOUT_MILLIS = 15_000L
 
         /**
          * Long enough to collapse a burst of streamed display chunks into one
@@ -486,6 +615,34 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
          * this much of the transcript.
          */
         private const val SAVE_DEBOUNCE_MS = 400L
+    }
+}
+
+private data class ExternalPrompt(val text: String)
+
+internal class ExternalPromptDrafts {
+    private val queuedPrompts = ArrayDeque<String>()
+
+    var isShowingExternalPrompt = false
+        private set
+
+    fun park(currentText: String, prompt: String): String {
+        queuedPrompts.addLast(prompt)
+        return showNextIfAvailable(currentText)
+    }
+
+    fun currentRemoved(currentText: String): String {
+        isShowingExternalPrompt = false
+        return showNextIfAvailable(currentText)
+    }
+
+    private fun showNextIfAvailable(currentText: String): String {
+        if (isShowingExternalPrompt || currentText.isNotBlank()) {
+            return currentText
+        }
+        val nextPrompt = queuedPrompts.removeFirstOrNull() ?: return currentText
+        isShowingExternalPrompt = true
+        return nextPrompt
     }
 }
 

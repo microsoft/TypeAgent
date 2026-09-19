@@ -7,9 +7,11 @@ Automated build and signing for the TypeAgent headless agent-server MSI installe
 This implementation builds a lightweight Windows Installer (MSI) that:
 
 - Downloads the `agent-server.<rid>` artifact from the ADO feed
-- Bundles it with the Copilot plugin and TypeAgent VS Code Chat VSIX
+- Bundles it with the Copilot plugin, the TypeAgent VS Code Chat VSIX, and the
+  TypeAgent VS Code Shell VSIX
 - Installs TypeAgent Chat and creates a desktop shortcut when VS Code 1.133+
   is present
+- Installs the TypeAgent VS Code Shell extension when VS Code 1.90+ is present
 - Signs with the TypeAgent development certificate (from Key Vault)
 - Produces a signed `.msi` ready for distribution
 
@@ -28,7 +30,7 @@ ts/tools/installers/wix/
   └── register-plugin.ps1         # Deferred CA: register/unregister the Copilot CLI plugin
 
 ts/tools/installers/common/
-  └── install-vscode-chat.ps1     # Shared VSIX install + desktop shortcut lifecycle
+  └── install-vscode-typeagent.ps1 # Shared VSIX install + desktop shortcut lifecycle
 
 pipelines/
   └── azure-build-publish-all.yml   # ADO pipeline (build_sign_publish_msi job)
@@ -127,6 +129,7 @@ agent-server:
 
 ```powershell
 pnpm --filter vscode-chat run package
+pnpm --filter vscode-shell run package
 
 node tools/scripts/stageCopilotPlugin.mjs `
   --out "$env:TEMP\typeagent-msi-stage\copilot-plugin"
@@ -174,9 +177,11 @@ node tools/scripts/build-msi.mjs `
   --agent-dir  "$env:TEMP\typeagent-msi-stage\agent-server" `
   --plugin-dir "$env:TEMP\typeagent-msi-stage\copilot-plugin" `
   --vscode-chat-vsix "packages\vscode-chat\dist-pub\vscode-chat.vsix" `
+  --vscode-shell-vsix "packages\vscode-shell\dist-pub\vscode-shell.vsix" `
   --version 0.0.1-local `
   --plugin-version 0.0.1-local `
   --vscode-chat-version 0.0.1-local `
+  --vscode-shell-version 0.0.1-local `
   --skip-shell-feed-resolution `
   --output "$env:TEMP\typeagent-msi-stage\out"
 ```
@@ -184,6 +189,23 @@ node tools/scripts/build-msi.mjs `
 The local wrapper skips shell feed resolution so this path does not require an
 Azure CLI login. Remove `--skip-shell-feed-resolution` to resolve and bake the
 latest shell fallback package version, which requires feed access.
+
+The MSI lifecycle wrappers derive the installing user's profile from
+`[LocalAppDataFolder]` and use the Windows profile registry as a fallback.
+Do not use `[UserProfileFolder]` in custom-action command lines: this MSI does
+not populate that property, and an empty value becomes a relative path under
+the Windows Installer working directory. Append `.` when quoting directory
+properties (`[LocalAppDataFolder].`) so the command-line value does not end in a
+backslash that escapes its closing quote.
+
+Lifecycle subcommands are passed with the named `-ServeCommand` parameter.
+Do not pass `provision`, `start`, or `autostart` as the first bare argument to a
+PowerShell `-File` invocation because Windows PowerShell drops that token before
+the script's remaining-arguments parameter.
+
+The managed Copilot CLI cache uses `TYPEAGENT_COPILOT_RUNTIME_ROOT`.
+`TYPEAGENT_RUNTIME_ROOT` is reserved for the bundled agent-server's application
+assets and must not be overridden by installer lifecycle actions.
 
 **Output:**
 
@@ -226,7 +248,8 @@ node build-msi.mjs --rid win32-x64 --version 0.0.1-<buildId> --output ./msi-out
 **What it does:**
 
 1. Downloads `agent-server.win32-x64` from the `typeagent` feed
-2. Downloads `typeagent-copilot-plugin` and `typeagent-vscode-chat`
+2. Downloads `typeagent-copilot-plugin`, `typeagent-vscode-chat`, and
+   `typeagent-vscode-shell`
 3. Extracts/stages the artifacts under `./msi-out/artifact`
 4. Compiles WiX definition (`.wxs` → `.wixobj`)
 5. Links to create `TypeAgent-<version>-win32-x64.msi`
@@ -274,7 +297,7 @@ exception remains available in the log.
 ## Native VS Code Chat integration
 
 `VSCODECHAT=1` is enabled by default. During install, the MSI runs the shared
-`install-vscode-chat.ps1` helper as the current user. The helper:
+`install-vscode-typeagent.ps1` helper as the current user. The helper:
 
 1. Finds user- or system-installed VS Code.
 2. Requires VS Code 1.133.0 or newer.
@@ -297,55 +320,84 @@ The MSI removes the shortcut on uninstall. It removes the extension only when
 the installed version still matches the version originally installed by
 TypeAgent, so it does not delete an independently upgraded extension.
 
-## Endpoint provider selection (self-host)
+## TypeAgent VS Code Shell extension
 
-TypeAgent needs an LLM endpoint configuration (`config.local.yaml`) at runtime.
-By default it is downloaded from the AI Systems Key Vault, but machines without
-Key Vault access can instead run against a local **Ollama** server or the
-**Copilot** SDK.
+`VSCODESHELL=1` is enabled by default and is exposed as a checkbox in the
+interactive installer. During install, the MSI runs the shared
+`install-vscode-typeagent.ps1` helper with `-ExtensionId typeagent.vscode-shell`, a
+distinct ownership subkey (`HKCU\Software\Microsoft\TypeAgent\VSCodeShell`), and
+`-NoShortcut`. The helper:
 
-During an **interactive** install the MSI shows a provider-selection dialog
-(after the license page) with radio-button groups for the chat provider
-(AI Systems / Ollama / Copilot), the embedding provider (Local / Ollama / OpenAI
-/ None), and an Ollama host field. The same choices can be driven **silently**
-through public properties:
+1. Finds user- or system-installed VS Code.
+2. Requires VS Code 1.90.0 or newer (the extension's `engines.vscode`).
+3. Installs the bundled `typeagent.vscode-shell` VSIX.
 
-| Property     | Values                              | Default                  | Notes                                                                           |
-| ------------ | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------- |
-| `PROVIDER`   | `AISYSTEMS`, `OLLAMA`, `COPILOT`    | `AISYSTEMS`              | `OLLAMA`/`COPILOT` generate `config.local.yaml` during install (no Key Vault).  |
-| `EMBEDDING`  | `LOCAL`, `OLLAMA`, `OPENAI`, `NONE` | `LOCAL`                  | Embedding source for the self-host providers. `LOCAL` = bundled CPU-only model. |
-| `OLLAMAHOST` | any URL                             | `http://localhost:11434` | Ollama base URL (used for `OLLAMA` chat and/or embeddings).                     |
+No desktop shortcut is created for this extension. If compatible VS Code is
+absent, the step logs a warning to `%LOCALAPPDATA%\TypeAgent\logs\vscode-shell-install.log`
+and the rest of the TypeAgent installation continues. Disable the component for
+a silent install with:
 
 ```powershell
-# AI Systems (default) — provisions via az login + getKeys after install
+msiexec /i TypeAgent-<version>-win32-x64.msi VSCODESHELL=0
+```
+
+On uninstall the MSI removes the extension only when the installed version
+still matches the version originally installed by TypeAgent, so it does not
+delete an independently upgraded extension.
+
+## Endpoint provider selection
+
+TypeAgent needs an LLM endpoint configuration (`config.local.yaml`) at runtime.
+The MSI supports two completion providers:
+
+- **AI Systems** downloads configuration from the AI Systems Key Vault.
+- **GitHub Copilot** uses the authenticated Copilot CLI for chat and
+  automatically configures TypeAgent's local embedding provider.
+
+During an **interactive** install the provider-selection dialog appears after
+the license page. The same choice can be driven **silently** through the public
+`PROVIDER` property:
+
+| Property   | Values                 | Default   | Notes                                                                  |
+| ---------- | ---------------------- | --------- | ---------------------------------------------------------------------- |
+| `PROVIDER` | `AISYSTEMS`, `COPILOT` | `COPILOT` | `COPILOT` generates `config.local.yaml` with local embeddings enabled. |
+
+```powershell
+# Copilot chat (default; requires an authenticated `copilot` CLI) + local embeddings
 msiexec /i TypeAgent-<version>-win32-x64.msi
 
-# Local Ollama chat with the bundled local embedding model
-msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=OLLAMA
+# AI Systems — provisions via az login + getKeys after install
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=AISYSTEMS
 
-# Copilot SDK chat (requires an authenticated `copilot` CLI) + local embeddings
+# Explicit Copilot selection
 msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT
 
-# Fully silent
-msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=OLLAMA EMBEDDING=LOCAL
+# Fully silent Copilot install
+msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=COPILOT
 ```
 
 The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → **ProviderDlg** →
-VerifyReadyDlg. For `OLLAMA`/`COPILOT`, a deferred, impersonated custom action
-runs `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider [PROVIDER]
---embedding [EMBEDDING] --ollama-host [OLLAMAHOST] --force` as the installing
-user, writing `config.local.yaml` to `~/.typeagent`. For `AISYSTEMS`
-(the default), the MSI **attempts** provisioning during install via a deferred,
-impersonated (interactive) custom action `ProvisionAiSystemsConfig` that runs
-`node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in as
-the installing user). It is **non-fatal**: if sign-in is unavailable during the
-install, the final page (ExitDialog) reminds the user to run `provision`
-manually. Because the embedding config for `AISYSTEMS` comes from Key Vault, the
-embedding radio and Ollama host field are **disabled** in the dialog when
-`PROVIDER=AISYSTEMS` (they apply only to the self-host providers). Fine-grained
-overrides (chat model, embedding endpoint, API keys) are available on the
-`provision`/`generate-selfhost-config` CLI; re-run provisioning post-install to
-adjust them.
+VerifyReadyDlg. For `COPILOT`, a deferred, impersonated custom action runs
+`node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider COPILOT
+--embedding LOCAL --local-embedding-cache-dir
+"%LOCALAPPDATA%\TypeAgent\embedding-cache" --force` as the installing user,
+writing `config.local.yaml` to `~/.typeagent`. Keeping model weights outside
+the MSI-managed `agent-server` directory preserves the cache across upgrades
+and ensures it inherits the user's per-user cache permissions. The action explicitly pins
+`TYPEAGENT_CONFIG_DIR` and `TYPEAGENT_USER_DATA_DIR` because deferred MSI
+actions can retain the Windows Installer service environment even while
+impersonating the user. Copilot provisioning is local and must succeed; it does
+not contact Key Vault. For `AISYSTEMS`, the MSI
+**attempts** provisioning during install via a deferred, impersonated
+(interactive) custom action `ProvisionAiSystemsConfig` that runs
+`node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in
+as the installing user). It is **non-fatal**: if sign-in is unavailable during
+the install, the final page (ExitDialog) reminds the user to run `provision`
+manually.
+
+The MSI rejects `PROVIDER=OLLAMA` and the legacy `EMBEDDING` and `OLLAMAHOST`
+properties. Ollama and custom embedding configurations remain available through
+the script installers and the `provision`/`generate-selfhost-config` CLI.
 
 ## Agent-server prerequisites & lifecycle
 

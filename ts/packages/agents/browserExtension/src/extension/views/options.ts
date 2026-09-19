@@ -19,6 +19,7 @@ interface ExtensionSettings {
     autoDiscoveryMode: "scope" | "content";
     excludeSensitiveSites: boolean;
     autoOpenChatPanel: boolean;
+    caseInsensitiveWindowTitleMatching: boolean;
 }
 
 interface AIModelStatus {
@@ -38,6 +39,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
     autoDiscoveryMode: "content",
     excludeSensitiveSites: true,
     autoOpenChatPanel: true,
+    caseInsensitiveWindowTitleMatching: true,
 };
 
 class EnhancedOptionsPage {
@@ -144,6 +146,14 @@ class EnhancedOptionsPage {
             ) as HTMLInputElement | null;
             if (autoOpenChatPanelEl) {
                 autoOpenChatPanelEl.checked = this.settings.autoOpenChatPanel;
+            }
+            const caseInsensitiveWindowTitleMatchingEl =
+                document.getElementById(
+                    "caseInsensitiveWindowTitleMatching",
+                ) as HTMLInputElement | null;
+            if (caseInsensitiveWindowTitleMatchingEl) {
+                caseInsensitiveWindowTitleMatchingEl.checked =
+                    this.settings.caseInsensitiveWindowTitleMatching;
             }
         } catch (error) {
             console.error("Error loading settings:", error);
@@ -301,6 +311,13 @@ class EnhancedOptionsPage {
         ) as HTMLInputElement | null;
         if (autoOpenChatPanelEl) {
             this.settings.autoOpenChatPanel = autoOpenChatPanelEl.checked;
+        }
+        const caseInsensitiveWindowTitleMatchingEl = document.getElementById(
+            "caseInsensitiveWindowTitleMatching",
+        ) as HTMLInputElement | null;
+        if (caseInsensitiveWindowTitleMatchingEl) {
+            this.settings.caseInsensitiveWindowTitleMatching =
+                caseInsensitiveWindowTitleMatchingEl.checked;
         }
 
         try {

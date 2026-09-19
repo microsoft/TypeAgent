@@ -144,4 +144,21 @@ describe("workspace MCP primitives", () => {
             fetchWorkspaceUrl({ url: "http://localhost/private" }),
         ).rejects.toThrow("Private network target");
     });
+
+    it.each([
+        ["decimal IPv4", "http://2852039166/private"],
+        ["hexadecimal IPv4", "http://0xa9fea9fe/private"],
+        ["octal IPv4", "http://0251.0376.0251.0376/private"],
+        ["loopback subnet", "http://127.0.0.2/private"],
+        ["carrier-grade NAT", "http://100.64.0.1/private"],
+        ["IPv4-mapped IPv6", "http://[::ffff:169.254.169.254]/private"],
+        ["Teredo", "http://[2001:0000::1]/private"],
+        ["6to4", "http://[2002:a9fe:a9fe::]/private"],
+        ["NAT64", "http://[64:ff9b::a9fe:a9fe]/private"],
+        ["unique-local IPv6", "http://[fc00::1]/private"],
+    ])("blocks %s fetch targets", async (_name, url) => {
+        await expect(fetchWorkspaceUrl({ url })).rejects.toThrow(
+            "Private network target",
+        );
+    });
 });
