@@ -11,12 +11,11 @@ const runtimeFiles = [
     ".mcp.json",
     "hooks.json",
     "plugin.json",
-    "dist/hooks/hook-agent-stop.js",
-    "dist/hooks/hook-post-tool.js",
-    "dist/hooks/hook-powershell.js",
     "dist/hooks/hook-router.js",
     "dist/mcp/server.js",
 ];
+const extensionSource = "dist/extensions/typeagent/extension.mjs";
+const extensionTarget = "extensions/typeagent/extension.mjs";
 
 function parseArgs(argv) {
     const args = {};
@@ -44,6 +43,11 @@ export function stageCopilotPlugin(out) {
         }
         copyFile(source, path.join(out, relative));
     }
+    const extension = path.join(sourceRoot, extensionSource);
+    if (!fs.existsSync(extension)) {
+        throw new Error(`Copilot plugin runtime file is missing: ${extension}`);
+    }
+    copyFile(extension, path.join(out, extensionTarget));
     for (const directory of ["agents", "skills"]) {
         fs.cpSync(path.join(sourceRoot, directory), path.join(out, directory), {
             recursive: true,
@@ -52,7 +56,7 @@ export function stageCopilotPlugin(out) {
     const metrics = fileMetrics(out);
     writeJson(path.join(out, "bundle-manifest.json"), {
         package: "@typeagent/copilot-plugin",
-        runtimeFiles,
+        runtimeFiles: [...runtimeFiles, extensionTarget],
         metrics,
     });
     return metrics;

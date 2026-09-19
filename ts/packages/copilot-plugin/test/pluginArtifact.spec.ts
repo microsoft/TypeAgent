@@ -14,6 +14,10 @@ interface PluginMcpManifest {
     >;
 }
 
+interface PluginManifest {
+    extensions: string;
+}
+
 describe("staged plugin artifact", () => {
     it("registers the structured Direct bridge in the actual bundled agent server", async () => {
         const pluginRoot = path.resolve(
@@ -54,6 +58,27 @@ describe("staged plugin artifact", () => {
             await client.close();
         }
     });
+    it("contains the extension bundle at the declared discovery path", async () => {
+        const testDir = path.dirname(fileURLToPath(import.meta.url));
+        const pluginRoot = path.resolve(testDir, "..", "..");
+        const manifest = JSON.parse(
+            await readFile(path.join(pluginRoot, "plugin.json"), "utf8"),
+        ) as PluginManifest;
+        const bundle = await readFile(
+            path.join(
+                pluginRoot,
+                "dist",
+                manifest.extensions,
+                "typeagent",
+                "extension.mjs",
+            ),
+            "utf8",
+        );
+
+        expect(manifest.extensions).toBe("extensions/");
+        expect(bundle).toContain('from "@github/copilot-sdk/extension"');
+    });
+
     it("starts the bundled macro server declared by .mcp.json", async () => {
         const testDir = path.dirname(fileURLToPath(import.meta.url));
         const pluginRoot = path.resolve(testDir, "..", "..");

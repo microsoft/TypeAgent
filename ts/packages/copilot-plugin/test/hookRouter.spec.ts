@@ -3,6 +3,7 @@
 
 import { jest } from "@jest/globals";
 import {
+    handleSlashCommand,
     routePrompt,
     type RoutePromptDependencies,
 } from "../src/hooks/hook-router.js";
@@ -77,5 +78,45 @@ describe("macro recording routing override", () => {
             ),
         ).resolves.toEqual({});
         expect(dependencies.claimRecording).not.toHaveBeenCalled();
+    });
+});
+
+describe("@typeagent command routing", () => {
+    it("forces handling for @typeagent run", async () => {
+        const direct = jest.fn(async () => ({ handled: true }));
+        const runInput = {
+            ...input,
+            prompt: "@typeagent run @package group list",
+        };
+
+        await expect(handleSlashCommand(runInput, { direct })).resolves.toEqual(
+            { handled: true },
+        );
+        expect(direct).toHaveBeenCalledWith(
+            {
+                ...runInput,
+                prompt: "@package group list",
+            },
+            { forceHandled: true },
+        );
+    });
+
+    it("keeps catch-all commands in ordinary direct mode", async () => {
+        const direct = jest.fn(async () => ({ handled: true }));
+        const catchAllInput = {
+            ...input,
+            prompt: "@typeagent list the playlists",
+        };
+
+        await expect(
+            handleSlashCommand(catchAllInput, { direct }),
+        ).resolves.toEqual({ handled: true });
+        expect(direct).toHaveBeenCalledWith(
+            {
+                ...catchAllInput,
+                prompt: "list the playlists",
+            },
+            undefined,
+        );
     });
 });
