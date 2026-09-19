@@ -856,6 +856,13 @@ export function createEnhancedClientIO(
         message: IAgentMessage,
         mode?: DisplayAppendMode,
     ): void {
+        // The CLI has no replaceable message container. Do not commit
+        // temporary snapshots to scrollback; the spinner remains visible until
+        // the permanent display replaces them.
+        if (mode === "temporary") {
+            return;
+        }
+
         const kind = message.kind;
         if (kind === "toast") {
             displayToastNotification(
