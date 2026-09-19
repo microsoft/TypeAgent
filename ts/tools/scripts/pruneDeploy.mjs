@@ -8,7 +8,7 @@
  *
  * Why: the agent-server's dependency closure includes packages that ship
  * prebuilt native binaries as per-platform optional sub-packages (e.g.
- * `@github/copilot-win32-x64` + `@github/copilot-win32-arm64`,
+ * `@github/copilot-sdk-win32-x64` + `@github/copilot-sdk-win32-arm64`,
  * `@anthropic-ai/claude-agent-sdk-win32-*`, `@napi-rs/canvas-win32-*-msvc`,
  * `@img/sharp-<os>-<arch>`, `@esbuild/<os>-<arch>`, ...). pnpm installs every
  * platform variant, so a naive `pnpm deploy --prod` carries binaries for arches
