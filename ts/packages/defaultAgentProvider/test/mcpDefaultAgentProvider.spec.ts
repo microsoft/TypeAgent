@@ -22,7 +22,7 @@ function tmpInstanceDir(): string {
     return tmpDir("ta-mcp-default-");
 }
 
-function filesystemArgs(instanceDir: string): string[] {
+function filesystemArgs(instanceDir: string) {
     const configs = getInstanceConfigProvider(instanceDir);
     const source = createMcpAppAgentSourceForInstance(configs);
     const server = source.testApi.getServer("shipped:mcpfilesystem");
