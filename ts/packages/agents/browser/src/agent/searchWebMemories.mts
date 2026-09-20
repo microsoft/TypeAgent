@@ -14,6 +14,7 @@ import { getWebsiteSearchPromptPreamble } from "./search/websiteSearchPrompts.mj
 import { openai as ai } from "@typeagent/aiclient";
 import { hookModelTokenUsage } from "./tokenUsage.mjs";
 import type { TypeChatLanguageModel } from "typechat";
+import type { BrowserMemoryMatch } from "./browserMemoryService.mjs";
 
 const debug = registerDebug("typeagent:browser:unified-search");
 
@@ -27,6 +28,9 @@ export interface SearchWebMemoriesRequest {
     // Temporal filters
     dateFrom?: string | undefined;
     dateTo?: string | undefined;
+    domain?: string | undefined;
+    pageType?: string | undefined;
+    source?: string | undefined;
 
     // Search configuration
     limit?: number | undefined;
@@ -191,6 +195,7 @@ export async function searchWebMemories(
     context: SessionContext<BrowserActionContext>,
 ): Promise<SearchWebMemoriesResponse> {
     const startTime = Date.now();
+    let memoryServiceResponse: SearchWebMemoriesResponse | undefined;
     const timing = {
         parsing: 0,
         search: 0,
@@ -212,23 +217,88 @@ export async function searchWebMemories(
             throw new Error("Query cannot be empty");
         }
 
+        const currentPageUrl = request.metadata?.url || request.url;
+        const parsedQuery = parsePropertySearch(request.query);
+        const searchText = parsedQuery.searchText;
+        const propertyFilters: PropertyFilter = {
+            ...((request.domain ?? parsedQuery.propertyFilters.domain) ===
+            undefined
+                ? {}
+                : {
+                      domain:
+                          request.domain ?? parsedQuery.propertyFilters.domain,
+                  }),
+            ...((request.pageType ?? parsedQuery.propertyFilters.pageType) ===
+            undefined
+                ? {}
+                : {
+                      pageType:
+                          request.pageType ??
+                          parsedQuery.propertyFilters.pageType,
+                  }),
+            ...((request.source ?? parsedQuery.propertyFilters.source) ===
+            undefined
+                ? {}
+                : {
+                      source:
+                          request.source ?? parsedQuery.propertyFilters.source,
+                  }),
+        };
+        const memoryService = context.agentContext.browserMemoryService;
+        if (memoryService !== undefined && searchText.length > 0) {
+            try {
+                const matches = await memoryService.search({
+                    query: searchText,
+                    limit: request.limit ?? 20,
+                    ...(request.searchScope === "current_page" &&
+                    currentPageUrl !== undefined
+                        ? { url: currentPageUrl }
+                        : {}),
+                    ...(propertyFilters.domain === undefined
+                        ? {}
+                        : { domain: propertyFilters.domain }),
+                    ...(propertyFilters.pageType === undefined
+                        ? {}
+                        : { pageType: propertyFilters.pageType }),
+                    ...(propertyFilters.source === undefined
+                        ? {}
+                        : { source: propertyFilters.source }),
+                    ...(request.dateFrom === undefined
+                        ? {}
+                        : { dateFrom: request.dateFrom }),
+                    ...(request.dateTo === undefined
+                        ? {}
+                        : { dateTo: request.dateTo }),
+                });
+                if (matches.length > 0) {
+                    memoryServiceResponse = createMemoryServiceResponse(
+                        matches,
+                        startTime,
+                        request.debug ? debugContext : undefined,
+                    );
+                }
+            } catch (error) {
+                debug(`Memory service search failed: ${String(error)}`);
+                debugContext.intermediateFallbacks.push("memory-service");
+            }
+        }
+
         const websiteCollection = context.agentContext.websiteCollection;
         if (!websiteCollection || websiteCollection.messages.length === 0) {
-            return createEmptyResponse(
-                "No website data available. Please import website data first using the library panel.",
-                startTime,
-                request.debug ? debugContext : undefined,
+            return (
+                memoryServiceResponse ??
+                createEmptyResponse(
+                    "No website data available. Please import website data first using the library panel.",
+                    startTime,
+                    request.debug ? debugContext : undefined,
+                )
             );
         }
 
         debug(`Starting unified search for query: "${request.query}"`);
 
-        const currentPageUrl = request.metadata?.url || request.url;
-
-        // Parse property filters from query (website-specific)
-        const { searchText, propertyFilters } = parsePropertySearch(
-            request.query,
-        );
+        // Property filters were parsed before the service search so both
+        // retrieval paths apply the same exact-match semantics.
         if (searchText !== request.query) {
             debug(`Property filters detected:`, propertyFilters);
             debug(`Search text after filter extraction: "${searchText}"`);
@@ -304,10 +374,13 @@ export async function searchWebMemories(
                 debug(`Pre-filter took ${filterTime}ms`);
             } else {
                 // No messages found for this URL
-                return createEmptyResponse(
-                    `No indexed content found for the current page: ${targetUrl}`,
-                    startTime,
-                    request.debug ? debugContext : undefined,
+                return (
+                    memoryServiceResponse ??
+                    createEmptyResponse(
+                        `No indexed content found for the current page: ${targetUrl}`,
+                        startTime,
+                        request.debug ? debugContext : undefined,
+                    )
                 );
             }
         }
@@ -324,10 +397,13 @@ export async function searchWebMemories(
         );
 
         if (!langResult.success) {
-            return createErrorResponse(
-                `Search query translation failed: ${langResult.message}`,
-                startTime,
-                request.debug ? debugContext : undefined,
+            return (
+                memoryServiceResponse ??
+                createErrorResponse(
+                    `Search query translation failed: ${langResult.message}`,
+                    startTime,
+                    request.debug ? debugContext : undefined,
+                )
             );
         }
 
@@ -900,15 +976,22 @@ export async function searchWebMemories(
         debug(
             `Search completed in ${timing.total}ms with ${websiteResults.length} results`,
         );
-        return response;
+        return mergeSearchResponses(
+            memoryServiceResponse,
+            response,
+            request.limit ?? 20,
+        );
     } catch (error) {
         timing.total = Date.now() - startTime;
         debug(`Search failed: ${error}`);
 
-        return createErrorResponse(
-            error instanceof Error ? error.message : "Unknown search error",
-            startTime,
-            request.debug ? debugContext : undefined,
+        return (
+            memoryServiceResponse ??
+            createErrorResponse(
+                error instanceof Error ? error.message : "Unknown search error",
+                startTime,
+                request.debug ? debugContext : undefined,
+            )
         );
     }
 }
@@ -1664,6 +1747,103 @@ function associateInsightsWithResults(
 
         return result;
     });
+}
+
+function createMemoryServiceResponse(
+    matches: BrowserMemoryMatch[],
+    startTime: number,
+    debugContext?: SearchDebugContext,
+): SearchWebMemoriesResponse {
+    const websites = matches.map(({ evidence, source }) => ({
+        url: evidence.canonicalUri ?? source.canonicalUri ?? source.sourceId,
+        title: evidence.title,
+        domain:
+            metadataString(source.metadata, "domain") ??
+            domainFromUrl(evidence.canonicalUri ?? source.canonicalUri),
+        pageType: metadataString(source.metadata, "pageType") ?? "general",
+        source: metadataString(source.metadata, "source") ?? "unknown",
+        relevanceScore: evidence.score,
+        ...(evidence.capturedAt === undefined
+            ? {}
+            : { lastVisited: evidence.capturedAt }),
+        snippet: evidence.snippet,
+    }));
+    return {
+        websites,
+        summary: {
+            totalFound: websites.length,
+            searchTime: Date.now() - startTime,
+            strategies: ["memory-service"],
+            confidence:
+                websites.reduce(
+                    (total, item) => total + item.relevanceScore,
+                    0,
+                ) / websites.length,
+        },
+        answerType: "noAnswer",
+        queryIntent: "discovery",
+        suggestedFollowups: [],
+        ...(debugContext === undefined ? {} : { debugContext }),
+    };
+}
+
+function mergeSearchResponses(
+    memoryResponse: SearchWebMemoriesResponse | undefined,
+    legacyResponse: SearchWebMemoriesResponse,
+    limit: number,
+): SearchWebMemoriesResponse {
+    if (memoryResponse === undefined) {
+        return legacyResponse;
+    }
+    const websites = new Map<string, WebsiteResult>();
+    for (const website of [
+        ...memoryResponse.websites,
+        ...legacyResponse.websites,
+    ]) {
+        const existing = websites.get(website.url);
+        if (
+            existing === undefined ||
+            website.relevanceScore > existing.relevanceScore
+        ) {
+            websites.set(website.url, website);
+        }
+    }
+    const mergedWebsites = [...websites.values()]
+        .sort((left, right) => right.relevanceScore - left.relevanceScore)
+        .slice(0, limit);
+    return {
+        ...legacyResponse,
+        websites: mergedWebsites,
+        summary: {
+            ...legacyResponse.summary,
+            totalFound: mergedWebsites.length,
+            strategies: [
+                ...new Set([
+                    ...memoryResponse.summary.strategies,
+                    ...legacyResponse.summary.strategies,
+                ]),
+            ],
+        },
+    };
+}
+
+function metadataString(
+    metadata: Record<string, unknown> | undefined,
+    name: string,
+): string | undefined {
+    const value = metadata?.[name];
+    return typeof value === "string" ? value : undefined;
+}
+
+function domainFromUrl(url: string | undefined): string {
+    if (url === undefined) {
+        return "unknown";
+    }
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return "unknown";
+    }
 }
 
 function createEmptyResponse(

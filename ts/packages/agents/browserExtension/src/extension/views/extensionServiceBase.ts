@@ -213,6 +213,12 @@ export abstract class ExtensionServiceBase {
                 limit: 50,
                 minScore: filters.minRelevance || 0.3,
                 domain: filters.domain,
+                source:
+                    filters.sourceType === "bookmarks"
+                        ? "bookmark"
+                        : filters.sourceType,
+                dateFrom: filters.dateFrom,
+                dateTo: filters.dateTo,
             },
         })) as any;
 

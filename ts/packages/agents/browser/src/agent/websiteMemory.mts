@@ -636,6 +636,15 @@ export async function importWebsiteDataFromSession(
                 },
             );
 
+            await ingestWebsitesIntoMemoryService(
+                chunk,
+                extractionMode,
+                context.agentContext,
+                importContext,
+                i,
+                websites.length,
+            );
+
             context.agentContext.websiteCollection.addWebsites(chunk);
 
             try {
@@ -1122,6 +1131,15 @@ export async function importHtmlFolderFromSession(
                     importContext,
                 );
 
+                await ingestWebsitesIntoMemoryService(
+                    chunk,
+                    extractionMode,
+                    context.agentContext,
+                    importContext,
+                    i,
+                    websites.length,
+                );
+
                 context.agentContext.websiteCollection.addWebsites(chunk);
 
                 try {
@@ -1347,6 +1365,72 @@ function convertWebsiteDataToWebsite(data: WebsiteData): any {
     );
 
     return websiteInstance;
+}
+
+async function ingestWebsitesIntoMemoryService(
+    websites: website.Website[],
+    mode: website.ExtractionMode,
+    agentContext: BrowserActionContext,
+    importContext: {
+        importId: string;
+        type: "websiteImport" | "htmlFolderImport";
+        url?: string;
+        folderPath?: string;
+    },
+    offset: number,
+    total: number,
+): Promise<void> {
+    const memoryService = agentContext.browserMemoryService;
+    if (memoryService === undefined) {
+        return;
+    }
+    for (const [index, item] of websites.entries()) {
+        await memoryService.ingest(
+            {
+                url: item.metadata.url,
+                title: item.metadata.title ?? item.metadata.url,
+                markdown: item.textChunks.join("\n\n"),
+                source: item.metadata.websiteSource,
+                ...(item.metadata.domain === undefined
+                    ? {}
+                    : { domain: item.metadata.domain }),
+                ...(item.metadata.pageType === undefined
+                    ? {}
+                    : { pageType: item.metadata.pageType }),
+                ...(item.timestamp === undefined
+                    ? {}
+                    : { capturedAt: item.timestamp }),
+                tags: item.tags,
+            },
+            mode,
+            {
+                onProgress: (progress) =>
+                    logStructuredProgress(
+                        offset + index,
+                        total,
+                        progress.message ??
+                            `Indexing ${item.metadata.title ?? item.metadata.url}`,
+                        "persisting",
+                        importContext,
+                        undefined,
+                        {
+                            url: item.metadata.url,
+                            ...(item.metadata.title === undefined
+                                ? {}
+                                : { title: item.metadata.title }),
+                            currentAction: "indexing",
+                        },
+                    ),
+            },
+        );
+        logStructuredProgress(
+            offset + index + 1,
+            total,
+            `Stored ${item.metadata.title ?? item.metadata.url} in durable memory`,
+            "persisting",
+            importContext,
+        );
+    }
 }
 
 /**

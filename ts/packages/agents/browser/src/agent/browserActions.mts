@@ -21,12 +21,21 @@ import {
     AgentWebSocketServer,
 } from "./agentWebSocketServer.mjs";
 import { getClientType } from "@typeagent/agent-server-protocol";
+import type { MemoryServiceClient } from "@typeagent/memory-client";
+import type { BrowserMemoryService } from "./browserMemoryService.mjs";
+
+export type BrowserAgentInitOptions = {
+    browserControl?: BrowserControl;
+    memoryServiceClient?: MemoryServiceClient;
+};
 
 export type BrowserActionContext = {
     sessionId: string;
     clientBrowserControl?: BrowserControl | undefined;
     externalBrowserControl?: ExternalBrowserClient | undefined;
     useExternalBrowserControl: boolean;
+    memoryServiceClient?: MemoryServiceClient;
+    browserMemoryService?: BrowserMemoryService;
     preferredClientType?: "extension" | "electron" | undefined;
     // Runtime override for the internet-lookup backend (@browser lookup ...);
     // takes precedence over azureAISearch.mode / AZURE_AI_SEARCH_LOOKUP_MODE.
@@ -73,6 +82,21 @@ export type BrowserActionContext = {
     // enable/disable doesn't double-count.
     browserSchemaEnabled?: boolean | undefined;
 };
+
+export function normalizeBrowserAgentInitOptions(
+    options: unknown,
+): BrowserAgentInitOptions {
+    if (
+        typeof options === "object" &&
+        options !== null &&
+        ("browserControl" in options || "memoryServiceClient" in options)
+    ) {
+        return options as BrowserAgentInitOptions;
+    }
+    return options === undefined
+        ? {}
+        : { browserControl: options as BrowserControl };
+}
 
 export function getBrowserControl(agentContext: BrowserActionContext) {
     const browserControl = agentContext.useExternalBrowserControl

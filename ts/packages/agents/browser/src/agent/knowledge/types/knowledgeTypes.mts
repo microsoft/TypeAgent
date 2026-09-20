@@ -112,6 +112,7 @@ export interface GraphCache {
         | undefined;
     lastUpdated: number;
     isValid: boolean;
+    sourceVersion?: number;
 }
 
 export interface TopicGraphCache {
