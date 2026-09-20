@@ -115,10 +115,7 @@ import {
 import { initializeImportWebSocketHandler } from "./import/importWebSocketHandler.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import {
-    BrowserControl,
-    defaultSearchProviders,
-} from "@typeagent/browser-control-rpc/types";
+import { defaultSearchProviders } from "@typeagent/browser-control-rpc/types";
 import { openai, tryCreateEmbeddingModel } from "@typeagent/aiclient";
 import {
     SearchProviderCommandHandlerTable,
@@ -127,8 +124,10 @@ import {
 import {
     BrowserActionContext,
     getActionBrowserControl,
+    normalizeBrowserAgentInitOptions,
     saveSettings,
 } from "./browserActions.mjs";
+import { getBrowserMemoryService } from "./browserMemoryService.mjs";
 import {
     ChunkChatResponse,
     generateAnswer,
@@ -454,12 +453,6 @@ export function instantiate(): AppAgent {
                 content: _webFlowStore.generateDynamicSchemaText(),
             };
         },
-        cancelChoice: async (
-            choiceId: string,
-            context: SessionContext<BrowserActionContext>,
-        ) => {
-            context.agentContext.choiceManager?.cancelChoice(choiceId);
-        },
         handleChoice: async (
             choiceId: string,
             response: boolean | number[],
@@ -515,9 +508,8 @@ export interface urlResolutionAction {
 async function initializeBrowserContext(
     settings?: AppAgentInitSettings,
 ): Promise<BrowserActionContext> {
-    const clientBrowserControl = settings?.options as
-        | BrowserControl
-        | undefined;
+    const { browserControl: clientBrowserControl, memoryServiceClient } =
+        normalizeBrowserAgentInitOptions(settings?.options);
 
     const localHostPort = settings?.localHostPort;
     if (localHostPort === undefined) {
@@ -529,6 +521,13 @@ async function initializeBrowserContext(
         sessionId: "default",
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
+        ...(memoryServiceClient === undefined ? {} : { memoryServiceClient }),
+        ...(memoryServiceClient === undefined
+            ? {}
+            : {
+                  browserMemoryService:
+                      getBrowserMemoryService(memoryServiceClient),
+              }),
         // With no in-process control (connect mode, or extension-only), leave
         // the preferred client type unset so selectActiveClientForSession uses
         // its default priority (electron > extension > any). This lets the
