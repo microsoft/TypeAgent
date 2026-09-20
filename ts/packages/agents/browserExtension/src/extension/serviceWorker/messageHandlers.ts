@@ -281,8 +281,23 @@ export async function handleSearchWebMemories(message: any) {
                 includeRelatedEntities: true,
                 enableAdvancedSearch: true,
                 limit: message.parameters.limit || 20,
-                minScore: message.parameters.filters?.minRelevance || 0.3,
+                minScore:
+                    message.parameters.minScore ??
+                    message.parameters.filters?.minRelevance ??
+                    0.3,
                 ...message.parameters.filters,
+                domain:
+                    message.parameters.domain ??
+                    message.parameters.filters?.domain,
+                source:
+                    message.parameters.source ??
+                    message.parameters.filters?.source,
+                dateFrom:
+                    message.parameters.dateFrom ??
+                    message.parameters.filters?.dateFrom,
+                dateTo:
+                    message.parameters.dateTo ??
+                    message.parameters.filters?.dateTo,
             },
         });
 

@@ -67,6 +67,8 @@
     "@typeagent/dispatcher-types": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-client": "workspace:*",
+    "@typeagent/memory-service": "workspace:*",
     "@typeagent/taskflow-typeagent": "workspace:*",
     "@typeagent/textpro": "workspace:*",
     "@typeagent/website-memory": "workspace:*",

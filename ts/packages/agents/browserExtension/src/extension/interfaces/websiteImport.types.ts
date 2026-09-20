@@ -39,6 +39,8 @@ export interface ImportProgress {
         | "fetching"
         | "processing"
         | "extracting"
+        | "graph-building"
+        | "persisting"
         | "complete"
         | "error";
     totalItems: number;
