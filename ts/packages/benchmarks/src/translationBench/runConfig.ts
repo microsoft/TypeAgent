@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import type { TpmLimits } from "../core/rateLimiter.js";
+import { readJsonFile } from "../core/fileJson.js";
 
 export const DEFAULT_TOK_PER_MIN_PER_SLOT = 70_000;
 export const DEFAULT_EST_TOKENS_PER_CALL = 10_400;
@@ -209,22 +210,7 @@ export function loadRunConfigFile(filePath: string): RunConfigFile {
     if (!fs.existsSync(filePath)) {
         return {};
     }
-    let text: string;
-    try {
-        text = fs.readFileSync(filePath, "utf8");
-    } catch (error) {
-        throw new Error(
-            `runConfig: failed to read ${filePath}: ${String(error)}`,
-        );
-    }
-    let raw: unknown;
-    try {
-        raw = JSON.parse(text) as unknown;
-    } catch (error) {
-        throw new Error(
-            `runConfig: failed to parse ${filePath}: ${String(error)}`,
-        );
-    }
+    const raw = readJsonFile<unknown>(filePath, "runConfig");
     return parseRunConfig(raw, filePath);
 }
 
