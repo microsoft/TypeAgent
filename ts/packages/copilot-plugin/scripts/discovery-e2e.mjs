@@ -367,7 +367,7 @@ async function probeMcp(config, env, smokeTest, signal) {
 export async function main(argv = process.argv.slice(2)) {
     const options = parseArgs(argv);
     if (options.help) {
-        console.log(help);
+        process.stdout.write(`${help}\n`);
         return;
     }
     if (process.platform !== "win32")
@@ -408,7 +408,7 @@ export async function main(argv = process.argv.slice(2)) {
     process.once("SIGINT", abort);
     process.once("SIGTERM", abort);
     let server;
-    console.log(`E2E logs and disposable data: ${runDir}`);
+    process.stdout.write(`E2E logs and disposable data: ${runDir}\n`);
     try {
         if (options.installDependencies) {
             const pm = packageManager("pnpm");
@@ -512,12 +512,12 @@ export async function main(argv = process.argv.slice(2)) {
             JSON.stringify(evidence, null, 2) + "\n",
         );
         if (options.smokeTest) {
-            console.log(
-                "PASS: real MCP catalog and list.listLists discovery. No action was executed.",
+            process.stdout.write(
+                "PASS: real MCP catalog and list.listLists discovery. No action was executed.\n",
             );
         } else {
-            console.log(
-                `Ready. Paste the following into Copilot (also saved in prompt.txt):\n\n${testPrompt}\n`,
+            process.stdout.write(
+                `Ready. Paste the following into Copilot (also saved in prompt.txt):\n\n${testPrompt}\n\n`,
             );
             await runCommand(
                 copilot,
@@ -553,7 +553,9 @@ export async function main(argv = process.argv.slice(2)) {
             process.removeListener("SIGTERM", abort);
         }
         if (server)
-            console.log(`Owned server stopped. Evidence retained at ${runDir}`);
+            process.stdout.write(
+                `Owned server stopped. Evidence retained at ${runDir}\n`,
+            );
     }
 }
 
