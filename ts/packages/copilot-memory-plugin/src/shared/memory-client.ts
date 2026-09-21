@@ -1,0 +1,285 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import fs from "node:fs/promises";
+import path from "node:path";
+import {
+    ConversationMemory,
+    ConversationMessage,
+    ConversationMessageMeta,
+    createConversationMemory,
+} from "@typeagent/conversation-memory";
+import { withMemoryLock } from "./lock.js";
+import {
+    recallCachePath,
+    resolveMemoryPaths,
+    type MemoryPaths,
+} from "./workspace.js";
+import type { KnowledgePayload } from "./transcript.js";
+import type { RecallAnswer } from "./context.js";
+
+type AnswerResponse = {
+    type?: string;
+    answer?: string;
+    whyNoAnswer?: string;
+};
+
+type StoreResult<T> = {
+    success: boolean;
+    message?: string;
+    data?: T;
+};
+
+export interface MemoryStore {
+    queueAddMessage(
+        message: ConversationMessage,
+        completionCallback?: (error?: unknown) => void,
+        extractKnowledge?: boolean,
+        retainKnowledge?: boolean,
+    ): void;
+    waitForPendingTasks(): Promise<void>;
+    addMessage(
+        message: ConversationMessage,
+        extractKnowledge?: boolean,
+        retainKnowledge?: boolean,
+    ): Promise<StoreResult<unknown>>;
+    getAnswerFromLanguage(question: string): Promise<StoreResult<unknown>>;
+}
+
+export type MemoryClient = {
+    captureRequest(text: string): Promise<void>;
+    captureResult(text: string, knowledge?: KnowledgePayload): Promise<void>;
+    remember(memory: string, source?: string): Promise<{ ok: true }>;
+    recall(query: string): Promise<RecallAnswer>;
+    readRecallCache(
+        sessionId: string,
+        prompt: string,
+    ): Promise<string | undefined>;
+    writeRecallCache(
+        sessionId: string,
+        prompt: string,
+        context: string,
+    ): Promise<void>;
+};
+
+type RecallCache = {
+    prompt: string;
+    context: string;
+    at: number;
+};
+
+const CACHE_MAX_AGE_MS = 120_000;
+
+function log(message: string): void {
+    process.stderr.write(`[typeagent-memory] ${message}\n`);
+}
+
+function readAnswers(data: unknown): AnswerResponse[] {
+    if (!Array.isArray(data)) {
+        return [];
+    }
+    return data.flatMap((entry) => {
+        if (!Array.isArray(entry)) {
+            return [];
+        }
+        const answer = entry[1];
+        if (!answer || typeof answer !== "object") {
+            return [];
+        }
+        return [answer as AnswerResponse];
+    });
+}
+
+export function toRecallAnswer(result: StoreResult<unknown>): RecallAnswer {
+    if (!result.success) {
+        return {
+            type: "NoAnswer",
+            whyNoAnswer: result.message ?? "Memory search failed.",
+        };
+    }
+    const answers = readAnswers(result.data);
+    const answered = answers.filter(
+        (answer) => answer.type === "Answered" && answer.answer,
+    );
+    if (answered.length > 0) {
+        return {
+            type: "Answered",
+            answer: answered.map((answer) => answer.answer).join("\n"),
+        };
+    }
+    const reasons = answers
+        .map((answer) => answer.whyNoAnswer)
+        .filter((reason): reason is string => Boolean(reason));
+    return {
+        type: "NoAnswer",
+        whyNoAnswer: reasons.join("\n") || "No answer in this conversation.",
+    };
+}
+
+function userMessage(text: string, source?: string): ConversationMessage {
+    return new ConversationMessage(
+        text,
+        new ConversationMessageMeta(source ?? "user", ["assistant"]),
+    );
+}
+
+function assistantMessage(
+    text: string,
+    knowledge?: KnowledgePayload,
+): ConversationMessage {
+    const metadata = new ConversationMessageMeta("assistant", ["user"]);
+    if (!knowledge) {
+        return new ConversationMessage(text, metadata);
+    }
+    return new ConversationMessage(
+        text,
+        metadata,
+        undefined,
+        knowledge as never,
+    );
+}
+
+async function queueMessage(
+    store: MemoryStore,
+    message: ConversationMessage,
+    extractKnowledge: boolean,
+): Promise<string | undefined> {
+    let failure: string | undefined;
+    store.queueAddMessage(
+        message,
+        (error) => {
+            if (error !== undefined) {
+                failure =
+                    error instanceof Error ? error.message : String(error);
+            }
+        },
+        extractKnowledge,
+        false,
+    );
+    await store.waitForPendingTasks();
+    return failure;
+}
+
+/**
+ * Implicit capture uses `queueAddMessage`, matching the dispatcher. If
+ * knowledge extraction fails, the turn text is still stored so a later
+ * recall can search it.
+ */
+export async function captureQueued(
+    store: MemoryStore,
+    message: ConversationMessage,
+): Promise<void> {
+    const failure = await queueMessage(store, message, true);
+    if (!failure) {
+        return;
+    }
+    log(`Knowledge extraction failed (${failure}); storing turn text only.`);
+    const retry = await queueMessage(store, message, false);
+    if (retry) {
+        throw new Error(retry);
+    }
+}
+
+export async function captureDirect(
+    store: MemoryStore,
+    message: ConversationMessage,
+): Promise<void> {
+    const extracted = await store.addMessage(message, true, false);
+    if (extracted.success) {
+        return;
+    }
+    log(
+        `Knowledge extraction failed (${extracted.message ?? "unknown"}); storing fact text only.`,
+    );
+    const stored = await store.addMessage(message, false, false);
+    if (!stored.success) {
+        throw new Error(stored.message ?? "Failed to store memory.");
+    }
+}
+
+export function createMemoryClient(
+    store: MemoryStore,
+    paths: Pick<MemoryPaths, "dirPath">,
+): MemoryClient {
+    return {
+        captureRequest(text) {
+            return captureQueued(store, userMessage(text));
+        },
+        captureResult(text, knowledge) {
+            return captureQueued(store, assistantMessage(text, knowledge));
+        },
+        async remember(memory, source) {
+            await captureDirect(store, userMessage(memory, source ?? "chat"));
+            return { ok: true };
+        },
+        async recall(query) {
+            return toRecallAnswer(await store.getAnswerFromLanguage(query));
+        },
+        readRecallCache(sessionId, prompt) {
+            return readRecallCache(paths.dirPath, sessionId, prompt);
+        },
+        writeRecallCache(sessionId, prompt, context) {
+            return writeRecallCache(paths.dirPath, sessionId, prompt, context);
+        },
+    };
+}
+
+async function readRecallCache(
+    dirPath: string,
+    sessionId: string,
+    prompt: string,
+): Promise<string | undefined> {
+    try {
+        const raw = await fs.readFile(
+            recallCachePath(dirPath, sessionId),
+            "utf8",
+        );
+        const cache = JSON.parse(raw) as RecallCache;
+        if (
+            cache.prompt !== prompt ||
+            Date.now() - cache.at > CACHE_MAX_AGE_MS
+        ) {
+            return undefined;
+        }
+        return cache.context;
+    } catch {
+        return undefined;
+    }
+}
+
+async function writeRecallCache(
+    dirPath: string,
+    sessionId: string,
+    prompt: string,
+    context: string,
+): Promise<void> {
+    const filePath = recallCachePath(dirPath, sessionId);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const cache: RecallCache = { prompt, context, at: Date.now() };
+    await fs.writeFile(filePath, JSON.stringify(cache), "utf8");
+}
+
+async function openStore(paths: MemoryPaths): Promise<ConversationMemory> {
+    return createConversationMemory(
+        {
+            dirPath: paths.dirPath,
+            baseFileName: paths.baseFileName,
+        },
+        false,
+    );
+}
+
+export async function withWorkspaceMemory<T>(
+    cwd: string,
+    fn: (client: MemoryClient) => Promise<T>,
+): Promise<T> {
+    const paths = resolveMemoryPaths(cwd);
+    return withMemoryLock(paths.dirPath, async () => {
+        const store = await openStore(paths);
+        try {
+            return await fn(createMemoryClient(store, paths));
+        } finally {
+            await store.waitForPendingTasks();
+        }
+    });
+}

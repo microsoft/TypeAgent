@@ -4651,6 +4651,40 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/copilot-memory-plugin:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 1.26.0
+        version: 1.26.0(zod@3.25.76)
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../memory/conversation
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.40
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@20.19.40)(ts-node@10.9.2(@types/node@20.19.40)(typescript@5.4.5))
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/copilot-plugin:
     dependencies:
       '@modelcontextprotocol/sdk':
