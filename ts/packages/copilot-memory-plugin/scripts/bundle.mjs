@@ -15,12 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-const optionalNatives = [
-    "better-sqlite3",
-    "sharp",
-    "canvas",
-    "keytar",
-];
+const optionalNatives = ["better-sqlite3", "sharp", "canvas", "keytar"];
 
 await build({
     entryPoints: {

@@ -11,7 +11,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const pluginRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+);
 const entryArg = process.argv[2];
 if (!entryArg) {
     process.stderr.write("usage: node scripts/launch.mjs <entry>\n");

@@ -39,7 +39,12 @@ const registerScript = path.join(
     "register-plugin.mjs",
 );
 
-const runtimeFiles = [".mcp.json", "hooks.json", "plugin.json", "scripts/launch.mjs"];
+const runtimeFiles = [
+    ".mcp.json",
+    "hooks.json",
+    "plugin.json",
+    "scripts/launch.mjs",
+];
 const bundledEntries = [
     ["dist/bundle/hooks/hook-router.js", "dist/hooks/hook-router.js"],
     ["dist/bundle/hooks/stop-router.js", "dist/hooks/stop-router.js"],
@@ -136,7 +141,9 @@ function stage() {
         "onnxruntime-node",
     );
     if (!fs.existsSync(onnxDir)) {
-        throw new Error(`Could not locate onnxruntime-node next to ${transformersDir}`);
+        throw new Error(
+            `Could not locate onnxruntime-node next to ${transformersDir}`,
+        );
     }
     fs.symlinkSync(onnxDir, path.join(modulesLink, "onnxruntime-node"));
 }
