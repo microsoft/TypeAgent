@@ -126,9 +126,14 @@ global registration fails with Windows `EPERM`, close other Copilot sessions
 holding the installed directory and retry; the default local snapshot needs no
 global registration. Only the launcher's child processes are stopped.
 
-Unknown/state-changing policies still require confirmation. The separate
-read-only-policy change is not implied by installing these adapters; even
-explicitly read-only actions may have their own handler questions.
+The bundled manifests now classify 25 audited actions across eight agents as
+read-only, including `list.listLists` and `list.getList`. These skip the
+structured dispatcher's outer effect-confirmation prompt unless confirmation
+is explicitly required. Unknown/state-changing policies still require
+confirmation. Authorization, readiness, validation, and handler questions still
+apply; read-only does not mean every interaction is bypassed.
+Restart the agent server after rebuilding so it loads the updated manifests;
+an already-running discovery session retains its previously loaded policy.
 
 Run launcher regression checks with
 `npm run test:e2e-launcher` from `ts\packages\copilot-plugin`.
