@@ -103,6 +103,16 @@ export interface JobProgress {
     completed: number;
     total?: number;
     message?: string;
+    stage?: JobState;
+    operation?: "rebuild" | "append";
+    elapsedMs?: number;
+    documentCount?: number;
+    docPartCount?: number;
+}
+
+export interface IngestionTraceEvent extends JobProgress {
+    state: JobState;
+    timestamp: string;
 }
 
 export interface IngestionJobStatus {
@@ -116,6 +126,7 @@ export interface IngestionJobStatus {
     updatedAt: string;
     error?: string;
     warnings: string[];
+    trace?: IngestionTraceEvent[];
 }
 
 export interface MemorySearchRequest {
@@ -230,6 +241,11 @@ export interface CorpusIndexMatch {
 export interface CorpusIndex {
     initialize(): Promise<void>;
     rebuild(
+        documents: IndexedDocument[],
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<void>;
+    append?(
         documents: IndexedDocument[],
         signal: AbortSignal,
         onProgress: (progress: JobProgress) => Promise<void>,

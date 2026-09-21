@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import { createKnowProCorpusIndex } from "./knowProCorpusIndex.js";
@@ -644,14 +644,43 @@ export class FileMemoryService implements MemoryService {
                 message: "Building corpus indexes",
             });
             const documents = this.activeDocuments(candidateManifest);
-            await raceWithAbort(
-                candidateIndex.rebuild(documents, signal, async (progress) => {
-                    if (!signal.aborted) {
-                        await this.updateJob(job, "building-indexes", progress);
-                    }
-                }),
-                signal,
-            );
+            const canAppend =
+                existing === undefined &&
+                runtime.manifest.sources.length > 0 &&
+                runtime.manifest.indexGeneration !== undefined &&
+                candidateIndex.append !== undefined;
+            const reportProgress = async (progress: JobProgress) => {
+                if (!signal.aborted) {
+                    await this.updateJob(
+                        job,
+                        progress.stage ?? "building-indexes",
+                        progress,
+                    );
+                }
+            };
+            if (canAppend) {
+                await cp(
+                    this.indexDirectory(
+                        request.corpusId,
+                        runtime.manifest.indexGeneration,
+                    ),
+                    candidateIndexDirectory,
+                    { recursive: true },
+                );
+                await raceWithAbort(
+                    candidateIndex.append!(
+                        [{ source, revision, content }],
+                        signal,
+                        reportProgress,
+                    ),
+                    signal,
+                );
+            } else {
+                await raceWithAbort(
+                    candidateIndex.rebuild(documents, signal, reportProgress),
+                    signal,
+                );
+            }
             this.throwIfAborted(signal);
             revision.state = "ready";
             revision.indexedAt = now();
@@ -784,9 +813,12 @@ export class FileMemoryService implements MemoryService {
         progress: JobProgress,
         error?: string,
     ): Promise<void> {
+        const timestamp = now();
         job.state = state;
         job.progress = progress;
-        job.updatedAt = now();
+        job.updatedAt = timestamp;
+        job.trace ??= [];
+        job.trace.push({ state, timestamp, ...progress });
         if (error !== undefined) {
             job.error = error;
         }

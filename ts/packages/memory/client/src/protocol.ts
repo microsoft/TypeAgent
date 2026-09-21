@@ -129,6 +129,16 @@ export const jobProgressSchema = z.object({
     completed: z.number().nonnegative(),
     total: z.number().nonnegative().optional(),
     message: z.string().optional(),
+    stage: jobStateSchema.optional(),
+    operation: z.enum(["rebuild", "append"]).optional(),
+    elapsedMs: z.number().nonnegative().optional(),
+    documentCount: z.number().int().nonnegative().optional(),
+    docPartCount: z.number().int().nonnegative().optional(),
+});
+
+export const ingestionTraceEventSchema = jobProgressSchema.extend({
+    state: jobStateSchema,
+    timestamp: z.string(),
 });
 
 export const jobStatusSchema = z.object({
@@ -142,6 +152,7 @@ export const jobStatusSchema = z.object({
     updatedAt: z.string(),
     error: z.string().optional(),
     warnings: z.array(z.string()),
+    trace: z.array(ingestionTraceEventSchema).optional(),
 });
 
 export const searchRequestSchema = z.object({
