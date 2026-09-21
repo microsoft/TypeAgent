@@ -36,6 +36,7 @@ export function createMemoryServiceRpcFacade(
         listJobs: (...args) => service.listJobs(...args),
         cancelJob: (...args) => service.cancelJob(...args),
         search: (...args) => service.search(...args),
+        answer: (...args) => service.answer(...args),
         getKnowledgeGraph: (...args) => service.getKnowledgeGraph(...args),
         getCapabilities: (...args) => service.getCapabilities(...args),
     };

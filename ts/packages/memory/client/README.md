@@ -5,8 +5,8 @@ memory service. The management surface includes corpus status, paged source and
 job listing, bounded content reads, source-scoped knowledge, revision-guarded
 replacement, preview/confirm source deletion, and source/corpus reindexing.
 
-Grounded answer generation is not exposed; inspect the typed
-`groundedAnswer` capability and use source-linked search evidence.
+The typed `answer` operation returns deterministic extractive answers with
+source-linked citations. It does not claim model-generated synthesis.
 
 ## Trademarks
 

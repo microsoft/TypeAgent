@@ -13,6 +13,8 @@ import type {
     DocumentIngestResult,
     IngestionJobStatus,
     MemoryCorpus,
+    MemoryAnswerRequest,
+    MemoryAnswerResult,
     MemoryKnowledgeGraph,
     MemorySearchRequest,
     MemorySearchResult,
@@ -238,6 +240,19 @@ class FakeMemoryService implements MemoryService {
         };
     }
 
+    public async answer(
+        request: MemoryAnswerRequest,
+    ): Promise<MemoryAnswerResult> {
+        return {
+            question: request.question,
+            answer: "No supporting memory evidence was found.",
+            citations: [],
+            grounded: true,
+            warnings: [],
+            indexVersion: "fixture",
+        };
+    }
+
     public async getKnowledgeGraph(): Promise<MemoryKnowledgeGraph> {
         return {
             entities: [
@@ -262,7 +277,7 @@ class FakeMemoryService implements MemoryService {
                 structuredSearch: true,
                 exactSearch: true,
                 management: true,
-                groundedAnswer: false,
+                groundedAnswer: true,
             },
             warnings: [],
         };
@@ -478,6 +493,19 @@ describe("MemoryServiceHost", () => {
                 }),
             ).toMatchObject({ jobId: "job-1", state: "complete" });
             expect(progress).toEqual([1]);
+            expect(
+                await client.answer({
+                    corpusId: "corpus-1",
+                    question: "What is stored?",
+                }),
+            ).toEqual({
+                question: "What is stored?",
+                answer: "No supporting memory evidence was found.",
+                citations: [],
+                grounded: true,
+                warnings: [],
+                indexVersion: "fixture",
+            });
             expect(await client.getKnowledgeGraph("corpus-1")).toEqual({
                 entities: [
                     {
@@ -493,7 +521,7 @@ describe("MemoryServiceHost", () => {
             expect(await client.getCapabilities()).toMatchObject({
                 features: {
                     management: true,
-                    groundedAnswer: false,
+                    groundedAnswer: true,
                 },
             });
             expect(await (await fetch(host.healthEndpoint)).json()).toEqual({

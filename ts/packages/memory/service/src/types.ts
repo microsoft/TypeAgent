@@ -256,6 +256,23 @@ export interface MemorySearchResult {
     indexVersion: string;
 }
 
+export interface MemoryAnswerRequest {
+    corpusId: string;
+    question: string;
+    limit?: number;
+    maxResponseChars?: number;
+    sourceIds?: string[];
+}
+
+export interface MemoryAnswerResult {
+    question: string;
+    answer: string;
+    citations: MemoryEvidence[];
+    grounded: true;
+    indexVersion: string;
+    warnings: string[];
+}
+
 export interface MemoryGraphEntity {
     name: string;
     types: string[];
@@ -344,6 +361,7 @@ export interface MemoryService {
     listJobs(request?: JobListRequest): Promise<MemoryPage<IngestionJobStatus>>;
     cancelJob(jobId: string): Promise<IngestionJobStatus | undefined>;
     search(request: MemorySearchRequest): Promise<MemorySearchResult>;
+    answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult>;
     getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph>;
     getCapabilities(): Promise<MemoryServiceCapabilities>;
 }

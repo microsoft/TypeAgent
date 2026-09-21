@@ -267,6 +267,32 @@ describe("FileMemoryService", () => {
         expect(source).not.toHaveProperty("revisions.0.content");
     });
 
+    test("answers with bounded source-linked evidence", async () => {
+        const corpus = await service.createCorpus("Grounded");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "runbook",
+                sourceType: "markdown",
+                title: "Recovery runbook",
+                markdown: "Restart the failed indexing worker.",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+
+        const result = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "How should indexing recover?",
+        });
+
+        expect(result).toMatchObject({
+            grounded: true,
+            citations: [{ sourceId: "runbook" }],
+        });
+        expect(result.answer).toContain("[1]");
+        expect(result.answer).toContain("Restart the failed indexing worker.");
+    });
+
     test("persists indexing mode and chunk size with the active revision", async () => {
         const corpus = await service.createCorpus("Basic");
         const accepted = await service.ingestDocument({

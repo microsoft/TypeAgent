@@ -26,6 +26,8 @@ import type {
     JobState,
     MemoryCorpus,
     MemoryCorpusStatus,
+    MemoryAnswerRequest,
+    MemoryAnswerResult,
     MemoryEvidence,
     MemoryKnowledgeGraph,
     MemorySearchRequest,
@@ -224,7 +226,7 @@ function defaultCapabilities(): MemoryServiceCapabilities {
             structuredSearch: true,
             exactSearch: true,
             management: true,
-            groundedAnswer: false,
+            groundedAnswer: true,
         },
         warnings: [],
     };
@@ -908,6 +910,48 @@ export class FileMemoryService implements MemoryService {
     public async getCapabilities(): Promise<MemoryServiceCapabilities> {
         await this.initialize();
         return structuredClone(this.capabilities);
+    }
+
+    public async answer(
+        request: MemoryAnswerRequest,
+    ): Promise<MemoryAnswerResult> {
+        const question = request.question.trim();
+        if (question.length === 0) {
+            throw new Error("Memory question cannot be empty");
+        }
+        const result = await this.search({
+            corpusId: request.corpusId,
+            query: question,
+            limit: request.limit ?? 5,
+            maxResponseChars: request.maxResponseChars,
+            ...(request.sourceIds === undefined
+                ? {}
+                : { sourceIds: request.sourceIds }),
+        });
+        if (result.matches.length === 0) {
+            return {
+                question,
+                answer: "No supporting memory evidence was found.",
+                citations: [],
+                grounded: true,
+                indexVersion: result.indexVersion,
+                warnings: result.warnings,
+            };
+        }
+        const answer = result.matches
+            .map(
+                (evidence, index) =>
+                    `[${index + 1}] ${evidence.snippet.trim()}`,
+            )
+            .join("\n\n");
+        return {
+            question,
+            answer,
+            citations: result.matches,
+            grounded: true,
+            indexVersion: result.indexVersion,
+            warnings: result.warnings,
+        };
     }
 
     public async getKnowledgeGraph(

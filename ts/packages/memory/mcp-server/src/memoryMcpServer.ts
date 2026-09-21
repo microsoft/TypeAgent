@@ -10,6 +10,8 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
     capabilitiesSchema,
+    answerRequestSchema,
+    answerResultSchema,
     clearedCountSchema,
     corpusSchema,
     optionalCorpusStatusSchema,
@@ -39,6 +41,7 @@ import {
 import type {
     DocumentIngestRequest,
     JobListRequest,
+    MemoryAnswerRequest,
     MemorySearchRequest,
     MemoryService,
     SourceContentRequest,
@@ -422,6 +425,20 @@ export class MemoryMcpServer {
             async (request) =>
                 this.run(() =>
                     this.service.search(request as MemorySearchRequest),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.answer,
+            {
+                description:
+                    "Answer from bounded source-linked memory evidence with explicit citations.",
+                inputSchema: answerRequestSchema,
+                outputSchema: outputSchema(answerResultSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.answer(request as MemoryAnswerRequest),
                 ),
         );
         this.server.registerTool(

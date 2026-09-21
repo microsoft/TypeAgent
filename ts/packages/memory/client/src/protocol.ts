@@ -24,6 +24,7 @@ export const memoryToolNames = {
     jobWait: "memory_job_wait",
     jobCancel: "memory_job_cancel",
     search: "memory_search",
+    answer: "memory_answer",
     knowledgeGraphGet: "memory_knowledge_graph_get",
     capabilities: "memory_capabilities",
 } as const;
@@ -302,6 +303,23 @@ export const searchResultSchema = z.object({
     warnings: z.array(z.string()),
     capabilitiesUsed: z.array(z.string()),
     indexVersion: z.string(),
+});
+
+export const answerRequestSchema = z.object({
+    corpusId: identifierSchema,
+    question: z.string().min(1),
+    limit: z.number().int().positive().max(100).optional(),
+    maxResponseChars: z.number().int().positive().optional(),
+    sourceIds: z.array(identifierSchema).optional(),
+});
+
+export const answerResultSchema = z.object({
+    question: z.string(),
+    answer: z.string(),
+    citations: searchResultSchema.shape.matches,
+    grounded: z.literal(true),
+    indexVersion: z.string(),
+    warnings: z.array(z.string()),
 });
 
 export const knowledgeGraphSchema = z.object({

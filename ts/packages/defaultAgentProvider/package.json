@@ -61,6 +61,7 @@
     "@typeagent/ipconfig-agent": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/list-agent": "workspace:*",
+    "@typeagent/memory-agent": "workspace:*",
     "@typeagent/markdown-agent": "workspace:*",
     "@typeagent/montage-agent": "workspace:*",
     "@typeagent/music": "workspace:*",

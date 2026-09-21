@@ -80,6 +80,14 @@ function createClient(): jest.Mocked<MemoryServiceClient> {
             capabilitiesUsed: ["structured-search"],
             indexVersion: "test",
         })),
+        answer: jest.fn(async (request) => ({
+            question: request.question,
+            answer: "No supporting memory evidence was found.",
+            citations: [],
+            grounded: true,
+            indexVersion: "test",
+            warnings: [],
+        })),
         getKnowledgeGraph: jest.fn(async () => ({
             entities: [],
             topics: [],

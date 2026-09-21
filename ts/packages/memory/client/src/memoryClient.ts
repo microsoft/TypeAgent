@@ -19,6 +19,8 @@ import type {
     JobProgress,
     MemoryCorpus,
     MemoryCorpusStatus,
+    MemoryAnswerRequest,
+    MemoryAnswerResult,
     MemoryKnowledgeGraph,
     MemoryPage,
     MemorySearchRequest,
@@ -39,6 +41,7 @@ import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
 import type { z } from "zod";
 import {
     capabilitiesSchema,
+    answerResultSchema,
     clearedCountSchema,
     corpusSchema,
     ingestResultSchema,
@@ -159,6 +162,10 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
 
     public search(request: MemorySearchRequest) {
         return this.service.search(request);
+    }
+
+    public answer(request: MemoryAnswerRequest) {
+        return this.service.answer(request);
     }
 
     public getKnowledgeGraph(corpusId: string) {
@@ -408,6 +415,10 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
 
     public search(request: MemorySearchRequest): Promise<MemorySearchResult> {
         return this.invoke(memoryToolNames.search, request, searchResultSchema);
+    }
+
+    public answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult> {
+        return this.invoke(memoryToolNames.answer, request, answerResultSchema);
     }
 
     public getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph> {

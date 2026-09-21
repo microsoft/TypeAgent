@@ -17,9 +17,9 @@ structured KnowPro index. Nonterminal jobs found after a service restart are
 marked failed with an explicit interruption reason so they are never left
 permanently active.
 
-`getCapabilities()` reports `management: true` and
-`groundedAnswer: false`. Grounded answer generation is intentionally not part of
-this slice; callers should use source-linked `search` evidence directly.
+`getCapabilities()` reports `management: true` and `groundedAnswer: true`.
+`answer` is deliberately extractive: it returns bounded source-linked evidence
+with explicit citations and does not claim model-generated synthesis.
 
 ## Trademarks
 
