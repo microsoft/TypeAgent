@@ -1735,9 +1735,6 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
-      '@typeagent/conversation-memory':
-        specifier: workspace:*
-        version: link:../../memory/conversation
       '@typeagent/copilot-macros':
         specifier: workspace:*
         version: link:../../copilot-macros
@@ -2140,6 +2137,9 @@ importers:
       dompurify:
         specifier: ^3.4.13
         version: 3.4.13
+      jsdom:
+        specifier: ^28.1.0
+        version: 28.1.0
     devDependencies:
       prettier:
         specifier: ^3.5.3
@@ -5606,6 +5606,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
+      gpt-tokenizer:
+        specifier: ^2.9.0
+        version: 2.9.0
       mailparser:
         specifier: 3.9.6
         version: 3.9.6

@@ -73,8 +73,6 @@ export function createAgentInvokeHandlers(
         searchByTopics: (params: any) =>
             websiteHandler("searchByTopics", params),
         hybridSearch: (params: any) => websiteHandler("hybridSearch", params),
-        getHierarchicalTopics: (params: any) =>
-            knowledgeHandler("getHierarchicalTopics", params),
         getTopicImportanceLayer: (params: any) =>
             knowledgeHandler("getTopicImportanceLayer", params),
         getTopicViewportNeighborhood: (params: any) =>

@@ -38,6 +38,15 @@ export interface MemoryCorpus {
     documentCount: number;
 }
 
+export interface MemoryCorpusStatus extends MemoryCorpus {
+    sourceCount: number;
+    revisionCount: number;
+    readyRevisionCount: number;
+    failedRevisionCount: number;
+    activeJobCount: number;
+    indexVersion: string;
+}
+
 export interface SourceDocument {
     sourceId: string;
     corpusId: string;
@@ -58,6 +67,10 @@ export interface SourceRevision {
     sourceModifiedAt?: string;
     indexedAt?: string;
     pipelineVersion: string;
+    pipeline?: {
+        mode: IngestionMode;
+        maxCharsPerChunk?: number;
+    };
     embeddingIdentity?: string;
     state: "accepted" | "processing" | "ready" | "failed" | "deleted";
 }
@@ -88,6 +101,7 @@ export interface DocumentIngestRequest {
         mode?: IngestionMode;
         maxCharsPerChunk?: number;
         updatePolicy?: UpdatePolicy;
+        expectedActiveRevisionId?: string;
     };
 }
 
@@ -103,6 +117,16 @@ export interface JobProgress {
     completed: number;
     total?: number;
     message?: string;
+    stage?: JobState;
+    operation?: "rebuild" | "append";
+    elapsedMs?: number;
+    documentCount?: number;
+    docPartCount?: number;
+}
+
+export interface IngestionTraceEvent extends JobProgress {
+    state: JobState;
+    timestamp: string;
 }
 
 export interface IngestionJobStatus {
@@ -116,6 +140,87 @@ export interface IngestionJobStatus {
     updatedAt: string;
     error?: string;
     warnings: string[];
+    trace?: IngestionTraceEvent[];
+}
+
+export interface MemoryPage<T> {
+    items: T[];
+    total: number;
+    nextContinuationToken?: string;
+}
+
+export interface SourceListRequest {
+    corpusId: string;
+    pageSize?: number;
+    continuationToken?: string;
+}
+
+export interface SourceContentRequest {
+    corpusId: string;
+    sourceId: string;
+    revisionId?: string;
+    offset?: number;
+    maxChars?: number;
+}
+
+export interface SourceContent {
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    mimeType: string;
+    offset: number;
+    content: string;
+    totalChars: number;
+    truncated: boolean;
+    nextOffset?: number;
+}
+
+export interface SourceReplaceRequest {
+    corpusId: string;
+    sourceId: string;
+    expectedActiveRevisionId: string;
+    source: Omit<IngestionSource, "sourceId">;
+    retainRevisionHistory?: boolean;
+}
+
+export interface SourceForgetPreview {
+    corpusId: string;
+    sourceId: string;
+    activeRevisionId: string;
+    revisionCount: number;
+    derivedEntityCount: number;
+    derivedTopicCount: number;
+    derivedRelationshipCount: number;
+    confirmationToken: string;
+    expiresAt: string;
+}
+
+export interface SourceForgetRequest {
+    corpusId: string;
+    sourceId: string;
+    confirmationToken: string;
+}
+
+export interface SourceForgetResult {
+    corpusId: string;
+    sourceId: string;
+    deletedRevisionCount: number;
+    indexVersion: string;
+}
+
+export interface ReindexResult {
+    corpusId: string;
+    sourceId?: string;
+    sourceCount: number;
+    indexVersion: string;
+}
+
+export interface JobListRequest {
+    corpusId?: string;
+    sourceId?: string;
+    states?: JobState[];
+    pageSize?: number;
+    continuationToken?: string;
 }
 
 export interface MemorySearchRequest {
@@ -187,6 +292,8 @@ export interface MemoryServiceCapabilities {
         vectorSimilarity: boolean;
         structuredSearch: boolean;
         exactSearch: boolean;
+        management: boolean;
+        groundedAnswer: boolean;
     };
     warnings: string[];
 }
@@ -196,17 +303,45 @@ export interface MemoryService {
     close?(): Promise<void>;
     createCorpus(name: string, description?: string): Promise<MemoryCorpus>;
     listCorpora(): Promise<MemoryCorpus[]>;
+    getCorpus(corpusId: string): Promise<MemoryCorpusStatus | undefined>;
     clearCorpus(corpusId: string): Promise<number>;
     listSources(corpusId: string): Promise<MemorySource[]>;
+    listSourcesPage(
+        request: SourceListRequest,
+    ): Promise<MemoryPage<MemorySource>>;
     getSource(
         corpusId: string,
         sourceId: string,
     ): Promise<MemorySource | undefined>;
+    getSourceContent(request: SourceContentRequest): Promise<SourceContent>;
+    getSourceKnowledge(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<MemoryKnowledgeGraph>;
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
     ): Promise<DocumentIngestResult>;
+    replaceSource(
+        request: SourceReplaceRequest,
+        signal?: AbortSignal,
+    ): Promise<DocumentIngestResult>;
+    previewForgetSource(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<SourceForgetPreview>;
+    forgetSource(request: SourceForgetRequest): Promise<SourceForgetResult>;
+    reindexCorpus(
+        corpusId: string,
+        signal?: AbortSignal,
+    ): Promise<ReindexResult>;
+    reindexSource(
+        corpusId: string,
+        sourceId: string,
+        signal?: AbortSignal,
+    ): Promise<ReindexResult>;
     getJob(jobId: string): Promise<IngestionJobStatus | undefined>;
+    listJobs(request?: JobListRequest): Promise<MemoryPage<IngestionJobStatus>>;
     cancelJob(jobId: string): Promise<IngestionJobStatus | undefined>;
     search(request: MemorySearchRequest): Promise<MemorySearchResult>;
     getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph>;
@@ -217,6 +352,10 @@ export interface IndexedDocument {
     source: SourceDocument;
     revision: SourceRevision;
     content: string;
+    pipeline: {
+        mode: IngestionMode;
+        maxCharsPerChunk?: number;
+    };
 }
 
 export interface CorpusIndexMatch {
@@ -234,8 +373,15 @@ export interface CorpusIndex {
         signal: AbortSignal,
         onProgress: (progress: JobProgress) => Promise<void>,
     ): Promise<void>;
+    append?(
+        documents: IndexedDocument[],
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<void>;
     search(query: string, limit: number): Promise<CorpusIndexMatch[]>;
-    getKnowledgeGraph(): Promise<MemoryKnowledgeGraph>;
+    getKnowledgeGraph(
+        sourceIds?: ReadonlySet<string>,
+    ): Promise<MemoryKnowledgeGraph>;
 }
 
 export type CorpusIndexFactory = (

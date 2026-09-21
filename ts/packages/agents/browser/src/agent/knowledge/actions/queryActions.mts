@@ -30,27 +30,21 @@ export async function getPageIndexedKnowledge(
                 error: "Durable browser memory is not available",
             };
         }
-        const source = await memory.getSource(parameters.url);
-        if (source === undefined) {
+        const sourceKnowledge = await memory.getSourceKnowledge(parameters.url);
+        if (sourceKnowledge === undefined) {
             return {
                 isIndexed: false,
                 error: "Page not found in index",
             };
         }
-        const graph = await memory.getKnowledgeGraph();
-        const entities: Entity[] = graph.entities
-            .filter((entity) => entity.sourceIds.includes(source.sourceId))
-            .map((entity) => ({
-                name: entity.name,
-                type: entity.types.join(", "),
-                confidence: 0.8,
-            }));
-        const keyTopics = graph.topics
-            .filter((topic) => topic.sourceIds.includes(source.sourceId))
-            .map((topic) => topic.name);
-        const relationships: Relationship[] = graph.relationships
-            .filter((item) => item.sourceIds.includes(source.sourceId))
-            .map((item) => ({
+        const entities: Entity[] = sourceKnowledge.entities.map((entity) => ({
+            name: entity.name,
+            type: entity.types.join(", "),
+            confidence: 0.8,
+        }));
+        const keyTopics = sourceKnowledge.topics.map((topic) => topic.name);
+        const relationships: Relationship[] =
+            sourceKnowledge.relationships.map((item) => ({
                 from: item.fromEntity,
                 relationship: item.relationshipType,
                 to: item.toEntity,
@@ -59,7 +53,7 @@ export async function getPageIndexedKnowledge(
         return {
             isIndexed: true,
             knowledge: {
-                title: source.title,
+                title: sourceKnowledge.source.title,
                 entities,
                 relationships,
                 keyTopics,
