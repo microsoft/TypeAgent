@@ -20,6 +20,7 @@ import {
 import { createActionContract } from "./contract.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import registerDebug from "debug";
+import { getStructuredActionUnsupportedReason } from "./executionFailure.js";
 
 const debugError = registerDebug(
     "typeagent:dispatcher:structuredActionDiscovery:error",
@@ -60,6 +61,25 @@ function validateSearch(request: ActionSearchRequest): void {
         throw new Error("Action search request must be an object");
     }
     validateString(request.query, "query");
+}
+
+function createDiscoverableActionContract(
+    identity: { schemaName: string; actionName: string },
+    definition: Parameters<typeof createActionContract>[1],
+    config: Parameters<typeof createActionContract>[2],
+): ActionContract {
+    const contract = createActionContract(identity, definition, config);
+    const unsupportedReason = getStructuredActionUnsupportedReason(identity);
+    if (unsupportedReason === undefined) return contract;
+
+    const unsupportedDescription = `Structured execution is unsupported: ${unsupportedReason}`;
+    return {
+        ...contract,
+        description:
+            contract.description.length === 0
+                ? unsupportedDescription
+                : `${contract.description}\n\n${unsupportedDescription}`,
+    };
 }
 
 export class StructuredActionDiscovery {
@@ -154,7 +174,7 @@ export class StructuredActionDiscovery {
                     return [];
                 }
                 return [
-                    createActionContract(
+                    createDiscoverableActionContract(
                         { schemaName, actionName },
                         definition,
                         config,
@@ -186,7 +206,7 @@ export class StructuredActionDiscovery {
                     continue;
                 }
                 matches.push(
-                    createActionContract(
+                    createDiscoverableActionContract(
                         { schemaName: config.schemaName, actionName },
                         definition,
                         config,
@@ -240,6 +260,15 @@ export class StructuredActionDiscovery {
                 status: "unavailable",
                 envelope,
                 message: "Action is disabled or inactive",
+            };
+        }
+        const unsupportedReason =
+            getStructuredActionUnsupportedReason(identity);
+        if (unsupportedReason !== undefined) {
+            return {
+                status: "unavailable",
+                envelope,
+                message: unsupportedReason,
             };
         }
         const agentName = getAppAgentName(identity.schemaName);
