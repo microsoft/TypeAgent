@@ -83,7 +83,10 @@ export function parsePythonLexemeJson(
     options: ParsePythonLexemeJsonOptions = {},
 ): unknown | unknown[] {
     if (options.multiple) {
-        if (options.maxLength !== undefined && text.length > options.maxLength) {
+        if (
+            options.maxLength !== undefined &&
+            text.length > options.maxLength
+        ) {
             throw new SyntaxError("Response exceeds maxLength");
         }
         const values: unknown[] = [];
