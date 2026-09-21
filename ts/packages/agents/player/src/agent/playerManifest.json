@@ -6,6 +6,10 @@
     "originalSchemaFile": "./playerSchema.ts",
     "schemaFile": "../../dist/agent/playerSchema.pas.json",
     "grammarFile": "../../dist/agent/playerSchema.ag.json",
+    "actionPolicies": {
+      "listDevices": { "effects": "read-only" },
+      "showSelectedDevice": { "effects": "read-only" }
+    },
     "schemaType": {
       "action": "PlayerActions",
       "entity": "PlayerEntities"

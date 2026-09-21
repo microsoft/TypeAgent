@@ -7,6 +7,9 @@
     "originalSchemaFile": "./github-cliSchema.ts",
     "schemaFile": "../dist/github-cliSchema.pas.json",
     "grammarFile": "../dist/github-cliSchema.ag.json",
+    "actionPolicies": {
+      "prFiles": { "effects": "read-only" }
+    },
     "schemaType": "GithubCliActions"
   }
 }

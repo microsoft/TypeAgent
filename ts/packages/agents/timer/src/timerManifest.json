@@ -6,6 +6,9 @@
     "originalSchemaFile": "./timerSchema.ts",
     "schemaFile": "../dist/timerSchema.pas.json",
     "grammarFile": "../dist/timerSchema.ag.json",
+    "actionPolicies": {
+      "listReminders": { "effects": "read-only" }
+    },
     "schemaType": {
       "action": "TimerAction"
     }
