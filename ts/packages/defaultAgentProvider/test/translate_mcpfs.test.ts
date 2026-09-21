@@ -21,7 +21,7 @@ try {
 } catch (e) {}
 
 await defineTranslateTest("translate mcp filesystem", dataFiles, {
-    getInstanceDir: () => undefined,
+    getInstanceDir: () => tempDir,
     getInstanceConfig: () => {
         return {
             mcpServers: {
