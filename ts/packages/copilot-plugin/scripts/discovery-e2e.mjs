@@ -24,7 +24,8 @@ const pluginRoot = path.resolve(
     "..",
 );
 const tsRoot = path.resolve(pluginRoot, "..", "..");
-const help = `Usage: node scripts/discovery-e2e.mjs [options]
+const help = `Usage (from ts): pnpm copilot:discovery [options]
+Change to ts first so Corepack can resolve the pinned pnpm version.
   --skip-build                 Reuse existing plugin/server builds
   --install-dependencies       Explicitly run pnpm install --frozen-lockfile
   --install-plugin             Also register the plugin globally (opt-in)

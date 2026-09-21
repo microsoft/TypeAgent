@@ -34,8 +34,13 @@ The hook output fields `handled`, `responseContent`, and `handledBy` are support
 From the repository root in PowerShell:
 
 ```powershell
-node .\ts\packages\copilot-plugin\scripts\discovery-e2e.mjs
+Set-Location .\ts
+pnpm copilot:discovery
 ```
+
+Run the commands below from `ts`. Changing directory first lets Corepack find
+the pinned pnpm version; `pnpm -C ts` from the repository root can instead try
+to fetch a default version before pnpm processes `-C`.
 
 The launcher builds the plugin and agent server, stages a session-local plugin
 snapshot, starts a disposable server on port 9024, checks the real MCP connection,
@@ -50,24 +55,40 @@ Existing TypeAgent MCP registrations are disabled only for this CLI invocation.
 No global mode settings change. Normal MCP-mode user prompts still use
 `processCommand`; this launcher is not a routing optimization or benchmark.
 
-Prerequisites: Windows, Node 22+ with npm, a native Copilot CLI executable on
+**How discovery is triggered:** in interactive mode, the startup check only lists
+MCP tools and calls `typeagent-getStatus`. It does not search actions or submit
+a prompt for you. After you paste the printed prompt, Copilot is asked to call
+`typeagent-searchActions` through `typeagent-e2e`, choose an action from the
+returned contracts, and call `typeagent-executeAction` with its scope, exact
+identity, and parameters. The query and tool calls are chosen by Copilot, not
+hardcoded by the launcher. Confirmation still requires your actual answer.
+The server uses the same TypeAgent action discovery implementation as other
+structured callers; no separate catalog or ranking logic is added here.
+
+With `--smoke-test`, the script instead calls
+`typeagent-searchActions({ query: "listLists" })` directly through the MCP SDK
+and checks that `list.listLists` is returned. That verifies the real
+MCP-to-TypeAgent discovery connection, **not Copilot's reasoning or selection**.
+It never launches Copilot or executes an action.
+
+Prerequisites: Windows, Node 22+ with npm, pnpm, a native Copilot CLI executable on
 PATH (already signed in), and existing TypeAgent model/embedding configuration.
 The launcher does not obtain credentials, change Azure accounts, or copy files
 from another checkout. Build/install requires a provisioned `ts\.npmrc`.
 
 ```powershell
 # First checkout: explicitly restore dependencies before building.
-node .\ts\packages\copilot-plugin\scripts\discovery-e2e.mjs --install-dependencies
+pnpm copilot:discovery --install-dependencies
 
 # Repeat with existing builds and an already-provisioned config directory.
-node .\ts\packages\copilot-plugin\scripts\discovery-e2e.mjs `
+pnpm copilot:discovery `
   --skip-build --config-dir 'C:\TypeAgent config' --port 9025
 
 # Noninteractive check: real MCP catalog + discovery, NO action execution.
-node .\ts\packages\copilot-plugin\scripts\discovery-e2e.mjs --skip-build --smoke-test
+pnpm copilot:discovery --skip-build --smoke-test
 
 # Optional: also update the global plugin using the existing registrar.
-node .\ts\packages\copilot-plugin\scripts\discovery-e2e.mjs --install-plugin
+pnpm copilot:discovery --install-plugin
 ```
 
 `--model <model>` selects the Copilot model; otherwise the CLI uses its normal
