@@ -9,7 +9,8 @@
     "grammarFile": "../dist/ipconfigSchema.ag.json",
     "actionPolicies": {
       "displayHelpMessage": { "effects": "read-only" },
-      "displayFullConfigurationInformation": { "effects": "read-only" }
+      "displayFullConfigurationInformation": { "effects": "read-only" },
+      "displayDNSResolverCacheContents": { "effects": "read-only" }
     },
     "schemaType": "IpconfigActions"
   }

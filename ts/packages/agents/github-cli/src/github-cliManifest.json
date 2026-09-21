@@ -8,7 +8,18 @@
     "schemaFile": "../dist/github-cliSchema.pas.json",
     "grammarFile": "../dist/github-cliSchema.ag.json",
     "actionPolicies": {
-      "prFiles": { "effects": "read-only" }
+      "prFiles": { "effects": "read-only" },
+      "codespaceList": { "effects": "read-only" },
+      "gistList": { "effects": "read-only" },
+      "orgList": { "effects": "read-only" },
+      "cacheList": { "effects": "read-only" },
+      "issueList": { "effects": "read-only" },
+      "issueView": { "effects": "read-only" },
+      "prList": { "effects": "read-only" },
+      "prView": { "effects": "read-only" },
+      "prMergedStatus": { "effects": "read-only" },
+      "prChecks": { "effects": "read-only" },
+      "releaseList": { "effects": "read-only" }
     },
     "schemaType": "GithubCliActions"
   }
