@@ -10,7 +10,10 @@ import {
     Storage,
     AppAgentInitSettings,
 } from "@typeagent/agent-sdk";
-import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultFromError,
+} from "@typeagent/agent-sdk/helpers/action";
 import {
     CreateDocumentAction,
     MarkdownAction,
@@ -140,6 +143,14 @@ async function handleUICommand(
             };
 
             const result = await handleMarkdownAction(action, context);
+            if (result?.error !== undefined) {
+                return {
+                    success: false,
+                    error: result.error,
+                    message: `Failed to execute ${command} command`,
+                    type: "error",
+                };
+            }
 
             return {
                 success: true,
@@ -443,7 +454,7 @@ async function handleStreamingMarkdownAction(
         `[AGENT] Starting streaming action: ${action.actionName} (stream: ${streamId})`,
     );
 
-    const agent = await createMarkdownAgent("GPT_4o");
+    const agent = await createMarkdownAgent();
     const {
         content: markdownContent,
         binding,
@@ -527,7 +538,7 @@ async function handleStreamingMarkdownAction(
             // Send error completion
             sendStreamingCompleteToView(streamId, [], actionContext);
 
-            throw new Error("Streaming failed: Unknown error");
+            throw new Error(`Streaming failed: ${response.message}`);
         }
     } catch (error) {
         console.error(`[STREAMING] Streaming action failed:`, error);
@@ -848,6 +859,36 @@ type DocumentUpdateAction = Extract<
 
 type CurrentDocumentBinding = DocumentBinding | { storageKey: string };
 
+async function selectUpdateDocument(
+    action: DocumentUpdateAction,
+    context: ActionContext<MarkdownActionContext>,
+): Promise<void> {
+    const documentPath = action.parameters.documentPath;
+    if (documentPath === undefined) {
+        return;
+    }
+    let name = documentPath;
+    if (path.isAbsolute(documentPath)) {
+        const root = context.workingDirectory;
+        if (root === undefined) {
+            throw new Error(
+                "Updating an absolute document path requires a working directory",
+            );
+        }
+        const filePath = resolveExistingFileWithinRoot(root, documentPath);
+        if (filePath === undefined) {
+            throw new Error(
+                `Document does not exist within the working directory: ${documentPath}`,
+            );
+        }
+        name = path.relative(fs.realpathSync(root), filePath);
+    }
+    await handleOpenDocument(
+        { actionName: "openDocument", parameters: { name } },
+        context,
+    );
+}
+
 function createSessionFileBinding(fullPath: string): DocumentBinding {
     return {
         token: undefined,
@@ -1082,22 +1123,29 @@ async function updateCurrentDocument(
         parseEditorContext(action.parameters.context),
     );
     if (!response.success) {
-        const message =
-            (response as { message?: string }).message ??
-            "Unknown error occurred";
-        return createActionResult(`Failed to update document: ${message}`);
-    }
-
-    if (response.data.operations?.length) {
-        await applyOperationsForCurrentDocument(
-            actionContext,
-            response.data.operations,
-            binding,
-            revision,
+        return createActionResultFromError(
+            `Failed to update document: ${response.message}`,
         );
     }
+
+    const updatedContent = applyDocumentOperations(
+        content,
+        response.data.operations,
+    );
+    const documentLocation =
+        "storageKey" in binding ? binding.storageKey : binding.filePath;
+    if (updatedContent === content) {
+        return createActionResult(`No changes made to ${documentLocation}`);
+    }
+    await applyOperationsForCurrentDocument(
+        actionContext,
+        response.data.operations,
+        binding,
+        revision,
+        computeContentRevision(updatedContent),
+    );
     return createActionResult(
-        response.data.operationSummary ?? "Updated document",
+        `Updated document at ${documentLocation}: ${response.data.operationSummary ?? "Applied document changes"}`,
     );
 }
 
@@ -1116,7 +1164,7 @@ async function handleMarkdownAction(
         total_tokens: 0,
     };
     const createAgent = async () => {
-        const agent = await createMarkdownAgent("GPT_4o");
+        const agent = await createMarkdownAgent();
         agent.tokenUsage = tokenUsage;
         return agent;
     };
@@ -1132,6 +1180,7 @@ async function handleMarkdownAction(
         }
         case "updateDocument":
         case "streamingUpdateDocument": {
+            await selectUpdateDocument(action, actionContext);
             const agent = await createAgent();
             result = await updateCurrentDocument(action, actionContext, agent);
             break;

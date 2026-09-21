@@ -33,6 +33,10 @@ export type UpdateDocumentAction = {
     parameters: {
         // the original request of the user
         originalRequest: string;
+        // The document named in the user's request. Always include when a file is
+        // specified; omit only to edit the currently open document. May be a
+        // relative path or an absolute path within the working directory.
+        documentPath?: string;
         // cursor position where the user invoked the command
         cursorPosition?: number;
         // additional context information from the editor (serialized as JSON string)
@@ -46,6 +50,10 @@ export type StreamingUpdateDocumentAction = {
     parameters: {
         // the original request of the user
         originalRequest: string;
+        // The document named in the user's request. Always include when a file is
+        // specified; omit only to edit the currently open document. May be a
+        // relative path or an absolute path within the working directory.
+        documentPath?: string;
         // cursor position where the user invoked the command
         cursorPosition?: number;
         // additional context information from the editor (serialized as JSON string)

@@ -17,8 +17,7 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
-    "./agent/handlers": "./dist/agent/browserActionHandler.mjs",
-    "./agent/indexing": "./dist/agent/indexing/browserIndexingService.js"
+    "./agent/handlers": "./dist/agent/browserActionHandler.mjs"
   },
   "main": "index.js",
   "files": [
@@ -67,6 +66,8 @@
     "@typeagent/dispatcher-types": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-client": "workspace:*",
+    "@typeagent/memory-service": "workspace:*",
     "@typeagent/taskflow-typeagent": "workspace:*",
     "@typeagent/textpro": "workspace:*",
     "@typeagent/website-memory": "workspace:*",

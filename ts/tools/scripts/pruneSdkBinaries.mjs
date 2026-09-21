@@ -16,7 +16,7 @@
  * is opt-in (deployAgentServer --external-cli), never the default artifact.
  *
  * Removes the bundled CLI runtimes; KEEPS the JS SDKs (which are imported):
- *   remove: @anthropic-ai/claude-agent-sdk-<rid>, @github/copilot, @github/copilot-<rid>
+ *   remove: @anthropic-ai/claude-agent-sdk-<rid>, @github/copilot-sdk-<rid>
  *   keep:   @anthropic-ai/claude-agent-sdk, @anthropic-ai/sdk, @github/copilot-sdk
  *
  * Usage:
@@ -51,8 +51,7 @@ function isBundledRuntime(name) {
     if (KEEP.has(name)) return false;
     return (
         name.startsWith("@anthropic-ai/claude-agent-sdk-") ||
-        name === "@github/copilot" ||
-        name.startsWith("@github/copilot-")
+        name.startsWith("@github/copilot-sdk-")
     );
 }
 

@@ -20,6 +20,10 @@ import {
 export interface BatchProcessorOptions {
     processingMode?: "realtime" | "batch";
     progressCallback?: (progress: BatchProgress) => void;
+    itemCompleteCallback?: (
+        result: ExtractionResult,
+        index: number,
+    ) => Promise<void>;
 }
 
 export interface BatchProcessorEvents {
@@ -54,7 +58,11 @@ export class BatchProcessor extends EventEmitter {
         const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
         const totalItems = items.length;
         let processedItems = 0;
-        const { processingMode = "batch", progressCallback } = options;
+        const {
+            processingMode = "batch",
+            progressCallback,
+            itemCompleteCallback,
+        } = options;
 
         this.results = [];
         this.errors = [];
@@ -91,6 +99,24 @@ export class BatchProcessor extends EventEmitter {
                         extractionOptions,
                     );
 
+                    this.results[i + batchIndex] = result;
+                    await itemCompleteCallback?.(result, i + batchIndex);
+                    processedItems++;
+                    this.emit("itemComplete", result, i + batchIndex);
+                    progressCallback?.({
+                        total: totalItems,
+                        processed: processedItems,
+                        percentage: Math.round(
+                            (processedItems / totalItems) * 100,
+                        ),
+                        currentItem: item.url,
+                        errors: this.errors.length,
+                        mode,
+                        intermediateResults: [...this.results].filter(
+                            (entry) => entry !== undefined,
+                        ),
+                    });
+
                     // Return result with index to preserve order
                     return {
                         success: true,
@@ -126,47 +152,10 @@ export class BatchProcessor extends EventEmitter {
 
             const batchResults = await Promise.allSettled(batchPromises);
 
-            // Process results in order
             batchResults.forEach((settledResult) => {
                 if (settledResult.status === "fulfilled") {
                     const outcome = settledResult.value;
-                    if (outcome.success && "result" in outcome) {
-                        this.results[outcome.globalIndex] = outcome.result;
-                        processedItems++;
-
-                        // ONLY difference: how progress events are published
-                        if (processingMode === "realtime") {
-                            // Real-time: WebSocket streaming events already sent during extraction
-                            this.emit(
-                                "itemComplete",
-                                outcome.result,
-                                outcome.globalIndex,
-                            );
-                        } else {
-                            // Batch: Traditional batch progress events
-                            this.emit(
-                                "itemComplete",
-                                outcome.result,
-                                outcome.globalIndex,
-                            );
-                        }
-
-                        if (progressCallback) {
-                            progressCallback({
-                                total: totalItems,
-                                processed: processedItems,
-                                percentage: Math.round(
-                                    (processedItems / totalItems) * 100,
-                                ),
-                                currentItem: items[outcome.globalIndex].url,
-                                errors: this.errors.length,
-                                mode,
-                                intermediateResults: [...this.results].filter(
-                                    (r) => r !== undefined,
-                                ),
-                            });
-                        }
-                    } else if (!outcome.success) {
+                    if (!outcome.success) {
                         processedItems++;
 
                         if (progressCallback) {
@@ -185,6 +174,8 @@ export class BatchProcessor extends EventEmitter {
                             });
                         }
                     }
+                } else {
+                    throw settledResult.reason;
                 }
             });
 

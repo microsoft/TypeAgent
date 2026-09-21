@@ -213,6 +213,12 @@ export abstract class ExtensionServiceBase {
                 limit: 50,
                 minScore: filters.minRelevance || 0.3,
                 domain: filters.domain,
+                source:
+                    filters.sourceType === "bookmarks"
+                        ? "bookmark"
+                        : filters.sourceType,
+                dateFrom: filters.dateFrom,
+                dateTo: filters.dateTo,
             },
         })) as any;
 
@@ -578,7 +584,7 @@ export abstract class ExtensionServiceBase {
             parameters: {
                 ...options, // TODO: remove "type" from this dictionary. That will remove the need to wrap these values in a "parameters" object
                 importId,
-                totalItems: 0,
+                totalItems: options.limit ?? 0,
                 progressCallback: true,
             },
         });

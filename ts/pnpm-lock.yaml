@@ -497,49 +497,6 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  examples/mcpMemory:
-    dependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: 1.26.0
-        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
-      '@typeagent/agent-runtime':
-        specifier: workspace:*
-        version: link:../../packages/typeagent
-      '@typeagent/config':
-        specifier: workspace:*
-        version: link:../../packages/config
-      '@typeagent/conversation-memory':
-        specifier: workspace:*
-        version: link:../../packages/memory/conversation
-      '@typeagent/knowpro':
-        specifier: workspace:*
-        version: link:../../packages/knowPro
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
-      examples-lib:
-        specifier: workspace:*
-        version: link:../examplesLib
-      interactive-app:
-        specifier: workspace:*
-        version: link:../../packages/interactiveApp
-      zod:
-        specifier: ^4.1.13
-        version: 4.1.13
-    devDependencies:
-      copyfiles:
-        specifier: ^2.4.1
-        version: 2.4.1
-      prettier:
-        specifier: ^3.2.5
-        version: 3.5.3
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.10
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-
   examples/memoryProviders:
     dependencies:
       '@elastic/elasticsearch':
@@ -1122,8 +1079,8 @@ importers:
   examples/workflow/engine:
     dependencies:
       '@github/copilot-sdk':
-        specifier: 1.0.9
-        version: 1.0.9
+        specifier: 1.0.13
+        version: 1.0.13
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../../packages/aiclient
@@ -1621,8 +1578,8 @@ importers:
         specifier: ^1.5.0
         version: 1.5.13
       '@github/copilot-sdk':
-        specifier: 1.0.9
-        version: 1.0.9
+        specifier: 1.0.13
+        version: 1.0.13
       '@modelcontextprotocol/server-filesystem':
         specifier: 2026.1.14
         version: 2026.1.14(zod@4.4.3)
@@ -1790,6 +1747,15 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../dispatcher/types
+      '@typeagent/memory-client':
+        specifier: workspace:*
+        version: link:../../memory/client
+      '@typeagent/memory-mcp-server':
+        specifier: workspace:*
+        version: link:../../memory/mcp-server
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../../memory/service
       '@typeagent/telemetry':
         specifier: workspace:*
         version: link:../../telemetry
@@ -2005,6 +1971,12 @@ importers:
       '@typeagent/knowpro':
         specifier: workspace:*
         version: link:../../knowPro
+      '@typeagent/memory-client':
+        specifier: workspace:*
+        version: link:../../memory/client
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../../memory/service
       '@typeagent/taskflow-typeagent':
         specifier: workspace:*
         version: link:../taskflow
@@ -3897,8 +3869,8 @@ importers:
         specifier: ^4.10.0
         version: 4.10.0
       '@github/copilot-sdk':
-        specifier: 1.0.9
-        version: 1.0.9
+        specifier: 1.0.13
+        version: 1.0.13
       '@opentelemetry/api':
         specifier: 1.9.0
         version: 1.9.0
@@ -4549,7 +4521,7 @@ importers:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
-        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+        version: 1.26.0(zod@4.1.13)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -4706,6 +4678,9 @@ importers:
         specifier: ^3.25.0
         version: 3.25.76
     devDependencies:
+      '@github/copilot-sdk':
+        specifier: 1.0.13
+        version: 1.0.13
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
@@ -4917,6 +4892,9 @@ importers:
         specifier: ^4.1.13
         version: 4.1.13
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -4969,11 +4947,11 @@ importers:
         specifier: ^4.10.0
         version: 4.10.0
       '@github/copilot-sdk':
-        specifier: 1.0.9
-        version: 1.0.9
+        specifier: 1.0.13
+        version: 1.0.13
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
-        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+        version: 1.26.0(zod@4.1.13)
       '@opentelemetry/api':
         specifier: 1.9.0
         version: 1.9.0
@@ -5580,6 +5558,28 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/memory/client:
+    dependencies:
+      '@modelcontextprotocol/client':
+        specifier: ^2.0.0
+        version: 2.0.0
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../service
+      zod:
+        specifier: ^4.1.13
+        version: 4.4.3
+    devDependencies:
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/memory/conversation:
     dependencies:
       '@typeagent/agent-runtime':
@@ -5707,6 +5707,74 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@26.4.1)(ts-node@10.9.2(@types/node@26.4.1)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/memory/mcp-server:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 1.26.0
+        version: 1.26.0(zod@4.4.3)
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../config
+      '@typeagent/memory-client':
+        specifier: workspace:*
+        version: link:../client
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../service
+      zod:
+        specifier: ^4.1.13
+        version: 4.4.3
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@26.4.1)(ts-node@10.9.2(@types/node@26.4.1)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/memory/service:
+    dependencies:
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../conversation
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../knowPro
+      proper-lockfile:
+        specifier: ^4.1.2
+        version: 4.1.2
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/proper-lockfile':
+        specifier: ^4.1.4
+        version: 4.1.4
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@26.4.1)(ts-node@10.9.2(@types/node@26.4.1)(typescript@5.4.5))
@@ -8577,65 +8645,53 @@ packages:
   '@fontsource/lato@5.2.5':
     resolution: {integrity: sha1-z1UvE6Vpr/KGJdnTfbNcomvn1ZQ=}
 
-  '@github/copilot-darwin-arm64@1.0.79':
-    resolution: {integrity: sha1-4RdyYAy2HB3HlX8m2j/zqOE0v/o=}
+  '@github/copilot-sdk-darwin-arm64@1.0.13':
+    resolution: {integrity: sha512-AvBV5dzjNWpGwgoCnttrETnt7rLI4pTFQsRSM7GU5TK+YqShauffdMU06Bn/d+IDX2fj1Z4ThH7yl/gHCDvoNQ==}
     cpu: [arm64]
     os: [darwin]
-    hasBin: true
 
-  '@github/copilot-darwin-x64@1.0.79':
-    resolution: {integrity: sha1-cZgeHMUMa3ZKVTo6P6W/C4EiM0M=}
+  '@github/copilot-sdk-darwin-x64@1.0.13':
+    resolution: {integrity: sha512-ZNQmTnHwk8bO/E514k0sFBsuCVNpFj8jMH4jeLncASQM4RRdOqYhXlYLW7H/ts7ANjdfMJjJY29NUqzEWaADOA==}
     cpu: [x64]
     os: [darwin]
-    hasBin: true
 
-  '@github/copilot-linux-arm64@1.0.79':
-    resolution: {integrity: sha1-Rah3fiM22cpTvGFOkOWyOY/Lcck=}
+  '@github/copilot-sdk-linux-arm64@1.0.13':
+    resolution: {integrity: sha512-km1jvveDwlJbht8luFyBurz0wUxPHSzdkZRMJEJgVHYfMn03gi0gdnZ6fC6JWgkiffNZpukSxRPJmPfRobw6Aw==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
-    hasBin: true
 
-  '@github/copilot-linux-x64@1.0.79':
-    resolution: {integrity: sha1-iLHMTjMrn5FebRXULRq0Of1LLvY=}
+  '@github/copilot-sdk-linux-x64@1.0.13':
+    resolution: {integrity: sha512-4AbzC8Nb1dWYQ1uxbHGAh0ZAoOJeL3Ms1oe3byZLn8ENP1PfoyD8DJZUSsyXGYHxL7oLJyUqd3wyt18ifIg8iw==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
-    hasBin: true
 
-  '@github/copilot-linuxmusl-arm64@1.0.79':
-    resolution: {integrity: sha1-QbsBmsxhhqik0BecFM9j+KHloXE=}
+  '@github/copilot-sdk-linuxmusl-arm64@1.0.13':
+    resolution: {integrity: sha512-pCUjly1nXcNpYDZNnKrglFIFejbb+QDkloilldu+0tTbSzb8gEmVsbGwpfwyZXfNQf5Je5FFjsOfQR9PXH1NDQ==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
-    hasBin: true
 
-  '@github/copilot-linuxmusl-x64@1.0.79':
-    resolution: {integrity: sha1-k4xvuTPm1Gt58NSHwLESGB3QU18=}
+  '@github/copilot-sdk-linuxmusl-x64@1.0.13':
+    resolution: {integrity: sha512-y5RmqAbKSYHt+OwQdILIiiMSibXdd7/0kO7kFoTZCN2gn2eGRA8wJbXlf6KZh+yYgWSJGUL8677LDJd3WnIHbA==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
-    hasBin: true
 
-  '@github/copilot-sdk@1.0.9':
-    resolution: {integrity: sha1-Bws1jP7j4Ss9qqpy/DnYcLbQvEM=}
+  '@github/copilot-sdk-win32-arm64@1.0.13':
+    resolution: {integrity: sha512-azISXh4pEVfX0hPzu58wZTYg3tdWG4L1nNpiRa/wdBxhcovbxw+eZVkI4C6FZMx0tiNYFkqWzVTV7oKskNybcw==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@github/copilot-sdk-win32-x64@1.0.13':
+    resolution: {integrity: sha512-lvS7kMbuuxydBQxPDHCkuUwbC858Rvcz3Q3vv0mxnLKuWJ75lAcqERefqA2p4beaPdez+ifZOA5heUT0rx3GnA==}
+    cpu: [x64]
+    os: [win32]
+
+  '@github/copilot-sdk@1.0.13':
+    resolution: {integrity: sha512-/j6/tGc9HOtcupuYFloOKk0fpScdpy65EVF1LKg2Z2VQOojCGPgBGkhgVGVDaqW7UB6TV2qbQZa9rKJimJ0wWQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
-
-  '@github/copilot-win32-arm64@1.0.79':
-    resolution: {integrity: sha1-uYlhy6X3hZrkZwvmQijNq/OyMfI=}
-    cpu: [arm64]
-    os: [win32]
-    hasBin: true
-
-  '@github/copilot-win32-x64@1.0.79':
-    resolution: {integrity: sha1-dSZXUujyMVChfNjwnF51e9n/k3Q=}
-    cpu: [x64]
-    os: [win32]
-    hasBin: true
-
-  '@github/copilot@1.0.79':
-    resolution: {integrity: sha1-ZiG27Bjj0VcXGbYveUWegdUk424=}
-    hasBin: true
 
   '@hapi/bourne@3.0.0':
     resolution: {integrity: sha1-8R/ffdpi/o4zb6fGZC2QQfMDVtc=}
@@ -9328,78 +9384,93 @@ packages:
     peerDependencies:
       tslib: '2'
 
-  '@koromix/koffi-darwin-arm64@3.1.4':
-    resolution: {integrity: sha1-Dc9DnEloGtq/KOWEhz9SzaAm3bU=}
+  '@koromix/koffi-android-arm64@3.2.1':
+    resolution: {integrity: sha1-Lc55jTZp0re1bpwCqKaidKvWx8Y=}
+    cpu: [arm64]
+    os: [android]
+
+  '@koromix/koffi-android-x64@3.2.1':
+    resolution: {integrity: sha1-TQr8uvZgQjEKwbOs8sWMb/6XN0M=}
+    cpu: [x64]
+    os: [android]
+
+  '@koromix/koffi-darwin-arm64@3.2.1':
+    resolution: {integrity: sha1-IP1RZvBGbrn1lplQbLeK8cUgfQk=}
     cpu: [arm64]
     os: [darwin]
 
-  '@koromix/koffi-darwin-x64@3.1.4':
-    resolution: {integrity: sha1-kihYEOO/vzM2DD7LCs1RqjjJmac=}
+  '@koromix/koffi-darwin-x64@3.2.1':
+    resolution: {integrity: sha1-A+TMtBoFV58aKcKB5IJiEzF89so=}
     cpu: [x64]
     os: [darwin]
 
-  '@koromix/koffi-freebsd-arm64@3.1.4':
-    resolution: {integrity: sha1-5bmKsothVd5aex9h/mvY8Uq83Jo=}
+  '@koromix/koffi-freebsd-arm64@3.2.1':
+    resolution: {integrity: sha1-0+Tp8iGTKchvN7woVoXriVpSgb0=}
     cpu: [arm64]
     os: [freebsd]
 
-  '@koromix/koffi-freebsd-ia32@3.1.4':
-    resolution: {integrity: sha1-5RJPyVYr3REpRTKBraVh6KyvdxA=}
+  '@koromix/koffi-freebsd-ia32@3.2.1':
+    resolution: {integrity: sha1-hphgO4/QJ8Hs9tw6rX303Bbv398=}
     cpu: [ia32]
     os: [freebsd]
 
-  '@koromix/koffi-freebsd-x64@3.1.4':
-    resolution: {integrity: sha1-VnXaZJo9Ysu7pYgC4LsJIF//80s=}
+  '@koromix/koffi-freebsd-x64@3.2.1':
+    resolution: {integrity: sha1-hROyr0V+Jtl+gNNPY8vwBjhzBYY=}
     cpu: [x64]
     os: [freebsd]
 
-  '@koromix/koffi-linux-arm64@3.1.4':
-    resolution: {integrity: sha1-mowhnA54iTZXjmwr/4QVCozSINI=}
+  '@koromix/koffi-linux-arm64@3.2.1':
+    resolution: {integrity: sha1-ddSlPuDQYfoVnMG+eugLBNEAkg8=}
     cpu: [arm64]
     os: [linux]
 
-  '@koromix/koffi-linux-ia32@3.1.4':
-    resolution: {integrity: sha1-OTD5YfyLmP25FCDYW37YqkS3rhE=}
+  '@koromix/koffi-linux-arm@3.2.1':
+    resolution: {integrity: sha1-U8kNnV+aiTlB862CivSHs3lejuE=}
+    cpu: [arm]
+    os: [linux]
+
+  '@koromix/koffi-linux-ia32@3.2.1':
+    resolution: {integrity: sha1-TvuhuJjnO2GNIqngyfPp0R192rQ=}
     cpu: [ia32]
     os: [linux]
 
-  '@koromix/koffi-linux-loong64@3.1.4':
-    resolution: {integrity: sha1-3E7he9GMKSignhPpNbPO7NXDS3E=}
+  '@koromix/koffi-linux-loong64@3.2.1':
+    resolution: {integrity: sha1-Kg2NCvf2bpXiVxEeX1TsIQjYs7g=}
     cpu: [loong64]
     os: [linux]
 
-  '@koromix/koffi-linux-riscv64@3.1.4':
-    resolution: {integrity: sha1-9fWKD5zdeAIKNjuFrnXF+niXcWo=}
+  '@koromix/koffi-linux-riscv64@3.2.1':
+    resolution: {integrity: sha1-1VWiDsNvfBkM8W/vEFWkKtkYPU0=}
     cpu: [riscv64]
     os: [linux]
 
-  '@koromix/koffi-linux-x64@3.1.4':
-    resolution: {integrity: sha1-Mz1fON2uoyRzQ1H1vLB69A5xUh4=}
+  '@koromix/koffi-linux-x64@3.2.1':
+    resolution: {integrity: sha1-I3tGQNc4A+tny7pDe1Eu2HkzgD0=}
     cpu: [x64]
     os: [linux]
 
-  '@koromix/koffi-openbsd-ia32@3.1.4':
-    resolution: {integrity: sha1-WjMblac5NdwkKNFjec2OBgbCdMY=}
+  '@koromix/koffi-openbsd-ia32@3.2.1':
+    resolution: {integrity: sha1-QzemOyiO/9HqwdOHbXlK4rfuPRg=}
     cpu: [ia32]
     os: [openbsd]
 
-  '@koromix/koffi-openbsd-x64@3.1.4':
-    resolution: {integrity: sha1-/SAnQlJmznm6GvQ+NKEl73u946M=}
+  '@koromix/koffi-openbsd-x64@3.2.1':
+    resolution: {integrity: sha1-xZycfkCVP/t+MvjY+8sZ/zio7wM=}
     cpu: [x64]
     os: [openbsd]
 
-  '@koromix/koffi-win32-arm64@3.1.4':
-    resolution: {integrity: sha1-pH5TpaecjVHYVW7OM9haJp7Eas8=}
+  '@koromix/koffi-win32-arm64@3.2.1':
+    resolution: {integrity: sha1-kVoYz1dHK16cbXFoE7w5mDekUU4=}
     cpu: [arm64]
     os: [win32]
 
-  '@koromix/koffi-win32-ia32@3.1.4':
-    resolution: {integrity: sha1-N6ok0y59+16Gt88nWzigUbC0vmo=}
+  '@koromix/koffi-win32-ia32@3.2.1':
+    resolution: {integrity: sha1-n60joxMqlAcm//MI5bKXVRepoys=}
     cpu: [ia32]
     os: [win32]
 
-  '@koromix/koffi-win32-x64@3.1.4':
-    resolution: {integrity: sha1-g6L3AiUC3Fg/viQ4QJ6hLeE4xcc=}
+  '@koromix/koffi-win32-x64@3.2.1':
+    resolution: {integrity: sha1-nTgKsOqLz7oW9P7aLJ6jYw/1Yg8=}
     cpu: [x64]
     os: [win32]
 
@@ -14732,10 +14803,6 @@ packages:
     resolution: {integrity: sha1-W+DO7WfKecbEvFzw1+6EPc6hEMQ=}
     engines: {node: '>=10.13.0'}
 
-  ip-address@10.3.1:
-    resolution: {integrity: sha1-kp+WKdFyT34bdIXOiXUvNnUzahA=}
-    engines: {node: '>= 12'}
-
   ip-address@10.7.0:
     resolution: {integrity: sha1-lxNCnxZ4ft6PZC9iVbQftRXIJdk=}
     engines: {node: '>= 12'}
@@ -15262,9 +15329,6 @@ packages:
   jose@5.10.0:
     resolution: {integrity: sha1-w3NGoJnWRnxAE1GpoMIWHg9SxL4=}
 
-  jose@6.2.3:
-    resolution: {integrity: sha1-CXUZetlzJRIhxlijzdxLlRolDC0=}
-
   jose@6.2.8:
     resolution: {integrity: sha1-OcFFn+XqyE6zmxYjuAd9z5ymxQY=}
 
@@ -15467,8 +15531,8 @@ packages:
   koffi@2.11.0:
     resolution: {integrity: sha1-mDalb3J7iWt5FqhOeVQhfJVIxiQ=}
 
-  koffi@3.1.4:
-    resolution: {integrity: sha1-wz+JxwMvC13y15fg54BK3elK3/8=}
+  koffi@3.2.1:
+    resolution: {integrity: sha1-lPmhEdssUTzdchscXYwk2DjCziU=}
 
   launch-editor@2.14.1:
     resolution: {integrity: sha1-9+DaP1iq6gP+oBB02EC19zntfdw=}
@@ -19294,7 +19358,7 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.26.0(zod@4.1.13))(zod@4.1.13)':
     dependencies:
       '@anthropic-ai/sdk': 0.93.0(zod@4.1.13)
-      '@modelcontextprotocol/sdk': 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.1.13)
       zod: 4.1.13
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.162
@@ -21535,49 +21599,44 @@ snapshots:
 
   '@fontsource/lato@5.2.5': {}
 
-  '@github/copilot-darwin-arm64@1.0.79':
+  '@github/copilot-sdk-darwin-arm64@1.0.13':
     optional: true
 
-  '@github/copilot-darwin-x64@1.0.79':
+  '@github/copilot-sdk-darwin-x64@1.0.13':
     optional: true
 
-  '@github/copilot-linux-arm64@1.0.79':
+  '@github/copilot-sdk-linux-arm64@1.0.13':
     optional: true
 
-  '@github/copilot-linux-x64@1.0.79':
+  '@github/copilot-sdk-linux-x64@1.0.13':
     optional: true
 
-  '@github/copilot-linuxmusl-arm64@1.0.79':
+  '@github/copilot-sdk-linuxmusl-arm64@1.0.13':
     optional: true
 
-  '@github/copilot-linuxmusl-x64@1.0.79':
+  '@github/copilot-sdk-linuxmusl-x64@1.0.13':
     optional: true
 
-  '@github/copilot-sdk@1.0.9':
+  '@github/copilot-sdk-win32-arm64@1.0.13':
+    optional: true
+
+  '@github/copilot-sdk-win32-x64@1.0.13':
+    optional: true
+
+  '@github/copilot-sdk@1.0.13':
     dependencies:
-      '@github/copilot': 1.0.79
-      koffi: 3.1.4
+      koffi: 3.2.1
       vscode-jsonrpc: 8.2.1
       zod: 4.4.3
-
-  '@github/copilot-win32-arm64@1.0.79':
-    optional: true
-
-  '@github/copilot-win32-x64@1.0.79':
-    optional: true
-
-  '@github/copilot@1.0.79':
-    dependencies:
-      detect-libc: 2.1.2
     optionalDependencies:
-      '@github/copilot-darwin-arm64': 1.0.79
-      '@github/copilot-darwin-x64': 1.0.79
-      '@github/copilot-linux-arm64': 1.0.79
-      '@github/copilot-linux-x64': 1.0.79
-      '@github/copilot-linuxmusl-arm64': 1.0.79
-      '@github/copilot-linuxmusl-x64': 1.0.79
-      '@github/copilot-win32-arm64': 1.0.79
-      '@github/copilot-win32-x64': 1.0.79
+      '@github/copilot-sdk-darwin-arm64': 1.0.13
+      '@github/copilot-sdk-darwin-x64': 1.0.13
+      '@github/copilot-sdk-linux-arm64': 1.0.13
+      '@github/copilot-sdk-linux-x64': 1.0.13
+      '@github/copilot-sdk-linuxmusl-arm64': 1.0.13
+      '@github/copilot-sdk-linuxmusl-x64': 1.0.13
+      '@github/copilot-sdk-win32-arm64': 1.0.13
+      '@github/copilot-sdk-win32-x64': 1.0.13
 
   '@hapi/bourne@3.0.0': {}
 
@@ -22560,49 +22619,58 @@ snapshots:
       '@jsonjoy.com/codegen': 17.67.0(tslib@2.8.1)
       tslib: 2.8.1
 
-  '@koromix/koffi-darwin-arm64@3.1.4':
+  '@koromix/koffi-android-arm64@3.2.1':
     optional: true
 
-  '@koromix/koffi-darwin-x64@3.1.4':
+  '@koromix/koffi-android-x64@3.2.1':
     optional: true
 
-  '@koromix/koffi-freebsd-arm64@3.1.4':
+  '@koromix/koffi-darwin-arm64@3.2.1':
     optional: true
 
-  '@koromix/koffi-freebsd-ia32@3.1.4':
+  '@koromix/koffi-darwin-x64@3.2.1':
     optional: true
 
-  '@koromix/koffi-freebsd-x64@3.1.4':
+  '@koromix/koffi-freebsd-arm64@3.2.1':
     optional: true
 
-  '@koromix/koffi-linux-arm64@3.1.4':
+  '@koromix/koffi-freebsd-ia32@3.2.1':
     optional: true
 
-  '@koromix/koffi-linux-ia32@3.1.4':
+  '@koromix/koffi-freebsd-x64@3.2.1':
     optional: true
 
-  '@koromix/koffi-linux-loong64@3.1.4':
+  '@koromix/koffi-linux-arm64@3.2.1':
     optional: true
 
-  '@koromix/koffi-linux-riscv64@3.1.4':
+  '@koromix/koffi-linux-arm@3.2.1':
     optional: true
 
-  '@koromix/koffi-linux-x64@3.1.4':
+  '@koromix/koffi-linux-ia32@3.2.1':
     optional: true
 
-  '@koromix/koffi-openbsd-ia32@3.1.4':
+  '@koromix/koffi-linux-loong64@3.2.1':
     optional: true
 
-  '@koromix/koffi-openbsd-x64@3.1.4':
+  '@koromix/koffi-linux-riscv64@3.2.1':
     optional: true
 
-  '@koromix/koffi-win32-arm64@3.1.4':
+  '@koromix/koffi-linux-x64@3.2.1':
     optional: true
 
-  '@koromix/koffi-win32-ia32@3.1.4':
+  '@koromix/koffi-openbsd-ia32@3.2.1':
     optional: true
 
-  '@koromix/koffi-win32-x64@3.1.4':
+  '@koromix/koffi-openbsd-x64@3.2.1':
+    optional: true
+
+  '@koromix/koffi-win32-arm64@3.2.1':
+    optional: true
+
+  '@koromix/koffi-win32-ia32@3.2.1':
+    optional: true
+
+  '@koromix/koffi-win32-x64@3.2.1':
     optional: true
 
   '@leichtgewicht/ip-codec@2.0.5': {}
@@ -23090,28 +23158,6 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  '@modelcontextprotocol/sdk@1.26.0(supports-color@8.1.1)(zod@4.1.13)':
-    dependencies:
-      '@hono/node-server': 1.19.17(hono@4.13.5)
-      ajv: 8.20.0
-      ajv-formats: 3.0.1(ajv@8.20.0)
-      content-type: 1.0.5
-      cors: 2.8.6
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
-      express-rate-limit: 8.5.2(express@5.2.1)
-      hono: 4.13.5
-      jose: 6.2.3
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.1
-      raw-body: 3.0.2
-      zod: 4.1.13
-      zod-to-json-schema: 3.25.2(zod@4.1.13)
-    transitivePeerDependencies:
-      - supports-color
-
   '@modelcontextprotocol/sdk@1.26.0(zod@3.25.76)':
     dependencies:
       '@hono/node-server': 1.19.17(hono@4.13.5)
@@ -23122,15 +23168,37 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.13.5
-      jose: 6.2.3
+      jose: 6.2.8
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
       zod: 3.25.76
       zod-to-json-schema: 3.25.2(zod@3.25.76)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.26.0(zod@4.1.13)':
+    dependencies:
+      '@hono/node-server': 1.19.17(hono@4.13.5)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.0
+      express: 5.2.1
+      express-rate-limit: 8.5.2(express@5.2.1)
+      hono: 4.13.5
+      jose: 6.2.8
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.1.13
+      zod-to-json-schema: 3.25.2(zod@4.1.13)
     transitivePeerDependencies:
       - supports-color
 
@@ -23144,10 +23212,10 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.13.5
-      jose: 6.2.3
+      jose: 6.2.8
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
@@ -23166,10 +23234,10 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.13.5
-      jose: 6.2.3
+      jose: 6.2.8
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
@@ -23180,7 +23248,7 @@ snapshots:
 
   '@modelcontextprotocol/server-filesystem@2026.1.14(zod@4.1.13)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.1.13)
       diff: 5.2.2
       glob: 10.5.0
       minimatch: 10.2.5
@@ -26453,7 +26521,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  body-parser@2.3.0(supports-color@8.1.1):
+  body-parser@2.3.0:
     dependencies:
       bytes: 3.1.2
       content-type: 2.0.0
@@ -28508,8 +28576,8 @@ snapshots:
 
   express-rate-limit@8.5.2(express@5.2.1):
     dependencies:
-      express: 5.2.1(supports-color@8.1.1)
-      ip-address: 10.3.1
+      express: 5.2.1
+      ip-address: 10.7.0
 
   express@4.22.1:
     dependencies:
@@ -28583,10 +28651,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  express@5.2.1(supports-color@8.1.1):
+  express@5.2.1:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.3.0(supports-color@8.1.1)
+      body-parser: 2.3.0
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 0.7.2
@@ -28596,7 +28664,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 2.1.1(supports-color@8.1.1)
+      finalhandler: 2.1.1
       fresh: 2.0.0
       http-errors: 2.0.1
       merge-descriptors: 2.0.0
@@ -28607,8 +28675,8 @@ snapshots:
       proxy-addr: 2.0.7
       qs: 6.16.0
       range-parser: 1.3.0
-      router: 2.2.0(supports-color@8.1.1)
-      send: 1.2.1(supports-color@8.1.1)
+      router: 2.2.0
+      send: 1.2.1
       serve-static: 2.2.1
       statuses: 2.0.2
       type-is: 2.1.0
@@ -28747,7 +28815,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  finalhandler@2.1.1(supports-color@8.1.1):
+  finalhandler@2.1.1:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       encodeurl: 2.0.0
@@ -29624,8 +29692,6 @@ snapshots:
   interpret@1.4.0: {}
 
   interpret@3.1.1: {}
-
-  ip-address@10.3.1: {}
 
   ip-address@10.7.0: {}
 
@@ -30659,8 +30725,6 @@ snapshots:
 
   jose@5.10.0: {}
 
-  jose@6.2.3: {}
-
   jose@6.2.8: {}
 
   js-stringify@1.0.2: {}
@@ -30973,23 +31037,26 @@ snapshots:
 
   koffi@2.11.0: {}
 
-  koffi@3.1.4:
+  koffi@3.2.1:
     optionalDependencies:
-      '@koromix/koffi-darwin-arm64': 3.1.4
-      '@koromix/koffi-darwin-x64': 3.1.4
-      '@koromix/koffi-freebsd-arm64': 3.1.4
-      '@koromix/koffi-freebsd-ia32': 3.1.4
-      '@koromix/koffi-freebsd-x64': 3.1.4
-      '@koromix/koffi-linux-arm64': 3.1.4
-      '@koromix/koffi-linux-ia32': 3.1.4
-      '@koromix/koffi-linux-loong64': 3.1.4
-      '@koromix/koffi-linux-riscv64': 3.1.4
-      '@koromix/koffi-linux-x64': 3.1.4
-      '@koromix/koffi-openbsd-ia32': 3.1.4
-      '@koromix/koffi-openbsd-x64': 3.1.4
-      '@koromix/koffi-win32-arm64': 3.1.4
-      '@koromix/koffi-win32-ia32': 3.1.4
-      '@koromix/koffi-win32-x64': 3.1.4
+      '@koromix/koffi-android-arm64': 3.2.1
+      '@koromix/koffi-android-x64': 3.2.1
+      '@koromix/koffi-darwin-arm64': 3.2.1
+      '@koromix/koffi-darwin-x64': 3.2.1
+      '@koromix/koffi-freebsd-arm64': 3.2.1
+      '@koromix/koffi-freebsd-ia32': 3.2.1
+      '@koromix/koffi-freebsd-x64': 3.2.1
+      '@koromix/koffi-linux-arm': 3.2.1
+      '@koromix/koffi-linux-arm64': 3.2.1
+      '@koromix/koffi-linux-ia32': 3.2.1
+      '@koromix/koffi-linux-loong64': 3.2.1
+      '@koromix/koffi-linux-riscv64': 3.2.1
+      '@koromix/koffi-linux-x64': 3.2.1
+      '@koromix/koffi-openbsd-ia32': 3.2.1
+      '@koromix/koffi-openbsd-x64': 3.2.1
+      '@koromix/koffi-win32-arm64': 3.2.1
+      '@koromix/koffi-win32-ia32': 3.2.1
+      '@koromix/koffi-win32-x64': 3.2.1
 
   launch-editor@2.14.1:
     dependencies:
@@ -33550,7 +33617,7 @@ snapshots:
       points-on-curve: 0.2.0
       points-on-path: 0.2.1
 
-  router@2.2.0(supports-color@8.1.1):
+  router@2.2.0:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       depd: 2.0.0
@@ -33747,7 +33814,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  send@1.2.1(supports-color@8.1.1):
+  send@1.2.1:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       encodeurl: 2.0.0
@@ -33806,7 +33873,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 1.2.1(supports-color@8.1.1)
+      send: 1.2.1
     transitivePeerDependencies:
       - supports-color
 

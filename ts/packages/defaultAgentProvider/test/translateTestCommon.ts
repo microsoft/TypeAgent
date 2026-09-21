@@ -6,6 +6,7 @@ loadConfigSync();
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
+import { createMcpAppAgentSourceForInstance } from "../src/mcpDefaultAgentProvider.js";
 import {
     awaitCommand,
     CommandResult,
@@ -222,6 +223,10 @@ export async function defineTranslateTest(
     const defaultAppAgentProviders = getDefaultAppAgentProviders(
         instanceConfigProvider,
     );
+    const mcpSource =
+        instanceConfigProvider?.getInstanceDir() === undefined
+            ? undefined
+            : createMcpAppAgentSourceForInstance(instanceConfigProvider);
     const inputs: TranslateTestEntry[] = (
         await Promise.all(
             dataFiles.map<Promise<TranslateTestFile>>(async (f) => {
@@ -304,6 +309,9 @@ export async function defineTranslateTest(
                     "cli test translate",
                     {
                         appAgentProviders: defaultAppAgentProviders,
+                        ...(mcpSource === undefined
+                            ? {}
+                            : { appAgentSources: [mcpSource] }),
                         agents: {
                             actions: false,
                             commands: ["dispatcher"],

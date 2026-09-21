@@ -34,29 +34,6 @@ const debug = registerDebug("typeagent:browser:action");
 // Knowledge extraction progress tracking
 const activeKnowledgeExtractions = new Map<string, ActiveKnowledgeExtraction>();
 
-// Utility functions
-function convertStoredKnowledgeToDisplayFormat(storedKnowledge: any): any {
-    const displayKnowledge = { ...storedKnowledge };
-
-    // Convert actions array to relationships array
-    if (storedKnowledge.actions && Array.isArray(storedKnowledge.actions)) {
-        displayKnowledge.relationships = storedKnowledge.actions.map(
-            (action: any) => ({
-                from: action.subjectEntityName || "unknown",
-                relationship: Array.isArray(action.verbs)
-                    ? action.verbs.join(" ")
-                    : action.verbs || "related to",
-                to: action.objectEntityName || "unknown",
-                confidence: action.confidence || 0.8,
-            }),
-        );
-    } else {
-        displayKnowledge.relationships = [];
-    }
-
-    return displayKnowledge;
-}
-
 async function checkKnowledgeInIndex(
     url: string,
     context: ActionContext<BrowserActionContext> | any,
@@ -65,26 +42,12 @@ async function checkKnowledgeInIndex(
         // Get the session context - either directly or from action context
         const sessionContext =
             "sessionContext" in context ? context.sessionContext : context;
-        const websiteCollection = sessionContext.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return null;
-        }
-
-        const websites = websiteCollection.messages.getAll();
-        const foundWebsite = websites.find(
-            (site: any) => site.metadata.url === url,
+        const result = await handleKnowledgeAction(
+            "getPageIndexedKnowledge",
+            { url },
+            sessionContext,
         );
-
-        if (foundWebsite) {
-            const knowledge = foundWebsite.getKnowledge();
-            if (knowledge) {
-                return convertStoredKnowledgeToDisplayFormat(knowledge);
-            }
-            return null;
-        }
-
-        return null;
+        return result.isIndexed ? result.knowledge : null;
     } catch (error) {
         debug("No existing knowledge found in index for:", url);
         return null;

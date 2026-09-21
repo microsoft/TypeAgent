@@ -22,18 +22,22 @@ function scriptCommand(serverScript: string): string | undefined {
  * config so shipped servers can be seeded through the dynamic source rather than
  * a separate hard-coded mechanism.
  *
- * Returns `undefined` when the entry cannot be expressed as a static normalized
- * config — specifically when its `serverScriptArgs` is an `ArgDefinitions`
- * object (interactive per-instance arguments, e.g. the filesystem server's
- * allowed directories). Those depend on runtime instance config and remain on
- * the legacy provider until that flow is migrated. `resolveScriptPath` resolves
- * a relative `serverScript` to an absolute path (the shipped scripts live under
- * the package).
+ * Returns `undefined` when the entry cannot be expressed as a normalized
+ * config. Interactive `serverScriptArgs` require a runtime resolver; unresolved
+ * entries remain on the legacy provider. `resolveScriptPath` resolves a relative
+ * `serverScript` to an absolute path (the shipped scripts live under the package).
  */
 export function mcpInfoToNormalized(
     name: string,
     info: McpAppAgentInfo,
     resolveScriptPath: (p: string) => string = (p) => p,
+    resolveServerArgs?: (
+        name: string,
+        definitions: Exclude<
+            NonNullable<McpAppAgentInfo["serverScriptArgs"]>,
+            string[]
+        >,
+    ) => string[] | undefined,
 ): NormalizedMcpServerConfig | undefined {
     const base: Pick<
         NormalizedMcpServerConfig,
@@ -71,11 +75,12 @@ export function mcpInfoToNormalized(
     if (info.serverScript === undefined) {
         return undefined;
     }
-    // ArgDefinitions (interactive per-instance args) cannot be seeded statically.
-    if (
-        info.serverScriptArgs !== undefined &&
-        !Array.isArray(info.serverScriptArgs)
-    ) {
+    const serverScriptArgs = Array.isArray(info.serverScriptArgs)
+        ? info.serverScriptArgs
+        : info.serverScriptArgs === undefined
+          ? []
+          : resolveServerArgs?.(name, info.serverScriptArgs);
+    if (serverScriptArgs === undefined) {
         return undefined;
     }
     const command = scriptCommand(info.serverScript);
@@ -83,25 +88,37 @@ export function mcpInfoToNormalized(
         return undefined;
     }
     const scriptPath = resolveScriptPath(info.serverScript);
-    const args = [scriptPath, ...(info.serverScriptArgs ?? [])];
+    const args = [scriptPath, ...serverScriptArgs];
     return { ...base, transport: { kind: "stdio", command, args } };
 }
 
 /**
  * Build the seed map of normalized shipped-server configs from the provider
- * config's `mcpServers`. Entries that cannot be statically seeded (interactive
- * arg definitions) are skipped and left to the legacy provider.
+ * config's `mcpServers`. Entries that cannot be seeded, including unresolved
+ * interactive argument definitions, are left to the legacy provider.
  */
 export function buildMcpSeed(
     servers: Record<string, McpAppAgentInfo> | undefined,
     resolveScriptPath: (p: string) => string = (p) => p,
+    resolveServerArgs?: (
+        name: string,
+        definitions: Exclude<
+            NonNullable<McpAppAgentInfo["serverScriptArgs"]>,
+            string[]
+        >,
+    ) => string[] | undefined,
 ): Record<string, NormalizedMcpServerConfig> {
     const seed: Record<string, NormalizedMcpServerConfig> = {};
     if (servers === undefined) {
         return seed;
     }
     for (const [name, info] of Object.entries(servers)) {
-        const normalized = mcpInfoToNormalized(name, info, resolveScriptPath);
+        const normalized = mcpInfoToNormalized(
+            name,
+            info,
+            resolveScriptPath,
+            resolveServerArgs,
+        );
         if (normalized !== undefined) {
             seed[name] = normalized;
         }
