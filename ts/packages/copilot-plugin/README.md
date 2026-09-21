@@ -97,6 +97,13 @@ default. `--startup-timeout <seconds>` controls the server listener wait
 `--config-dir` sets `TYPEAGENT_CONFIG_DIR` for child processes; without it,
 existing configuration resolution applies.
 
+The worktree must have its own model configuration; building the code does not
+provision it. If startup reports `Missing ApiSetting: AZURE_OPENAI_ENDPOINT`,
+pass `--config-dir` for an existing configuration directory, or provision
+`ts\config.local.yaml`. This can mean no configuration was loaded, not that you
+need to add an Azure endpoint when using a different provider. The launcher
+does not automatically use another checkout's configuration or fetch keys.
+
 Each invocation prints a fresh temporary run directory containing `mcp.json`,
 `prompt.txt`, `probe.json`, server stdout/stderr logs, the staged plugin, and
 disposable user data. These are retained for inspection, not deleted on exit.

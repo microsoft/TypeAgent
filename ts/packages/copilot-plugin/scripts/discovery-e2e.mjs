@@ -11,6 +11,7 @@ import {
     openSync,
     closeSync,
     writeFileSync,
+    readFileSync,
 } from "node:fs";
 import { createServer, createConnection } from "node:net";
 import { tmpdir } from "node:os";
@@ -252,7 +253,23 @@ export async function runCommand(command, args, env, signal) {
     }
 }
 
-export async function waitForServer(server, port, timeout, signal) {
+export function startupFailure(result, stderrPath) {
+    const reason = result.error?.message ?? result.code ?? result.signal;
+    const log =
+        stderrPath && existsSync(stderrPath)
+            ? readFileSync(stderrPath, "utf8")
+            : "";
+    // Only surface the setting name, not log lines that may contain credentials.
+    const missing = /Missing ApiSetting: ([A-Z][A-Z0-9_]*)\b/.exec(log)?.[1];
+    const details = missing
+        ? `\nMissing model configuration: ${missing}. Run with --config-dir pointing to an existing TypeAgent configuration directory containing config.local.yaml (or provision this worktree's ts\\config.local.yaml). No credentials were fetched or copied.`
+        : "";
+    return new Error(
+        `Agent server exited before readiness: ${reason}${details}${stderrPath ? `\nServer error log: ${stderrPath}` : ""}`,
+    );
+}
+
+export async function waitForServer(server, port, timeout, signal, stderrPath) {
     const deadline = Date.now() + timeout * 1000;
     while (Date.now() < deadline) {
         signal.throwIfAborted();
@@ -260,10 +277,7 @@ export async function waitForServer(server, port, timeout, signal) {
             server.completion,
             Promise.resolve(undefined),
         ]);
-        if (exited)
-            throw new Error(
-                `Agent server exited before readiness: ${exited.error?.message ?? exited.code ?? exited.signal}`,
-            );
+        if (exited) throw startupFailure(exited, stderrPath);
         const open = await new Promise((resolve) => {
             const socket = createConnection({ host: "127.0.0.1", port });
             const finish = (value) => {
@@ -501,6 +515,7 @@ export async function main(argv = process.argv.slice(2)) {
             options.port,
             options.startupTimeout,
             controller.signal,
+            path.join(runDir, "server.stderr.log"),
         );
         const evidence = await probeMcp(
             mcp.mcpServers["typeagent-e2e"],

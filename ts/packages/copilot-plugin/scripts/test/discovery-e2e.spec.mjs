@@ -4,6 +4,8 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:net";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
@@ -13,10 +15,40 @@ import {
     parseArgs,
     runCommand,
     startProcess,
+    startupFailure,
     stopProcess,
     testPrompt,
     waitForServer,
 } from "../discovery-e2e.mjs";
+
+test("startup diagnostics explain missing configuration without echoing sensitive logs", () => {
+    const folder = mkdtempSync(path.join(tmpdir(), "discovery-error-test-"));
+    const log = path.join(folder, "stderr.log");
+    try {
+        writeFileSync(
+            log,
+            "secret=must-not-echo\nFatal startup error: Error: Missing ApiSetting: AZURE_OPENAI_ENDPOINT\n",
+        );
+        const error = startupFailure({ code: 1 }, log);
+        assert.match(
+            error.message,
+            /Missing model configuration: AZURE_OPENAI_ENDPOINT/,
+        );
+        assert.match(error.message, /--config-dir/);
+        assert.ok(error.message.includes(log));
+        assert.doesNotMatch(error.message, /must-not-echo/);
+        writeFileSync(log, "Another failure containing secret=must-not-echo\n");
+        const other = startupFailure({ code: 2 }, log);
+        assert.match(other.message, /before readiness: 2/);
+        assert.doesNotMatch(
+            other.message,
+            /Missing model configuration|must-not-echo/,
+        );
+    } finally {
+        rmSync(log, { force: true });
+        rmSync(folder, { recursive: true });
+    }
+});
 
 test("validates options without silently ignoring misspellings or unsafe ports", () => {
     assert.deepEqual(parseArgs([]), { port: 9024, startupTimeout: 120 });
