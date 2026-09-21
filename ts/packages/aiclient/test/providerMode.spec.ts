@@ -45,6 +45,8 @@ describe("Copilot provider mode", () => {
         ["GPT_5", "gpt-5.6-sol"],
         ["GPT_5_MINI", "gpt-5.6-terra"],
         ["GPT_5_NANO", "gpt-5.6-luna"],
+        ["GPT_5_6_LUNA", "gpt-5.6-luna"],
+        ["gpt_5_6_luna", "gpt-5.6-luna"],
         ["GPT_V", "gpt-5.6-sol"],
     ])("maps %s to %s", (canonical, expected) => {
         expect(resolveTarget("copilot", canonical)).toBe(expected);
@@ -52,5 +54,22 @@ describe("Copilot provider mode", () => {
 
     test("keeps explicit canonical model mappings", () => {
         expect(usesProviderDefault("GPT_4_O")).toBe(false);
+        expect(usesProviderDefault("GPT_5_6_LUNA")).toBe(false);
+        expect(usesProviderDefault("gpt_5_6_luna")).toBe(false);
+    });
+});
+
+describe("GPT_5_6_LUNA provider mappings", () => {
+    test.each(["azure", "openai"] as const)(
+        "preserves the deployment name in %s mode",
+        (mode) => {
+            expect(resolveTarget(mode, "GPT_5_6_LUNA")).toBe("GPT_5_6_LUNA");
+        },
+    );
+
+    test("preserves the default local model in Ollama mode", () => {
+        expect(resolveTarget("ollama", "GPT_5_6_LUNA")).toBe(
+            resolveTarget("ollama", "DEFAULT"),
+        );
     });
 });

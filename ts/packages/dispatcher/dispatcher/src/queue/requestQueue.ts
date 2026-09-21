@@ -59,6 +59,8 @@ export interface QueueLogger {
  * broadcast redaction happens elsewhere.
  */
 export interface QueueExecutionContext {
+    /** Typed work runs inside the common request lifecycle, never the parser. */
+    work?: { kind: "structured-action"; run(): Promise<void> };
     requestId: string;
     originatorConnectionId: string;
     text: string;
@@ -74,6 +76,7 @@ export type InnerProcessCommand = (
 
 /** Inputs accepted by `RequestQueue.submit`. */
 export interface QueueSubmitInput {
+    work?: QueueExecutionContext["work"];
     text: string;
     originatorConnectionId: string;
     attachments?: string[];
@@ -90,6 +93,7 @@ export interface QueueSubmitInput {
  * loop resolves on terminal state.
  */
 interface InternalEntry extends QueuedRequest {
+    work?: QueueExecutionContext["work"];
     traceContext?: Context;
     completion: Promise<CommandResult | undefined>;
     resolveCompletion: (result: CommandResult | undefined) => void;
@@ -508,6 +512,7 @@ export class RequestQueue {
         if (input.traceContext !== undefined) {
             entry.traceContext = input.traceContext;
         }
+        if (input.work !== undefined) entry.work = input.work;
         return entry;
     }
 
@@ -528,6 +533,7 @@ export class RequestQueue {
             cancelReason: _cr,
             blockedOn: _bo,
             traceContext: _tc,
+            work: _work,
             ...pub
         } = entry;
         const out: QueuedRequest = { ...pub };
@@ -590,6 +596,23 @@ export class RequestQueue {
         );
     }
 
+    private executionContext(entry: InternalEntry): QueueExecutionContext {
+        const context: QueueExecutionContext = {
+            requestId: entry.requestId,
+            originatorConnectionId: entry.originatorConnectionId,
+            text: entry.text,
+        };
+        if (entry.clientRequestId !== undefined)
+            context.clientRequestId = entry.clientRequestId;
+        if (entry.attachments !== undefined)
+            context.attachments = entry.attachments;
+        if (entry.options !== undefined) context.options = entry.options;
+        if (entry.traceContext !== undefined)
+            context.traceContext = entry.traceContext;
+        if (entry.work !== undefined) context.work = entry.work;
+        return context;
+    }
+
     private async processEntry(entry: InternalEntry): Promise<void> {
         let result: CommandResult | undefined;
         let error: unknown = undefined;
@@ -600,19 +623,9 @@ export class RequestQueue {
                 entry.error = `cancelled:${entry.cancelReason}`;
                 result = { cancelled: true };
             } else {
-                const ctx: QueueExecutionContext = {
-                    requestId: entry.requestId,
-                    originatorConnectionId: entry.originatorConnectionId,
-                    text: entry.text,
-                };
-                if (entry.clientRequestId !== undefined)
-                    ctx.clientRequestId = entry.clientRequestId;
-                if (entry.attachments !== undefined)
-                    ctx.attachments = entry.attachments;
-                if (entry.options !== undefined) ctx.options = entry.options;
-                if (entry.traceContext !== undefined)
-                    ctx.traceContext = entry.traceContext;
-                result = await this.innerProcessCommand(ctx);
+                result = await this.innerProcessCommand(
+                    this.executionContext(entry),
+                );
                 if (result?.cancelled) {
                     state = "cancelled";
                     if (entry.error === undefined) {

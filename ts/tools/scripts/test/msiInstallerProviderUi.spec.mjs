@@ -54,6 +54,18 @@ const launchCopilotSetup = readFileSync(
     ),
     "utf8",
 );
+const installTypeAgent = readFileSync(
+    path.resolve(scriptsDir, "..", "install-typeagent.ps1"),
+    "utf8",
+);
+const installTypeAgentBash = readFileSync(
+    path.resolve(scriptsDir, "..", "install-typeagent.sh"),
+    "utf8",
+);
+const typeAgentServe = readFileSync(
+    path.resolve(scriptsDir, "..", "typeagent-serve.mjs"),
+    "utf8",
+);
 
 const providerRadio = wxs.match(
     /<Control Id="ProviderRadio"[\s\S]*?<\/Control>/,
@@ -74,10 +86,10 @@ test("MSI provider selection is limited to AI Systems and GitHub Copilot", () =>
     assert.doesNotMatch(providerRadio, /<RadioButton Value="OLLAMA"/);
 });
 
-test("MSI defaults to AI Systems and rejects unsupported provider values", () => {
+test("MSI defaults to GitHub Copilot and rejects unsupported provider values", () => {
     assert.match(
         wxs,
-        /<Property Id="PROVIDER" Value="AISYSTEMS" Secure="yes" \/>/,
+        /<Property Id="PROVIDER" Value="COPILOT" Secure="yes" \/>/,
     );
     assert.match(wxs, /PROVIDER="AISYSTEMS" OR PROVIDER="COPILOT"/);
     assert.match(wxs, /Ollama is not supported by this MSI/);
@@ -93,16 +105,47 @@ test("MSI no longer exposes embedding or Ollama host properties and controls", (
     assert.match(wxs, /NOT EMBEDDING AND NOT OLLAMAHOST/);
 });
 
-test("Copilot provisioning always uses local embeddings", () => {
+test("PowerShell installer defaults Copilot chat to Copilot embeddings", () => {
+    assert.match(
+        installTypeAgent,
+        /\[ValidateSet\("copilot", "local", "ollama", "openai", "none"\)\]/,
+    );
+    assert.match(
+        installTypeAgent,
+        /\$Provider -eq "copilot"\s+-and\s+-not \$PSBoundParameters\.ContainsKey\("Embedding"\)/,
+    );
+    assert.match(installTypeAgent, /\$Embedding = "copilot"/);
+});
+
+test("Bash installer defaults Copilot chat to Copilot embeddings", () => {
+    assert.match(installTypeAgentBash, /EMBEDDING=""/);
+    assert.match(
+        installTypeAgentBash,
+        /if \[\[ "\$PROVIDER" == "copilot" \]\]; then\s+EMBEDDING="copilot"/,
+    );
+    assert.match(installTypeAgentBash, /copilot\|local\|ollama\|openai\|none/);
+});
+
+test("recovery guidance uses provider-sensitive Copilot defaults", () => {
+    assert.match(typeAgentServe, /provision --provider copilot --force/);
+    assert.doesNotMatch(
+        typeAgentServe,
+        /provision --provider copilot --embedding local/,
+    );
+});
+
+test("Copilot provisioning uses Copilot embeddings", () => {
     const command = wxs.match(
         /<SetProperty Id="ProvisionCopilotConfig"[\s\S]*?Value="([^"]*)"/,
     )?.[1];
     assert.ok(command, "ProvisionCopilotConfig command must exist");
     assert.ok(
         command.includes(
-            "-ServeCommand provision --provider COPILOT --embedding LOCAL --force",
+            "-ServeCommand provision --provider COPILOT --embedding COPILOT",
         ),
     );
+    assert.ok(command.includes("--embedding-model text-embedding-3-small"));
+    assert.ok(command.includes("--force"));
     assert.ok(command.includes("-FailOnError"));
     assert.ok(!command.includes("--ollama-host"));
     assert.match(
@@ -227,7 +270,9 @@ test(
                     "--provider",
                     "COPILOT",
                     "--embedding",
-                    "LOCAL",
+                    "COPILOT",
+                    "--embedding-model",
+                    "text-embedding-3-small",
                     "--force",
                 ],
                 {
@@ -247,7 +292,9 @@ test(
                 "--provider",
                 "COPILOT",
                 "--embedding",
-                "LOCAL",
+                "COPILOT",
+                "--embedding-model",
+                "text-embedding-3-small",
                 "--force",
             ]);
             assert.equal(
@@ -264,7 +311,7 @@ test(
     },
 );
 
-test("generated Copilot config passes strict loading with local embeddings", () => {
+test("generated Copilot config defaults to Copilot embeddings", () => {
     const tempDir = mkdtempSync(
         path.join(os.tmpdir(), "typeagent-copilot-config-"),
     );
@@ -281,8 +328,54 @@ test("generated Copilot config passes strict loading with local embeddings", () 
                 generatorPath,
                 "--provider",
                 "copilot",
+                "--out",
+                configPath,
+                "--force",
+            ],
+            { encoding: "utf8" },
+        );
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+
+        const loaded = loadConfigSync({
+            defaultsPath: path.join(tempDir, "missing-defaults.yaml"),
+            localPath: configPath,
+            dotEnvPath: path.join(tempDir, "missing.env"),
+            populateProcessEnv: false,
+            strict: true,
+        });
+        assert.equal(loaded.env.TYPEAGENT_MODEL_PROVIDER, "copilot");
+        assert.equal(loaded.env.TYPEAGENT_EMBEDDING_PROVIDER, "copilot");
+        assert.equal(
+            loaded.env.TYPEAGENT_EMBEDDING_MODEL,
+            "text-embedding-3-small",
+        );
+    } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
+test("generated Copilot config passes strict loading with local embeddings when explicitly selected", () => {
+    const tempDir = mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-copilot-config-"),
+    );
+    try {
+        const configPath = path.join(tempDir, "config.local.yaml");
+        const embeddingCacheDir = path.join(tempDir, "embedding-cache");
+        const generatorPath = path.resolve(
+            scriptsDir,
+            "..",
+            "generate-selfhost-config.mjs",
+        );
+        const result = spawnSync(
+            process.execPath,
+            [
+                generatorPath,
+                "--provider",
+                "copilot",
                 "--embedding",
                 "local",
+                "--local-embedding-cache-dir",
+                embeddingCacheDir,
                 "--out",
                 configPath,
                 "--force",
@@ -307,6 +400,10 @@ test("generated Copilot config passes strict loading with local embeddings", () 
         assert.equal(
             loaded.env.TYPEAGENT_EMBEDDING_MODEL,
             "Xenova/all-MiniLM-L6-v2",
+        );
+        assert.equal(
+            loaded.env.TYPEAGENT_EMBEDDING_CACHE_DIR,
+            embeddingCacheDir,
         );
     } finally {
         rmSync(tempDir, { recursive: true, force: true });

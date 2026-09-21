@@ -10,12 +10,12 @@
  * cannot reliably drop (a bare `!` negation on a node_modules subpath collapses
  * the whole package/scope, and re-include globs do not resurrect it):
  *
- *   1. The native CLI packages for @github/copilot and
+ *   1. The native runtime packages for @github/copilot-sdk and
  *      @anthropic-ai/claude-agent-sdk (~250MB and ~230MB per platform). The
  *      connect-only shell delegates ALL model work to the agent-server (speech
  *      classification, translation, embeddings), so it never spawns these host
  *      CLIs — every platform-native package is dropped. The small JS wrapper
- *      packages (@github/copilot, @github/copilot-sdk) are kept so aiclient's
+ *      package (@github/copilot-sdk) is kept so aiclient's
  *      lazy `import()` still resolves in the unlikely event it is reached; the
  *      native is only required on first model use, which never happens here.
  *   2. The local-embedding runtime (onnxruntime-node, onnxruntime-web,
@@ -52,10 +52,13 @@ const leafTargets = [
 
 // Platform-native packages for the host CLIs, keyed by scope/base prefix. Any
 // package whose logical name starts with one of these (e.g.
-// `@github/copilot-win32-x64`, `@anthropic-ai/claude-agent-sdk-linux-arm64`)
+// `@github/copilot-sdk-win32-x64`, `@anthropic-ai/claude-agent-sdk-linux-arm64`)
 // is a per-platform native and is dropped for EVERY os/arch. The exact base
 // names in `keepExact` (the JS wrappers) are preserved.
-const nativePrefixes = ["@github/copilot-", "@anthropic-ai/claude-agent-sdk-"];
+const nativePrefixes = [
+    "@github/copilot-sdk-",
+    "@anthropic-ai/claude-agent-sdk-",
+];
 const keepExact = new Set([
     "@github/copilot-sdk", // JS SDK wrapper (small)
 ]);
@@ -69,7 +72,7 @@ const platformSuffix = /-(win32|darwin|linux)-(x64|arm64|ia32)$/;
 // `onnxruntime-node@1.21.0`.
 const pnpmPrefixes = leafTargets.map((t) => `${t.replace("/", "+")}@`);
 // Mangled store prefixes for the platform natives, e.g.
-// `@github+copilot-win32-x64@1.0.69`.
+// `@github+copilot-sdk-win32-x64@1.0.13`.
 const pnpmNativePrefixes = nativePrefixes.map((t) => t.replace("/", "+"));
 const pnpmKeepPrefixes = [...keepExact].map((t) => `${t.replace("/", "+")}@`);
 
@@ -190,7 +193,7 @@ function walk(dir, relPrefix) {
 }
 
 console.log(
-    `prune-shell-deploy: pruning ${nodeModules} (dropping @github/copilot + @anthropic-ai/claude-agent-sdk platform natives and the local-embedding runtime; connect-only shell delegates all model work to the agent-server)`,
+    `prune-shell-deploy: pruning ${nodeModules} (dropping @github/copilot-sdk + @anthropic-ai/claude-agent-sdk platform natives and the local-embedding runtime; connect-only shell delegates all model work to the agent-server)`,
 );
 walk(nodeModules, "");
 console.log(

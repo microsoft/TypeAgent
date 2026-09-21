@@ -96,9 +96,9 @@ param(
     #   copilot   - GitHub Copilot SDK chat via an authenticated 'copilot' CLI (no Key Vault).
     [ValidateSet("aisystems", "ollama", "copilot")]
     [string]$Provider = "aisystems",
-    # Embedding source for ollama/copilot providers (independent of chat):
-    #   local (default, bundled CPU-only), ollama, openai, or none.
-    [ValidateSet("local", "ollama", "openai", "none")]
+    # Embedding source for ollama/copilot providers. Defaults to copilot for
+    # Copilot chat and to the bundled CPU-only local model otherwise.
+    [ValidateSet("copilot", "local", "ollama", "openai", "none")]
     [string]$Embedding = "local",
     [string]$OllamaHost = "http://localhost:11434",
     [string]$ChatModel = "",
@@ -123,6 +123,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Provider -eq "copilot" -and -not $PSBoundParameters.ContainsKey("Embedding")) {
+    $Embedding = "copilot"
+}
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Fail($msg) { Write-Error $msg; exit 1 }

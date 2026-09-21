@@ -30,6 +30,10 @@ import {
     ActionSchemaSemanticMap,
     EmbeddingCache,
 } from "../translation/actionSchemaSemanticMap.js";
+import {
+    type ActionCandidateFilter,
+    type ActionCandidateRanker,
+} from "../translation/actionCandidateRanker.js";
 import { ActionSchemaFileCache } from "../translation/actionSchemaFileCache.js";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -190,7 +194,9 @@ function loadGrammar(
     );
 }
 
-export class AppAgentManager implements ActionConfigProvider {
+export class AppAgentManager
+    implements ActionConfigProvider, ActionCandidateRanker
+{
     // TODO: the per-agent routing artifacts below - action schemas
     // (`actionConfigs` / `actionSchemaFileCache`), grammars (built per record in
     // `agents`), and action embeddings (`actionSemanticMap`) - are built and
@@ -212,7 +218,7 @@ export class AppAgentManager implements ActionConfigProvider {
     private readonly flowRegistry = new Map<string, FlowDefinition>();
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readyWaiters: Array<() => void> = [];
-    private readonly actionSemanticMap?: ActionSchemaSemanticMap;
+    private actionSemanticMap: ActionSchemaSemanticMap | undefined;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
 
     // Static collision diagnostics. Populated by scanActionNameCollisions on
@@ -760,11 +766,64 @@ export class AppAgentManager implements ActionConfigProvider {
         filter: (schemaName: string) => boolean = (schemaName) =>
             this.isSchemaActive(schemaName),
     ) {
-        return this.actionSemanticMap?.nearestNeighbors(
+        const candidates = await this.rankActionCandidates(
             request,
             maxMatches,
+            (schemaName) => filter(schemaName),
+        );
+        return candidates?.map(({ schemaName, score, definition }) => ({
+            score,
+            item: {
+                actionSchemaFile: this.getActionSchemaFileForConfig(
+                    this.getActionConfig(schemaName),
+                ),
+                definition,
+            },
+        }));
+    }
+
+    public async rankActionCandidates(
+        request: string,
+        maxCandidates: number,
+        filter: ActionCandidateFilter,
+    ) {
+        return this.actionSemanticMap?.rankActionCandidates(
+            request,
+            maxCandidates,
             filter,
         );
+    }
+
+    public async rebuildActionSemanticMap(): Promise<void> {
+        let nextMap: ActionSchemaSemanticMap | undefined;
+        try {
+            nextMap = new ActionSchemaSemanticMap();
+        } catch (e) {
+            debugError(`Failed to rebuild action semantic map: ${e}`);
+        }
+
+        if (nextMap !== undefined) {
+            const pending: Promise<void>[] = [];
+            for (const config of this.actionConfigs.values()) {
+                try {
+                    pending.push(
+                        nextMap.addActionSchemaFile(
+                            config,
+                            this.actionSchemaFileCache.getActionSchemaFile(
+                                config,
+                            ),
+                        ),
+                    );
+                } catch (e) {
+                    debugError(
+                        `Failed to rebuild embeddings for ${config.schemaName}: ${e}`,
+                    );
+                }
+            }
+            await Promise.all(pending);
+        }
+
+        this.actionSemanticMap = nextMap;
     }
 
     public async addProvider(
@@ -795,7 +854,10 @@ export class AppAgentManager implements ActionConfigProvider {
         await Promise.all(semanticMapP);
         debug("Finish action embeddings");
 
-        if (provider.onSchemaReady && stateRefreshFn) {
+        if (
+            stateRefreshFn &&
+            (provider.onSchemaReady || provider.onSchemaFailed)
+        ) {
             // Mark only the agents that are actually loading asynchronously (e.g.
             // serverCommand MCP agents with slow startup).  Agents that failed
             // synchronously should show ❌, not ⏳.
@@ -816,7 +878,7 @@ export class AppAgentManager implements ActionConfigProvider {
                 }
             }
 
-            provider.onSchemaReady(async (agentName, manifest) => {
+            provider.onSchemaReady?.(async (agentName, manifest) => {
                 try {
                     const refreshSemanticMapP: Promise<void>[] = [];
                     this.refreshAgentSchema(
@@ -834,9 +896,33 @@ export class AppAgentManager implements ActionConfigProvider {
                     debugError(
                         `Failed to refresh schema for agent '${agentName}': ${e}`,
                     );
+                } finally {
+                    this.clearLoadingSchemasForAgent(agentName);
+                }
+            });
+            provider.onSchemaFailed?.(async (agentName, error) => {
+                this.clearLoadingSchemasForAgent(agentName);
+                debugError(
+                    `Failed to load schema for agent '${agentName}': ${error.message}`,
+                );
+                try {
+                    await stateRefreshFn();
+                } catch (e) {
+                    debugError(
+                        `Failed to refresh state after schema load failure for agent '${agentName}': ${e}`,
+                    );
                 }
             });
         }
+    }
+
+    private clearLoadingSchemasForAgent(appAgentName: string): void {
+        for (const schemaName of this.loadingSchemas) {
+            if (getAppAgentName(schemaName) === appAgentName) {
+                this.loadingSchemas.delete(schemaName);
+            }
+        }
+        this.notifyReadyIfDone();
     }
 
     private refreshAgentSchema(
@@ -1602,8 +1688,16 @@ export class AppAgentManager implements ActionConfigProvider {
 
         // Invalidate cached parsed schema so it gets re-parsed from new content
         this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+        const actionSchemaFile =
+            this.actionSchemaFileCache.getActionSchemaFile(config);
 
-        // Clear translator cache so next translation uses the updated schema
+        // Replace the semantic entries only after all new embeddings are ready.
+        await this.actionSemanticMap?.replaceActionSchemaFile(
+            config,
+            actionSchemaFile,
+        );
+
+        // Clear translator cache so next translation uses the updated schema.
         context.translatorCache.clear();
 
         debug(`Loaded dynamic schema for ${schemaName}`);

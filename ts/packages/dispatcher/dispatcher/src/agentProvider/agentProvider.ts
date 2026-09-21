@@ -32,6 +32,9 @@ export interface AppAgentProvider {
     onSchemaReady?: (
         callback: (agentName: string, manifest: AppAgentManifest) => void,
     ) => void;
+    onSchemaFailed?: (
+        callback: (agentName: string, error: Error) => void,
+    ) => void;
     getLoadingAgentNames?(): string[];
     /**
      * When false, newly attached sessions persist disabled command, schema, and

@@ -27,9 +27,12 @@ export * from "./tokenCounter.js";
 export {
     getCopilotClient,
     getCopilotCliPath,
+    createCopilotModelEndpointProvider,
     warmupCopilotClient,
     warmupCopilotFromConfig,
     type CopilotClientOptions,
+    type CopilotModelEndpoint,
+    type CopilotModelEndpointProvider,
 } from "./copilotModels.js";
 export {
     copilotApiSettingsFromConfig,
@@ -66,6 +69,10 @@ export {
     DefaultLocalEmbeddingModel,
     type LocalEmbeddingModelSettings,
 } from "./localEmbedding.js";
+export {
+    createCopilotEmbeddingModel,
+    DefaultCopilotEmbeddingModel,
+} from "./copilotEmbedding.js";
 export {
     getEmbeddingProvider,
     isEmbeddingAvailable,
