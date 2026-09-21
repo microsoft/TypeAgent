@@ -20,6 +20,7 @@ function createClient(): jest.Mocked<MemoryServiceClient> {
             documentCount: 0,
         })),
         listCorpora: jest.fn(async () => []),
+        clearCorpus: jest.fn(async () => 0),
         listSources: jest.fn(async () => []),
         getSource: jest.fn(),
         ingestDocument: jest.fn(async () => ({
@@ -29,7 +30,17 @@ function createClient(): jest.Mocked<MemoryServiceClient> {
             state: "accepted",
             statusUri: "typeagent-memory://jobs/job-1",
         })),
-        getJob: jest.fn(),
+        getJob: jest.fn(async () => ({
+            jobId: "job-1",
+            corpusId: "browser-corpus",
+            sourceId: "source-1",
+            revisionId: "revision-1",
+            state: "complete",
+            progress: { completed: 1, total: 1 },
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            warnings: [],
+        })),
         cancelJob: jest.fn(),
         search: jest.fn(async (request) => ({
             query: request.query,
@@ -88,29 +99,26 @@ describe("BrowserMemoryService", () => {
             .sourceId as string;
         expect(firstSourceId).toMatch(/^web:[a-f0-9]{64}$/);
         expect(secondSourceId).toBe(firstSourceId);
-        expect(client.waitForJob).toHaveBeenCalledTimes(2);
+        expect(client.getJob).toHaveBeenCalledTimes(2);
     });
 
     test("forwards ingestion progress to browser callers", async () => {
         const client = createClient();
         const onProgress = jest.fn();
-        client.waitForJob.mockImplementation(async (_jobId, options) => {
-            options?.onProgress?.({
+        client.getJob.mockResolvedValue({
+            jobId: "job-1",
+            corpusId: "browser-corpus",
+            sourceId: "source-1",
+            revisionId: "revision-1",
+            state: "complete",
+            progress: {
                 completed: 2,
                 total: 3,
                 message: "Creating embeddings",
-            });
-            return {
-                jobId: "job-1",
-                corpusId: "browser-corpus",
-                sourceId: "source-1",
-                revisionId: "revision-1",
-                state: "complete",
-                progress: { completed: 3, total: 3 },
-                createdAt: "2026-01-01T00:00:00.000Z",
-                updatedAt: "2026-01-01T00:00:00.000Z",
-                warnings: [],
-            };
+            },
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            warnings: [],
         });
 
         await new BrowserMemoryService(client).ingest(
@@ -142,6 +150,15 @@ describe("BrowserMemoryService", () => {
             expect.stringMatching(/^web:[a-f0-9]{64}$/),
         );
         expect(client.getKnowledgeGraph).toHaveBeenCalledWith("browser-corpus");
+    });
+
+    test("clears the durable browser corpus", async () => {
+        const client = createClient();
+        client.clearCorpus.mockResolvedValue(3);
+
+        await expect(new BrowserMemoryService(client).clear()).resolves.toBe(3);
+
+        expect(client.clearCorpus).toHaveBeenCalledWith("browser-corpus");
     });
 
     test("translates URL, metadata, and date filters to source IDs", async () => {

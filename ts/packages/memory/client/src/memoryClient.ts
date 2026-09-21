@@ -24,9 +24,11 @@ import type {
     MemoryServiceCapabilities,
     MemorySource,
 } from "@typeagent/memory-service";
+import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
 import type { z } from "zod";
 import {
     capabilitiesSchema,
+    clearedCountSchema,
     corpusSchema,
     ingestResultSchema,
     jobStatusSchema,
@@ -36,7 +38,6 @@ import {
     optionalSourceSchema,
     searchResultSchema,
     sourceSchema,
-    terminalJobStates,
 } from "./protocol.js";
 
 export interface MemoryClientCallOptions {
@@ -65,6 +66,10 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
 
     public listCorpora() {
         return this.service.listCorpora();
+    }
+
+    public clearCorpus(corpusId: string) {
+        return this.service.clearCorpus(corpusId);
     }
 
     public listSources(corpusId: string) {
@@ -106,7 +111,7 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         jobId: string,
         options: MemoryClientCallOptions & { pollIntervalMs?: number } = {},
     ) {
-        return waitForJob(this, jobId, options);
+        return waitForMemoryJob(this, jobId, options);
     }
 
     public async close(): Promise<void> {}
@@ -176,6 +181,14 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             memoryToolNames.corpusList,
             {},
             corpusSchema.array(),
+        );
+    }
+
+    public clearCorpus(corpusId: string): Promise<number> {
+        return this.invoke(
+            memoryToolNames.corpusClear,
+            { corpusId },
+            clearedCountSchema,
         );
     }
 
@@ -302,42 +315,6 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             },
         );
         return parseToolResult(name, result, schema);
-    }
-}
-
-async function waitForJob(
-    client: MemoryService,
-    jobId: string,
-    options: MemoryClientCallOptions & { pollIntervalMs?: number },
-): Promise<IngestionJobStatus> {
-    const interval = options.pollIntervalMs ?? 250;
-    while (true) {
-        if (options.signal?.aborted) {
-            await client.cancelJob(jobId);
-            throw options.signal.reason ?? new Error("Job wait cancelled");
-        }
-        const job = await client.getJob(jobId);
-        if (job === undefined) {
-            throw new Error(`Unknown memory job '${jobId}'`);
-        }
-        options.onProgress?.(job.progress);
-        if (terminalJobStates.has(job.state)) {
-            return job;
-        }
-        await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(resolve, interval);
-            options.signal?.addEventListener(
-                "abort",
-                () => {
-                    clearTimeout(timeout);
-                    reject(
-                        options.signal?.reason ??
-                            new Error("Job wait cancelled"),
-                    );
-                },
-                { once: true },
-            );
-        });
     }
 }
 

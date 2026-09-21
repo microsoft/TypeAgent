@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FileMemoryService } from "../src/fileMemoryService.js";
@@ -16,15 +16,20 @@ import type {
 
 class FakeCorpusIndex implements CorpusIndex {
     public documents: IndexedDocument[] = [];
+    public indexDirectory: string | undefined;
+    public initializeCalls = 0;
     public failNextRebuild = false;
     public blockNextRebuild = false;
+    public ignoreNextAbort = false;
     public graph: MemoryKnowledgeGraph = {
         entities: [],
         topics: [],
         relationships: [],
     };
 
-    public async initialize(): Promise<void> {}
+    public async initialize(): Promise<void> {
+        this.initializeCalls++;
+    }
 
     public async rebuild(
         documents: IndexedDocument[],
@@ -38,6 +43,10 @@ class FakeCorpusIndex implements CorpusIndex {
         if (this.blockNextRebuild) {
             this.blockNextRebuild = false;
             await new Promise<void>((resolve, reject) => {
+                if (this.ignoreNextAbort) {
+                    this.ignoreNextAbort = false;
+                    return;
+                }
                 if (signal.aborted) {
                     reject(signal.reason);
                     return;
@@ -52,6 +61,9 @@ class FakeCorpusIndex implements CorpusIndex {
             total: documents.length,
             message: "Fake index complete",
         });
+        if (this.indexDirectory !== undefined) {
+            await writeFile(path.join(this.indexDirectory, "index.marker"), "");
+        }
         this.documents = structuredClone(documents);
     }
 
@@ -107,7 +119,10 @@ describe("FileMemoryService", () => {
         );
         index = new FakeCorpusIndex();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => index,
+            indexFactory: (_corpusId, indexDirectory) => {
+                index.indexDirectory = indexDirectory;
+                return index;
+            },
         });
     });
 
@@ -157,6 +172,15 @@ describe("FileMemoryService", () => {
         expect(await service.listCorpora()).toEqual([first]);
     });
 
+    test("initializes the index before reading its knowledge graph", async () => {
+        const corpus = await service.createCorpus("Browser");
+
+        await expect(
+            service.getKnowledgeGraph(corpus.corpusId),
+        ).resolves.toEqual(index.graph);
+        expect(index.initializeCalls).toBe(1);
+    });
+
     test("publishes an ingested document as source-linked evidence", async () => {
         const corpus = await service.createCorpus("Engineering");
         const accepted = await service.ingestDocument({
@@ -188,6 +212,38 @@ describe("FileMemoryService", () => {
         const source = await service.getSource(corpus.corpusId, "design-doc");
         expect(source?.revisions).toHaveLength(1);
         expect(source).not.toHaveProperty("revisions.0.content");
+    });
+
+    test("clears durable sources and their index entries", async () => {
+        const corpus = await service.createCorpus("Browser");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "bookmark",
+                sourceType: "web",
+                title: "Bookmark",
+                canonicalUri: "https://example.test/bookmark",
+                markdown: "Durable bookmark content.",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+
+        await expect(service.clearCorpus(corpus.corpusId)).resolves.toBe(1);
+
+        await expect(service.listSources(corpus.corpusId)).resolves.toEqual([]);
+        await expect(
+            service.search({
+                corpusId: corpus.corpusId,
+                query: "bookmark",
+            }),
+        ).resolves.toMatchObject({ matches: [] });
+        await expect(service.listCorpora()).resolves.toEqual([
+            expect.objectContaining({
+                corpusId: corpus.corpusId,
+                documentCount: 0,
+                status: "ready",
+            }),
+        ]);
     });
 
     test("treats an unchanged source as an idempotent import", async () => {
@@ -327,5 +383,36 @@ describe("FileMemoryService", () => {
         const job = await waitForTerminalJob(service, accepted.jobId);
         expect(job.state).toBe("cancelled");
         expect(index.documents).toHaveLength(0);
+    });
+
+    test("cancels when an index rebuild does not observe the signal", async () => {
+        const corpus = await service.createCorpus("Engineering");
+        index.blockNextRebuild = true;
+        index.ignoreNextAbort = true;
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "stuck-doc",
+                sourceType: "markdown",
+                title: "Stuck document",
+                markdown: "A model request that does not stop promptly.",
+            },
+        });
+
+        const deadline = Date.now() + 5_000;
+        while (Date.now() < deadline) {
+            if (
+                (await service.getJob(accepted.jobId))?.state ===
+                "building-indexes"
+            ) {
+                break;
+            }
+            await new Promise<void>((resolve) => setTimeout(resolve, 10));
+        }
+        await service.cancelJob(accepted.jobId);
+
+        expect((await waitForTerminalJob(service, accepted.jobId)).state).toBe(
+            "cancelled",
+        );
     });
 });

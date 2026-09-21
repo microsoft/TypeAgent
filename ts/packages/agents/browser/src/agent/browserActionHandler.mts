@@ -61,8 +61,6 @@ import {
 
 import registerDebug from "debug";
 
-import * as website from "@typeagent/website-memory";
-import { createGraphologyPersistenceManager } from "./knowledge/utils/graphologyPersistence.mjs";
 import { ExtractKnowledgeHandler } from "./knowledge/extractKnowledgeCommand.mjs";
 import {
     performKnowledgeExtraction,
@@ -84,7 +82,7 @@ import {
     searchByTopics,
     hybridSearch,
     generateWebSearchMarkdown,
-} from "./searchWebMemories.mjs";
+} from "./durableWebSearch.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -537,7 +535,6 @@ async function initializeBrowserContext(
         // because it provides the control in-process.
         preferredClientType:
             clientBrowserControl === undefined ? undefined : "electron",
-        index: undefined,
         localHostPort,
         // Shared WebSocket server is created lazily on the first
         // updateBrowserContext(true, ...) call so the bind happens with
@@ -600,11 +597,6 @@ async function updateBrowserContext(
         await loadAllowDynamicAgentDomains(context);
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
-        }
-
-        // Load the website index from disk
-        if (!context.agentContext.websiteCollection) {
-            await initializeWebsiteIndex(context);
         }
 
         // Initialize fuzzy matching model for website search
@@ -1086,192 +1078,6 @@ export function sendWebFlowRefreshToClient(
         debug("Sent webFlowRefresh to active client");
     } catch (error) {
         debug("Failed to send webFlowRefresh:", error);
-    }
-}
-
-async function initializeWebsiteIndex(
-    context: SessionContext<BrowserActionContext>,
-) {
-    try {
-        const websiteIndexes = await context.indexes("website");
-
-        if (websiteIndexes.length > 0) {
-            context.agentContext.index = websiteIndexes[0];
-            context.agentContext.websiteCollection =
-                await website.WebsiteCollection.readFromFile(
-                    websiteIndexes[0].path,
-                    "index",
-                );
-
-            // Initialize JSON storage alongside SQLite
-            await initializeGraphologyStorage(context, websiteIndexes[0].path);
-
-            debug(
-                `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
-            );
-        } else {
-            debug(
-                "No existing website index found, checking for index file at target path",
-            );
-
-            let indexPath: string | undefined;
-            let websiteCollection: website.WebsiteCollection | undefined;
-
-            // Try to determine the target index path
-            try {
-                const sessionDir = await getSessionFolderPath(context);
-                if (sessionDir) {
-                    // Create index path following IndexManager pattern: sessionDir/indexes/website
-                    indexPath = path.resolve(
-                        sessionDir,
-                        "..",
-                        "indexes",
-                        "website",
-                        "index",
-                    );
-
-                    // Check if the index database file exists and try to read it
-                    const dbFile = path.join(
-                        indexPath,
-                        "index_dataFrames.sqlite",
-                    );
-                    if (fs.existsSync(dbFile)) {
-                        try {
-                            websiteCollection =
-                                await website.WebsiteCollection.readFromFile(
-                                    indexPath,
-                                    "index",
-                                );
-
-                            if (
-                                websiteCollection &&
-                                websiteCollection.messages.length > 0
-                            ) {
-                                context.agentContext.websiteCollection =
-                                    websiteCollection;
-
-                                // Create proper IndexData object for the loaded collection
-                                context.agentContext.index = {
-                                    source: "website",
-                                    name: "website-index",
-                                    location: "browser-agent",
-                                    size: websiteCollection.messages.length,
-                                    path: indexPath,
-                                    state: "finished",
-                                    progress: 100,
-                                    sizeOnDisk: 0,
-                                };
-
-                                // Initialize JSON storage and perform migration if needed
-                                await initializeGraphologyStorage(
-                                    context,
-                                    indexPath,
-                                );
-
-                                debug(
-                                    `Loaded existing website collection with ${websiteCollection.messages.length} websites from ${indexPath}`,
-                                );
-                            } else {
-                                debug(
-                                    `Database exists but collection is empty at ${indexPath}, will create new collection`,
-                                );
-                                websiteCollection = undefined;
-                            }
-                        } catch (readError) {
-                            debug(
-                                `Failed to read existing collection: ${readError}`,
-                            );
-                            websiteCollection = undefined;
-                        }
-                    } else {
-                        debug(`No existing database file found at ${dbFile}`);
-                    }
-                }
-            } catch (pathError) {
-                debug(`Error determining index path: ${pathError}`);
-                indexPath = undefined;
-            }
-
-            // If we couldn't load an existing collection, create a new one
-            if (!websiteCollection) {
-                context.agentContext.websiteCollection =
-                    new website.WebsiteCollection();
-
-                // Set up index metadata if we have a valid path
-                // Directory will be created when writeToFile is called
-                if (indexPath) {
-                    context.agentContext.index = {
-                        source: "website",
-                        name: "website-index",
-                        location: "browser-agent",
-                        size: 0,
-                        path: indexPath,
-                        state: "new",
-                        progress: 0,
-                        sizeOnDisk: 0,
-                    };
-
-                    // Initialize JSON storage for new index
-                    await initializeGraphologyStorage(context, indexPath);
-
-                    debug(
-                        `Index will be created at ${indexPath} when first page is indexed`,
-                    );
-                } else {
-                    context.agentContext.index = undefined;
-                    debug(
-                        "No index path available, collection will be in-memory only",
-                    );
-                }
-            }
-
-            // Log final state
-            if (!context.agentContext.index) {
-                debug(
-                    "Website collection created without persistent index - data will be in-memory only",
-                );
-            }
-        }
-    } catch (error) {
-        debug("Error initializing website collection:", error);
-        // SQLite/website-memory may be unavailable; keep browser agent alive.
-        // Knowledge features will remain unavailable until dependency issues are resolved.
-        context.agentContext.websiteCollection = undefined;
-        context.agentContext.index = undefined;
-    }
-}
-
-/**
- * Initialize Graphology storage for pure Graphology architecture
- */
-async function initializeGraphologyStorage(
-    context: SessionContext<BrowserActionContext>,
-    indexPath: string,
-): Promise<void> {
-    try {
-        debug("Initializing Graphology storage");
-
-        // Create storage path for Graphology files
-        const graphologyStoragePath = path.join(indexPath, "storage");
-
-        // Create Graphology persistence manager
-        const persistenceManager = createGraphologyPersistenceManager(
-            graphologyStoragePath,
-        );
-
-        // Store reference in context for later use (maintaining compatibility)
-        if (!context.agentContext.graphJsonStorage) {
-            context.agentContext.graphJsonStorage = {
-                manager: persistenceManager,
-                lastEntityGraphUpdate: null,
-                lastTopicGraphUpdate: null,
-            };
-        }
-
-        debug("Graphology storage initialization complete");
-    } catch (error) {
-        debug(`Error initializing Graphology storage: ${error}`);
-        // Don't throw - this should not break the main initialization
     }
 }
 

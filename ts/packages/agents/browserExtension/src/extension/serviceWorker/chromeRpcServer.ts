@@ -24,12 +24,14 @@ export function createChromeRpcServer<
     callHandlers?: CallHandlers,
 ): { adapter: ChannelAdapter; rpc: ReturnType<typeof createRpc> } {
     const adapter = createChannelAdapter((message: any) => {
-        chrome.runtime.sendMessage({ type: "rpc", message }).catch(() => {});
+        chrome.runtime
+            .sendMessage({ type: "rpc", target: "view", message })
+            .catch(() => {});
     });
 
     chrome.runtime.onMessage.addListener(
         (msg: any, _sender: chrome.runtime.MessageSender) => {
-            if (msg.type === "rpc") {
+            if (msg.type === "rpc" && msg.target === "serviceWorker") {
                 adapter.notifyMessage(msg.message);
             }
         },

@@ -43,8 +43,13 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { otel } from "@typeagent/telemetry";
 import { MacroManager } from "@typeagent/copilot-macros";
 import { MemoryServiceHost } from "@typeagent/memory-mcp-server";
-import { FileMemoryService } from "@typeagent/memory-service";
-import { InProcessMemoryServiceClient } from "@typeagent/memory-client";
+import {
+    FileMemoryService,
+    createKnowProCorpusIndex,
+} from "@typeagent/memory-service";
+import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
+import { createDocMemorySettings } from "@typeagent/conversation-memory";
+import { openai } from "@typeagent/aiclient";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -334,6 +339,21 @@ async function main() {
     debugStartup("starting instance memory service");
     const memoryService = new FileMemoryService(
         path.join(instanceDir, "memory"),
+        {
+            indexFactory: (corpusId, indexDirectory) =>
+                createKnowProCorpusIndex(corpusId, indexDirectory, () =>
+                    createDocMemorySettings(
+                        64,
+                        undefined,
+                        openai.createChatModel(
+                            openai.GPT_5_6_LUNA,
+                            undefined,
+                            undefined,
+                            ["website-knowledge", "durable-index"],
+                        ),
+                    ),
+                ),
+        },
     );
     const memoryServiceHost = await MemoryServiceHost.start(memoryService, {
         onError: (error) =>
@@ -425,9 +445,8 @@ async function main() {
                 allowSharedLocalView: ["browser"],
                 agentInitOptions: {
                     browser: {
-                        memoryServiceClient: new InProcessMemoryServiceClient(
-                            memoryService,
-                        ),
+                        memoryServiceClient:
+                            createMemoryServiceRpcFacade(memoryService),
                     },
                 },
             },

@@ -3,7 +3,6 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
-import * as website from "@typeagent/website-memory";
 import { createExtractionInputsFromFragments } from "./extractionActions.mjs";
 import registerDebug from "debug";
 
@@ -129,9 +128,8 @@ export async function getKnowledgeIndexStats(
     indexSize: string;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        const memory = context.agentContext.browserMemoryService;
+        if (memory === undefined) {
             return {
                 totalPages: 0,
                 totalEntities: 0,
@@ -141,44 +139,24 @@ export async function getKnowledgeIndexStats(
             };
         }
 
-        const websites = websiteCollection.messages.getAll();
-        let totalEntities = 0;
-        let totalRelationships = 0;
-        let lastIndexed: string | null = null;
-
-        for (const site of websites) {
-            try {
-                const knowledge = site.getKnowledge();
-                if (knowledge) {
-                    totalEntities += knowledge.entities?.length || 0;
-                    totalRelationships += knowledge.actions?.length || 0;
-                }
-            } catch (error) {
-                console.warn("Error getting knowledge for site:", error);
-                // Continue processing other sites
-            }
-
-            const metadata = site.metadata as website.WebsiteDocPartMeta;
-
-            const siteDate = metadata?.visitDate || metadata?.bookmarkDate;
-            if (siteDate && (!lastIndexed || siteDate > lastIndexed)) {
-                lastIndexed = siteDate;
-            }
-        }
-
-        const totalContent = websites.reduce(
-            (sum: number, site: any) =>
-                sum + (site.textChunks?.join("").length || 0),
-            0,
-        );
-        const indexSize = `${Math.round(totalContent / 1024)} KB`;
+        const [sources, graph] = await Promise.all([
+            memory.listSources(),
+            memory.getKnowledgeGraph(),
+        ]);
+        const indexedDates = sources.flatMap((source) => {
+            const revision = source.revisions.find(
+                (item) => item.revisionId === source.activeRevisionId,
+            );
+            const date = revision?.indexedAt ?? revision?.capturedAt;
+            return date === undefined ? [] : [date];
+        });
 
         return {
-            totalPages: websites.length,
-            totalEntities,
-            totalRelationships,
-            lastIndexed: lastIndexed || "Never",
-            indexSize,
+            totalPages: sources.length,
+            totalEntities: graph.entities.length,
+            totalRelationships: graph.relationships.length,
+            lastIndexed: indexedDates.sort().at(-1) ?? "Never",
+            indexSize: "Unknown",
         };
     } catch (error) {
         console.error("Error getting knowledge index stats:", error);
@@ -197,18 +175,17 @@ export async function clearKnowledgeIndex(
     context: SessionContext<BrowserActionContext>,
 ): Promise<{ success: boolean; message: string }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
+        const memory = context.agentContext.browserMemoryService;
 
-        if (!websiteCollection) {
+        if (memory === undefined) {
             return {
                 success: false,
-                message: "No website collection found to clear.",
+                message: "Durable browser memory is not available.",
             };
         }
 
-        const itemsCleared = websiteCollection.messages.length;
-        context.agentContext.websiteCollection =
-            new website.WebsiteCollection();
+        const itemsCleared = await memory.clear();
+        context.agentContext.graphCache = undefined;
 
         return {
             success: true,

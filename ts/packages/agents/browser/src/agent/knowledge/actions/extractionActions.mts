@@ -26,7 +26,6 @@ import {
     ExtractionInput,
     EXTRACTION_MODE_CONFIGS,
 } from "@typeagent/website-memory";
-import * as website from "@typeagent/website-memory";
 import { BrowserKnowledgeExtractor } from "../browserKnowledgeExtractor.mjs";
 import { docPartsFromHtml } from "@typeagent/conversation-memory";
 import { handleKnowledgeAction } from "./knowledgeActionRouter.mjs";
@@ -40,64 +39,6 @@ import registerDebug from "debug";
 import { convert } from "html-to-text";
 
 const debug = registerDebug("typeagent:browser:knowledge");
-
-// Helper function to get actions from aggregated results
-function getActionsFromAggregatedResults(aggregatedResults: any): any[] {
-    // If we have contentActions, use them directly
-    if (
-        aggregatedResults.contentActions &&
-        Array.isArray(aggregatedResults.contentActions) &&
-        aggregatedResults.contentActions.length > 0
-    ) {
-        return aggregatedResults.contentActions;
-    }
-
-    // If we have relationships but no contentActions, convert relationships to actions
-    if (
-        aggregatedResults.relationships &&
-        Array.isArray(aggregatedResults.relationships) &&
-        aggregatedResults.relationships.length > 0
-    ) {
-        return aggregatedResults.relationships.map((relationship: any) => ({
-            verbs: relationship.relationship
-                ? relationship.relationship
-                      .split(/[,\s]+/)
-                      .filter((v: string) => v.trim().length > 0)
-                : ["related to"],
-            verbTense: "present" as "past" | "present" | "future",
-            subjectEntityName: relationship.from || "none",
-            objectEntityName: relationship.to || "none",
-            indirectObjectEntityName: "none",
-            params: [],
-            confidence: relationship.confidence || 0.8,
-        }));
-    }
-
-    return [];
-}
-
-// Helper function to check if a page exists in the index
-function checkPageExistsInIndex(
-    url: string,
-    context: SessionContext<BrowserActionContext>,
-): boolean {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-        if (!websiteCollection) {
-            return false;
-        }
-
-        const websites = websiteCollection.messages.getAll();
-        return websites.some((site: any) => site.metadata.url === url);
-    } catch (error) {
-        console.error("Error checking page existence:", error);
-        return false;
-    }
-}
-
-function hasIndexingErrors(result: any): boolean {
-    return result && result.errors && result.errors.length > 0;
-}
 
 // TODO: Move this to common and use the same schema in extension and agent
 interface KnowledgeExtractionProgress {
@@ -450,13 +391,13 @@ async function saveExtractedKnowledgeWithChunks(
     aggregatedResults: any,
     context: SessionContext<BrowserActionContext>,
 ): Promise<void> {
-    if (!context.agentContext.websiteCollection) {
-        debug("No websiteCollection available, skipping save");
-        return;
+    const memory = context.agentContext.browserMemoryService;
+    if (memory === undefined) {
+        throw new Error("Durable browser memory is not available");
     }
 
     try {
-        debug(`Saving extracted knowledge to index for URL: ${url}`);
+        debug(`Saving extracted knowledge to durable memory for URL: ${url}`);
 
         // Extract text chunks from docParts (preserves chunking structure)
         const allTextChunks: string[] = [];
@@ -482,116 +423,19 @@ async function saveExtractedKnowledgeWithChunks(
             `Extracted ${allTextChunks.length} text chunks from ${extractionInputs.length} extraction inputs with ${totalDocParts} docParts`,
         );
 
-        // Create WebsiteMeta
-        const timestamp = new Date().toISOString();
-        const meta = new website.WebsiteMeta({
-            url,
-            title,
-            source: "history",
-            visitDate: timestamp,
-        });
-
-        // Create Website object directly with chunked text
-        const websiteObj = new website.Website(
-            meta,
-            allTextChunks, // Preserves chunking!
-            [],
-            aggregatedResults.entities && aggregatedResults.entities.length > 0
-                ? {
-                      entities: aggregatedResults.entities.map(
-                          (entity: any) => ({
-                              ...entity,
-                              type: Array.isArray(entity.type)
-                                  ? entity.type
-                                  : [entity.type],
-                          }),
-                      ),
-                      topics:
-                          aggregatedResults.keyTopics ||
-                          aggregatedResults.topics,
-                      actions:
-                          getActionsFromAggregatedResults(aggregatedResults),
-                      inverseActions: [],
-                  }
-                : undefined,
-            undefined, // topicHierarchy - will be built during indexing
-            undefined, // deletionInfo
-            true, // isNew
+        await memory.ingest(
+            {
+                url,
+                title,
+                markdown: allTextChunks.join("\n\n"),
+                source: "current-page",
+                capturedAt: new Date().toISOString(),
+            },
+            "full",
         );
 
-        // Add metadata
-        if (
-            aggregatedResults.detectedActions ||
-            aggregatedResults.actionSummary
-        ) {
-            websiteObj.metadata.detectedActions =
-                aggregatedResults.detectedActions;
-            websiteObj.metadata.actionSummary = aggregatedResults.actionSummary;
-        }
-        if (aggregatedResults.summary) {
-            websiteObj.metadata.contentSummary = aggregatedResults.summary;
-        }
-
-        // Check if page already exists
-        const isNewPage = !checkPageExistsInIndex(url, context);
-
-        // Save to index
-        if (isNewPage) {
-            const docPart = website.WebsiteDocPart.fromWebsite(websiteObj);
-            const result =
-                await context.agentContext.websiteCollection.addWebsiteToIndex(
-                    docPart,
-                );
-            if (hasIndexingErrors(result)) {
-                debug(
-                    "Incremental indexing failed, falling back to full rebuild",
-                );
-                context.agentContext.websiteCollection.addWebsites([
-                    websiteObj,
-                ]);
-                await context.agentContext.websiteCollection.buildIndex();
-            }
-            debug(`Saved new page to index: ${url}`);
-        } else {
-            const docPart = website.WebsiteDocPart.fromWebsite(websiteObj);
-
-            const result =
-                await context.agentContext.websiteCollection.updateWebsiteInIndex(
-                    url,
-                    docPart,
-                );
-            if (hasIndexingErrors(result)) {
-                debug(
-                    "Incremental update failed, falling back to full rebuild",
-                );
-                context.agentContext.websiteCollection.addWebsites([
-                    websiteObj,
-                ]);
-                await context.agentContext.websiteCollection.buildIndex();
-            }
-            debug(`Updated existing page in index: ${url}`);
-        }
-
-        try {
-            if (context.agentContext.index?.path) {
-                await context.agentContext.websiteCollection.writeToFile(
-                    context.agentContext.index.path,
-                    "index",
-                );
-                debug(
-                    `Saved updated website collection to ${context.agentContext.index.path}`,
-                );
-            } else {
-                console.warn(
-                    "No index path available, indexed page data not persisted to disk",
-                );
-            }
-        } catch (error) {
-            console.error("Error persisting website collection:", error);
-        }
-
         debug(
-            `Knowledge saved successfully for ${url} with ${allTextChunks.length} text chunks`,
+            `Knowledge stored durably for ${url} with ${allTextChunks.length} text chunks and ${aggregatedResults.entities?.length ?? 0} extracted entities`,
         );
     } catch (error) {
         console.error("Error saving knowledge to index:", error);
@@ -1123,29 +967,6 @@ export async function extractKnowledgeFromPageStreaming(
 // Global tracking for active knowledge extractions
 const activeKnowledgeExtractions = new Map<string, ActiveKnowledgeExtraction>();
 
-// Convert stored knowledge format (with actions) back to display format (with relationships)
-function convertStoredKnowledgeToDisplayFormat(storedKnowledge: any): any {
-    const displayKnowledge = { ...storedKnowledge };
-
-    // Convert actions array to relationships array
-    if (storedKnowledge.actions && Array.isArray(storedKnowledge.actions)) {
-        displayKnowledge.relationships = storedKnowledge.actions.map(
-            (action: any) => ({
-                from: action.subjectEntityName || "unknown",
-                relationship: Array.isArray(action.verbs)
-                    ? action.verbs.join(" ")
-                    : action.verbs || "related to",
-                to: action.objectEntityName || "unknown",
-                confidence: action.confidence || 0.8,
-            }),
-        );
-    } else {
-        displayKnowledge.relationships = [];
-    }
-
-    return displayKnowledge;
-}
-
 // Helper functions for enhanced navigation with index integration
 async function checkKnowledgeInIndex(
     url: string,
@@ -1157,26 +978,26 @@ async function checkKnowledgeInIndex(
         // Get the session context - either directly or from action context
         const sessionContext =
             "sessionContext" in context ? context.sessionContext : context;
-        const websiteCollection = sessionContext.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        const memory = sessionContext.agentContext.browserMemoryService;
+        if (memory === undefined) {
             return null;
         }
-
-        const websites = websiteCollection.messages.getAll();
-        const foundWebsite = websites.find(
-            (site: any) => site.metadata.url === url,
-        );
-
-        if (foundWebsite) {
-            const knowledge = foundWebsite.getKnowledge();
-            if (knowledge) {
-                return convertStoredKnowledgeToDisplayFormat(knowledge);
-            }
+        const source = await memory.getSource(url);
+        if (source === undefined) {
             return null;
         }
-
-        return null;
+        const graph = await memory.getKnowledgeGraph();
+        return {
+            entities: graph.entities.filter((entity) =>
+                entity.sourceIds.includes(source.sourceId),
+            ),
+            topics: graph.topics
+                .filter((topic) => topic.sourceIds.includes(source.sourceId))
+                .map((topic) => topic.name),
+            relationships: graph.relationships.filter((relationship) =>
+                relationship.sourceIds.includes(source.sourceId),
+            ),
+        };
     } catch (error) {
         debug("No existing knowledge found in index for:", url);
         return null;

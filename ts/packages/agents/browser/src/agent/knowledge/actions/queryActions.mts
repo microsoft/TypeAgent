@@ -23,165 +23,52 @@ export async function getPageIndexedKnowledge(
     error?: string;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        const memory = context.agentContext.browserMemoryService;
+        if (memory === undefined) {
             return {
                 isIndexed: false,
-                error: "No website collection available",
+                error: "Durable browser memory is not available",
             };
         }
-
-        const websites = websiteCollection.messages.getAll();
-        const foundWebsite = websites.find(
-            (site: any) => site.metadata.url === parameters.url,
-        );
-
-        if (!foundWebsite) {
+        const source = await memory.getSource(parameters.url);
+        if (source === undefined) {
             return {
                 isIndexed: false,
                 error: "Page not found in index",
             };
         }
-
-        try {
-            const knowledge = foundWebsite.getKnowledge();
-
-            if (!knowledge) {
-                return {
-                    isIndexed: true,
-                    knowledge: {
-                        title: "",
-                        entities: [],
-                        relationships: [],
-                        keyTopics: [],
-                        detectedActions: [],
-                        suggestedQuestions: [],
-                        summary:
-                            "Page is indexed but no knowledge was extracted.",
-                        contentMetrics: {
-                            readingTime: 0,
-                            wordCount: 0,
-                        },
-                    },
-                };
-            }
-
-            let detectedActions: any[] = [];
-
-            // Check websiteObj metadata for detectedActions first (with safe property access)
-            if (
-                foundWebsite.metadata &&
-                (foundWebsite.metadata as any).detectedActions &&
-                Array.isArray((foundWebsite.metadata as any).detectedActions)
-            ) {
-                detectedActions = (foundWebsite.metadata as any)
-                    .detectedActions;
-            }
-
-            // Also check knowledge object for detectedActions (fallback)
-            if (
-                (knowledge as any).detectedActions &&
-                Array.isArray((knowledge as any).detectedActions)
-            ) {
-                detectedActions.push(...(knowledge as any).detectedActions);
-            }
-
-            // Convert the stored knowledge to the expected format
-            const entities: Entity[] =
-                knowledge.entities?.map((entity) => ({
-                    name: entity.name,
-                    type: Array.isArray(entity.type)
-                        ? entity.type.join(", ")
-                        : entity.type,
-                    description: entity.facets?.find(
-                        (f) => f.name === "description",
-                    )?.value as string,
-                    confidence: 0.8, // Default confidence for indexed content
-                })) || [];
-
-            const keyTopics: string[] = knowledge.topics || [];
-
-            const allRelationships: Relationship[] =
-                knowledge.actions?.map((action) => ({
-                    from: action.subjectEntityName || "unknown",
-                    relationship: action.verbs?.join(", ") || "related to",
-                    to: action.objectEntityName || "unknown",
-                    confidence: 0.8, // Default confidence for indexed content
-                })) || [];
-
-            // Deduplicate relationships
-            const relationships = allRelationships.filter(
-                (rel, index, arr) =>
-                    arr.findIndex(
-                        (r) =>
-                            r.from === rel.from &&
-                            r.relationship === rel.relationship &&
-                            r.to === rel.to,
-                    ) === index,
-            );
-
-            // Generate contextual questions for indexed content
-            const suggestedQuestions: string[] = [];
-            /*
-            const suggestedQuestions: string[] =
-                await generateSmartSuggestedQuestions(
-                    knowledge,
-                    null,
-                    parameters.url,
-                    context,
-                );
-            */
-
-            // Calculate content metrics from the stored text
-            const textContent = foundWebsite.textChunks?.join("\n\n") || "";
-            const wordCount = textContent.split(/\s+/).length;
-            const contentMetrics = {
-                readingTime: Math.ceil(wordCount / 225),
-                wordCount: wordCount,
-            };
-
-            const summary = `Retrieved indexed knowledge: ${entities.length} entities, ${keyTopics.length} topics, ${relationships.length} relationships.`;
-
-            return {
-                isIndexed: true,
-                knowledge: {
-                    title: (knowledge as any).title || "",
-                    entities,
-                    relationships,
-                    keyTopics,
-                    detectedActions,
-                    contentActions: knowledge.actions || [],
-                    actionSummary: foundWebsite.metadata
-                        ? (foundWebsite.metadata as any).actionSummary
-                        : undefined,
-                    suggestedQuestions,
-                    summary,
-                    contentMetrics,
-                },
-            };
-        } catch (knowledgeError) {
-            console.warn(
-                "Error extracting knowledge from indexed page:",
-                knowledgeError,
-            );
-            return {
-                isIndexed: true,
-                knowledge: {
-                    title: "",
-                    entities: [],
-                    relationships: [],
-                    keyTopics: [],
-                    detectedActions: [],
-                    suggestedQuestions: [],
-                    summary: "Page is indexed but knowledge extraction failed.",
-                    contentMetrics: {
-                        readingTime: 0,
-                        wordCount: 0,
-                    },
-                },
-            };
-        }
+        const graph = await memory.getKnowledgeGraph();
+        const entities: Entity[] = graph.entities
+            .filter((entity) => entity.sourceIds.includes(source.sourceId))
+            .map((entity) => ({
+                name: entity.name,
+                type: entity.types.join(", "),
+                confidence: 0.8,
+            }));
+        const keyTopics = graph.topics
+            .filter((topic) => topic.sourceIds.includes(source.sourceId))
+            .map((topic) => topic.name);
+        const relationships: Relationship[] = graph.relationships
+            .filter((item) => item.sourceIds.includes(source.sourceId))
+            .map((item) => ({
+                from: item.fromEntity,
+                relationship: item.relationshipType,
+                to: item.toEntity,
+                confidence: 0.8,
+            }));
+        return {
+            isIndexed: true,
+            knowledge: {
+                title: source.title,
+                entities,
+                relationships,
+                keyTopics,
+                detectedActions: [],
+                suggestedQuestions: [],
+                summary: `Retrieved indexed knowledge: ${entities.length} entities, ${keyTopics.length} topics, ${relationships.length} relationships.`,
+                contentMetrics: { readingTime: 0, wordCount: 0 },
+            },
+        };
     } catch (error) {
         console.error("Error getting page indexed knowledge:", error);
         return {
@@ -229,9 +116,8 @@ export async function getDiscoverInsights(
     success: boolean;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        const memory = context.agentContext.browserMemoryService;
+        if (memory === undefined) {
             return {
                 trendingTopics: [],
                 readingPatterns: [],
@@ -241,7 +127,32 @@ export async function getDiscoverInsights(
             };
         }
 
-        const websites = websiteCollection.messages.getAll();
+        const [sources, graph] = await Promise.all([
+            memory.listSources(),
+            memory.getKnowledgeGraph(),
+        ]);
+        const websites = sources.map((source) => {
+            const revision = source.revisions.find(
+                (item) => item.revisionId === source.activeRevisionId,
+            );
+            const capturedAt = revision?.capturedAt ?? revision?.indexedAt;
+            return {
+                metadata: {
+                    url: source.canonicalUri,
+                    title: source.title,
+                    ...(source.metadata?.source === "bookmark"
+                        ? { bookmarkDate: capturedAt }
+                        : { visitDate: capturedAt }),
+                },
+                getKnowledge: () => ({
+                    entities: graph.entities
+                        .filter((entity) =>
+                            entity.sourceIds.includes(source.sourceId),
+                        )
+                        .map((entity) => ({ name: entity.name })),
+                }),
+            };
+        });
         const limit = parameters.limit || 10;
         const timeframe = parameters.timeframe || "30d";
 
@@ -295,17 +206,17 @@ export async function generateSmartSuggestedQuestions(
         }
     }
 
-    // Use DataFrames for context-aware questions
-    const websiteCollection = context.agentContext.websiteCollection;
-    if (websiteCollection && websiteCollection.visitFrequency) {
+    // Add history-oriented questions only when durable browser memory is available.
+    if (context.agentContext.browserMemoryService !== undefined) {
         try {
-            // Domain visit history - simplified approach for now
             debug("Checking domain visit data for enhanced questions");
 
             if (domain) {
                 questions.push(`When did I first visit ${domain}?`);
                 questions.push(`What's my learning journey on ${domain}?`);
             }
+            questions.push("When did I first encounter this information?");
+            questions.push("What have I learned recently in this domain?");
         } catch (error) {
             console.warn("Error querying domain data:", error);
         }
@@ -321,10 +232,6 @@ export async function generateSmartSuggestedQuestions(
     // Learning progression questions
     questions.push("What should I learn next in this area?");
     questions.push("Are there any knowledge gaps I should fill?");
-
-    // Temporal questions
-    questions.push("When did I first encounter this information?");
-    questions.push("What have I learned recently in this domain?");
 
     return questions.slice(0, 8); // Limit to most relevant questions
 }

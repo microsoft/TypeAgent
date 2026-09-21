@@ -4,6 +4,7 @@
 import {
     DocMemory,
     DocPart,
+    type DocMemorySettings,
     docPartsFromHtml,
     docPartsFromMarkdown,
     docPartsFromText,
@@ -77,12 +78,14 @@ export class KnowProCorpusIndex implements CorpusIndex {
     public constructor(
         private readonly corpusId: string,
         private readonly indexDirectory: string,
+        private readonly settingsFactory?: () => DocMemorySettings,
     ) {}
 
     public async initialize(): Promise<void> {
         this.memory = await DocMemory.readFromFile(
             this.indexDirectory,
             indexBaseName,
+            this.settingsFactory?.(),
         );
     }
 
@@ -92,7 +95,11 @@ export class KnowProCorpusIndex implements CorpusIndex {
         onProgress: (progress: JobProgress) => Promise<void>,
     ): Promise<void> {
         const parts = documents.flatMap(toDocParts);
-        const memory = new DocMemory(this.corpusId, parts);
+        const memory = new DocMemory(
+            this.corpusId,
+            parts,
+            this.settingsFactory?.(),
+        );
         let completed = 0;
         let progressTail = Promise.resolve();
         const total = Math.max(parts.length, 1);
@@ -296,6 +303,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
 export function createKnowProCorpusIndex(
     corpusId: string,
     indexDirectory: string,
+    settingsFactory?: () => DocMemorySettings,
 ): CorpusIndex {
-    return new KnowProCorpusIndex(corpusId, indexDirectory);
+    return new KnowProCorpusIndex(corpusId, indexDirectory, settingsFactory);
 }
