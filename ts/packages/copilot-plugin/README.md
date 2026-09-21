@@ -29,6 +29,75 @@ The hook output fields `handled`, `responseContent`, and `handledBy` are support
 
 ## Structured actions in Direct and MCP modes
 
+### One-command discovery E2E session (Windows)
+
+From the repository root in PowerShell:
+
+```powershell
+node .\ts\packages\copilot-plugin\scripts\discovery-e2e.mjs
+```
+
+The launcher builds the plugin and agent server, stages a session-local plugin
+snapshot, starts a disposable server on port 9024, checks the real MCP connection,
+then opens interactive Copilot. Paste the printed test prompt to discover the
+list-inventory action and execute it. Answer any required confirmation yourself.
+Afterward, ask Copilot to repeat the action without rediscovery. Exit Copilot to
+stop the owned server process tree; Ctrl+C also triggers cleanup.
+
+This is a **controlled discovery session**: the normal initial-prompt routing
+hook uses bypass mode, while a separate `typeagent-e2e` MCP process uses MCP mode.
+Existing TypeAgent MCP registrations are disabled only for this CLI invocation.
+No global mode settings change. Normal MCP-mode user prompts still use
+`processCommand`; this launcher is not a routing optimization or benchmark.
+
+Prerequisites: Windows, Node 22+ with npm, a native Copilot CLI executable on
+PATH (already signed in), and existing TypeAgent model/embedding configuration.
+The launcher does not obtain credentials, change Azure accounts, or copy files
+from another checkout. Build/install requires a provisioned `ts\.npmrc`.
+
+```powershell
+# First checkout: explicitly restore dependencies before building.
+node .\ts\packages\copilot-plugin\scripts\discovery-e2e.mjs --install-dependencies
+
+# Repeat with existing builds and an already-provisioned config directory.
+node .\ts\packages\copilot-plugin\scripts\discovery-e2e.mjs `
+  --skip-build --config-dir 'C:\TypeAgent config' --port 9025
+
+# Noninteractive check: real MCP catalog + discovery, NO action execution.
+node .\ts\packages\copilot-plugin\scripts\discovery-e2e.mjs --skip-build --smoke-test
+
+# Optional: also update the global plugin using the existing registrar.
+node .\ts\packages\copilot-plugin\scripts\discovery-e2e.mjs --install-plugin
+```
+
+`--model <model>` selects the Copilot model; otherwise the CLI uses its normal
+default. `--startup-timeout <seconds>` controls the server listener wait
+(default 120); MCP connection/probe calls have separate bounded timeouts.
+`--config-dir` sets `TYPEAGENT_CONFIG_DIR` for child processes; without it,
+existing configuration resolution applies.
+
+Each invocation prints a fresh temporary run directory containing `mcp.json`,
+`prompt.txt`, `probe.json`, server stdout/stderr logs, the staged plugin, and
+disposable user data. These are retained for inspection, not deleted on exit.
+`probe.json` contains catalog/discovery evidence, not a Copilot transcript;
+use Copilot's `/share` command to save the interactive tool timeline.
+The smoke-test binding is closed and must not be reused by another session.
+
+An occupied port causes an error rather than reusing or stopping its owner.
+For startup/configuration failures, inspect the printed server logs. If optional
+global registration fails with Windows `EPERM`, close other Copilot sessions
+holding the installed directory and retry; the default local snapshot needs no
+global registration. Only the launcher's child processes are stopped.
+
+Unknown/state-changing policies still require confirmation. The separate
+read-only-policy change is not implied by installing these adapters; even
+explicitly read-only actions may have their own handler questions.
+
+Run launcher regression checks with
+`npm run test:e2e-launcher` from `ts\packages\copilot-plugin`.
+
+### Routing and tool contracts
+
 There are two intentional entry paths:
 
 - **User-originated natural language:** ordinary Direct prompts still go through
