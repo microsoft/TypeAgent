@@ -6,6 +6,7 @@ import {
     CancelWorkspaceCommandResultSchema,
     WorkspaceCommandInputSchema,
     WorkspaceCommandResultSchema,
+    WorkspaceCommandToolResultSchema,
 } from "../src/workspaceCommandMcpSchema.js";
 
 describe("workspace command MCP schemas", () => {
@@ -26,6 +27,36 @@ describe("workspace command MCP schemas", () => {
             executionId: "coda-tests",
         });
     });
+
+    test("accepts pending structured-action results without fabricating command output", () => {
+        expect(
+            WorkspaceCommandToolResultSchema.parse({
+                protocolVersion: 1,
+                scopeId: "scope-1",
+                operationId: "operation-1",
+                status: "requires_interaction",
+                interactionId: "interaction-1",
+                expiresAt: 42,
+                prompt: {
+                    type: "confirmation",
+                },
+                output: [],
+                results: [],
+            }),
+        ).toMatchObject({
+            status: "requires_interaction",
+            interactionId: "interaction-1",
+        });
+    });
+
+    test.each(["contract_stale", "not-found"])(
+        "rejects obsolete structured-action status %s",
+        (status) => {
+            expect(() =>
+                WorkspaceCommandToolResultSchema.parse({ status }),
+            ).toThrow();
+        },
+    );
 
     test("rejects an invalid timeout, oversized UTF-8 command, and empty execution ID", () => {
         expect(() =>
