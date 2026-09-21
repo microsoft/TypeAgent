@@ -2982,7 +2982,8 @@ class AskAboutPageHandler implements CommandHandler {
                 {
                     query: question,
                     searchScope: "current_page",
-                    metadata: { url },
+                    url,
+                    generateAnswer: true,
                 },
                 context.sessionContext,
             );

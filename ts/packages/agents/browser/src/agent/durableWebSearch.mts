@@ -4,6 +4,7 @@
 import type { SessionContext } from "@typeagent/agent-sdk";
 import type { MemoryKnowledgeGraph } from "@typeagent/memory-service";
 import type { BrowserActionContext } from "./browserActions.mjs";
+import { openai as ai } from "@typeagent/aiclient";
 import type {
     Entity,
     WebPageReference,
@@ -109,6 +110,27 @@ function sourceMetadata(
     return typeof value === "string" ? value : undefined;
 }
 
+async function generateGroundedAnswer(
+    query: string,
+    websites: WebsiteResult[],
+): Promise<string | undefined> {
+    const evidence = websites
+        .map(
+            (website, index) =>
+                `[${index + 1}] ${website.title}\nURL: ${website.url}\n${website.snippet ?? ""}`,
+        )
+        .join("\n\n")
+        .slice(0, 40_000);
+    const model = ai.createChatModel(ai.GPT_5_6_LUNA, undefined, undefined, [
+        "website-knowledge",
+        "page-answer",
+    ]);
+    const response = await model.complete(
+        `Answer the question using only the indexed page evidence below. If the evidence is insufficient, say so directly. Do not mention search counts.\n\nQuestion: ${query}\n\nEvidence:\n${evidence}`,
+    );
+    return response.success ? response.data.trim() : undefined;
+}
+
 async function searchDurable(
     request: SearchWebMemoriesRequest,
     context: SessionContext<BrowserActionContext>,
@@ -186,6 +208,28 @@ async function searchDurable(
                   intermediateFallbacks: [],
               }
             : undefined;
+        let answer: string;
+        let answerType: "direct" | "synthesized" | "noAnswer";
+        if (websites.length === 0) {
+            answer = `No indexed websites matched "${query}".`;
+            answerType = "noAnswer";
+        } else if (request.generateAnswer) {
+            try {
+                answer =
+                    (await generateGroundedAnswer(query, websites)) ??
+                    websites[0].snippet ??
+                    `Found ${websites.length} indexed website${websites.length === 1 ? "" : "s"}.`;
+                answerType = "synthesized";
+            } catch {
+                answer =
+                    websites[0].snippet ??
+                    "The indexed page did not contain enough text to answer the question.";
+                answerType = "direct";
+            }
+        } else {
+            answer = `Found ${websites.length} indexed website${websites.length === 1 ? "" : "s"}.`;
+            answerType = "direct";
+        }
         return {
             websites,
             summary: {
@@ -199,11 +243,8 @@ async function searchDurable(
                               ...websites.map((site) => site.relevanceScore),
                           ),
             },
-            answer:
-                websites.length === 0
-                    ? `No indexed websites matched "${query}".`
-                    : `Found ${websites.length} indexed website${websites.length === 1 ? "" : "s"}.`,
-            answerType: websites.length === 0 ? "noAnswer" : "direct",
+            answer,
+            answerType,
             answerSources: matches.map(({ evidence, source }) => ({
                 url: source.canonicalUri ?? "",
                 title: source.title,
