@@ -143,6 +143,7 @@ export function createMcpAppAgentSourceForInstance(
     instanceConfigs: InstanceConfigProvider,
     services?: McpHostServices,
     discovery?: McpConfigDiscoveryResult,
+    runtimeSeed: Record<string, NormalizedMcpServerConfig> = {},
 ): McpAppAgentSourceForTest {
     const instanceDir = instanceConfigs.getInstanceDir();
     if (instanceDir === undefined) {
@@ -150,10 +151,13 @@ export function createMcpAppAgentSourceForInstance(
             "Internal error: MCP app agent source requires an instance directory.",
         );
     }
-    const seed = getShippedSeed(instanceConfigs);
+    const seed = { ...getShippedSeed(instanceConfigs), ...runtimeSeed };
     // Reserve ALL shipped server names (both seeded and legacy) so the user
     // store can never register a name owned by another provider.
-    const reserved = new Set(Object.keys(getProviderConfig().mcpServers ?? {}));
+    const reserved = new Set([
+        ...Object.keys(getProviderConfig().mcpServers ?? {}),
+        ...Object.values(runtimeSeed).map((config) => config.name),
+    ]);
     const store = openMcpServerStore(
         instanceDir,
         reserved,

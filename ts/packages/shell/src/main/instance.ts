@@ -15,6 +15,7 @@ import { ShellSettingManager } from "./shellSettings.js";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import { ShellWindow } from "./shellWindow.js";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
+import { createBrowserControlRpcFacade } from "@typeagent/browser-control-rpc/types";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import { getTraceId } from "agent-dispatcher/helpers/data";
 import { createShellAgent, createShellAgentProvider } from "./agent.js";
@@ -621,7 +622,11 @@ async function initializeDispatcher(
                         ...getDefaultAppAgentProviders(instanceDir, configName),
                     ],
                     agentInitOptions: {
-                        browser: browserControl.control,
+                        browser: {
+                            browserControl: createBrowserControlRpcFacade(
+                                browserControl.control,
+                            ),
+                        },
                     },
                     portRegistrar,
                     appAgentSources: getDefaultAppAgentSources(instanceDir, {

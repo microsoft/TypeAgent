@@ -206,9 +206,17 @@ function createOptionsRpc(
                             fn = options[name];
                         } else {
                             const funcName = names.pop();
-                            thisObject = getObjectProperty(options, name);
+                            thisObject = getObjectProperty(
+                                options,
+                                names.join("."),
+                            );
                             fn = thisObject[funcName!];
                         }
+                    }
+                    if (typeof fn !== "function") {
+                        throw new Error(
+                            `Options callback '${name}' for object ${param.id} is not a function`,
+                        );
                     }
                     return fn.call(thisObject, ...param.args);
                 },
