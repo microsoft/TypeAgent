@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import { createKnowProCorpusIndex } from "./knowProCorpusIndex.js";
@@ -59,6 +59,25 @@ export interface FileMemoryServiceOptions {
 
 function now(): string {
     return new Date().toISOString();
+}
+
+function raceWithAbort<T>(
+    operation: Promise<T>,
+    signal: AbortSignal,
+): Promise<T> {
+    if (signal.aborted) {
+        return Promise.reject(
+            signal.reason ?? new Error("Operation cancelled"),
+        );
+    }
+    return new Promise<T>((resolve, reject) => {
+        const abort = () =>
+            reject(signal.reason ?? new Error("Operation cancelled"));
+        signal.addEventListener("abort", abort, { once: true });
+        operation
+            .then(resolve, reject)
+            .finally(() => signal.removeEventListener("abort", abort));
+    });
 }
 
 function contentFor(request: DocumentIngestRequest): string {
@@ -257,6 +276,44 @@ export class FileMemoryService implements MemoryService {
         return corpora.sort((left, right) =>
             left.name.localeCompare(right.name),
         );
+    }
+
+    public async clearCorpus(corpusId: string): Promise<number> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        let clearedCount = 0;
+        await this.enqueueWrite(corpusId, async () => {
+            const runtime = await this.getCorpus(corpusId);
+            clearedCount = runtime.manifest.sources.length;
+            const indexGeneration = randomUUID();
+            await mkdir(this.indexDirectory(corpusId, indexGeneration), {
+                recursive: true,
+            });
+            const candidateIndex = this.createIndex(corpusId, indexGeneration);
+            await candidateIndex.rebuild(
+                [],
+                new AbortController().signal,
+                async () => {},
+            );
+            const timestamp = now();
+            const candidateManifest: CorpusManifest = {
+                corpus: {
+                    ...runtime.manifest.corpus,
+                    updatedAt: timestamp,
+                    status: "ready",
+                    documentCount: 0,
+                },
+                sources: [],
+                indexGeneration,
+            };
+            await writeJsonAtomic(
+                this.manifestPath(corpusId),
+                candidateManifest,
+            );
+            runtime.manifest = candidateManifest;
+            runtime.index = candidateIndex;
+        });
+        return clearedCount;
     }
 
     public async listSources(corpusId: string): Promise<MemorySource[]> {
@@ -464,6 +521,7 @@ export class FileMemoryService implements MemoryService {
         corpusId: string,
     ): Promise<MemoryKnowledgeGraph> {
         const runtime = await this.getCorpus(corpusId);
+        await runtime.index.initialize();
         return runtime.index.getKnowledgeGraph();
     }
 
@@ -576,6 +634,7 @@ export class FileMemoryService implements MemoryService {
                 request.corpusId,
                 indexGeneration,
             );
+            await mkdir(candidateIndexDirectory, { recursive: true });
             const candidateIndex = this.indexFactory(
                 request.corpusId,
                 candidateIndexDirectory,
@@ -585,13 +644,43 @@ export class FileMemoryService implements MemoryService {
                 message: "Building corpus indexes",
             });
             const documents = this.activeDocuments(candidateManifest);
-            await candidateIndex.rebuild(
-                documents,
-                signal,
-                async (progress) => {
-                    await this.updateJob(job, "building-indexes", progress);
-                },
-            );
+            const canAppend =
+                existing === undefined &&
+                runtime.manifest.sources.length > 0 &&
+                runtime.manifest.indexGeneration !== undefined &&
+                candidateIndex.append !== undefined;
+            const reportProgress = async (progress: JobProgress) => {
+                if (!signal.aborted) {
+                    await this.updateJob(
+                        job,
+                        progress.stage ?? "building-indexes",
+                        progress,
+                    );
+                }
+            };
+            if (canAppend) {
+                await cp(
+                    this.indexDirectory(
+                        request.corpusId,
+                        runtime.manifest.indexGeneration,
+                    ),
+                    candidateIndexDirectory,
+                    { recursive: true },
+                );
+                await raceWithAbort(
+                    candidateIndex.append!(
+                        [{ source, revision, content }],
+                        signal,
+                        reportProgress,
+                    ),
+                    signal,
+                );
+            } else {
+                await raceWithAbort(
+                    candidateIndex.rebuild(documents, signal, reportProgress),
+                    signal,
+                );
+            }
             this.throwIfAborted(signal);
             revision.state = "ready";
             revision.indexedAt = now();
@@ -724,9 +813,12 @@ export class FileMemoryService implements MemoryService {
         progress: JobProgress,
         error?: string,
     ): Promise<void> {
+        const timestamp = now();
         job.state = state;
         job.progress = progress;
-        job.updatedAt = now();
+        job.updatedAt = timestamp;
+        job.trace ??= [];
+        job.trace.push({ state, timestamp, ...progress });
         if (error !== undefined) {
             job.error = error;
         }

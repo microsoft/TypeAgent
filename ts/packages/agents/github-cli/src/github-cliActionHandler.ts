@@ -1846,11 +1846,12 @@ async function searchRepoCandidates(query: string): Promise<string[]> {
         const stdout = await runGh([
             "search",
             "repos",
-            query,
             "--limit",
             "5",
             "--json",
             "name,owner",
+            "--",
+            query,
         ]);
         const data = JSON.parse(stdout) as Array<{
             name?: string;

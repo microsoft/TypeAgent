@@ -43,8 +43,8 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { otel } from "@typeagent/telemetry";
 import { MacroManager } from "@typeagent/copilot-macros";
 import { MemoryServiceHost } from "@typeagent/memory-mcp-server";
-import { FileMemoryService } from "@typeagent/memory-service";
-import { InProcessMemoryServiceClient } from "@typeagent/memory-client";
+import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
+import { createDurableMemoryService } from "./durableMemoryService.js";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -332,7 +332,7 @@ async function main() {
         debugStartup("developer mode enabled at startup (--dev)");
     }
     debugStartup("starting instance memory service");
-    const memoryService = new FileMemoryService(
+    const memoryService = createDurableMemoryService(
         path.join(instanceDir, "memory"),
     );
     const memoryServiceHost = await MemoryServiceHost.start(memoryService, {
@@ -425,9 +425,8 @@ async function main() {
                 allowSharedLocalView: ["browser"],
                 agentInitOptions: {
                     browser: {
-                        memoryServiceClient: new InProcessMemoryServiceClient(
-                            memoryService,
-                        ),
+                        memoryServiceClient:
+                            createMemoryServiceRpcFacade(memoryService),
                     },
                 },
             },

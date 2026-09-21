@@ -18,6 +18,75 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 
 describe("agent action context RPC", () => {
+    test("invokes nested initialization option methods with their receiver", async () => {
+        let clientProvider: ChannelProviderAdapter;
+        let serverProvider: ChannelProviderAdapter;
+        clientProvider = createChannelProviderAdapter(
+            "options-client",
+            (message, callback) => {
+                queueMicrotask(() =>
+                    serverProvider.notifyMessage(
+                        JSON.parse(JSON.stringify(message)),
+                    ),
+                );
+                callback?.(null);
+            },
+        );
+        serverProvider = createChannelProviderAdapter(
+            "options-server",
+            (message, callback) => {
+                queueMicrotask(() =>
+                    clientProvider.notifyMessage(
+                        JSON.parse(JSON.stringify(message)),
+                    ),
+                );
+                callback?.(null);
+            },
+        );
+
+        let result: string | undefined;
+        const serverAgent: AppAgent = {
+            initializeAgentContext: async (settings) => {
+                const options = settings?.options as {
+                    service: {
+                        prefix: string;
+                        getValue(value: string): string;
+                    };
+                };
+                result = await options.service.getValue("value");
+                return {};
+            },
+        };
+        const server = createAgentRpcServer(
+            "nested-options",
+            serverAgent,
+            serverProvider,
+        );
+        const client = await createAgentRpcClient(
+            "nested-options",
+            clientProvider,
+            server.agentInterface,
+        );
+
+        try {
+            await client.initializeAgentContext?.({
+                options: {
+                    service: {
+                        prefix: "nested",
+                        getValue(value: string) {
+                            return `${this.prefix}:${value}`;
+                        },
+                    },
+                },
+            });
+            expect(result).toBe("nested:value");
+        } finally {
+            server.closeFn();
+            clientProvider.notifyDisconnected();
+            serverProvider.notifyDisconnected();
+        }
+    });
+
     test("cancels a real SDK choice over agent RPC without invoking its callback", async () => {
         let clientProvider: ChannelProviderAdapter;
         let serverProvider: ChannelProviderAdapter;

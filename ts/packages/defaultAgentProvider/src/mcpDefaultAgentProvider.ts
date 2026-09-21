@@ -18,19 +18,61 @@ import {
 import type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
 import type { McpHostServices } from "./mcp/mcpServerProvider.js";
 import type { McpConfigDiscoveryResult } from "./mcp/mcpConfigDiscovery.js";
+import fs from "node:fs";
+import path from "node:path";
 import registerDebug from "debug";
 
 const MCP_CLIENT_INFO = { name: "typeagent", version: "0.0.1" };
 const debug = registerDebug("typeagent:mcp:discovery");
+const FILESYSTEM_SERVER_NAME = "mcpfilesystem";
 
 let mcpAppAgentProvider: AppAgentProvider | undefined;
 
-// The shipped-server seed the dynamic MCP source vends: every `data/config.json`
-// mcpServers entry that can be expressed as a static normalized config. Entries
-// with interactive arg definitions (e.g. the filesystem server) are NOT here —
-// they stay on the legacy provider. Script paths resolve against the package.
-function getShippedSeed(): Record<string, NormalizedMcpServerConfig> {
-    return buildMcpSeed(getProviderConfig().mcpServers, getPackageFilePath);
+function isDirectory(directory: string): boolean {
+    try {
+        return fs.statSync(directory).isDirectory();
+    } catch {
+        return false;
+    }
+}
+
+function resolveShippedServerArgs(
+    instanceConfigs: InstanceConfigProvider,
+    name: string,
+): string[] | undefined {
+    if (name !== FILESYSTEM_SERVER_NAME) {
+        return undefined;
+    }
+
+    const configured =
+        instanceConfigs.getInstanceConfig().mcpServers?.[name]
+            ?.serverScriptArgs;
+    const validConfigured = (configured ?? [])
+        .map((directory) => path.resolve(directory))
+        .filter(isDirectory);
+    if (validConfigured.length > 0) {
+        return validConfigured;
+    }
+
+    const instanceDir = instanceConfigs.getInstanceDir();
+    if (instanceDir === undefined) {
+        return undefined;
+    }
+    const sandbox = path.join(instanceDir, "mcp-filesystem");
+    fs.mkdirSync(sandbox, { recursive: true });
+    return [sandbox];
+}
+
+function getShippedSeed(
+    instanceConfigs?: InstanceConfigProvider,
+): Record<string, NormalizedMcpServerConfig> {
+    return buildMcpSeed(
+        getProviderConfig().mcpServers,
+        getPackageFilePath,
+        instanceConfigs === undefined
+            ? undefined
+            : (name) => resolveShippedServerArgs(instanceConfigs, name),
+    );
 }
 
 function initializeMcpAppAgentProvider(
@@ -41,11 +83,7 @@ function initializeMcpAppAgentProvider(
         return undefined;
     }
 
-    // Hand every statically-convertible shipped server to the dynamic MCP
-    // source (see getMcpAppAgentSource); the legacy provider keeps only the ones
-    // that cannot be seeded (interactive arg definitions), so no name is
-    // registered by two providers.
-    const seeded = new Set(Object.keys(getShippedSeed()));
+    const seeded = new Set(Object.keys(getShippedSeed(instanceConfigs)));
     for (const name of Object.keys(servers)) {
         if (seeded.has(name)) {
             delete servers[name];
@@ -113,7 +151,7 @@ export function createMcpAppAgentSourceForInstance(
             "Internal error: MCP app agent source requires an instance directory.",
         );
     }
-    const seed = { ...getShippedSeed(), ...runtimeSeed };
+    const seed = { ...getShippedSeed(instanceConfigs), ...runtimeSeed };
     // Reserve ALL shipped server names (both seeded and legacy) so the user
     // store can never register a name owned by another provider.
     const reserved = new Set([

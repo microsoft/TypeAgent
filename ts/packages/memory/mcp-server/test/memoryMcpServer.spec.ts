@@ -102,6 +102,10 @@ class FakeMemoryService implements MemoryService {
         return [this.corpus];
     }
 
+    public async clearCorpus(): Promise<number> {
+        return 1;
+    }
+
     public async listSources(): Promise<MemorySource[]> {
         return [this.source];
     }

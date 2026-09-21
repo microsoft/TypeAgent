@@ -254,10 +254,12 @@ export type KnowledgeMarkdownTypes =
 
 export type KnowledgeCollectionOptions = {
     tagTokens: Set<KnowledgeMarkdownTypes>; // Extract tags for these token types
+    collectLinks: boolean;
 };
 
 export function createKnowledgeCollectionOptions(): KnowledgeCollectionOptions {
     return {
+        collectLinks: true,
         tagTokens: new Set([
             "blockquote",
             "code",
@@ -409,7 +411,9 @@ export class MarkdownKnowledgeCollector implements MarkdownBlockHandler {
     }
 
     onLink(link: md.Tokens.Link): void {
-        this.linksInScope.set(link.text, link.href);
+        if (this.options.collectLinks) {
+            this.linksInScope.set(link.text, link.href);
+        }
     }
 
     onImage(image: md.Tokens.Image): void {

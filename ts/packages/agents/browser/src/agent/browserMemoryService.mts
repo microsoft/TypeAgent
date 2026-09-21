@@ -2,17 +2,18 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
-import type { MemoryServiceClient } from "@typeagent/memory-client";
 import type {
     IngestionMode,
     JobProgress,
     MemoryEvidence,
     MemoryKnowledgeGraph,
+    MemoryService,
     MemorySource,
 } from "@typeagent/memory-service";
+import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
 
 const browserCorpusName = "TypeAgent Browser Memory";
-const adapters = new WeakMap<MemoryServiceClient, BrowserMemoryService>();
+const adapters = new WeakMap<MemoryService, BrowserMemoryService>();
 
 export interface BrowserMemoryDocument {
     url: string;
@@ -28,6 +29,7 @@ export interface BrowserMemoryDocument {
 export interface BrowserMemorySearchOptions {
     query: string;
     limit?: number;
+    sourceIds?: string[];
     url?: string;
     domain?: string;
     pageType?: string;
@@ -45,7 +47,7 @@ export class BrowserMemoryService {
     private corpusIdPromise: Promise<string> | undefined;
     private graphVersion = 0;
 
-    public constructor(private readonly client: MemoryServiceClient) {}
+    public constructor(private readonly client: MemoryService) {}
 
     public async ingest(
         document: BrowserMemoryDocument,
@@ -56,38 +58,33 @@ export class BrowserMemoryService {
         } = {},
     ): Promise<void> {
         const corpusId = await this.getCorpusId();
-        const result = await this.client.ingestDocument(
-            {
-                corpusId,
-                source: {
-                    sourceId: sourceIdForUrl(document.url),
-                    sourceType: "web",
-                    title: document.title,
-                    canonicalUri: document.url,
-                    markdown: document.markdown,
-                    ...(document.tags === undefined
+        const result = await this.client.ingestDocument({
+            corpusId,
+            source: {
+                sourceId: sourceIdForUrl(document.url),
+                sourceType: "web",
+                title: document.title,
+                canonicalUri: document.url,
+                markdown: document.markdown,
+                ...(document.tags === undefined ? {} : { tags: document.tags }),
+                ...(document.capturedAt === undefined
+                    ? {}
+                    : { capturedAt: document.capturedAt }),
+                metadata: {
+                    ...(document.domain === undefined
                         ? {}
-                        : { tags: document.tags }),
-                    ...(document.capturedAt === undefined
+                        : { domain: document.domain }),
+                    ...(document.pageType === undefined
                         ? {}
-                        : { capturedAt: document.capturedAt }),
-                    metadata: {
-                        ...(document.domain === undefined
-                            ? {}
-                            : { domain: document.domain }),
-                        ...(document.pageType === undefined
-                            ? {}
-                            : { pageType: document.pageType }),
-                        ...(document.source === undefined
-                            ? {}
-                            : { source: document.source }),
-                    },
+                        : { pageType: document.pageType }),
+                    ...(document.source === undefined
+                        ? {}
+                        : { source: document.source }),
                 },
-                pipeline: { mode, updatePolicy: "skipIfUnchanged" },
             },
-            options.signal,
-        );
-        const job = await this.client.waitForJob(result.jobId, options);
+            pipeline: { mode, updatePolicy: "skipIfUnchanged" },
+        });
+        const job = await waitForMemoryJob(this.client, result.jobId, options);
         if (job.state !== "complete" && job.state !== "partial") {
             throw new Error(
                 job.error ??
@@ -102,8 +99,17 @@ export class BrowserMemoryService {
     ): Promise<BrowserMemoryMatch[]> {
         const corpusId = await this.getCorpusId();
         const sources = await this.client.listSources(corpusId);
+        const requestedSourceIds =
+            options.sourceIds === undefined
+                ? undefined
+                : new Set(options.sourceIds);
         const sourceIds = sources
-            .filter((source) => matchesFilters(source, options))
+            .filter(
+                (source) =>
+                    (requestedSourceIds === undefined ||
+                        requestedSourceIds.has(source.sourceId)) &&
+                    matchesFilters(source, options),
+            )
             .map((source) => source.sourceId);
         if (sourceIds.length === 0) {
             return [];
@@ -129,6 +135,24 @@ export class BrowserMemoryService {
             await this.getCorpusId(),
             sourceIdForUrl(url),
         );
+    }
+
+    public async getSourceById(
+        sourceId: string,
+    ): Promise<MemorySource | undefined> {
+        return this.client.getSource(await this.getCorpusId(), sourceId);
+    }
+
+    public async listSources(): Promise<MemorySource[]> {
+        return this.client.listSources(await this.getCorpusId());
+    }
+
+    public async clear(): Promise<number> {
+        const clearedCount = await this.client.clearCorpus(
+            await this.getCorpusId(),
+        );
+        this.graphVersion++;
+        return clearedCount;
     }
 
     public async getKnowledgeGraph(): Promise<MemoryKnowledgeGraph> {
@@ -159,7 +183,7 @@ export class BrowserMemoryService {
 }
 
 export function getBrowserMemoryService(
-    client: MemoryServiceClient,
+    client: MemoryService,
 ): BrowserMemoryService {
     let service = adapters.get(client);
     if (service === undefined) {
