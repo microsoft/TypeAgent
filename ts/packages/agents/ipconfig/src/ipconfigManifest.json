@@ -7,6 +7,10 @@
     "originalSchemaFile": "./ipconfigSchema.ts",
     "schemaFile": "../dist/ipconfigSchema.pas.json",
     "grammarFile": "../dist/ipconfigSchema.ag.json",
+    "actionPolicies": {
+      "displayHelpMessage": { "effects": "read-only" },
+      "displayFullConfigurationInformation": { "effects": "read-only" }
+    },
     "schemaType": "IpconfigActions"
   }
 }

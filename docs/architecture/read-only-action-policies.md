@@ -6,16 +6,16 @@ confirmation requirement, so structured discovery reports
 `confirmation: "not-required"` and execution skips only the dispatcher's
 outer effect-confirmation prompt. Natural-language routing is unchanged.
 
-| Agent      | Action (exact schemaName.actionName) | Why no confirmation                                                                                         |
-| ---------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| List       | `list.listLists`                     | It reads the names of existing lists without changing their contents.                                       |
-| List       | `list.getList`                       | It reads one named list without adding, removing, or saving items.                                          |
-| Weather    | `weather.getCurrentConditions`       | It queries fixed Open-Meteo endpoints for a supplied place without changing settings.                       |
-| Weather    | `weather.getForecast`                | It reads a one-to-seven-day forecast from fixed Open-Meteo endpoints.                                       |
-| Player     | `player.listDevices`                 | It reads Spotify device and playback metadata without selecting a device or controlling playback.           |
-| Player     | `player.showSelectedDevice`          | It reports the selected or default Spotify device without changing that selection.                          |
-| GitHub CLI | `github-cli.prFiles`                 | It reads bounded pull-request file details using fixed GitHub CLI commands without changing the repository. |
-| Timer      | `timer.listReminders`                | It reads pending reminders without scheduling, cancelling, or firing them.                                  |
+| Agent      | Action (exact schemaName.actionName)           | Why no confirmation                                                                                         |
+| ---------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| List       | `list.listLists`                               | It reads the names of existing lists without changing their contents.                                       |
+| List       | `list.getList`                                 | It reads one named list without adding, removing, or saving items.                                          |
+| Weather    | `weather.getCurrentConditions`                 | It queries fixed Open-Meteo endpoints for a supplied place without changing settings.                       |
+| Weather    | `weather.getForecast`                          | It reads a one-to-seven-day forecast from fixed Open-Meteo endpoints.                                       |
+| IP config  | `ipconfig.displayHelpMessage`                  | It runs the fixed ipconfig help command without accepting command arguments or changing network settings.   |
+| IP config  | `ipconfig.displayFullConfigurationInformation` | It reads local network configuration using a fixed ipconfig command without changing adapters or DNS.       |
+| GitHub CLI | `github-cli.prFiles`                           | It reads bounded pull-request file details using fixed GitHub CLI commands without changing the repository. |
+| Timer      | `timer.listReminders`                          | It reads pending reminders without scheduling, cancelling, or firing them.                                  |
 
 ## Boundaries
 
@@ -23,7 +23,7 @@ Validation, enabled-agent checks, readiness, authorization, live policy
 rechecks, and handler-originated questions still apply. An explicit
 `confirmation: "required"` overrides a read-only declaration. Every omitted
 action remains unclassified and requires outer confirmation, including list
-edits, timer changes, player controls, GitHub mutations, and generic commands.
+edits, timer changes, network changes, player controls, GitHub mutations, and generic commands.
 This is not a new permission system or an exemption for every action whose
 name sounds like a read.
 
@@ -38,6 +38,9 @@ Weather sends the supplied place to Open-Meteo. `prFiles` uses the existing
 GitHub CLI account/host selection and fixed PR metadata/files GET operations;
 optional patch excerpts remain bounded. A bare repository name can still
 require the handler's repository-choice prompt.
+The ipconfig actions run only the fixed Windows commands `ipconfig /?` and
+`ipconfig /all`; network configuration details stay in the response to the
+requesting client, not a new external destination.
 
 Narrow exclusions from this pass:
 
@@ -48,24 +51,26 @@ Narrow exclusions from this pass:
   pagination link on error; defer calendar scenarios until that path is fixed.
 - GitHub CLI: `prFailedChecks` derives annotation hosts from check links;
   `authStatus` can expose tokens, and generic API/CLI actions are not covered.
+- Player: even device reads delegate to `getAccessToken()` with interactive
+  fallback when refresh credentials are missing or rejected; no player action
+  is exempted until that auth path can be guaranteed non-interactive.
 - Weather: `getAlerts` currently returns placeholder data, so it is not a useful
-  real-service scenario. Player searches/playlists and all playback/UI changes
-  are outside this device-inventory-only pass.
+  real-service scenario.
 
 ## Safe manual scenarios
 
 Use an isolated instance with existing lists and already-configured services.
 Do not approve setup, mutation, or handler questions unattended.
 
-| Scenario                         | Structured action and parameters                                                    |
-| -------------------------------- | ----------------------------------------------------------------------------------- |
-| Inventory existing lists         | `list.listLists {}`                                                                 |
-| Read two disposable lists        | `list.getList {"listName":"groceries"}`, then `{"listName":"packing"}`              |
-| Read weather in two places       | `weather.getCurrentConditions {"location":"Seattle"}`, then `{"location":"Boston"}` |
-| Read a short forecast            | `weather.getForecast {"location":"Seattle","days":3}`                               |
-| Inspect Spotify devices          | `player.listDevices`, then `player.showSelectedDevice` (omit parameters)            |
-| Inspect PR files without patches | `github-cli.prFiles {"repo":"microsoft/TypeAgent","number":2991,"maxFiles":5}`      |
-| Inventory existing reminders     | `timer.listReminders {}`                                                            |
+| Scenario                              | Structured action and parameters                                                         |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Inventory existing lists              | `list.listLists {}`                                                                      |
+| Read two disposable lists             | `list.getList {"listName":"groceries"}`, then `{"listName":"packing"}`                   |
+| Read weather in two places            | `weather.getCurrentConditions {"location":"Seattle"}`, then `{"location":"Boston"}`      |
+| Read a short forecast                 | `weather.getForecast {"location":"Seattle","days":3}`                                    |
+| Inspect Windows network configuration | `ipconfig.displayHelpMessage {}`, then `ipconfig.displayFullConfigurationInformation {}` |
+| Inspect PR files without patches      | `github-cli.prFiles {"repo":"microsoft/TypeAgent","number":2991,"maxFiles":5}`           |
+| Inventory existing reminders          | `timer.listReminders {}`                                                                 |
 
 For timing, compare discovery plus the first completed structured action,
 a repeat using its known identity/contract, and similar natural-language

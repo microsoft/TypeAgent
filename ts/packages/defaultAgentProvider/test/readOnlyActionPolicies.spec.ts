@@ -34,8 +34,8 @@ const allowed = [
     ["list", "getList"],
     ["weather", "getCurrentConditions"],
     ["weather", "getForecast"],
-    ["player", "listDevices"],
-    ["player", "showSelectedDevice"],
+    ["ipconfig", "displayHelpMessage"],
+    ["ipconfig", "displayFullConfigurationInformation"],
     ["github-cli", "prFiles"],
     ["timer", "listReminders"],
 ] as const;
@@ -118,7 +118,7 @@ describe("built-in read-only action policies", () => {
                 if (name === "timer") return instantiateTimer();
                 if (name === "weather") return instantiateWeather();
                 // Only discovery and the pre-handler confirmation gate are
-                // exercised for Spotify/GitHub here, never auth or live I/O.
+                // exercised for ipconfig/GitHub here, never live CLI I/O.
                 return { executeAction: externalExecute };
             },
             unloadAppAgent: async () => {},
@@ -373,7 +373,7 @@ describe("built-in read-only action policies", () => {
 
     it.each([
         ["list", "addItems", { listName: "groceries", items: ["bread"] }],
-        ["player", "setVolume", { newVolumeLevel: 50 }],
+        ["ipconfig", "purgeDNSResolverCache", {}],
         [
             "github-cli",
             "prFailedChecks",
