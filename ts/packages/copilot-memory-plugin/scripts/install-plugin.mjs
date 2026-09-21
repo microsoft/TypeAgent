@@ -13,6 +13,7 @@ import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 
@@ -38,7 +39,7 @@ const registerScript = path.join(
     "register-plugin.mjs",
 );
 
-const runtimeFiles = [".mcp.json", "hooks.json", "plugin.json"];
+const runtimeFiles = [".mcp.json", "hooks.json", "plugin.json", "scripts/launch.mjs"];
 const bundledEntries = [
     ["dist/bundle/hooks/hook-router.js", "dist/hooks/hook-router.js"],
     ["dist/bundle/hooks/stop-router.js", "dist/hooks/stop-router.js"],
@@ -82,6 +83,15 @@ function stage() {
         const target = path.join(stagingRoot, targetRelative);
         fs.mkdirSync(path.dirname(target), { recursive: true });
         fs.copyFileSync(source, target);
+        const sourceDir = path.dirname(source);
+        const targetDir = path.dirname(target);
+        for (const name of fs.readdirSync(sourceDir)) {
+            if (!name.endsWith(".ts")) continue;
+            fs.copyFileSync(
+                path.join(sourceDir, name),
+                path.join(targetDir, name),
+            );
+        }
     }
     fs.cpSync(
         path.join(pluginRoot, "skills"),
@@ -90,6 +100,45 @@ function stage() {
             recursive: true,
         },
     );
+    const runtime = {
+        configDir: workspaceRoot,
+        nodePath: path.join(workspaceRoot, "node_modules"),
+    };
+    fs.writeFileSync(
+        path.join(stagingRoot, "runtime.json"),
+        JSON.stringify(runtime, null, 2) + "\n",
+    );
+    const modulesLink = path.join(stagingRoot, "node_modules");
+    fs.rmSync(modulesLink, { recursive: true, force: true });
+    fs.mkdirSync(path.join(modulesLink, "@huggingface"), { recursive: true });
+    const require = createRequire(
+        path.join(workspaceRoot, "packages/aiclient/package.json"),
+    );
+    function packageDir(name) {
+        let dir = path.dirname(require.resolve(name));
+        while (dir !== path.dirname(dir)) {
+            const manifest = path.join(dir, "package.json");
+            if (fs.existsSync(manifest)) {
+                const parsed = JSON.parse(fs.readFileSync(manifest, "utf8"));
+                if (parsed.name === name) return dir;
+            }
+            dir = path.dirname(dir);
+        }
+        throw new Error(`Could not locate package ${name}`);
+    }
+    const transformersDir = packageDir("@huggingface/transformers");
+    fs.symlinkSync(
+        transformersDir,
+        path.join(modulesLink, "@huggingface/transformers"),
+    );
+    const onnxDir = path.join(
+        path.dirname(path.dirname(transformersDir)),
+        "onnxruntime-node",
+    );
+    if (!fs.existsSync(onnxDir)) {
+        throw new Error(`Could not locate onnxruntime-node next to ${transformersDir}`);
+    }
+    fs.symlinkSync(onnxDir, path.join(modulesLink, "onnxruntime-node"));
 }
 
 if (

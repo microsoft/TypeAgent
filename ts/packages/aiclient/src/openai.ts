@@ -508,6 +508,14 @@ function createAzureOpenAIChatModel(
     completionSettings ??= {};
     completionSettings.n ??= 1;
     completionSettings.temperature ??= 0;
+    // Deployment names such as gpt-5.6-luna are not always visible to the
+    // endpoint-name check above. These models reject temperature 0.
+    const modelLabel = [settings.modelName, settings.endpoint]
+        .filter((value): value is string => Boolean(value))
+        .join(" ");
+    if (/gpt.?5/i.test(modelLabel)) {
+        completionSettings.temperature = 1;
+    }
 
     // Normalize max_tokens → max_completion_tokens.  Newer models (GPT-5,
     // o3, o4, GPT-4.1, etc.) reject the legacy `max_tokens` parameter.

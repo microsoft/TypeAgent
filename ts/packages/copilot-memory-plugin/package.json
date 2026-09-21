@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@typeagent/config": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
     "zod": "^3.25.0"
   },

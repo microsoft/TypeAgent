@@ -3,6 +3,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { loadConfigSync } from "@typeagent/config";
 import {
     ConversationMemory,
     ConversationMessage,
@@ -71,7 +72,8 @@ type RecallCache = {
 const CACHE_MAX_AGE_MS = 120_000;
 
 function log(message: string): void {
-    process.stderr.write(`[typeagent-memory] ${message}\n`);
+    const safe = message.replace(/https?:\/\/\S+/g, "<endpoint>");
+    process.stderr.write(`[typeagent-memory] ${safe}\n`);
 }
 
 function readAnswers(data: unknown): AnswerResponse[] {
@@ -259,7 +261,19 @@ async function writeRecallCache(
     await fs.writeFile(filePath, JSON.stringify(cache), "utf8");
 }
 
+function ensureModelConfig(): void {
+    // Copilot does not load TypeAgent config. Without this, extraction and
+    // recall throw Missing ApiSetting before any model request.
+    // The machine default provider is Copilot itself. Using it inside a
+    // Copilot hook launches another Copilot process and deadlocks the hook.
+    if (process.env.COPILOT_PLUGIN_ROOT || process.env.PLUGIN_ROOT) {
+        process.env.TYPEAGENT_MODEL_PROVIDER ??= "azure";
+    }
+    loadConfigSync();
+}
+
 async function openStore(paths: MemoryPaths): Promise<ConversationMemory> {
+    ensureModelConfig();
     return createConversationMemory(
         {
             dirPath: paths.dirPath,

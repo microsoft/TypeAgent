@@ -9,6 +9,7 @@
  */
 
 import { build } from "esbuild";
+import { copyFileSync, mkdirSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,8 +17,6 @@ const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const optionalNatives = [
     "better-sqlite3",
-    "@huggingface/transformers",
-    "onnxruntime-node",
     "sharp",
     "canvas",
     "keytar",
@@ -35,7 +34,12 @@ await build({
     format: "esm",
     target: "node22",
     sourcemap: true,
-    external: ["bufferutil", "utf-8-validate"],
+    external: [
+        "bufferutil",
+        "utf-8-validate",
+        "@huggingface/transformers",
+        "onnxruntime-node",
+    ],
     plugins: [
         {
             name: "optional-native",
@@ -82,4 +86,43 @@ await build({
 
 process.stdout.write(
     "[copilot-memory-plugin] Bundled entry points into dist.\n",
+);
+
+// Knowledge extraction loads these with loadSchema(..., import.meta.url).
+// The bundle collapses that URL onto the entry file, so the schemas have to
+// sit beside hook-router.js, stop-router.js, and server.js.
+const schemaDirs = [
+    resolve(pluginRoot, "../knowledgeProcessor/src/conversation"),
+    resolve(pluginRoot, "../knowPro/src"),
+    resolve(pluginRoot, "../knowPro/src/dataFrame"),
+];
+const schemaNames = new Set();
+for (const dir of schemaDirs) {
+    for (const name of readdirSync(dir)) {
+        if (name.includes("Schema") && name.endsWith(".ts")) {
+            schemaNames.add(name);
+        }
+    }
+}
+for (const outDir of ["hooks", "mcp"]) {
+    const targetDir = resolve(pluginRoot, "dist/bundle", outDir);
+    mkdirSync(targetDir, { recursive: true });
+    for (const name of schemaNames) {
+        const source = schemaDirs
+            .map((dir) => resolve(dir, name))
+            .find((candidate) => {
+                try {
+                    copyFileSync(candidate, resolve(targetDir, name));
+                    return true;
+                } catch {
+                    return false;
+                }
+            });
+        if (!source) {
+            throw new Error(`Missing schema ${name}`);
+        }
+    }
+}
+process.stdout.write(
+    `[copilot-memory-plugin] Copied ${schemaNames.size} schema files next to each bundle entry.\n`,
 );

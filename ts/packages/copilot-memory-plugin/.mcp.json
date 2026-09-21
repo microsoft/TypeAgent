@@ -2,7 +2,7 @@
   "mcpServers": {
     "typeagent-memory": {
       "command": "node",
-      "args": ["${PLUGIN_ROOT}/dist/mcp/server.js"],
+      "args": ["${PLUGIN_ROOT}/scripts/launch.mjs", "${PLUGIN_ROOT}/dist/mcp/server.js"],
       "tools": ["remember", "recall"]
     }
   }
