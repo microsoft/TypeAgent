@@ -36,6 +36,7 @@
     "stop": "node dist/stop.js",
     "test": "npm run test:local",
     "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\" --passWithNoTests",
+    "test:live": "pnpm run jest-esm --testPathPattern=\".*[.]test[.]js\" --runInBand",
     "tsc": "tsc -b"
   },
   "dependencies": {

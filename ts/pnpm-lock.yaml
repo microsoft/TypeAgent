@@ -2140,6 +2140,9 @@ importers:
       dompurify:
         specifier: ^3.4.13
         version: 3.4.13
+      jsdom:
+        specifier: ^28.1.0
+        version: 28.1.0
     devDependencies:
       prettier:
         specifier: ^3.5.3
@@ -5603,6 +5606,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
+      gpt-tokenizer:
+        specifier: ^2.9.0
+        version: 2.9.0
       mailparser:
         specifier: 3.9.6
         version: 3.9.6
