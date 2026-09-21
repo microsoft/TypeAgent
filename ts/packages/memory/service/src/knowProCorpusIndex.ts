@@ -58,7 +58,7 @@ function toDocParts(document: IndexedDocument): DocPart[] {
             return docPartsFromHtml(
                 document.content,
                 false,
-                chunkCharacters,
+                structuralChunkCharacters,
                 uri,
                 undefined,
                 durableDocPartOptions,
@@ -67,7 +67,7 @@ function toDocParts(document: IndexedDocument): DocPart[] {
         case "web":
             return docPartsFromMarkdown(
                 document.content,
-                chunkCharacters,
+                structuralChunkCharacters,
                 uri,
                 durableDocPartOptions,
             );
@@ -76,7 +76,7 @@ function toDocParts(document: IndexedDocument): DocPart[] {
         case "text":
             return docPartsFromText(
                 document.content,
-                chunkCharacters,
+                structuralChunkCharacters,
                 uri,
             );
     }

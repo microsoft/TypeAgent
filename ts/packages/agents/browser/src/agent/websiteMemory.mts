@@ -412,10 +412,20 @@ export async function importWebsiteDataFromSession(
                                     site.metadata.url,
                                     { mode: "content" },
                                 );
-                            if (reduced.textContent.trim().length > 0) {
+                            const parts = docPartsFromHtml(
+                                reduced.processedHtml,
+                                false,
+                                importOptions.maxCharsPerChunk || 8000,
+                                site.metadata.url,
+                            );
+                            if (parts.length > 0) {
                                 const completedWebsite: any = {
                                     ...site,
-                                    textChunks: [reduced.textContent],
+                                    textChunks: [
+                                        parts
+                                            .flatMap((part) => part.textChunks)
+                                            .join("\n\n"),
+                                    ],
                                 };
                                 websites.push(completedWebsite);
                                 const knowledge =
