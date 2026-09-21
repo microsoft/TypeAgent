@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { sendActionToAgent } from "../../src/extension/serviceWorker/websocket";
-import { handleSearchWebMemories } from "../../src/extension/serviceWorker/messageHandlers";
+import {
+    handleImportWebsiteDataWithProgress,
+    handleSearchWebMemories,
+} from "../../src/extension/serviceWorker/messageHandlers";
+import { broadcastEvent } from "../../src/extension/serviceWorker/extensionEventHelpers";
 
 jest.mock("../../src/extension/serviceWorker/websocket", () => ({
     sendActionToAgent: jest.fn(async () => ({
@@ -48,5 +52,87 @@ describe("handleSearchWebMemories", () => {
                 dateTo: "2026-03-01T00:00:00.000Z",
             }),
         });
+    });
+});
+
+describe("handleImportWebsiteDataWithProgress", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test("forwards the nested import id and known total", async () => {
+        (sendActionToAgent as jest.Mock).mockResolvedValueOnce({
+            success: true,
+            itemCount: 10,
+        });
+
+        const result = await handleImportWebsiteDataWithProgress({
+            type: "importWebsiteDataWithProgress",
+            parameters: {
+                source: "chrome",
+                type: "bookmarks",
+                limit: 10,
+                importId: "import-10",
+                totalItems: 10,
+                progressCallback: true,
+            },
+        });
+
+        expect(broadcastEvent).toHaveBeenCalledWith("importProgress", {
+            importId: "import-10",
+            progress: expect.objectContaining({
+                importId: "import-10",
+                phase: "initializing",
+                totalItems: 10,
+                processedItems: 0,
+            }),
+        });
+        expect(sendActionToAgent).toHaveBeenCalledWith({
+            actionName: "importWebsiteDataWithProgress",
+            parameters: expect.objectContaining({
+                importId: "import-10",
+                totalItems: 10,
+            }),
+        });
+        expect(broadcastEvent).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({
+            success: true,
+            itemCount: 10,
+            error: undefined,
+        });
+    });
+
+    test("reports an agent-declared failure as terminal error progress", async () => {
+        (sendActionToAgent as jest.Mock).mockResolvedValueOnce({
+            success: false,
+            itemCount: 3,
+            error: "durable ingestion failed",
+        });
+
+        const result = await handleImportWebsiteDataWithProgress({
+            type: "importWebsiteDataWithProgress",
+            parameters: {
+                source: "chrome",
+                type: "bookmarks",
+                limit: 10,
+                importId: "import-failed",
+                totalItems: 10,
+            },
+        });
+
+        expect(broadcastEvent).toHaveBeenLastCalledWith("importProgress", {
+            importId: "import-failed",
+            progress: expect.objectContaining({
+                phase: "error",
+                totalItems: 10,
+                processedItems: 3,
+                errors: [
+                    expect.objectContaining({
+                        message: "durable ingestion failed",
+                    }),
+                ],
+            }),
+        });
+        expect(result.success).toBe(false);
     });
 });

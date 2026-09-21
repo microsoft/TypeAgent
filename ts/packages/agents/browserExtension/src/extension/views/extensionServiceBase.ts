@@ -584,7 +584,7 @@ export abstract class ExtensionServiceBase {
             parameters: {
                 ...options, // TODO: remove "type" from this dictionary. That will remove the need to wrap these values in a "parameters" object
                 importId,
-                totalItems: 0,
+                totalItems: options.limit ?? 0,
                 progressCallback: true,
             },
         });

@@ -3,7 +3,7 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
-import { searchWebMemories } from "../../searchWebMemories.mjs";
+import { searchWebMemories } from "../../durableWebSearch.mjs";
 import {
     extractKnowledgeFromPage,
     extractKnowledgeFromPageStreaming,
@@ -30,7 +30,9 @@ import {
     rebuildKnowledgeGraph,
     mergeTopicHierarchies,
     getEntityNeighborhood,
+    getEntityNeighborhoodLayoutData,
     getGlobalImportanceLayer,
+    getGlobalGraphLayoutData,
     getTopicImportanceLayer,
     getImportanceStatistics,
     getTopicMetrics,
@@ -93,6 +95,10 @@ export async function handleKnowledgeAction(
             return await mergeTopicHierarchies(parameters, context);
         case "getEntityNeighborhood":
             return await getEntityNeighborhood(parameters, context);
+        case "getEntityNeighborhoodLayoutData":
+            return await getEntityNeighborhoodLayoutData(parameters, context);
+        case "getGlobalGraphLayoutData":
+            return await getGlobalGraphLayoutData(parameters, context);
         case "getGlobalImportanceLayer":
             return await getGlobalImportanceLayer(parameters, context);
         case "getImportanceStatistics":

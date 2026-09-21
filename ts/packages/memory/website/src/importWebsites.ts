@@ -199,7 +199,9 @@ export async function importChromeBookmarks(
             );
         }
 
-        return websites.slice(0, options?.limit);
+        return options?.limit === undefined
+            ? websites
+            : websites.slice(0, options.limit);
     } catch (error) {
         throw new Error(`Failed to import Chrome bookmarks: ${error}`);
     }

@@ -6,6 +6,7 @@ import { z } from "zod";
 export const memoryToolNames = {
     corpusCreate: "memory_corpus_create",
     corpusList: "memory_corpus_list",
+    corpusClear: "memory_corpus_clear",
     sourceList: "memory_source_list",
     sourceGet: "memory_source_get",
     documentIngest: "memory_document_ingest",
@@ -218,3 +219,4 @@ export const capabilitiesSchema = z.object({
 
 export const optionalJobStatusSchema = jobStatusSchema.nullable();
 export const optionalSourceSchema = sourceSchema.nullable();
+export const clearedCountSchema = z.number().int().nonnegative();

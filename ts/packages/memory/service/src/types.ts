@@ -196,6 +196,7 @@ export interface MemoryService {
     close?(): Promise<void>;
     createCorpus(name: string, description?: string): Promise<MemoryCorpus>;
     listCorpora(): Promise<MemoryCorpus[]>;
+    clearCorpus(corpusId: string): Promise<number>;
     listSources(corpusId: string): Promise<MemorySource[]>;
     getSource(
         corpusId: string,

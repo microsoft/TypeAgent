@@ -3,7 +3,10 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import type { BrowserAgentInvokeFunctions } from "@typeagent/browser-control-rpc/serviceTypes";
-import type { BrowserActionContext } from "./browserActions.mjs";
+import {
+    getSessionBrowserControl,
+    type BrowserActionContext,
+} from "./browserActions.mjs";
 import { handleKnowledgeAction } from "./knowledge/actions/knowledgeActionRouter.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import {
@@ -24,6 +27,27 @@ export function createAgentInvokeHandlers(
         return handleKnowledgeAction(method, params, context);
     }
 
+    async function extractionHandler(params: any): Promise<any> {
+        if (Array.isArray(params.htmlFragments)) {
+            return knowledgeHandler("extractKnowledgeFromPage", params);
+        }
+        const browserControl = getSessionBrowserControl(context);
+        const url = params.url ?? (await browserControl.getPageUrl());
+        const htmlFragments = await browserControl.getHtmlFragments(
+            false,
+            "knowledgeExtraction",
+        );
+        return knowledgeHandler("extractKnowledgeFromPage", {
+            ...params,
+            url,
+            title: params.title ?? url,
+            htmlFragments,
+            extractEntities: params.extractEntities ?? true,
+            extractRelationships: params.extractRelationships ?? true,
+            suggestQuestions: params.suggestQuestions ?? true,
+        });
+    }
+
     async function discoveryHandler(method: string, params: any): Promise<any> {
         const result = await handleSchemaDiscoveryAction(
             { actionName: method as any, parameters: params },
@@ -38,8 +62,7 @@ export function createAgentInvokeHandlers(
 
     const handlers: BrowserAgentInvokeFunctions = {
         // Knowledge extraction
-        extractKnowledgeFromPage: (params: any) =>
-            knowledgeHandler("extractKnowledgeFromPage", params),
+        extractKnowledgeFromPage: extractionHandler,
         // Knowledge queries
         searchWebMemories: (params: any) =>
             websiteHandler("searchWebMemories", params),

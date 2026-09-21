@@ -17,8 +17,7 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
-    "./agent/handlers": "./dist/agent/browserActionHandler.mjs",
-    "./agent/indexing": "./dist/agent/indexing/browserIndexingService.js"
+    "./agent/handlers": "./dist/agent/browserActionHandler.mjs"
   },
   "main": "index.js",
   "files": [

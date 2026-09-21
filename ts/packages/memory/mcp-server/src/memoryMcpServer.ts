@@ -10,6 +10,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
     capabilitiesSchema,
+    clearedCountSchema,
     corpusSchema,
     identifierSchema,
     ingestRequestSchema,
@@ -104,6 +105,18 @@ export class MemoryMcpServer {
                 annotations: { readOnlyHint: true },
             },
             async () => this.run(() => this.service.listCorpora()),
+        );
+        this.server.registerTool(
+            memoryToolNames.corpusClear,
+            {
+                description:
+                    "Clear all sources and indexes from a memory corpus.",
+                inputSchema: corpusIdInputSchema,
+                outputSchema: outputSchema(clearedCountSchema),
+                annotations: { destructiveHint: true },
+            },
+            async ({ corpusId }) =>
+                this.run(() => this.service.clearCorpus(corpusId)),
         );
         this.server.registerTool(
             memoryToolNames.sourceList,
