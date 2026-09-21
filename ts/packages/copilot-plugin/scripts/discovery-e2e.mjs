@@ -48,6 +48,26 @@ export const testPrompt =
     "If TypeAgent requires confirmation, show me the full prompt and wait for my answer before continuing. " +
     "Show the final structured result.";
 
+export function makeBuildCommand(root) {
+    return {
+        command: process.execPath,
+        args: [
+            path.join(
+                root,
+                "node_modules",
+                "@fluidframework",
+                "build-tools",
+                "bin",
+                "fluid-build",
+            ),
+            "^(@typeagent/copilot-plugin|agent-server)$",
+            "-t",
+            "build",
+            "--dep",
+        ],
+    };
+}
+
 export function parseArgs(argv) {
     const options = { port: 9024, startupTimeout: 120 };
     const flags = {
@@ -436,26 +456,15 @@ export async function main(argv = process.argv.slice(2)) {
         }
         if (!options.skipBuild) {
             // The root build script includes ".", which selects unrelated packages.
-            const build = path.join(
-                tsRoot,
-                "node_modules",
-                "@fluidframework",
-                "build-tools",
-                "bin",
-                "fluid-build",
-            );
-            if (!existsSync(build))
+            // --dep includes dependency tasks, not just their graph nodes.
+            const build = makeBuildCommand(tsRoot);
+            if (!existsSync(build.args[0]))
                 throw new Error(
                     "Build dependencies are missing. Retry with --install-dependencies.",
                 );
             await runCommand(
-                process.execPath,
-                [
-                    build,
-                    "^(@typeagent/copilot-plugin|agent-server)$",
-                    "-t",
-                    "build",
-                ],
+                build.command,
+                build.args,
                 process.env,
                 controller.signal,
             );

@@ -11,6 +11,7 @@ import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import {
     checkPort,
+    makeBuildCommand,
     makeConfiguration,
     parseArgs,
     runCommand,
@@ -20,6 +21,33 @@ import {
     testPrompt,
     waitForServer,
 } from "../discovery-e2e.mjs";
+
+test("builds selected packages and dependency tasks incrementally without selecting the whole workspace", () => {
+    const root = path.resolve("workspace with spaces", "ts");
+    const { command, args } = makeBuildCommand(root);
+    assert.equal(command, process.execPath);
+    assert.deepEqual(args, [
+        path.join(
+            root,
+            "node_modules",
+            "@fluidframework",
+            "build-tools",
+            "bin",
+            "fluid-build",
+        ),
+        "^(@typeagent/copilot-plugin|agent-server)$",
+        "-t",
+        "build",
+        "--dep",
+    ]);
+    const selector = new RegExp(args[1]);
+    for (const name of ["@typeagent/copilot-plugin", "agent-server"])
+        assert.ok(selector.test(name));
+    for (const name of ["agent-shell", "agent-server-client", "other-package"])
+        assert.ok(!selector.test(name));
+    for (const flag of [".", "--all", "--force", "--rebuild", "--clean"])
+        assert.ok(!args.includes(flag));
+});
 
 test("startup diagnostics explain missing configuration without echoing sensitive logs", () => {
     const folder = mkdtempSync(path.join(tmpdir(), "discovery-error-test-"));

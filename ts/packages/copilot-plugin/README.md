@@ -42,7 +42,9 @@ Run the commands below from `ts`. Changing directory first lets Corepack find
 the pinned pnpm version; `pnpm -C ts` from the repository root can instead try
 to fetch a default version before pnpm processes `-C`.
 
-The launcher builds the plugin and agent server, stages a session-local plugin
+The launcher incrementally builds the plugin, agent server, and their transitive
+dependencies using Fluid Build's `--dep` option, without selecting unrelated
+workspace packages. It stages a session-local plugin
 snapshot, starts a disposable server on port 9024, checks the real MCP connection,
 then opens interactive Copilot. Paste the printed test prompt to discover the
 list-inventory action and execute it. Answer any required confirmation yourself.
