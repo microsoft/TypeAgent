@@ -34,11 +34,13 @@ Change to ts first so Corepack can resolve the pinned pnpm version.
   --port <1-65535>              Isolated server port (default 9024)
   --startup-timeout <seconds>  Readiness timeout (default 120)
   --model <model>              Optional Copilot model
+  --same-window                Keep interactive Copilot in this console
   --smoke-test                 Verify MCP catalog and discovery; do not execute actions
   --help                      Show this help
 
 Requires Node 22+, Copilot CLI, and provisioned TypeAgent configuration.
 By default uses a fresh session-local plugin snapshot, not the global install.
+Interactive Copilot opens in a new console; keep this window open until it exits.
 Logs and disposable data are retained in the printed temporary run directory.`;
 
 export const testPrompt =
@@ -75,6 +77,7 @@ export function parseArgs(argv) {
         "--install-dependencies": "installDependencies",
         "--install-plugin": "installPlugin",
         "--smoke-test": "smokeTest",
+        "--same-window": "sameWindow",
         "--help": "help",
     };
     const values = {
@@ -250,13 +253,22 @@ export async function stopProcess(processInfo) {
         );
 }
 
-export async function runCommand(command, args, env, signal) {
+export async function runCommand(
+    command,
+    args,
+    env,
+    signal,
+    processOptions = {},
+) {
     signal.throwIfAborted();
     const running = startProcess(command, args, {
         cwd: tsRoot,
         env,
         stdio: "inherit",
+        ...processOptions,
     });
+    running.child.stdout?.pipe(process.stdout);
+    running.child.stderr?.pipe(process.stderr);
     const abort = () => {
         void stopProcess(running).catch((error) =>
             console.error(error.message),
@@ -271,6 +283,89 @@ export async function runCommand(command, args, env, signal) {
         signal.removeEventListener("abort", abort);
         await stopProcess(running);
     }
+}
+
+export async function runInNewWindow(command, args, env, signal, runDir) {
+    signal.throwIfAborted();
+    // A Node bridge forwards argv without Start-Process's lossy array joining.
+    const bridge = path.join(runDir, "console-command.mjs");
+    const statusPath = path.join(runDir, "console-status.json");
+    writeFileSync(statusPath, JSON.stringify({ phase: "pending" }));
+    writeFileSync(
+        bridge,
+        `import { spawn } from "node:child_process";
+import { writeFileSync, renameSync } from "node:fs";
+const { command, args, cwd } = ${JSON.stringify({ command, args, cwd: tsRoot })};
+const statusPath = ${JSON.stringify(statusPath)};
+const status = { phase: "starting", bridgePid: process.pid, tty: [process.stdin.isTTY, process.stdout.isTTY, process.stderr.isTTY].map(Boolean) };
+const save = (update) => {
+    writeFileSync(statusPath + ".tmp", JSON.stringify(Object.assign(status, update)));
+    renameSync(statusPath + ".tmp", statusPath);
+};
+save({});
+if (!status.tty.every(Boolean)) {
+    save({ phase: "failed", error: "New console has no interactive input/output handles" });
+    console.error(status.error);
+    process.exitCode = 1;
+} else {
+const child = spawn(command, args, { cwd, env: process.env, stdio: "inherit", shell: false });
+child.once("spawn", () => save({ phase: "running", childPid: child.pid }));
+child.once("error", (error) => { save({ phase: "failed", error: error.message }); console.error(error.message); process.exitCode = 1; });
+child.once("exit", (code, signal) => { save({ phase: "exited", code, signal }); process.exitCode = code ?? 1; });
+}
+`,
+    );
+    const literal = (value) => "'" + value.replaceAll("'", "''") + "'";
+    // Only one quoted file path crosses Start-Process's command-line boundary.
+    const script = `$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+try {
+    Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class DiscoveryConsole { [DllImport("kernel32.dll")] public static extern bool FreeConsole(); }'
+    [DiscoveryConsole]::FreeConsole() | Out-Null
+    $child = Start-Process -FilePath ${literal(process.execPath)} -ArgumentList ${literal(`"${bridge}"`)} -WorkingDirectory ${literal(tsRoot)} -PassThru -Wait
+    $child.Refresh()
+    exit $child.ExitCode
+} catch {
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}`;
+    try {
+        await runCommand(
+            path.join(
+                process.env.SystemRoot ?? "C:\\Windows",
+                "System32",
+                "WindowsPowerShell",
+                "v1.0",
+                "powershell.exe",
+            ),
+            [
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-OutputFormat",
+                "Text",
+                "-EncodedCommand",
+                Buffer.from(script, "utf16le").toString("base64"),
+            ],
+            env,
+            signal,
+            // The wrapper leaves the parent's console group before launching.
+            // Pipes preserve its diagnostics after FreeConsole.
+            { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+        );
+    } catch (error) {
+        signal.throwIfAborted();
+        const status = JSON.parse(readFileSync(statusPath, "utf8"));
+        throw new Error(
+            `New console: ${status.error ?? error.message}. Launch status: ${statusPath}`,
+            { cause: error },
+        );
+    }
+    const status = JSON.parse(readFileSync(statusPath, "utf8"));
+    if (status.phase !== "exited" || status.code !== 0)
+        throw new Error(
+            `New console ended without a successful child exit (phase: ${status.phase}). Launch status: ${statusPath}`,
+        );
 }
 
 export function startupFailure(result, stderrPath) {
@@ -542,9 +637,17 @@ export async function main(argv = process.argv.slice(2)) {
             );
         } else {
             process.stdout.write(
-                `Ready. Paste the following into Copilot (also saved in prompt.txt):\n\n${testPrompt}\n\n`,
+                `Ready. Paste the following into Copilot (also saved in prompt.txt):\n\n${testPrompt}\n\n${
+                    !options.sameWindow
+                        ? "Opening Copilot in a new window. Keep this window open; it owns the server. Ctrl+C here stops both.\n"
+                        : ""
+                }`,
             );
-            await runCommand(
+            const launch = options.sameWindow
+                ? runCommand
+                : (command, args, env, signal) =>
+                      runInNewWindow(command, args, env, signal, runDir);
+            await launch(
                 copilot,
                 [
                     "--plugin-dir",
@@ -559,6 +662,8 @@ export async function main(argv = process.argv.slice(2)) {
                     `@${configPath}`,
                     "--no-custom-instructions",
                     "--no-remote-export",
+                    "--log-dir",
+                    path.join(runDir, "copilot-logs"),
                     ...(options.model ? ["--model", options.model] : []),
                 ],
                 env,

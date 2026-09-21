@@ -4,7 +4,13 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:net";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import {
+    mkdtempSync,
+    writeFileSync,
+    readFileSync,
+    existsSync,
+    rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -15,6 +21,7 @@ import {
     makeConfiguration,
     parseArgs,
     runCommand,
+    runInNewWindow,
     startProcess,
     startupFailure,
     stopProcess,
@@ -80,6 +87,7 @@ test("startup diagnostics explain missing configuration without echoing sensitiv
 
 test("validates options without silently ignoring misspellings or unsafe ports", () => {
     assert.deepEqual(parseArgs([]), { port: 9024, startupTimeout: 120 });
+    assert.equal(parseArgs(["--same-window"]).sameWindow, true);
     assert.deepEqual(
         parseArgs(["--port", "9321", "--skip-build", "--smoke-test"]),
         {
@@ -101,6 +109,140 @@ test("validates options without silently ignoring misspellings or unsafe ports",
     ])
         assert.throws(() => parseArgs(args));
 });
+
+test(
+    "new Windows console preserves argv, environment, cwd, completion and failure",
+    { skip: process.platform !== "win32" },
+    async () => {
+        const folder = mkdtempSync(
+            path.join(tmpdir(), "discovery console ' & "),
+        );
+        const output = path.join(folder, "result.json");
+        const args = [
+            "model with spaces",
+            '{"quoted":"value with spaces"}',
+            "trailing\\",
+            "",
+            'embedded"quote',
+            "$value;&'literal",
+        ];
+        try {
+            await runInNewWindow(
+                process.execPath,
+                [
+                    "-e",
+                    `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(output)}, JSON.stringify({ args: process.argv.slice(1), cwd: process.cwd(), marker: process.env.DISCOVERY_WINDOW_TEST, tty: [process.stdin.isTTY, process.stdout.isTTY, process.stderr.isTTY] })), 100);`,
+                    ...args,
+                ],
+                { ...process.env, DISCOVERY_WINDOW_TEST: "isolated child" },
+                new AbortController().signal,
+                folder,
+            );
+            const result = JSON.parse(readFileSync(output, "utf8"));
+            assert.deepEqual(result.args, args);
+            assert.equal(result.marker, "isolated child");
+            assert.deepEqual(result.tty, [true, true, true]);
+            const status = JSON.parse(
+                readFileSync(path.join(folder, "console-status.json"), "utf8"),
+            );
+            assert.equal(status.phase, "exited");
+            assert.equal(status.code, 0);
+            assert.ok(status.childPid > 0);
+            assert.equal(
+                result.cwd,
+                path.resolve(import.meta.dirname, "..", "..", "..", ".."),
+            );
+            await assert.rejects(
+                runInNewWindow(
+                    process.execPath,
+                    ["-e", "process.exit(17)"],
+                    process.env,
+                    new AbortController().signal,
+                    folder,
+                ),
+                /exited with 17/,
+            );
+            await assert.rejects(
+                runInNewWindow(
+                    path.join(folder, "missing.exe"),
+                    [],
+                    process.env,
+                    new AbortController().signal,
+                    folder,
+                ),
+                /New console:.*ENOENT.*console-status.json/,
+            );
+        } finally {
+            rmSync(folder, { recursive: true, force: true });
+        }
+    },
+);
+
+test("pre-aborted new-window launch writes no files and starts no child", async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), "discovery-pre-abort-"));
+    try {
+        await assert.rejects(
+            runInNewWindow(
+                process.execPath,
+                [],
+                process.env,
+                AbortSignal.abort(new Error("already interrupted")),
+                folder,
+            ),
+            /already interrupted/,
+        );
+        assert.equal(
+            existsSync(path.join(folder, "console-command.mjs")),
+            false,
+        );
+        assert.equal(
+            existsSync(path.join(folder, "console-status.json")),
+            false,
+        );
+    } finally {
+        rmSync(folder, { recursive: true, force: true });
+    }
+});
+
+test(
+    "interrupting the new Windows console stops its owned command and descendants",
+    { skip: process.platform !== "win32" },
+    async () => {
+        const folder = mkdtempSync(
+            path.join(tmpdir(), "discovery-console-stop-"),
+        );
+        const output = path.join(folder, "pids.json");
+        const controller = new AbortController();
+        const command = runInNewWindow(
+            process.execPath,
+            [
+                "-e",
+                `const child = require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+child.once("spawn", () => require("node:fs").writeFileSync(${JSON.stringify(output)}, JSON.stringify([process.pid, child.pid])));
+setInterval(() => {}, 1000);`,
+            ],
+            process.env,
+            controller.signal,
+            folder,
+        );
+        const rejected = assert.rejects(command, /window interruption/);
+        try {
+            const deadline = Date.now() + 15000;
+            while (!existsSync(output) && Date.now() < deadline)
+                await delay(50);
+            assert.ok(existsSync(output), "Window child must start");
+            const pids = JSON.parse(readFileSync(output, "utf8"));
+            controller.abort(new Error("window interruption"));
+            await rejected;
+            for (const pid of pids)
+                assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+        } finally {
+            controller.abort(new Error("window interruption"));
+            await rejected;
+            rmSync(folder, { recursive: true, force: true });
+        }
+    },
+);
 
 test("isolates data, saved conversations and hook mode without copying credentials into MCP JSON", () => {
     const inherited = {

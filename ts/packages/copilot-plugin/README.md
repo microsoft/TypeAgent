@@ -46,10 +46,14 @@ The launcher incrementally builds the plugin, agent server, and their transitive
 dependencies using Fluid Build's `--dep` option, without selecting unrelated
 workspace packages. It stages a session-local plugin
 snapshot, starts a disposable server on port 9024, checks the real MCP connection,
-then opens interactive Copilot. Paste the printed test prompt to discover the
-list-inventory action and execute it. Answer any required confirmation yourself.
+then opens interactive Copilot in a new Windows console, leaving the printed
+prompt visible in the original PowerShell window. Paste that prompt into Copilot
+to discover the list-inventory action and execute it. Answer any required confirmation yourself.
 Afterward, ask Copilot to repeat the action without rediscovery. Exit Copilot to
-stop the owned server process tree; Ctrl+C also triggers cleanup.
+stop the owned server process tree; the original window waits for Copilot and
+propagates failures. Ctrl+C in the original window also stops the owned Copilot
+window/process tree and server. Use `--same-window` to keep Copilot in the original
+console. The launcher currently supports Windows only.
 
 This is a **controlled discovery session**: the normal initial-prompt routing
 hook uses bypass mode, while a separate `typeagent-e2e` MCP process uses MCP mode.
@@ -71,7 +75,7 @@ With `--smoke-test`, the script instead calls
 `typeagent-searchActions({ query: "listLists" })` directly through the MCP SDK
 and checks that `list.listLists` is returned. That verifies the real
 MCP-to-TypeAgent discovery connection, **not Copilot's reasoning or selection**.
-It never launches Copilot or executes an action.
+It never launches Copilot, opens another console, or executes an action.
 
 Prerequisites: Windows, Node 22+ with npm, pnpm, a native Copilot CLI executable on
 PATH (already signed in), and existing TypeAgent model/embedding configuration.
@@ -107,8 +111,11 @@ need to add an Azure endpoint when using a different provider. The launcher
 does not automatically use another checkout's configuration or fetch keys.
 
 Each invocation prints a fresh temporary run directory containing `mcp.json`,
-`prompt.txt`, `probe.json`, server stdout/stderr logs, the staged plugin, and
+`prompt.txt`, `probe.json`, server stdout/stderr logs, `copilot-logs`, the staged plugin, and
 disposable user data. These are retained for inspection, not deleted on exit.
+New-window launches also record console handles, owned process IDs, and the
+actual child exit or startup error in `console-status.json`. If no window appears,
+the launcher reports missing child completion rather than assuming success.
 `probe.json` contains catalog/discovery evidence, not a Copilot transcript;
 use Copilot's `/share` command to save the interactive tool timeline.
 The smoke-test binding is closed and must not be reused by another session.
