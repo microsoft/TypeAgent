@@ -16,11 +16,12 @@ import {
     getTraceIdAsync,
 } from "agent-dispatcher/helpers/data";
 import {
+    createDefaultAgentRuntime,
     getDefaultAppAgentProviders,
-    getDefaultAppAgentSources,
     getIndexingServiceRegistry,
     getDefaultConstructionProvider,
     McpReplayHost,
+    SessionMcpCredentialStore,
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
@@ -36,10 +37,15 @@ import {
 } from "@typeagent/agent-server-client";
 import registerDebug from "debug";
 import os from "node:os";
+import path from "node:path";
 import { spawn } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
 import { otel } from "@typeagent/telemetry";
 import { MacroManager } from "@typeagent/copilot-macros";
+import { MemoryServiceHost } from "@typeagent/memory-mcp-server";
+import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
+import { createDurableMemoryService } from "./durableMemoryService.js";
+import { createLocalSkillServices } from "./skillCatalog.js";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -284,6 +290,7 @@ function initialIdentity(): UserIdentity {
 }
 
 let userIdentity: UserIdentity = initialIdentity();
+let failedStartupCleanup: (() => Promise<void>) | undefined;
 
 // Kick off the token-based resolution asynchronously. Env override wins
 // if set, so skip the network call in that case.
@@ -325,6 +332,50 @@ async function main() {
     if (developerMode) {
         debugStartup("developer mode enabled at startup (--dev)");
     }
+    debugStartup("starting instance memory service");
+    const memoryService = createDurableMemoryService(
+        path.join(instanceDir, "memory"),
+    );
+    const memoryServiceHost = await MemoryServiceHost.start(memoryService, {
+        onError: (error) =>
+            console.error("[agent-server] Memory service error:", error),
+    });
+    failedStartupCleanup = () => memoryServiceHost.close();
+    const memoryCredentialStore = new SessionMcpCredentialStore();
+    const memoryCredential = await memoryCredentialStore.set(
+        "runtime-memory-bearer",
+        memoryServiceHost.bearerToken,
+    );
+    const defaultAgentRuntime = createDefaultAgentRuntime(
+        instanceDir,
+        { configName },
+        { credentialStore: memoryCredentialStore },
+        {
+            "memory-mcp": {
+                id: "runtime:typeagent-memory",
+                name: "memory-mcp",
+                description: "Durable document and website memory",
+                transport: {
+                    kind: "http",
+                    url: memoryServiceHost.endpoint,
+                    headers: {
+                        authorization: {
+                            value: "Bearer {token}",
+                            variables: { token: memoryCredential },
+                        },
+                    },
+                },
+                enabled: true,
+                trust: "trusted",
+                scope: "shipped",
+                provenance: {
+                    source: "agent-server",
+                    sourceKind: "runtime",
+                },
+            },
+        },
+    );
+    debugStartup(`memory service ready at ${memoryServiceHost.endpoint}`);
     debugStartup("creating conversation manager (will lockInstanceDir)");
     // Single PortRegistrar shared across every conversation in this
     // process. Lets external clients (browser extension, VS Code, CLI)
@@ -342,9 +393,7 @@ async function main() {
                     instanceDir,
                     configName,
                 ),
-                appAgentSources: getDefaultAppAgentSources(instanceDir, {
-                    configName,
-                }),
+                appAgentSources: defaultAgentRuntime.appAgentSources,
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
                 metrics: true,
@@ -375,13 +424,31 @@ async function main() {
                 // local-view ports so inline-browser embedding works in
                 // connect mode, matching the standalone (in-process) shell.
                 allowSharedLocalView: ["browser"],
+                agentInitOptions: {
+                    browser: {
+                        memoryServiceClient:
+                            createMemoryServiceRpcFacade(memoryService),
+                    },
+                    memory: {
+                        memoryServiceClient:
+                            createMemoryServiceRpcFacade(memoryService),
+                    },
+                },
             },
             instanceDir,
         );
+    failedStartupCleanup = async () => {
+        await Promise.all([
+            memoryServiceHost.close(),
+            conversationManager.close(),
+        ]);
+    };
     const macroManager = new MacroManager(
         instanceDir,
         new McpReplayHost(instanceDir),
     );
+    const { skillCatalog, skillAcquirer } =
+        await createLocalSkillServices(instanceDir);
 
     debugStartup("conversation manager ready; prewarming default conversation");
     // Pre-initialize the default conversation dispatcher before accepting clients,
@@ -441,6 +508,7 @@ async function main() {
     function teardownServer(): Promise<void> {
         teardownPromise ??= (async () => {
             wss?.close();
+            await memoryServiceHost.close();
             await conversationManager.close();
             removeServerPid(port);
         })();
@@ -520,6 +588,9 @@ async function main() {
         createAgentServerConnectionHandler({
             conversationManager,
             macroManager,
+            skillCatalog,
+            skillAcquirer,
+            procedureService: memoryService,
             shutdown: shutdownServer,
             restart: restartServer,
             isStale: isStaleBuild,
@@ -576,6 +647,7 @@ async function main() {
     // any already-connected clients the moment it's detected.
     startStaleBuildWatcher(import.meta.url, broadcastStaleNotice);
     scheduleIdleShutdown();
+    failedStartupCleanup = undefined;
 }
 
 process.on("unhandledRejection", (reason, _promise) => {
@@ -589,8 +661,14 @@ process.on("uncaughtException", (err) => {
 });
 
 await main().catch((err: any) => {
-    return otel
-        .shutdownTelemetry()
+    return (failedStartupCleanup?.() ?? Promise.resolve())
+        .catch((cleanupError) => {
+            console.error(
+                "[agent-server] Startup cleanup failed:",
+                cleanupError,
+            );
+        })
+        .then(() => otel.shutdownTelemetry())
         .catch((shutdownError) => {
             console.error(
                 "[agent-server] Telemetry shutdown failed:",

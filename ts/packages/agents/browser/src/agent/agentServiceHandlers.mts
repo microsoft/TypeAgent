@@ -3,7 +3,11 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import type { BrowserAgentInvokeFunctions } from "@typeagent/browser-control-rpc/serviceTypes";
-import type { BrowserActionContext } from "./browserActions.mjs";
+import type { PersonalHowToService } from "@typeagent/memory-service";
+import {
+    getSessionBrowserControl,
+    type BrowserActionContext,
+} from "./browserActions.mjs";
 import { handleKnowledgeAction } from "./knowledge/actions/knowledgeActionRouter.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import {
@@ -20,8 +24,37 @@ import {
 export function createAgentInvokeHandlers(
     context: SessionContext<BrowserActionContext>,
 ): BrowserAgentInvokeFunctions {
+    function getMemoryService() {
+        const service = context.agentContext.memoryServiceClient;
+        if (!service) {
+            throw new Error("Durable memory service is not available");
+        }
+        return service as typeof service & PersonalHowToService;
+    }
+
     async function knowledgeHandler(method: string, params: any): Promise<any> {
         return handleKnowledgeAction(method, params, context);
+    }
+
+    async function extractionHandler(params: any): Promise<any> {
+        if (Array.isArray(params.htmlFragments)) {
+            return knowledgeHandler("extractKnowledgeFromPage", params);
+        }
+        const browserControl = getSessionBrowserControl(context);
+        const url = params.url ?? (await browserControl.getPageUrl());
+        const htmlFragments = await browserControl.getHtmlFragments(
+            false,
+            "knowledgeExtraction",
+        );
+        return knowledgeHandler("extractKnowledgeFromPage", {
+            ...params,
+            url,
+            title: params.title ?? url,
+            htmlFragments,
+            extractEntities: params.extractEntities ?? true,
+            extractRelationships: params.extractRelationships ?? true,
+            suggestQuestions: params.suggestQuestions ?? true,
+        });
     }
 
     async function discoveryHandler(method: string, params: any): Promise<any> {
@@ -37,9 +70,143 @@ export function createAgentInvokeHandlers(
     }
 
     const handlers: BrowserAgentInvokeFunctions = {
+        memoryCreateCorpus: ({ name, description }) =>
+            getMemoryService().createCorpus(name, description),
+        memoryListCorpora: () => getMemoryService().listCorpora(),
+        memoryGetCorpus: ({ corpusId }) =>
+            getMemoryService().getCorpus(corpusId),
+        memoryListSources: (params) =>
+            getMemoryService().listSourcesPage(params),
+        memoryGetSource: ({ corpusId, sourceId }) =>
+            getMemoryService().getSource(corpusId, sourceId),
+        memoryGetSourceContent: (params) =>
+            getMemoryService().getSourceContent(params),
+        memoryGetSourceKnowledge: ({ corpusId, sourceId }) =>
+            getMemoryService().getSourceKnowledge(corpusId, sourceId),
+        memoryImportDocument: ({
+            corpusId,
+            title,
+            markdown,
+            canonicalUri,
+            tags,
+        }) =>
+            getMemoryService().ingestDocument({
+                corpusId,
+                source: {
+                    sourceType: "markdown",
+                    title,
+                    markdown,
+                    ...(canonicalUri === undefined ? {} : { canonicalUri }),
+                    ...(tags === undefined ? {} : { tags }),
+                },
+                pipeline: {
+                    mode: "full",
+                    updatePolicy: "retainRevisionHistory",
+                },
+            }),
+        memoryReplaceSource: async ({
+            corpusId,
+            sourceId,
+            expectedActiveRevisionId,
+            text,
+            retainRevisionHistory,
+        }) => {
+            const service = getMemoryService();
+            const existing = await service.getSource(corpusId, sourceId);
+            if (!existing) {
+                throw new Error(`Memory source '${sourceId}' was not found`);
+            }
+            const sourceContent =
+                existing.sourceType === "html"
+                    ? { html: text }
+                    : existing.sourceType === "text"
+                      ? { text }
+                      : { markdown: text };
+            return service.replaceSource({
+                corpusId,
+                sourceId,
+                expectedActiveRevisionId,
+                source: {
+                    sourceType: existing.sourceType,
+                    title: existing.title,
+                    ...(existing.canonicalUri === undefined
+                        ? {}
+                        : { canonicalUri: existing.canonicalUri }),
+                    ...(existing.tags === undefined
+                        ? {}
+                        : { tags: existing.tags }),
+                    ...(existing.metadata === undefined
+                        ? {}
+                        : { metadata: existing.metadata }),
+                    ...sourceContent,
+                },
+                ...(retainRevisionHistory === undefined
+                    ? {}
+                    : { retainRevisionHistory }),
+            });
+        },
+        memoryPreviewForgetSource: ({ corpusId, sourceId }) =>
+            getMemoryService().previewForgetSource(corpusId, sourceId),
+        memoryForgetSource: (params) => getMemoryService().forgetSource(params),
+        memoryReindexCorpus: ({ corpusId }) =>
+            getMemoryService().reindexCorpus(corpusId),
+        memoryReindexSource: ({ corpusId, sourceId }) =>
+            getMemoryService().reindexSource(corpusId, sourceId),
+        memoryListJobs: (params) => getMemoryService().listJobs(params),
+        memoryCancelJob: ({ jobId }) => getMemoryService().cancelJob(jobId),
+        memoryGetHowToSettings: ({ corpusId }) =>
+            getMemoryService().getPersonalHowToSettings(corpusId),
+        memoryUpdateHowToSettings: ({
+            corpusId,
+            expectedRevision,
+            enabled,
+            detectCandidates,
+            preferences,
+        }) =>
+            getMemoryService().updatePersonalHowToSettings(corpusId, {
+                expectedRevision,
+                ...(enabled === undefined ? {} : { enabled }),
+                ...(detectCandidates === undefined ? {} : { detectCandidates }),
+                ...(preferences === undefined ? {} : { preferences }),
+            }),
+        memoryCreateProcedureCandidate: (params) =>
+            getMemoryService().createProcedureCandidate(params),
+        memoryListProcedureCandidates: ({ corpusId, states }) =>
+            getMemoryService().listProcedureCandidates(corpusId, states),
+        memoryRejectProcedureCandidate: ({ corpusId, candidateId }) =>
+            getMemoryService().rejectProcedureCandidate(corpusId, candidateId),
+        memorySaveProcedure: (params) =>
+            getMemoryService().saveProcedure(params),
+        memoryListProcedures: (params) =>
+            getMemoryService().listProcedures(params),
+        memoryGetProcedure: ({ corpusId, procedureId, version }) =>
+            getMemoryService().getProcedure(corpusId, procedureId, version),
+        memorySearchProcedures: (params) =>
+            getMemoryService().searchProcedures(params),
+        memoryArchiveProcedure: ({ corpusId, procedureId, expectedVersion }) =>
+            getMemoryService().archiveProcedure(
+                corpusId,
+                procedureId,
+                expectedVersion,
+            ),
+
+        memoryListActivity: (params) => {
+            const service = context.agentContext.browserMemoryService;
+            if (!service) {
+                throw new Error("Durable browser memory is not available");
+            }
+            return service.listActivity(params);
+        },
+        memoryForgetActivity: (params) => {
+            const service = context.agentContext.browserMemoryService;
+            if (!service) {
+                throw new Error("Durable browser memory is not available");
+            }
+            return service.forgetActivity(params);
+        },
+
         // Knowledge extraction
-        extractKnowledgeFromPage: (params: any) =>
-            knowledgeHandler("extractKnowledgeFromPage", params),
+        extractKnowledgeFromPage: extractionHandler,
         // Knowledge queries
         searchWebMemories: (params: any) =>
             websiteHandler("searchWebMemories", params),
@@ -51,7 +218,7 @@ export function createAgentInvokeHandlers(
             websiteHandler("searchByTopics", params),
         hybridSearch: (params: any) => websiteHandler("hybridSearch", params),
         getHierarchicalTopics: (params: any) =>
-            knowledgeHandler("getHierarchicalTopics", params),
+            websiteHandler("getHierarchicalTopics", params),
         getTopicImportanceLayer: (params: any) =>
             knowledgeHandler("getTopicImportanceLayer", params),
         getTopicViewportNeighborhood: (params: any) =>

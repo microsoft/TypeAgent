@@ -31,6 +31,26 @@ import type {
     TraceSummary,
     ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
+import type {
+    CatalogEntry,
+    CatalogSearchResult,
+    CatalogState,
+    SkillIdentity,
+    SkillGrammarRoutingResult,
+    SkillScope,
+    SkillAcquisitionPreview,
+    SkillAcquisitionRequest,
+    SkillUpdateCheck,
+} from "@typeagent/skill-catalog";
+import type {
+    MacroDraftResult,
+    ProcedureLineage,
+} from "@typeagent/procedure-artifacts";
+
+export type {
+    MacroDraftResult,
+    ProcedureLineage,
+} from "@typeagent/procedure-artifacts";
 
 export type {
     ApproveMacroRequest,
@@ -65,6 +85,14 @@ export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
     clientType?: "shell" | "extension" | "android"; // identifies the connecting client type
     conversationId?: string; // join a specific conversation by UUID. If omitted, connects to the default conversation.
+    /**
+     * Opt into isolated structured-action ownership. Requires conversationId.
+     * Resume only with the capability returned by an earlier join of that
+     * same live conversation. Never substitute a client-supplied identity.
+     */
+    structuredActions?: {
+        resumeToken?: string;
+    };
 };
 
 /**
@@ -153,6 +181,14 @@ export type JoinConversationResult = {
     /** Server-side queue snapshot at join time. Omitted when idle/empty;
      *  older clients ignore the field. */
     queueSnapshot?: QueueSnapshot;
+    /**
+     * Private, in-memory resume capability for this logical structured caller.
+     * Keep it out of logs, model prompts, history, and persisted metadata.
+     * A resumed join revokes structured access on the previous connection.
+     */
+    structuredActions?: {
+        resumeToken: string;
+    };
 };
 
 /**
@@ -181,6 +217,119 @@ export type SpeechToken = {
     region: string;
     endpoint: string;
 };
+
+export type ListSkillsRequest = {
+    states?: CatalogState[];
+    scopes?: SkillScope[];
+    activeOnly?: boolean;
+};
+
+export type SearchSkillsRequest = {
+    query: string;
+    scopes?: SkillScope[];
+    limit?: number;
+};
+
+export type GetSkillRequest = {
+    identity: SkillIdentity;
+    revision?: string;
+};
+
+export type ReadSkillFileRequest = {
+    identity: SkillIdentity;
+    revision: string;
+    path: string;
+};
+
+export type ReadSkillFileResponse = {
+    content: string;
+    encoding: "base64";
+    mimeType: string;
+};
+
+export type PublishSkillRequest = {
+    identity: SkillIdentity;
+    displayName?: string;
+    description?: string;
+    schemaFingerprint: string;
+    files: {
+        path: string;
+        content: string;
+        encoding?: "utf8" | "base64";
+    }[];
+};
+
+export type ChangeSkillStateRequest = {
+    identity: SkillIdentity;
+    revision: string;
+    state: CatalogState;
+};
+
+export type SelectSkillRevisionRequest = {
+    identity: SkillIdentity;
+    revision: string;
+};
+
+export type CheckSkillUpdateResponse = SkillUpdateCheck & {
+    currentState?: CatalogState;
+};
+
+export type SkillAcquisitionRevisionResponse = {
+    entry: CatalogEntry;
+    revision: string;
+    state: CatalogState;
+    active: boolean;
+    updated: boolean;
+    sourceFingerprint: string;
+    manifestDigest: string;
+};
+
+export type ProcedureVersionReference = {
+    corpusId: string;
+    procedureId: string;
+    version: number;
+};
+
+export type ProcedureSkillArtifact = {
+    path?: string;
+    content: string;
+    encoding?: "utf8" | "base64";
+};
+
+export type ProcedureArtifactRequest =
+    | (ProcedureVersionReference & {
+          kind: "skill";
+          skill: {
+              identity: SkillIdentity;
+              description?: string;
+              schema?: ProcedureSkillArtifact;
+              grammar?: ProcedureSkillArtifact;
+          };
+      })
+    | (ProcedureVersionReference & { kind: "macro" });
+
+export type ProcedureArtifactPreview =
+    | {
+          kind: "skill";
+          lineage: ProcedureLineage;
+          skill: PublishSkillRequest;
+      }
+    | {
+          kind: "macro";
+          result: MacroDraftResult;
+      };
+
+export type ProcedureArtifactPromotion =
+    | {
+          kind: "skill";
+          lineage: ProcedureLineage;
+          entry: CatalogEntry;
+      }
+    | {
+          kind: "macro";
+          lineage: ProcedureLineage;
+          macro: MacroVersionRef;
+      };
 
 export type AgentServerInvokeFunctions = {
     armMacroRecording: (
@@ -220,6 +369,45 @@ export type AgentServerInvokeFunctions = {
     ) => Promise<MacroVersionRef>;
     cancelMacroRun: (runId: string) => Promise<void>;
     getMacroRun: (runId: string) => Promise<MacroRunRecord>;
+    listSkills: (request?: ListSkillsRequest) => Promise<CatalogEntry[]>;
+    searchSkills: (
+        request: SearchSkillsRequest,
+    ) => Promise<readonly CatalogSearchResult[]>;
+    matchSkillGrammar: (
+        utterance: string,
+    ) => Promise<SkillGrammarRoutingResult>;
+    getSkill: (request: GetSkillRequest) => Promise<CatalogEntry | undefined>;
+    readSkillFile: (
+        request: ReadSkillFileRequest,
+    ) => Promise<ReadSkillFileResponse>;
+    publishSkill: (request: PublishSkillRequest) => Promise<CatalogEntry>;
+    changeSkillState: (
+        request: ChangeSkillStateRequest,
+    ) => Promise<CatalogEntry>;
+    activateSkill: (
+        request: SelectSkillRevisionRequest,
+    ) => Promise<CatalogEntry>;
+    rollbackSkill: (
+        request: SelectSkillRevisionRequest,
+    ) => Promise<CatalogEntry>;
+    previewSkillAcquisition: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<SkillAcquisitionPreview>;
+    checkSkillUpdate: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<CheckSkillUpdateResponse>;
+    acquireAndPublishSkill: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<SkillAcquisitionRevisionResponse>;
+    updateSkill: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<SkillAcquisitionRevisionResponse>;
+    previewProcedureArtifact: (
+        request: ProcedureArtifactRequest,
+    ) => Promise<ProcedureArtifactPreview>;
+    promoteProcedureArtifact: (
+        request: ProcedureArtifactRequest,
+    ) => Promise<ProcedureArtifactPromotion>;
 
     joinConversation: (
         options?: DispatcherConnectOptions,

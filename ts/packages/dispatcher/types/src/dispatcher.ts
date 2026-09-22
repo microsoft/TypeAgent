@@ -21,6 +21,10 @@ import type { CancelResult, QueueSnapshot, SubmitResult } from "./queue.js";
 import type {
     ActionSearchRequest,
     ActionSearchResult,
+    ExecuteActionRequest,
+    ContinueActionRequest,
+    CancelActionRequest,
+    StructuredActionExecutionResult,
 } from "./structuredAction.js";
 
 export const DispatcherName = "dispatcher";
@@ -513,6 +517,16 @@ export interface Dispatcher {
     getAgentSchemas(agentName?: string): Promise<AgentSchemaInfo[]>;
 
     searchActions(request: ActionSearchRequest): Promise<ActionSearchResult>;
+
+    executeAction(
+        request: ExecuteActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
+    continueAction(
+        request: ContinueActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
+    cancelAction(
+        request: CancelActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
 
     /**
      * Respond to a pending choice from an agent.

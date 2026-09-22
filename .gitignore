@@ -452,6 +452,7 @@ FodyWeavers.xsd
 
 /ts/packages/cli/.collection-backups
 /ts/packages/cli/.import-states
+/ts/packages/agentServer/server/.import-states
 
 # agent files
 .claude/

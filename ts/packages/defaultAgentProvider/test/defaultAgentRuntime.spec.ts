@@ -44,4 +44,47 @@ describe("createDefaultAgentRuntime", () => {
         expect(context.mcpSource).toBe(runtime.mcpServerSourceApi);
         installedConnection.dispose();
     });
+
+    it("keeps runtime MCP seeds protected and out of persistent storage", async () => {
+        const instanceDir = tmpInstanceDir();
+        const runtime = createDefaultAgentRuntime(
+            instanceDir,
+            undefined,
+            undefined,
+            {
+                memory: {
+                    id: "runtime:typeagent-memory",
+                    name: "memory",
+                    transport: {
+                        kind: "http",
+                        url: "http://127.0.0.1:12345/mcp",
+                    },
+                    enabled: true,
+                    trust: "trusted",
+                    scope: "shipped",
+                    provenance: {
+                        source: "agent-server",
+                        sourceKind: "runtime",
+                    },
+                },
+            },
+        );
+
+        expect(
+            runtime.mcpServerSourceApi.getServer("runtime:typeagent-memory"),
+        ).toMatchObject({ name: "memory", scope: "shipped" });
+        await expect(
+            runtime.mcpServerSourceApi.removeServer("runtime:typeagent-memory"),
+        ).rejects.toThrow("Cannot remove shipped MCP server");
+
+        const persisted = JSON.parse(
+            fs.readFileSync(path.join(instanceDir, "mcpServers.json"), "utf8"),
+        ) as { servers: Record<string, unknown> };
+        const persistedText = JSON.stringify(persisted);
+        expect(persisted.servers).not.toHaveProperty(
+            "runtime:typeagent-memory",
+        );
+        expect(persistedText).not.toContain("127.0.0.1:12345");
+        expect(persistedText).not.toContain('"name":"memory"');
+    });
 });

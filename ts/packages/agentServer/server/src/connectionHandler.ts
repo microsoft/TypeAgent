@@ -19,11 +19,20 @@ import {
 } from "@typeagent/agent-server-protocol";
 import type { ConfigDrift } from "@typeagent/config";
 import type { MacroManager } from "@typeagent/copilot-macros";
+import type { PersonalHowToService } from "@typeagent/memory-service";
+import type {
+    LiveSkillCatalog,
+    SkillAcquirer,
+    SkillAcquisitionResult,
+} from "@typeagent/skill-catalog";
+import type { SkillAcquisitionRevisionResponse } from "@typeagent/agent-server-protocol";
 import type { Dispatcher } from "agent-dispatcher";
 import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
 import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
 import { getSpeechToken } from "./speechToken.js";
+import { validateStructuredActionJoin } from "./structuredActionBindings.js";
+import { ProcedureArtifactRpcService } from "./procedureArtifacts.js";
 import registerDebug from "debug";
 
 // Disconnect cleanup is best effort, so a failure cannot be surfaced to anyone:
@@ -70,10 +79,44 @@ function checkIdentityField(
     return trimmed;
 }
 
+function getSkillMimeType(filePath: string): string {
+    if (filePath.endsWith(".json")) return "application/json";
+    if (filePath.endsWith(".md")) return "text/markdown";
+    if (
+        filePath.endsWith(".txt") ||
+        filePath.endsWith(".agr") ||
+        filePath.endsWith(".ts")
+    ) {
+        return "text/plain";
+    }
+    return "application/octet-stream";
+}
+
+function acquisitionResponse(
+    result: SkillAcquisitionResult,
+): SkillAcquisitionRevisionResponse {
+    const metadata = result.entry.revision.acquisition;
+    if (metadata === undefined) {
+        throw new Error("Acquired skill revision is missing source metadata.");
+    }
+    return {
+        entry: result.entry,
+        revision: result.entry.revision.revision,
+        state: result.entry.state,
+        active: result.entry.active,
+        updated: result.updated,
+        sourceFingerprint: metadata.sourceFingerprint,
+        manifestDigest: metadata.manifestDigest,
+    };
+}
+
 export type ConnectionHandlerDeps = {
     /** The conversation manager backing this server. */
     conversationManager: ConversationManager;
     macroManager: MacroManager;
+    skillCatalog: LiveSkillCatalog;
+    skillAcquirer?: SkillAcquirer;
+    procedureService?: Pick<PersonalHowToService, "getProcedure">;
     /**
      * Invoked when the dispatcher (or an RPC client) requests a server
      * shutdown. For the standalone agent-server this kills the process; for an
@@ -209,6 +252,7 @@ export function createAgentServerConnectionHandler(
     const {
         conversationManager,
         macroManager,
+        skillCatalog,
         shutdown,
         restart,
         isStale,
@@ -218,6 +262,28 @@ export function createAgentServerConnectionHandler(
         onConnect,
         onDisconnect,
     } = deps;
+    const procedureArtifacts =
+        deps.procedureService === undefined
+            ? undefined
+            : new ProcedureArtifactRpcService(
+                  deps.procedureService,
+                  skillCatalog,
+                  macroManager,
+              );
+    const requireProcedureArtifacts = () => {
+        if (procedureArtifacts === undefined) {
+            throw new Error(
+                "Procedure artifact promotion is not configured on this server.",
+            );
+        }
+        return procedureArtifacts;
+    };
+    const requireSkillAcquirer = () => {
+        if (deps.skillAcquirer === undefined) {
+            throw new Error("Skill acquisition is unavailable on this host.");
+        }
+        return deps.skillAcquirer;
+    };
 
     // Built once from the startup config-drift snapshot (undefined when the
     // local config matches the vault, no vault is configured, or drift
@@ -249,6 +315,8 @@ export function createAgentServerConnectionHandler(
             string,
             { dispatcher: Dispatcher; connectionId: string }
         >();
+        const joiningConversations = new Set<string>();
+        let disconnected = false;
 
         // Client-hosted agents this connection registered, per conversation.
         // Keyed by instance so disconnect removes only this connection's
@@ -324,25 +392,129 @@ export function createAgentServerConnectionHandler(
                 macroManager.submitMacroCandidate(request),
             cancelMacroRun: async (runId) => macroManager.cancelMacroRun(runId),
             getMacroRun: async (runId) => macroManager.getMacroRun(runId),
+            listSkills: async (request) => {
+                const entries = await skillCatalog.list();
+                return entries.filter(
+                    (entry) =>
+                        (request?.activeOnly !== true || entry.active) &&
+                        (request?.states === undefined ||
+                            request.states.includes(entry.state)) &&
+                        (request?.scopes === undefined ||
+                            request.scopes.includes(
+                                entry.revision.identity.scope,
+                            )),
+                );
+            },
+            searchSkills: async (request) =>
+                skillCatalog.search({
+                    text: request.query,
+                    ...(request.scopes === undefined
+                        ? {}
+                        : { scopes: request.scopes }),
+                    ...(request.limit === undefined
+                        ? {}
+                        : { limit: request.limit }),
+                }),
+            matchSkillGrammar: async (utterance) =>
+                skillCatalog.routeGrammar(utterance),
+            getSkill: async (request) =>
+                skillCatalog.get(request.identity, request.revision),
+            readSkillFile: async (request) => {
+                const content = await skillCatalog.readFile(
+                    request.identity,
+                    request.revision,
+                    request.path,
+                );
+                return {
+                    content: Buffer.from(content).toString("base64"),
+                    encoding: "base64",
+                    mimeType: getSkillMimeType(request.path),
+                };
+            },
+            publishSkill: async (request) =>
+                skillCatalog.publish({
+                    identity: request.identity,
+                    ...(request.displayName === undefined
+                        ? {}
+                        : { displayName: request.displayName }),
+                    ...(request.description === undefined
+                        ? {}
+                        : { description: request.description }),
+                    schemaFingerprint: request.schemaFingerprint,
+                    files: request.files.map((file) => ({
+                        path: file.path,
+                        content:
+                            file.encoding === "base64"
+                                ? Buffer.from(file.content, "base64")
+                                : file.content,
+                    })),
+                }),
+            changeSkillState: async (request) =>
+                skillCatalog.transition(
+                    request.identity,
+                    request.revision,
+                    request.state,
+                ),
+            activateSkill: async (request) =>
+                skillCatalog.activate(request.identity, request.revision),
+            rollbackSkill: async (request) =>
+                skillCatalog.rollback(request.identity, request.revision),
+            previewSkillAcquisition: async (request) =>
+                requireSkillAcquirer().preview(request),
+            checkSkillUpdate: async (request) => {
+                const check =
+                    await requireSkillAcquirer().checkForUpdate(request);
+                const current = await skillCatalog.get(request.identity);
+                return {
+                    ...check,
+                    ...(current === undefined
+                        ? {}
+                        : { currentState: current.state }),
+                };
+            },
+            acquireAndPublishSkill: async (request) =>
+                acquisitionResponse(
+                    await requireSkillAcquirer().acquireAndPublish(request),
+                ),
+            updateSkill: async (request) =>
+                acquisitionResponse(
+                    await requireSkillAcquirer().update(request),
+                ),
+            previewProcedureArtifact: async (request) =>
+                requireProcedureArtifacts().preview(request),
+            promoteProcedureArtifact: async (request) =>
+                requireProcedureArtifacts().promote(request),
 
             joinConversation: async (options?: DispatcherConnectOptions) => {
+                validateStructuredActionJoin(options);
+                if (disconnected) {
+                    throw new Error("Agent connection is disconnected");
+                }
+
                 // Resolve conversation ID first (may auto-create default)
                 const conversationId =
                     await conversationManager.resolveConversationId(
                         options?.conversationId,
                     );
 
-                if (joinedConversations.has(conversationId)) {
+                if (disconnected) {
+                    throw new Error("Agent connection is disconnected");
+                }
+                if (
+                    joinedConversations.has(conversationId) ||
+                    joiningConversations.has(conversationId)
+                ) {
                     throw new Error(
                         `Already joined conversation '${conversationId}'. Call leaveConversation() before joining again.`,
                     );
                 }
 
-                // Create conversation-namespaced channels
-                const clientIOChannel = channelProvider.createChannel(
-                    getClientIOChannelName(conversationId),
-                );
+                joiningConversations.add(conversationId);
+                let acquiredConnectionId: string | undefined;
                 try {
+                    const clientIOChannel = channelProvider.createChannel(
+                        getClientIOChannelName(conversationId),
+                    );
                     const clientIORpcClient =
                         createClientIORpcClient(clientIOChannel);
 
@@ -380,6 +552,10 @@ export function createAgentServerConnectionHandler(
                         },
                         options,
                     );
+                    acquiredConnectionId = result.connectionId;
+                    if (disconnected) {
+                        throw new Error("Agent connection is disconnected");
+                    }
 
                     const dispatcherChannel = channelProvider.createChannel(
                         getDispatcherChannelName(conversationId),
@@ -490,12 +666,27 @@ export function createAgentServerConnectionHandler(
                     if (result.queueSnapshot !== undefined) {
                         joinResult.queueSnapshot = result.queueSnapshot;
                     }
+                    if (result.structuredActions !== undefined) {
+                        joinResult.structuredActions = result.structuredActions;
+                    }
                     return joinResult;
                 } catch (e) {
-                    channelProvider.deleteChannel(
-                        getClientIOChannelName(conversationId),
-                    );
+                    try {
+                        if (acquiredConnectionId !== undefined) {
+                            await conversationManager.leaveConversation(
+                                conversationId,
+                                acquiredConnectionId,
+                            );
+                        }
+                    } finally {
+                        joinedConversations.delete(conversationId);
+                        channelProvider.deleteChannel(
+                            getClientIOChannelName(conversationId),
+                        );
+                    }
                     throw e;
+                } finally {
+                    joiningConversations.delete(conversationId);
                 }
             },
 
@@ -722,6 +913,7 @@ export function createAgentServerConnectionHandler(
 
         // Clean up all conversations on disconnect
         channelProvider.on("disconnect", () => {
+            disconnected = true;
             onDisconnect?.();
             if (staleNotifier !== undefined) {
                 staleNotifiers.delete(staleNotifier);

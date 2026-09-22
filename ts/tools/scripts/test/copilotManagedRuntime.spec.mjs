@@ -33,23 +33,38 @@ test("manifest records the resolved SDK-compatible Windows runtime", () => {
         arch: "x64",
     });
     assert.equal(manifest.sdkPackage, "@github/copilot-sdk");
-    assert.equal(manifest.sdkVersion, "1.0.9");
-    assert.equal(manifest.sdkCliRequirement, "^1.0.78");
-    assert.equal(manifest.cliPackage, "@github/copilot");
-    assert.equal(manifest.cliVersion, "1.0.79");
-    assert.equal(manifest.platformPackage, "@github/copilot-win32-x64");
-    assert.equal(manifest.platformVersion, manifest.cliVersion);
+    assert.equal(manifest.sdkVersion, "1.0.13");
+    assert.equal(manifest.runtimeVersion, "1.0.83");
+    assert.equal(manifest.runtimePlatform, "win32-x64");
+    assert.equal(manifest.platformPackage, "@github/copilot-sdk-win32-x64");
+    assert.equal(manifest.platformVersion, manifest.sdkVersion);
+    assert.equal(
+        manifest.executablePath,
+        "prebuilds/win32-x64/copilot-runtime.exe",
+    );
+    assert.equal(
+        manifest.runtimeLibraryPath,
+        "prebuilds/win32-x64/runtime.node",
+    );
     assert.match(manifest.registry, /^https:\/\/pkgs\.dev\.azure\.com\//);
 });
 
 test("platform package naming follows Copilot package conventions", () => {
     assert.equal(
         copilotPlatformPackage("win32", "x64"),
-        "@github/copilot-win32-x64",
+        "@github/copilot-sdk-win32-x64",
     );
     assert.equal(
         copilotPlatformPackage("darwin", "arm64"),
-        "@github/copilot-darwin-arm64",
+        "@github/copilot-sdk-darwin-arm64",
+    );
+    assert.equal(
+        copilotPlatformPackage("linuxmusl", "x64"),
+        "@github/copilot-sdk-linuxmusl-x64",
+    );
+    assert.throws(
+        () => copilotPlatformPackage("win32", "ia32"),
+        /Unsupported Copilot runtime architecture/,
     );
 });
 
@@ -64,7 +79,11 @@ test("npm install is exact and locked to the authenticated feed", () => {
     assert.ok(args.includes(manifest.registry));
     assert.ok(args.includes("--userconfig"));
     assert.ok(args.includes("C:\\auth\\.npmrc"));
-    assert.ok(args.includes(`@github/copilot@${manifest.cliVersion}`));
+    assert.ok(
+        args.includes(
+            `${manifest.platformPackage}@${manifest.platformVersion}`,
+        ),
+    );
     assert.ok(!args.includes("-g"));
 });
 
@@ -140,32 +159,11 @@ test("managed runtime resolves the platform executable only at the exact version
             platform: "win32",
             arch: "x64",
         });
-
-        test("global Copilot compatibility uses npm package metadata", () => {
-            const root = fs.mkdtempSync(
-                path.join(os.tmpdir(), "ta-copilot-global-"),
-            );
-            try {
-                const packageDir = path.join(root, "@github", "copilot");
-                fs.mkdirSync(packageDir, { recursive: true });
-                fs.writeFileSync(
-                    path.join(packageDir, "package.json"),
-                    JSON.stringify({
-                        name: "@github/copilot",
-                        version: "1.0.79",
-                    }),
-                );
-                assert.equal(globalCopilotPackageVersion(root), "1.0.79");
-            } finally {
-                fs.rmSync(root, { recursive: true, force: true });
-            }
-        });
         const runtimeDir = managedRuntimeDirectory(manifest, root);
         const packageDir = path.join(
             runtimeDir,
             "node_modules",
-            "@github",
-            "copilot-win32-x64",
+            ...manifest.platformPackage.split("/"),
         );
         fs.mkdirSync(packageDir, { recursive: true });
         fs.writeFileSync(
@@ -173,11 +171,18 @@ test("managed runtime resolves the platform executable only at the exact version
             JSON.stringify({
                 name: manifest.platformPackage,
                 version: manifest.platformVersion,
-                bin: { "copilot-win32-x64": "copilot.exe" },
             }),
         );
-        const executable = path.join(packageDir, "copilot.exe");
+        const prebuildDir = path.join(packageDir, "prebuilds", "win32-x64");
+        fs.mkdirSync(prebuildDir, { recursive: true });
+        const executable = path.join(prebuildDir, "copilot-runtime.exe");
+        const runtimeLibrary = path.join(prebuildDir, "runtime.node");
         fs.writeFileSync(executable, "");
+        assert.equal(
+            resolveInstalledCopilotPath(runtimeDir, manifest),
+            undefined,
+        );
+        fs.writeFileSync(runtimeLibrary, "");
         assert.equal(
             resolveInstalledCopilotPath(runtimeDir, manifest),
             executable,
@@ -189,6 +194,24 @@ test("managed runtime resolves the platform executable only at the exact version
 
         const wrong = { ...manifest, platformVersion: "9.9.9" };
         assert.equal(resolveInstalledCopilotPath(runtimeDir, wrong), undefined);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("global Copilot compatibility uses npm package metadata", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ta-copilot-global-"));
+    try {
+        const packageDir = path.join(root, "@github", "copilot");
+        fs.mkdirSync(packageDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(packageDir, "package.json"),
+            JSON.stringify({
+                name: "@github/copilot",
+                version: "1.0.83",
+            }),
+        );
+        assert.equal(globalCopilotPackageVersion(root), "1.0.83");
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }

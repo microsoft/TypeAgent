@@ -61,6 +61,48 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
     }
 
     return {
+        memoryCreateCorpus: (params) => forward("memoryCreateCorpus", params),
+        memoryListCorpora: (params) => forward("memoryListCorpora", params),
+        memoryGetCorpus: (params) => forward("memoryGetCorpus", params),
+        memoryListSources: (params) => forward("memoryListSources", params),
+        memoryGetSource: (params) => forward("memoryGetSource", params),
+        memoryGetSourceContent: (params) =>
+            forward("memoryGetSourceContent", params),
+        memoryGetSourceKnowledge: (params) =>
+            forward("memoryGetSourceKnowledge", params),
+        memoryImportDocument: (params) =>
+            forward("memoryImportDocument", params),
+        memoryReplaceSource: (params) => forward("memoryReplaceSource", params),
+        memoryPreviewForgetSource: (params) =>
+            forward("memoryPreviewForgetSource", params),
+        memoryForgetSource: (params) => forward("memoryForgetSource", params),
+        memoryReindexCorpus: (params) => forward("memoryReindexCorpus", params),
+        memoryReindexSource: (params) => forward("memoryReindexSource", params),
+        memoryListJobs: (params) => forward("memoryListJobs", params),
+        memoryCancelJob: (params) => forward("memoryCancelJob", params),
+        memoryGetHowToSettings: (params) =>
+            forward("memoryGetHowToSettings", params),
+        memoryUpdateHowToSettings: (params) =>
+            forward("memoryUpdateHowToSettings", params),
+        memoryCreateProcedureCandidate: (params) =>
+            forward("memoryCreateProcedureCandidate", params),
+        memoryListProcedureCandidates: (params) =>
+            forward("memoryListProcedureCandidates", params),
+        memoryRejectProcedureCandidate: (params) =>
+            forward("memoryRejectProcedureCandidate", params),
+        memorySaveProcedure: (params) => forward("memorySaveProcedure", params),
+        memoryListProcedures: (params) =>
+            forward("memoryListProcedures", params),
+        memoryGetProcedure: (params) => forward("memoryGetProcedure", params),
+        memorySearchProcedures: (params) =>
+            forward("memorySearchProcedures", params),
+        memoryArchiveProcedure: (params) =>
+            forward("memoryArchiveProcedure", params),
+
+        memoryListActivity: (params) => forward("memoryListActivity", params),
+        memoryForgetActivity: (params) =>
+            forward("memoryForgetActivity", params),
+
         // =============================================================
         // Local operations (handled directly in service worker)
         // =============================================================
@@ -439,6 +481,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     {
                         mode: params.mode,
                         extractedKnowledge: params.extractedKnowledge,
+                        activityType: "captured",
                     },
                 );
                 return { success };
@@ -455,6 +498,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 const success = await indexPageContent(targetTab, false, {
                     quality: params.quality,
                     textOnly: params.textOnly,
+                    activityType: "visited",
                 });
                 return { success };
             }

@@ -290,10 +290,15 @@ export type ModelProviderMode = "azure" | "openai" | "ollama" | "copilot";
 /**
  * Source of text embeddings, independent of the chat `modelProvider`.
  * - "local": CPU-only transformers.js model bundled with the app.
- * - "openai" / "azure": hosted embedding endpoints.
+ * - "openai" / "azure" / "copilot": hosted embedding endpoints.
  * - "none": embeddings disabled; consumers must degrade gracefully.
  */
-export type EmbeddingProviderMode = "local" | "openai" | "azure" | "none";
+export type EmbeddingProviderMode =
+    | "local"
+    | "openai"
+    | "azure"
+    | "copilot"
+    | "none";
 
 /**
  * Embedding provider configuration. Kept separate from chat provider
@@ -306,7 +311,7 @@ export type EmbeddingProviderMode = "local" | "openai" | "azure" | "none";
 export interface EmbeddingConfig {
     /** Which embedding provider to use. */
     readonly provider?: EmbeddingProviderMode | undefined;
-    /** Local-provider model id (e.g. `Xenova/all-MiniLM-L6-v2`). */
+    /** Embedding model id (e.g. `text-embedding-3-small`). */
     readonly model?: string | undefined;
     /** Directory used to cache / pre-stage local model weights. */
     readonly cacheDir?: string | undefined;

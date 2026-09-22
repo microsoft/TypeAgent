@@ -5,6 +5,7 @@ import { getTabHTMLFragments, CompressionMode } from "./capture";
 import { sendActionToAgent } from "./websocket";
 import { BrowserContentDownloader } from "./contentDownloader.js";
 import type { KnowledgeExtractionProgress } from "../interfaces/knowledgeExtraction.types";
+import type { ImportWebsiteDataMessage } from "../interfaces/websiteImport.types";
 import { broadcastEvent } from "./extensionEventHelpers";
 
 // Store active extraction callbacks
@@ -32,9 +33,10 @@ export function handleKnowledgeExtractionProgress(
 }
 
 // Website Library Panel handlers
-export async function handleImportWebsiteDataWithProgress(message: any) {
-    const importId = message.importId;
-    const totalItems = message.totalItems || 0;
+export async function handleImportWebsiteDataWithProgress(
+    message: ImportWebsiteDataMessage,
+) {
+    const { importId, totalItems = 0 } = message.parameters;
 
     try {
         // Send initial progress update
@@ -45,8 +47,6 @@ export async function handleImportWebsiteDataWithProgress(message: any) {
             processedItems: 0,
             errors: [],
         });
-
-        const startTime = Date.now();
 
         const result = await sendActionToAgent({
             actionName: "importWebsiteDataWithProgress",
@@ -65,18 +65,26 @@ export async function handleImportWebsiteDataWithProgress(message: any) {
             },
         });
 
-        // Send completion progress
-        sendProgressToUI(importId, {
-            importId,
-            phase: "complete",
-            totalItems: totalItems,
-            processedItems: totalItems,
-            errors: [],
-        });
+        if (result.error || result.success === false) {
+            const error = result.error || "Website import failed";
+            sendProgressToUI(importId, {
+                importId,
+                phase: "error",
+                totalItems,
+                processedItems: result.itemCount || 0,
+                errors: [
+                    {
+                        type: "processing",
+                        message: error,
+                        timestamp: Date.now(),
+                    },
+                ],
+            });
+        }
 
         return {
-            success: !result.error,
-            itemCount: result.itemCount || totalItems,
+            success: !result.error && result.success !== false,
+            itemCount: result.itemCount || 0,
             error: result.error,
         };
     } catch (error) {
@@ -119,21 +127,10 @@ export function sendProgressToUI(importId: string, progress: any) {
         ...progress,
     };
 
-    // Send to all connected library panels via runtime messaging
-    try {
-        chrome.runtime
-            .sendMessage({
-                type: "importProgress",
-                importId,
-                progress: structuredProgress,
-            })
-            .catch((error) => {
-                // Handle case where no listeners are available
-                console.log("No listeners for progress update:", error);
-            });
-    } catch (error) {
-        console.error("Failed to send progress to UI:", error);
-    }
+    broadcastEvent("importProgress", {
+        importId,
+        progress: structuredProgress,
+    });
 }
 
 export async function handleClearWebsiteLibrary() {
@@ -196,19 +193,12 @@ export async function handleImportHtmlFolder(message: any) {
         });
 
         return {
-            success: !result.error,
-            itemCount: result.websiteCount || 0,
+            success: result.success !== false && !result.error,
+            itemCount: result.itemCount || 0,
             importId: importId,
             duration: result.duration || 0,
             errors: result.errors || [],
-            summary: {
-                totalProcessed: result.websiteCount || 0,
-                successfullyImported: result.websiteCount || 0,
-                knowledgeExtracted: result.knowledgeCount || 0,
-                entitiesFound: result.entityCount || 0,
-                topicsIdentified: result.topicCount || 0,
-                actionsDetected: result.actionCount || 0,
-            },
+            summary: result.summary,
         };
     } catch (error) {
         console.error("Folder import error:", error);
@@ -267,44 +257,66 @@ export async function handleCancelFileImport(importId: string) {
     }
 }
 
+type SearchWebMemoriesMessage = { parameters: any };
+
+function searchWebMemoryParameters(message: SearchWebMemoriesMessage) {
+    const { parameters } = message;
+    return {
+        query: parameters.query,
+        generateAnswer: true,
+        includeRelatedEntities: true,
+        enableAdvancedSearch: true,
+        limit: parameters.limit || 20,
+        minScore:
+            parameters.minScore ?? parameters.filters?.minRelevance ?? 0.3,
+        ...parameters.filters,
+        domain: parameters.domain ?? parameters.filters?.domain,
+        source: parameters.source ?? parameters.filters?.source,
+        dateFrom: parameters.dateFrom ?? parameters.filters?.dateFrom,
+        dateTo: parameters.dateTo ?? parameters.filters?.dateTo,
+    };
+}
+
+function searchWebMemoryResponse(
+    message: SearchWebMemoriesMessage,
+    result: Awaited<ReturnType<typeof sendActionToAgent>>,
+    startTime: number,
+) {
+    return {
+        success: true,
+        results: {
+            websites: result.websites || [],
+            summary: {
+                text: result.answer || "",
+                totalFound: result.websites?.length || 0,
+                searchTime:
+                    result.summary?.searchTime || Date.now() - startTime,
+                sources: result.answerSources || [],
+                entities: result.relatedEntities || [],
+            },
+            query: message.parameters.query,
+            filters: message.parameters.filters || {},
+            topTopics: result.topTopics || [],
+            suggestedFollowups: result.suggestedFollowups || [],
+            relatedEntities: result.relatedEntities || [],
+        },
+    };
+}
+
 // Enhanced search handlers
-export async function handleSearchWebMemories(message: any) {
+export async function handleSearchWebMemories(
+    message: SearchWebMemoriesMessage,
+) {
     try {
         const startTime = Date.now();
 
         // Use the new unified search action
         const result = await sendActionToAgent({
             actionName: "searchWebMemories",
-            parameters: {
-                query: message.parameters.query,
-                generateAnswer: true, // Knowledge Library wants answers
-                includeRelatedEntities: true,
-                enableAdvancedSearch: true,
-                limit: message.parameters.limit || 20,
-                minScore: message.parameters.filters?.minRelevance || 0.3,
-                ...message.parameters.filters,
-            },
+            parameters: searchWebMemoryParameters(message),
         });
 
-        return {
-            success: true,
-            results: {
-                websites: result.websites || [],
-                summary: {
-                    text: result.answer || "",
-                    totalFound: result.websites?.length || 0,
-                    searchTime:
-                        result.summary?.searchTime || Date.now() - startTime,
-                    sources: result.answerSources || [],
-                    entities: result.relatedEntities || [],
-                },
-                query: message.parameters.query,
-                filters: message.parameters.filters || {},
-                topTopics: result.topTopics || [],
-                suggestedFollowups: result.suggestedFollowups || [],
-                relatedEntities: result.relatedEntities || [],
-            },
-        };
+        return searchWebMemoryResponse(message, result, startTime);
     } catch (error) {
         console.error("Error in unified search:", error);
         return {
@@ -421,6 +433,7 @@ export async function indexPageContent(
         textOnly?: boolean;
         mode?: "basic" | "content" | "actions" | "full";
         extractedKnowledge?: any;
+        activityType?: "visited" | "captured";
     } = {},
 ): Promise<boolean> {
     try {
@@ -449,6 +462,7 @@ export async function indexPageContent(
             quality: options.quality || "balanced",
             textOnly: options.textOnly || false,
             mode: options.mode || "content",
+            activityType: options.activityType ?? "captured",
         };
 
         if (options.extractedKnowledge) {

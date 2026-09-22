@@ -8,18 +8,16 @@ import { fileURLToPath } from "node:url";
 import {
     clearPackagedEligibleGoldActionsCacheForTests,
     getPackagedEligibleGoldActionIds,
-    loadPackagedGraderForEligibility,
-    pickEligibleGoldActions,
-} from "../src/translationBench/policy/index.js";
-import {
     fieldTreeIsLlmAsAJudge,
     listActionsWithLlmJudgeFields,
-} from "../src/translationBench/policy/graderInspect.js";
+    loadPackagedGraderForEligibility,
+    pickEligibleGoldActions,
+} from "../src/translationBench/policy/actionQualityPicker.js";
 import {
     loadActionParametersGraderCatalogFile,
     type ActionParametersGraderCatalog,
     type GeneratedActionCatalog,
-} from "../src/translationBench/policy/policyGenerator.js";
+} from "../src/translationBench/synthesizer/catalogGenerator/index.js";
 import {
     countEligibleTranslationBenchActions,
     getPackagedScheduleExcludedActionIds,

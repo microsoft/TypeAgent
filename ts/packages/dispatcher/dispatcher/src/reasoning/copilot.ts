@@ -28,7 +28,6 @@ import {
 import registerDebug from "debug";
 import os from "node:os";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { existsSync, mkdtempSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
@@ -46,6 +45,7 @@ import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { createLimiter } from "@typeagent/common-utils";
+import { searchDurableConversationMemory } from "../context/conversationDurableMemory.js";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import {
     SUBAGENT_TOOL_DESCRIPTIONS,
@@ -352,74 +352,6 @@ function getRepoRoot(): string {
 }
 
 /**
- * Locate the platform-specific native copilot binary bundled by the SDK.
- * Navigates pnpm's virtual store: resolve @github/copilot-sdk, find the
- * @github/copilot sibling directory, follow its symlink to the real path,
- * then locate the platform binary (@github/copilot-<platform>-<arch>)
- * among the real copilot package's siblings.
- */
-function findBundledNativeCli(): string | undefined {
-    const binaryName = process.platform === "win32" ? "copilot.exe" : "copilot";
-    const require = createRequire(import.meta.url);
-    try {
-        // Resolve our direct dependency @github/copilot-sdk. Its install
-        // location is stable across machines (always under the repo's
-        // node_modules), but its entry-point *depth* is not — copilot-sdk@0.2.0
-        // nests the entry deeper than earlier versions, which broke a
-        // hard-coded "../.." climb to the @github scope dir. Instead, walk up
-        // from the resolved entry to the enclosing "@github" directory,
-        // bounded to the repo root so we never depend on anything above it.
-        // Works for both pnpm's isolated store and a hoisted node_modules
-        // layout. (@github/copilot itself is not require.resolve-able — its
-        // package "exports" blocks both the main entry and package.json.)
-        const sdkEntry = require.resolve("@github/copilot-sdk");
-        const repoRoot = getRepoRoot();
-        let scopeDir = path.dirname(sdkEntry);
-        while (
-            path.basename(scopeDir) !== "@github" &&
-            scopeDir.startsWith(repoRoot) &&
-            path.dirname(scopeDir) !== scopeDir
-        ) {
-            scopeDir = path.dirname(scopeDir);
-        }
-        if (
-            path.basename(scopeDir) !== "@github" ||
-            !scopeDir.startsWith(repoRoot)
-        ) {
-            debug(`Could not locate @github scope dir from: ${sdkEntry}`);
-            return undefined;
-        }
-
-        // @github/copilot is a (transitive) dependency of the SDK, linked as a
-        // sibling of copilot-sdk under the @github scope. Follow the symlink to
-        // its real location; the platform binary package
-        // (@github/copilot-<platform>-<arch>) is a sibling there.
-        const copilotDir = path.join(scopeDir, "copilot");
-        if (!existsSync(copilotDir)) {
-            debug(`@github/copilot not found at: ${copilotDir}`);
-            return undefined;
-        }
-        const realGithubDir = path.dirname(realpathSync(copilotDir));
-        const candidate = path.join(
-            realGithubDir,
-            `copilot-${process.platform}-${process.arch}`,
-            binaryName,
-        );
-        if (existsSync(candidate)) {
-            debug(`Found bundled native CLI: ${candidate}`);
-            return candidate;
-        }
-        debug(`Platform binary not found at: ${candidate}`);
-    } catch (err) {
-        debug(
-            `Could not resolve bundled native CLI for ${process.platform}-${process.arch}:`,
-            err,
-        );
-    }
-    return undefined;
-}
-
-/**
  * Create + start a Copilot client. Go through getCopilotClient(), which
  * memoizes the in-flight promise so we never start two CLIs concurrently.
  */
@@ -430,15 +362,6 @@ async function createCopilotClient(
     const repoRoot = getRepoRoot();
     debug(`Repo root: ${repoRoot}`);
     debug(`Parent dir: ${path.resolve(repoRoot, "..")}`);
-
-    // When running inside Electron, process.execPath is the Electron
-    // binary — not node. The SDK's default getBundledCliPath() resolves
-    // to a .js entry point which the SDK then spawns via
-    // process.execPath, causing the CLI to exit immediately. To avoid
-    // this, resolve the platform-specific native binary from the
-    // bundled @github/copilot-<platform> package and pass it as
-    // cliPath so the SDK spawns it directly (no node needed).
-    const cliPath = await findBundledNativeCli();
 
     // Isolate the CLI from the user's ~/.claude/settings.json.
     // The Copilot CLI binary internally uses the Anthropic API and
@@ -454,17 +377,7 @@ async function createCopilotClient(
     );
 
     const client = new CopilotClient({
-        connection: RuntimeConnection.forStdio({
-            ...(cliPath ? { path: cliPath } : {}),
-            args: [
-                "--add-dir",
-                repoRoot,
-                "--add-dir",
-                path.resolve(repoRoot, ".."),
-                "--allow-all-urls",
-                "--allow-all-tools",
-            ],
-        }),
+        connection: RuntimeConnection.forStdio(),
         env: {
             ...process.env,
             CLAUDE_CONFIG_DIR: isolatedConfigDir,
@@ -498,7 +411,7 @@ async function createCopilotClient(
     } catch (err) {
         debug("Failed to start Copilot client:", err);
         throw new Error(
-            `Failed to start Copilot CLI client. Make sure 'copilot' command is available and authenticated.\n` +
+            `Failed to start the Copilot SDK runtime. Verify the SDK runtime package is installed and Copilot is authenticated.\n` +
                 `Error: ${err instanceof Error ? err.message : String(err)}`,
         );
     }
@@ -1615,6 +1528,16 @@ function getCopilotSessionConfig(
         handler: async (args: any) => {
             const { question } = args;
             debug(`Searching memory: ${question}`);
+            const durableResult = await searchDurableConversationMemory(
+                systemContext,
+                question,
+            );
+            if (durableResult !== undefined) {
+                return {
+                    textResultForLlm: durableResult,
+                    resultType: "success" as const,
+                };
+            }
             const memory = systemContext.conversationMemory;
             if (memory === undefined) {
                 return {
@@ -1654,25 +1577,53 @@ function getCopilotSessionConfig(
                     type: "string",
                     description: "The information to remember",
                 },
+                kind: {
+                    type: "string",
+                    enum: ["decision", "task-outcome", "context"],
+                    description:
+                        "Whether this is an explicit decision, completed task outcome, or contextual evidence",
+                },
             },
             required: ["text"],
         },
         handler: async (args: any) => {
-            const { text } = args;
+            const { text, kind } = args;
             debug(`Remembering: ${text}`);
             const memory = systemContext.conversationMemory;
-            if (memory === undefined) {
+            if (
+                memory === undefined &&
+                systemContext.conversationDurableMemory === undefined
+            ) {
                 return {
                     textResultForLlm: "Conversation memory is not available.",
                     resultType: "success" as const,
                 };
             }
-            memory.queueAddMessage(
+            memory?.queueAddMessage(
                 new ConversationMessage(
                     text,
                     new ConversationMessageMeta("reasoning", ["user"]),
                 ),
             );
+            const turnId = systemContext.currentRequestId?.requestId;
+            if (turnId !== undefined) {
+                if (kind === "task-outcome") {
+                    systemContext.conversationDurableMemory?.recordTaskOutcome(
+                        text,
+                        turnId,
+                    );
+                } else if (kind === "decision") {
+                    systemContext.conversationDurableMemory?.recordDecision(
+                        text,
+                        turnId,
+                    );
+                } else {
+                    systemContext.conversationDurableMemory?.recordAssistantEvidence(
+                        text,
+                        turnId,
+                    );
+                }
+            }
             return {
                 textResultForLlm: "Remembered.",
                 resultType: "success" as const,
@@ -2178,6 +2129,7 @@ function getCopilotSessionConfig(
         ],
         availableTools: buildCopilotAvailableTools({ subagentsEnabled }),
         workingDirectory: workingDirectory ?? getRepoRoot(),
+        additionalDirectories: [path.resolve(getRepoRoot(), "..")],
         onPermissionRequest: createCopilotPermissionHandler(
             context,
             workingDirectory,

@@ -18,7 +18,9 @@ import {
     type ActionCandidateResult,
 } from "../translation/actionCandidateRanker.js";
 import { createActionContract } from "./contract.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import registerDebug from "debug";
+import { getStructuredActionUnsupportedReason } from "./executionFailure.js";
 
 const debugError = registerDebug(
     "typeagent:dispatcher:structuredActionDiscovery:error",
@@ -31,6 +33,10 @@ const rankedCandidateLimit = 5;
 export type StructuredActionAccess = () => {
     scope: object;
     canDiscoverSchema(schemaName: string): boolean;
+    // Discovery-only facades deny execution without hiding contracts.
+    // Omitted for existing/direct callers, which retain execution access.
+    canExecute?: boolean;
+    isActive?(): boolean;
 };
 
 type DiscoveryContext = {
@@ -57,6 +63,25 @@ function validateSearch(request: ActionSearchRequest): void {
     validateString(request.query, "query");
 }
 
+function createDiscoverableActionContract(
+    identity: { schemaName: string; actionName: string },
+    definition: Parameters<typeof createActionContract>[1],
+    config: Parameters<typeof createActionContract>[2],
+): ActionContract {
+    const contract = createActionContract(identity, definition, config);
+    const unsupportedReason = getStructuredActionUnsupportedReason(identity);
+    if (unsupportedReason === undefined) return contract;
+
+    const unsupportedDescription = `Structured execution is unsupported: ${unsupportedReason}`;
+    return {
+        ...contract,
+        description:
+            contract.description.length === 0
+                ? unsupportedDescription
+                : `${contract.description}\n\n${unsupportedDescription}`,
+    };
+}
+
 export class StructuredActionDiscovery {
     private readonly anonymousScope = {};
 
@@ -66,8 +91,14 @@ export class StructuredActionDiscovery {
         private readonly candidateRanker: ActionCandidateRanker = context.agents,
     ) {}
 
-    private bindScope() {
+    public bindScope() {
         const policy = this.access?.();
+        if (
+            policy?.isActive?.() === false ||
+            (this.access !== undefined && policy === undefined)
+        ) {
+            throw new Error("Structured action access has been revoked");
+        }
         const permissionScope = policy?.scope ?? this.anonymousScope;
         let scopes = sessionScopes.get(this.context.session);
         if (scopes === undefined) {
@@ -143,7 +174,7 @@ export class StructuredActionDiscovery {
                     return [];
                 }
                 return [
-                    createActionContract(
+                    createDiscoverableActionContract(
                         { schemaName, actionName },
                         definition,
                         config,
@@ -175,7 +206,7 @@ export class StructuredActionDiscovery {
                     continue;
                 }
                 matches.push(
-                    createActionContract(
+                    createDiscoverableActionContract(
                         { schemaName: config.schemaName, actionName },
                         definition,
                         config,
@@ -184,5 +215,94 @@ export class StructuredActionDiscovery {
             }
         }
         return matches.sort(compareActionCandidateIdentity);
+    }
+
+    /** Resolve one exact identity for execution without semantic selection. */
+    public resolveActionContract(identity: {
+        schemaName: string;
+        actionName: string;
+    }):
+        | {
+              status: "found";
+              envelope: StructuredActionEnvelope;
+              contract: ActionContract;
+          }
+        | {
+              status: "unavailable";
+              envelope: StructuredActionEnvelope;
+              message: string;
+          } {
+        validateString(identity.schemaName, "schemaName");
+        validateString(identity.actionName, "actionName");
+        const { envelope, policy } = this.bindScope();
+        if (policy?.canDiscoverSchema(identity.schemaName) === false) {
+            return {
+                status: "unavailable",
+                envelope,
+                message: "Action is unavailable",
+            };
+        }
+        const config = this.context.agents.tryGetActionConfig(
+            identity.schemaName,
+        );
+        if (config === undefined) {
+            return {
+                status: "unavailable",
+                envelope,
+                message: "Action is unavailable",
+            };
+        }
+        if (
+            !this.context.agents.isSchemaActive(identity.schemaName) ||
+            !this.context.agents.isActionActive(identity.schemaName)
+        ) {
+            return {
+                status: "unavailable",
+                envelope,
+                message: "Action is disabled or inactive",
+            };
+        }
+        const unsupportedReason =
+            getStructuredActionUnsupportedReason(identity);
+        if (unsupportedReason !== undefined) {
+            return {
+                status: "unavailable",
+                envelope,
+                message: unsupportedReason,
+            };
+        }
+        const agentName = getAppAgentName(identity.schemaName);
+        if (this.context.agents.hasUnknownReadiness(agentName)) {
+            return {
+                status: "unavailable",
+                envelope,
+                message: `Readiness for '${agentName}' has not been checked`,
+            };
+        }
+        const readiness = this.context.agents.getReadiness(agentName);
+        if (readiness.state !== "ready") {
+            return {
+                status: "unavailable",
+                envelope,
+                message:
+                    readiness.message ??
+                    `Agent '${agentName}' is ${readiness.state}`,
+            };
+        }
+        const definition = this.context.agents
+            .getActionSchemaFileForConfig(config)
+            .parsedActionSchema.actionSchemas.get(identity.actionName);
+        if (definition === undefined) {
+            return {
+                status: "unavailable",
+                envelope,
+                message: "Action is unavailable",
+            };
+        }
+        return {
+            status: "found",
+            envelope,
+            contract: createActionContract(identity, definition, config),
+        };
     }
 }

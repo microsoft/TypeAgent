@@ -15,7 +15,7 @@ import {
 import {
     loadActionParametersGraderCatalogFile,
     type GeneratedActionCatalog,
-} from "../policy/policyGenerator.js";
+} from "../synthesizer/catalogGenerator/index.js";
 
 const DEFAULT_CATALOG = "src/translationBench/catalog.generated.json";
 const DEFAULT_GRADER =

@@ -415,14 +415,6 @@
       "args": [],
       "console": "externalTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
-    },           {
-      "name": "Launch MCP Memory",
-      "type": "node",
-      "request": "launch",
-      "skipFiles": ["<node_internals>/**"],
-      "program": "${workspaceFolder}/examples/mcpMemory/src/main.ts",
-      "console": "externalTerminal",
-      "outFiles": ["${workspaceFolder}/**/*.js"],
     },
     {
       "name": "Launch Website Alias Extractor",

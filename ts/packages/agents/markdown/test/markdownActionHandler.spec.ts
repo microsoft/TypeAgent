@@ -2,6 +2,14 @@
 // Licensed under the MIT License.
 
 import type { ActionContext, Storage } from "@typeagent/agent-sdk";
+import {
+    configFromEnvRecord,
+    getActiveModelProvider,
+    getRuntimeConfig,
+    setActiveModelProvider,
+    setRuntimeConfig,
+} from "@typeagent/aiclient";
+import { jest } from "@jest/globals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -126,6 +134,192 @@ describe("markdown document creation", () => {
             }
         }
     });
+
+    test.each(
+        ["updateDocument", "streamingUpdateDocument"].flatMap((actionName) =>
+            [200, 401].flatMap((status) =>
+                ["current", "relative", "absolute"].map((target) => ({
+                    actionName,
+                    status,
+                    target,
+                })),
+            ),
+        ),
+    )(
+        "$actionName handles HTTP $status with the default model and $target target",
+        async ({ actionName, status, target }) => {
+            const savedConfig = getRuntimeConfig();
+            const savedProvider = getActiveModelProvider();
+            const initialContent = "# Notes\n\nInitial content.";
+            const paragraph = "\n\nLorem ipsum dolor sit amet.";
+            const endpoint = "https://markdown-test.invalid/chat/completions";
+            const usage = {
+                prompt_tokens: 100,
+                completion_tokens: 20,
+                total_tokens: 120,
+            };
+            const fetchMock = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+                new Response(
+                    JSON.stringify({
+                        choices: [
+                            {
+                                message: {
+                                    content: JSON.stringify({
+                                        operations: [
+                                            {
+                                                type: "insert",
+                                                position: initialContent.length,
+                                                content: [
+                                                    {
+                                                        type: "text",
+                                                        text: paragraph,
+                                                    },
+                                                ],
+                                            },
+                                        ],
+                                        operationSummary: "Added a paragraph",
+                                    }),
+                                },
+                            },
+                        ],
+                        usage,
+                    }),
+                    {
+                        status,
+                        headers: { "content-type": "application/json" },
+                    },
+                ),
+            );
+            const env = { ...process.env };
+            for (const key of Object.keys(env)) {
+                if (
+                    key.startsWith("AZURE_OPENAI_") ||
+                    key.startsWith("OPENAI_") ||
+                    key === "TYPEAGENT_MODEL_PROVIDER"
+                ) {
+                    delete env[key];
+                }
+            }
+            const envMock = jest.replaceProperty(process, "env", env);
+
+            try {
+                setRuntimeConfig(
+                    configFromEnvRecord({
+                        AZURE_OPENAI_ENDPOINT_GPT_5_MINI_EASTUS: endpoint,
+                        AZURE_OPENAI_API_KEY_GPT_5_MINI_EASTUS: "test-key",
+                    }),
+                );
+                setActiveModelProvider(undefined);
+                const sessionFiles = new Map([["live.md", "Session content"]]);
+                const storage = {
+                    exists: async (name: string) => sessionFiles.has(name),
+                    read: async (name: string) => sessionFiles.get(name) ?? "",
+                    write: async (name: string, content: string) => {
+                        sessionFiles.set(name, content);
+                    },
+                } as unknown as Storage;
+                const { context, agentContext } = createContext({ storage });
+                const agent = instantiate();
+                await agent.executeAction!(
+                    {
+                        schemaName: "markdown",
+                        actionName: "createDocument",
+                        parameters: { name: "notes", content: initialContent },
+                    },
+                    context,
+                );
+                expect(fetchMock).not.toHaveBeenCalled();
+                if (target !== "current") {
+                    // A restarted agent selects its default session document.
+                    agentContext.currentDocument = {
+                        source: "session",
+                        storageKey: "live.md",
+                    };
+                }
+
+                const result = await agent.executeAction!(
+                    {
+                        schemaName: "markdown",
+                        actionName,
+                        parameters: {
+                            originalRequest: "Add a paragraph of lorem ipsum",
+                            ...(target === "current"
+                                ? {}
+                                : {
+                                      documentPath:
+                                          target === "absolute"
+                                              ? path.join(workspace, "notes.md")
+                                              : "notes.md",
+                                  }),
+                        },
+                    },
+                    context,
+                );
+
+                expect(result).toBeDefined();
+                expect(fetchMock).toHaveBeenCalledTimes(1);
+                expect(fetchMock.mock.calls[0][0]).toBe(endpoint);
+                if (status === 200) {
+                    expect(result).not.toHaveProperty("error");
+                    expect(result).toMatchObject({ tokenUsage: usage });
+                } else {
+                    expect(result).toMatchObject({
+                        error: expect.stringContaining("401"),
+                    });
+                }
+                expect(
+                    fs.readFileSync(path.join(workspace, "notes.md"), "utf8"),
+                ).toBe(
+                    status === 200
+                        ? initialContent + paragraph
+                        : initialContent,
+                );
+                expect(sessionFiles.get("live.md")).toBe("Session content");
+            } finally {
+                fetchMock.mockRestore();
+                envMock.restore();
+                setRuntimeConfig(savedConfig);
+                setActiveModelProvider(savedProvider);
+            }
+        },
+    );
+
+    test.each(["updateDocument", "streamingUpdateDocument"])(
+        "%s refuses an invalid explicit target instead of editing the current document",
+        async (actionName) => {
+            const { context, agentContext } = createContext();
+            const filePath = path.join(workspace, "notes.md");
+            fs.writeFileSync(filePath, "original");
+            agentContext.currentDocument = {
+                source: "workspace",
+                filePath,
+                workspaceRoot: workspace,
+            };
+            for (const documentPath of [
+                "missing.md",
+                "../outside.md",
+                path.join(workspace, "..", "outside.md"),
+            ]) {
+                await expect(
+                    instantiate().executeAction!(
+                        {
+                            schemaName: "markdown",
+                            actionName,
+                            parameters: {
+                                documentPath,
+                                originalRequest: "Add text",
+                            },
+                        },
+                        context,
+                    ),
+                ).rejects.toThrow(
+                    /within the working directory|safe relative path/,
+                );
+                expect(fs.readFileSync(filePath, "utf8")).toBe("original");
+                expect(agentContext.currentDocument.filePath).toBe(filePath);
+            }
+        },
+    );
 
     test.each([
         ["traversal", "../escape"],

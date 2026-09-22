@@ -43,6 +43,34 @@ describe("docImport.offline", () => {
         },
         testTimeout,
     );
+    test("aggregates structural parts without link knowledge", () => {
+        const markdown = [
+            "# Ada Lovelace",
+            "",
+            "Read the [citation](https://example.test/citation).",
+            "",
+            "## Analytical Engine",
+            "",
+            "Ada described an algorithm for the engine.",
+        ].join("\n");
+        const parts = docPartsFromMarkdown(markdown, 20, "fixture", {
+            collectLinkKnowledge: false,
+            maxTokensPerPart: 100,
+        });
+
+        expect(parts).toHaveLength(1);
+        expect(parts[0].textChunks.join("\n")).toContain("Analytical Engine");
+        expect(parts[0].knowledge?.topics).toEqual(
+            expect.arrayContaining(["Ada Lovelace", "Analytical Engine"]),
+        );
+        expect(parts[0].knowledge?.entities).not.toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    type: expect.arrayContaining(["url"]),
+                }),
+            ]),
+        );
+    });
 });
 
 describeIf(

@@ -16,7 +16,7 @@
  *   @typeagent status        — show current configuration
  */
 
-import { handleDirect } from "./hook-direct.js";
+import { handleDirect, type DirectHandlingOptions } from "./hook-direct.js";
 import { handleMcpRedirect } from "./hook-mcp-redirect.js";
 import { handleDevActions } from "./hook-dev-actions.js";
 import { makeTurnId, writeDemoState } from "./demo-state.js";
@@ -35,8 +35,8 @@ import {
 } from "../shared/plugin-config.js";
 
 const modeDescriptions: Record<Mode, string> = {
-    direct: "Hook handles requests directly, bypassing the LLM. Workspace macro tools remain available.",
-    mcp: "Hook redirects to the TypeAgent MCP tool. Workspace macro tools remain available.",
+    direct: "Hook handles user natural language directly. Copilot-selected structured actions use the persistent TypeAgent MCP tools. Workspace macro tools remain available.",
+    mcp: "Hook redirects user natural language to processCommand; Copilot-selected actions use searchActions and executeAction. Workspace macro tools remain available.",
     dev: "TypeAgent handles registered PowerShell flows and recording directives; other requests fall through to Copilot. Workspace macro tools remain available.",
     bypass: "TypeAgent is disabled. All requests bypass TypeAgent routing and fall through to other handlers.",
 };
@@ -91,21 +91,45 @@ async function handleMacroCommand(
     }
 }
 
-function directCommand(input: HookInput, command: string): Promise<HookOutput> {
-    return handleDirect({
-        prompt: command,
-        sessionId: input.sessionId,
-        timestamp: input.timestamp,
-        cwd: input.cwd,
-    });
+export type DirectHandler = (
+    input: HookInput,
+    options?: DirectHandlingOptions,
+) => Promise<HookOutput>;
+
+export interface SlashCommandDependencies {
+    direct: DirectHandler;
+}
+
+const slashCommandDefaults: SlashCommandDependencies = {
+    direct: handleDirect,
+};
+
+function directCommand(
+    input: HookInput,
+    command: string,
+    direct: DirectHandler,
+    options?: DirectHandlingOptions,
+): Promise<HookOutput> {
+    return direct(
+        {
+            prompt: command,
+            sessionId: input.sessionId,
+            timestamp: input.timestamp,
+            cwd: input.cwd,
+        },
+        options,
+    );
 }
 
 function handleRunCommand(
     input: HookInput,
     trimmed: string,
+    direct: DirectHandler,
 ): Promise<HookOutput> | undefined {
     const match = trimmed.match(/^@typeagent\s+run\s+(.+)$/i);
-    return match ? directCommand(input, match[1]) : undefined;
+    return match
+        ? directCommand(input, match[1], direct, { forceHandled: true })
+        : undefined;
 }
 
 function handleModeCommand(lower: string): HookOutput | undefined {
@@ -202,9 +226,10 @@ function handleStatusCommand(lower: string): HookOutput | undefined {
 function handleCatchAllCommand(
     input: HookInput,
     trimmed: string,
+    direct: DirectHandler,
 ): Promise<HookOutput> | undefined {
     const match = trimmed.match(/^@typeagent\s+(.+)$/i);
-    return match ? directCommand(input, match[1]) : undefined;
+    return match ? directCommand(input, match[1], direct) : undefined;
 }
 
 /**
@@ -212,19 +237,20 @@ function handleCatchAllCommand(
  * was handled, or undefined if the prompt is not a slash command.
  * Returns a Promise for commands that need async work (e.g., @typeagent run).
  */
-async function handleSlashCommand(
+export async function handleSlashCommand(
     input: HookInput,
+    dependencies: SlashCommandDependencies = slashCommandDefaults,
 ): Promise<HookOutput | undefined> {
     const trimmed = input.prompt.trim();
     const lower = trimmed.toLowerCase();
 
     return (
         (await handleMacroCommand(input, lower)) ??
-        handleRunCommand(input, trimmed) ??
+        handleRunCommand(input, trimmed, dependencies.direct) ??
         handleModeCommand(lower) ??
         handlePowerShellCommand(lower) ??
         handleStatusCommand(lower) ??
-        handleCatchAllCommand(input, trimmed)
+        handleCatchAllCommand(input, trimmed, dependencies.direct)
     );
 }
 
@@ -271,7 +297,7 @@ async function main(): Promise<void> {
 
 export interface RoutePromptDependencies {
     claimRecording: (input: HookInput) => Promise<boolean>;
-    direct: (input: HookInput) => Promise<HookOutput>;
+    direct: DirectHandler;
     mcp: (input: HookInput) => HookOutput;
     dev: (input: HookInput, signal: AbortSignal) => Promise<HookOutput>;
 }

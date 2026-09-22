@@ -10,10 +10,10 @@ import {
 import {
     ambiguousCrossSchemaActionIds,
     clearPackagedEligibleGoldActionsCacheForTests,
+    listActionsWithLlmJudgeFields,
     getPackagedEligibleGoldActionIds,
     loadPackagedGraderForEligibility,
 } from "../policy/actionQualityPicker.js";
-import { listActionsWithLlmJudgeFields } from "../policy/graderInspect.js";
 
 /**
  * Benign non-tool actions excluded from TB gold targeting and from scored

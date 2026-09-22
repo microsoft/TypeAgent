@@ -598,6 +598,52 @@ describe("CLI queue version watermark", () => {
     });
 });
 
+describe("CLI temporary display", () => {
+    it("does not commit replaceable snapshots or alter inline state", () => {
+        const clientIO = createEnhancedClientIO(undefined, {
+            current: undefined,
+        });
+        const message = {
+            requestId: { requestId: "rid-1", clientRequestId: "c-1" },
+            source: "dispatcher",
+        } as const;
+
+        clientIO.appendDisplay(
+            { ...message, message: "prefix" } as any,
+            "inline",
+        );
+        clientIO.appendDisplay(
+            { ...message, message: "I'll inspect" } as any,
+            "temporary",
+        );
+        clientIO.appendDisplay({ ...message, message: "Done" } as any, "block");
+
+        expect(captured()).toContain("Done");
+        expect(captured()).not.toContain("I'll inspect");
+        expect(captured()).toContain("prefix\n");
+    });
+
+    it("does not print an agent source header for temporary output", () => {
+        const clientIO = createEnhancedClientIO(undefined, {
+            current: undefined,
+        });
+
+        clientIO.appendDisplay(
+            {
+                requestId: {
+                    requestId: "rid-1",
+                    clientRequestId: "agent-1",
+                },
+                message: "Working",
+                source: "dispatcher",
+            } as any,
+            "temporary",
+        );
+
+        expect(captured()).toBe("");
+    });
+});
+
 // /queue list truncation
 describe("/queue list truncation", () => {
     it("truncates queued list past 10 entries with a footer hint", async () => {
