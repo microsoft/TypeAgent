@@ -21,6 +21,16 @@ permanently active.
 `answer` is deliberately extractive: it returns bounded source-linked evidence
 with explicit citations and does not claim model-generated synthesis.
 
+The service also provides a shared episode/event substrate for conversation,
+web-activity, and procedural producers. Events are appended to a per-corpus
+log without rebuilding the document index and are deduplicated by producer and
+idempotency key, including after restart. Typed provenance includes source
+kind, producer, event type, conversation/run/turn, sender, action, observed
+time, and event time. Events can link to durable document sources without
+copying source content, and can be listed, searched, filtered, or forgotten
+independently. Linked sources are deleted only when explicitly requested and
+when no retained event still links to them.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

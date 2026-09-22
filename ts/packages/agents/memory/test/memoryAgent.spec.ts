@@ -184,6 +184,33 @@ function createFakeService(
             total: 1,
         }),
         cancelJob: async () => undefined,
+        appendEvent: async (request) => ({
+            event: {
+                eventId: "event-1",
+                corpusId: request.corpusId,
+                idempotencyKey: request.idempotencyKey,
+                producer: request.producer,
+                eventType: request.eventType,
+                sourceKind: request.sourceKind,
+                observedAt: request.observedAt ?? "2026-01-01T00:00:00.000Z",
+                eventTime:
+                    request.eventTime ??
+                    request.observedAt ??
+                    "2026-01-01T00:00:00.000Z",
+                createdAt: "2026-01-01T00:00:00.000Z",
+            },
+            replayed: false,
+        }),
+        getEvent: async () => undefined,
+        listEvents: async () => ({ items: [], total: 0 }),
+        searchEvents: async ({ query }) => ({ query, matches: [] }),
+        forgetEvents: async ({ corpusId }) => ({
+            corpusId,
+            deletedEventCount: 0,
+            deletedSourceCount: 0,
+            retainedLinkedSourceIds: [],
+            indexVersion: "1",
+        }),
         search: async ({ query }) => ({
             query,
             matches: [createEvidence()],

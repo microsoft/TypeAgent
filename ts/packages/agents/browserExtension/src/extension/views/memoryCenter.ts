@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import type {
+    MemoryCenterActivity,
+    MemoryCenterActivityFilter,
     MemoryCenterContent,
     MemoryCenterCorpus,
     MemoryCenterCorpusStatus,
@@ -64,6 +66,7 @@ const entityList = element<HTMLDivElement>("entityList");
 const topicList = element<HTMLDivElement>("topicList");
 const relationshipList = element<HTMLDivElement>("relationshipList");
 const jobList = element<HTMLDivElement>("jobList");
+const activityList = element<HTMLDivElement>("activityList");
 const errorBanner = element<HTMLDivElement>("errorBanner");
 const connectionState = element<HTMLDivElement>("connectionState");
 
@@ -85,6 +88,13 @@ let jobTokens: Array<string | undefined> = [undefined];
 let jobPageIndex = 0;
 let pendingReplacement: string | undefined;
 let pendingForget: MemoryCenterForgetPreview | undefined;
+let activityPage: MemoryCenterPage<MemoryCenterActivity> = {
+    items: [],
+    total: 0,
+};
+let activityTokens: Array<string | undefined> = [undefined];
+let activityPageIndex = 0;
+let activityLinkedSourceId: string | undefined;
 
 function setError(error?: unknown): void {
     if (error === undefined) {
@@ -141,6 +151,11 @@ function resetSourcePaging(): void {
 function resetJobPaging(): void {
     jobTokens = [undefined];
     jobPageIndex = 0;
+}
+
+function resetActivityPaging(): void {
+    activityTokens = [undefined];
+    activityPageIndex = 0;
 }
 
 function renderCorpora(): void {
@@ -216,6 +231,7 @@ function renderSource(): void {
     element<HTMLButtonElement>("reindexSourceButton").disabled = !hasSource;
     element<HTMLButtonElement>("forgetSourceButton").disabled = !hasSource;
     element<HTMLButtonElement>("replaceSourceButton").disabled = !hasSource;
+    element<HTMLButtonElement>("showSourceActivity").disabled = !hasSource;
     contentEditor.disabled = !hasSource;
     sourceMetadata.replaceChildren();
     revisionList.replaceChildren();
@@ -255,6 +271,123 @@ function renderSource(): void {
             "revision",
         );
     }
+}
+
+function activityMetadata(
+    activity: MemoryCenterActivity,
+    key: string,
+): string | undefined {
+    const value = activity.metadata?.[key];
+    return typeof value === "string" ? value : undefined;
+}
+
+function renderActivity(): void {
+    activityList.replaceChildren();
+    for (const activity of activityPage.items) {
+        const card = document.createElement("div");
+        card.className = "activity-item";
+        appendTextItem(
+            card,
+            `${activity.eventType} · ${activityMetadata(activity, "title") ?? activityMetadata(activity, "url") ?? "Untitled page"}`,
+            "item-title",
+        );
+        appendTextItem(
+            card,
+            `${new Date(activity.eventTime).toLocaleString()} · ${activityMetadata(activity, "domain") ?? "unknown domain"} · ${activityMetadata(activity, "source") ?? "browser"}`,
+            "item-subtitle",
+        );
+        const actions = document.createElement("div");
+        actions.className = "item-actions";
+        const sourceId = activity.linkedSourceIds?.[0];
+        if (sourceId) {
+            const open = document.createElement("button");
+            open.type = "button";
+            open.textContent = "Linked page";
+            open.addEventListener("click", () => {
+                void run(async () => {
+                    if (activeCorpus?.corpusId !== activity.corpusId) {
+                        await selectCorpus(activity.corpusId);
+                    }
+                    await selectSource(sourceId);
+                });
+            });
+            actions.appendChild(open);
+        }
+        const forget = document.createElement("button");
+        forget.type = "button";
+        forget.textContent = "Delete event";
+        forget.addEventListener("click", () => {
+            void run(async () => {
+                await invoke("memoryForgetActivity", {
+                    eventIds: [activity.eventId],
+                });
+                await loadActivity();
+            });
+        });
+        actions.appendChild(forget);
+        card.appendChild(actions);
+        activityList.appendChild(card);
+    }
+    if (activityPage.items.length === 0) {
+        setEmpty(activityList, "No matching web activity.");
+    } else {
+        activityList.classList.remove("empty");
+    }
+    element<HTMLSpanElement>("activityCount").textContent =
+        `${activityPage.total} total`;
+    element<HTMLSpanElement>("activityPageLabel").textContent =
+        `Page ${activityPageIndex + 1}`;
+    element<HTMLButtonElement>("activityPrevious").disabled =
+        activityPageIndex === 0;
+    element<HTMLButtonElement>("activityNext").disabled =
+        !activityPage.nextContinuationToken;
+}
+
+function optionalInput(id: string): string | undefined {
+    const value = element<HTMLInputElement>(id).value.trim();
+    return value.length === 0 ? undefined : value;
+}
+
+function activityFilter(): MemoryCenterActivityFilter {
+    const dateFrom = optionalInput("activityFrom");
+    const dateTo = optionalInput("activityTo");
+    const domain = optionalInput("activityDomain");
+    const eventType =
+        element<HTMLSelectElement>("activityType").value || undefined;
+    const source = optionalInput("activitySource");
+    const pageType = optionalInput("activityPageType");
+    return {
+        ...(dateFrom === undefined
+            ? {}
+            : { dateFrom: new Date(dateFrom).toISOString() }),
+        ...(dateTo === undefined
+            ? {}
+            : { dateTo: new Date(dateTo).toISOString() }),
+        ...(domain === undefined ? {} : { domains: [domain] }),
+        ...(eventType === undefined
+            ? {}
+            : {
+                  eventTypes: [eventType as MemoryCenterActivity["eventType"]],
+              }),
+        ...(source === undefined ? {} : { sources: [source] }),
+        ...(pageType === undefined ? {} : { pageTypes: [pageType] }),
+        ...(activityLinkedSourceId === undefined
+            ? {}
+            : { sourceIds: [activityLinkedSourceId] }),
+    };
+}
+
+async function loadActivity(): Promise<void> {
+    activityPage = await invoke("memoryListActivity", {
+        ...activityFilter(),
+        pageSize: PAGE_SIZE,
+        continuationToken: activityTokens[activityPageIndex],
+    });
+    if (activityPage.nextContinuationToken) {
+        activityTokens[activityPageIndex + 1] =
+            activityPage.nextContinuationToken;
+    }
+    renderActivity();
 }
 
 function renderContent(): void {
@@ -387,6 +520,8 @@ async function loadCorpora(preferredCorpusId?: string): Promise<void> {
         renderContent();
         renderKnowledge();
         renderJobs();
+        activityPage = { items: [], total: 0 };
+        renderActivity();
         return;
     }
     await selectCorpus(corpusId);
@@ -399,12 +534,13 @@ async function selectCorpus(corpusId: string): Promise<void> {
     contentPage = undefined;
     resetSourcePaging();
     resetJobPaging();
+    resetActivityPaging();
     renderCorpora();
     renderCorpusStatus();
     renderSource();
     renderContent();
     renderKnowledge();
-    await Promise.all([loadSources(), loadJobs()]);
+    await Promise.all([loadSources(), loadJobs(), loadActivity()]);
 }
 
 async function loadSources(): Promise<void> {
@@ -511,7 +647,8 @@ async function refreshActiveCorpus(): Promise<void> {
     renderCorpusStatus();
     resetSourcePaging();
     resetJobPaging();
-    await Promise.all([loadSources(), loadJobs()]);
+    resetActivityPaging();
+    await Promise.all([loadSources(), loadJobs(), loadActivity()]);
     if (sourceId) {
         await selectSource(sourceId);
     }
@@ -610,6 +747,50 @@ element<HTMLButtonElement>("jobNext").addEventListener("click", () => {
     if (!jobPage.nextContinuationToken) return;
     jobPageIndex += 1;
     void run(loadJobs);
+});
+element<HTMLButtonElement>("activityPrevious").addEventListener("click", () => {
+    if (activityPageIndex === 0) return;
+    activityPageIndex -= 1;
+    void run(loadActivity);
+});
+element<HTMLButtonElement>("activityNext").addEventListener("click", () => {
+    if (!activityPage.nextContinuationToken) return;
+    activityPageIndex += 1;
+    void run(loadActivity);
+});
+element<HTMLButtonElement>("applyActivityFilter").addEventListener(
+    "click",
+    () => {
+        activityLinkedSourceId = undefined;
+        resetActivityPaging();
+        void run(loadActivity);
+    },
+);
+element<HTMLButtonElement>("showSourceActivity").addEventListener(
+    "click",
+    () => {
+        if (!selectedSource) return;
+        activityLinkedSourceId = selectedSource.sourceId;
+        resetActivityPaging();
+        void run(loadActivity);
+    },
+);
+element<HTMLButtonElement>("forgetActivity").addEventListener("click", () => {
+    void run(async () => {
+        const filter = activityFilter();
+        if (
+            filter.dateFrom === undefined &&
+            filter.dateTo === undefined &&
+            filter.domains === undefined
+        ) {
+            throw new Error(
+                "Choose a domain or time range before deleting matching events",
+            );
+        }
+        await invoke("memoryForgetActivity", filter);
+        resetActivityPaging();
+        await loadActivity();
+    });
 });
 element<HTMLButtonElement>("contentPrevious").addEventListener("click", () => {
     if (contentPageIndex === 0) return;

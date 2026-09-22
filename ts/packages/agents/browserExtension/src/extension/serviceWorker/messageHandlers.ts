@@ -257,59 +257,66 @@ export async function handleCancelFileImport(importId: string) {
     }
 }
 
+type SearchWebMemoriesMessage = { parameters: any };
+
+function searchWebMemoryParameters(message: SearchWebMemoriesMessage) {
+    const { parameters } = message;
+    return {
+        query: parameters.query,
+        generateAnswer: true,
+        includeRelatedEntities: true,
+        enableAdvancedSearch: true,
+        limit: parameters.limit || 20,
+        minScore:
+            parameters.minScore ?? parameters.filters?.minRelevance ?? 0.3,
+        ...parameters.filters,
+        domain: parameters.domain ?? parameters.filters?.domain,
+        source: parameters.source ?? parameters.filters?.source,
+        dateFrom: parameters.dateFrom ?? parameters.filters?.dateFrom,
+        dateTo: parameters.dateTo ?? parameters.filters?.dateTo,
+    };
+}
+
+function searchWebMemoryResponse(
+    message: SearchWebMemoriesMessage,
+    result: Awaited<ReturnType<typeof sendActionToAgent>>,
+    startTime: number,
+) {
+    return {
+        success: true,
+        results: {
+            websites: result.websites || [],
+            summary: {
+                text: result.answer || "",
+                totalFound: result.websites?.length || 0,
+                searchTime:
+                    result.summary?.searchTime || Date.now() - startTime,
+                sources: result.answerSources || [],
+                entities: result.relatedEntities || [],
+            },
+            query: message.parameters.query,
+            filters: message.parameters.filters || {},
+            topTopics: result.topTopics || [],
+            suggestedFollowups: result.suggestedFollowups || [],
+            relatedEntities: result.relatedEntities || [],
+        },
+    };
+}
+
 // Enhanced search handlers
-export async function handleSearchWebMemories(message: any) {
+export async function handleSearchWebMemories(
+    message: SearchWebMemoriesMessage,
+) {
     try {
         const startTime = Date.now();
 
         // Use the new unified search action
         const result = await sendActionToAgent({
             actionName: "searchWebMemories",
-            parameters: {
-                query: message.parameters.query,
-                generateAnswer: true, // Knowledge Library wants answers
-                includeRelatedEntities: true,
-                enableAdvancedSearch: true,
-                limit: message.parameters.limit || 20,
-                minScore:
-                    message.parameters.minScore ??
-                    message.parameters.filters?.minRelevance ??
-                    0.3,
-                ...message.parameters.filters,
-                domain:
-                    message.parameters.domain ??
-                    message.parameters.filters?.domain,
-                source:
-                    message.parameters.source ??
-                    message.parameters.filters?.source,
-                dateFrom:
-                    message.parameters.dateFrom ??
-                    message.parameters.filters?.dateFrom,
-                dateTo:
-                    message.parameters.dateTo ??
-                    message.parameters.filters?.dateTo,
-            },
+            parameters: searchWebMemoryParameters(message),
         });
 
-        return {
-            success: true,
-            results: {
-                websites: result.websites || [],
-                summary: {
-                    text: result.answer || "",
-                    totalFound: result.websites?.length || 0,
-                    searchTime:
-                        result.summary?.searchTime || Date.now() - startTime,
-                    sources: result.answerSources || [],
-                    entities: result.relatedEntities || [],
-                },
-                query: message.parameters.query,
-                filters: message.parameters.filters || {},
-                topTopics: result.topTopics || [],
-                suggestedFollowups: result.suggestedFollowups || [],
-                relatedEntities: result.relatedEntities || [],
-            },
-        };
+        return searchWebMemoryResponse(message, result, startTime);
     } catch (error) {
         console.error("Error in unified search:", error);
         return {
@@ -426,6 +433,7 @@ export async function indexPageContent(
         textOnly?: boolean;
         mode?: "basic" | "content" | "actions" | "full";
         extractedKnowledge?: any;
+        activityType?: "visited" | "captured";
     } = {},
 ): Promise<boolean> {
     try {
@@ -454,6 +462,7 @@ export async function indexPageContent(
             quality: options.quality || "balanced",
             textOnly: options.textOnly || false,
             mode: options.mode || "content",
+            activityType: options.activityType ?? "captured",
         };
 
         if (options.extractedKnowledge) {

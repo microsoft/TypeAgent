@@ -131,6 +131,54 @@
               <button id="jobNext" type="button">Next</button>
             </div>
           </section>
+
+          <section class="card activity-panel">
+            <div class="section-heading">
+              <h2>Web activity timeline</h2>
+              <span id="activityCount"></span>
+            </div>
+            <div class="activity-filters">
+              <label
+                >From <input id="activityFrom" type="datetime-local"
+              /></label>
+              <label>To <input id="activityTo" type="datetime-local" /></label>
+              <label
+                >Domain <input id="activityDomain" placeholder="example.com"
+              /></label>
+              <label
+                >Event
+                <select id="activityType">
+                  <option value="">All</option>
+                  <option value="visited">Visited</option>
+                  <option value="bookmarked">Bookmarked</option>
+                  <option value="captured">Captured</option>
+                  <option value="imported">Imported</option>
+                </select>
+              </label>
+              <label
+                >Source <input id="activitySource" placeholder="history"
+              /></label>
+              <label
+                >Page type
+                <input id="activityPageType" placeholder="documentation"
+              /></label>
+            </div>
+            <div class="activity-actions">
+              <button id="applyActivityFilter" type="button">Filter</button>
+              <button id="showSourceActivity" type="button" disabled>
+                Selected page
+              </button>
+              <button id="forgetActivity" class="danger" type="button">
+                Delete matching events
+              </button>
+            </div>
+            <div id="activityList" class="list"></div>
+            <div class="pager">
+              <button id="activityPrevious" type="button">Previous</button>
+              <span id="activityPageLabel"></span>
+              <button id="activityNext" type="button">Next</button>
+            </div>
+          </section>
         </aside>
       </div>
     </main>
