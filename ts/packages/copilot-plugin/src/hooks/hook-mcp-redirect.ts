@@ -12,6 +12,14 @@
 
 import type { HookInput, HookOutput } from "./types.js";
 import { parseRecordingDirective } from "@typeagent/dispatcher-types";
+import {
+    getMcpRouting,
+    isPowerShellGuidanceEnabled,
+} from "../shared/plugin-config.js";
+import {
+    mixedMcpGuidance,
+    mixedPowerShellGuidance,
+} from "../shared/mcp-guidance.js";
 
 /**
  * Get session-level TypeAgent PowerShell guidance for Windows.
@@ -57,8 +65,18 @@ function getSpecialPrefixGuidance(prompt: string): string | undefined {
 }
 
 export function handleMcpRedirect(input: HookInput): HookOutput {
-    const psGuidance = getPowerShellSessionGuidance() ?? "";
     const prefixGuidance = getSpecialPrefixGuidance(input.prompt) ?? "";
+    if (getMcpRouting() === "mixed" && !prefixGuidance) {
+        const psGuidance =
+            process.platform === "win32" && isPowerShellGuidanceEnabled()
+                ? `\n[TypeAgent PowerShell reminder]\n${mixedPowerShellGuidance}`
+                : "";
+        return {
+            modifiedPrompt: input.prompt,
+            additionalContext: mixedMcpGuidance + psGuidance,
+        };
+    }
+    const psGuidance = getPowerShellSessionGuidance() ?? "";
 
     return {
         modifiedPrompt: input.prompt,

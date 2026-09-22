@@ -6,9 +6,11 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 
 export type Mode = "direct" | "mcp" | "dev" | "bypass";
+export type McpRouting = "delegate" | "mixed";
 
 export interface PluginConfig {
     mode: Mode;
+    mcpRouting?: McpRouting;
     /** Public server conversation id, never a structured resume capability. */
     conversationId?: string;
     powershell?: {
@@ -67,4 +69,17 @@ export function getMode(): Mode {
 
 export function isPowerShellGuidanceEnabled(): boolean {
     return readConfig()?.powershell?.enabled ?? true;
+}
+
+export function getMcpRouting(): McpRouting {
+    return readConfig()?.mcpRouting === "mixed" ? "mixed" : "delegate";
+}
+
+export function isMixedMcpMode(): boolean {
+    return getMode() === "mcp" && getMcpRouting() === "mixed";
+}
+
+export function getModeLabel(): string {
+    const mode = getMode();
+    return mode === "mcp" ? `mcp (${getMcpRouting()})` : mode;
 }

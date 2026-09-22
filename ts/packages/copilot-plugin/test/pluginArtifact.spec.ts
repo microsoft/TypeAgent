@@ -58,6 +58,21 @@ describe("staged plugin artifact", () => {
         try {
             await client.connect(transport);
             const catalog = await client.listTools();
+            const titles = Object.fromEntries(
+                catalog.tools.map((tool) => [tool.name, tool.title]),
+            );
+            expect(titles).toMatchObject({
+                "typeagent-processCommand":
+                    "TypeAgent: Natural-language delegation (processCommand)",
+                "typeagent-searchActions":
+                    "TypeAgent: Structured discovery (searchActions)",
+                "typeagent-executeAction":
+                    "TypeAgent: Structured execution (executeAction)",
+                "typeagent-continueAction":
+                    "TypeAgent: Structured continuation (continueAction)",
+                "typeagent-cancelAction":
+                    "TypeAgent: Structured cancellation (cancelAction)",
+            });
             expect(catalog.tools.map((tool) => tool.name)).toEqual(
                 expect.arrayContaining([
                     "typeagent-searchActions",

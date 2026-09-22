@@ -53,8 +53,8 @@ describe("extension commands", () => {
             JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
         ).toMatchObject({ mode: "mcp" });
         expect(messages).toEqual([
-            "TypeAgent mode switched to mcp.",
-            "Usage: /typeagent-mode direct|mcp|dev|bypass",
+            "TypeAgent mode switched to mcp (delegate).",
+            "Usage: /typeagent-mode direct|mcp [delegate|mixed]|dev|bypass",
         ]);
     });
 });
