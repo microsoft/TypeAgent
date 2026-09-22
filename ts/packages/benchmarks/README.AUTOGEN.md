@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=35f168c8e48e6cad8ddf2ff4a59cad32e208c99ac2474ada4112ef9ef68d89d0 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=bd4a9814bc1fe778d16c309980a7de7452c9e895cf33f9be681ca0358ac5f09b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -54,7 +54,7 @@ _None._
 - [./src/core/fileJson.ts](./src/core/fileJson.ts)
 - [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
 - [./src/core/paths.ts](./src/core/paths.ts)
-- _…and 75 more under `./src/`._
+- _…and 74 more under `./src/`._
 
 ### Environment variables
 
@@ -66,6 +66,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `1e90f36ac85323f0ffc3bad7de54f2a9a32835cc` on `2026-09-22T21:27:13.339Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `ad830c7ffaf05d70ab788d53fa1b904da349391a` on `2026-09-22T23:17:26.350Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
