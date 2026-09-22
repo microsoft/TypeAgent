@@ -454,9 +454,28 @@ export class FileMemoryService implements MemoryService {
     public async listSourcesPage(
         request: SourceListRequest,
     ): Promise<MemoryPage<MemorySource>> {
-        const sources = (await this.listSources(request.corpusId)).sort(
-            (left, right) => left.sourceId.localeCompare(right.sourceId),
-        );
+        const query = request.query?.trim().toLocaleLowerCase();
+        const sourceTypes =
+            request.sourceTypes === undefined
+                ? undefined
+                : new Set(request.sourceTypes);
+        const sources = (await this.listSources(request.corpusId))
+            .filter(
+                (source) =>
+                    (sourceTypes === undefined ||
+                        sourceTypes.has(source.sourceType)) &&
+                    (query === undefined ||
+                        query.length === 0 ||
+                        source.sourceId.toLocaleLowerCase().includes(query) ||
+                        source.title.toLocaleLowerCase().includes(query) ||
+                        source.canonicalUri
+                            ?.toLocaleLowerCase()
+                            .includes(query) === true ||
+                        source.tags?.some((tag) =>
+                            tag.toLocaleLowerCase().includes(query),
+                        ) === true),
+            )
+            .sort((left, right) => left.sourceId.localeCompare(right.sourceId));
         return pageItems(sources, request.pageSize, request.continuationToken);
     }
 
@@ -923,7 +942,9 @@ export class FileMemoryService implements MemoryService {
             corpusId: request.corpusId,
             query: question,
             limit: request.limit ?? 5,
-            maxResponseChars: request.maxResponseChars,
+            ...(request.maxResponseChars === undefined
+                ? {}
+                : { maxResponseChars: request.maxResponseChars }),
             ...(request.sourceIds === undefined
                 ? {}
                 : { sourceIds: request.sourceIds }),
@@ -1296,7 +1317,16 @@ export class FileMemoryService implements MemoryService {
                 );
                 await raceWithAbort(
                     candidateIndex.append!(
-                        [{ source, revision, content }],
+                        [
+                            {
+                                source,
+                                revision,
+                                content,
+                                pipeline: revision.pipeline ?? {
+                                    mode: "content",
+                                },
+                            },
+                        ],
                         signal,
                         reportProgress,
                     ),

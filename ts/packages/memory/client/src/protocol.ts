@@ -192,6 +192,8 @@ export const pageRequestSchema = z.object({
 
 export const sourceListRequestSchema = pageRequestSchema.extend({
     corpusId: identifierSchema,
+    query: z.string().optional(),
+    sourceTypes: sourceTypeSchema.array().optional(),
 });
 
 export const sourcePageSchema = z.object({

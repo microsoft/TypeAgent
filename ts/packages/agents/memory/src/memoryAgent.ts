@@ -26,6 +26,7 @@ import {
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 import type {
+    IngestionMode,
     JobState,
     MemoryEvidence,
     MemoryService,
@@ -42,9 +43,23 @@ interface ClearPreview {
 }
 
 interface ImportBatchState {
-    controller: AbortController;
+    corpusId: string;
+    profile: ImportPipelineProfile | null;
+    pipeline: ImportPipelineOptions;
+    controller?: AbortController;
     jobIds: Set<string>;
-    promise: Promise<ImportBatchManifest>;
+    promise?: Promise<ImportBatchManifest>;
+    manifest?: ImportBatchManifest;
+    error?: string;
+    cancellationRequested?: boolean;
+}
+
+interface PersistedImportBatch {
+    batchId: string;
+    corpusId: string;
+    profile: ImportPipelineProfile | null;
+    pipeline: ImportPipelineOptions;
+    jobIds: string[];
     manifest?: ImportBatchManifest;
     error?: string;
     cancellationRequested?: boolean;
@@ -67,6 +82,7 @@ export interface MemoryAgentContext {
     replacePreview?: ReplacePreview;
     sessionStorage?: Storage;
     imports: Map<string, ImportBatchState>;
+    importPersistence?: Promise<void>;
     lastAnswerEvidence?: {
         question: string;
         answer: string;
@@ -85,6 +101,37 @@ type CompletionProvider = (
 ) => Promise<CompletionGroups>;
 
 const ACTIVE_CORPUS_STORAGE_PATH = "memory-agent-active-corpus.txt";
+const IMPORT_BATCHES_STORAGE_PATH = "memory-agent-import-batches.json";
+
+export type ImportPipelineProfile = "fast" | "balanced" | "deep";
+
+interface ImportPipelineOptions {
+    readonly mode: IngestionMode;
+    readonly maxCharsPerChunk: number;
+}
+
+export const importPipelineProfiles: Readonly<
+    Record<ImportPipelineProfile, ImportPipelineOptions>
+> = {
+    fast: { mode: "basic", maxCharsPerChunk: 8_000 },
+    balanced: { mode: "content", maxCharsPerChunk: 4_000 },
+    deep: { mode: "full", maxCharsPerChunk: 2_000 },
+};
+
+const defaultImportPipeline: ImportPipelineOptions = {
+    mode: "content",
+    maxCharsPerChunk: 8_000,
+};
+
+class ImportStorageStateError extends Error {
+    public readonly cause: unknown;
+
+    public constructor(message: string, cause?: unknown) {
+        super(message);
+        this.name = "ImportStorageStateError";
+        this.cause = cause;
+    }
+}
 
 function markdown(value: unknown): ActionResult {
     const text =
@@ -123,6 +170,22 @@ function optionalString(value: unknown): string | undefined {
 
 function optionalNumber(value: unknown): number | undefined {
     return typeof value === "number" ? value : undefined;
+}
+
+function optionalStringArray(
+    value: unknown,
+    name: string,
+): readonly string[] | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (
+        !Array.isArray(value) ||
+        !value.every((item) => typeof item === "string")
+    ) {
+        throw new Error(`${name} must contain only strings`);
+    }
+    return value;
 }
 
 function booleanValue(value: unknown): boolean {
@@ -164,6 +227,232 @@ function getMemoryService(options: unknown): MemoryService | undefined {
     return undefined;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+    return value === undefined || typeof value === "string";
+}
+
+function isImportPipelineProfile(
+    value: unknown,
+): value is ImportPipelineProfile {
+    return value === "fast" || value === "balanced" || value === "deep";
+}
+
+function isImportPipelineOptions(
+    value: unknown,
+): value is ImportPipelineOptions {
+    return (
+        isRecord(value) &&
+        (value.mode === "basic" ||
+            value.mode === "summary" ||
+            value.mode === "content" ||
+            value.mode === "full") &&
+        typeof value.maxCharsPerChunk === "number" &&
+        Number.isSafeInteger(value.maxCharsPerChunk) &&
+        value.maxCharsPerChunk > 0
+    );
+}
+
+function isImportBatchManifest(value: unknown): value is ImportBatchManifest {
+    if (!isRecord(value) || !Array.isArray(value.files)) {
+        return false;
+    }
+    return (
+        typeof value.batchId === "string" &&
+        typeof value.corpusId === "string" &&
+        typeof value.root === "string" &&
+        typeof value.startedAt === "string" &&
+        typeof value.completedAt === "string" &&
+        typeof value.discovered === "number" &&
+        typeof value.accepted === "number" &&
+        typeof value.failed === "number" &&
+        typeof value.totalBytes === "number" &&
+        typeof value.cancelled === "boolean" &&
+        value.files.every(
+            (file) =>
+                isRecord(file) &&
+                typeof file.relativePath === "string" &&
+                isOptionalString(file.sourceId) &&
+                isOptionalString(file.jobId) &&
+                isOptionalString(file.state) &&
+                (file.unchanged === undefined ||
+                    typeof file.unchanged === "boolean") &&
+                isOptionalString(file.error),
+        )
+    );
+}
+
+function parsePersistedImportBatch(
+    value: unknown,
+    index: number,
+): PersistedImportBatch {
+    if (
+        !isRecord(value) ||
+        typeof value.batchId !== "string" ||
+        typeof value.corpusId !== "string" ||
+        (value.profile !== null && !isImportPipelineProfile(value.profile)) ||
+        !isImportPipelineOptions(value.pipeline) ||
+        !Array.isArray(value.jobIds) ||
+        !value.jobIds.every((jobId) => typeof jobId === "string") ||
+        (value.manifest !== undefined &&
+            !isImportBatchManifest(value.manifest)) ||
+        !isOptionalString(value.error) ||
+        (value.cancellationRequested !== undefined &&
+            typeof value.cancellationRequested !== "boolean")
+    ) {
+        throw new ImportStorageStateError(
+            `Invalid memory import storage: batch entry ${index} is invalid.`,
+        );
+    }
+    if (
+        value.manifest !== undefined &&
+        (value.manifest.batchId !== value.batchId ||
+            value.manifest.corpusId !== value.corpusId)
+    ) {
+        throw new ImportStorageStateError(
+            `Invalid memory import storage: batch entry ${index} does not match its manifest.`,
+        );
+    }
+    return {
+        batchId: value.batchId,
+        corpusId: value.corpusId,
+        profile: value.profile,
+        pipeline: value.pipeline,
+        jobIds: value.jobIds,
+        ...(value.manifest === undefined ? {} : { manifest: value.manifest }),
+        ...(value.error === undefined ? {} : { error: value.error }),
+        ...(value.cancellationRequested === undefined
+            ? {}
+            : { cancellationRequested: value.cancellationRequested }),
+    };
+}
+
+async function persistImportBatches(
+    context: MemoryAgentContext,
+): Promise<void> {
+    if (context.sessionStorage === undefined) {
+        return;
+    }
+    const batches: PersistedImportBatch[] = [...context.imports.entries()].map(
+        ([batchId, batch]) => ({
+            batchId,
+            corpusId: batch.corpusId,
+            profile: batch.profile,
+            pipeline: batch.pipeline,
+            jobIds: [...batch.jobIds],
+            ...(batch.manifest === undefined
+                ? {}
+                : { manifest: batch.manifest }),
+            ...(batch.error === undefined ? {} : { error: batch.error }),
+            ...(batch.cancellationRequested === undefined
+                ? {}
+                : { cancellationRequested: batch.cancellationRequested }),
+        }),
+    );
+    await context.sessionStorage.write(
+        IMPORT_BATCHES_STORAGE_PATH,
+        JSON.stringify({ version: 1, batches }),
+        "utf8",
+    );
+}
+
+function queueImportPersistence(context: MemoryAgentContext): Promise<void> {
+    const persist = () => persistImportBatches(context);
+    context.importPersistence = (
+        context.importPersistence ?? Promise.resolve()
+    ).then(persist, persist);
+    return context.importPersistence;
+}
+
+async function restoreImportBatches(
+    context: MemoryAgentContext,
+): Promise<void> {
+    const storage = context.sessionStorage;
+    if (
+        storage === undefined ||
+        !(await storage.exists(IMPORT_BATCHES_STORAGE_PATH))
+    ) {
+        return;
+    }
+    const serialized = await storage.read(IMPORT_BATCHES_STORAGE_PATH, "utf8");
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(serialized);
+    } catch (error: unknown) {
+        throw new ImportStorageStateError(
+            "Invalid memory import storage: malformed JSON.",
+            error,
+        );
+    }
+    if (!isRecord(parsed) || !Array.isArray(parsed.batches)) {
+        throw new ImportStorageStateError(
+            "Invalid memory import storage: expected a versioned batch list.",
+        );
+    }
+    if (parsed.version !== 1) {
+        throw new ImportStorageStateError(
+            `Unsupported memory import storage version '${String(parsed.version)}'.`,
+        );
+    }
+    const persistedBatches = parsed.batches.map((value, index) =>
+        parsePersistedImportBatch(value, index),
+    );
+    const batchIds = new Set<string>();
+    for (const persisted of persistedBatches) {
+        if (batchIds.has(persisted.batchId)) {
+            throw new ImportStorageStateError(
+                `Invalid memory import storage: duplicate batch '${persisted.batchId}'.`,
+            );
+        }
+        batchIds.add(persisted.batchId);
+    }
+    for (const persisted of persistedBatches) {
+        const existing = context.imports.get(persisted.batchId);
+        if (existing !== undefined) {
+            for (const jobId of persisted.jobIds) {
+                existing.jobIds.add(jobId);
+            }
+            if (
+                existing.manifest === undefined &&
+                persisted.manifest !== undefined
+            ) {
+                existing.manifest = persisted.manifest;
+            }
+            if (existing.error === undefined && persisted.error !== undefined) {
+                existing.error = persisted.error;
+            }
+            existing.profile = persisted.profile;
+            if (existing.controller === undefined) {
+                existing.pipeline = persisted.pipeline;
+            }
+            existing.cancellationRequested =
+                existing.cancellationRequested === true ||
+                persisted.cancellationRequested === true;
+            continue;
+        }
+        context.imports.set(persisted.batchId, {
+            corpusId: persisted.corpusId,
+            profile: persisted.profile,
+            pipeline: persisted.pipeline,
+            jobIds: new Set(persisted.jobIds),
+            ...(persisted.manifest === undefined
+                ? {}
+                : { manifest: persisted.manifest }),
+            ...(persisted.error === undefined
+                ? {}
+                : { error: persisted.error }),
+            ...(persisted.cancellationRequested === undefined
+                ? {}
+                : {
+                      cancellationRequested: persisted.cancellationRequested,
+                  }),
+        });
+    }
+}
+
 async function initializeMemoryContext(
     settings?: AppAgentInitSettings,
 ): Promise<MemoryAgentContext> {
@@ -185,12 +474,16 @@ async function updateMemoryContext(
     context: SessionContext<MemoryAgentContext>,
 ): Promise<void> {
     if (!enable) {
-        context.agentContext.sessionStorage = undefined;
-        context.agentContext.clearPreview = undefined;
-        context.agentContext.replacePreview = undefined;
+        delete context.agentContext.sessionStorage;
+        delete context.agentContext.clearPreview;
+        delete context.agentContext.replacePreview;
         return;
     }
-    context.agentContext.sessionStorage = context.sessionStorage;
+    if (context.sessionStorage === undefined) {
+        delete context.agentContext.sessionStorage;
+    } else {
+        context.agentContext.sessionStorage = context.sessionStorage;
+    }
     if (
         context.sessionStorage !== undefined &&
         (await context.sessionStorage.exists(ACTIVE_CORPUS_STORAGE_PATH))
@@ -201,8 +494,15 @@ async function updateMemoryContext(
                 "utf8",
             )
         ).trim();
-        context.agentContext.activeCorpusId =
-            corpusId.length === 0 ? undefined : corpusId;
+        if (corpusId.length === 0) {
+            delete context.agentContext.activeCorpusId;
+        } else {
+            context.agentContext.activeCorpusId = corpusId;
+        }
+    }
+    await restoreImportBatches(context.agentContext);
+    if (context.agentContext.imports.size > 0) {
+        await queueImportPersistence(context.agentContext);
     }
 }
 
@@ -222,14 +522,15 @@ async function closeMemoryContext(
     context: SessionContext<unknown>,
 ): Promise<void> {
     const state = memoryContext(context);
-    const cancellations: Promise<unknown>[] = [];
     for (const batch of state.imports.values()) {
-        batch.controller.abort(new Error("Memory agent session closed"));
-        cancellations.push(
-            ...[...batch.jobIds].map((jobId) => state.service.cancelJob(jobId)),
-        );
+        batch.controller?.abort(new Error("Memory agent session closed"));
     }
-    await Promise.all(cancellations);
+    await Promise.allSettled(
+        [...state.imports.values()].flatMap((batch) =>
+            batch.promise === undefined ? [] : [batch.promise],
+        ),
+    );
+    await state.importPersistence;
 }
 
 function parameters(
@@ -324,9 +625,11 @@ async function jobCompletions(
     _params: PartialParams,
     names: string[],
 ): Promise<CompletionGroups> {
-    const jobs = await context.service.listJobs({
-        corpusId: context.activeCorpusId,
-    });
+    const jobs = await context.service.listJobs(
+        context.activeCorpusId === undefined
+            ? {}
+            : { corpusId: context.activeCorpusId },
+    );
     return completionGroups(
         names,
         "jobId",
@@ -339,7 +642,20 @@ async function importBatchCompletions(
     _params: PartialParams,
     names: string[],
 ): Promise<CompletionGroups> {
+    await restoreImportBatches(context);
     return completionGroups(names, "batchId", [...context.imports.keys()]);
+}
+
+async function importProfileCompletions(
+    _context: MemoryAgentContext,
+    _params: PartialParams,
+    names: string[],
+): Promise<CompletionGroups> {
+    return completionGroups(
+        names,
+        "profile",
+        Object.keys(importPipelineProfiles),
+    );
 }
 
 async function resolveCorpus(context: MemoryAgentContext, idOrName: string) {
@@ -472,7 +788,7 @@ const corpusCommands: CommandHandlerTable = {
                     );
                 }
                 const deleted = await context.service.clearCorpus(corpusId);
-                context.clearPreview = undefined;
+                delete context.clearPreview;
                 return markdown(
                     `Cleared ${deleted} source(s) from \`${corpusId}\`.`,
                 );
@@ -506,9 +822,43 @@ const importParameters = {
             description: "Maximum concurrent ingestions",
             type: "number",
         },
+        profile: {
+            description: "Ingestion profile: fast, balanced, or deep",
+            type: "string",
+        },
         wait: { description: "Wait for ingestion jobs", default: false },
     },
 } as const;
+
+function getImportPipelineProfile(value: unknown): {
+    profile: ImportPipelineProfile | null;
+    pipeline: ImportPipelineOptions;
+} {
+    if (value === undefined) {
+        return { profile: null, pipeline: defaultImportPipeline };
+    }
+    switch (value) {
+        case "fast":
+            return {
+                profile: "fast",
+                pipeline: importPipelineProfiles.fast,
+            };
+        case "balanced":
+            return {
+                profile: "balanced",
+                pipeline: importPipelineProfiles.balanced,
+            };
+        case "deep":
+            return {
+                profile: "deep",
+                pipeline: importPipelineProfiles.deep,
+            };
+        default:
+            throw new Error(
+                `Unknown import profile '${String(value)}'. Choose fast, balanced, or deep.`,
+            );
+    }
+}
 
 async function beginImport(
     context: MemoryAgentContext,
@@ -519,44 +869,79 @@ async function beginImport(
     const controller = new AbortController();
     const path = stringValue(args(params).path, "path");
     const importFlags = flags(params);
+    const { profile, pipeline } = getImportPipelineProfile(importFlags.profile);
+    const include = optionalStringArray(importFlags.include, "include");
+    const exclude = optionalStringArray(importFlags.exclude, "exclude");
+    const maxFiles = optionalNumber(importFlags.maxFiles);
+    const maxTotalBytes = optionalNumber(importFlags.maxBytes);
+    const concurrency = optionalNumber(importFlags.concurrency);
+    const corpusId = requireActiveCorpus(context);
     const jobIds = new Set<string>();
+    const batch: ImportBatchState = {
+        corpusId,
+        profile,
+        pipeline,
+        controller,
+        jobIds,
+    };
+    context.imports.set(batchId, batch);
+    await queueImportPersistence(context);
     const promise = importMarkdownPath(context.service, {
         batchId,
-        corpusId: requireActiveCorpus(context),
+        corpusId,
         path,
         expectedKind,
         recursive: booleanValue(importFlags.recursive),
-        include: importFlags.include as string[] | undefined,
-        exclude: importFlags.exclude as string[] | undefined,
-        maxFiles: optionalNumber(importFlags.maxFiles),
-        maxTotalBytes: optionalNumber(importFlags.maxBytes),
-        concurrency: optionalNumber(importFlags.concurrency),
         wait: booleanValue(importFlags.wait),
+        ...(include === undefined ? {} : { include }),
+        ...(exclude === undefined ? {} : { exclude }),
+        ...(maxFiles === undefined ? {} : { maxFiles }),
+        ...(maxTotalBytes === undefined ? {} : { maxTotalBytes }),
+        ...(concurrency === undefined ? {} : { concurrency }),
+        pipeline,
         signal: controller.signal,
         onJobAccepted: async (jobId) => {
             jobIds.add(jobId);
+            try {
+                await queueImportPersistence(context);
+            } catch (error: unknown) {
+                try {
+                    await context.service.cancelJob(jobId);
+                } catch (cancellationError: unknown) {
+                    throw new ImportStorageStateError(
+                        `Failed to persist accepted memory job '${jobId}' and failed to cancel it.`,
+                        { persistenceError: error, cancellationError },
+                    );
+                }
+                throw error;
+            }
             if (controller.signal.aborted) {
                 await context.service.cancelJob(jobId);
             }
         },
     });
-    const batch: ImportBatchState = { controller, jobIds, promise };
-    context.imports.set(batchId, batch);
-    void promise.then(
-        (manifest) => {
+    const completed = promise
+        .then(async (manifest) => {
             batch.manifest = manifest;
-        },
-        (error: unknown) => {
+            await queueImportPersistence(context);
+            return manifest;
+        })
+        .catch(async (error: unknown) => {
             batch.error =
                 error instanceof Error ? error.message : String(error);
-        },
-    );
+            await queueImportPersistence(context);
+            throw error;
+        });
+    batch.promise = completed;
+    void completed.catch(() => undefined);
     if (booleanValue(importFlags.wait)) {
-        return markdown(await promise);
+        return markdown(await completed);
     }
     return markdown({
         batchId,
         state: "running",
+        profile,
+        pipeline,
         status: `@memory import status ${batchId}`,
     });
 }
@@ -568,73 +953,122 @@ const terminalJobStates = new Set<JobState>([
     "cancelled",
 ]);
 
-async function getImportBatchStatus(
+async function inspectImportBatch(
     context: MemoryAgentContext,
     batchId: string,
     batch: ImportBatchState,
-): Promise<unknown> {
-    if (batch.error !== undefined) {
-        return { batchId, state: "failed", error: batch.error };
-    }
-    if (batch.manifest === undefined) {
+): Promise<{
+    status: unknown;
+    activeJobIds: string[];
+    terminal: boolean;
+}> {
+    if (batch.manifest === undefined && batch.jobIds.size === 0) {
         return {
-            batchId,
-            state: "submitting",
-            acceptedJobs: batch.jobIds.size,
+            status: {
+                batchId,
+                state: batch.error === undefined ? "submitting" : "failed",
+                acceptedJobs: 0,
+                profile: batch.profile,
+                pipeline: batch.pipeline,
+                ...(batch.error === undefined ? {} : { error: batch.error }),
+            },
+            activeJobIds: [],
+            terminal: batch.error !== undefined,
         };
     }
-    const jobs = await Promise.all(
-        [...batch.jobIds].map((jobId) => context.service.getJob(jobId)),
+    const jobEntries = await Promise.all(
+        [...batch.jobIds].map(async (jobId) => ({
+            jobId,
+            job: await context.service.getJob(jobId),
+        })),
     );
     const jobStates: Record<string, number> = {};
     let missingJobs = 0;
-    for (const job of jobs) {
+    for (const { job } of jobEntries) {
         if (job === undefined) {
             missingJobs++;
             continue;
         }
         jobStates[job.state] = (jobStates[job.state] ?? 0) + 1;
     }
-    const hasActiveJobs = jobs.some(
-        (job) => job !== undefined && !terminalJobStates.has(job.state),
-    );
-    const hasFailedJobs = jobs.some(
-        (job) =>
-            job?.state === "failed" ||
-            job?.state === "partial" ||
-            job?.state === "cancelled",
-    );
-    const unchangedJobs = jobs.filter(
-        (job) => job?.progress.message === "Source is unchanged",
+    const activeJobIds = jobEntries
+        .filter(
+            (entry) =>
+                entry.job !== undefined &&
+                !terminalJobStates.has(entry.job.state),
+        )
+        .map((entry) => entry.jobId);
+    const failedJobs = jobStates.failed ?? 0;
+    const partialJobs = jobStates.partial ?? 0;
+    const cancelledJobs = jobStates.cancelled ?? 0;
+    const unchangedJobs = jobEntries.filter(
+        ({ job }) => job?.progress.message === "Source is unchanged",
     ).length;
     let state = "complete";
-    if (batch.cancellationRequested && hasActiveJobs) {
+    if (batch.error !== undefined) {
+        state = "failed";
+    } else if (batch.cancellationRequested && activeJobIds.length > 0) {
         state = "cancelling";
-    } else if (batch.cancellationRequested || batch.manifest.cancelled) {
-        state = "cancelled";
-    } else if (hasActiveJobs) {
+    } else if (activeJobIds.length > 0) {
         state = "running";
-    } else if (batch.manifest.failed > 0 || hasFailedJobs || missingJobs > 0) {
+    } else if (
+        (batch.manifest?.failed ?? 0) > 0 ||
+        failedJobs > 0 ||
+        partialJobs > 0 ||
+        missingJobs > 0
+    ) {
         state = "partial";
+    } else if (cancelledJobs > 0) {
+        state = batch.cancellationRequested ? "cancelled" : "partial";
+    } else if (batch.manifest?.cancelled === true) {
+        state = batch.cancellationRequested ? "cancelled" : "partial";
     }
     return {
-        batchId,
-        state,
-        jobStates,
-        unchangedJobs,
-        missingJobs,
-        manifest: batch.manifest,
+        status: {
+            batchId,
+            state,
+            profile: batch.profile,
+            pipeline: batch.pipeline,
+            jobStates,
+            failedJobs,
+            partialJobs,
+            cancelledJobs,
+            unchangedJobs,
+            missingJobs,
+            ...(batch.error === undefined ? {} : { error: batch.error }),
+            manifest: batch.manifest,
+        },
+        activeJobIds,
+        terminal:
+            activeJobIds.length === 0 &&
+            (batch.manifest !== undefined ||
+                batch.error !== undefined ||
+                (batch.controller === undefined &&
+                    batch.promise === undefined &&
+                    batch.jobIds.size > 0)),
     };
+}
+
+async function getImportBatchStatus(
+    context: MemoryAgentContext,
+    batchId: string,
+    batch: ImportBatchState,
+): Promise<unknown> {
+    return (await inspectImportBatch(context, batchId, batch)).status;
 }
 
 const importCommands: CommandHandlerTable = {
     description: "Import Markdown files and manage import batches",
     commands: {
-        file: parameters(importParameters, (context, params) =>
-            beginImport(context, params, "file"),
+        file: parameters(
+            importParameters,
+            (context, params) => beginImport(context, params, "file"),
+            importProfileCompletions,
         ),
-        folder: parameters(importParameters, (context, params) =>
-            beginImport(context, params, "folder"),
+        folder: parameters(
+            importParameters,
+            (context, params) => beginImport(context, params, "folder"),
+            importProfileCompletions,
         ),
         status: parameters(
             {
@@ -646,6 +1080,7 @@ const importCommands: CommandHandlerTable = {
                 },
             },
             async (context, params) => {
+                await restoreImportBatches(context);
                 const batchId = optionalString(args(params).batchId);
                 if (batchId === undefined) {
                     return markdown(
@@ -671,18 +1106,30 @@ const importCommands: CommandHandlerTable = {
                 args: { batchId: { description: "Batch ID" } },
             },
             async (context, params) => {
+                await restoreImportBatches(context);
                 const batchId = stringValue(args(params).batchId, "batch ID");
                 const batch = context.imports.get(batchId);
                 if (batch === undefined) {
                     throw new Error(`Unknown import batch '${batchId}'`);
                 }
+                const inspection = await inspectImportBatch(
+                    context,
+                    batchId,
+                    batch,
+                );
+                if (inspection.terminal) {
+                    throw new Error(
+                        `Import batch '${batchId}' is already terminal and cannot be cancelled.`,
+                    );
+                }
                 batch.cancellationRequested = true;
-                batch.controller.abort(new Error("Import cancelled by user"));
+                batch.controller?.abort(new Error("Import cancelled by user"));
                 await Promise.all(
-                    [...batch.jobIds].map((jobId) =>
+                    inspection.activeJobIds.map((jobId) =>
                         context.service.cancelJob(jobId),
                     ),
                 );
+                await queueImportPersistence(context);
                 return markdown(
                     `Cancellation requested for import \`${batchId}\`.`,
                 );
@@ -762,7 +1209,7 @@ async function replaceSource(
         },
     };
     const result = await context.service.replaceSource(request);
-    context.replacePreview = undefined;
+    delete context.replacePreview;
     return markdown(
         wait ? await waitForMemoryJob(context.service, result.jobId) : result,
     );
@@ -791,18 +1238,21 @@ const sourceCommands: CommandHandlerTable = {
                     },
                 },
             },
-            async (context, params) =>
-                markdown(
+            async (context, params) => {
+                const offset = optionalNumber(flags(params).offset);
+                const maxChars = optionalNumber(flags(params).maxChars);
+                return markdown(
                     await context.service.getSourceContent({
                         corpusId: requireActiveCorpus(context),
                         sourceId: stringValue(
                             args(params).sourceId,
                             "source ID",
                         ),
-                        offset: optionalNumber(flags(params).offset),
-                        maxChars: optionalNumber(flags(params).maxChars),
+                        ...(offset === undefined ? {} : { offset }),
+                        ...(maxChars === undefined ? {} : { maxChars }),
                     }),
-                ),
+                );
+            },
             sourceCompletions,
         ),
         knowledge: parameters(
@@ -923,7 +1373,7 @@ async function search(
     const result = await context.service.search({
         corpusId: requireActiveCorpus(context),
         query,
-        limit,
+        ...(limit === undefined ? {} : { limit }),
     });
     return markdown(
         `## Search results\n\n${renderEvidence(result.matches)}\n\nIndex: \`${result.indexVersion}\``,
@@ -956,9 +1406,11 @@ const jobCommands: CommandHandlerTable = {
     commands: {
         list: noParameters("List jobs", async (context) =>
             markdown(
-                await context.service.listJobs({
-                    corpusId: context.activeCorpusId,
-                }),
+                await context.service.listJobs(
+                    context.activeCorpusId === undefined
+                        ? {}
+                        : { corpusId: context.activeCorpusId },
+                ),
             ),
         ),
         show: parameters(
@@ -1061,6 +1513,7 @@ const handlers: CommandHandlerTable = {
             sourceCompletions,
         ),
         status: noParameters("Show memory service status", async (context) => {
+            await restoreImportBatches(context);
             const corpus =
                 context.activeCorpusId === undefined
                     ? undefined

@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { MemoryService } from "@typeagent/memory-service";
+import type { IngestionMode, MemoryService } from "@typeagent/memory-service";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
 
 export interface MarkdownImportOptions {
@@ -20,6 +20,10 @@ export interface MarkdownImportOptions {
     maxTotalBytes?: number;
     concurrency?: number;
     wait?: boolean;
+    pipeline?: {
+        mode: IngestionMode;
+        maxCharsPerChunk: number;
+    };
     cwd?: string;
     signal?: AbortSignal;
     onJobAccepted?: (jobId: string) => void | Promise<void>;
@@ -279,6 +283,7 @@ async function importCandidate(
                 },
                 pipeline: {
                     updatePolicy: "skipIfUnchanged",
+                    ...options.pipeline,
                 },
             },
             options.signal,
@@ -297,7 +302,9 @@ async function importCandidate(
         let unchanged = false;
         if (options.wait === true) {
             const job = await waitForMemoryJob(service, result.jobId, {
-                signal: options.signal,
+                ...(options.signal === undefined
+                    ? {}
+                    : { signal: options.signal }),
             });
             state = job.state;
             unchanged = job.progress.message === "Source is unchanged";

@@ -19,6 +19,7 @@ import {
 } from "./durableWebSearch.mjs";
 import * as website from "@typeagent/website-memory";
 import registerDebug from "debug";
+import { convert } from "html-to-text";
 import {
     importProgressEvents,
     ImportProgressEvent,
@@ -99,22 +100,22 @@ function logStructuredProgress(
         };
         importProgressEvents.emitProgress(progressEvent);
     }
+}
 
-    function importPhaseForMemoryStage(
-        stage: string | undefined,
-    ): ImportProgressEvent["phase"] {
-        switch (stage) {
-            case "extracting-knowledge":
-            case "embedding":
-                return "extracting";
-            case "building-indexes":
-                return "graph-building";
-            case "persisting":
-            case "complete":
-                return "persisting";
-            default:
-                return "processing";
-        }
+function importPhaseForMemoryStage(
+    stage: string | undefined,
+): ImportProgressEvent["phase"] {
+    switch (stage) {
+        case "extracting-knowledge":
+        case "embedding":
+            return "extracting";
+        case "building-indexes":
+            return "graph-building";
+        case "persisting":
+        case "complete":
+            return "persisting";
+        default:
+            return "processing";
     }
 }
 import { WebsiteData } from "./htmlUtils.mjs";
@@ -128,7 +129,6 @@ import {
     DEFAULT_FOLDER_OPTIONS,
 } from "./folderUtils.mjs";
 import { processHtmlFolder } from "./websiteImport.mjs";
-import { DirectFolderProcessor } from "./htmlProcessor.mjs";
 import type { BrowserSourceKnowledge } from "./browserMemoryService.mjs";
 
 const debug = registerDebug("typeagent:browser:website-memory");
@@ -252,6 +252,7 @@ export async function importWebsiteDataFromSession(
     parameters: ImportWebsiteData["parameters"] & {
         importId?: string;
         url?: string;
+        maxCharsPerChunk?: number;
     },
     context: SessionContext<BrowserActionContext>,
 ) {
@@ -278,6 +279,7 @@ export async function importWebsiteDataFromSession(
             mode,
             maxConcurrent,
             contentTimeout,
+            maxCharsPerChunk,
         } = parameters;
 
         logStructuredProgress(
@@ -339,6 +341,8 @@ export async function importWebsiteDataFromSession(
             importOptions.maxConcurrent = maxConcurrent;
         if (contentTimeout !== undefined)
             importOptions.contentTimeout = contentTimeout;
+        if (maxCharsPerChunk !== undefined)
+            importOptions.maxCharsPerChunk = maxCharsPerChunk;
 
         let websites: any[] = [];
 
@@ -394,8 +398,8 @@ export async function importWebsiteDataFromSession(
                 );
 
                 const htmlFetcher = new website.HtmlFetcher();
-                const htmlProcessor = new DirectFolderProcessor();
                 let persistedCount = 0;
+                persistedDuringExtraction = true;
 
                 for (let i = 0; i < metadataWebsites.length; i++) {
                     const site = metadataWebsites[i];
@@ -406,28 +410,11 @@ export async function importWebsiteDataFromSession(
 
                     if (fetchResult.html) {
                         try {
-                            const reduced =
-                                await htmlProcessor.processHtmlContent(
-                                    fetchResult.html,
-                                    site.metadata.url,
-                                    { mode: "content" },
-                                );
-                            const parts = docPartsFromHtml(
-                                reduced.processedHtml,
-                                false,
-                                importOptions.maxCharsPerChunk || 8000,
-                                site.metadata.url,
-                            );
-                            if (parts.length > 0) {
+                            if (fetchResult.html.trim().length > 0) {
                                 const completedWebsite: any = {
                                     ...site,
-                                    textChunks: [
-                                        parts
-                                            .flatMap((part) => part.textChunks)
-                                            .join("\n\n"),
-                                    ],
+                                    textChunks: [fetchResult.html],
                                 };
-                                websites.push(completedWebsite);
                                 const knowledge =
                                     await ingestWebsitesIntoMemoryService(
                                         [completedWebsite],
@@ -437,7 +424,9 @@ export async function importWebsiteDataFromSession(
                                         i,
                                         metadataWebsites.length,
                                         importOptions.maxCharsPerChunk,
+                                        "html",
                                     );
+                                websites.push(completedWebsite);
                                 completedWebsite.knowledge = {
                                     entities: knowledge[0].entities,
                                     topics: knowledge[0].topics.map(
@@ -445,7 +434,6 @@ export async function importWebsiteDataFromSession(
                                     ),
                                     actions: knowledge[0].relationships,
                                 };
-                                persistedDuringExtraction = true;
                                 persistedCount++;
                                 importState.processedWebsites = persistedCount;
                                 importState.lastSavePoint = persistedCount;
@@ -1072,6 +1060,21 @@ function convertWebsiteDataToWebsite(data: WebsiteData): any {
     return websiteInstance;
 }
 
+function normalizeImportedContent(content: string | string[]): string {
+    const original = Array.isArray(content) ? content.join("\n\n") : content;
+    return original.replace(/\r\n?/g, "\n").trim();
+}
+
+function normalizeImportedHtml(content: string | string[]): string {
+    return convert(normalizeImportedContent(content), {
+        wordwrap: false,
+        selectors: [
+            { selector: "script", format: "skip" },
+            { selector: "style", format: "skip" },
+        ],
+    }).trim();
+}
+
 async function ingestWebsitesIntoMemoryService(
     websites: website.Website[],
     mode: website.ExtractionMode,
@@ -1085,6 +1088,7 @@ async function ingestWebsitesIntoMemoryService(
     offset: number,
     total: number,
     maxCharsPerChunk?: number,
+    contentFormat: "markdown" | "html" = "markdown",
 ): Promise<BrowserSourceKnowledge[]> {
     const memoryService = agentContext.browserMemoryService;
     if (memoryService === undefined) {
@@ -1096,7 +1100,10 @@ async function ingestWebsitesIntoMemoryService(
             {
                 url: item.metadata.url,
                 title: item.metadata.title ?? item.metadata.url,
-                markdown: item.textChunks.join("\n\n"),
+                markdown:
+                    contentFormat === "html"
+                        ? normalizeImportedHtml(item.textChunks)
+                        : normalizeImportedContent(item.textChunks),
                 source: item.metadata.websiteSource,
                 ...(item.metadata.domain === undefined
                     ? {}
@@ -1111,9 +1118,7 @@ async function ingestWebsitesIntoMemoryService(
             },
             mode,
             {
-                ...(maxCharsPerChunk === undefined
-                    ? {}
-                    : { maxCharsPerChunk }),
+                ...(maxCharsPerChunk === undefined ? {} : { maxCharsPerChunk }),
                 onProgress: (progress) =>
                     logStructuredProgress(
                         offset +

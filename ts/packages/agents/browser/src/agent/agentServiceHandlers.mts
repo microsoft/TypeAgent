@@ -23,6 +23,14 @@ import {
 export function createAgentInvokeHandlers(
     context: SessionContext<BrowserActionContext>,
 ): BrowserAgentInvokeFunctions {
+    function getMemoryService() {
+        const service = context.agentContext.memoryServiceClient;
+        if (!service) {
+            throw new Error("Durable memory service is not available");
+        }
+        return service;
+    }
+
     async function knowledgeHandler(method: string, params: any): Promise<any> {
         return handleKnowledgeAction(method, params, context);
     }
@@ -61,6 +69,70 @@ export function createAgentInvokeHandlers(
     }
 
     const handlers: BrowserAgentInvokeFunctions = {
+        memoryCreateCorpus: ({ name, description }) =>
+            getMemoryService().createCorpus(name, description),
+        memoryListCorpora: () => getMemoryService().listCorpora(),
+        memoryGetCorpus: ({ corpusId }) =>
+            getMemoryService().getCorpus(corpusId),
+        memoryListSources: (params) =>
+            getMemoryService().listSourcesPage(params),
+        memoryGetSource: ({ corpusId, sourceId }) =>
+            getMemoryService().getSource(corpusId, sourceId),
+        memoryGetSourceContent: (params) =>
+            getMemoryService().getSourceContent(params),
+        memoryGetSourceKnowledge: ({ corpusId, sourceId }) =>
+            getMemoryService().getSourceKnowledge(corpusId, sourceId),
+        memoryReplaceSource: async ({
+            corpusId,
+            sourceId,
+            expectedActiveRevisionId,
+            text,
+            retainRevisionHistory,
+        }) => {
+            const service = getMemoryService();
+            const existing = await service.getSource(corpusId, sourceId);
+            if (!existing) {
+                throw new Error(`Memory source '${sourceId}' was not found`);
+            }
+            const sourceContent =
+                existing.sourceType === "html"
+                    ? { html: text }
+                    : existing.sourceType === "text"
+                      ? { text }
+                      : { markdown: text };
+            return service.replaceSource({
+                corpusId,
+                sourceId,
+                expectedActiveRevisionId,
+                source: {
+                    sourceType: existing.sourceType,
+                    title: existing.title,
+                    ...(existing.canonicalUri === undefined
+                        ? {}
+                        : { canonicalUri: existing.canonicalUri }),
+                    ...(existing.tags === undefined
+                        ? {}
+                        : { tags: existing.tags }),
+                    ...(existing.metadata === undefined
+                        ? {}
+                        : { metadata: existing.metadata }),
+                    ...sourceContent,
+                },
+                ...(retainRevisionHistory === undefined
+                    ? {}
+                    : { retainRevisionHistory }),
+            });
+        },
+        memoryPreviewForgetSource: ({ corpusId, sourceId }) =>
+            getMemoryService().previewForgetSource(corpusId, sourceId),
+        memoryForgetSource: (params) => getMemoryService().forgetSource(params),
+        memoryReindexCorpus: ({ corpusId }) =>
+            getMemoryService().reindexCorpus(corpusId),
+        memoryReindexSource: ({ corpusId, sourceId }) =>
+            getMemoryService().reindexSource(corpusId, sourceId),
+        memoryListJobs: (params) => getMemoryService().listJobs(params),
+        memoryCancelJob: ({ jobId }) => getMemoryService().cancelJob(jobId),
+
         // Knowledge extraction
         extractKnowledgeFromPage: extractionHandler,
         // Knowledge queries
@@ -73,6 +145,8 @@ export function createAgentInvokeHandlers(
         searchByTopics: (params: any) =>
             websiteHandler("searchByTopics", params),
         hybridSearch: (params: any) => websiteHandler("hybridSearch", params),
+        getHierarchicalTopics: (params: any) =>
+            websiteHandler("getHierarchicalTopics", params),
         getTopicImportanceLayer: (params: any) =>
             knowledgeHandler("getTopicImportanceLayer", params),
         getTopicViewportNeighborhood: (params: any) =>

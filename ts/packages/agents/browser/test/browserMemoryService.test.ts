@@ -186,6 +186,50 @@ describe("BrowserMemoryService", () => {
             total: 3,
             message: "Creating embeddings",
         });
+        expect(onProgress).toHaveBeenCalledTimes(1);
+    });
+
+    test("reports terminal progress before returning ingestion knowledge", async () => {
+        const client = createClient();
+        const onProgress = jest.fn();
+
+        await new BrowserMemoryService(client).ingest(
+            {
+                url: "https://example.test/terminal",
+                title: "Terminal progress",
+                markdown: "Original content",
+            },
+            "content",
+            { onProgress },
+        );
+
+        expect(onProgress).toHaveBeenLastCalledWith({
+            completed: 1,
+            total: 1,
+        });
+        expect(client.getSourceKnowledge).toHaveBeenCalledTimes(1);
+    });
+
+    test("cancels an accepted ingestion job when already aborted", async () => {
+        const client = createClient();
+        const controller = new AbortController();
+        const reason = new Error("Import cancelled");
+        controller.abort(reason);
+
+        await expect(
+            new BrowserMemoryService(client).ingest(
+                {
+                    url: "https://example.test/cancelled",
+                    title: "Cancelled import",
+                    markdown: "Original content",
+                },
+                "content",
+                { signal: controller.signal },
+            ),
+        ).rejects.toBe(reason);
+
+        expect(client.cancelJob).toHaveBeenCalledWith("job-1");
+        expect(client.getSourceKnowledge).not.toHaveBeenCalled();
     });
 
     test("forwards model-free mode and chunk policy to durable ingestion", async () => {
@@ -229,28 +273,26 @@ describe("BrowserMemoryService", () => {
     test("returns durable source-scoped knowledge after ingestion", async () => {
         const client = createClient();
         const sourceId = expect.stringMatching(/^web:[a-f0-9]{64}$/);
-        client.getSourceKnowledge.mockImplementation(async () => {
-            const ingestedSourceId = client.ingestDocument.mock.calls[0][0]
-                .source.sourceId as string;
-            return {
-                entities: [
-                    {
-                        name: "TypeAgent",
-                        types: ["project"],
-                        mentionCount: 1,
-                        sourceIds: [ingestedSourceId],
-                    },
-                    {
-                        name: "Unrelated",
-                        types: ["project"],
-                        mentionCount: 1,
-                        sourceIds: ["another-source"],
-                    },
-                ],
-                topics: [],
-                relationships: [],
-            };
-        });
+        client.getSourceKnowledge.mockImplementation(
+            async (corpusId, requestedSourceId) => {
+                const ingestedSourceId = client.ingestDocument.mock.calls[0][0]
+                    .source.sourceId as string;
+                expect(corpusId).toBe("browser-corpus");
+                expect(requestedSourceId).toBe(ingestedSourceId);
+                return {
+                    entities: [
+                        {
+                            name: "TypeAgent",
+                            types: ["project"],
+                            mentionCount: 1,
+                            sourceIds: [ingestedSourceId],
+                        },
+                    ],
+                    topics: [],
+                    relationships: [],
+                };
+            },
+        );
 
         const result = await new BrowserMemoryService(client).ingest(
             {

@@ -51,9 +51,16 @@ revision semantics, retrieval ranking, deletion cleanup, or durable job state.
 Those behaviors belong in the memory service so native and MCP clients remain
 consistent.
 
-The active corpus is session state and is restored from `sessionStorage` when
-available. Select one by ID or name with `@memory corpus use <corpus>` before
-running corpus-scoped commands. Confirmation tokens are never persisted.
+The active corpus and import batch manifests are session state and are restored
+from `sessionStorage` when available. Durable job IDs are stored with each
+batch, allowing status and cancellation to continue after agent recreation.
+In-process cancellation handles are never persisted. Select a corpus by ID or
+name with `@memory corpus use <corpus>` before running corpus-scoped commands.
+Confirmation tokens are never persisted.
+
+Closing an agent instance stops its local file submission work but does not
+cancel already accepted service jobs. Use `@memory import cancel <batchId>` to
+cancel those durable jobs explicitly.
 
 ## Commands
 
@@ -77,13 +84,26 @@ and `--exclude` are repeatable globs over root-relative paths. Defaults are
 1,000 files, 50 MiB total, and four concurrent ingestion requests; lower limits
 can be supplied with `--maxFiles`, `--maxBytes`, and `--concurrency`.
 
+`--profile` selects a public ingestion preset:
+
+- `fast`: basic indexing with 8,000-character chunks
+- `balanced`: content indexing with 4,000-character chunks
+- `deep`: full indexing with 2,000-character chunks
+
+Without `--profile`, imports use the service-equivalent default of content
+indexing with 8,000-character chunks. The selected profile and effective
+pipeline are stored with the batch and included in status output after
+restoration. Profile names are available through command completion for both
+file and folder import.
+
 Every candidate is checked after `realpath`. A symlink or junction that resolves
 outside the import root is reported as a per-file error, and linked directories
 are not traversed. Source IDs are stable SHA-256 IDs derived from the real root
 and normalized relative path. The batch manifest records every accepted file
 and exact per-file failure. Batch status aggregates the current durable job
-states, so a batch remains running while accepted jobs are indexing. `--wait`
-also waits for terminal service job states before the import command returns.
+states, so a batch remains running while accepted jobs are indexing. Restored
+batches reconstruct their current state from those jobs. `--wait` also waits
+for terminal service job states before the import command returns.
 
 `ask` calls `MemoryService.answer` and renders its grounded extractive answer
 with citation metadata. `explain` shows the answer and citations retained from

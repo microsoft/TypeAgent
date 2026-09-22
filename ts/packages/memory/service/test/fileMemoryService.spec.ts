@@ -19,7 +19,9 @@ class FakeCorpusIndex implements CorpusIndex {
     public indexDirectory: string | undefined;
     public initializeCalls = 0;
     public failNextRebuild = false;
+    public failNextAppend = false;
     public blockNextRebuild = false;
+    public blockNextAppend = false;
     public ignoreNextAbort = false;
     public graph: MemoryKnowledgeGraph = {
         entities: [],
@@ -65,6 +67,39 @@ class FakeCorpusIndex implements CorpusIndex {
             await writeFile(path.join(this.indexDirectory, "index.marker"), "");
         }
         this.documents = structuredClone(documents);
+    }
+
+    public async append(
+        documents: IndexedDocument[],
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<void> {
+        if (this.failNextAppend) {
+            this.failNextAppend = false;
+            throw new Error("Expected append failure");
+        }
+        if (this.blockNextAppend) {
+            this.blockNextAppend = false;
+            await new Promise<void>((resolve, reject) => {
+                if (signal.aborted) {
+                    reject(signal.reason);
+                    return;
+                }
+                signal.addEventListener("abort", () => reject(signal.reason), {
+                    once: true,
+                });
+            });
+        }
+        await onProgress({
+            completed: documents.length,
+            total: documents.length,
+            message: "Fake append complete",
+            operation: "append",
+        });
+        if (this.indexDirectory !== undefined) {
+            await writeFile(path.join(this.indexDirectory, "index.marker"), "");
+        }
+        this.documents.push(...structuredClone(documents));
     }
 
     public async search(
@@ -282,7 +317,7 @@ describe("FileMemoryService", () => {
 
         const result = await service.answer({
             corpusId: corpus.corpusId,
-            question: "How should indexing recover?",
+            question: "indexing",
         });
 
         expect(result).toMatchObject({
@@ -357,10 +392,23 @@ describe("FileMemoryService", () => {
             service.listSourcesPage({
                 corpusId: corpus.corpusId,
                 pageSize: 1,
-                continuationToken: firstPage.nextContinuationToken,
+                ...(firstPage.nextContinuationToken === undefined
+                    ? {}
+                    : {
+                          continuationToken: firstPage.nextContinuationToken,
+                      }),
             }),
         ).resolves.toMatchObject({
             total: 2,
+            items: [{ sourceId: "source-b" }],
+        });
+        await expect(
+            service.listSourcesPage({
+                corpusId: corpus.corpusId,
+                query: "SOURCE-B",
+            }),
+        ).resolves.toMatchObject({
+            total: 1,
             items: [{ sourceId: "source-b" }],
         });
         await expect(
@@ -692,6 +740,152 @@ describe("FileMemoryService", () => {
         });
         expect(stable.matches).toHaveLength(1);
         expect(unpublished.matches).toHaveLength(0);
+    });
+
+    test("keeps the prior generation and removes the candidate when append fails", async () => {
+        const corpus = await service.createCorpus("Engineering");
+        const first = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "stable-doc",
+                sourceType: "markdown",
+                title: "Stable",
+                markdown: "The stable source uses queues.",
+            },
+        });
+        await waitForTerminalJob(service, first.jobId);
+        const before = await readdir(
+            path.join(rootDirectory, corpus.corpusId, "index"),
+        );
+
+        index.failNextAppend = true;
+        const failed = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "candidate-doc",
+                sourceType: "markdown",
+                title: "Candidate",
+                markdown: "The candidate source uses streams.",
+            },
+        });
+        expect((await waitForTerminalJob(service, failed.jobId)).state).toBe(
+            "failed",
+        );
+
+        await expect(
+            service.search({ corpusId: corpus.corpusId, query: "queues" }),
+        ).resolves.toMatchObject({
+            matches: [expect.objectContaining({ sourceId: "stable-doc" })],
+        });
+        await expect(
+            service.search({ corpusId: corpus.corpusId, query: "streams" }),
+        ).resolves.toMatchObject({ matches: [] });
+        expect(
+            await readdir(path.join(rootDirectory, corpus.corpusId, "index")),
+        ).toEqual(before);
+    });
+
+    test("serializes concurrent appends without losing either source", async () => {
+        const corpus = await service.createCorpus("Engineering");
+        const seed = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "seed-doc",
+                sourceType: "markdown",
+                title: "Seed",
+                markdown: "The seed source uses anchors.",
+            },
+        });
+        await waitForTerminalJob(service, seed.jobId);
+
+        const [first, second] = await Promise.all([
+            service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceId: "first-append",
+                    sourceType: "markdown",
+                    title: "First append",
+                    markdown: "The first append uses cobalt.",
+                },
+            }),
+            service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceId: "second-append",
+                    sourceType: "markdown",
+                    title: "Second append",
+                    markdown: "The second append uses quartz.",
+                },
+            }),
+        ]);
+        await Promise.all([
+            waitForTerminalJob(service, first.jobId),
+            waitForTerminalJob(service, second.jobId),
+        ]);
+
+        await expect(service.listSources(corpus.corpusId)).resolves.toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ sourceId: "seed-doc" }),
+                expect.objectContaining({ sourceId: "first-append" }),
+                expect.objectContaining({ sourceId: "second-append" }),
+            ]),
+        );
+        await expect(
+            service.search({ corpusId: corpus.corpusId, query: "cobalt" }),
+        ).resolves.toMatchObject({
+            matches: [expect.objectContaining({ sourceId: "first-append" })],
+        });
+        await expect(
+            service.search({ corpusId: corpus.corpusId, query: "quartz" }),
+        ).resolves.toMatchObject({
+            matches: [expect.objectContaining({ sourceId: "second-append" })],
+        });
+    });
+
+    test("cancels an active incremental append without publishing it", async () => {
+        const corpus = await service.createCorpus("Engineering");
+        const seed = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "seed-doc",
+                sourceType: "markdown",
+                title: "Seed",
+                markdown: "The seed source uses anchors.",
+            },
+        });
+        await waitForTerminalJob(service, seed.jobId);
+
+        index.blockNextAppend = true;
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "cancelled-append",
+                sourceType: "markdown",
+                title: "Cancelled append",
+                markdown: "This candidate uses peridot.",
+            },
+        });
+        const deadline = Date.now() + 5_000;
+        while (Date.now() < deadline) {
+            if (
+                (await service.getJob(accepted.jobId))?.state ===
+                "building-indexes"
+            ) {
+                break;
+            }
+            await new Promise<void>((resolve) => setTimeout(resolve, 10));
+        }
+        await service.cancelJob(accepted.jobId);
+
+        expect((await waitForTerminalJob(service, accepted.jobId)).state).toBe(
+            "cancelled",
+        );
+        await expect(
+            service.search({ corpusId: corpus.corpusId, query: "peridot" }),
+        ).resolves.toMatchObject({ matches: [] });
+        await expect(
+            service.getSource(corpus.corpusId, "cancelled-append"),
+        ).resolves.toBeUndefined();
     });
 
     test("cancels an active index rebuild", async () => {

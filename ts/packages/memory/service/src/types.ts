@@ -153,6 +153,8 @@ export interface SourceListRequest {
     corpusId: string;
     pageSize?: number;
     continuationToken?: string;
+    query?: string;
+    sourceTypes?: SourceType[];
 }
 
 export interface SourceContentRequest {

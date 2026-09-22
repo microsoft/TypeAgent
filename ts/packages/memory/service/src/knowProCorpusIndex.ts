@@ -58,7 +58,7 @@ function toDocParts(document: IndexedDocument): DocPart[] {
             return docPartsFromHtml(
                 document.content,
                 false,
-                structuralChunkCharacters,
+                chunkCharacters,
                 uri,
                 undefined,
                 durableDocPartOptions,
@@ -67,18 +67,14 @@ function toDocParts(document: IndexedDocument): DocPart[] {
         case "web":
             return docPartsFromMarkdown(
                 document.content,
-                structuralChunkCharacters,
+                chunkCharacters,
                 uri,
                 durableDocPartOptions,
             );
         case "vtt":
             return docPartsFromVtt(document.content, uri);
         case "text":
-            return docPartsFromText(
-                document.content,
-                structuralChunkCharacters,
-                uri,
-            );
+            return docPartsFromText(document.content, chunkCharacters, uri);
     }
 }
 
@@ -529,11 +525,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         await mkdir(this.indexDirectory, { recursive: true });
         const target = path.join(this.indexDirectory, basicIndexFileName);
         const temporary = `${target}.tmp`;
-        await writeFile(
-            temporary,
-            JSON.stringify(this.basicDocuments),
-            "utf8",
-        );
+        await writeFile(temporary, JSON.stringify(this.basicDocuments), "utf8");
         await rename(temporary, target);
     }
 }

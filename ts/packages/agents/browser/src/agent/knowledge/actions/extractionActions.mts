@@ -273,16 +273,20 @@ export async function extractKnowledgeFromPageStreaming(
                     ? {}
                     : { signal: parameters.signal }),
                 onProgress: (progress) => {
+                    const calculatedPercentage =
+                        progress.total === undefined || progress.total === 0
+                            ? 10
+                            : (progress.completed / progress.total) * 100;
                     const percentage = Math.min(
                         95,
-                        Math.max(10, progress.percentage ?? 10),
+                        Math.max(10, calculatedPercentage),
                     );
                     emitProgress(
                         id,
                         url,
                         "extracting",
                         percentage,
-                        progress.message,
+                        progress.message ?? "Memory ingestion in progress",
                     );
                 },
             },
