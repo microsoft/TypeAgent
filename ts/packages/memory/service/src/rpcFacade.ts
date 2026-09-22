@@ -5,6 +5,7 @@ import type {
     IngestionJobStatus,
     JobProgress,
     MemoryService,
+    PersonalHowToService,
 } from "./types.js";
 
 export interface MemoryJobWaitOptions {
@@ -14,8 +15,14 @@ export interface MemoryJobWaitOptions {
 }
 
 export function createMemoryServiceRpcFacade(
+    service: MemoryService & PersonalHowToService,
+): MemoryService & PersonalHowToService;
+export function createMemoryServiceRpcFacade(
     service: MemoryService,
-): MemoryService {
+): MemoryService;
+export function createMemoryServiceRpcFacade(
+    service: MemoryService & Partial<PersonalHowToService>,
+): MemoryService & PersonalHowToService {
     return {
         createCorpus: (...args) => service.createCorpus(...args),
         listCorpora: (...args) => service.listCorpora(...args),
@@ -44,6 +51,23 @@ export function createMemoryServiceRpcFacade(
         answer: (...args) => service.answer(...args),
         getKnowledgeGraph: (...args) => service.getKnowledgeGraph(...args),
         getCapabilities: (...args) => service.getCapabilities(...args),
+        getPersonalHowToSettings: (...args) =>
+            service.getPersonalHowToSettings!(...args),
+        updatePersonalHowToSettings: (...args) =>
+            service.updatePersonalHowToSettings!(...args),
+        createProcedureCandidate: (...args) =>
+            service.createProcedureCandidate!(...args),
+        getProcedureCandidate: (...args) =>
+            service.getProcedureCandidate!(...args),
+        listProcedureCandidates: (...args) =>
+            service.listProcedureCandidates!(...args),
+        rejectProcedureCandidate: (...args) =>
+            service.rejectProcedureCandidate!(...args),
+        saveProcedure: (...args) => service.saveProcedure!(...args),
+        listProcedures: (...args) => service.listProcedures!(...args),
+        getProcedure: (...args) => service.getProcedure!(...args),
+        searchProcedures: (...args) => service.searchProcedures!(...args),
+        archiveProcedure: (...args) => service.archiveProcedure!(...args),
     };
 }
 

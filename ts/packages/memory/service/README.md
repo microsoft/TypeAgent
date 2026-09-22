@@ -31,6 +31,28 @@ copying source content, and can be listed, searched, filtered, or forgotten
 independently. Linked sources are deleted only when explicitly requested and
 when no retained event still links to them.
 
+Personal how-to storage is corpus-owned but persisted independently from the
+source manifest, so importing, replacing, reindexing, or forgetting sources
+cannot reset its settings. `getPersonalHowToSettings` and
+`updatePersonalHowToSettings` use an optimistic settings revision. Procedure
+candidates can be detected, drafted, rejected, or saved. Saved procedures are
+immutable versions with canonical JSON, a deterministic Markdown projection,
+content hashes, source-revision citations, and version lineage. Markdown saves
+are parsed and validated while retaining additional free-form sections.
+
+`listProcedures`, `getProcedure`, `searchProcedures`, `saveProcedure`, and
+`archiveProcedure` provide the procedure lifecycle. Replacing or forgetting a
+cited source creates a new `stale` procedure version while leaving every older
+version unchanged. The transport-independent personal how-to API is also
+available through the RPC facade.
+
+When both personal how-to settings are enabled, successful Markdown and text
+ingestion detects procedural sections containing ordered or checklist steps.
+Detected candidates use deterministic source-revision identities and citations,
+so unchanged imports and restarts do not create duplicates. Detection runs only
+after the source commit; failures are reported in ingestion job warnings without
+rolling back the committed source or changing authored procedures.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

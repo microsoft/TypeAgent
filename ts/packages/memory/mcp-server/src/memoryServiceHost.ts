@@ -13,7 +13,10 @@ import {
     type WebStandardStreamableHTTPServerTransportOptions,
 } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { MemoryService } from "@typeagent/memory-service";
+import type {
+    MemoryService,
+    PersonalHowToService,
+} from "@typeagent/memory-service";
 import { MemoryMcpServer } from "./memoryMcpServer.js";
 
 export interface MemoryServiceHostOptions {
@@ -30,7 +33,7 @@ export class MemoryServiceHost {
     private constructor(
         private readonly httpServer: Server,
         private readonly activeServers: Set<MemoryMcpServer>,
-        private readonly service: MemoryService,
+        private readonly service: MemoryService & PersonalHowToService,
         private readonly beginClosing: () => void,
         public readonly host: string,
         public readonly port: number,
@@ -46,7 +49,7 @@ export class MemoryServiceHost {
     }
 
     public static async start(
-        service: MemoryService,
+        service: MemoryService & PersonalHowToService,
         options: MemoryServiceHostOptions = {},
     ): Promise<MemoryServiceHost> {
         const host = options.host ?? "127.0.0.1";

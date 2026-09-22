@@ -6,16 +6,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createExtensionCommands } from "../src/extension/commands.js";
 import { getPowerShellHookOutput } from "../src/extension/powershell-guidance.js";
+import { getSelectedSkills, writeConfig } from "../src/shared/plugin-config.js";
 
 describe("extension commands", () => {
     let dataDir: string;
     const originalDataDir = process.env.TYPEAGENT_PLUGIN_DATA;
     const originalMode = process.env.TYPEAGENT_MODE;
+    const originalSelectedSkills = process.env.TYPEAGENT_SELECTED_SKILLS;
 
     beforeEach(() => {
         dataDir = mkdtempSync(join(tmpdir(), "typeagent-copilot-"));
         process.env.TYPEAGENT_PLUGIN_DATA = dataDir;
         delete process.env.TYPEAGENT_MODE;
+        delete process.env.TYPEAGENT_SELECTED_SKILLS;
     });
 
     afterEach(() => {
@@ -25,6 +28,9 @@ describe("extension commands", () => {
         else process.env.TYPEAGENT_PLUGIN_DATA = originalDataDir;
         if (originalMode === undefined) delete process.env.TYPEAGENT_MODE;
         else process.env.TYPEAGENT_MODE = originalMode;
+        if (originalSelectedSkills === undefined)
+            delete process.env.TYPEAGENT_SELECTED_SKILLS;
+        else process.env.TYPEAGENT_SELECTED_SKILLS = originalSelectedSkills;
     });
 
     it("reports status using the default configuration", async () => {
@@ -55,6 +61,33 @@ describe("extension commands", () => {
         expect(messages).toEqual([
             "TypeAgent mode switched to mcp.",
             "Usage: /typeagent-mode direct|mcp|dev|bypass",
+        ]);
+    });
+
+    it("loads explicit selected skills from plugin configuration", () => {
+        writeConfig({
+            mode: "direct",
+            selectedSkills: [
+                {
+                    identity: {
+                        scope: "project",
+                        origin: "c:/src/project",
+                        name: "calendar",
+                    },
+                    revision: "a".repeat(64),
+                },
+            ],
+        });
+
+        expect(getSelectedSkills()).toEqual([
+            {
+                identity: {
+                    scope: "project",
+                    origin: "c:/src/project",
+                    name: "calendar",
+                },
+                revision: "a".repeat(64),
+            },
         ]);
     });
 });

@@ -15,6 +15,10 @@ import {
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import { createKnowProCorpusIndex } from "./knowProCorpusIndex.js";
+import {
+    detectProcedureCandidates,
+    PersonalHowToStore,
+} from "./personalHowToStore.js";
 import type {
     CorpusIndex,
     CorpusIndexFactory,
@@ -46,6 +50,17 @@ import type {
     MemoryServiceCapabilities,
     MemorySource,
     MemoryPage,
+    PersonalHowToSettings,
+    PersonalHowToSettingsUpdate,
+    PersonalHowToService,
+    ProcedureCandidate,
+    ProcedureCandidateCreateRequest,
+    ProcedureListRequest,
+    ProcedureSaveRequest,
+    ProcedureSearchMatch,
+    ProcedureSearchRequest,
+    ProcedureSummary,
+    ProcedureVersion,
     ReindexResult,
     SourceContent,
     SourceContentRequest,
@@ -394,9 +409,10 @@ function defaultCapabilities(): MemoryServiceCapabilities {
     };
 }
 
-export class FileMemoryService implements MemoryService {
+export class FileMemoryService implements MemoryService, PersonalHowToService {
     private readonly indexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
+    private readonly personalHowToStore: PersonalHowToStore;
     private readonly corpora = new Map<string, CorpusRuntime>();
     private readonly jobs = new Map<string, IngestionJobStatus>();
     private readonly controllers = new Map<string, AbortController>();
@@ -411,6 +427,7 @@ export class FileMemoryService implements MemoryService {
     ) {
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
         this.capabilities = options.capabilities ?? defaultCapabilities();
+        this.personalHowToStore = new PersonalHowToStore(rootDirectory);
     }
 
     public initialize(): Promise<void> {
@@ -900,6 +917,10 @@ export class FileMemoryService implements MemoryService {
                 runtime,
                 candidateManifest,
                 new AbortController().signal,
+            );
+            await this.personalHowToStore.markStale(
+                request.corpusId,
+                request.sourceId,
             );
             result = {
                 corpusId: request.corpusId,
@@ -1411,6 +1432,126 @@ export class FileMemoryService implements MemoryService {
         return runtime.index.getKnowledgeGraph();
     }
 
+    public async getPersonalHowToSettings(
+        corpusId: string,
+    ): Promise<PersonalHowToSettings> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        await this.getCorpusRuntime(corpusId);
+        return this.personalHowToStore.getSettings(corpusId);
+    }
+
+    public async updatePersonalHowToSettings(
+        corpusId: string,
+        update: PersonalHowToSettingsUpdate,
+    ): Promise<PersonalHowToSettings> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        return this.enqueueWrite(corpusId, () =>
+            this.personalHowToStore.updateSettings(corpusId, update),
+        );
+    }
+
+    public async createProcedureCandidate(
+        request: ProcedureCandidateCreateRequest,
+    ): Promise<ProcedureCandidate> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        return this.enqueueWrite(request.corpusId, () =>
+            this.personalHowToStore.createCandidate(request),
+        );
+    }
+
+    public async getProcedureCandidate(
+        corpusId: string,
+        candidateId: string,
+    ): Promise<ProcedureCandidate | undefined> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        validateIdentifier("candidate ID", candidateId);
+        await this.getCorpusRuntime(corpusId);
+        return this.personalHowToStore.getCandidate(corpusId, candidateId);
+    }
+
+    public async listProcedureCandidates(
+        corpusId: string,
+        states?: ProcedureCandidate["state"][],
+    ): Promise<ProcedureCandidate[]> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        await this.getCorpusRuntime(corpusId);
+        return this.personalHowToStore.listCandidates(corpusId, states);
+    }
+
+    public async rejectProcedureCandidate(
+        corpusId: string,
+        candidateId: string,
+    ): Promise<ProcedureCandidate> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        validateIdentifier("candidate ID", candidateId);
+        return this.enqueueWrite(corpusId, () =>
+            this.personalHowToStore.rejectCandidate(corpusId, candidateId),
+        );
+    }
+
+    public async saveProcedure(
+        request: ProcedureSaveRequest,
+    ): Promise<ProcedureVersion> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        return this.enqueueWrite(request.corpusId, () =>
+            this.personalHowToStore.save(request),
+        );
+    }
+
+    public async listProcedures(
+        request: ProcedureListRequest,
+    ): Promise<ProcedureSummary[]> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        await this.getCorpusRuntime(request.corpusId);
+        return this.personalHowToStore.list(request);
+    }
+
+    public async getProcedure(
+        corpusId: string,
+        procedureId: string,
+        version?: number,
+    ): Promise<ProcedureVersion | undefined> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        validateIdentifier("procedure ID", procedureId);
+        await this.getCorpusRuntime(corpusId);
+        return this.personalHowToStore.get(corpusId, procedureId, version);
+    }
+
+    public async searchProcedures(
+        request: ProcedureSearchRequest,
+    ): Promise<ProcedureSearchMatch[]> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        await this.getCorpusRuntime(request.corpusId);
+        return this.personalHowToStore.search(request);
+    }
+
+    public async archiveProcedure(
+        corpusId: string,
+        procedureId: string,
+        expectedVersion?: number,
+    ): Promise<ProcedureVersion> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        validateIdentifier("procedure ID", procedureId);
+        return this.enqueueWrite(corpusId, () =>
+            this.personalHowToStore.archive(
+                corpusId,
+                procedureId,
+                expectedVersion,
+            ),
+        );
+    }
+
     private async reindex(
         corpusId: string,
         sourceId: string | undefined,
@@ -1628,6 +1769,14 @@ export class FileMemoryService implements MemoryService {
                 if (policy === "failIfExists") {
                     throw new Error(`Source '${sourceId}' already exists`);
                 }
+                job.warnings.push(
+                    ...(await this.updatePersonalHowToAfterIngestion(
+                        request,
+                        sourceId,
+                        revisionId,
+                        content,
+                    )),
+                );
                 await this.updateJob(job, "complete", {
                     completed: 1,
                     total: 1,
@@ -1742,6 +1891,14 @@ export class FileMemoryService implements MemoryService {
                 request.corpusId,
                 indexGeneration,
             );
+            job.warnings.push(
+                ...(await this.updatePersonalHowToAfterIngestion(
+                    request,
+                    sourceId,
+                    revisionId,
+                    content,
+                )),
+            );
             await this.updateJob(job, "complete", {
                 completed: 1,
                 total: 1,
@@ -1771,10 +1928,57 @@ export class FileMemoryService implements MemoryService {
         }
     }
 
-    private async enqueueWrite(
+    private async updatePersonalHowToAfterIngestion(
+        request: DocumentIngestRequest,
+        sourceId: string,
+        revisionId: string,
+        content: string,
+    ): Promise<string[]> {
+        const warnings: string[] = [];
+        try {
+            await this.personalHowToStore.markStale(
+                request.corpusId,
+                sourceId,
+                revisionId,
+            );
+        } catch (error) {
+            warnings.push(
+                `Personal how-to stale update failed: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+        if (request.source.html !== undefined) {
+            return warnings;
+        }
+        try {
+            const settings = await this.personalHowToStore.getSettings(
+                request.corpusId,
+            );
+            if (!settings.enabled || !settings.detectCandidates) {
+                return warnings;
+            }
+            const candidates = detectProcedureCandidates(
+                request.corpusId,
+                sourceId,
+                revisionId,
+                content,
+            );
+            await this.personalHowToStore.createDetectedCandidates(candidates);
+        } catch (error) {
+            warnings.push(
+                `Procedure candidate extraction failed: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+        return warnings;
+    }
+
+    private async enqueueWrite<T>(
         corpusId: string,
-        operation: () => Promise<void>,
-    ): Promise<void> {
+        operation: () => Promise<T>,
+    ): Promise<T> {
         const runtime = await this.getCorpusRuntime(corpusId);
         const queued = runtime.writeTail.then(operation, operation);
         runtime.writeTail = queued.then(
