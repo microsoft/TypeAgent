@@ -23,6 +23,11 @@ export const memoryToolNames = {
     jobList: "memory_job_list",
     jobWait: "memory_job_wait",
     jobCancel: "memory_job_cancel",
+    eventAppend: "memory_event_append",
+    eventGet: "memory_event_get",
+    eventList: "memory_event_list",
+    eventSearch: "memory_event_search",
+    eventForget: "memory_event_forget",
     search: "memory_search",
     answer: "memory_answer",
     knowledgeGraphGet: "memory_knowledge_graph_get",
@@ -274,6 +279,121 @@ export const jobPageSchema = z.object({
     nextContinuationToken: z.string().optional(),
 });
 
+export const eventSourceKindSchema = z.enum([
+    "conversation",
+    "document",
+    "web-activity",
+    "procedure",
+    "system",
+    "other",
+]);
+
+export const eventSenderSchema = z.enum([
+    "user",
+    "assistant",
+    "system",
+    "tool",
+    "agent",
+    "other",
+]);
+
+export const eventProducerSchema = z.object({
+    producerId: identifierSchema,
+    producerType: identifierSchema,
+});
+
+export const eventSchema = z.object({
+    eventId: identifierSchema,
+    corpusId: identifierSchema,
+    idempotencyKey: z.string().min(1).max(500),
+    producer: eventProducerSchema,
+    eventType: identifierSchema,
+    sourceKind: eventSourceKindSchema,
+    observedAt: z.string(),
+    eventTime: z.string(),
+    createdAt: z.string(),
+    content: z.string().max(1_000_000).optional(),
+    conversationId: identifierSchema.optional(),
+    runId: identifierSchema.optional(),
+    turnId: identifierSchema.optional(),
+    sender: eventSenderSchema.optional(),
+    actionName: z.string().min(1).max(500).optional(),
+    linkedSourceIds: z.array(identifierSchema).max(1_000).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const eventAppendRequestSchema = eventSchema
+    .omit({
+        eventId: true,
+        observedAt: true,
+        eventTime: true,
+        createdAt: true,
+    })
+    .extend({
+        observedAt: z.string().optional(),
+        eventTime: z.string().optional(),
+    });
+
+export const eventAppendResultSchema = z.object({
+    event: eventSchema,
+    replayed: z.boolean(),
+});
+
+export const eventFilterSchema = z.object({
+    sourceKinds: z.array(eventSourceKindSchema).optional(),
+    producerIds: z.array(identifierSchema).optional(),
+    eventTypes: z.array(identifierSchema).optional(),
+    conversationIds: z.array(identifierSchema).optional(),
+    runIds: z.array(identifierSchema).optional(),
+    linkedSourceIds: z.array(identifierSchema).optional(),
+    observedFrom: z.string().optional(),
+    observedTo: z.string().optional(),
+    eventFrom: z.string().optional(),
+    eventTo: z.string().optional(),
+});
+
+export const eventListRequestSchema = eventFilterSchema.extend({
+    corpusId: identifierSchema,
+    ...pageRequestSchema.shape,
+});
+
+export const eventPageSchema = z.object({
+    items: z.array(eventSchema),
+    total: z.number().int().nonnegative(),
+    nextContinuationToken: z.string().optional(),
+});
+
+export const eventSearchRequestSchema = eventFilterSchema.extend({
+    corpusId: identifierSchema,
+    query: z.string().min(1),
+    limit: z.number().int().positive().max(100).optional(),
+});
+
+export const eventSearchResultSchema = z.object({
+    query: z.string(),
+    matches: z.array(
+        z.object({
+            event: eventSchema,
+            snippet: z.string(),
+            score: z.number(),
+        }),
+    ),
+});
+
+export const eventForgetRequestSchema = eventFilterSchema.extend({
+    corpusId: identifierSchema,
+    eventIds: z.array(identifierSchema).optional(),
+    forgetLinkedSources: z.boolean().optional(),
+});
+
+export const eventForgetResultSchema = z.object({
+    corpusId: identifierSchema,
+    deletedEventCount: z.number().int().nonnegative(),
+    deletedSourceCount: z.number().int().nonnegative(),
+    retainedLinkedSourceIds: z.array(identifierSchema),
+    indexVersion: z.string(),
+});
+
 export const searchRequestSchema = z.object({
     corpusId: identifierSchema,
     query: z.string().min(1),
@@ -369,4 +489,5 @@ export const capabilitiesSchema = z.object({
 export const optionalJobStatusSchema = jobStatusSchema.nullable();
 export const optionalSourceSchema = sourceSchema.nullable();
 export const optionalCorpusStatusSchema = corpusStatusSchema.nullable();
+export const optionalEventSchema = eventSchema.nullable();
 export const clearedCountSchema = z.number().int().nonnegative();

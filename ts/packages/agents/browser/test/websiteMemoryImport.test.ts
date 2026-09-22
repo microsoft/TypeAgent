@@ -121,6 +121,11 @@ describe("non-basic website import", () => {
                 source: "history",
                 domain: "example.test",
                 tags: ["test"],
+                activityType: "visited",
+                activityMetadata: {
+                    importId: "import-1",
+                    importType: "websiteImport",
+                },
             },
             "content",
             expect.objectContaining({

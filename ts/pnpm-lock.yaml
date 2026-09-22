@@ -2793,31 +2793,6 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/agents/memory:
-    dependencies:
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../../agentSdk
-      '@typeagent/memory-service':
-        specifier: workspace:*
-        version: link:../../memory/service
-    devDependencies:
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.14
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-
   packages/agents/markdown:
     dependencies:
       '@milkdown/core':
@@ -2965,6 +2940,31 @@ importers:
       vite:
         specifier: ^6.4.3
         version: 6.4.3(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
+
+  packages/agents/memory:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../../memory/service
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@26.4.1)(ts-node@10.9.2(@types/node@26.4.1)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/agents/montage:
     dependencies:
@@ -4814,12 +4814,12 @@ importers:
       '@typeagent/list-agent':
         specifier: workspace:*
         version: link:../agents/list
-      '@typeagent/memory-agent':
-        specifier: workspace:*
-        version: link:../agents/memory
       '@typeagent/markdown-agent':
         specifier: workspace:*
         version: link:../agents/markdown
+      '@typeagent/memory-agent':
+        specifier: workspace:*
+        version: link:../agents/memory
       '@typeagent/montage-agent':
         specifier: workspace:*
         version: link:../agents/montage
@@ -5031,6 +5031,9 @@ importers:
       '@typeagent/knowpro':
         specifier: workspace:*
         version: link:../../knowPro
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../../memory/service
       '@typeagent/selfhelp':
         specifier: workspace:*
         version: link:../../agents/selfhelp

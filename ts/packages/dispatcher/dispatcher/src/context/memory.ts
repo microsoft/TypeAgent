@@ -44,6 +44,11 @@ import {
     ConversationSearchResult,
     SearchSelectExpr,
 } from "@typeagent/knowpro";
+import {
+    ConversationDurableMemory,
+    searchDurableConversationMemory,
+} from "./conversationDurableMemory.js";
+import path from "node:path";
 
 const debug = registerDebug("typeagent:dispatcher:memory");
 
@@ -51,6 +56,7 @@ export async function initializeMemory(
     context: CommandHandlerContext,
     sessionDirPath: string | undefined,
 ) {
+    context.conversationDurableMemory = undefined;
     if (sessionDirPath === undefined) {
         context.conversationManager = undefined;
         context.conversationMemory = undefined;
@@ -69,6 +75,14 @@ export async function initializeMemory(
         },
         false,
     );
+    if (context.durableMemoryService !== undefined) {
+        context.conversationDurableMemory = new ConversationDurableMemory({
+            service: context.durableMemoryService,
+            conversationId:
+                context.conversationId ?? path.basename(sessionDirPath),
+            runId: context.activationId,
+        });
+    }
 }
 
 function toConcreteEntity(
@@ -114,6 +128,10 @@ export function addUserMessageToHistory(
         "user",
         context.currentRequestId?.requestId,
     );
+    const turnId = context.currentRequestId?.requestId;
+    if (turnId !== undefined) {
+        context.conversationDurableMemory?.recordUserTurn(request, turnId);
+    }
 }
 
 // Queue the user's turn for knowledge extraction into conversation memory.
@@ -162,6 +180,16 @@ export function addResultToMemory(
         "assistant",
         context.currentRequestId?.requestId,
     );
+    const turnId = context.currentRequestId?.requestId;
+    if (turnId !== undefined) {
+        context.conversationDurableMemory?.recordAssistantEvidence(
+            message,
+            turnId,
+            action === undefined
+                ? undefined
+                : `${getAppAgentName(schemaName)}.${action.actionName}`,
+        );
+    }
 
     if (context.actionResultKnowledgeExtraction) {
         if (context.conversationManager && entities) {
@@ -213,6 +241,8 @@ export function addActionResultToMemory(
     schemaName: string,
     result: ActionResult,
 ): void {
+    const turnId = context.currentRequestId?.requestId;
+    const actionName = getFullActionName(executableAction);
     if (result.error !== undefined) {
         addResultToMemory(
             context,
@@ -220,6 +250,14 @@ export function addActionResultToMemory(
             schemaName,
             resolvedEntities,
         );
+        if (turnId !== undefined) {
+            context.conversationDurableMemory?.recordActionResult(
+                result.error,
+                turnId,
+                actionName,
+                false,
+            );
+        }
     } else {
         const combinedEntities = resolvedEntities ? [...resolvedEntities] : [];
         combinedEntities.push(...result.entities);
@@ -238,6 +276,17 @@ export function addActionResultToMemory(
             result.activityContext,
             executableAction.action,
         );
+        if (turnId !== undefined) {
+            const outcome =
+                result.historyText ??
+                `Action ${actionName} completed successfully.`;
+            context.conversationDurableMemory?.recordActionResult(
+                outcome,
+                turnId,
+                actionName,
+                true,
+            );
+        }
     }
 }
 
@@ -246,7 +295,33 @@ export async function lookupAndAnswerFromMemory(
     question: string,
 ): Promise<{ historyText: string[]; answered: boolean }> {
     const systemContext = context.sessionContext.agentContext;
+    const durableAnswer = await searchDurableConversationMemory(
+        systemContext,
+        question,
+        "current",
+    );
+    if (durableAnswer !== undefined) {
+        const text = durableAnswer;
+        displayResult(text, context);
+        return { historyText: [text], answered: true };
+    }
+
     const conversationMemory = systemContext.conversationMemory;
+    if (
+        conversationMemory === undefined &&
+        systemContext.conversationDurableMemory !== undefined
+    ) {
+        const crossConversationEvidence = await searchDurableConversationMemory(
+            systemContext,
+            question,
+            "all",
+        );
+        if (crossConversationEvidence !== undefined) {
+            const text = crossConversationEvidence;
+            displayResult(text, context);
+            return { historyText: [text], answered: true };
+        }
+    }
     if (conversationMemory === undefined) {
         throw new Error("Conversation memory is undefined!");
     }
@@ -273,6 +348,19 @@ export async function lookupAndAnswerFromMemory(
     // The current conversation had no answer. Fall back to the unified
     // cross-conversation content index (host-injected in connected mode) so a
     // question whose answer lives in another conversation still gets one.
+    if (!answered) {
+        const durableFallback = await searchDurableConversationMemory(
+            systemContext,
+            question,
+            "all",
+        );
+        if (durableFallback !== undefined) {
+            historyText.length = 0;
+            historyText.push(durableFallback);
+            displayResult(durableFallback, context);
+            answered = true;
+        }
+    }
     if (!answered) {
         const fallback = await lookupAnswerFromOtherConversations(
             systemContext,
@@ -534,6 +622,114 @@ class MemoryAnswerCommandHandler implements CommandHandler {
     }
 }
 
+class DurableInspectTurnCommandHandler implements CommandHandler {
+    public readonly description =
+        "Inspect durable conversation evidence for one turn";
+    public readonly parameters = {
+        args: {
+            turnId: { description: "Turn identifier" },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const memory = requireDurableMemory(context);
+        displayResult(
+            JSON.stringify(
+                await memory.inspectTurn(params.args.turnId),
+                undefined,
+                2,
+            ),
+            context,
+        );
+    }
+}
+
+class DurableInspectConversationCommandHandler implements CommandHandler {
+    public readonly description = "Inspect durable conversation evidence";
+    public readonly parameters = {
+        args: {
+            conversationId: {
+                description: "Conversation identifier (current when omitted)",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const memory = requireDurableMemory(context);
+        displayResult(
+            JSON.stringify(
+                await memory.inspectConversation(params.args.conversationId),
+                undefined,
+                2,
+            ),
+            context,
+        );
+    }
+}
+
+class DurableForgetTurnCommandHandler implements CommandHandler {
+    public readonly description = "Forget durable evidence for one turn";
+    public readonly parameters = {
+        args: {
+            turnId: { description: "Turn identifier" },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const memory = requireDurableMemory(context);
+        displayResult(
+            JSON.stringify(await memory.forgetTurn(params.args.turnId)),
+            context,
+        );
+    }
+}
+
+class DurableForgetConversationCommandHandler implements CommandHandler {
+    public readonly description = "Forget durable evidence for a conversation";
+    public readonly parameters = {
+        args: {
+            conversationId: {
+                description: "Conversation identifier (current when omitted)",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const memory = requireDurableMemory(context);
+        displayResult(
+            JSON.stringify(
+                await memory.forgetConversation(params.args.conversationId),
+            ),
+            context,
+        );
+    }
+}
+
+function requireDurableMemory(
+    context: ActionContext<CommandHandlerContext>,
+): ConversationDurableMemory {
+    const memory =
+        context.sessionContext.agentContext.conversationDurableMemory;
+    if (memory === undefined) {
+        throw new Error("Durable conversation memory is not available.");
+    }
+    return memory;
+}
+
 export function getMemoryCommandHandlers(): CommandHandlerTable {
     return {
         description: "Legacy per-conversation memory commands",
@@ -554,6 +750,12 @@ export function getMemoryCommandHandlers(): CommandHandlerTable {
             query: new MemorySearchCommandHandler(),
             search: new MemoryAnswerCommandHandler(true),
             answer: new MemoryAnswerCommandHandler(false),
+            "inspect-turn": new DurableInspectTurnCommandHandler(),
+            "inspect-conversation":
+                new DurableInspectConversationCommandHandler(),
+            "forget-turn": new DurableForgetTurnCommandHandler(),
+            "forget-conversation":
+                new DurableForgetConversationCommandHandler(),
         },
     };
 }
