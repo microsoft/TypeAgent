@@ -38,6 +38,7 @@
     "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "html-to-text": "^9.0.5",
+    "yaml": "^2.8.3",
     "zod": "^3.25.0"
   },
   "devDependencies": {

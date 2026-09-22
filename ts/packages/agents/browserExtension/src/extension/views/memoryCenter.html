@@ -28,6 +28,9 @@
         <button id="createCorpusButton" class="primary" type="button">
           Create corpus
         </button>
+        <button id="importDocumentButton" type="button" disabled>
+          Import Markdown
+        </button>
         <button id="reindexCorpusButton" type="button">Reindex corpus</button>
         <div id="corpusStatus" class="summary"></div>
       </section>
@@ -181,6 +184,99 @@
           </section>
         </aside>
       </div>
+
+      <section class="howto-section">
+        <div class="section-heading">
+          <div>
+            <h2>Personal how-tos</h2>
+            <p class="summary">
+              Review discovered procedures and maintain private, editable
+              instructions for this corpus.
+            </p>
+          </div>
+          <button
+            id="newProcedureButton"
+            class="primary"
+            type="button"
+            disabled
+          >
+            New how-to
+          </button>
+        </div>
+        <div class="howto-workspace">
+          <section class="card howto-settings">
+            <h3>Corpus settings</h3>
+            <label class="checkbox">
+              <input id="howToEnabled" type="checkbox" />
+              Enable personal how-tos
+            </label>
+            <label class="checkbox">
+              <input id="detectCandidates" type="checkbox" />
+              Detect procedure candidates during import
+            </label>
+            <label>
+              Extraction guidance
+              <textarea
+                id="howToInstructions"
+                placeholder="Formatting rules, required links, or domain-specific guidance"
+              ></textarea>
+            </label>
+            <button id="saveHowToSettings" type="button">Save settings</button>
+
+            <div class="section-heading subsection-heading">
+              <h3>Discovered</h3>
+              <span id="candidateCount" class="summary"></span>
+            </div>
+            <div id="candidateList" class="list compact-list empty">
+              No procedure candidates.
+            </div>
+          </section>
+
+          <section class="card howto-list-panel">
+            <div class="section-heading">
+              <h3>Saved procedures</h3>
+              <span id="procedureCount" class="summary"></span>
+            </div>
+            <div class="source-filter">
+              <input
+                id="procedureSearch"
+                type="search"
+                placeholder="What should I check when the worker restarts?"
+              />
+              <button id="searchProceduresButton" type="button">Search</button>
+            </div>
+            <div id="procedureList" class="list empty">
+              No saved procedures.
+            </div>
+          </section>
+
+          <section class="card howto-editor-panel">
+            <div class="section-heading">
+              <h3 id="procedureTitle">Select a procedure</h3>
+              <div>
+                <button id="archiveProcedureButton" type="button" disabled>
+                  Archive
+                </button>
+                <button
+                  id="saveProcedureButton"
+                  class="primary"
+                  type="button"
+                  disabled
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+            <div id="procedureMetadata" class="summary"></div>
+            <textarea
+              id="procedureEditor"
+              aria-label="Procedure Markdown"
+              spellcheck="true"
+              disabled
+            ></textarea>
+          </section>
+        </div>
+      </section>
     </main>
 
     <dialog id="createCorpusDialog">
@@ -214,6 +310,31 @@
           Replace source
         </button>
       </div>
+    </dialog>
+
+    <dialog id="importDocumentDialog">
+      <form id="importDocumentForm">
+        <h2>Import Markdown</h2>
+        <label>Title <input id="importTitle" required maxlength="200" /></label>
+        <label
+          >Source URL
+          <input id="importUri" type="url" placeholder="https://..." />
+        </label>
+        <label
+          >Tags
+          <input id="importTags" placeholder="runbook, service-name" />
+        </label>
+        <label>
+          Markdown
+          <textarea id="importMarkdown" required spellcheck="true"></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button type="button" data-close-dialog="importDocumentDialog">
+            Cancel
+          </button>
+          <button class="primary" type="submit">Import and index</button>
+        </div>
+      </form>
     </dialog>
 
     <dialog id="forgetDialog">

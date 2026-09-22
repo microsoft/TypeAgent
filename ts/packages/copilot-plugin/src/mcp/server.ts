@@ -4,6 +4,7 @@
 import { TypeAgentMcpServer } from "./agentServer.js";
 import { TypeAgentMacroMcpServer } from "./macroServer.js";
 import { TypeAgentWorkspaceMcpServer } from "./workspaceServer.js";
+import { TypeAgentSkillsMcpServer } from "./skillsServer.js";
 import { selectMcpServer } from "./serverSelector.js";
 
 const kind = selectMcpServer(process.argv.slice(2));
@@ -12,7 +13,9 @@ const server =
         ? new TypeAgentWorkspaceMcpServer()
         : kind === "macros"
           ? new TypeAgentMacroMcpServer()
-          : new TypeAgentMcpServer();
+          : kind === "skills"
+            ? new TypeAgentSkillsMcpServer()
+            : new TypeAgentMcpServer();
 
 if (server instanceof TypeAgentMcpServer) {
     // Stdio has no intrinsic Copilot session identity. This process retains one
