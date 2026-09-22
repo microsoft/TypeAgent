@@ -11,6 +11,7 @@ import yaml from "js-yaml";
 import { z } from "zod";
 
 import { TRANSLATION_BENCH_DEFAULT_APPROVE_SCORE_THRESHOLD } from "./benchmark.js";
+import { formatZodIssues } from "./zodJson.js";
 
 /** Directory containing *.prompt.yaml next to this module (src or dist). */
 export const TRANSLATION_BENCH_SYNTHESIZER_PROMPTS_DIR = path.dirname(
@@ -270,13 +271,7 @@ export type TranslationBenchParameterGraderPromptPack = z.infer<
 >;
 
 function formatZodError(label: string, error: z.ZodError): string {
-    const detail = error.issues
-        .map((issue) => {
-            const path = issue.path.length === 0 ? "$" : issue.path.join(".");
-            return `${path}: ${issue.message}`;
-        })
-        .join("; ");
-    return `Translation-bench prompt '${label}' invalid: ${detail}`;
+    return `Translation-bench prompt '${label}' invalid: ${formatZodIssues(error)}`;
 }
 
 function parseWithZod<T>(
