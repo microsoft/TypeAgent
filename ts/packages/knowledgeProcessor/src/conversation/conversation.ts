@@ -73,7 +73,7 @@ export function createConversationSettings(
             caseSensitive: false,
             concurrency: 2,
             embeddingModel,
-            semanticIndex: true,
+            semanticIndex: embeddingModel !== undefined,
         },
     };
 }
@@ -130,9 +130,10 @@ export interface Conversation<
     readonly knowledge: ObjectFolder<ExtractedKnowledge>;
 
     /**
-     * Returns the index for all messages in this conversation. The index is dynamically maintained.
+     * Returns the index for all messages in this conversation when semantic indexing is enabled.
+     * The index is dynamically maintained.
      */
-    getMessageIndex(): Promise<MessageIndex<MessageId>>;
+    getMessageIndex(): Promise<MessageIndex<MessageId> | undefined>;
     /**
      * Returns the index of all entities found in this conversation. The index is dynamically maintained.
      */
@@ -309,7 +310,12 @@ export async function createConversation(
     await load();
     return thisConversation;
 
-    async function getMessageIndex(): Promise<MessageIndex<MessageId>> {
+    async function getMessageIndex(): Promise<
+        MessageIndex<MessageId> | undefined
+    > {
+        if (!settings.indexSettings.semanticIndex) {
+            return undefined;
+        }
         if (!messageIndex) {
             messageIndex = await createMessageIndex(
                 settings.indexSettings,
@@ -363,6 +369,7 @@ export async function createConversation(
             threadIndex = await createThreadIndexOnStorage(
                 threadsPath,
                 provider,
+                settings.indexSettings,
             );
         }
         return threadIndex;
@@ -503,7 +510,9 @@ export async function createConversation(
     ): Promise<void> {
         if (message) {
             const messageIndex = await getMessageIndex();
-            await messageIndex.put(message.value, message.blockId);
+            if (messageIndex) {
+                await messageIndex.put(message.value, message.blockId);
+            }
         }
     }
 
@@ -882,6 +891,11 @@ export async function createConversation(
         });
         if (existing && existing.messages && existing.messages.length > 0) {
             const messageBlock = existing.messages[0];
+            if (messageText === messageBlock.value.value) {
+                return messageBlock;
+            }
+        }
+        for await (const messageBlock of messages.allObjects()) {
             if (messageText === messageBlock.value.value) {
                 return messageBlock;
             }
