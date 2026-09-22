@@ -4,6 +4,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import type { SkillSelection } from "../extension/skill-session.js";
 
 export type Mode = "direct" | "mcp" | "dev" | "bypass";
 export type McpRouting = "delegate" | "mixed";
@@ -16,6 +17,8 @@ export interface PluginConfig {
     powershell?: {
         enabled?: boolean;
     };
+    /** Catalog revisions to expose to this Copilot session. */
+    selectedSkills?: SkillSelection[];
     [key: string]: unknown;
 }
 
@@ -82,4 +85,67 @@ export function isMixedMcpMode(): boolean {
 export function getModeLabel(): string {
     const mode = getMode();
     return mode === "mcp" ? `mcp (${getMcpRouting()})` : mode;
+}
+
+export function getSelectedSkills(): SkillSelection[] {
+    const environment = process.env.TYPEAGENT_SELECTED_SKILLS;
+    const value =
+        environment === undefined
+            ? readConfig()?.selectedSkills
+            : parse(environment);
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) {
+        throw new Error("selectedSkills must be an array.");
+    }
+    return value.map((selection, index) =>
+        parseSkillSelection(selection, index),
+    );
+}
+
+function parse(value: string): unknown {
+    try {
+        return JSON.parse(value);
+    } catch {
+        throw new Error("TYPEAGENT_SELECTED_SKILLS must be valid JSON.");
+    }
+}
+
+function parseSkillSelection(value: unknown, index: number): SkillSelection {
+    if (typeof value !== "object" || value === null) {
+        throw invalidSelection(index);
+    }
+    const selection = value as Record<string, unknown>;
+    const identity = selection.identity;
+    if (typeof identity !== "object" || identity === null) {
+        throw invalidSelection(index);
+    }
+    const candidate = identity as Record<string, unknown>;
+    if (
+        !["builtin", "user", "project", "package"].includes(
+            candidate.scope as string,
+        ) ||
+        typeof candidate.origin !== "string" ||
+        candidate.origin.length === 0 ||
+        typeof candidate.name !== "string" ||
+        candidate.name.length === 0 ||
+        (selection.revision !== undefined &&
+            (typeof selection.revision !== "string" ||
+                !/^[a-fA-F0-9]{64}$/.test(selection.revision)))
+    ) {
+        throw invalidSelection(index);
+    }
+    return {
+        identity: {
+            scope: candidate.scope as SkillSelection["identity"]["scope"],
+            origin: candidate.origin,
+            name: candidate.name,
+        },
+        ...(selection.revision === undefined
+            ? {}
+            : { revision: selection.revision as string }),
+    };
+}
+
+function invalidSelection(index: number): Error {
+    return new Error(`Invalid selectedSkills entry at index ${index}.`);
 }

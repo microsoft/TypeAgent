@@ -12,6 +12,10 @@ import type {
     MemoryCenterJob,
     MemoryCenterKnowledge,
     MemoryCenterPage,
+    MemoryCenterHowToSettings,
+    MemoryCenterProcedureCandidate,
+    MemoryCenterProcedureSummary,
+    MemoryCenterProcedureVersion,
     MemoryCenterSource,
 } from "@typeagent/browser-control-rpc/serviceTypes";
 import { createChromeRpcClient } from "./chromeRpcClient";
@@ -69,6 +73,10 @@ const jobList = element<HTMLDivElement>("jobList");
 const activityList = element<HTMLDivElement>("activityList");
 const errorBanner = element<HTMLDivElement>("errorBanner");
 const connectionState = element<HTMLDivElement>("connectionState");
+const candidateList = element<HTMLDivElement>("candidateList");
+const procedureList = element<HTMLDivElement>("procedureList");
+const procedureEditor = element<HTMLTextAreaElement>("procedureEditor");
+const procedureSearch = element<HTMLInputElement>("procedureSearch");
 
 let corpora: MemoryCenterCorpus[] = [];
 let activeCorpus: MemoryCenterCorpusStatus | undefined;
@@ -95,6 +103,11 @@ let activityPage: MemoryCenterPage<MemoryCenterActivity> = {
 let activityTokens: Array<string | undefined> = [undefined];
 let activityPageIndex = 0;
 let activityLinkedSourceId: string | undefined;
+let howToSettings: MemoryCenterHowToSettings | undefined;
+let procedureCandidates: MemoryCenterProcedureCandidate[] = [];
+let procedures: MemoryCenterProcedureSummary[] = [];
+let selectedProcedure: MemoryCenterProcedureVersion | undefined;
+let isNewProcedure = false;
 
 function setError(error?: unknown): void {
     if (error === undefined) {
@@ -500,6 +513,201 @@ function renderJobs(): void {
         !jobPage.nextContinuationToken;
 }
 
+function renderHowToSettings(): void {
+    const enabled = activeCorpus !== undefined;
+    element<HTMLInputElement>("howToEnabled").disabled = !enabled;
+    element<HTMLInputElement>("detectCandidates").disabled = !enabled;
+    element<HTMLTextAreaElement>("howToInstructions").disabled = !enabled;
+    element<HTMLButtonElement>("saveHowToSettings").disabled = !enabled;
+    element<HTMLButtonElement>("newProcedureButton").disabled = !enabled;
+    element<HTMLButtonElement>("importDocumentButton").disabled = !enabled;
+    if (!howToSettings) {
+        element<HTMLInputElement>("howToEnabled").checked = false;
+        element<HTMLInputElement>("detectCandidates").checked = false;
+        element<HTMLTextAreaElement>("howToInstructions").value = "";
+        return;
+    }
+    element<HTMLInputElement>("howToEnabled").checked = howToSettings.enabled;
+    element<HTMLInputElement>("detectCandidates").checked =
+        howToSettings.detectCandidates;
+    const instructions = howToSettings.preferences?.instructions;
+    element<HTMLTextAreaElement>("howToInstructions").value =
+        typeof instructions === "string" ? instructions : "";
+}
+
+function renderProcedureCandidates(): void {
+    candidateList.replaceChildren();
+    for (const candidate of procedureCandidates) {
+        const item = document.createElement("div");
+        item.className = "list-item";
+        const title = document.createElement("div");
+        title.className = "item-title";
+        title.textContent = candidate.title;
+        const subtitle = document.createElement("div");
+        subtitle.className = "item-subtitle";
+        subtitle.textContent = `${candidate.state} · ${candidate.steps.length} step(s)`;
+        const actions = document.createElement("div");
+        actions.className = "item-actions";
+        const save = document.createElement("button");
+        save.type = "button";
+        save.textContent = "Save";
+        save.addEventListener("click", () => {
+            void run(async () => {
+                const version = await invoke("memorySaveProcedure", {
+                    corpusId: candidate.corpusId,
+                    candidateId: candidate.candidateId,
+                });
+                selectedProcedure = version;
+                isNewProcedure = false;
+                await loadHowTos();
+            });
+        });
+        const reject = document.createElement("button");
+        reject.type = "button";
+        reject.textContent = "Reject";
+        reject.addEventListener("click", () => {
+            void run(async () => {
+                await invoke("memoryRejectProcedureCandidate", {
+                    corpusId: candidate.corpusId,
+                    candidateId: candidate.candidateId,
+                });
+                await loadHowTos();
+            });
+        });
+        actions.append(save, reject);
+        item.append(title, subtitle, actions);
+        candidateList.appendChild(item);
+    }
+    element<HTMLSpanElement>("candidateCount").textContent =
+        `${procedureCandidates.length} pending`;
+    if (procedureCandidates.length === 0) {
+        setEmpty(candidateList, "No procedure candidates.");
+    } else {
+        candidateList.classList.remove("empty");
+    }
+}
+
+function renderProcedures(): void {
+    procedureList.replaceChildren();
+    for (const procedure of procedures) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "list-item";
+        if (procedure.procedureId === selectedProcedure?.procedureId) {
+            button.classList.add("selected");
+        }
+        const title = document.createElement("div");
+        title.className = "item-title";
+        title.textContent = procedure.title;
+        const subtitle = document.createElement("div");
+        subtitle.className = "item-subtitle";
+        subtitle.textContent = `${procedure.state} · version ${procedure.latestVersion}`;
+        button.append(title, subtitle);
+        button.addEventListener("click", () => {
+            void run(() => selectProcedure(procedure.procedureId));
+        });
+        procedureList.appendChild(button);
+    }
+    element<HTMLSpanElement>("procedureCount").textContent =
+        `${procedures.length} result(s)`;
+    if (procedures.length === 0) {
+        setEmpty(procedureList, "No saved procedures.");
+    } else {
+        procedureList.classList.remove("empty");
+    }
+}
+
+function renderProcedureEditor(): void {
+    const hasEditor = selectedProcedure !== undefined || isNewProcedure;
+    procedureEditor.disabled = !hasEditor;
+    element<HTMLButtonElement>("saveProcedureButton").disabled = !hasEditor;
+    element<HTMLButtonElement>("archiveProcedureButton").disabled =
+        selectedProcedure === undefined ||
+        selectedProcedure.state === "archived";
+    if (selectedProcedure) {
+        element<HTMLHeadingElement>("procedureTitle").textContent =
+            selectedProcedure.document.title;
+        element<HTMLDivElement>("procedureMetadata").textContent =
+            `${selectedProcedure.state} · version ${selectedProcedure.version} · ${selectedProcedure.document.citations.length} source citation(s)`;
+        procedureEditor.value = selectedProcedure.markdown;
+    } else if (!isNewProcedure) {
+        element<HTMLHeadingElement>("procedureTitle").textContent =
+            "Select a procedure";
+        element<HTMLDivElement>("procedureMetadata").textContent = "";
+        procedureEditor.value = "";
+    }
+}
+
+async function loadHowTos(): Promise<void> {
+    if (!activeCorpus) {
+        howToSettings = undefined;
+        procedureCandidates = [];
+        procedures = [];
+        selectedProcedure = undefined;
+        isNewProcedure = false;
+        renderHowToSettings();
+        renderProcedureCandidates();
+        renderProcedures();
+        renderProcedureEditor();
+        return;
+    }
+    const corpusId = activeCorpus.corpusId;
+    const query = procedureSearch.value.trim();
+    const [settings, candidates, procedureResults] = await Promise.all([
+        invoke("memoryGetHowToSettings", { corpusId }),
+        invoke("memoryListProcedureCandidates", {
+            corpusId,
+            states: ["detected", "draft"],
+        }),
+        query
+            ? invoke("memorySearchProcedures", {
+                  corpusId,
+                  query,
+                  states: ["saved", "stale"],
+                  limit: 50,
+              }).then((matches) => matches.map((match) => match.procedure))
+            : invoke("memoryListProcedures", {
+                  corpusId,
+                  states: ["saved", "stale"],
+              }),
+    ]);
+    howToSettings = settings;
+    procedureCandidates = candidates;
+    procedures = procedureResults;
+    if (
+        selectedProcedure &&
+        selectedProcedure.corpusId === corpusId &&
+        procedures.some(
+            (item) => item.procedureId === selectedProcedure?.procedureId,
+        )
+    ) {
+        selectedProcedure = await invoke("memoryGetProcedure", {
+            corpusId,
+            procedureId: selectedProcedure.procedureId,
+        });
+    } else if (!isNewProcedure) {
+        selectedProcedure = undefined;
+    }
+    renderHowToSettings();
+    renderProcedureCandidates();
+    renderProcedures();
+    renderProcedureEditor();
+}
+
+async function selectProcedure(procedureId: string): Promise<void> {
+    if (!activeCorpus) return;
+    selectedProcedure = await invoke("memoryGetProcedure", {
+        corpusId: activeCorpus.corpusId,
+        procedureId,
+    });
+    if (!selectedProcedure) {
+        throw new Error(`Procedure '${procedureId}' no longer exists`);
+    }
+    isNewProcedure = false;
+    renderProcedures();
+    renderProcedureEditor();
+}
+
 async function loadCorpora(preferredCorpusId?: string): Promise<void> {
     corpora = await invoke("memoryListCorpora", {});
     const stored = localStorage.getItem(ACTIVE_CORPUS_KEY);
@@ -522,6 +730,8 @@ async function loadCorpora(preferredCorpusId?: string): Promise<void> {
         renderJobs();
         activityPage = { items: [], total: 0 };
         renderActivity();
+        await loadHowTos();
+
         return;
     }
     await selectCorpus(corpusId);
@@ -540,7 +750,12 @@ async function selectCorpus(corpusId: string): Promise<void> {
     renderSource();
     renderContent();
     renderKnowledge();
-    await Promise.all([loadSources(), loadJobs(), loadActivity()]);
+    await Promise.all([
+        loadSources(),
+        loadJobs(),
+        loadActivity(),
+        loadHowTos(),
+    ]);
 }
 
 async function loadSources(): Promise<void> {
@@ -648,7 +863,12 @@ async function refreshActiveCorpus(): Promise<void> {
     resetSourcePaging();
     resetJobPaging();
     resetActivityPaging();
-    await Promise.all([loadSources(), loadJobs(), loadActivity()]);
+    await Promise.all([
+        loadSources(),
+        loadJobs(),
+        loadActivity(),
+        loadHowTos(),
+    ]);
     if (sourceId) {
         await selectSource(sourceId);
     }
@@ -700,6 +920,125 @@ element<HTMLFormElement>("createCorpusForm").addEventListener(
             dialog("createCorpusDialog").close();
             element<HTMLFormElement>("createCorpusForm").reset();
             await loadCorpora(created.corpusId);
+        });
+    },
+);
+element<HTMLButtonElement>("importDocumentButton").addEventListener(
+    "click",
+    () => {
+        dialog("importDocumentDialog").showModal();
+    },
+);
+element<HTMLFormElement>("importDocumentForm").addEventListener(
+    "submit",
+    (event) => {
+        event.preventDefault();
+        void run(async () => {
+            if (!activeCorpus) return;
+            const title = element<HTMLInputElement>("importTitle").value.trim();
+            const markdown =
+                element<HTMLTextAreaElement>("importMarkdown").value;
+            const canonicalUri =
+                element<HTMLInputElement>("importUri").value.trim();
+            const tags = element<HTMLInputElement>("importTags")
+                .value.split(",")
+                .map((tag) => tag.trim())
+                .filter(Boolean);
+            await invoke("memoryImportDocument", {
+                corpusId: activeCorpus.corpusId,
+                title,
+                markdown,
+                ...(canonicalUri ? { canonicalUri } : {}),
+                ...(tags.length > 0 ? { tags } : {}),
+            });
+            dialog("importDocumentDialog").close();
+            element<HTMLFormElement>("importDocumentForm").reset();
+            await refreshActiveCorpus();
+        });
+    },
+);
+element<HTMLButtonElement>("saveHowToSettings").addEventListener(
+    "click",
+    () => {
+        void run(async () => {
+            if (!activeCorpus || !howToSettings) return;
+            const instructions =
+                element<HTMLTextAreaElement>("howToInstructions").value.trim();
+            const preferences = {
+                ...howToSettings.preferences,
+                instructions,
+            };
+            howToSettings = await invoke("memoryUpdateHowToSettings", {
+                corpusId: activeCorpus.corpusId,
+                expectedRevision: howToSettings.revision,
+                enabled: element<HTMLInputElement>("howToEnabled").checked,
+                detectCandidates:
+                    element<HTMLInputElement>("detectCandidates").checked,
+                preferences,
+            });
+            renderHowToSettings();
+        });
+    },
+);
+element<HTMLButtonElement>("searchProceduresButton").addEventListener(
+    "click",
+    () => {
+        void run(loadHowTos);
+    },
+);
+procedureSearch.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        void run(loadHowTos);
+    }
+});
+element<HTMLButtonElement>("newProcedureButton").addEventListener(
+    "click",
+    () => {
+        selectedProcedure = undefined;
+        isNewProcedure = true;
+        element<HTMLHeadingElement>("procedureTitle").textContent =
+            "New procedure";
+        element<HTMLDivElement>("procedureMetadata").textContent =
+            "Unsaved private draft";
+        procedureEditor.value =
+            "# New procedure\n\nDescribe when to use this procedure.\n\n## Steps\n\n1. Add the first step.\n\n## Sources\n\n_None_\n";
+        renderProcedures();
+        renderProcedureEditor();
+    },
+);
+element<HTMLButtonElement>("saveProcedureButton").addEventListener(
+    "click",
+    () => {
+        void run(async () => {
+            if (!activeCorpus) return;
+            selectedProcedure = await invoke("memorySaveProcedure", {
+                corpusId: activeCorpus.corpusId,
+                markdown: procedureEditor.value,
+                ...(selectedProcedure === undefined
+                    ? {}
+                    : {
+                          procedureId: selectedProcedure.procedureId,
+                          expectedVersion: selectedProcedure.version,
+                      }),
+            });
+            isNewProcedure = false;
+            procedureSearch.value = "";
+            await loadHowTos();
+        });
+    },
+);
+element<HTMLButtonElement>("archiveProcedureButton").addEventListener(
+    "click",
+    () => {
+        void run(async () => {
+            if (!selectedProcedure) return;
+            selectedProcedure = await invoke("memoryArchiveProcedure", {
+                corpusId: selectedProcedure.corpusId,
+                procedureId: selectedProcedure.procedureId,
+                expectedVersion: selectedProcedure.version,
+            });
+            await loadHowTos();
         });
     },
 );

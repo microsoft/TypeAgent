@@ -62,6 +62,15 @@ describe("mixed MCP routing", () => {
                 mode: "direct",
                 conversationId: "existing",
                 powershell: { enabled: false },
+                selectedSkills: [
+                    {
+                        identity: {
+                            scope: "user",
+                            origin: "test",
+                            name: "calendar",
+                        },
+                    },
+                ],
             });
             const messages: string[] = [];
             const direct = jest.fn(async () => ({}));
@@ -94,6 +103,15 @@ describe("mixed MCP routing", () => {
                 mcpRouting: "mixed",
                 conversationId: "existing",
                 powershell: { enabled: false },
+                selectedSkills: [
+                    {
+                        identity: {
+                            scope: "user",
+                            origin: "test",
+                            name: "calendar",
+                        },
+                    },
+                ],
             });
             await run("mcp delegate");
             expect(getModeLabel()).toBe("mcp (delegate)");

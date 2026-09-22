@@ -787,22 +787,80 @@ macro traces and TypeAgent history, injects PowerShell guidance with an
 
 ### MCP Servers (`.mcp.json`)
 
-The plugin starts three logical MCP servers from the same bundled entry point and
+The plugin starts four logical MCP servers from the same bundled entry point and
 single-file release executable:
 
-| Server                | Tool                         | Description                                                                                     |
-| --------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
-| `typeagent`           | `typeagent-processCommand`   | Send a command to the TypeAgent agent-server                                                    |
-| `typeagent`           | `typeagent-listAgents`       | List available TypeAgent agents                                                                 |
-| `typeagent`           | `typeagent-getStatus`        | Get TypeAgent server status                                                                     |
-| `typeagent`           | four structured-action tools | Search complete contracts, execute, continue, and cancel through Dispatcher in Direct/MCP modes |
-| `typeagent-workspace` | `read`                       | Read bounded text under approved workspace roots                                                |
-| `typeagent-workspace` | `glob`                       | Find bounded, deterministically ordered workspace files                                         |
-| `typeagent-workspace` | `grep`                       | Search bounded workspace text                                                                   |
-| `typeagent-workspace` | `fetch`                      | Fetch bounded public HTTP(S) text without ambient credentials or private-network access         |
-| `typeagent-macros`    | `list_macros`                | List and search reusable captured procedures                                                    |
-| `typeagent-macros`    | `run_macro`                  | Replay an approved macro or return an agent-runner handoff                                      |
-| `typeagent-macros`    | lifecycle tools              | Capture-derived draft validation, approval, disablement, and candidate submission               |
+| Server                | Tool                                 | Description                                                                                     |
+| --------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `typeagent`           | `typeagent-processCommand`           | Send a command to the TypeAgent agent-server                                                    |
+| `typeagent`           | `typeagent-listAgents`               | List available TypeAgent agents                                                                 |
+| `typeagent`           | `typeagent-getStatus`                | Get TypeAgent server status                                                                     |
+| `typeagent`           | four structured-action tools         | Search complete contracts, execute, continue, and cancel through Dispatcher in Direct/MCP modes |
+| `typeagent-workspace` | `read`                               | Read bounded text under approved workspace roots                                                |
+| `typeagent-workspace` | `glob`                               | Find bounded, deterministically ordered workspace files                                         |
+| `typeagent-workspace` | `grep`                               | Search bounded workspace text                                                                   |
+| `typeagent-workspace` | `fetch`                              | Fetch bounded public HTTP(S) text without ambient credentials or private-network access         |
+| `typeagent-macros`    | `list_macros`                        | List and search reusable captured procedures                                                    |
+| `typeagent-macros`    | `run_macro`                          | Replay an approved macro or return an agent-runner handoff                                      |
+| `typeagent-macros`    | lifecycle tools                      | Capture-derived draft validation, approval, disablement, and candidate submission               |
+| `typeagent-skills`    | `typeagent-listSkills`               | List local immutable skill package revisions                                                    |
+| `typeagent-skills`    | `typeagent-searchSkills`             | Search the local catalog by exact name or origin-qualified identity                             |
+| `typeagent-skills`    | `typeagent-getSkill`                 | Get revision metadata and its complete file manifest                                            |
+| `typeagent-skills`    | `typeagent-previewProcedureArtifact` | Preview a skill or macro artifact from a saved procedure without changing state                 |
+| `typeagent-skills`    | `typeagent-promoteProcedureArtifact` | Generate and publish a skill draft or macro from a saved procedure                              |
+| `typeagent-skills`    | `typeagent-previewSkillAcquisition`  | Validate and preview a directory, Git, or archive source without publishing                     |
+| `typeagent-skills`    | `typeagent-checkSkillUpdate`         | Check whether a source differs from its catalog revision without publishing                     |
+| `typeagent-skills`    | `typeagent-acquireAndPublishSkill`   | Acquire a source and publish its validated package as a draft                                   |
+| `typeagent-skills`    | `typeagent-updateSkill`              | Reacquire a source and publish a changed draft revision                                         |
+
+`typeagent-skills` implements the `io.modelcontextprotocol/skills` read
+extension (`server/discover`, `skills/list`, and `skills/get`) and publishes
+active catalog files as `skill://typeagent/...` MCP resources. Listings include
+verbatim `SKILL.md` frontmatter plus complete SHA-256 resource manifests.
+Resource discovery and reads are backed by the agent-server-owned local catalog
+and never execute skills.
+
+The preview and update-check tools are annotated read-only. Promotion,
+acquisition, and update tools are explicitly annotated as mutating and publish
+catalog or macro state. These six management tools are ordinary MCP tools only;
+they are not added to `server/discover`, `skills/list`, or `skills/get`.
+
+The plugin's SDK host can also create an isolated session from an explicit set
+of catalog selections with `createApprovedSkillSession`. Omitted revisions
+resolve through the server's active pointer; explicit revisions must be
+`approved` or `active`. Before session creation, every file is downloaded into
+a session-private temporary tree and checked against its manifest byte size and
+SHA-256 digest. The SDK session disables configuration discovery, built-in
+skills, plugins, file hooks, remote export, and the shared session store, and
+receives only the selected materialized directories. Call `close()` (or use
+`await using`) to disconnect the private SDK runtime and remove all staged
+files. Materialization never invokes package hooks.
+
+The live extension session uses the same materializer when `selectedSkills` is
+present in the plugin `config.json` (shown by `/typeagent-status`), or when the
+`TYPEAGENT_SELECTED_SKILLS` environment variable contains the equivalent JSON
+array. The environment value takes precedence. For example:
+
+```json
+{
+  "mode": "direct",
+  "selectedSkills": [
+    {
+      "identity": {
+        "scope": "project",
+        "origin": "C:/src/project",
+        "name": "calendar"
+      },
+      "revision": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  ]
+}
+```
+
+When selections are configured, the extension verifies and stages them before
+calling the SDK's `joinSession`, passes only those directories, and removes the
+staging tree on join failure, normal close, process termination, or the SDK
+`session.shutdown` event. With no selection, startup behavior is unchanged.
 
 Workspace tools are available in direct, MCP, and dev modes. In bypass mode
 they remain discoverable because Copilot fixes the MCP catalog when the session
