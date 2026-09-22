@@ -350,9 +350,9 @@ async function main() {
         { configName },
         { credentialStore: memoryCredentialStore },
         {
-            memory: {
+            "memory-mcp": {
                 id: "runtime:typeagent-memory",
-                name: "memory",
+                name: "memory-mcp",
                 description: "Durable document and website memory",
                 transport: {
                     kind: "http",
@@ -425,6 +425,10 @@ async function main() {
                 allowSharedLocalView: ["browser"],
                 agentInitOptions: {
                     browser: {
+                        memoryServiceClient:
+                            createMemoryServiceRpcFacade(memoryService),
+                    },
+                    memory: {
                         memoryServiceClient:
                             createMemoryServiceRpcFacade(memoryService),
                     },

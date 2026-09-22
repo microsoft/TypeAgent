@@ -26,28 +26,30 @@ export async function indexWebPageContent(
     entityCount: number;
 }> {
     try {
-        let combinedTextContent = "";
-
         if (parameters.extractedKnowledge) {
-            combinedTextContent = parameters.extractedKnowledge.summary || "";
-        } else {
-            const extractionInputs = createExtractionInputsFromFragments(
-                parameters.htmlFragments!,
-                parameters.url,
-                parameters.title,
-                "index",
-                parameters.timestamp,
+            throw new Error(
+                "Generated knowledge cannot be indexed without original page content",
             );
-            combinedTextContent = extractionInputs
-                .map((input) => input.textContent)
-                .join("\n\n");
         }
+        if (!parameters.htmlFragments) {
+            throw new Error("Page HTML fragments are required for indexing");
+        }
+        const extractionInputs = createExtractionInputsFromFragments(
+            parameters.htmlFragments,
+            parameters.url,
+            parameters.title,
+            "index",
+            parameters.timestamp,
+        );
+        const combinedTextContent = extractionInputs
+            .map((input) => `## ${input.title}\n\n${input.textContent}`)
+            .join("\n\n");
 
         const memoryService = context.agentContext.browserMemoryService;
         if (memoryService === undefined) {
             throw new Error("Durable browser memory is not available");
         }
-        await memoryService.ingest(
+        const knowledge = await memoryService.ingest(
             {
                 url: parameters.url,
                 title: parameters.title,
@@ -59,19 +61,10 @@ export async function indexWebPageContent(
         );
         debug(`Stored current page in durable memory: ${parameters.url}`);
 
-        const source = await memoryService.getSource(parameters.url);
-        const graph = await memoryService.getKnowledgeGraph();
-        const entityCount =
-            source === undefined
-                ? 0
-                : graph.entities.filter((entity) =>
-                      entity.sourceIds.includes(source.sourceId),
-                  ).length;
-
         return {
             indexed: true,
             knowledgeExtracted: parameters.extractKnowledge,
-            entityCount,
+            entityCount: knowledge.entities.length,
         };
     } catch (error) {
         console.error("Error indexing page content:", error);

@@ -1,0 +1,184 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Memory Center</title>
+    <link rel="stylesheet" href="../vendor/bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="memoryCenter.css" />
+  </head>
+  <body>
+    <header class="top-nav">
+      <div>
+        <h1>Memory Center</h1>
+        <p>Manage durable memory corpora and their indexed sources.</p>
+      </div>
+      <div id="connectionState" class="status">Connecting</div>
+    </header>
+
+    <main>
+      <section class="toolbar card">
+        <label>
+          Corpus
+          <select id="corpusSelect"></select>
+        </label>
+        <button id="refreshButton" type="button">Refresh</button>
+        <button id="createCorpusButton" class="primary" type="button">
+          Create corpus
+        </button>
+        <button id="reindexCorpusButton" type="button">Reindex corpus</button>
+        <div id="corpusStatus" class="summary"></div>
+      </section>
+
+      <div id="errorBanner" class="error hidden" role="alert"></div>
+
+      <div class="workspace">
+        <section class="card sources-panel">
+          <div class="section-heading">
+            <h2>Sources</h2>
+            <span id="sourceCount"></span>
+          </div>
+          <div class="source-filter">
+            <input
+              id="sourceFilter"
+              type="search"
+              placeholder="Filter by title, ID, URI, or tag"
+            />
+            <button id="applySourceFilter" type="button">Filter</button>
+          </div>
+          <div id="sourceList" class="list"></div>
+          <div class="pager">
+            <button id="sourcePrevious" type="button">Previous</button>
+            <span id="sourcePageLabel"></span>
+            <button id="sourceNext" type="button">Next</button>
+          </div>
+        </section>
+
+        <section class="card detail-panel">
+          <div class="section-heading">
+            <h2 id="sourceTitle">Select a source</h2>
+            <div>
+              <button id="reindexSourceButton" type="button" disabled>
+                Reindex
+              </button>
+              <button
+                id="forgetSourceButton"
+                class="danger"
+                type="button"
+                disabled
+              >
+                Forget
+              </button>
+            </div>
+          </div>
+          <dl id="sourceMetadata" class="metadata"></dl>
+          <h3>Revisions</h3>
+          <div id="revisionList" class="revision-list empty">
+            No source selected.
+          </div>
+          <div class="content-heading">
+            <h3>Content</h3>
+            <span id="contentRange"></span>
+          </div>
+          <textarea
+            id="contentEditor"
+            aria-label="Source content"
+            spellcheck="false"
+            disabled
+          ></textarea>
+          <div class="content-actions">
+            <button id="contentPrevious" type="button" disabled>
+              Previous content
+            </button>
+            <button id="contentNext" type="button" disabled>
+              Next content
+            </button>
+            <button
+              id="replaceSourceButton"
+              class="primary"
+              type="button"
+              disabled
+            >
+              Preview replacement
+            </button>
+          </div>
+        </section>
+
+        <aside class="side-column">
+          <section class="card">
+            <h2>Source knowledge</h2>
+            <h3>Entities</h3>
+            <div id="entityList" class="chips empty">No source selected.</div>
+            <h3>Topics</h3>
+            <div id="topicList" class="chips empty">No source selected.</div>
+            <h3>Relationships</h3>
+            <div id="relationshipList" class="knowledge-list empty">
+              No source selected.
+            </div>
+          </section>
+
+          <section class="card jobs-panel">
+            <div class="section-heading">
+              <h2>Jobs</h2>
+              <button id="refreshJobsButton" type="button">Refresh</button>
+            </div>
+            <div id="jobList" class="list"></div>
+            <div class="pager">
+              <button id="jobPrevious" type="button">Previous</button>
+              <span id="jobPageLabel"></span>
+              <button id="jobNext" type="button">Next</button>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <dialog id="createCorpusDialog">
+      <form id="createCorpusForm">
+        <h2>Create corpus</h2>
+        <label>Name <input id="corpusName" required maxlength="120" /></label>
+        <label
+          >Description
+          <textarea id="corpusDescription" maxlength="500"></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button type="button" data-close-dialog="createCorpusDialog">
+            Cancel
+          </button>
+          <button class="primary" type="submit">Create</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="replaceDialog">
+      <h2>Confirm source replacement</h2>
+      <p id="replaceSummary"></p>
+      <pre id="replacePreview"></pre>
+      <label class="checkbox">
+        <input id="retainHistory" type="checkbox" checked />
+        Retain revision history
+      </label>
+      <div class="dialog-actions">
+        <button type="button" data-close-dialog="replaceDialog">Cancel</button>
+        <button id="confirmReplaceButton" class="primary" type="button">
+          Replace source
+        </button>
+      </div>
+    </dialog>
+
+    <dialog id="forgetDialog">
+      <h2>Confirm forget</h2>
+      <div id="forgetPreview"></div>
+      <div class="dialog-actions">
+        <button type="button" data-close-dialog="forgetDialog">Cancel</button>
+        <button id="confirmForgetButton" class="danger" type="button">
+          Forget source
+        </button>
+      </div>
+    </dialog>
+
+    <script src="memoryCenter.js"></script>
+  </body>
+</html>
