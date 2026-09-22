@@ -234,6 +234,11 @@ export function applySealToolsTypeAgentOverride(
         ...row,
         expectedActions,
         parameterScore,
+        dimensions: {
+            ...row.dimensions,
+            arity: expectedActions.length,
+            shape: expectedActions.length > 1 ? "multi" : "simple",
+        },
         targetAction: {
             schemaName: SEAL_SCHEMA_NAME,
             actionName: expectedActions[0]!.actionName,

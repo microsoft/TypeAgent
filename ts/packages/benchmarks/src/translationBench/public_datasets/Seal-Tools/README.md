@@ -42,6 +42,11 @@ request. Rows with a clear source-gold error use an explicit corrected
 `expectedActions` value. Each affected row records the reason in
 `typeAgentScoring`.
 
+`sealToolsGoldActions` retains numeric Python spellings in JSON as
+`{ "__pythonNumber": "..." }`. The Seal-compatible scorer recognizes these
+markers after the generated rows are read back from JSONL. Overrides also update
+`dimensions.arity` and `dimensions.shape` to match the corrected actions.
+
 ## Build & run
 
 From `ts/packages/benchmarks`:

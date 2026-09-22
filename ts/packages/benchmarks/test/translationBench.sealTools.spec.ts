@@ -84,3 +84,32 @@ it("retains audited TypeAgent-only scoring exclusions", () => {
             ?.excludeFromScoring,
     ).toBe(true);
 });
+
+it("updates dimensions when corrected gold removes an action", () => {
+    const row = toTypeAgentEvalRow(
+        {
+            id: "dev-difficult-440",
+            domain: "marketing",
+            conversations: [
+                {
+                    from: "human",
+                    value:
+                        `api_list = [{'api_name': 'createPressRelease', ` +
+                        `'parameters': {}, 'required': []}]\n` +
+                        `task_instruction = "Create a press release."\nOutput:\n`,
+                },
+                {
+                    from: "gpt",
+                    value:
+                        `[{"api": "createPressRelease", "parameters": {}, "responses": []}, ` +
+                        `{"api": "submitResearch", "parameters": {}, "responses": []}]`,
+                },
+            ],
+        },
+        0,
+    );
+
+    expect(row?.expectedActions).toHaveLength(1);
+    expect(row?.dimensions).toMatchObject({ arity: 1, shape: "simple" });
+    expect(row?.sealToolsGoldActions).toHaveLength(2);
+});
