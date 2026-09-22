@@ -16,6 +16,12 @@ import path from "path";
 import { getHtml } from "@typeagent/aiclient";
 import { Result, success } from "typechat";
 import * as kp from "@typeagent/knowpro";
+import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
+
+export interface DocPartOptions {
+    collectLinkKnowledge?: boolean;
+    maxTokensPerPart?: number;
+}
 
 /**
  * Import a text document as DocMemory
@@ -190,13 +196,19 @@ export function docPartsFromHtml(
     maxCharsPerChunk: number,
     sourceUrl?: string,
     rootTag?: string,
+    options?: DocPartOptions,
 ): DocPart[] {
     if (textOnly) {
         const htmlText = tp.htmlToText(html);
         return docPartsFromText(htmlText, maxCharsPerChunk, sourceUrl);
     } else {
         const markdown = tp.htmlToMarkdown(html, rootTag);
-        return docPartsFromMarkdown(markdown, maxCharsPerChunk, sourceUrl);
+        return docPartsFromMarkdown(
+            markdown,
+            maxCharsPerChunk,
+            sourceUrl,
+            options,
+        );
     }
 }
 
@@ -219,10 +231,14 @@ export function docPartsFromMarkdown(
     markdown: string,
     maxCharsPerChunk: number,
     sourceUrl?: string,
+    options?: DocPartOptions,
 ): DocPart[] {
+    const knowledgeOptions = tp.createKnowledgeCollectionOptions();
+    knowledgeOptions.collectLinks = options?.collectLinkKnowledge ?? true;
     const [textBlocks, knowledgeBlocks] = tp.markdownToTextAndKnowledgeBlocks(
         markdown,
         maxCharsPerChunk,
+        knowledgeOptions,
     );
     if (textBlocks.length !== knowledgeBlocks.length) {
         throw new Error(
@@ -253,7 +269,55 @@ export function docPartsFromMarkdown(
         );
         parts.push(part);
     }
-    return parts;
+    return options?.maxTokensPerPart === undefined
+        ? parts
+        : aggregateDocParts(parts, options.maxTokensPerPart);
+}
+
+export function aggregateDocParts(
+    parts: DocPart[],
+    maxTokensPerPart: number,
+): DocPart[] {
+    if (maxTokensPerPart < 1) {
+        throw new Error("maxTokensPerPart must be greater than zero");
+    }
+    const aggregated: DocPart[] = [];
+    let current: DocPart | undefined;
+    for (const part of parts) {
+        const text = part.textChunks.join("\n\n");
+        const combinedText =
+            current === undefined
+                ? text
+                : `${current.textChunks[0]}\n\n${text}`;
+        if (
+            current !== undefined &&
+            countTokens(combinedText) > maxTokensPerPart
+        ) {
+            aggregated.push(current);
+            current = undefined;
+        }
+        if (current === undefined) {
+            current = new DocPart(
+                text,
+                part.metadata,
+                [...part.tags],
+                part.timestamp,
+                part.knowledge === undefined
+                    ? undefined
+                    : structuredClone(part.knowledge),
+            );
+        } else {
+            current.textChunks[0] = combinedText;
+            current.tags.push(...part.tags);
+            if (part.knowledge !== undefined) {
+                current.addKnowledge(structuredClone(part.knowledge));
+            }
+        }
+    }
+    if (current !== undefined) {
+        aggregated.push(current);
+    }
+    return aggregated;
 }
 
 /**

@@ -2,6 +2,16 @@
 // Licensed under the MIT License.
 
 export {
+    StructuredActionClient,
+    StructuredActionClientError,
+} from "./structuredActionClient.js";
+export type {
+    StructuredActionClientOptions,
+    StructuredActionBinding,
+    StructuredActionClientErrorReason,
+} from "./structuredActionClient.js";
+
+export {
     connectAgentServer,
     createAgentServerConnection,
     AgentServerConnection,
