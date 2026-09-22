@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 /**
- * Scenario B: MCP redirect hook.
- * Detects action requests and modifies the prompt to instruct the LLM
- * to use the typeagent MCP tool. Does NOT connect to TypeAgent itself.
+ * MCP prompt guidance. Delegate policy sends requests to processCommand;
+ * mixed policy lets Copilot choose delegation or task ownership.
+ * This hook does not classify intent or connect to TypeAgent.
  *
  * On Windows, also injects session-level TypeAgent PowerShell guidance (Layer 1)
  * to steer the LLM toward TypeAgent's PowerShell agent for system operations.

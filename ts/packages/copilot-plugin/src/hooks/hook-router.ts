@@ -12,6 +12,7 @@
  * Slash commands (intercepted before routing):
  *   @typeagent mode direct   — switch to direct mode
  *   @typeagent mode mcp      — switch to MCP mode
+ *   @typeagent mode mcp mixed - let Copilot choose delegation or orchestration
  *   @typeagent mode          — show current mode
  *   @typeagent status        — show current configuration
  */
