@@ -21,8 +21,11 @@ import {
     formatQueueBadge,
     cancelAllInQueue,
     setPendingExitMessage,
+    clearRecentSubmissions,
     __testGetCurrentRequestId,
     __testSetCurrentRequestId,
+    __testRememberSubmittedId,
+    __testRestoreTerminalState,
     __testActivateTerminalLayout,
 } from "../src/enhancedConsole.js";
 import {
@@ -65,6 +68,7 @@ beforeEach(() => {
     setQueueDispatcher(undefined);
     setCliConnectionId(undefined);
     __testSetCurrentRequestId(undefined);
+    clearRecentSubmissions();
 });
 
 afterEach(() => {
@@ -75,6 +79,7 @@ afterEach(() => {
     setQueueDispatcher(undefined);
     setCliConnectionId(undefined);
     __testSetCurrentRequestId(undefined);
+    clearRecentSubmissions();
 });
 
 // Helpers
@@ -110,6 +115,19 @@ describe("CLI primary-buffer messages", () => {
         setPendingExitMessage("Disconnected from dispatcher");
 
         expect(stderrOutput.join("")).toBe("Disconnected from dispatcher\n");
+    });
+
+    it("restores the scroll region and cursor without an alternate screen", () => {
+        const layout = __testActivateTerminalLayout(1);
+        stdoutOutput.length = 0;
+        try {
+            __testRestoreTerminalState();
+
+            expect(stdoutOutput.join("")).toContain("\x1b[r\x1b[?25h");
+            expect(stdoutOutput.join("")).not.toContain("\x1b[?1049l");
+        } finally {
+            layout.teardown();
+        }
     });
 });
 
@@ -576,6 +594,24 @@ describe("CLI cancel UX", () => {
         expect(formatQueueBadge(makeSnapshot(peer, []))).toContain(
             "(queue: 1)",
         );
+    });
+
+    it("keeps processing ownership after requestStarted consumes no fallback", () => {
+        const clientIO = createEnhancedClientIO(undefined, {
+            current: undefined,
+        });
+        const local = makeEntry(
+            "cccccccc-dddd-eeee-ffff-000000000015",
+            "local task",
+            "running",
+        );
+        local.originatorConnectionId = "missing-or-stale-originator";
+        __testRememberSubmittedId(local.requestId);
+
+        clientIO.requestStarted!(local, 1);
+
+        expect(captured()).not.toContain("▶ running:");
+        expect(formatQueueBadge()).toContain("(processing)");
     });
 
     it("redraws when a local request transitions from processing to idle", () => {

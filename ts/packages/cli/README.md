@@ -173,7 +173,7 @@ agent-cli connect --scrollback           # retain session output in terminal scr
 - Pass `--resume` / `-r` to instead resume the last used conversation (persisted client-side in `~/.typeagent/cli-state.json`). If that conversation no longer exists, you will be prompted to join the `"CLI"` conversation.
 - Pass `--conversation` / `-s <id>` to connect to any specific conversation by its UUID. Takes priority over `--resume` if both are provided.
 - Pass `--memory` to use an ephemeral conversation that is created fresh and automatically deleted when you exit. Cannot be combined with `--conversation` or `--resume`.
-- Pass `--scrollback` to use the primary terminal buffer so wheel and terminal scrollbar history remain available. Unlike the default alternate-screen mode, CLI output remains in the terminal after exit.
+- Pass `--scrollback` to use the primary terminal buffer so session output remains after exit. The fixed prompt still uses an ANSI scroll region while active, so wheel and scrollbar behavior can vary by terminal.
 - The server is started automatically if it is not already running. By default it starts in a visible window; pass `--hidden` to suppress the window.
 - On connect (and on every conversation switch), the conversation name is printed after any replayed history, just below the `─── now ─────` separator.
 

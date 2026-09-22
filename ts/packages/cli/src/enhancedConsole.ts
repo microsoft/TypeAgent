@@ -92,14 +92,17 @@ function enterAltScreen(): void {
     altScreenActive = true;
     // Save cursor, switch to alt screen, clear it.
     process.stdout.write("\x1b[?1049h");
+}
+
+function registerTerminalExitHandler(): void {
     if (!exitHandlerRegistered) {
         exitHandlerRegistered = true;
-        process.on("exit", exitAltScreen);
+        process.on("exit", restoreTerminalState);
     }
 }
 
-function exitAltScreen(): void {
-    if (!altScreenActive) return;
+function restoreTerminalState(): void {
+    const leaveAltScreen = altScreenActive;
     altScreenActive = false;
     try {
         if (currentSpinner) {
@@ -117,8 +120,10 @@ function exitAltScreen(): void {
                 // ignore
             }
         }
-        // Reset scroll region, show cursor, leave alt screen.
-        process.stdout.write("\x1b[r\x1b[?25h\x1b[?1049l");
+        // Reset scroll region and input state in both terminal-buffer modes.
+        process.stdout.write(
+            "\x1b[r\x1b[?25h" + (leaveAltScreen ? "\x1b[?1049l" : ""),
+        );
         if (process.stdin.isTTY) {
             try {
                 process.stdin.setRawMode(false);
@@ -145,7 +150,11 @@ function exitAltScreen(): void {
  */
 export function setPendingExitMessage(message: string): void {
     if (!altScreenActive) {
-        process.stderr.write(message + "\n");
+        try {
+            process.stderr.write(message + "\n");
+        } catch {
+            // Exit messages are best-effort during terminal teardown.
+        }
         return;
     }
     pendingExitMessage = message;
@@ -390,7 +399,8 @@ function tryCancelRunningHead(
 
 // Mirror of the server's per-conversation queue. UI side effects live in the event handlers below.
 const queueMirror = new QueueStateMirror();
-// Tracks recent submits from THIS CLI so requestStarted doesn't double-print; pruned per access.
+// Tracks recent submits from THIS CLI until completion/cancellation so queue
+// ownership survives missing or stale originator metadata.
 const RECENT_SUBMITTED_TTL_MS = 60_000;
 const recentlySubmittedRequestIds = new Map<string, number>();
 
@@ -407,6 +417,11 @@ function pruneRecentSubmissions(): void {
 function rememberSubmittedId(id: string): void {
     pruneRecentSubmissions();
     recentlySubmittedRequestIds.set(id, Date.now());
+}
+
+function hasRecentlySubmittedId(id: string): boolean {
+    pruneRecentSubmissions();
+    return recentlySubmittedRequestIds.has(id);
 }
 
 function consumeSubmittedId(id: string): boolean {
@@ -439,6 +454,12 @@ export function __testSetCurrentRequestId(id: string | undefined): void {
 }
 export function __testGetRecentlySubmitted(): ReadonlyMap<string, number> {
     return recentlySubmittedRequestIds;
+}
+export function __testRememberSubmittedId(id: string): void {
+    rememberSubmittedId(id);
+}
+export function __testRestoreTerminalState(): void {
+    restoreTerminalState();
 }
 /**
  * @internal Activate a TerminalLayout + stub PromptRenderer so tests can
@@ -1692,7 +1713,7 @@ export function createEnhancedClientIO(
             if (!queueMirror.applyStarted(entry, version).admitted) return;
             // Suppress the marker if THIS CLI submitted the entry (otherwise we double-print).
             const isOurs =
-                isOurEntry(entry) || consumeSubmittedId(entry.requestId);
+                isOurEntry(entry) || hasRecentlySubmittedId(entry.requestId);
             redrawPromptIfActive();
             if (isOurs) {
                 return;
@@ -2590,14 +2611,15 @@ export async function withEnhancedConsoleClientIO(
         bindDispatcher: (d: Dispatcher) => void,
     ) => Promise<void>,
     rl?: readline.promises.Interface,
-    alternateScreen: boolean = true,
+    options: { alternateScreen?: boolean } = {},
 ) {
     if (usingEnhancedConsole) {
         throw new Error("Cannot have multiple enhanced console clients");
     }
     usingEnhancedConsole = true;
 
-    if (alternateScreen) {
+    registerTerminalExitHandler();
+    if (options.alternateScreen ?? true) {
         // Restore the parent shell on exit. Scrollback mode stays on the
         // primary buffer so the terminal can retain the session output.
         enterAltScreen();
@@ -3023,8 +3045,7 @@ function getQueueBadgeState(snap: QueueSnapshot | undefined): {
     const processing =
         running !== null &&
         running !== undefined &&
-        (isOurEntry(running) ||
-            recentlySubmittedRequestIds.has(running.requestId));
+        (isOurEntry(running) || hasRecentlySubmittedId(running.requestId));
     return {
         processing,
         queueCount:

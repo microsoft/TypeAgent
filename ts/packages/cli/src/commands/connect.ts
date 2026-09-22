@@ -471,11 +471,9 @@ export default class Connect extends Command {
                 }
             }
         };
-        await withEnhancedConsoleClientIO(
-            runConnected,
-            undefined,
-            !flags.scrollback,
-        );
+        await withEnhancedConsoleClientIO(runConnected, undefined, {
+            alternateScreen: !flags.scrollback,
+        });
 
         // Some background network (like mongo) might keep the process live.
         exitCli(0);
