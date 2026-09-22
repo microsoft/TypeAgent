@@ -4,26 +4,13 @@
 import * as kpLib from "@typeagent/knowledge-processor";
 import * as kp from "@typeagent/knowpro";
 import * as ms from "@typeagent/memory-storage";
-import {
-    getEmbeddingProvider,
-    tryCreateEmbeddingModel,
-} from "@typeagent/aiclient";
+import { tryCreateEmbeddingModel } from "@typeagent/aiclient";
 import { IndexFileSettings, IndexingState } from "./memory.js";
-
-function configuredEmbeddingSize(): number {
-    if (getEmbeddingProvider() !== "local") {
-        return 1536;
-    }
-    const model =
-        process.env.TYPEAGENT_EMBEDDING_MODEL?.trim() ||
-        "Xenova/all-MiniLM-L6-v2";
-    return model.includes("MiniLM-L6") ? 384 : 1536;
-}
 
 export function createEmbeddingModelWithCache(
     cacheSize: number,
     getCache?: () => kpLib.TextEmbeddingCache | undefined,
-    embeddingSize = configuredEmbeddingSize(),
+    embeddingSize = 1536,
 ): [kpLib.TextEmbeddingModelWithCache | undefined, number] {
     // May be undefined when no embedding provider is configured (e.g. Copilot
     // self-host without a local embedder). Memory then indexes/searches with
