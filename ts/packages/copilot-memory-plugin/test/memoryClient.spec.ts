@@ -57,10 +57,11 @@ describe("capture fallback", () => {
 
 describe("workspace scope", () => {
     it("keeps one directory for a workspace when TYPEAGENT_MEMORY_DIR is set", () => {
-        const paths = resolveMemoryPaths("/tmp/repo", {
-            TYPEAGENT_MEMORY_DIR: "/tmp/memory-override",
+        const override = path.join(os.tmpdir(), "memory-override");
+        const paths = resolveMemoryPaths(path.join(os.tmpdir(), "repo"), {
+            TYPEAGENT_MEMORY_DIR: override,
         });
-        expect(paths.dirPath).toBe("/tmp/memory-override");
+        expect(paths.dirPath).toBe(path.resolve(override));
         expect(paths.baseFileName).toBe("conversationMemory");
     });
 
