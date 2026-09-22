@@ -368,6 +368,7 @@ export type MemoryCenterInvokeFunctions = {
         procedureId: string;
         expectedVersion?: number;
     }): Promise<MemoryCenterProcedureVersion>;
+
     memoryListActivity(
         params: MemoryCenterActivityFilter,
     ): Promise<MemoryCenterPage<MemoryCenterActivity>>;

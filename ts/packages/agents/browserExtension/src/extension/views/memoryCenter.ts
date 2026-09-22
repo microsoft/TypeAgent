@@ -109,6 +109,7 @@ let procedures: MemoryCenterProcedureSummary[] = [];
 let selectedProcedure: MemoryCenterProcedureVersion | undefined;
 let isNewProcedure = false;
 
+
 function setError(error?: unknown): void {
     if (error === undefined) {
         errorBanner.textContent = "";
@@ -731,6 +732,7 @@ async function loadCorpora(preferredCorpusId?: string): Promise<void> {
         activityPage = { items: [], total: 0 };
         renderActivity();
         await loadHowTos();
+
         return;
     }
     await selectCorpus(corpusId);

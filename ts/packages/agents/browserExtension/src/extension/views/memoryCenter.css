@@ -180,7 +180,7 @@ button.danger {
   background: var(--background);
 }
 
-.item-actions {
+.activity-item .item-actions {
   display: flex;
   gap: 6px;
   margin-top: 6px;

@@ -698,6 +698,7 @@ export class MemoryMcpServer {
                 ),
         );
         this.server.registerTool(
+
             memoryToolNames.search,
             {
                 description:

@@ -189,6 +189,7 @@ export function createAgentInvokeHandlers(
                 procedureId,
                 expectedVersion,
             ),
+
         memoryListActivity: (params) => {
             const service = context.agentContext.browserMemoryService;
             if (!service) {

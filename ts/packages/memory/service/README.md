@@ -46,6 +46,7 @@ cited source creates a new `stale` procedure version while leaving every older
 version unchanged. The personal how-to API is transport-independent and is not
 exposed through the RPC facade.
 
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

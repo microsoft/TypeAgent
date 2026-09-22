@@ -98,6 +98,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             forward("memorySearchProcedures", params),
         memoryArchiveProcedure: (params) =>
             forward("memoryArchiveProcedure", params),
+
         memoryListActivity: (params) => forward("memoryListActivity", params),
         memoryForgetActivity: (params) =>
             forward("memoryForgetActivity", params),
