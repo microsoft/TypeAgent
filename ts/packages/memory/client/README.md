@@ -1,6 +1,12 @@
 # @typeagent/memory-client
 
-Typed clients and protocol schemas for the TypeAgent memory service
+Typed in-process and MCP clients plus Zod protocol schemas for the TypeAgent
+memory service. The management surface includes corpus status, paged source and
+job listing, bounded content reads, source-scoped knowledge, revision-guarded
+replacement, preview/confirm source deletion, and source/corpus reindexing.
+
+The typed `answer` operation returns deterministic extractive answers with
+source-linked citations. It does not claim model-generated synthesis.
 
 ## Trademarks
 

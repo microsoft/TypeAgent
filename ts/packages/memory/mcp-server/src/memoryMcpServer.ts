@@ -10,11 +10,16 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
     capabilitiesSchema,
+    answerRequestSchema,
+    answerResultSchema,
     clearedCountSchema,
     corpusSchema,
+    optionalCorpusStatusSchema,
     identifierSchema,
     ingestRequestSchema,
     ingestResultSchema,
+    jobListRequestSchema,
+    jobPageSchema,
     jobStatusSchema,
     knowledgeGraphSchema,
     memoryToolNames,
@@ -22,12 +27,27 @@ import {
     optionalSourceSchema,
     searchRequestSchema,
     searchResultSchema,
+    sourceContentRequestSchema,
+    sourceContentSchema,
+    sourceForgetPreviewSchema,
+    sourceForgetRequestSchema,
+    sourceForgetResultSchema,
+    sourceListRequestSchema,
+    sourcePageSchema,
+    sourceReplaceRequestSchema,
+    reindexResultSchema,
     sourceSchema,
 } from "@typeagent/memory-client";
 import type {
     DocumentIngestRequest,
+    JobListRequest,
+    MemoryAnswerRequest,
     MemorySearchRequest,
     MemoryService,
+    SourceContentRequest,
+    SourceForgetRequest,
+    SourceListRequest,
+    SourceReplaceRequest,
 } from "@typeagent/memory-service";
 import { z } from "zod";
 
@@ -107,6 +127,21 @@ export class MemoryMcpServer {
             async () => this.run(() => this.service.listCorpora()),
         );
         this.server.registerTool(
+            memoryToolNames.corpusGet,
+            {
+                description:
+                    "Get corpus status, durable counts, and index version.",
+                inputSchema: corpusIdInputSchema,
+                outputSchema: outputSchema(optionalCorpusStatusSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId }) =>
+                this.run(
+                    async () =>
+                        (await this.service.getCorpus(corpusId)) ?? null,
+                ),
+        );
+        this.server.registerTool(
             memoryToolNames.corpusClear,
             {
                 description:
@@ -119,6 +154,20 @@ export class MemoryMcpServer {
                 this.run(() => this.service.clearCorpus(corpusId)),
         );
         this.server.registerTool(
+            memoryToolNames.corpusReindex,
+            {
+                description:
+                    "Atomically rebuild all derived indexes for a corpus.",
+                inputSchema: corpusIdInputSchema,
+                outputSchema: outputSchema(reindexResultSchema),
+                annotations: { destructiveHint: false },
+            },
+            async ({ corpusId }, extra) =>
+                this.run(() =>
+                    this.service.reindexCorpus(corpusId, extra.signal),
+                ),
+        );
+        this.server.registerTool(
             memoryToolNames.sourceList,
             {
                 description: "List source metadata in a memory corpus.",
@@ -128,6 +177,20 @@ export class MemoryMcpServer {
             },
             async ({ corpusId }) =>
                 this.run(() => this.service.listSources(corpusId)),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceListPage,
+            {
+                description:
+                    "List source metadata with bounded deterministic pagination.",
+                inputSchema: sourceListRequestSchema,
+                outputSchema: outputSchema(sourcePageSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.listSourcesPage(request as SourceListRequest),
+                ),
         );
         this.server.registerTool(
             memoryToolNames.sourceGet,
@@ -142,6 +205,36 @@ export class MemoryMcpServer {
                     async () =>
                         (await this.service.getSource(corpusId, sourceId)) ??
                         null,
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceContentGet,
+            {
+                description:
+                    "Read a bounded range from an active or named source revision.",
+                inputSchema: sourceContentRequestSchema,
+                outputSchema: outputSchema(sourceContentSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.getSourceContent(
+                        request as SourceContentRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceKnowledgeGet,
+            {
+                description:
+                    "Get entities, topics, and relationships derived from one source.",
+                inputSchema: sourceGetInputSchema,
+                outputSchema: outputSchema(knowledgeGraphSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId, sourceId }) =>
+                this.run(() =>
+                    this.service.getSourceKnowledge(corpusId, sourceId),
                 ),
         );
         this.server.registerTool(
@@ -162,6 +255,69 @@ export class MemoryMcpServer {
                 ),
         );
         this.server.registerTool(
+            memoryToolNames.sourceReplace,
+            {
+                description:
+                    "Replace a source only if its active revision still matches.",
+                inputSchema: sourceReplaceRequestSchema,
+                outputSchema: outputSchema(ingestResultSchema),
+                annotations: { destructiveHint: false },
+            },
+            async (request, extra) =>
+                this.run(() =>
+                    this.service.replaceSource(
+                        request as SourceReplaceRequest,
+                        extra.signal,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceForgetPreview,
+            {
+                description:
+                    "Preview source deletion and issue a short-lived confirmation token.",
+                inputSchema: sourceGetInputSchema,
+                outputSchema: outputSchema(sourceForgetPreviewSchema),
+                annotations: { readOnlyHint: false, destructiveHint: false },
+            },
+            async ({ corpusId, sourceId }) =>
+                this.run(() =>
+                    this.service.previewForgetSource(corpusId, sourceId),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceForget,
+            {
+                description:
+                    "Confirm source deletion and rebuild indexes without its derived data.",
+                inputSchema: sourceForgetRequestSchema,
+                outputSchema: outputSchema(sourceForgetResultSchema),
+                annotations: { destructiveHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.forgetSource(request as SourceForgetRequest),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.sourceReindex,
+            {
+                description:
+                    "Atomically rebuild corpus indexes for a source management request.",
+                inputSchema: sourceGetInputSchema,
+                outputSchema: outputSchema(reindexResultSchema),
+                annotations: { destructiveHint: false },
+            },
+            async ({ corpusId, sourceId }, extra) =>
+                this.run(() =>
+                    this.service.reindexSource(
+                        corpusId,
+                        sourceId,
+                        extra.signal,
+                    ),
+                ),
+        );
+        this.server.registerTool(
             memoryToolNames.jobGet,
             {
                 description: "Get durable ingestion job status and progress.",
@@ -172,6 +328,20 @@ export class MemoryMcpServer {
             async ({ jobId }) =>
                 this.run(
                     async () => (await this.service.getJob(jobId)) ?? null,
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.jobList,
+            {
+                description:
+                    "List durable jobs with corpus, source, and state filters.",
+                inputSchema: jobListRequestSchema,
+                outputSchema: outputSchema(jobPageSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.listJobs(request as JobListRequest),
                 ),
         );
         this.server.registerTool(
@@ -255,6 +425,20 @@ export class MemoryMcpServer {
             async (request) =>
                 this.run(() =>
                     this.service.search(request as MemorySearchRequest),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.answer,
+            {
+                description:
+                    "Answer from bounded source-linked memory evidence with explicit citations.",
+                inputSchema: answerRequestSchema,
+                outputSchema: outputSchema(answerResultSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.answer(request as MemoryAnswerRequest),
                 ),
         );
         this.server.registerTool(

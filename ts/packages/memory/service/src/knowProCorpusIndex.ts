@@ -11,6 +11,8 @@ import {
     docPartsFromVtt,
 } from "@typeagent/conversation-memory";
 import * as kp from "@typeagent/knowpro";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type {
     CorpusIndex,
     CorpusIndexMatch,
@@ -20,6 +22,7 @@ import type {
 } from "./types.js";
 
 const indexBaseName = "corpus";
+const basicIndexFileName = "basic-documents.json";
 const structuralChunkCharacters = 8_000;
 const extractionChunkTokens = 7_500;
 const durableDocPartOptions = {
@@ -48,12 +51,14 @@ function sourceUri(document: IndexedDocument): string {
 
 function toDocParts(document: IndexedDocument): DocPart[] {
     const uri = sourceUri(document);
+    const chunkCharacters =
+        document.pipeline.maxCharsPerChunk ?? structuralChunkCharacters;
     switch (document.source.sourceType) {
         case "html":
             return docPartsFromHtml(
                 document.content,
                 false,
-                structuralChunkCharacters,
+                chunkCharacters,
                 uri,
                 undefined,
                 durableDocPartOptions,
@@ -62,18 +67,14 @@ function toDocParts(document: IndexedDocument): DocPart[] {
         case "web":
             return docPartsFromMarkdown(
                 document.content,
-                structuralChunkCharacters,
+                chunkCharacters,
                 uri,
                 durableDocPartOptions,
             );
         case "vtt":
             return docPartsFromVtt(document.content, uri);
         case "text":
-            return docPartsFromText(
-                document.content,
-                structuralChunkCharacters,
-                uri,
-            );
+            return docPartsFromText(document.content, chunkCharacters, uri);
     }
 }
 
@@ -96,6 +97,7 @@ function parseSourceUri(
 
 export class KnowProCorpusIndex implements CorpusIndex {
     private memory: DocMemory | undefined;
+    private basicDocuments: IndexedDocument[] = [];
 
     public constructor(
         private readonly corpusId: string,
@@ -109,6 +111,19 @@ export class KnowProCorpusIndex implements CorpusIndex {
             indexBaseName,
             this.settingsFactory?.(),
         );
+        try {
+            this.basicDocuments = JSON.parse(
+                await readFile(
+                    path.join(this.indexDirectory, basicIndexFileName),
+                    "utf8",
+                ),
+            );
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                throw error;
+            }
+            this.basicDocuments = [];
+        }
     }
 
     public async rebuild(
@@ -117,7 +132,13 @@ export class KnowProCorpusIndex implements CorpusIndex {
         onProgress: (progress: JobProgress) => Promise<void>,
     ): Promise<void> {
         const startedAt = performance.now();
-        const parts = documents.flatMap(toDocParts);
+        const semanticDocuments = documents.filter(
+            (document) => document.pipeline.mode !== "basic",
+        );
+        const parts = semanticDocuments.flatMap(toDocParts);
+        this.basicDocuments = documents.filter(
+            (document) => document.pipeline.mode === "basic",
+        );
         await onProgress({
             completed: parts.length,
             total: parts.length,
@@ -186,6 +207,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             docPartCount: parts.length,
         });
         await memory.writeToFile(this.indexDirectory, indexBaseName);
+        await this.persistBasicDocuments();
         this.memory = memory;
         await onProgress({
             completed: total,
@@ -209,7 +231,15 @@ export class KnowProCorpusIndex implements CorpusIndex {
         if (this.memory === undefined) {
             throw new Error(`Corpus '${this.corpusId}' has not been indexed`);
         }
-        const parts = documents.flatMap(toDocParts);
+        const semanticDocuments = documents.filter(
+            (document) => document.pipeline.mode !== "basic",
+        );
+        const parts = semanticDocuments.flatMap(toDocParts);
+        this.basicDocuments.push(
+            ...documents.filter(
+                (document) => document.pipeline.mode === "basic",
+            ),
+        );
         await onProgress({
             completed: parts.length,
             total: parts.length,
@@ -276,6 +306,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             docPartCount: parts.length,
         });
         await this.memory.writeToFile(this.indexDirectory, indexBaseName);
+        await this.persistBasicDocuments();
         await onProgress({
             completed: total,
             total,
@@ -311,7 +342,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 }
             }
         }
-        return [...matches]
+        const semanticMatches = [...matches]
             .sort((left, right) => right[1] - left[1])
             .slice(0, limit)
             .flatMap(([messageOrdinal, score]) => {
@@ -329,9 +360,43 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     },
                 ];
             });
+        const queryTerms = query
+            .toLocaleLowerCase()
+            .split(/\s+/)
+            .filter((term) => term.length > 0);
+        const basicMatches = this.basicDocuments.flatMap((document) => {
+            const normalizedContent = document.content.toLocaleLowerCase();
+            const matchedTerms = queryTerms.filter((term) =>
+                normalizedContent.includes(term),
+            );
+            if (matchedTerms.length === 0) {
+                return [];
+            }
+            const firstMatch = Math.min(
+                ...matchedTerms.map((term) => normalizedContent.indexOf(term)),
+            );
+            const snippetStart = Math.max(0, firstMatch - 200);
+            return [
+                {
+                    sourceId: document.source.sourceId,
+                    revisionId: document.revision.revisionId,
+                    snippet: document.content.slice(
+                        snippetStart,
+                        snippetStart + 1_000,
+                    ),
+                    score: matchedTerms.length / queryTerms.length,
+                    locator: `character:${firstMatch}`,
+                },
+            ];
+        });
+        return [...semanticMatches, ...basicMatches]
+            .sort((left, right) => right.score - left.score)
+            .slice(0, limit);
     }
 
-    public async getKnowledgeGraph(): Promise<MemoryKnowledgeGraph> {
+    public async getKnowledgeGraph(
+        sourceIds?: ReadonlySet<string>,
+    ): Promise<MemoryKnowledgeGraph> {
         if (this.memory === undefined) {
             throw new Error(`Corpus '${this.corpusId}' has not been indexed`);
         }
@@ -370,6 +435,12 @@ export class KnowProCorpusIndex implements CorpusIndex {
             const sourceId = parseSourceUri(
                 message?.metadata.sourceUrl,
             )?.sourceId;
+            if (
+                sourceIds !== undefined &&
+                (sourceId === undefined || !sourceIds.has(sourceId))
+            ) {
+                continue;
+            }
             if (semanticRef.knowledgeType === "entity") {
                 const entity = semanticRef.knowledge as EntityKnowledge;
                 const key = entity.name.trim().toLocaleLowerCase();
@@ -448,6 +519,14 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 sourceIds: [...relationship.sourceIds],
             })),
         };
+    }
+
+    private async persistBasicDocuments(): Promise<void> {
+        await mkdir(this.indexDirectory, { recursive: true });
+        const target = path.join(this.indexDirectory, basicIndexFileName);
+        const temporary = `${target}.tmp`;
+        await writeFile(temporary, JSON.stringify(this.basicDocuments), "utf8");
+        await rename(temporary, target);
     }
 }
 
