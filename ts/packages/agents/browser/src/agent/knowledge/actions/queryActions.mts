@@ -43,13 +43,14 @@ export async function getPageIndexedKnowledge(
             confidence: 0.8,
         }));
         const keyTopics = sourceKnowledge.topics.map((topic) => topic.name);
-        const relationships: Relationship[] =
-            sourceKnowledge.relationships.map((item) => ({
+        const relationships: Relationship[] = sourceKnowledge.relationships.map(
+            (item) => ({
                 from: item.fromEntity,
                 relationship: item.relationshipType,
                 to: item.toEntity,
                 confidence: 0.8,
-            }));
+            }),
+        );
         return {
             isIndexed: true,
             knowledge: {
