@@ -57,6 +57,16 @@ import {
     SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
+    CatalogEntry,
+    CatalogSearchResult,
+    ListSkillsRequest,
+    SearchSkillsRequest,
+    GetSkillRequest,
+    ReadSkillFileRequest,
+    ReadSkillFileResponse,
+    PublishSkillRequest,
+    ChangeSkillStateRequest,
+    SelectSkillRevisionRequest,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -189,6 +199,18 @@ export type AgentServerConnection = {
     ): Promise<MacroVersionRef>;
     cancelMacroRun(runId: string): Promise<void>;
     getMacroRun(runId: string): Promise<MacroRunRecord>;
+    listSkills?(request?: ListSkillsRequest): Promise<CatalogEntry[]>;
+    searchSkills?(
+        request: SearchSkillsRequest,
+    ): Promise<readonly CatalogSearchResult[]>;
+    getSkill?(request: GetSkillRequest): Promise<CatalogEntry | undefined>;
+    readSkillFile?(
+        request: ReadSkillFileRequest,
+    ): Promise<ReadSkillFileResponse>;
+    publishSkill?(request: PublishSkillRequest): Promise<CatalogEntry>;
+    changeSkillState?(request: ChangeSkillStateRequest): Promise<CatalogEntry>;
+    activateSkill?(request: SelectSkillRevisionRequest): Promise<CatalogEntry>;
+    rollbackSkill?(request: SelectSkillRevisionRequest): Promise<CatalogEntry>;
 
     joinConversation(
         clientIO: ClientIO,
@@ -477,6 +499,52 @@ export function createAgentServerConnection(
 
         async getMacroRun(runId: string): Promise<MacroRunRecord> {
             return rpc.invoke("getMacroRun", runId);
+        },
+
+        async listSkills(request?: ListSkillsRequest): Promise<CatalogEntry[]> {
+            return rpc.invoke("listSkills", request);
+        },
+
+        async searchSkills(
+            request: SearchSkillsRequest,
+        ): Promise<readonly CatalogSearchResult[]> {
+            return rpc.invoke("searchSkills", request);
+        },
+
+        async getSkill(
+            request: GetSkillRequest,
+        ): Promise<CatalogEntry | undefined> {
+            return rpc.invoke("getSkill", request);
+        },
+
+        async readSkillFile(
+            request: ReadSkillFileRequest,
+        ): Promise<ReadSkillFileResponse> {
+            return rpc.invoke("readSkillFile", request);
+        },
+
+        async publishSkill(
+            request: PublishSkillRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("publishSkill", request);
+        },
+
+        async changeSkillState(
+            request: ChangeSkillStateRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("changeSkillState", request);
+        },
+
+        async activateSkill(
+            request: SelectSkillRevisionRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("activateSkill", request);
+        },
+
+        async rollbackSkill(
+            request: SelectSkillRevisionRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("rollbackSkill", request);
         },
 
         async joinConversation(

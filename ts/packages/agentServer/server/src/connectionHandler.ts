@@ -19,6 +19,7 @@ import {
 } from "@typeagent/agent-server-protocol";
 import type { ConfigDrift } from "@typeagent/config";
 import type { MacroManager } from "@typeagent/copilot-macros";
+import type { SkillCatalog } from "@typeagent/skill-catalog";
 import type { Dispatcher } from "agent-dispatcher";
 import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
@@ -71,10 +72,24 @@ function checkIdentityField(
     return trimmed;
 }
 
+function getSkillMimeType(filePath: string): string {
+    if (filePath.endsWith(".json")) return "application/json";
+    if (filePath.endsWith(".md")) return "text/markdown";
+    if (
+        filePath.endsWith(".txt") ||
+        filePath.endsWith(".agr") ||
+        filePath.endsWith(".ts")
+    ) {
+        return "text/plain";
+    }
+    return "application/octet-stream";
+}
+
 export type ConnectionHandlerDeps = {
     /** The conversation manager backing this server. */
     conversationManager: ConversationManager;
     macroManager: MacroManager;
+    skillCatalog: SkillCatalog;
     /**
      * Invoked when the dispatcher (or an RPC client) requests a server
      * shutdown. For the standalone agent-server this kills the process; for an
@@ -210,6 +225,7 @@ export function createAgentServerConnectionHandler(
     const {
         conversationManager,
         macroManager,
+        skillCatalog,
         shutdown,
         restart,
         isStale,
@@ -327,12 +343,78 @@ export function createAgentServerConnectionHandler(
                 macroManager.submitMacroCandidate(request),
             cancelMacroRun: async (runId) => macroManager.cancelMacroRun(runId),
             getMacroRun: async (runId) => macroManager.getMacroRun(runId),
+            listSkills: async (request) => {
+                const entries = await skillCatalog.list();
+                return entries.filter(
+                    (entry) =>
+                        (request?.activeOnly !== true || entry.active) &&
+                        (request?.states === undefined ||
+                            request.states.includes(entry.state)) &&
+                        (request?.scopes === undefined ||
+                            request.scopes.includes(
+                                entry.revision.identity.scope,
+                            )),
+                );
+            },
+            searchSkills: async (request) =>
+                skillCatalog.search({
+                    text: request.query,
+                    ...(request.scopes === undefined
+                        ? {}
+                        : { scopes: request.scopes }),
+                    ...(request.limit === undefined
+                        ? {}
+                        : { limit: request.limit }),
+                }),
+            getSkill: async (request) =>
+                skillCatalog.get(request.identity, request.revision),
+            readSkillFile: async (request) => {
+                const content = await skillCatalog.readFile(
+                    request.identity,
+                    request.revision,
+                    request.path,
+                );
+                return {
+                    content: Buffer.from(content).toString("base64"),
+                    encoding: "base64",
+                    mimeType: getSkillMimeType(request.path),
+                };
+            },
+            publishSkill: async (request) =>
+                skillCatalog.publish({
+                    identity: request.identity,
+                    ...(request.displayName === undefined
+                        ? {}
+                        : { displayName: request.displayName }),
+                    ...(request.description === undefined
+                        ? {}
+                        : { description: request.description }),
+                    schemaFingerprint: request.schemaFingerprint,
+                    files: request.files.map((file) => ({
+                        path: file.path,
+                        content:
+                            file.encoding === "base64"
+                                ? Buffer.from(file.content, "base64")
+                                : file.content,
+                    })),
+                }),
+            changeSkillState: async (request) =>
+                skillCatalog.transition(
+                    request.identity,
+                    request.revision,
+                    request.state,
+                ),
+            activateSkill: async (request) =>
+                skillCatalog.activate(request.identity, request.revision),
+            rollbackSkill: async (request) =>
+                skillCatalog.rollback(request.identity, request.revision),
 
             joinConversation: async (options?: DispatcherConnectOptions) => {
                 validateStructuredActionJoin(options);
                 if (disconnected) {
                     throw new Error("Agent connection is disconnected");
                 }
+
                 // Resolve conversation ID first (may auto-create default)
                 const conversationId =
                     await conversationManager.resolveConversationId(

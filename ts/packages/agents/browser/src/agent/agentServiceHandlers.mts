@@ -3,6 +3,7 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import type { BrowserAgentInvokeFunctions } from "@typeagent/browser-control-rpc/serviceTypes";
+import type { PersonalHowToService } from "@typeagent/memory-service";
 import {
     getSessionBrowserControl,
     type BrowserActionContext,
@@ -28,7 +29,7 @@ export function createAgentInvokeHandlers(
         if (!service) {
             throw new Error("Durable memory service is not available");
         }
-        return service;
+        return service as typeof service & PersonalHowToService;
     }
 
     async function knowledgeHandler(method: string, params: any): Promise<any> {
@@ -82,6 +83,27 @@ export function createAgentInvokeHandlers(
             getMemoryService().getSourceContent(params),
         memoryGetSourceKnowledge: ({ corpusId, sourceId }) =>
             getMemoryService().getSourceKnowledge(corpusId, sourceId),
+        memoryImportDocument: ({
+            corpusId,
+            title,
+            markdown,
+            canonicalUri,
+            tags,
+        }) =>
+            getMemoryService().ingestDocument({
+                corpusId,
+                source: {
+                    sourceType: "markdown",
+                    title,
+                    markdown,
+                    ...(canonicalUri === undefined ? {} : { canonicalUri }),
+                    ...(tags === undefined ? {} : { tags }),
+                },
+                pipeline: {
+                    mode: "full",
+                    updatePolicy: "retainRevisionHistory",
+                },
+            }),
         memoryReplaceSource: async ({
             corpusId,
             sourceId,
@@ -132,6 +154,41 @@ export function createAgentInvokeHandlers(
             getMemoryService().reindexSource(corpusId, sourceId),
         memoryListJobs: (params) => getMemoryService().listJobs(params),
         memoryCancelJob: ({ jobId }) => getMemoryService().cancelJob(jobId),
+        memoryGetHowToSettings: ({ corpusId }) =>
+            getMemoryService().getPersonalHowToSettings(corpusId),
+        memoryUpdateHowToSettings: ({
+            corpusId,
+            expectedRevision,
+            enabled,
+            detectCandidates,
+            preferences,
+        }) =>
+            getMemoryService().updatePersonalHowToSettings(corpusId, {
+                expectedRevision,
+                ...(enabled === undefined ? {} : { enabled }),
+                ...(detectCandidates === undefined ? {} : { detectCandidates }),
+                ...(preferences === undefined ? {} : { preferences }),
+            }),
+        memoryCreateProcedureCandidate: (params) =>
+            getMemoryService().createProcedureCandidate(params),
+        memoryListProcedureCandidates: ({ corpusId, states }) =>
+            getMemoryService().listProcedureCandidates(corpusId, states),
+        memoryRejectProcedureCandidate: ({ corpusId, candidateId }) =>
+            getMemoryService().rejectProcedureCandidate(corpusId, candidateId),
+        memorySaveProcedure: (params) =>
+            getMemoryService().saveProcedure(params),
+        memoryListProcedures: (params) =>
+            getMemoryService().listProcedures(params),
+        memoryGetProcedure: ({ corpusId, procedureId, version }) =>
+            getMemoryService().getProcedure(corpusId, procedureId, version),
+        memorySearchProcedures: (params) =>
+            getMemoryService().searchProcedures(params),
+        memoryArchiveProcedure: ({ corpusId, procedureId, expectedVersion }) =>
+            getMemoryService().archiveProcedure(
+                corpusId,
+                procedureId,
+                expectedVersion,
+            ),
         memoryListActivity: (params) => {
             const service = context.agentContext.browserMemoryService;
             if (!service) {

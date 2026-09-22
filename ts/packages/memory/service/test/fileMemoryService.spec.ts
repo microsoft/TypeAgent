@@ -1,10 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import {
+    mkdir,
+    mkdtemp,
+    readdir,
+    rename,
+    rm,
+    writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FileMemoryService } from "../src/fileMemoryService.js";
+import { createMemoryServiceRpcFacade } from "../src/rpcFacade.js";
+import {
+    procedureFromMarkdown,
+    procedureToMarkdown,
+} from "../src/personalHowToStore.js";
 import type {
     CorpusIndex,
     CorpusIndexMatch,
@@ -1161,5 +1173,361 @@ describe("FileMemoryService", () => {
         expect((await waitForTerminalJob(service, accepted.jobId)).state).toBe(
             "cancelled",
         );
+    });
+
+    test("preserves personal how-to settings across source operations", async () => {
+        const corpus = await service.createCorpus("How-to");
+        const settings = await service.updatePersonalHowToSettings(
+            corpus.corpusId,
+            {
+                expectedRevision: 0,
+                enabled: false,
+                detectCandidates: false,
+                preferences: { language: "en-US" },
+            },
+        );
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "guide",
+                sourceType: "markdown",
+                title: "Guide",
+                markdown: "Original instructions",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+        await service.reindexSource(corpus.corpusId, "guide");
+        const replacement = await service.replaceSource({
+            corpusId: corpus.corpusId,
+            sourceId: "guide",
+            expectedActiveRevisionId: accepted.revisionId,
+            source: {
+                sourceType: "markdown",
+                title: "Guide",
+                markdown: "Revised instructions",
+            },
+        });
+        await waitForTerminalJob(service, replacement.jobId);
+        const preview = await service.previewForgetSource(
+            corpus.corpusId,
+            "guide",
+        );
+        await service.forgetSource({
+            corpusId: corpus.corpusId,
+            sourceId: "guide",
+            confirmationToken: preview.confirmationToken,
+        });
+
+        expect(await service.getPersonalHowToSettings(corpus.corpusId)).toEqual(
+            settings,
+        );
+    });
+
+    test("enforces optimistic settings revisions", async () => {
+        const corpus = await service.createCorpus("How-to");
+        const first = await service.updatePersonalHowToSettings(
+            corpus.corpusId,
+            { expectedRevision: 0, enabled: false },
+        );
+
+        await expect(
+            service.updatePersonalHowToSettings(corpus.corpusId, {
+                expectedRevision: 0,
+                enabled: true,
+            }),
+        ).rejects.toThrow(
+            "Personal how-to settings revision conflict: expected 0, actual 1",
+        );
+        expect(first.revision).toBe(1);
+        expect(
+            (await service.getPersonalHowToSettings(corpus.corpusId)).enabled,
+        ).toBe(false);
+    });
+
+    test("exposes personal how-to operations through the RPC facade", async () => {
+        const corpus = await service.createCorpus("How-to RPC");
+        const facade = createMemoryServiceRpcFacade(service);
+        await facade.updatePersonalHowToSettings(corpus.corpusId, {
+            expectedRevision: 0,
+            detectCandidates: false,
+        });
+        const candidate = await facade.createProcedureCandidate({
+            corpusId: corpus.corpusId,
+            candidateId: "rpc-candidate",
+            title: "RPC procedure",
+            steps: ["Call the facade"],
+            citations: [],
+        });
+        await facade.saveProcedure({
+            corpusId: corpus.corpusId,
+            procedureId: "rpc-procedure",
+            candidateId: candidate.candidateId,
+        });
+
+        expect(
+            await facade.getPersonalHowToSettings(corpus.corpusId),
+        ).toMatchObject({ revision: 1, detectCandidates: false });
+        expect(
+            await facade.searchProcedures({
+                corpusId: corpus.corpusId,
+                query: "facade",
+            }),
+        ).toEqual([
+            expect.objectContaining({
+                procedure: expect.objectContaining({
+                    procedureId: "rpc-procedure",
+                }),
+            }),
+        ]);
+    });
+
+    test("round trips deterministic procedure Markdown with free-form sections", () => {
+        const document = {
+            title: "Publish a package",
+            summary: "Release the tested package.",
+            steps: ["Build it", "Publish it"],
+            citations: [
+                {
+                    sourceId: "release-guide",
+                    revisionId: "rev-1",
+                    locator: "lines 10-20",
+                    excerpt: "Run the publish command.",
+                },
+            ],
+            additionalSections: [
+                {
+                    heading: "Troubleshooting",
+                    content: "Retry after refreshing credentials.",
+                },
+            ],
+        };
+
+        const markdown = procedureToMarkdown(document);
+        expect(procedureFromMarkdown(markdown)).toEqual(document);
+        expect(procedureToMarkdown(procedureFromMarkdown(markdown))).toBe(
+            markdown,
+        );
+    });
+
+    test("stores candidates and immutable searchable procedure versions", async () => {
+        const corpus = await service.createCorpus("How-to");
+        const candidate = await service.createProcedureCandidate({
+            corpusId: corpus.corpusId,
+            candidateId: "publish",
+            title: "Publish a package",
+            summary: "Release to the registry.",
+            steps: ["Build the package", "Publish the package"],
+            citations: [],
+            additionalSections: [
+                { heading: "Notes", content: "Use a clean checkout." },
+            ],
+        });
+        const saved = await service.saveProcedure({
+            corpusId: corpus.corpusId,
+            procedureId: "publish-procedure",
+            candidateId: candidate.candidateId,
+            expectedVersion: 0,
+        });
+
+        expect(saved.state).toBe("saved");
+        expect(saved.canonicalJson.endsWith("\n")).toBe(true);
+        expect(saved.markdown).toContain("## Notes");
+        expect(
+            await service.listProcedureCandidates(corpus.corpusId, ["saved"]),
+        ).toHaveLength(1);
+        const matches = await service.searchProcedures({
+            corpusId: corpus.corpusId,
+            query: "registry",
+        });
+        expect(matches.map((match) => match.procedure.procedureId)).toEqual([
+            "publish-procedure",
+        ]);
+
+        const archived = await service.archiveProcedure(
+            corpus.corpusId,
+            "publish-procedure",
+            1,
+        );
+        expect(archived).toMatchObject({
+            version: 2,
+            previousVersion: 1,
+            state: "archived",
+        });
+        expect(
+            await service.getProcedure(corpus.corpusId, "publish-procedure", 1),
+        ).toMatchObject({ version: 1, state: "saved" });
+    });
+
+    test("rejects invalid saves and detects projection corruption", async () => {
+        const corpus = await service.createCorpus("How-to");
+        await expect(
+            service.saveProcedure({
+                corpusId: corpus.corpusId,
+                procedureId: "broken",
+                markdown: "# Missing sections\n",
+            }),
+        ).rejects.toThrow("requires Steps and Sources sections");
+        expect(
+            await service.listProcedures({ corpusId: corpus.corpusId }),
+        ).toEqual([]);
+
+        await service.saveProcedure({
+            corpusId: corpus.corpusId,
+            procedureId: "valid",
+            document: {
+                title: "Valid",
+                steps: ["Do the thing"],
+                citations: [],
+            },
+        });
+        await writeFile(
+            path.join(
+                rootDirectory,
+                corpus.corpusId,
+                "personal-how-to",
+                "procedures",
+                "valid",
+                "versions",
+                "00000001",
+                "procedure.md",
+            ),
+            "# Corrupt\n",
+        );
+        await expect(
+            service.getProcedure(corpus.corpusId, "valid"),
+        ).rejects.toThrow("is corrupt");
+    });
+
+    test("persists settings, candidates, and procedures across restart", async () => {
+        const corpus = await service.createCorpus("How-to");
+        await service.updatePersonalHowToSettings(corpus.corpusId, {
+            expectedRevision: 0,
+            detectCandidates: false,
+        });
+        await service.createProcedureCandidate({
+            corpusId: corpus.corpusId,
+            candidateId: "restart-candidate",
+            title: "Restart",
+            steps: ["Stop", "Start"],
+            citations: [],
+        });
+        await service.saveProcedure({
+            corpusId: corpus.corpusId,
+            procedureId: "restart-procedure",
+            expectedVersion: 0,
+            document: {
+                title: "Restart",
+                steps: ["Stop", "Start"],
+                citations: [],
+            },
+        });
+        await service.close();
+        const settingsPath = path.join(
+            rootDirectory,
+            corpus.corpusId,
+            "personal-how-to",
+            "settings.json",
+        );
+        await rename(settingsPath, `${settingsPath}.interrupted.bak`);
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => new FakeCorpusIndex(),
+        });
+
+        expect(
+            (await service.getPersonalHowToSettings(corpus.corpusId))
+                .detectCandidates,
+        ).toBe(false);
+        expect(
+            await service.getProcedureCandidate(
+                corpus.corpusId,
+                "restart-candidate",
+            ),
+        ).toMatchObject({ state: "detected" });
+        expect(
+            await service.getProcedure(corpus.corpusId, "restart-procedure"),
+        ).toMatchObject({ version: 1, state: "saved" });
+    });
+
+    test("marks dependent procedures stale without changing old versions", async () => {
+        const corpus = await service.createCorpus("How-to");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "source",
+                sourceType: "markdown",
+                title: "Source",
+                markdown: "First revision",
+            },
+        });
+        expect((await waitForTerminalJob(service, accepted.jobId)).state).toBe(
+            "complete",
+        );
+        await service.saveProcedure({
+            corpusId: corpus.corpusId,
+            procedureId: "dependent",
+            document: {
+                title: "Dependent",
+                steps: ["Follow the source"],
+                citations: [
+                    {
+                        sourceId: accepted.sourceId,
+                        revisionId: accepted.revisionId,
+                    },
+                ],
+            },
+        });
+
+        const replacement = await service.replaceSource({
+            corpusId: corpus.corpusId,
+            sourceId: accepted.sourceId,
+            expectedActiveRevisionId: accepted.revisionId,
+            source: {
+                sourceType: "markdown",
+                title: "Source",
+                markdown: "Second revision",
+            },
+        });
+        expect(
+            (await waitForTerminalJob(service, replacement.jobId)).state,
+        ).toBe("complete");
+
+        expect(
+            await service.getProcedure(corpus.corpusId, "dependent"),
+        ).toMatchObject({ version: 2, previousVersion: 1, state: "stale" });
+        expect(
+            await service.getProcedure(corpus.corpusId, "dependent", 1),
+        ).toMatchObject({ version: 1, state: "saved" });
+
+        await service.saveProcedure({
+            corpusId: corpus.corpusId,
+            procedureId: "dependent",
+            expectedVersion: 2,
+            document: {
+                title: "Dependent",
+                steps: ["Follow the revised source"],
+                citations: [
+                    {
+                        sourceId: replacement.sourceId,
+                        revisionId: replacement.revisionId,
+                    },
+                ],
+            },
+        });
+        const preview = await service.previewForgetSource(
+            corpus.corpusId,
+            replacement.sourceId,
+        );
+        await service.forgetSource({
+            corpusId: corpus.corpusId,
+            sourceId: replacement.sourceId,
+            confirmationToken: preview.confirmationToken,
+        });
+
+        expect(
+            await service.getProcedure(corpus.corpusId, "dependent"),
+        ).toMatchObject({ version: 4, previousVersion: 3, state: "stale" });
+        expect(
+            await service.getProcedure(corpus.corpusId, "dependent", 3),
+        ).toMatchObject({ version: 3, state: "saved" });
     });
 });

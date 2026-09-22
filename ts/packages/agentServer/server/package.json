@@ -56,6 +56,7 @@
     "@typeagent/memory-client": "workspace:*",
     "@typeagent/memory-mcp-server": "workspace:*",
     "@typeagent/memory-service": "workspace:*",
+    "@typeagent/skill-catalog": "workspace:*",
     "@typeagent/telemetry": "workspace:*",
     "@typeagent/typechat-utils": "workspace:*",
     "@typeagent/websocket-channel-server": "workspace:*",

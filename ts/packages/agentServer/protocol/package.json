@@ -30,7 +30,8 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
-    "@typeagent/dispatcher-types": "workspace:*"
+    "@typeagent/dispatcher-types": "workspace:*",
+    "@typeagent/skill-catalog": "workspace:*"
   },
   "devDependencies": {
     "prettier": "^3.5.3",

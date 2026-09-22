@@ -51,12 +51,30 @@ export {
     SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
+    ListSkillsRequest,
+    SearchSkillsRequest,
+    GetSkillRequest,
+    ReadSkillFileRequest,
+    ReadSkillFileResponse,
+    PublishSkillRequest,
+    ChangeSkillStateRequest,
+    SelectSkillRevisionRequest,
     getDispatcherChannelName,
     getClientIOChannelName,
     registerClientType,
     getClientType,
     unregisterClient,
 } from "./protocol.js";
+
+export type {
+    CatalogEntry,
+    CatalogSearchResult,
+    CatalogState,
+    SkillFileManifest,
+    SkillIdentity,
+    SkillRevision,
+    SkillScope,
+} from "@typeagent/skill-catalog";
 
 export type {
     QueueRequestState,

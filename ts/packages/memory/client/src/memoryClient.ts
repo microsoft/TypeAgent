@@ -36,6 +36,17 @@ import type {
     MemoryService,
     MemoryServiceCapabilities,
     MemorySource,
+    PersonalHowToService,
+    PersonalHowToSettings,
+    PersonalHowToSettingsUpdate,
+    ProcedureCandidate,
+    ProcedureCandidateCreateRequest,
+    ProcedureListRequest,
+    ProcedureSaveRequest,
+    ProcedureSearchMatch,
+    ProcedureSearchRequest,
+    ProcedureSummary,
+    ProcedureVersion,
     ReindexResult,
     SourceContent,
     SourceContentRequest,
@@ -65,6 +76,13 @@ import {
     optionalCorpusStatusSchema,
     optionalEventSchema,
     optionalSourceSchema,
+    optionalProcedureCandidateSchema,
+    optionalProcedureVersionSchema,
+    personalHowToSettingsSchema,
+    procedureCandidateSchema,
+    procedureSearchMatchSchema,
+    procedureSummarySchema,
+    procedureVersionSchema,
     searchResultSchema,
     sourceSchema,
     sourceContentSchema,
@@ -79,7 +97,9 @@ export interface MemoryClientCallOptions {
     onProgress?: (progress: JobProgress) => void;
 }
 
-export interface MemoryServiceClient extends MemoryService {
+export interface MemoryServiceClient
+    extends MemoryService,
+        PersonalHowToService {
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
@@ -92,7 +112,9 @@ export interface MemoryServiceClient extends MemoryService {
 }
 
 export class InProcessMemoryServiceClient implements MemoryServiceClient {
-    public constructor(private readonly service: MemoryService) {}
+    public constructor(
+        private readonly service: MemoryService & PersonalHowToService,
+    ) {}
 
     public createCorpus(name: string, description?: string) {
         return this.service.createCorpus(name, description);
@@ -207,6 +229,68 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
 
     public getCapabilities() {
         return this.service.getCapabilities();
+    }
+
+    public getPersonalHowToSettings(corpusId: string) {
+        return this.service.getPersonalHowToSettings(corpusId);
+    }
+
+    public updatePersonalHowToSettings(
+        corpusId: string,
+        update: PersonalHowToSettingsUpdate,
+    ) {
+        return this.service.updatePersonalHowToSettings(corpusId, update);
+    }
+
+    public createProcedureCandidate(request: ProcedureCandidateCreateRequest) {
+        return this.service.createProcedureCandidate(request);
+    }
+
+    public getProcedureCandidate(corpusId: string, candidateId: string) {
+        return this.service.getProcedureCandidate(corpusId, candidateId);
+    }
+
+    public listProcedureCandidates(
+        corpusId: string,
+        states?: ProcedureCandidate["state"][],
+    ) {
+        return this.service.listProcedureCandidates(corpusId, states);
+    }
+
+    public rejectProcedureCandidate(corpusId: string, candidateId: string) {
+        return this.service.rejectProcedureCandidate(corpusId, candidateId);
+    }
+
+    public saveProcedure(request: ProcedureSaveRequest) {
+        return this.service.saveProcedure(request);
+    }
+
+    public listProcedures(request: ProcedureListRequest) {
+        return this.service.listProcedures(request);
+    }
+
+    public getProcedure(
+        corpusId: string,
+        procedureId: string,
+        version?: number,
+    ) {
+        return this.service.getProcedure(corpusId, procedureId, version);
+    }
+
+    public searchProcedures(request: ProcedureSearchRequest) {
+        return this.service.searchProcedures(request);
+    }
+
+    public archiveProcedure(
+        corpusId: string,
+        procedureId: string,
+        expectedVersion?: number,
+    ) {
+        return this.service.archiveProcedure(
+            corpusId,
+            procedureId,
+            expectedVersion,
+        );
     }
 
     public waitForJob(
@@ -514,6 +598,132 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             memoryToolNames.capabilities,
             {},
             capabilitiesSchema,
+        );
+    }
+
+    public getPersonalHowToSettings(
+        corpusId: string,
+    ): Promise<PersonalHowToSettings> {
+        return this.invoke(
+            memoryToolNames.howToSettingsGet,
+            { corpusId },
+            personalHowToSettingsSchema,
+        );
+    }
+
+    public updatePersonalHowToSettings(
+        corpusId: string,
+        update: PersonalHowToSettingsUpdate,
+    ): Promise<PersonalHowToSettings> {
+        return this.invoke(
+            memoryToolNames.howToSettingsUpdate,
+            { corpusId, ...update },
+            personalHowToSettingsSchema,
+        );
+    }
+
+    public createProcedureCandidate(
+        request: ProcedureCandidateCreateRequest,
+    ): Promise<ProcedureCandidate> {
+        return this.invoke(
+            memoryToolNames.procedureCandidateCreate,
+            request,
+            procedureCandidateSchema,
+        );
+    }
+
+    public getProcedureCandidate(
+        corpusId: string,
+        candidateId: string,
+    ): Promise<ProcedureCandidate | undefined> {
+        return this.invoke<ProcedureCandidate | null>(
+            memoryToolNames.procedureCandidateGet,
+            { corpusId, candidateId },
+            optionalProcedureCandidateSchema,
+        ).then((candidate) => candidate ?? undefined);
+    }
+
+    public listProcedureCandidates(
+        corpusId: string,
+        states?: ProcedureCandidate["state"][],
+    ): Promise<ProcedureCandidate[]> {
+        return this.invoke(
+            memoryToolNames.procedureCandidateList,
+            { corpusId, ...(states === undefined ? {} : { states }) },
+            procedureCandidateSchema.array(),
+        );
+    }
+
+    public rejectProcedureCandidate(
+        corpusId: string,
+        candidateId: string,
+    ): Promise<ProcedureCandidate> {
+        return this.invoke(
+            memoryToolNames.procedureCandidateReject,
+            { corpusId, candidateId },
+            procedureCandidateSchema,
+        );
+    }
+
+    public saveProcedure(
+        request: ProcedureSaveRequest,
+    ): Promise<ProcedureVersion> {
+        return this.invoke(
+            memoryToolNames.procedureSave,
+            request,
+            procedureVersionSchema,
+        );
+    }
+
+    public listProcedures(
+        request: ProcedureListRequest,
+    ): Promise<ProcedureSummary[]> {
+        return this.invoke(
+            memoryToolNames.procedureList,
+            request,
+            procedureSummarySchema.array(),
+        );
+    }
+
+    public getProcedure(
+        corpusId: string,
+        procedureId: string,
+        version?: number,
+    ): Promise<ProcedureVersion | undefined> {
+        return this.invoke<ProcedureVersion | null>(
+            memoryToolNames.procedureGet,
+            {
+                corpusId,
+                procedureId,
+                ...(version === undefined ? {} : { version }),
+            },
+            optionalProcedureVersionSchema,
+        ).then((procedure) => procedure ?? undefined);
+    }
+
+    public searchProcedures(
+        request: ProcedureSearchRequest,
+    ): Promise<ProcedureSearchMatch[]> {
+        return this.invoke(
+            memoryToolNames.procedureSearch,
+            request,
+            procedureSearchMatchSchema.array(),
+        );
+    }
+
+    public archiveProcedure(
+        corpusId: string,
+        procedureId: string,
+        expectedVersion?: number,
+    ): Promise<ProcedureVersion> {
+        return this.invoke(
+            memoryToolNames.procedureArchive,
+            {
+                corpusId,
+                procedureId,
+                ...(expectedVersion === undefined ? {} : { expectedVersion }),
+            },
+            procedureVersionSchema,
         );
     }
 

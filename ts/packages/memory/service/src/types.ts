@@ -431,6 +431,112 @@ export interface MemoryServiceCapabilities {
     warnings: string[];
 }
 
+export interface PersonalHowToSettings {
+    revision: number;
+    updatedAt: string;
+    enabled: boolean;
+    detectCandidates: boolean;
+    preferences?: Record<string, unknown>;
+}
+
+export interface PersonalHowToSettingsUpdate {
+    expectedRevision: number;
+    enabled?: boolean;
+    detectCandidates?: boolean;
+    preferences?: Record<string, unknown>;
+}
+
+export type ProcedureState =
+    | "detected"
+    | "draft"
+    | "saved"
+    | "stale"
+    | "archived"
+    | "rejected";
+
+export interface ProcedureSourceCitation {
+    sourceId: string;
+    revisionId: string;
+    locator?: string;
+    excerpt?: string;
+}
+
+export interface ProcedureSection {
+    heading: string;
+    content: string;
+}
+
+export interface ProcedureDocument {
+    title: string;
+    summary?: string;
+    steps: string[];
+    citations: ProcedureSourceCitation[];
+    additionalSections?: ProcedureSection[];
+}
+
+export interface ProcedureCandidate extends ProcedureDocument {
+    candidateId: string;
+    corpusId: string;
+    state: "detected" | "draft" | "rejected" | "saved";
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ProcedureCandidateCreateRequest extends ProcedureDocument {
+    corpusId: string;
+    candidateId?: string;
+    state?: "detected" | "draft";
+}
+
+export interface ProcedureVersion {
+    corpusId: string;
+    procedureId: string;
+    version: number;
+    state: "saved" | "stale" | "archived";
+    document: ProcedureDocument;
+    canonicalJson: string;
+    markdown: string;
+    createdAt: string;
+    jsonHash: string;
+    markdownHash: string;
+    basedOnCandidateId?: string;
+    previousVersion?: number;
+}
+
+export interface ProcedureSummary {
+    corpusId: string;
+    procedureId: string;
+    title: string;
+    state: "saved" | "stale" | "archived";
+    latestVersion: number;
+    updatedAt: string;
+}
+
+export interface ProcedureSaveRequest {
+    corpusId: string;
+    procedureId?: string;
+    candidateId?: string;
+    expectedVersion?: number;
+    document?: ProcedureDocument;
+    markdown?: string;
+}
+
+export interface ProcedureListRequest {
+    corpusId: string;
+    states?: Array<"saved" | "stale" | "archived">;
+}
+
+export interface ProcedureSearchRequest extends ProcedureListRequest {
+    query: string;
+    limit?: number;
+}
+
+export interface ProcedureSearchMatch {
+    procedure: ProcedureSummary;
+    version: ProcedureVersion;
+    score: number;
+}
+
 export interface MemoryService {
     initialize?(): Promise<void>;
     close?(): Promise<void>;
@@ -496,6 +602,44 @@ export interface MemoryService {
     answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult>;
     getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph>;
     getCapabilities(): Promise<MemoryServiceCapabilities>;
+}
+
+export interface PersonalHowToService {
+    getPersonalHowToSettings(corpusId: string): Promise<PersonalHowToSettings>;
+    updatePersonalHowToSettings(
+        corpusId: string,
+        update: PersonalHowToSettingsUpdate,
+    ): Promise<PersonalHowToSettings>;
+    createProcedureCandidate(
+        request: ProcedureCandidateCreateRequest,
+    ): Promise<ProcedureCandidate>;
+    getProcedureCandidate(
+        corpusId: string,
+        candidateId: string,
+    ): Promise<ProcedureCandidate | undefined>;
+    listProcedureCandidates(
+        corpusId: string,
+        states?: ProcedureCandidate["state"][],
+    ): Promise<ProcedureCandidate[]>;
+    rejectProcedureCandidate(
+        corpusId: string,
+        candidateId: string,
+    ): Promise<ProcedureCandidate>;
+    saveProcedure(request: ProcedureSaveRequest): Promise<ProcedureVersion>;
+    listProcedures(request: ProcedureListRequest): Promise<ProcedureSummary[]>;
+    getProcedure(
+        corpusId: string,
+        procedureId: string,
+        version?: number,
+    ): Promise<ProcedureVersion | undefined>;
+    searchProcedures(
+        request: ProcedureSearchRequest,
+    ): Promise<ProcedureSearchMatch[]>;
+    archiveProcedure(
+        corpusId: string,
+        procedureId: string,
+        expectedVersion?: number,
+    ): Promise<ProcedureVersion>;
 }
 
 export interface IndexedDocument {

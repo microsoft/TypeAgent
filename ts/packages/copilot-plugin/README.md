@@ -729,7 +729,7 @@ macro traces and TypeAgent history, injects PowerShell guidance with an
 
 ### MCP Servers (`.mcp.json`)
 
-The plugin starts three logical MCP servers from the same bundled entry point and
+The plugin starts four logical MCP servers from the same bundled entry point and
 single-file release executable:
 
 | Server                | Tool                         | Description                                                                                     |
@@ -745,6 +745,16 @@ single-file release executable:
 | `typeagent-macros`    | `list_macros`                | List and search reusable captured procedures                                                    |
 | `typeagent-macros`    | `run_macro`                  | Replay an approved macro or return an agent-runner handoff                                      |
 | `typeagent-macros`    | lifecycle tools              | Capture-derived draft validation, approval, disablement, and candidate submission               |
+| `typeagent-skills`    | `typeagent-listSkills`       | List local immutable skill package revisions                                                    |
+| `typeagent-skills`    | `typeagent-searchSkills`     | Search the local catalog by exact name or origin-qualified identity                             |
+| `typeagent-skills`    | `typeagent-getSkill`         | Get revision metadata and its complete file manifest                                            |
+
+`typeagent-skills` implements the `io.modelcontextprotocol/skills` read
+extension (`server/discover`, `skills/list`, and `skills/get`) and publishes
+active catalog files as `skill://typeagent/...` MCP resources. Listings include
+verbatim `SKILL.md` frontmatter plus complete SHA-256 resource manifests.
+Resource discovery and reads are backed by the agent-server-owned local catalog
+and never execute skills.
 
 Workspace tools are available in direct, MCP, and dev modes. In bypass mode
 they remain discoverable because Copilot fixes the MCP catalog when the session

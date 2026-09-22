@@ -119,4 +119,50 @@ describe("staged plugin artifact", () => {
             await client.close();
         }
     });
+
+    it("starts the bundled skills server declared by .mcp.json", async () => {
+        const testDir = path.dirname(fileURLToPath(import.meta.url));
+        const pluginRoot = path.resolve(testDir, "..", "..");
+        const manifest = JSON.parse(
+            await readFile(path.join(pluginRoot, ".mcp.json"), "utf8"),
+        ) as PluginMcpManifest;
+        const registration = manifest.mcpServers["typeagent-skills"];
+
+        expect(registration).toEqual({
+            command: "node",
+            args: ["${PLUGIN_ROOT}/dist/mcp/server.js", "--skills"],
+            tools: ["*"],
+        });
+
+        const transport = new StdioClientTransport({
+            command: process.execPath,
+            args: registration.args.map((argument) =>
+                argument.replace("${PLUGIN_ROOT}", pluginRoot),
+            ),
+            stderr: "pipe",
+        });
+        const client = new Client({
+            name: "typeagent-skills-artifact-test",
+            version: "1.0.0",
+        });
+        try {
+            await client.connect(transport);
+            const catalog = await client.listTools();
+            expect(catalog.tools.map((tool) => tool.name)).toEqual([
+                "typeagent-listSkills",
+                "typeagent-searchSkills",
+                "typeagent-getSkill",
+            ]);
+            const templates = await client.listResourceTemplates();
+            expect(templates.resourceTemplates).toEqual([
+                expect.objectContaining({
+                    name: "typeagent-skill-file",
+                    uriTemplate:
+                        "typeagent-skills://catalog/{identity}/{revision}/files/{file}",
+                }),
+            ]);
+        } finally {
+            await client.close();
+        }
+    });
 });

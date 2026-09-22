@@ -12,6 +12,7 @@ import {
 } from "@typeagent/agent-server-client";
 import type { DispatcherConnectOptions } from "@typeagent/agent-server-protocol";
 import type { MacroManager } from "@typeagent/copilot-macros";
+import type { SkillCatalog } from "@typeagent/skill-catalog";
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-types";
 import type { ConversationManager } from "../src/conversationManager.js";
 import { createAgentServerConnectionHandler } from "../src/connectionHandler.js";
@@ -97,6 +98,7 @@ function fixture() {
     const { handler } = createAgentServerConnectionHandler({
         conversationManager: manager,
         macroManager: {} as MacroManager,
+        skillCatalog: {} as SkillCatalog,
         shutdown() {},
         getUserIdentity: () => ({
             username: "test",

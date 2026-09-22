@@ -31,6 +31,13 @@ import type {
     TraceSummary,
     ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
+import type {
+    CatalogEntry,
+    CatalogSearchResult,
+    CatalogState,
+    SkillIdentity,
+    SkillScope,
+} from "@typeagent/skill-catalog";
 
 export type {
     ApproveMacroRequest,
@@ -198,6 +205,58 @@ export type SpeechToken = {
     endpoint: string;
 };
 
+export type ListSkillsRequest = {
+    states?: CatalogState[];
+    scopes?: SkillScope[];
+    activeOnly?: boolean;
+};
+
+export type SearchSkillsRequest = {
+    query: string;
+    scopes?: SkillScope[];
+    limit?: number;
+};
+
+export type GetSkillRequest = {
+    identity: SkillIdentity;
+    revision?: string;
+};
+
+export type ReadSkillFileRequest = {
+    identity: SkillIdentity;
+    revision: string;
+    path: string;
+};
+
+export type ReadSkillFileResponse = {
+    content: string;
+    encoding: "base64";
+    mimeType: string;
+};
+
+export type PublishSkillRequest = {
+    identity: SkillIdentity;
+    displayName?: string;
+    description?: string;
+    schemaFingerprint: string;
+    files: {
+        path: string;
+        content: string;
+        encoding?: "utf8" | "base64";
+    }[];
+};
+
+export type ChangeSkillStateRequest = {
+    identity: SkillIdentity;
+    revision: string;
+    state: CatalogState;
+};
+
+export type SelectSkillRevisionRequest = {
+    identity: SkillIdentity;
+    revision: string;
+};
+
 export type AgentServerInvokeFunctions = {
     armMacroRecording: (
         request: ArmRecordingRequest,
@@ -236,6 +295,24 @@ export type AgentServerInvokeFunctions = {
     ) => Promise<MacroVersionRef>;
     cancelMacroRun: (runId: string) => Promise<void>;
     getMacroRun: (runId: string) => Promise<MacroRunRecord>;
+    listSkills: (request?: ListSkillsRequest) => Promise<CatalogEntry[]>;
+    searchSkills: (
+        request: SearchSkillsRequest,
+    ) => Promise<readonly CatalogSearchResult[]>;
+    getSkill: (request: GetSkillRequest) => Promise<CatalogEntry | undefined>;
+    readSkillFile: (
+        request: ReadSkillFileRequest,
+    ) => Promise<ReadSkillFileResponse>;
+    publishSkill: (request: PublishSkillRequest) => Promise<CatalogEntry>;
+    changeSkillState: (
+        request: ChangeSkillStateRequest,
+    ) => Promise<CatalogEntry>;
+    activateSkill: (
+        request: SelectSkillRevisionRequest,
+    ) => Promise<CatalogEntry>;
+    rollbackSkill: (
+        request: SelectSkillRevisionRequest,
+    ) => Promise<CatalogEntry>;
 
     joinConversation: (
         options?: DispatcherConnectOptions,

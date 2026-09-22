@@ -19,6 +19,7 @@ import {
     ConversationManager,
 } from "./conversationManager.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
+import { createLocalSkillCatalog } from "./skillCatalog.js";
 
 const debug = registerDebug("agent-server:in-process");
 
@@ -89,6 +90,7 @@ export async function createInProcessAgentServer(
             instanceDir,
             new McpReplayHost(instanceDir),
         ),
+        skillCatalog: createLocalSkillCatalog(instanceDir),
         shutdown: options.shutdown,
         getUserIdentity: options.getUserIdentity ?? defaultUserIdentity,
         // No discovery RPC here: embedded hosts run their own discovery
