@@ -92,14 +92,17 @@ function enterAltScreen(): void {
     altScreenActive = true;
     // Save cursor, switch to alt screen, clear it.
     process.stdout.write("\x1b[?1049h");
+}
+
+function registerTerminalExitHandler(): void {
     if (!exitHandlerRegistered) {
         exitHandlerRegistered = true;
-        process.on("exit", exitAltScreen);
+        process.on("exit", restoreTerminalState);
     }
 }
 
-function exitAltScreen(): void {
-    if (!altScreenActive) return;
+function restoreTerminalState(): void {
+    const leaveAltScreen = altScreenActive;
     altScreenActive = false;
     try {
         if (currentSpinner) {
@@ -117,8 +120,10 @@ function exitAltScreen(): void {
                 // ignore
             }
         }
-        // Reset scroll region, show cursor, leave alt screen.
-        process.stdout.write("\x1b[r\x1b[?25h\x1b[?1049l");
+        // Reset scroll region and input state in both terminal-buffer modes.
+        process.stdout.write(
+            "\x1b[r\x1b[?25h" + (leaveAltScreen ? "\x1b[?1049l" : ""),
+        );
         if (process.stdin.isTTY) {
             try {
                 process.stdin.setRawMode(false);
@@ -144,6 +149,14 @@ function exitAltScreen(): void {
  * CLI exits the alternate screen (e.g., disconnect reasons).
  */
 export function setPendingExitMessage(message: string): void {
+    if (!altScreenActive) {
+        try {
+            process.stderr.write(message + "\n");
+        } catch {
+            // Exit messages are best-effort during terminal teardown.
+        }
+        return;
+    }
     pendingExitMessage = message;
 }
 
@@ -386,7 +399,8 @@ function tryCancelRunningHead(
 
 // Mirror of the server's per-conversation queue. UI side effects live in the event handlers below.
 const queueMirror = new QueueStateMirror();
-// Tracks recent submits from THIS CLI so requestStarted doesn't double-print; pruned per access.
+// Tracks recent submits from THIS CLI until completion/cancellation so queue
+// ownership survives missing or stale originator metadata.
 const RECENT_SUBMITTED_TTL_MS = 60_000;
 const recentlySubmittedRequestIds = new Map<string, number>();
 
@@ -403,6 +417,11 @@ function pruneRecentSubmissions(): void {
 function rememberSubmittedId(id: string): void {
     pruneRecentSubmissions();
     recentlySubmittedRequestIds.set(id, Date.now());
+}
+
+function hasRecentlySubmittedId(id: string): boolean {
+    pruneRecentSubmissions();
+    return recentlySubmittedRequestIds.has(id);
 }
 
 function consumeSubmittedId(id: string): boolean {
@@ -435,6 +454,12 @@ export function __testSetCurrentRequestId(id: string | undefined): void {
 }
 export function __testGetRecentlySubmitted(): ReadonlyMap<string, number> {
     return recentlySubmittedRequestIds;
+}
+export function __testRememberSubmittedId(id: string): void {
+    rememberSubmittedId(id);
+}
+export function __testRestoreTerminalState(): void {
+    restoreTerminalState();
 }
 /**
  * @internal Activate a TerminalLayout + stub PromptRenderer so tests can
@@ -1688,7 +1713,7 @@ export function createEnhancedClientIO(
             if (!queueMirror.applyStarted(entry, version).admitted) return;
             // Suppress the marker if THIS CLI submitted the entry (otherwise we double-print).
             const isOurs =
-                isOurEntry(entry) || consumeSubmittedId(entry.requestId);
+                isOurEntry(entry) || hasRecentlySubmittedId(entry.requestId);
             redrawPromptIfActive();
             if (isOurs) {
                 return;
@@ -1739,14 +1764,8 @@ export function createEnhancedClientIO(
 /** Stable key for the visible badge state, used to detect meaningful changes. */
 function computeBadgeState(snap: QueueSnapshot | undefined): string {
     if (!snap) return "none";
-    const queuedCount = snap.queued.length;
-    const runningOther =
-        snap.running &&
-        snap.running.requestId !== currentRequestId &&
-        !recentlySubmittedRequestIds.has(snap.running.requestId)
-            ? 1
-            : 0;
-    return `q${queuedCount}r${runningOther}p${snap.paused ? 1 : 0}`;
+    const { processing, queueCount } = getQueueBadgeState(snap);
+    return `q${queueCount}r${processing ? 1 : 0}p${snap.paused ? 1 : 0}`;
 }
 
 /** Redraw the active prompt; no-op when no interactive UI is active. */
@@ -2592,15 +2611,19 @@ export async function withEnhancedConsoleClientIO(
         bindDispatcher: (d: Dispatcher) => void,
     ) => Promise<void>,
     rl?: readline.promises.Interface,
+    options: { alternateScreen?: boolean } = {},
 ) {
     if (usingEnhancedConsole) {
         throw new Error("Cannot have multiple enhanced console clients");
     }
     usingEnhancedConsole = true;
 
-    // Run the session in the terminal's alternate screen buffer so the
-    // parent shell is restored on any exit path.
-    enterAltScreen();
+    registerTerminalExitHandler();
+    if (options.alternateScreen ?? true) {
+        // Restore the parent shell on exit. Scrollback mode stays on the
+        // primary buffer so the terminal can retain the session output.
+        enterAltScreen();
+    }
 
     try {
         const dispatcherRef: { current?: Dispatcher } = {};
@@ -3001,22 +3024,33 @@ function getNextInput(
 }
 
 /**
- * Live `(queue: N) ` prefix for the interactive prompt; empty when nothing to surface.
+ * Live processing / queue prefix for the interactive prompt; empty when idle.
  * Re-derived at render time so it stays in sync with the queue mirror between Enter presses.
- * A `running` entry that matches `currentRequestId` or was recently submitted from THIS
- * CLI is not counted — the spinner / "▶ running" marker already conveys it.
  */
 export function formatQueueBadge(snap?: QueueSnapshot | undefined): string {
     const s = snap ?? queueMirror.snapshot;
-    const queuedCount = s?.queued.length ?? 0;
-    const runningOther =
-        s?.running &&
-        s.running.requestId !== currentRequestId &&
-        !recentlySubmittedRequestIds.has(s.running.requestId)
-            ? 1
-            : 0;
-    const total = queuedCount + runningOther;
-    return total > 0 ? chalk.yellow(`(queue: ${total}) `) : "";
+    const { processing, queueCount } = getQueueBadgeState(s);
+    if (processing) {
+        const queue = queueCount > 0 ? ` · queue: ${queueCount}` : "";
+        return chalk.yellow(`(processing${queue}) `);
+    }
+    return queueCount > 0 ? chalk.yellow(`(queue: ${queueCount}) `) : "";
+}
+
+function getQueueBadgeState(snap: QueueSnapshot | undefined): {
+    processing: boolean;
+    queueCount: number;
+} {
+    const running = snap?.running;
+    const processing =
+        running !== null &&
+        running !== undefined &&
+        (isOurEntry(running) || hasRecentlySubmittedId(running.requestId));
+    return {
+        processing,
+        queueCount:
+            (snap?.queued.length ?? 0) + (running && !processing ? 1 : 0),
+    };
 }
 
 /**
