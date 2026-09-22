@@ -20,6 +20,12 @@ import type {
 } from "./types.js";
 
 const indexBaseName = "corpus";
+const structuralChunkCharacters = 8_000;
+const extractionChunkTokens = 7_500;
+const durableDocPartOptions = {
+    collectLinkKnowledge: false,
+    maxTokensPerPart: extractionChunkTokens,
+};
 
 interface EntityKnowledge {
     name: string;
@@ -44,14 +50,30 @@ function toDocParts(document: IndexedDocument): DocPart[] {
     const uri = sourceUri(document);
     switch (document.source.sourceType) {
         case "html":
-            return docPartsFromHtml(document.content, false, 8_000, uri);
+            return docPartsFromHtml(
+                document.content,
+                false,
+                structuralChunkCharacters,
+                uri,
+                undefined,
+                durableDocPartOptions,
+            );
         case "markdown":
         case "web":
-            return docPartsFromMarkdown(document.content, 8_000, uri);
+            return docPartsFromMarkdown(
+                document.content,
+                structuralChunkCharacters,
+                uri,
+                durableDocPartOptions,
+            );
         case "vtt":
             return docPartsFromVtt(document.content, uri);
         case "text":
-            return docPartsFromText(document.content, 8_000, uri);
+            return docPartsFromText(
+                document.content,
+                structuralChunkCharacters,
+                uri,
+            );
     }
 }
 
@@ -94,7 +116,18 @@ export class KnowProCorpusIndex implements CorpusIndex {
         signal: AbortSignal,
         onProgress: (progress: JobProgress) => Promise<void>,
     ): Promise<void> {
+        const startedAt = performance.now();
         const parts = documents.flatMap(toDocParts);
+        await onProgress({
+            completed: parts.length,
+            total: parts.length,
+            message: "Documents chunked",
+            stage: "chunking",
+            operation: "rebuild",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
         const memory = new DocMemory(
             this.corpusId,
             parts,
@@ -103,19 +136,33 @@ export class KnowProCorpusIndex implements CorpusIndex {
         let completed = 0;
         let progressTail = Promise.resolve();
         const total = Math.max(parts.length, 1);
-        const report = (message: string): boolean => {
+        const report = (
+            message: string,
+            stage: NonNullable<JobProgress["stage"]>,
+        ): boolean => {
             if (signal.aborted) {
                 return false;
             }
             completed = Math.min(completed + 1, total);
-            const progress = { completed, total, message };
+            const progress: JobProgress = {
+                completed,
+                total,
+                message,
+                stage,
+                operation: "rebuild",
+                elapsedMs: performance.now() - startedAt,
+                documentCount: documents.length,
+                docPartCount: parts.length,
+            };
             progressTail = progressTail.then(() => onProgress(progress));
             return true;
         };
         const result = await memory.buildIndex({
-            onKnowledgeExtracted: () => report("Extracting knowledge"),
-            onEmbeddingsCreated: () => report("Creating embeddings"),
-            onTextIndexed: () => report("Indexing text"),
+            onKnowledgeExtracted: () =>
+                report("Extracting knowledge", "extracting-knowledge"),
+            onEmbeddingsCreated: () =>
+                report("Creating embeddings", "embedding"),
+            onTextIndexed: () => report("Indexing text", "building-indexes"),
         });
         if (signal.aborted) {
             throw signal.reason ?? new Error("Ingestion cancelled");
@@ -128,12 +175,116 @@ export class KnowProCorpusIndex implements CorpusIndex {
             throw new Error(indexingError);
         }
         await progressTail;
+        await onProgress({
+            completed: total,
+            total,
+            message: "Persisting index",
+            stage: "persisting",
+            operation: "rebuild",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
         await memory.writeToFile(this.indexDirectory, indexBaseName);
         this.memory = memory;
         await onProgress({
             completed: total,
             total,
             message: "Index persisted",
+            stage: "persisting",
+            operation: "rebuild",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
+    }
+
+    public async append(
+        documents: IndexedDocument[],
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<void> {
+        const startedAt = performance.now();
+        await this.initialize();
+        if (this.memory === undefined) {
+            throw new Error(`Corpus '${this.corpusId}' has not been indexed`);
+        }
+        const parts = documents.flatMap(toDocParts);
+        await onProgress({
+            completed: parts.length,
+            total: parts.length,
+            message: "Documents chunked",
+            stage: "chunking",
+            operation: "append",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
+        for (const part of parts) {
+            this.memory.messages.append(part);
+        }
+        let completed = 0;
+        let progressTail = Promise.resolve();
+        const total = Math.max(parts.length, 1);
+        const report = (
+            message: string,
+            stage: NonNullable<JobProgress["stage"]>,
+        ): boolean => {
+            if (signal.aborted) {
+                return false;
+            }
+            completed = Math.min(completed + 1, total);
+            const progress: JobProgress = {
+                completed,
+                total,
+                message,
+                stage,
+                operation: "append",
+                elapsedMs: performance.now() - startedAt,
+                documentCount: documents.length,
+                docPartCount: parts.length,
+            };
+            progressTail = progressTail.then(() => onProgress(progress));
+            return true;
+        };
+        const result = await this.memory.addToIndex({
+            onKnowledgeExtracted: () =>
+                report("Extracting knowledge", "extracting-knowledge"),
+            onEmbeddingsCreated: () =>
+                report("Creating embeddings", "embedding"),
+            onTextIndexed: () => report("Indexing text", "building-indexes"),
+        });
+        if (signal.aborted) {
+            throw signal.reason ?? new Error("Ingestion cancelled");
+        }
+        const indexingError =
+            result.semanticRefs?.error ??
+            result.secondaryIndexResults?.message?.error ??
+            result.secondaryIndexResults?.relatedTerms?.error;
+        if (indexingError !== undefined) {
+            throw new Error(indexingError);
+        }
+        await progressTail;
+        await onProgress({
+            completed: total,
+            total,
+            message: "Persisting index",
+            stage: "persisting",
+            operation: "append",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
+        await this.memory.writeToFile(this.indexDirectory, indexBaseName);
+        await onProgress({
+            completed: total,
+            total,
+            message: "Index persisted",
+            stage: "persisting",
+            operation: "append",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
         });
     }
 

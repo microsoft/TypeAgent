@@ -79,6 +79,40 @@ function setDisplay(content: DisplayContent): EmitDisplay {
 const forced = { forceHandled: true };
 
 describe("direct TypeAgent hook", () => {
+    it.each([false, true])(
+        "preserves pending user input instead of claiming completion (forced: %s)",
+        async (forceHandled) => {
+            const { dependencies, close } = createDependencies({}, (io) => {
+                io.requestChoice(
+                    {
+                        requestId: "request-1",
+                        connectionId: "connection-1",
+                    },
+                    "choice-1",
+                    "yesNo",
+                    "Apply the change?",
+                    ["Yes", "No"],
+                    "test-agent",
+                );
+            });
+            const result = await handleDirect(
+                input,
+                { forceHandled },
+                dependencies,
+            );
+            expect(result.handled).toBe(true);
+            expect(result.responseContent).toContain(
+                "USER interaction required",
+            );
+            expect(result.responseContent).toContain("Apply the change?");
+            expect(result.responseContent).toContain("choice-1");
+            expect(result.responseContent).not.toContain(
+                "TypeAgent completed the command",
+            );
+            expect(close).toHaveBeenCalledTimes(1);
+        },
+    );
+
     it("returns a warning without duplicating it as persistent progress", async () => {
         const { dependencies, close, emitProgress } = createDependencies(
             {},

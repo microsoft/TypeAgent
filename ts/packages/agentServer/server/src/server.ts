@@ -43,13 +43,8 @@ import { DefaultAzureCredential } from "@azure/identity";
 import { otel } from "@typeagent/telemetry";
 import { MacroManager } from "@typeagent/copilot-macros";
 import { MemoryServiceHost } from "@typeagent/memory-mcp-server";
-import {
-    FileMemoryService,
-    createKnowProCorpusIndex,
-} from "@typeagent/memory-service";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
-import { createDocMemorySettings } from "@typeagent/conversation-memory";
-import { openai } from "@typeagent/aiclient";
+import { createDurableMemoryService } from "./durableMemoryService.js";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -337,23 +332,8 @@ async function main() {
         debugStartup("developer mode enabled at startup (--dev)");
     }
     debugStartup("starting instance memory service");
-    const memoryService = new FileMemoryService(
+    const memoryService = createDurableMemoryService(
         path.join(instanceDir, "memory"),
-        {
-            indexFactory: (corpusId, indexDirectory) =>
-                createKnowProCorpusIndex(corpusId, indexDirectory, () =>
-                    createDocMemorySettings(
-                        64,
-                        undefined,
-                        openai.createChatModel(
-                            openai.GPT_5_6_LUNA,
-                            undefined,
-                            undefined,
-                            ["website-knowledge", "durable-index"],
-                        ),
-                    ),
-                ),
-        },
     );
     const memoryServiceHost = await MemoryServiceHost.start(memoryService, {
         onError: (error) =>

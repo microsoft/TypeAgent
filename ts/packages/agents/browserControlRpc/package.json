@@ -32,7 +32,8 @@
   },
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
-    "dompurify": "^3.4.13"
+    "dompurify": "^3.4.13",
+    "jsdom": "^28.1.0"
   },
   "devDependencies": {
     "prettier": "^3.5.3",
