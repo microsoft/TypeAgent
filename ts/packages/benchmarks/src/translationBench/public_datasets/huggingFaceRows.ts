@@ -3,11 +3,13 @@
 
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { open, readFile, rename, rm } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { setTimeout as delay } from "node:timers/promises";
+
+import { ensureParentDir, readJsonlLines } from "../../core/fileJson.js";
 
 export interface HuggingFaceRowsSource {
     dataset: string;
@@ -185,7 +187,7 @@ export async function downloadHuggingFaceRows<Row>(
         options.signal,
     );
 
-    await mkdir(dirname(options.outputPath), { recursive: true });
+    await ensureParentDir(options.outputPath);
     const tempPath = `${options.outputPath}.${process.pid}.${Date.now()}.tmp`;
     const output = await open(tempPath, "wx");
     let offset = 0;
@@ -282,7 +284,7 @@ async function downloadFile(
     }
 
     // Keep partial bytes outside the destination until the stream completes.
-    await mkdir(dirname(outputPath), { recursive: true });
+    await ensureParentDir(outputPath);
     const temporaryPath = `${outputPath}.${process.pid}.${randomUUID()}.tmp`;
     try {
         await pipeline(
@@ -309,14 +311,5 @@ export async function downloadDroidCall(outputDir: string): Promise<string[]> {
 // Parse JSONL with source coordinates so corrupt upstream rows are actionable.
 export async function readDroidCallJsonl<T>(path: string): Promise<T[]> {
     const text = await readFile(path, "utf8");
-    const rows: T[] = [];
-    for (const [index, line] of text.split("\n").entries()) {
-        if (line.trim().length === 0) continue;
-        try {
-            rows.push(JSON.parse(line) as T);
-        } catch (error) {
-            throw new Error(`${basename(path)}:${index + 1}: ${String(error)}`);
-        }
-    }
-    return rows;
+    return readJsonlLines<T>(text, basename(path));
 }
