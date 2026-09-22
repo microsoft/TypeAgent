@@ -3,6 +3,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import {
+    appendFile,
     cp,
     mkdir,
     readFile,
@@ -26,6 +27,15 @@ import type {
     JobState,
     MemoryCorpus,
     MemoryCorpusStatus,
+    MemoryEvent,
+    MemoryEventAppendRequest,
+    MemoryEventAppendResult,
+    MemoryEventFilter,
+    MemoryEventForgetRequest,
+    MemoryEventForgetResult,
+    MemoryEventListRequest,
+    MemoryEventSearchRequest,
+    MemoryEventSearchResult,
     MemoryAnswerRequest,
     MemoryAnswerResult,
     MemoryEvidence,
@@ -49,9 +59,26 @@ import type {
 } from "./types.js";
 
 const manifestFileName = "manifest.json";
+const eventsFileName = "events.jsonl";
 const jobsDirectoryName = "jobs";
 const indexDirectoryName = "index";
 const pipelineVersion = "1";
+const eventSourceKinds = new Set([
+    "conversation",
+    "document",
+    "web-activity",
+    "procedure",
+    "system",
+    "other",
+]);
+const eventSenders = new Set([
+    "user",
+    "assistant",
+    "system",
+    "tool",
+    "agent",
+    "other",
+]);
 
 interface StoredRevision extends SourceRevision {
     content: string;
@@ -76,6 +103,8 @@ interface CorpusManifest {
 interface CorpusRuntime {
     manifest: CorpusManifest;
     index: CorpusIndex;
+    events: MemoryEvent[];
+    eventIdempotency: Map<string, MemoryEvent>;
     writeTail: Promise<void>;
 }
 
@@ -143,6 +172,51 @@ function validateIdentifier(kind: string, value: string): void {
     }
 }
 
+function validateTimestamp(kind: string, value: string): void {
+    if (!Number.isFinite(Date.parse(value))) {
+        throw new Error(`Invalid ${kind} '${value}'`);
+    }
+}
+
+function eventIdempotencyKey(event: {
+    producer: { producerId: string };
+    idempotencyKey: string;
+}): string {
+    return `${event.producer.producerId}\n${event.idempotencyKey}`;
+}
+
+function matchesEventFilter(
+    event: MemoryEvent,
+    filter: MemoryEventFilter,
+): boolean {
+    return (
+        (filter.sourceKinds === undefined ||
+            filter.sourceKinds.includes(event.sourceKind)) &&
+        (filter.producerIds === undefined ||
+            filter.producerIds.includes(event.producer.producerId)) &&
+        (filter.eventTypes === undefined ||
+            filter.eventTypes.includes(event.eventType)) &&
+        (filter.conversationIds === undefined ||
+            (event.conversationId !== undefined &&
+                filter.conversationIds.includes(event.conversationId))) &&
+        (filter.runIds === undefined ||
+            (event.runId !== undefined &&
+                filter.runIds.includes(event.runId))) &&
+        (filter.linkedSourceIds === undefined ||
+            filter.linkedSourceIds.some((sourceId) =>
+                event.linkedSourceIds?.includes(sourceId),
+            )) &&
+        (filter.observedFrom === undefined ||
+            Date.parse(event.observedAt) >= Date.parse(filter.observedFrom)) &&
+        (filter.observedTo === undefined ||
+            Date.parse(event.observedAt) <= Date.parse(filter.observedTo)) &&
+        (filter.eventFrom === undefined ||
+            Date.parse(event.eventTime) >= Date.parse(filter.eventFrom)) &&
+        (filter.eventTo === undefined ||
+            Date.parse(event.eventTime) <= Date.parse(filter.eventTo))
+    );
+}
+
 function pageOffset(token: string | undefined): number {
     if (token === undefined) {
         return 0;
@@ -183,6 +257,33 @@ async function readJson<T>(filePath: string): Promise<T | undefined> {
         }
         throw error;
     }
+}
+
+async function readEvents(filePath: string): Promise<MemoryEvent[]> {
+    let content: string;
+    try {
+        content = await readFile(filePath, "utf8");
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return [];
+        }
+        throw error;
+    }
+    if (content.trim().length === 0) {
+        return [];
+    }
+    return content
+        .split(/\r?\n/)
+        .filter((line) => line.length > 0)
+        .map((line, index) => {
+            try {
+                return JSON.parse(line) as MemoryEvent;
+            } catch (error) {
+                throw new Error(
+                    `Invalid event record at line ${index + 1}: ${String(error)}`,
+                );
+            }
+        });
 }
 
 async function writeJsonAtomic(
@@ -311,6 +412,8 @@ export class FileMemoryService implements MemoryService {
             this.corpora.set(corpusId, {
                 manifest,
                 index,
+                events: [],
+                eventIdempotency: new Map(),
                 writeTail: Promise.resolve(),
             });
             return structuredClone(corpus);
@@ -432,8 +535,11 @@ export class FileMemoryService implements MemoryService {
                 this.manifestPath(corpusId),
                 candidateManifest,
             );
+            await writeFile(this.eventsPath(corpusId), "");
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
+            runtime.events = [];
+            runtime.eventIdempotency.clear();
             await this.removeInactiveIndexGenerations(
                 corpusId,
                 indexGeneration,
@@ -843,6 +949,265 @@ export class FileMemoryService implements MemoryService {
         });
         this.controllers.get(jobId)?.abort(new Error("Ingestion cancelled"));
         return structuredClone(job);
+    }
+
+    public async appendEvent(
+        request: MemoryEventAppendRequest,
+    ): Promise<MemoryEventAppendResult> {
+        await this.initialize();
+        this.validateEventAppendRequest(request);
+        let result: MemoryEventAppendResult | undefined;
+        await this.enqueueWrite(request.corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(request.corpusId);
+            const key = eventIdempotencyKey(request);
+            const existing = runtime.eventIdempotency.get(key);
+            if (existing !== undefined) {
+                result = {
+                    event: structuredClone(existing),
+                    replayed: true,
+                };
+                return;
+            }
+            const linkedSourceIds = [...new Set(request.linkedSourceIds ?? [])];
+            for (const sourceId of linkedSourceIds) {
+                if (
+                    !runtime.manifest.sources.some(
+                        (source) => source.sourceId === sourceId,
+                    )
+                ) {
+                    throw new Error(`Unknown linked source '${sourceId}'`);
+                }
+            }
+            const timestamp = now();
+            const observedAt = request.observedAt ?? timestamp;
+            const event: MemoryEvent = {
+                eventId: randomUUID(),
+                corpusId: request.corpusId,
+                idempotencyKey: request.idempotencyKey,
+                producer: structuredClone(request.producer),
+                eventType: request.eventType,
+                sourceKind: request.sourceKind,
+                observedAt,
+                eventTime: request.eventTime ?? observedAt,
+                createdAt: timestamp,
+                ...(request.content === undefined
+                    ? {}
+                    : { content: request.content }),
+                ...(request.conversationId === undefined
+                    ? {}
+                    : { conversationId: request.conversationId }),
+                ...(request.runId === undefined
+                    ? {}
+                    : { runId: request.runId }),
+                ...(request.turnId === undefined
+                    ? {}
+                    : { turnId: request.turnId }),
+                ...(request.sender === undefined
+                    ? {}
+                    : { sender: request.sender }),
+                ...(request.actionName === undefined
+                    ? {}
+                    : { actionName: request.actionName }),
+                ...(linkedSourceIds.length === 0 ? {} : { linkedSourceIds }),
+                ...(request.metadata === undefined
+                    ? {}
+                    : { metadata: structuredClone(request.metadata) }),
+            };
+            await mkdir(path.dirname(this.eventsPath(request.corpusId)), {
+                recursive: true,
+            });
+            await appendFile(
+                this.eventsPath(request.corpusId),
+                `${JSON.stringify(event)}\n`,
+                "utf8",
+            );
+            runtime.events.push(event);
+            runtime.eventIdempotency.set(key, event);
+            result = { event: structuredClone(event), replayed: false };
+        });
+        return result!;
+    }
+
+    public async getEvent(
+        corpusId: string,
+        eventId: string,
+    ): Promise<MemoryEvent | undefined> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        validateIdentifier("event ID", eventId);
+        const runtime = await this.getCorpusRuntime(corpusId);
+        const event = runtime.events.find((item) => item.eventId === eventId);
+        return event === undefined ? undefined : structuredClone(event);
+    }
+
+    public async listEvents(
+        request: MemoryEventListRequest,
+    ): Promise<MemoryPage<MemoryEvent>> {
+        await this.initialize();
+        this.validateEventFilterRequest(request);
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        const events = [...runtime.events]
+            .filter((event) => matchesEventFilter(event, request))
+            .sort(
+                (left, right) =>
+                    Date.parse(right.observedAt) -
+                        Date.parse(left.observedAt) ||
+                    right.eventId.localeCompare(left.eventId),
+            )
+            .map((event) => structuredClone(event));
+        return pageItems(events, request.pageSize, request.continuationToken);
+    }
+
+    public async searchEvents(
+        request: MemoryEventSearchRequest,
+    ): Promise<MemoryEventSearchResult> {
+        await this.initialize();
+        this.validateEventFilterRequest(request);
+        const query = request.query.trim().toLocaleLowerCase();
+        if (query.length === 0) {
+            throw new Error("Event search query must not be empty");
+        }
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        const limit = Math.max(1, Math.min(request.limit ?? 20, 100));
+        const matches = runtime.events
+            .filter((event) => matchesEventFilter(event, request))
+            .map((event) => {
+                const searchable = [
+                    event.content,
+                    event.eventType,
+                    event.actionName,
+                    event.conversationId,
+                    event.runId,
+                    event.metadata === undefined
+                        ? undefined
+                        : JSON.stringify(event.metadata),
+                ]
+                    .filter((value): value is string => value !== undefined)
+                    .join("\n");
+                const normalized = searchable.toLocaleLowerCase();
+                const offset = normalized.indexOf(query);
+                if (offset < 0) {
+                    return undefined;
+                }
+                const snippetStart = Math.max(0, offset - 80);
+                const snippet = searchable.slice(
+                    snippetStart,
+                    Math.min(searchable.length, offset + query.length + 160),
+                );
+                return {
+                    event,
+                    snippet,
+                    score: 1 + 1 / (1 + offset),
+                };
+            })
+            .filter(
+                (
+                    match,
+                ): match is {
+                    event: MemoryEvent;
+                    snippet: string;
+                    score: number;
+                } => match !== undefined,
+            )
+            .sort(
+                (left, right) =>
+                    right.score - left.score ||
+                    Date.parse(right.event.observedAt) -
+                        Date.parse(left.event.observedAt) ||
+                    right.event.eventId.localeCompare(left.event.eventId),
+            )
+            .slice(0, limit)
+            .map((match) => ({
+                ...match,
+                event: structuredClone(match.event),
+            }));
+        return { query: request.query, matches };
+    }
+
+    public async forgetEvents(
+        request: MemoryEventForgetRequest,
+    ): Promise<MemoryEventForgetResult> {
+        await this.initialize();
+        this.validateEventFilterRequest(request);
+        const eventIds = request.eventIds ?? [];
+        for (const eventId of eventIds) {
+            validateIdentifier("event ID", eventId);
+        }
+        if (
+            eventIds.length === 0 &&
+            request.sourceKinds === undefined &&
+            request.producerIds === undefined &&
+            request.eventTypes === undefined &&
+            request.conversationIds === undefined &&
+            request.runIds === undefined &&
+            request.linkedSourceIds === undefined &&
+            request.observedFrom === undefined &&
+            request.observedTo === undefined &&
+            request.eventFrom === undefined &&
+            request.eventTo === undefined
+        ) {
+            throw new Error("At least one event forget selector is required");
+        }
+        let result: MemoryEventForgetResult | undefined;
+        await this.enqueueWrite(request.corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(request.corpusId);
+            const deleted = runtime.events.filter(
+                (event) =>
+                    (eventIds.length === 0 ||
+                        eventIds.includes(event.eventId)) &&
+                    matchesEventFilter(event, request),
+            );
+            const deletedIds = new Set(deleted.map((event) => event.eventId));
+            const remaining = runtime.events.filter(
+                (event) => !deletedIds.has(event.eventId),
+            );
+            const linkedSourceIds = [
+                ...new Set(
+                    deleted.flatMap((event) => event.linkedSourceIds ?? []),
+                ),
+            ];
+            const retainedLinkIds = new Set(
+                remaining.flatMap((event) => event.linkedSourceIds ?? []),
+            );
+            const deletableSourceIds =
+                request.forgetLinkedSources === true
+                    ? linkedSourceIds.filter(
+                          (sourceId) =>
+                              !retainedLinkIds.has(sourceId) &&
+                              runtime.manifest.sources.some(
+                                  (source) => source.sourceId === sourceId,
+                              ),
+                      )
+                    : [];
+            if (deletableSourceIds.length > 0) {
+                const sourceIds = new Set(deletableSourceIds);
+                const candidateManifest = structuredClone(runtime.manifest);
+                candidateManifest.sources = candidateManifest.sources.filter(
+                    (source) => !sourceIds.has(source.sourceId),
+                );
+                await this.rebuildAndActivate(
+                    request.corpusId,
+                    runtime,
+                    candidateManifest,
+                    new AbortController().signal,
+                );
+            }
+            await this.writeEvents(request.corpusId, remaining);
+            runtime.events = remaining;
+            runtime.eventIdempotency = new Map(
+                remaining.map((event) => [eventIdempotencyKey(event), event]),
+            );
+            result = {
+                corpusId: request.corpusId,
+                deletedEventCount: deleted.length,
+                deletedSourceCount: deletableSourceIds.length,
+                retainedLinkedSourceIds: linkedSourceIds.filter(
+                    (sourceId) => !deletableSourceIds.includes(sourceId),
+                ),
+                indexVersion: this.indexVersion(runtime.manifest),
+            };
+        });
+        return result!;
     }
 
     public async search(
@@ -1411,9 +1776,23 @@ export class FileMemoryService implements MemoryService {
         if (manifest === undefined) {
             throw new Error(`Unknown corpus '${corpusId}'`);
         }
+        const events = await readEvents(this.eventsPath(corpusId));
+        const eventIdempotency = new Map<string, MemoryEvent>();
+        for (const event of events) {
+            this.validateStoredEvent(event, corpusId);
+            const key = eventIdempotencyKey(event);
+            if (eventIdempotency.has(key)) {
+                throw new Error(
+                    `Duplicate persisted event idempotency key for producer '${event.producer.producerId}'`,
+                );
+            }
+            eventIdempotency.set(key, event);
+        }
         const runtime: CorpusRuntime = {
             manifest,
             index: this.createIndex(corpusId, manifest.indexGeneration),
+            events,
+            eventIdempotency,
             writeTail: Promise.resolve(),
         };
         this.corpora.set(corpusId, runtime);
@@ -1468,6 +1847,207 @@ export class FileMemoryService implements MemoryService {
         };
     }
 
+    private validateEventAppendRequest(
+        request: MemoryEventAppendRequest,
+    ): void {
+        validateIdentifier("corpus ID", request.corpusId);
+        validateIdentifier("producer ID", request.producer.producerId);
+        validateIdentifier("producer type", request.producer.producerType);
+        validateIdentifier("event type", request.eventType);
+        if (!eventSourceKinds.has(request.sourceKind)) {
+            throw new Error(
+                `Invalid event source kind '${request.sourceKind}'`,
+            );
+        }
+        if (request.sender !== undefined && !eventSenders.has(request.sender)) {
+            throw new Error(`Invalid event sender '${request.sender}'`);
+        }
+        if (
+            request.idempotencyKey.length === 0 ||
+            request.idempotencyKey.length > 500
+        ) {
+            throw new Error(
+                "Event idempotency key must contain 1 to 500 characters",
+            );
+        }
+        if (
+            request.content !== undefined &&
+            request.content.length > 1_000_000
+        ) {
+            throw new Error(
+                "Event content exceeds the 1000000 character limit",
+            );
+        }
+        if (
+            request.actionName !== undefined &&
+            (request.actionName.length === 0 || request.actionName.length > 500)
+        ) {
+            throw new Error(
+                "Event action name must contain 1 to 500 characters",
+            );
+        }
+        if (
+            request.metadata !== undefined &&
+            JSON.stringify(request.metadata).length > 262_144
+        ) {
+            throw new Error(
+                "Event metadata exceeds the 262144 character limit",
+            );
+        }
+        for (const [kind, value] of [
+            ["conversation ID", request.conversationId],
+            ["run ID", request.runId],
+            ["turn ID", request.turnId],
+        ] as const) {
+            if (value !== undefined) {
+                validateIdentifier(kind, value);
+            }
+        }
+        for (const sourceId of request.linkedSourceIds ?? []) {
+            validateIdentifier("linked source ID", sourceId);
+        }
+        if ((request.linkedSourceIds?.length ?? 0) > 1_000) {
+            throw new Error("An event may link to at most 1000 sources");
+        }
+        if (request.observedAt !== undefined) {
+            validateTimestamp("observed timestamp", request.observedAt);
+        }
+        if (request.eventTime !== undefined) {
+            validateTimestamp("event timestamp", request.eventTime);
+        }
+    }
+
+    private validateEventFilterRequest(
+        request: MemoryEventFilter & { corpusId: string },
+    ): void {
+        validateIdentifier("corpus ID", request.corpusId);
+        for (const producerId of request.producerIds ?? []) {
+            validateIdentifier("producer ID", producerId);
+        }
+        for (const eventType of request.eventTypes ?? []) {
+            validateIdentifier("event type", eventType);
+        }
+        for (const conversationId of request.conversationIds ?? []) {
+            validateIdentifier("conversation ID", conversationId);
+        }
+        for (const runId of request.runIds ?? []) {
+            validateIdentifier("run ID", runId);
+        }
+        for (const sourceId of request.linkedSourceIds ?? []) {
+            validateIdentifier("linked source ID", sourceId);
+        }
+        for (const [kind, value] of [
+            ["observed-from timestamp", request.observedFrom],
+            ["observed-to timestamp", request.observedTo],
+            ["event-from timestamp", request.eventFrom],
+            ["event-to timestamp", request.eventTo],
+        ] as const) {
+            if (value !== undefined) {
+                validateTimestamp(kind, value);
+            }
+        }
+        if (
+            request.observedFrom !== undefined &&
+            request.observedTo !== undefined &&
+            Date.parse(request.observedFrom) > Date.parse(request.observedTo)
+        ) {
+            throw new Error("Observed time range is inverted");
+        }
+        if (
+            request.eventFrom !== undefined &&
+            request.eventTo !== undefined &&
+            Date.parse(request.eventFrom) > Date.parse(request.eventTo)
+        ) {
+            throw new Error("Event time range is inverted");
+        }
+    }
+
+    private validateStoredEvent(event: MemoryEvent, corpusId: string): void {
+        if (
+            typeof event !== "object" ||
+            event === null ||
+            event.corpusId !== corpusId ||
+            typeof event.eventId !== "string" ||
+            typeof event.idempotencyKey !== "string" ||
+            typeof event.eventType !== "string" ||
+            typeof event.observedAt !== "string" ||
+            typeof event.eventTime !== "string" ||
+            typeof event.createdAt !== "string" ||
+            typeof event.producer !== "object" ||
+            event.producer === null ||
+            typeof event.producer.producerId !== "string" ||
+            typeof event.producer.producerType !== "string"
+        ) {
+            throw new Error(`Invalid persisted event in corpus '${corpusId}'`);
+        }
+        validateIdentifier("event ID", event.eventId);
+        this.validateEventAppendRequest({
+            corpusId: event.corpusId,
+            idempotencyKey: event.idempotencyKey,
+            producer: event.producer,
+            eventType: event.eventType,
+            sourceKind: event.sourceKind,
+            observedAt: event.observedAt,
+            eventTime: event.eventTime,
+            ...(event.content === undefined ? {} : { content: event.content }),
+            ...(event.conversationId === undefined
+                ? {}
+                : { conversationId: event.conversationId }),
+            ...(event.runId === undefined ? {} : { runId: event.runId }),
+            ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
+            ...(event.sender === undefined ? {} : { sender: event.sender }),
+            ...(event.actionName === undefined
+                ? {}
+                : { actionName: event.actionName }),
+            ...(event.linkedSourceIds === undefined
+                ? {}
+                : { linkedSourceIds: event.linkedSourceIds }),
+            ...(event.metadata === undefined
+                ? {}
+                : { metadata: event.metadata }),
+        });
+        validateTimestamp("created timestamp", event.createdAt);
+    }
+
+    private async writeEvents(
+        corpusId: string,
+        events: MemoryEvent[],
+    ): Promise<void> {
+        await mkdir(path.dirname(this.eventsPath(corpusId)), {
+            recursive: true,
+        });
+        const value =
+            events.length === 0
+                ? ""
+                : `${events.map((event) => JSON.stringify(event)).join("\n")}\n`;
+        const filePath = this.eventsPath(corpusId);
+        const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
+        const backupPath = `${filePath}.${randomUUID()}.bak`;
+        await writeFile(temporaryPath, value, "utf8");
+        let hasBackup = false;
+        try {
+            await rename(filePath, backupPath);
+            hasBackup = true;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                await rm(temporaryPath, { force: true });
+                throw error;
+            }
+        }
+        try {
+            await rename(temporaryPath, filePath);
+            if (hasBackup) {
+                await rm(backupPath, { force: true });
+            }
+        } catch (error) {
+            await rm(temporaryPath, { force: true });
+            if (hasBackup) {
+                await rename(backupPath, filePath);
+            }
+            throw error;
+        }
+    }
+
     private async saveJob(job: IngestionJobStatus): Promise<void> {
         this.jobs.set(job.jobId, job);
         await writeJsonAtomic(this.jobPath(job.jobId), job);
@@ -1493,6 +2073,10 @@ export class FileMemoryService implements MemoryService {
 
     private manifestPath(corpusId: string): string {
         return path.join(this.rootDirectory, corpusId, manifestFileName);
+    }
+
+    private eventsPath(corpusId: string): string {
+        return path.join(this.rootDirectory, corpusId, eventsFileName);
     }
 
     private jobPath(jobId: string): string {
