@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { TypeAgentJsonValidator } from "@typeagent/typechat-utils";
 import { z } from "zod/v4";
 import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
+import { searchDurableConversationMemory } from "../context/conversationDurableMemory.js";
 import {
     CommandHandlerContext,
     getCommandResult,
@@ -690,6 +691,15 @@ function getClaudeOptions(
         inputSchema: searchMemorySchema,
         handler: async (args) => {
             debugMcp(`search_memory question=${args.question}`);
+            const durableResult = await searchDurableConversationMemory(
+                systemContext,
+                args.question,
+            );
+            if (durableResult !== undefined) {
+                return {
+                    content: [{ type: "text", text: durableResult }],
+                };
+            }
             const memory = systemContext.conversationMemory;
             if (memory === undefined) {
                 return {
@@ -726,18 +736,23 @@ function getClaudeOptions(
 
     const rememberSchema = {
         text: z.string(),
+        kind: z.enum(["decision", "task-outcome", "context"]).optional(),
     };
     const rememberTool: SdkMcpToolDefinition<typeof rememberSchema> = {
         name: "remember",
         description: [
             "Save a new memory to the user's conversation memory so it can be recalled later.",
             "Use this to durably record facts, decisions, or context discovered during reasoning.",
+            "Set kind for an explicit decision or completed task outcome.",
         ].join("\n"),
         inputSchema: rememberSchema,
         handler: async (args) => {
             debugMcp(`remember text=${args.text}`);
             const memory = systemContext.conversationMemory;
-            if (memory === undefined) {
+            if (
+                memory === undefined &&
+                systemContext.conversationDurableMemory === undefined
+            ) {
                 return {
                     content: [
                         {
@@ -747,12 +762,31 @@ function getClaudeOptions(
                     ],
                 };
             }
-            memory.queueAddMessage(
+            memory?.queueAddMessage(
                 new ConversationMessage(
                     args.text,
                     new ConversationMessageMeta("reasoning", ["user"]),
                 ),
             );
+            const turnId = systemContext.currentRequestId?.requestId;
+            if (turnId !== undefined) {
+                if (args.kind === "task-outcome") {
+                    systemContext.conversationDurableMemory?.recordTaskOutcome(
+                        args.text,
+                        turnId,
+                    );
+                } else if (args.kind === "decision") {
+                    systemContext.conversationDurableMemory?.recordDecision(
+                        args.text,
+                        turnId,
+                    );
+                } else {
+                    systemContext.conversationDurableMemory?.recordAssistantEvidence(
+                        args.text,
+                        turnId,
+                    );
+                }
+            }
             return {
                 content: [{ type: "text", text: "Remembered." }],
             };

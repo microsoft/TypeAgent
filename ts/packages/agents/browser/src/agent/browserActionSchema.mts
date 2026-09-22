@@ -179,6 +179,13 @@ export type SearchWebMemories = {
         originalUserRequest?: string;
         query: string;
         searchScope?: "current_page" | "all_indexed";
+        // Restrict results by when and how the page was encountered
+        dateFrom?: string;
+        dateTo?: string;
+        domain?: string;
+        eventType?: "visited" | "bookmarked" | "captured" | "imported";
+        source?: string;
+        pageType?: string;
 
         // Search configuration
         limit?: number;

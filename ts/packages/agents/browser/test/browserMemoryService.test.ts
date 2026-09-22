@@ -73,6 +73,36 @@ function createClient(): jest.Mocked<MemoryServiceClient> {
         })),
         cancelJob: jest.fn(),
         listJobs: jest.fn(async () => ({ items: [], total: 0 })),
+        appendEvent: jest.fn(async (request) => ({
+            event: {
+                eventId: "event-1",
+                corpusId: request.corpusId,
+                idempotencyKey: request.idempotencyKey,
+                producer: request.producer,
+                eventType: request.eventType,
+                sourceKind: request.sourceKind,
+                observedAt: request.observedAt ?? "2026-01-01T00:00:00.000Z",
+                eventTime: request.eventTime ?? "2026-01-01T00:00:00.000Z",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                content: request.content,
+                linkedSourceIds: request.linkedSourceIds,
+                metadata: request.metadata,
+            },
+            replayed: false,
+        })),
+        getEvent: jest.fn(),
+        listEvents: jest.fn(async () => ({ items: [], total: 0 })),
+        searchEvents: jest.fn(async (request) => ({
+            query: request.query,
+            matches: [],
+        })),
+        forgetEvents: jest.fn(async (request) => ({
+            corpusId: request.corpusId,
+            deletedEventCount: request.eventIds?.length ?? 0,
+            deletedSourceCount: 0,
+            retainedLinkedSourceIds: [],
+            indexVersion: "test",
+        })),
         search: jest.fn(async (request) => ({
             query: request.query,
             matches: [],
@@ -187,6 +217,91 @@ describe("BrowserMemoryService", () => {
             message: "Creating embeddings",
         });
         expect(onProgress).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+        ["history", "visited"],
+        ["bookmark", "bookmarked"],
+        ["current-page", "captured"],
+        ["file_import", "imported"],
+    ] as const)(
+        "records %s ingestion as a linked %s event",
+        async (source, eventType) => {
+            const client = createClient();
+
+            await new BrowserMemoryService(client).ingest(
+                {
+                    url: `https://example.test/${source}`,
+                    title: source,
+                    markdown: "Same durable page content",
+                    source,
+                    domain: "example.test",
+                    pageType: "documentation",
+                    capturedAt: "2026-04-05T06:07:08.000Z",
+                },
+                "basic",
+            );
+
+            expect(client.appendEvent).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    eventType,
+                    sourceKind: "web-activity",
+                    eventTime: "2026-04-05T06:07:08.000Z",
+                    linkedSourceIds: ["source-1"],
+                    metadata: expect.objectContaining({
+                        domain: "example.test",
+                        pageType: "documentation",
+                        source,
+                    }),
+                }),
+            );
+        },
+    );
+
+    test("keeps repeated visits as events without changing source identity", async () => {
+        const client = createClient();
+        const service = new BrowserMemoryService(client);
+        const document = {
+            url: "https://example.test/revisited",
+            title: "Revisited",
+            markdown: "Unchanged content",
+            source: "history",
+        };
+
+        await service.ingest(
+            { ...document, capturedAt: "2026-04-01T00:00:00.000Z" },
+            "basic",
+        );
+        await service.ingest(
+            {
+                ...document,
+                url: `${document.url}#second-section`,
+                capturedAt: "2026-04-02T00:00:00.000Z",
+            },
+            "basic",
+        );
+
+        expect(client.ingestDocument).toHaveBeenCalledTimes(2);
+        expect(
+            client.ingestDocument.mock.calls.map(
+                ([request]) => request.source.sourceId,
+            ),
+        ).toEqual([
+            expect.stringMatching(/^web:/),
+            expect.stringMatching(/^web:/),
+        ]);
+        expect(client.ingestDocument.mock.calls[0][0].source.sourceId).toBe(
+            client.ingestDocument.mock.calls[1][0].source.sourceId,
+        );
+        expect(client.appendEvent).toHaveBeenCalledTimes(2);
+        expect(
+            client.appendEvent.mock.calls.map(
+                ([request]) => request.idempotencyKey,
+            ),
+        ).toEqual([
+            expect.stringContaining("2026-04-01"),
+            expect.stringContaining("2026-04-02"),
+        ]);
     });
 
     test("reports terminal progress before returning ingestion knowledge", async () => {
@@ -366,6 +481,31 @@ describe("BrowserMemoryService", () => {
                 canonicalUri: "https://example.test/other",
             },
         ]);
+        client.listEvents.mockResolvedValue({
+            items: [
+                {
+                    eventId: "matching-event",
+                    corpusId: "browser-corpus",
+                    idempotencyKey: "matching",
+                    producer: {
+                        producerId: "typeagent-browser",
+                        producerType: "browser",
+                    },
+                    eventType: "bookmarked",
+                    sourceKind: "web-activity",
+                    observedAt: "2026-02-01T00:00:00.000Z",
+                    eventTime: "2026-02-01T00:00:00.000Z",
+                    createdAt: "2026-02-01T00:00:00.000Z",
+                    linkedSourceIds: ["matching"],
+                    metadata: {
+                        domain: "example.test",
+                        pageType: "documentation",
+                        source: "bookmark",
+                    },
+                },
+            ],
+            total: 1,
+        });
 
         await new BrowserMemoryService(client).search({
             query: "design",
@@ -373,6 +513,7 @@ describe("BrowserMemoryService", () => {
             domain: "example.test",
             pageType: "documentation",
             source: "bookmark",
+            eventType: "bookmarked",
             dateFrom: "2026-01-01T00:00:00.000Z",
             dateTo: "2026-03-01T00:00:00.000Z",
         });
@@ -380,5 +521,128 @@ describe("BrowserMemoryService", () => {
         expect(client.search).toHaveBeenCalledWith(
             expect.objectContaining({ sourceIds: ["matching"] }),
         );
+        expect(client.listEvents).toHaveBeenCalledWith(
+            expect.objectContaining({ eventTypes: ["bookmarked"] }),
+        );
+    });
+
+    test("returns latest encounter provenance with page content matches", async () => {
+        const client = createClient();
+        const source = await client.getSource("browser-corpus", "source-1");
+        client.listSources.mockResolvedValue([source!]);
+        client.search.mockResolvedValue({
+            query: "captured",
+            matches: [
+                {
+                    sourceId: "source-1",
+                    revisionId: "revision-1",
+                    score: 1,
+                    snippet: "Captured page",
+                },
+            ],
+            warnings: [],
+            capabilitiesUsed: ["exact-search"],
+            indexVersion: "test",
+        });
+        client.listEvents.mockResolvedValue({
+            items: [
+                {
+                    eventId: "event-encounter",
+                    corpusId: "browser-corpus",
+                    idempotencyKey: "encounter",
+                    producer: {
+                        producerId: "typeagent-browser",
+                        producerType: "browser",
+                    },
+                    eventType: "bookmarked",
+                    sourceKind: "web-activity",
+                    observedAt: "2026-04-04T00:00:00.000Z",
+                    eventTime: "2026-04-03T00:00:00.000Z",
+                    createdAt: "2026-04-04T00:00:00.000Z",
+                    linkedSourceIds: ["source-1"],
+                    metadata: { source: "bookmark" },
+                },
+            ],
+            total: 1,
+        });
+
+        const matches = await new BrowserMemoryService(client).search({
+            query: "captured",
+        });
+
+        expect(matches[0].evidence.snippet).toBe("Captured page");
+        expect(matches[0].latestActivity).toEqual(
+            expect.objectContaining({
+                eventType: "bookmarked",
+                eventTime: "2026-04-03T00:00:00.000Z",
+            }),
+        );
+    });
+
+    test("filters the activity timeline and forgets events without sources", async () => {
+        const client = createClient();
+        client.listEvents.mockResolvedValue({
+            items: [
+                {
+                    eventId: "matching-event",
+                    corpusId: "browser-corpus",
+                    idempotencyKey: "one",
+                    producer: {
+                        producerId: "typeagent-browser",
+                        producerType: "browser",
+                    },
+                    eventType: "visited",
+                    sourceKind: "web-activity",
+                    observedAt: "2026-04-02T00:00:00.000Z",
+                    eventTime: "2026-04-01T00:00:00.000Z",
+                    createdAt: "2026-04-02T00:00:00.000Z",
+                    linkedSourceIds: ["source-1"],
+                    metadata: {
+                        domain: "example.test",
+                        source: "history",
+                        pageType: "documentation",
+                    },
+                },
+                {
+                    eventId: "other-event",
+                    corpusId: "browser-corpus",
+                    idempotencyKey: "two",
+                    producer: {
+                        producerId: "typeagent-browser",
+                        producerType: "browser",
+                    },
+                    eventType: "captured",
+                    sourceKind: "web-activity",
+                    observedAt: "2026-04-03T00:00:00.000Z",
+                    eventTime: "2026-04-03T00:00:00.000Z",
+                    createdAt: "2026-04-03T00:00:00.000Z",
+                    metadata: { domain: "other.test" },
+                },
+            ],
+            total: 2,
+        });
+        const service = new BrowserMemoryService(client);
+
+        await expect(
+            service.listActivity({
+                domains: ["example.test"],
+                sources: ["history"],
+                pageTypes: ["documentation"],
+            }),
+        ).resolves.toEqual({
+            items: [expect.objectContaining({ eventId: "matching-event" })],
+            total: 1,
+        });
+        await service.forgetActivity({
+            domains: ["example.test"],
+            dateFrom: "2026-04-01T00:00:00.000Z",
+            dateTo: "2026-04-02T23:59:59.999Z",
+        });
+
+        expect(client.forgetEvents).toHaveBeenCalledWith({
+            corpusId: "browser-corpus",
+            eventIds: ["matching-event"],
+            forgetLinkedSources: false,
+        });
     });
 });

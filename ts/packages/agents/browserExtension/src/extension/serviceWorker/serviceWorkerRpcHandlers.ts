@@ -78,6 +78,9 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryReindexSource: (params) => forward("memoryReindexSource", params),
         memoryListJobs: (params) => forward("memoryListJobs", params),
         memoryCancelJob: (params) => forward("memoryCancelJob", params),
+        memoryListActivity: (params) => forward("memoryListActivity", params),
+        memoryForgetActivity: (params) =>
+            forward("memoryForgetActivity", params),
 
         // =============================================================
         // Local operations (handled directly in service worker)
@@ -457,6 +460,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     {
                         mode: params.mode,
                         extractedKnowledge: params.extractedKnowledge,
+                        activityType: "captured",
                     },
                 );
                 return { success };
@@ -473,6 +477,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 const success = await indexPageContent(targetTab, false, {
                     quality: params.quality,
                     textOnly: params.textOnly,
+                    activityType: "visited",
                 });
                 return { success };
             }

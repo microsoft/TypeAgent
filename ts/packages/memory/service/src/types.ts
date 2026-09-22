@@ -275,6 +275,120 @@ export interface MemoryAnswerResult {
     warnings: string[];
 }
 
+export type MemoryEventSourceKind =
+    | "conversation"
+    | "document"
+    | "web-activity"
+    | "procedure"
+    | "system"
+    | "other";
+
+export type MemoryEventSender =
+    | "user"
+    | "assistant"
+    | "system"
+    | "tool"
+    | "agent"
+    | "other";
+
+export interface MemoryEventProducer {
+    producerId: string;
+    producerType: string;
+}
+
+export interface MemoryEvent {
+    eventId: string;
+    corpusId: string;
+    idempotencyKey: string;
+    producer: MemoryEventProducer;
+    eventType: string;
+    sourceKind: MemoryEventSourceKind;
+    observedAt: string;
+    eventTime: string;
+    createdAt: string;
+    content?: string;
+    conversationId?: string;
+    runId?: string;
+    turnId?: string;
+    sender?: MemoryEventSender;
+    actionName?: string;
+    linkedSourceIds?: string[];
+    metadata?: Record<string, unknown>;
+}
+
+export interface MemoryEventAppendRequest {
+    corpusId: string;
+    idempotencyKey: string;
+    producer: MemoryEventProducer;
+    eventType: string;
+    sourceKind: MemoryEventSourceKind;
+    observedAt?: string;
+    eventTime?: string;
+    content?: string;
+    conversationId?: string;
+    runId?: string;
+    turnId?: string;
+    sender?: MemoryEventSender;
+    actionName?: string;
+    linkedSourceIds?: string[];
+    metadata?: Record<string, unknown>;
+}
+
+export interface MemoryEventAppendResult {
+    event: MemoryEvent;
+    replayed: boolean;
+}
+
+export interface MemoryEventFilter {
+    sourceKinds?: MemoryEventSourceKind[];
+    producerIds?: string[];
+    eventTypes?: string[];
+    conversationIds?: string[];
+    runIds?: string[];
+    linkedSourceIds?: string[];
+    observedFrom?: string;
+    observedTo?: string;
+    eventFrom?: string;
+    eventTo?: string;
+}
+
+export interface MemoryEventListRequest extends MemoryEventFilter {
+    corpusId: string;
+    pageSize?: number;
+    continuationToken?: string;
+}
+
+export interface MemoryEventSearchRequest extends MemoryEventFilter {
+    corpusId: string;
+    query: string;
+    limit?: number;
+}
+
+export interface MemoryEventSearchMatch {
+    event: MemoryEvent;
+    snippet: string;
+    score: number;
+}
+
+export interface MemoryEventSearchResult {
+    query: string;
+    matches: MemoryEventSearchMatch[];
+}
+
+export interface MemoryEventForgetRequest extends MemoryEventFilter {
+    corpusId: string;
+    eventIds?: string[];
+    forgetLinkedSources?: boolean;
+}
+
+export interface MemoryEventForgetResult {
+    corpusId: string;
+    deletedEventCount: number;
+    deletedSourceCount: number;
+    retainedLinkedSourceIds: string[];
+    indexVersion: string;
+}
+
 export interface MemoryGraphEntity {
     name: string;
     types: string[];
@@ -362,6 +476,22 @@ export interface MemoryService {
     getJob(jobId: string): Promise<IngestionJobStatus | undefined>;
     listJobs(request?: JobListRequest): Promise<MemoryPage<IngestionJobStatus>>;
     cancelJob(jobId: string): Promise<IngestionJobStatus | undefined>;
+    appendEvent(
+        request: MemoryEventAppendRequest,
+    ): Promise<MemoryEventAppendResult>;
+    getEvent(
+        corpusId: string,
+        eventId: string,
+    ): Promise<MemoryEvent | undefined>;
+    listEvents(
+        request: MemoryEventListRequest,
+    ): Promise<MemoryPage<MemoryEvent>>;
+    searchEvents(
+        request: MemoryEventSearchRequest,
+    ): Promise<MemoryEventSearchResult>;
+    forgetEvents(
+        request: MemoryEventForgetRequest,
+    ): Promise<MemoryEventForgetResult>;
     search(request: MemorySearchRequest): Promise<MemorySearchResult>;
     answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult>;
     getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph>;

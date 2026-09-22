@@ -20,6 +20,7 @@ export interface SearchWebMemoriesRequest {
     domain?: string | undefined;
     pageType?: string | undefined;
     source?: string | undefined;
+    eventType?: "visited" | "bookmarked" | "captured" | "imported" | undefined;
     limit?: number | undefined;
     minScore?: number | undefined;
     exactMatch?: boolean | undefined;
@@ -64,6 +65,7 @@ export interface WebsiteResult {
     source: string;
     relevanceScore: number;
     lastVisited?: string;
+    encounterType?: string;
     snippet?: string;
 }
 
@@ -117,7 +119,7 @@ async function generateGroundedAnswer(
     const evidence = websites
         .map(
             (website, index) =>
-                `[${index + 1}] ${website.title}\nURL: ${website.url}\n${website.snippet ?? ""}`,
+                `[${index + 1}] ${website.title}\nURL: ${website.url}\nEncounter: ${website.encounterType ?? "unknown"} at ${website.lastVisited ?? "unknown time"}\n${website.snippet ?? ""}`,
         )
         .join("\n\n")
         .slice(0, 40_000);
@@ -161,6 +163,9 @@ async function searchDurable(
                 ? {}
                 : { pageType: request.pageType }),
             ...(request.source === undefined ? {} : { source: request.source }),
+            ...(request.eventType === undefined
+                ? {}
+                : { eventType: request.eventType }),
             ...(request.dateFrom === undefined
                 ? {}
                 : { dateFrom: request.dateFrom }),
@@ -168,7 +173,7 @@ async function searchDurable(
             ...(sourceIds === undefined ? {} : { sourceIds }),
         });
         const websites: WebsiteResult[] = matches.map(
-            ({ evidence, source }) => {
+            ({ evidence, source, latestActivity }) => {
                 let domain = sourceMetadata(source.metadata, "domain");
                 if (domain === undefined && source.canonicalUri !== undefined) {
                     try {
@@ -185,11 +190,21 @@ async function searchDurable(
                         sourceMetadata(source.metadata, "pageType") ??
                         "webpage",
                     source:
-                        sourceMetadata(source.metadata, "source") ?? "memory",
+                        sourceMetadata(latestActivity?.metadata, "source") ??
+                        sourceMetadata(source.metadata, "source") ??
+                        "memory",
                     relevanceScore: evidence.score,
-                    ...(evidence.capturedAt === undefined
+                    ...(latestActivity === undefined &&
+                    evidence.capturedAt === undefined
                         ? {}
-                        : { lastVisited: evidence.capturedAt }),
+                        : {
+                              lastVisited:
+                                  latestActivity?.eventTime ??
+                                  evidence.capturedAt,
+                          }),
+                    ...(latestActivity === undefined
+                        ? {}
+                        : { encounterType: latestActivity.eventType }),
                     snippet: evidence.snippet,
                 };
             },

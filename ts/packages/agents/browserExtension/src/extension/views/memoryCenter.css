@@ -150,6 +150,42 @@ button.danger {
   margin-bottom: 10px;
 }
 
+.activity-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.activity-filters label {
+  min-width: 0;
+}
+
+.activity-filters input,
+.activity-filters select {
+  min-width: 0;
+  width: 100%;
+}
+
+.activity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.activity-item {
+  padding: 9px;
+  border-left: 3px solid var(--primary);
+  background: var(--background);
+}
+
+.activity-item .item-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
 .source-filter input {
   min-width: 0;
   width: 100%;

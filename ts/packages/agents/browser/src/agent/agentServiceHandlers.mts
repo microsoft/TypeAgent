@@ -132,6 +132,20 @@ export function createAgentInvokeHandlers(
             getMemoryService().reindexSource(corpusId, sourceId),
         memoryListJobs: (params) => getMemoryService().listJobs(params),
         memoryCancelJob: ({ jobId }) => getMemoryService().cancelJob(jobId),
+        memoryListActivity: (params) => {
+            const service = context.agentContext.browserMemoryService;
+            if (!service) {
+                throw new Error("Durable browser memory is not available");
+            }
+            return service.listActivity(params);
+        },
+        memoryForgetActivity: (params) => {
+            const service = context.agentContext.browserMemoryService;
+            if (!service) {
+                throw new Error("Durable browser memory is not available");
+            }
+            return service.forgetActivity(params);
+        },
 
         // Knowledge extraction
         extractKnowledgeFromPage: extractionHandler,

@@ -328,6 +328,222 @@ describe("FileMemoryService", () => {
         expect(result.answer).toContain("Restart the failed indexing worker.");
     });
 
+    test("appends events idempotently across service restarts", async () => {
+        const corpus = await service.createCorpus("Episodes");
+        const request = {
+            corpusId: corpus.corpusId,
+            idempotencyKey: "conversation-1:turn-1",
+            producer: {
+                producerId: "conversation-agent",
+                producerType: "typeagent",
+            },
+            eventType: "turn.completed",
+            sourceKind: "conversation" as const,
+            observedAt: "2026-09-21T10:00:01.000Z",
+            eventTime: "2026-09-21T10:00:00.000Z",
+            conversationId: "conversation-1",
+            runId: "run-1",
+            turnId: "turn-1",
+            sender: "user" as const,
+            content: "Remember the deployment window.",
+        };
+
+        const first = await service.appendEvent(request);
+        const duplicate = await service.appendEvent(request);
+
+        expect(first.replayed).toBe(false);
+        expect(duplicate).toEqual({
+            event: first.event,
+            replayed: true,
+        });
+        expect(
+            (await service.listEvents({ corpusId: corpus.corpusId })).total,
+        ).toBe(1);
+
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => new FakeCorpusIndex(),
+        });
+
+        await expect(service.appendEvent(request)).resolves.toEqual({
+            event: first.event,
+            replayed: true,
+        });
+    });
+
+    test("filters and searches typed event provenance", async () => {
+        const corpus = await service.createCorpus("Activity");
+        const shared = {
+            corpusId: corpus.corpusId,
+            producer: {
+                producerId: "browser",
+                producerType: "browser-extension",
+            },
+            sourceKind: "web-activity" as const,
+        };
+        await service.appendEvent({
+            ...shared,
+            idempotencyKey: "visit-1",
+            eventType: "page.visited",
+            observedAt: "2026-09-21T10:00:00.000Z",
+            content: "TypeAgent memory architecture",
+        });
+        await service.appendEvent({
+            ...shared,
+            idempotencyKey: "bookmark-1",
+            eventType: "page.bookmarked",
+            observedAt: "2026-09-21T11:00:00.000Z",
+            content: "Structured retrieval guide",
+        });
+        await service.appendEvent({
+            corpusId: corpus.corpusId,
+            idempotencyKey: "turn-1",
+            producer: {
+                producerId: "conversation-agent",
+                producerType: "typeagent",
+            },
+            eventType: "turn.completed",
+            sourceKind: "conversation",
+            observedAt: "2026-09-21T12:00:00.000Z",
+            conversationId: "conversation-1",
+            runId: "run-1",
+            content: "Discussed memory architecture",
+        });
+
+        await expect(
+            service.listEvents({
+                corpusId: corpus.corpusId,
+                producerIds: ["browser"],
+                eventTypes: ["page.bookmarked"],
+                observedFrom: "2026-09-21T10:30:00.000Z",
+                observedTo: "2026-09-21T11:30:00.000Z",
+            }),
+        ).resolves.toMatchObject({
+            total: 1,
+            items: [{ eventType: "page.bookmarked" }],
+        });
+        await expect(
+            service.listEvents({
+                corpusId: corpus.corpusId,
+                conversationIds: ["conversation-1"],
+                runIds: ["run-1"],
+            }),
+        ).resolves.toMatchObject({
+            total: 1,
+            items: [{ eventType: "turn.completed" }],
+        });
+        await expect(
+            service.searchEvents({
+                corpusId: corpus.corpusId,
+                query: "architecture",
+            }),
+        ).resolves.toMatchObject({
+            matches: [
+                { event: { eventType: "turn.completed" } },
+                { event: { eventType: "page.visited" } },
+            ],
+        });
+    });
+
+    test("forgets events independently from linked documents", async () => {
+        const corpus = await service.createCorpus("Linked activity");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "page-1",
+                sourceType: "markdown",
+                title: "Page",
+                markdown: "Durable page content",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+        const appended = await service.appendEvent({
+            corpusId: corpus.corpusId,
+            idempotencyKey: "visit-1",
+            producer: {
+                producerId: "browser",
+                producerType: "browser-extension",
+            },
+            eventType: "page.visited",
+            sourceKind: "web-activity",
+            observedAt: "2026-09-21T10:00:00.000Z",
+            linkedSourceIds: ["page-1"],
+        });
+
+        await expect(
+            service.forgetEvents({
+                corpusId: corpus.corpusId,
+                eventIds: [appended.event.eventId],
+            }),
+        ).resolves.toMatchObject({
+            deletedEventCount: 1,
+            deletedSourceCount: 0,
+            retainedLinkedSourceIds: ["page-1"],
+        });
+        await expect(
+            service.getSource(corpus.corpusId, "page-1"),
+        ).resolves.toBeDefined();
+    });
+
+    test("forgets event ranges and unshared linked documents explicitly", async () => {
+        const corpus = await service.createCorpus("Lifecycle");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "page-1",
+                sourceType: "text",
+                title: "Page",
+                text: "Disposable page",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+        for (const [idempotencyKey, observedAt, runId] of [
+            ["event-1", "2026-09-21T10:00:00.000Z", "run-1"],
+            ["event-2", "2026-09-21T11:00:00.000Z", "run-2"],
+        ] as const) {
+            await service.appendEvent({
+                corpusId: corpus.corpusId,
+                idempotencyKey,
+                producer: {
+                    producerId: "browser",
+                    producerType: "browser-extension",
+                },
+                eventType: "page.visited",
+                sourceKind: "web-activity",
+                observedAt,
+                runId,
+                linkedSourceIds: ["page-1"],
+            });
+        }
+
+        await expect(
+            service.forgetEvents({
+                corpusId: corpus.corpusId,
+                runIds: ["run-1"],
+                forgetLinkedSources: true,
+            }),
+        ).resolves.toMatchObject({
+            deletedEventCount: 1,
+            deletedSourceCount: 0,
+            retainedLinkedSourceIds: ["page-1"],
+        });
+        await expect(
+            service.forgetEvents({
+                corpusId: corpus.corpusId,
+                observedFrom: "2026-09-21T10:30:00.000Z",
+                observedTo: "2026-09-21T11:30:00.000Z",
+                forgetLinkedSources: true,
+            }),
+        ).resolves.toMatchObject({
+            deletedEventCount: 1,
+            deletedSourceCount: 1,
+            retainedLinkedSourceIds: [],
+        });
+        await expect(
+            service.getSource(corpus.corpusId, "page-1"),
+        ).resolves.toBeUndefined();
+    });
+
     test("persists indexing mode and chunk size with the active revision", async () => {
         const corpus = await service.createCorpus("Basic");
         const accepted = await service.ingestDocument({

@@ -690,6 +690,7 @@ export async function createConversationManager(
                                 sender,
                                 turnKey,
                             ),
+                        conversationId: record.conversationId,
                         // Let the reasoning agent search across ALL
                         // conversations' content (the knowPro unified index)
                         // and read the best matches back, enriched with each
