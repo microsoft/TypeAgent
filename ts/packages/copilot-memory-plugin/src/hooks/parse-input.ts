@@ -10,13 +10,9 @@ export function parsePromptInput(value: unknown): PromptHookInput {
         throw new Error("Hook input must be a JSON object.");
     }
     const prompt = readString(input, "prompt") ?? "";
-    const transformed = readString(
-        input,
-        "transformedPrompt",
-        "transformed_prompt",
-    );
+    const transformed = readString(input, "transformedPrompt");
     const parsed: PromptHookInput = {
-        sessionId: readString(input, "sessionId", "session_id") ?? "default",
+        sessionId: readString(input, "sessionId") ?? "default",
         cwd: readString(input, "cwd") ?? process.cwd(),
         prompt,
     };
@@ -35,26 +31,17 @@ export function parseStopInput(value: unknown): StopHookInput {
         throw new Error("Hook input must be a JSON object.");
     }
     const parsed: StopHookInput = {
-        sessionId: readString(input, "sessionId", "session_id") ?? "default",
+        sessionId: readString(input, "sessionId") ?? "default",
         cwd: readString(input, "cwd") ?? process.cwd(),
     };
     if (typeof input.timestamp === "number") {
         parsed.timestamp = input.timestamp;
     }
-    const transcriptPath = readString(
-        input,
-        "transcriptPath",
-        "transcript_path",
-    );
+    const transcriptPath = readString(input, "transcriptPath");
     if (transcriptPath) {
         parsed.transcriptPath = transcriptPath;
     }
-    const response = readString(
-        input,
-        "response",
-        "lastAssistantMessage",
-        "last_assistant_message",
-    );
+    const response = readString(input, "response", "lastAssistantMessage");
     if (response) {
         parsed.response = response;
     }
