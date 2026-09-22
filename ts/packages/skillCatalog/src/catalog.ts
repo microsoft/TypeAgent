@@ -20,6 +20,7 @@ import {
     sha256,
     skillManifestDigest,
     skillStorageKey,
+    trimTrailingSlashes,
     validateSkillPath,
 } from "./util.js";
 
@@ -48,7 +49,7 @@ export class SkillCatalog {
         private readonly storage: InstanceStorage,
         root = "skill-catalog/v1",
     ) {
-        this.root = root.replace(/\/+$/, "");
+        this.root = trimTrailingSlashes(root);
     }
 
     public publish(input: SkillPackageInput): Promise<CatalogEntry> {

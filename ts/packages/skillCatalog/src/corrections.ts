@@ -11,6 +11,7 @@ import {
     qualifySkill,
     sha256,
     skillStorageKey,
+    trimTrailingSlashes,
 } from "./util.js";
 
 interface CorrectionIndex {
@@ -25,7 +26,7 @@ export class SkillCorrectionStore {
         private readonly storage: InstanceStorage,
         root = "skill-catalog/v1/corrections",
     ) {
-        this.root = root.replace(/\/+$/, "");
+        this.root = trimTrailingSlashes(root);
     }
 
     public add(

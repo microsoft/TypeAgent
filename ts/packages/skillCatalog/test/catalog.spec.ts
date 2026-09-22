@@ -34,7 +34,7 @@ function packageInput(content = "first", identity: SkillIdentity = userSkill) {
 describe("SkillCatalog", () => {
     it("publishes immutable, content-addressed revisions with full manifests", async () => {
         const storage = new MemoryStorage();
-        const catalog = new SkillCatalog(storage);
+        const catalog = new SkillCatalog(storage, "skill-catalog/v1///");
         const first = await catalog.publish(packageInput());
         const repeated = await catalog.publish(packageInput());
         const second = await catalog.publish(packageInput("second"));

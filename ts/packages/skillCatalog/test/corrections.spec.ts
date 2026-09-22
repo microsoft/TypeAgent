@@ -7,7 +7,10 @@ import { MemoryStorage } from "./memoryStorage.js";
 describe("SkillCorrectionStore", () => {
     it("stores immutable corrections outside package revisions", async () => {
         const storage = new MemoryStorage();
-        const store = new SkillCorrectionStore(storage);
+        const store = new SkillCorrectionStore(
+            storage,
+            "skill-catalog/v1/corrections///",
+        );
         const skill: SkillIdentity = {
             scope: "project",
             origin: "c:/project",

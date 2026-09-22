@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { InstanceStorage } from "../src/index.js";
+import { trimTrailingSlashes } from "../src/util.js";
 
 export class MemoryStorage implements InstanceStorage {
     public readonly values = new Map<string, Uint8Array>();
@@ -59,7 +60,7 @@ export class MemoryStorage implements InstanceStorage {
         path: string,
         options?: { dirs?: boolean; fullPath?: boolean },
     ): Promise<string[]> {
-        const prefix = `${path.replace(/\/+$/, "")}/`;
+        const prefix = `${trimTrailingSlashes(path)}/`;
         const names = new Set<string>();
         for (const key of this.values.keys()) {
             if (!key.startsWith(prefix)) {

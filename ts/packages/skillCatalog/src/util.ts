@@ -84,6 +84,14 @@ export function normalizedSkillPath(path: string): string {
     return path.normalize("NFC").toLocaleLowerCase("en-US");
 }
 
+export function trimTrailingSlashes(value: string): string {
+    let end = value.length;
+    while (end > 0 && value.charCodeAt(end - 1) === 0x2f) {
+        end--;
+    }
+    return value.slice(0, end);
+}
+
 function isWindowsDeviceName(segment: string): boolean {
     const base = segment.split(".")[0].trimEnd().toUpperCase();
     return (
