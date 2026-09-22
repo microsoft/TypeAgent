@@ -426,6 +426,7 @@ export async function indexPageContent(
         textOnly?: boolean;
         mode?: "basic" | "content" | "actions" | "full";
         extractedKnowledge?: any;
+        activityType?: "visited" | "captured";
     } = {},
 ): Promise<boolean> {
     try {
@@ -454,6 +455,7 @@ export async function indexPageContent(
             quality: options.quality || "balanced",
             textOnly: options.textOnly || false,
             mode: options.mode || "content",
+            activityType: options.activityType ?? "captured",
         };
 
         if (options.extractedKnowledge) {

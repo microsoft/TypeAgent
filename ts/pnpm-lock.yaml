@@ -5028,6 +5028,9 @@ importers:
       '@typeagent/knowpro':
         specifier: workspace:*
         version: link:../../knowPro
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../../memory/service
       '@typeagent/selfhelp':
         specifier: workspace:*
         version: link:../../agents/selfhelp

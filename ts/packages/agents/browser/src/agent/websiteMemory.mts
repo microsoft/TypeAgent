@@ -1115,6 +1115,19 @@ async function ingestWebsitesIntoMemoryService(
                     ? {}
                     : { capturedAt: item.timestamp }),
                 tags: item.tags,
+                activityType:
+                    item.metadata.websiteSource === "history"
+                        ? "visited"
+                        : item.metadata.websiteSource === "bookmark"
+                          ? "bookmarked"
+                          : "imported",
+                activityMetadata: {
+                    importId: importContext.importId,
+                    importType: importContext.type,
+                    ...(item.metadata.visitCount === undefined
+                        ? {}
+                        : { visitCount: item.metadata.visitCount }),
+                },
             },
             mode,
             {
