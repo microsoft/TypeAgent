@@ -11,6 +11,8 @@ import {
     docPartsFromVtt,
 } from "@typeagent/conversation-memory";
 import * as kp from "@typeagent/knowpro";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type {
     CorpusIndex,
     CorpusIndexMatch,
@@ -20,6 +22,13 @@ import type {
 } from "./types.js";
 
 const indexBaseName = "corpus";
+const basicIndexFileName = "basic-documents.json";
+const structuralChunkCharacters = 8_000;
+const extractionChunkTokens = 7_500;
+const durableDocPartOptions = {
+    collectLinkKnowledge: false,
+    maxTokensPerPart: extractionChunkTokens,
+};
 
 interface EntityKnowledge {
     name: string;
@@ -42,16 +51,30 @@ function sourceUri(document: IndexedDocument): string {
 
 function toDocParts(document: IndexedDocument): DocPart[] {
     const uri = sourceUri(document);
+    const chunkCharacters =
+        document.pipeline.maxCharsPerChunk ?? structuralChunkCharacters;
     switch (document.source.sourceType) {
         case "html":
-            return docPartsFromHtml(document.content, false, 8_000, uri);
+            return docPartsFromHtml(
+                document.content,
+                false,
+                chunkCharacters,
+                uri,
+                undefined,
+                durableDocPartOptions,
+            );
         case "markdown":
         case "web":
-            return docPartsFromMarkdown(document.content, 8_000, uri);
+            return docPartsFromMarkdown(
+                document.content,
+                chunkCharacters,
+                uri,
+                durableDocPartOptions,
+            );
         case "vtt":
             return docPartsFromVtt(document.content, uri);
         case "text":
-            return docPartsFromText(document.content, 8_000, uri);
+            return docPartsFromText(document.content, chunkCharacters, uri);
     }
 }
 
@@ -74,6 +97,7 @@ function parseSourceUri(
 
 export class KnowProCorpusIndex implements CorpusIndex {
     private memory: DocMemory | undefined;
+    private basicDocuments: IndexedDocument[] = [];
 
     public constructor(
         private readonly corpusId: string,
@@ -87,6 +111,19 @@ export class KnowProCorpusIndex implements CorpusIndex {
             indexBaseName,
             this.settingsFactory?.(),
         );
+        try {
+            this.basicDocuments = JSON.parse(
+                await readFile(
+                    path.join(this.indexDirectory, basicIndexFileName),
+                    "utf8",
+                ),
+            );
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                throw error;
+            }
+            this.basicDocuments = [];
+        }
     }
 
     public async rebuild(
@@ -94,7 +131,24 @@ export class KnowProCorpusIndex implements CorpusIndex {
         signal: AbortSignal,
         onProgress: (progress: JobProgress) => Promise<void>,
     ): Promise<void> {
-        const parts = documents.flatMap(toDocParts);
+        const startedAt = performance.now();
+        const semanticDocuments = documents.filter(
+            (document) => document.pipeline.mode !== "basic",
+        );
+        const parts = semanticDocuments.flatMap(toDocParts);
+        this.basicDocuments = documents.filter(
+            (document) => document.pipeline.mode === "basic",
+        );
+        await onProgress({
+            completed: parts.length,
+            total: parts.length,
+            message: "Documents chunked",
+            stage: "chunking",
+            operation: "rebuild",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
         const memory = new DocMemory(
             this.corpusId,
             parts,
@@ -103,19 +157,33 @@ export class KnowProCorpusIndex implements CorpusIndex {
         let completed = 0;
         let progressTail = Promise.resolve();
         const total = Math.max(parts.length, 1);
-        const report = (message: string): boolean => {
+        const report = (
+            message: string,
+            stage: NonNullable<JobProgress["stage"]>,
+        ): boolean => {
             if (signal.aborted) {
                 return false;
             }
             completed = Math.min(completed + 1, total);
-            const progress = { completed, total, message };
+            const progress: JobProgress = {
+                completed,
+                total,
+                message,
+                stage,
+                operation: "rebuild",
+                elapsedMs: performance.now() - startedAt,
+                documentCount: documents.length,
+                docPartCount: parts.length,
+            };
             progressTail = progressTail.then(() => onProgress(progress));
             return true;
         };
         const result = await memory.buildIndex({
-            onKnowledgeExtracted: () => report("Extracting knowledge"),
-            onEmbeddingsCreated: () => report("Creating embeddings"),
-            onTextIndexed: () => report("Indexing text"),
+            onKnowledgeExtracted: () =>
+                report("Extracting knowledge", "extracting-knowledge"),
+            onEmbeddingsCreated: () =>
+                report("Creating embeddings", "embedding"),
+            onTextIndexed: () => report("Indexing text", "building-indexes"),
         });
         if (signal.aborted) {
             throw signal.reason ?? new Error("Ingestion cancelled");
@@ -128,12 +196,126 @@ export class KnowProCorpusIndex implements CorpusIndex {
             throw new Error(indexingError);
         }
         await progressTail;
+        await onProgress({
+            completed: total,
+            total,
+            message: "Persisting index",
+            stage: "persisting",
+            operation: "rebuild",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
         await memory.writeToFile(this.indexDirectory, indexBaseName);
+        await this.persistBasicDocuments();
         this.memory = memory;
         await onProgress({
             completed: total,
             total,
             message: "Index persisted",
+            stage: "persisting",
+            operation: "rebuild",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
+    }
+
+    public async append(
+        documents: IndexedDocument[],
+        signal: AbortSignal,
+        onProgress: (progress: JobProgress) => Promise<void>,
+    ): Promise<void> {
+        const startedAt = performance.now();
+        await this.initialize();
+        if (this.memory === undefined) {
+            throw new Error(`Corpus '${this.corpusId}' has not been indexed`);
+        }
+        const semanticDocuments = documents.filter(
+            (document) => document.pipeline.mode !== "basic",
+        );
+        const parts = semanticDocuments.flatMap(toDocParts);
+        this.basicDocuments.push(
+            ...documents.filter(
+                (document) => document.pipeline.mode === "basic",
+            ),
+        );
+        await onProgress({
+            completed: parts.length,
+            total: parts.length,
+            message: "Documents chunked",
+            stage: "chunking",
+            operation: "append",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
+        for (const part of parts) {
+            this.memory.messages.append(part);
+        }
+        let completed = 0;
+        let progressTail = Promise.resolve();
+        const total = Math.max(parts.length, 1);
+        const report = (
+            message: string,
+            stage: NonNullable<JobProgress["stage"]>,
+        ): boolean => {
+            if (signal.aborted) {
+                return false;
+            }
+            completed = Math.min(completed + 1, total);
+            const progress: JobProgress = {
+                completed,
+                total,
+                message,
+                stage,
+                operation: "append",
+                elapsedMs: performance.now() - startedAt,
+                documentCount: documents.length,
+                docPartCount: parts.length,
+            };
+            progressTail = progressTail.then(() => onProgress(progress));
+            return true;
+        };
+        const result = await this.memory.addToIndex({
+            onKnowledgeExtracted: () =>
+                report("Extracting knowledge", "extracting-knowledge"),
+            onEmbeddingsCreated: () =>
+                report("Creating embeddings", "embedding"),
+            onTextIndexed: () => report("Indexing text", "building-indexes"),
+        });
+        if (signal.aborted) {
+            throw signal.reason ?? new Error("Ingestion cancelled");
+        }
+        const indexingError =
+            result.semanticRefs?.error ??
+            result.secondaryIndexResults?.message?.error ??
+            result.secondaryIndexResults?.relatedTerms?.error;
+        if (indexingError !== undefined) {
+            throw new Error(indexingError);
+        }
+        await progressTail;
+        await onProgress({
+            completed: total,
+            total,
+            message: "Persisting index",
+            stage: "persisting",
+            operation: "append",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
+        });
+        await this.memory.writeToFile(this.indexDirectory, indexBaseName);
+        await this.persistBasicDocuments();
+        await onProgress({
+            completed: total,
+            total,
+            message: "Index persisted",
+            stage: "persisting",
+            operation: "append",
+            elapsedMs: performance.now() - startedAt,
+            documentCount: documents.length,
+            docPartCount: parts.length,
         });
     }
 
@@ -160,7 +342,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 }
             }
         }
-        return [...matches]
+        const semanticMatches = [...matches]
             .sort((left, right) => right[1] - left[1])
             .slice(0, limit)
             .flatMap(([messageOrdinal, score]) => {
@@ -178,9 +360,43 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     },
                 ];
             });
+        const queryTerms = query
+            .toLocaleLowerCase()
+            .split(/\s+/)
+            .filter((term) => term.length > 0);
+        const basicMatches = this.basicDocuments.flatMap((document) => {
+            const normalizedContent = document.content.toLocaleLowerCase();
+            const matchedTerms = queryTerms.filter((term) =>
+                normalizedContent.includes(term),
+            );
+            if (matchedTerms.length === 0) {
+                return [];
+            }
+            const firstMatch = Math.min(
+                ...matchedTerms.map((term) => normalizedContent.indexOf(term)),
+            );
+            const snippetStart = Math.max(0, firstMatch - 200);
+            return [
+                {
+                    sourceId: document.source.sourceId,
+                    revisionId: document.revision.revisionId,
+                    snippet: document.content.slice(
+                        snippetStart,
+                        snippetStart + 1_000,
+                    ),
+                    score: matchedTerms.length / queryTerms.length,
+                    locator: `character:${firstMatch}`,
+                },
+            ];
+        });
+        return [...semanticMatches, ...basicMatches]
+            .sort((left, right) => right.score - left.score)
+            .slice(0, limit);
     }
 
-    public async getKnowledgeGraph(): Promise<MemoryKnowledgeGraph> {
+    public async getKnowledgeGraph(
+        sourceIds?: ReadonlySet<string>,
+    ): Promise<MemoryKnowledgeGraph> {
         if (this.memory === undefined) {
             throw new Error(`Corpus '${this.corpusId}' has not been indexed`);
         }
@@ -219,6 +435,12 @@ export class KnowProCorpusIndex implements CorpusIndex {
             const sourceId = parseSourceUri(
                 message?.metadata.sourceUrl,
             )?.sourceId;
+            if (
+                sourceIds !== undefined &&
+                (sourceId === undefined || !sourceIds.has(sourceId))
+            ) {
+                continue;
+            }
             if (semanticRef.knowledgeType === "entity") {
                 const entity = semanticRef.knowledge as EntityKnowledge;
                 const key = entity.name.trim().toLocaleLowerCase();
@@ -297,6 +519,14 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 sourceIds: [...relationship.sourceIds],
             })),
         };
+    }
+
+    private async persistBasicDocuments(): Promise<void> {
+        await mkdir(this.indexDirectory, { recursive: true });
+        const target = path.join(this.indexDirectory, basicIndexFileName);
+        const temporary = `${target}.tmp`;
+        await writeFile(temporary, JSON.stringify(this.basicDocuments), "utf8");
+        await rename(temporary, target);
     }
 }
 

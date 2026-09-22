@@ -2,7 +2,15 @@
 // Licensed under the MIT License.
 
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+    cp,
+    mkdir,
+    readFile,
+    readdir,
+    rename,
+    rm,
+    writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import { createKnowProCorpusIndex } from "./knowProCorpusIndex.js";
@@ -13,9 +21,13 @@ import type {
     DocumentIngestResult,
     IndexedDocument,
     IngestionJobStatus,
+    JobListRequest,
     JobProgress,
     JobState,
     MemoryCorpus,
+    MemoryCorpusStatus,
+    MemoryAnswerRequest,
+    MemoryAnswerResult,
     MemoryEvidence,
     MemoryKnowledgeGraph,
     MemorySearchRequest,
@@ -23,7 +35,16 @@ import type {
     MemoryService,
     MemoryServiceCapabilities,
     MemorySource,
+    MemoryPage,
+    ReindexResult,
+    SourceContent,
+    SourceContentRequest,
     SourceDocument,
+    SourceForgetPreview,
+    SourceForgetRequest,
+    SourceForgetResult,
+    SourceListRequest,
+    SourceReplaceRequest,
     SourceRevision,
 } from "./types.js";
 
@@ -44,6 +65,12 @@ interface CorpusManifest {
     corpus: MemoryCorpus;
     sources: StoredSource[];
     indexGeneration?: string;
+    pendingSourceForget?: {
+        sourceId: string;
+        activeRevisionId: string;
+        confirmationToken: string;
+        expiresAt: string;
+    };
 }
 
 interface CorpusRuntime {
@@ -110,10 +137,102 @@ function hashContent(content: string): string {
     return createHash("sha256").update(content).digest("hex");
 }
 
+function createStoredSource(
+    request: DocumentIngestRequest,
+    content: string,
+    contentHash: string,
+    sourceId: string,
+    revisionId: string,
+    mimeType: string,
+    existing: StoredSource | undefined,
+): { source: StoredSource; revision: StoredRevision } {
+    const revision: StoredRevision = {
+        revisionId,
+        sourceId,
+        contentHash,
+        mimeType,
+        ...(request.source.capturedAt === undefined
+            ? {}
+            : { capturedAt: request.source.capturedAt }),
+        ...(request.source.sourceModifiedAt === undefined
+            ? {}
+            : { sourceModifiedAt: request.source.sourceModifiedAt }),
+        pipelineVersion,
+        pipeline: {
+            mode: request.pipeline?.mode ?? "content",
+            ...(request.pipeline?.maxCharsPerChunk === undefined
+                ? {}
+                : { maxCharsPerChunk: request.pipeline.maxCharsPerChunk }),
+        },
+        state: "processing",
+        content,
+    };
+    const policy = request.pipeline?.updatePolicy ?? "skipIfUnchanged";
+    const source: StoredSource = {
+        sourceId,
+        corpusId: request.corpusId,
+        sourceType: request.source.sourceType,
+        ...(request.source.canonicalUri === undefined
+            ? {}
+            : { canonicalUri: request.source.canonicalUri }),
+        title: request.source.title,
+        ...(request.source.tags === undefined
+            ? {}
+            : { tags: request.source.tags }),
+        ...(request.source.metadata === undefined
+            ? {}
+            : { metadata: request.source.metadata }),
+        activeRevisionId: revisionId,
+        revisions:
+            existing === undefined
+                ? [revision]
+                : policy === "retainRevisionHistory"
+                  ? [
+                        ...existing.revisions.filter(
+                            (item) => item.revisionId !== revisionId,
+                        ),
+                        revision,
+                    ]
+                  : [revision],
+    };
+    return { source, revision };
+}
+
 function validateIdentifier(kind: string, value: string): void {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) {
         throw new Error(`Invalid ${kind} '${value}'`);
     }
+}
+
+function pageOffset(token: string | undefined): number {
+    if (token === undefined) {
+        return 0;
+    }
+    if (!/^(0|[1-9][0-9]*)$/.test(token)) {
+        throw new Error("Invalid continuation token");
+    }
+    return Number(token);
+}
+
+function pageItems<T>(
+    items: T[],
+    pageSize: number | undefined,
+    continuationToken: string | undefined,
+): MemoryPage<T> {
+    const offset = pageOffset(continuationToken);
+    const limit = Math.max(1, Math.min(pageSize ?? 50, 200));
+    if (offset > items.length) {
+        throw new Error("Continuation token is out of range");
+    }
+    const page = items.slice(offset, offset + limit);
+    const nextOffset = offset + page.length;
+    return {
+        items: page,
+        total: items.length,
+        ...(nextOffset < items.length
+            ? { nextContinuationToken: String(nextOffset) }
+            : {}),
+    };
 }
 
 async function readJson<T>(filePath: string): Promise<T | undefined> {
@@ -167,6 +286,8 @@ function defaultCapabilities(): MemoryServiceCapabilities {
             vectorSimilarity: true,
             structuredSearch: true,
             exactSearch: true,
+            management: true,
+            groundedAnswer: true,
         },
         warnings: [],
     };
@@ -195,7 +316,9 @@ export class FileMemoryService implements MemoryService {
         if (this.closed) {
             return Promise.reject(new Error("Memory service is closed"));
         }
-        this.initializePromise ??= this.acquireStorageLock();
+        this.initializePromise ??= this.acquireStorageLock().then(() =>
+            this.recoverInterruptedJobs(),
+        );
         return this.initializePromise;
     }
 
@@ -278,12 +401,72 @@ export class FileMemoryService implements MemoryService {
         );
     }
 
+    public async getCorpus(
+        corpusId: string,
+    ): Promise<MemoryCorpusStatus | undefined> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        let runtime: CorpusRuntime;
+        try {
+            runtime = await this.getCorpusRuntime(corpusId);
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                error.message === `Unknown corpus '${corpusId}'`
+            ) {
+                return undefined;
+            }
+            throw error;
+        }
+        const revisions = runtime.manifest.sources.flatMap(
+            (source) => source.revisions,
+        );
+        const activeStates: JobState[] = [
+            "accepted",
+            "validating",
+            "normalizing",
+            "chunking",
+            "extracting-knowledge",
+            "embedding",
+            "building-indexes",
+            "persisting",
+            "cancelling",
+        ];
+        let activeJobCount = 0;
+        let continuationToken: string | undefined;
+        do {
+            const jobs = await this.listJobs({
+                corpusId,
+                states: activeStates,
+                pageSize: 200,
+                ...(continuationToken === undefined
+                    ? {}
+                    : { continuationToken }),
+            });
+            activeJobCount += jobs.items.length;
+            continuationToken = jobs.nextContinuationToken;
+        } while (continuationToken !== undefined);
+        return {
+            ...structuredClone(runtime.manifest.corpus),
+            sourceCount: runtime.manifest.sources.length,
+            revisionCount: revisions.length,
+            readyRevisionCount: revisions.filter(
+                (revision) => revision.state === "ready",
+            ).length,
+            failedRevisionCount: revisions.filter(
+                (revision) => revision.state === "failed",
+            ).length,
+            activeJobCount,
+            indexVersion: this.indexVersion(runtime.manifest),
+        };
+    }
+
     public async clearCorpus(corpusId: string): Promise<number> {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
         let clearedCount = 0;
         await this.enqueueWrite(corpusId, async () => {
-            const runtime = await this.getCorpus(corpusId);
+            const runtime = await this.getCorpusRuntime(corpusId);
             clearedCount = runtime.manifest.sources.length;
             const indexGeneration = randomUUID();
             await mkdir(this.indexDirectory(corpusId, indexGeneration), {
@@ -312,6 +495,10 @@ export class FileMemoryService implements MemoryService {
             );
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
+            await this.removeInactiveIndexGenerations(
+                corpusId,
+                indexGeneration,
+            );
         });
         return clearedCount;
     }
@@ -319,10 +506,38 @@ export class FileMemoryService implements MemoryService {
     public async listSources(corpusId: string): Promise<MemorySource[]> {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
-        const runtime = await this.getCorpus(corpusId);
+        const runtime = await this.getCorpusRuntime(corpusId);
         return runtime.manifest.sources.map((source) =>
             this.toMemorySource(source),
         );
+    }
+
+    public async listSourcesPage(
+        request: SourceListRequest,
+    ): Promise<MemoryPage<MemorySource>> {
+        const query = request.query?.trim().toLocaleLowerCase();
+        const sourceTypes =
+            request.sourceTypes === undefined
+                ? undefined
+                : new Set(request.sourceTypes);
+        const sources = (await this.listSources(request.corpusId))
+            .filter(
+                (source) =>
+                    (sourceTypes === undefined ||
+                        sourceTypes.has(source.sourceType)) &&
+                    (query === undefined ||
+                        query.length === 0 ||
+                        source.sourceId.toLocaleLowerCase().includes(query) ||
+                        source.title.toLocaleLowerCase().includes(query) ||
+                        source.canonicalUri
+                            ?.toLocaleLowerCase()
+                            .includes(query) === true ||
+                        source.tags?.some((tag) =>
+                            tag.toLocaleLowerCase().includes(query),
+                        ) === true),
+            )
+            .sort((left, right) => left.sourceId.localeCompare(right.sourceId));
+        return pageItems(sources, request.pageSize, request.continuationToken);
     }
 
     public async getSource(
@@ -332,11 +547,73 @@ export class FileMemoryService implements MemoryService {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
         validateIdentifier("source ID", sourceId);
-        const runtime = await this.getCorpus(corpusId);
+        const runtime = await this.getCorpusRuntime(corpusId);
         const source = runtime.manifest.sources.find(
             (item) => item.sourceId === sourceId,
         );
         return source === undefined ? undefined : this.toMemorySource(source);
+    }
+
+    public async getSourceContent(
+        request: SourceContentRequest,
+    ): Promise<SourceContent> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        validateIdentifier("source ID", request.sourceId);
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        const source = runtime.manifest.sources.find(
+            (item) => item.sourceId === request.sourceId,
+        );
+        if (source === undefined) {
+            throw new Error(`Unknown source '${request.sourceId}'`);
+        }
+        const revisionId = request.revisionId ?? source.activeRevisionId;
+        validateIdentifier("revision ID", revisionId);
+        const revision = source.revisions.find(
+            (item) => item.revisionId === revisionId,
+        );
+        if (revision === undefined) {
+            throw new Error(`Unknown revision '${revisionId}'`);
+        }
+        const offset = request.offset ?? 0;
+        const maxChars = Math.max(
+            1,
+            Math.min(request.maxChars ?? 20_000, 100_000),
+        );
+        if (
+            !Number.isInteger(offset) ||
+            offset < 0 ||
+            offset > revision.content.length
+        ) {
+            throw new Error("Content offset is out of range");
+        }
+        const content = revision.content.slice(offset, offset + maxChars);
+        const nextOffset = offset + content.length;
+        return {
+            corpusId: request.corpusId,
+            sourceId: request.sourceId,
+            revisionId,
+            mimeType: revision.mimeType,
+            offset,
+            content,
+            totalChars: revision.content.length,
+            truncated: nextOffset < revision.content.length,
+            ...(nextOffset < revision.content.length ? { nextOffset } : {}),
+        };
+    }
+
+    public async getSourceKnowledge(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<MemoryKnowledgeGraph> {
+        await this.initialize();
+        const source = await this.getSource(corpusId, sourceId);
+        if (source === undefined) {
+            throw new Error(`Unknown source '${sourceId}'`);
+        }
+        const runtime = await this.getCorpusRuntime(corpusId);
+        await runtime.index.initialize();
+        return runtime.index.getKnowledgeGraph(new Set([sourceId]));
     }
 
     public async ingestDocument(
@@ -345,6 +622,15 @@ export class FileMemoryService implements MemoryService {
     ): Promise<DocumentIngestResult> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
+        if (
+            request.pipeline?.maxCharsPerChunk !== undefined &&
+            (!Number.isInteger(request.pipeline.maxCharsPerChunk) ||
+                request.pipeline.maxCharsPerChunk <= 0)
+        ) {
+            throw new Error(
+                "Pipeline maxCharsPerChunk must be a positive integer",
+            );
+        }
         const content = contentFor(request);
         const contentHash = request.source.contentHash ?? hashContent(content);
         if (contentHash !== hashContent(content)) {
@@ -396,6 +682,145 @@ export class FileMemoryService implements MemoryService {
         };
     }
 
+    public async replaceSource(
+        request: SourceReplaceRequest,
+        signal?: AbortSignal,
+    ): Promise<DocumentIngestResult> {
+        validateIdentifier("source ID", request.sourceId);
+        validateIdentifier("revision ID", request.expectedActiveRevisionId);
+        const source = await this.getSource(request.corpusId, request.sourceId);
+        if (source === undefined) {
+            throw new Error(`Unknown source '${request.sourceId}'`);
+        }
+        return this.ingestDocument(
+            {
+                corpusId: request.corpusId,
+                source: { ...request.source, sourceId: request.sourceId },
+                pipeline: {
+                    updatePolicy:
+                        request.retainRevisionHistory === false
+                            ? "replaceActiveRevision"
+                            : "retainRevisionHistory",
+                    expectedActiveRevisionId: request.expectedActiveRevisionId,
+                },
+            },
+            signal,
+        );
+    }
+
+    public async previewForgetSource(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<SourceForgetPreview> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        validateIdentifier("source ID", sourceId);
+        let preview: SourceForgetPreview | undefined;
+        await this.enqueueWrite(corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(corpusId);
+            const source = runtime.manifest.sources.find(
+                (item) => item.sourceId === sourceId,
+            );
+            if (source === undefined) {
+                throw new Error(`Unknown source '${sourceId}'`);
+            }
+            await runtime.index.initialize();
+            const graph = await runtime.index.getKnowledgeGraph(
+                new Set([sourceId]),
+            );
+            const confirmationToken = randomUUID();
+            const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+            const candidateManifest = structuredClone(runtime.manifest);
+            candidateManifest.pendingSourceForget = {
+                sourceId,
+                activeRevisionId: source.activeRevisionId,
+                confirmationToken,
+                expiresAt,
+            };
+            await writeJsonAtomic(
+                this.manifestPath(corpusId),
+                candidateManifest,
+            );
+            runtime.manifest = candidateManifest;
+            preview = {
+                corpusId,
+                sourceId,
+                activeRevisionId: source.activeRevisionId,
+                revisionCount: source.revisions.length,
+                derivedEntityCount: graph.entities.length,
+                derivedTopicCount: graph.topics.length,
+                derivedRelationshipCount: graph.relationships.length,
+                confirmationToken,
+                expiresAt,
+            };
+        });
+        return preview!;
+    }
+
+    public async forgetSource(
+        request: SourceForgetRequest,
+    ): Promise<SourceForgetResult> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        validateIdentifier("source ID", request.sourceId);
+        let result: SourceForgetResult | undefined;
+        await this.enqueueWrite(request.corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(request.corpusId);
+            const source = runtime.manifest.sources.find(
+                (item) => item.sourceId === request.sourceId,
+            );
+            if (source === undefined) {
+                throw new Error(`Unknown source '${request.sourceId}'`);
+            }
+            const confirmation = runtime.manifest.pendingSourceForget;
+            if (
+                confirmation === undefined ||
+                confirmation.sourceId !== request.sourceId ||
+                confirmation.activeRevisionId !== source.activeRevisionId ||
+                confirmation.confirmationToken !== request.confirmationToken
+            ) {
+                throw new Error("Invalid or stale source forget confirmation");
+            }
+            if (Date.parse(confirmation.expiresAt) <= Date.now()) {
+                throw new Error("Source forget confirmation has expired");
+            }
+            const candidateManifest = structuredClone(runtime.manifest);
+            candidateManifest.sources = candidateManifest.sources.filter(
+                (item) => item.sourceId !== request.sourceId,
+            );
+            delete candidateManifest.pendingSourceForget;
+            await this.rebuildAndActivate(
+                request.corpusId,
+                runtime,
+                candidateManifest,
+                new AbortController().signal,
+            );
+            result = {
+                corpusId: request.corpusId,
+                sourceId: request.sourceId,
+                deletedRevisionCount: source.revisions.length,
+                indexVersion: this.indexVersion(runtime.manifest),
+            };
+        });
+        return result!;
+    }
+
+    public async reindexCorpus(
+        corpusId: string,
+        signal: AbortSignal = new AbortController().signal,
+    ): Promise<ReindexResult> {
+        return this.reindex(corpusId, undefined, signal);
+    }
+
+    public async reindexSource(
+        corpusId: string,
+        sourceId: string,
+        signal: AbortSignal = new AbortController().signal,
+    ): Promise<ReindexResult> {
+        validateIdentifier("source ID", sourceId);
+        return this.reindex(corpusId, sourceId, signal);
+    }
+
     public async getJob(
         jobId: string,
     ): Promise<IngestionJobStatus | undefined> {
@@ -405,6 +830,61 @@ export class FileMemoryService implements MemoryService {
             this.jobs.get(jobId) ??
             (await readJson<IngestionJobStatus>(this.jobPath(jobId)));
         return job === undefined ? undefined : structuredClone(job);
+    }
+
+    public async listJobs(
+        request: JobListRequest = {},
+    ): Promise<MemoryPage<IngestionJobStatus>> {
+        await this.initialize();
+        if (request.corpusId !== undefined) {
+            validateIdentifier("corpus ID", request.corpusId);
+        }
+        if (request.sourceId !== undefined) {
+            validateIdentifier("source ID", request.sourceId);
+        }
+        let entries: string[];
+        try {
+            entries = await readdir(
+                path.join(this.rootDirectory, jobsDirectoryName),
+            );
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                entries = [];
+            } else {
+                throw error;
+            }
+        }
+        const jobs = (
+            await Promise.all(
+                entries
+                    .filter((entry) => entry.endsWith(".json"))
+                    .map((entry) =>
+                        readJson<IngestionJobStatus>(
+                            path.join(
+                                this.rootDirectory,
+                                jobsDirectoryName,
+                                entry,
+                            ),
+                        ),
+                    ),
+            )
+        )
+            .filter((job): job is IngestionJobStatus => job !== undefined)
+            .filter(
+                (job) =>
+                    (request.corpusId === undefined ||
+                        job.corpusId === request.corpusId) &&
+                    (request.sourceId === undefined ||
+                        job.sourceId === request.sourceId) &&
+                    (request.states === undefined ||
+                        request.states.includes(job.state)),
+            )
+            .sort(
+                (left, right) =>
+                    right.createdAt.localeCompare(left.createdAt) ||
+                    right.jobId.localeCompare(left.jobId),
+            );
+        return pageItems(jobs, request.pageSize, request.continuationToken);
     }
 
     public async cancelJob(
@@ -435,7 +915,7 @@ export class FileMemoryService implements MemoryService {
         if (query.length === 0) {
             throw new Error("Search query cannot be empty");
         }
-        const runtime = await this.getCorpus(request.corpusId);
+        const runtime = await this.getCorpusRuntime(request.corpusId);
         await runtime.index.initialize();
         const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
         const candidates = await runtime.index.search(query, limit * 4);
@@ -503,12 +983,7 @@ export class FileMemoryService implements MemoryService {
             matches,
             warnings: [...this.capabilities.warnings],
             capabilitiesUsed: ["structured-search"],
-            indexVersion: hashContent(
-                runtime.manifest.sources
-                    .map((source) => source.activeRevisionId)
-                    .sort()
-                    .join("\n"),
-            ),
+            indexVersion: this.indexVersion(runtime.manifest),
         };
     }
 
@@ -517,12 +992,175 @@ export class FileMemoryService implements MemoryService {
         return structuredClone(this.capabilities);
     }
 
+    public async answer(
+        request: MemoryAnswerRequest,
+    ): Promise<MemoryAnswerResult> {
+        const question = request.question.trim();
+        if (question.length === 0) {
+            throw new Error("Memory question cannot be empty");
+        }
+        const result = await this.search({
+            corpusId: request.corpusId,
+            query: question,
+            limit: request.limit ?? 5,
+            ...(request.maxResponseChars === undefined
+                ? {}
+                : { maxResponseChars: request.maxResponseChars }),
+            ...(request.sourceIds === undefined
+                ? {}
+                : { sourceIds: request.sourceIds }),
+        });
+        if (result.matches.length === 0) {
+            return {
+                question,
+                answer: "No supporting memory evidence was found.",
+                citations: [],
+                grounded: true,
+                indexVersion: result.indexVersion,
+                warnings: result.warnings,
+            };
+        }
+        const answer = result.matches
+            .map(
+                (evidence, index) =>
+                    `[${index + 1}] ${evidence.snippet.trim()}`,
+            )
+            .join("\n\n");
+        return {
+            question,
+            answer,
+            citations: result.matches,
+            grounded: true,
+            indexVersion: result.indexVersion,
+            warnings: result.warnings,
+        };
+    }
+
     public async getKnowledgeGraph(
         corpusId: string,
     ): Promise<MemoryKnowledgeGraph> {
-        const runtime = await this.getCorpus(corpusId);
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        const runtime = await this.getCorpusRuntime(corpusId);
         await runtime.index.initialize();
         return runtime.index.getKnowledgeGraph();
+    }
+
+    private async reindex(
+        corpusId: string,
+        sourceId: string | undefined,
+        signal: AbortSignal,
+    ): Promise<ReindexResult> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        let result: ReindexResult | undefined;
+        await this.enqueueWrite(corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(corpusId);
+            if (
+                sourceId !== undefined &&
+                !runtime.manifest.sources.some(
+                    (source) => source.sourceId === sourceId,
+                )
+            ) {
+                throw new Error(`Unknown source '${sourceId}'`);
+            }
+            const candidateManifest = structuredClone(runtime.manifest);
+            delete candidateManifest.pendingSourceForget;
+            await this.rebuildAndActivate(
+                corpusId,
+                runtime,
+                candidateManifest,
+                signal,
+            );
+            result = {
+                corpusId,
+                ...(sourceId === undefined ? {} : { sourceId }),
+                sourceCount: runtime.manifest.sources.length,
+                indexVersion: this.indexVersion(runtime.manifest),
+            };
+        });
+        return result!;
+    }
+
+    private async rebuildAndActivate(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        candidateManifest: CorpusManifest,
+        signal: AbortSignal,
+    ): Promise<void> {
+        const indexGeneration = randomUUID();
+        const candidateDirectory = this.indexDirectory(
+            corpusId,
+            indexGeneration,
+        );
+        await mkdir(candidateDirectory, { recursive: true });
+        const candidateIndex = this.indexFactory(corpusId, candidateDirectory);
+        try {
+            await raceWithAbort(
+                candidateIndex.rebuild(
+                    this.activeDocuments(candidateManifest),
+                    signal,
+                    async () => {},
+                ),
+                signal,
+            );
+            this.throwIfAborted(signal);
+            candidateManifest.indexGeneration = indexGeneration;
+            candidateManifest.corpus = {
+                ...candidateManifest.corpus,
+                updatedAt: now(),
+                status: "ready",
+                documentCount: candidateManifest.sources.length,
+            };
+            await writeJsonAtomic(
+                this.manifestPath(corpusId),
+                candidateManifest,
+            );
+            runtime.manifest = candidateManifest;
+            runtime.index = candidateIndex;
+        } catch (error) {
+            await rm(candidateDirectory, { recursive: true, force: true });
+            throw error;
+        }
+        await this.removeInactiveIndexGenerations(corpusId, indexGeneration);
+    }
+
+    private async removeInactiveIndexGenerations(
+        corpusId: string,
+        activeGeneration: string,
+    ): Promise<void> {
+        const root = this.indexDirectory(corpusId);
+        let entries;
+        try {
+            entries = await readdir(root, { withFileTypes: true });
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                return;
+            }
+            throw error;
+        }
+        await Promise.all(
+            entries
+                .filter(
+                    (entry) =>
+                        entry.isDirectory() && entry.name !== activeGeneration,
+                )
+                .map((entry) =>
+                    rm(path.join(root, entry.name), {
+                        recursive: true,
+                        force: true,
+                    }),
+                ),
+        );
+    }
+
+    private indexVersion(manifest: CorpusManifest): string {
+        return hashContent(
+            manifest.sources
+                .map((source) => source.activeRevisionId)
+                .sort()
+                .join("\n"),
+        );
     }
 
     private async acquireStorageLock(): Promise<void> {
@@ -532,6 +1170,55 @@ export class FileMemoryService implements MemoryService {
             retries: 0,
             stale: 10_000,
         });
+    }
+
+    private async recoverInterruptedJobs(): Promise<void> {
+        const directory = path.join(this.rootDirectory, jobsDirectoryName);
+        let entries: string[];
+        try {
+            entries = await readdir(directory);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                return;
+            }
+            throw error;
+        }
+        const terminalStates = new Set<JobState>([
+            "complete",
+            "partial",
+            "failed",
+            "cancelled",
+        ]);
+        for (const entry of entries.filter((name) => name.endsWith(".json"))) {
+            const job = await readJson<IngestionJobStatus>(
+                path.join(directory, entry),
+            );
+            if (job === undefined || terminalStates.has(job.state)) {
+                continue;
+            }
+            const timestamp = now();
+            const recovered: IngestionJobStatus = {
+                ...job,
+                state: "failed",
+                progress: {
+                    ...job.progress,
+                    message: "Ingestion interrupted by service restart",
+                },
+                updatedAt: timestamp,
+                error: "Ingestion interrupted by service restart",
+                trace: [
+                    ...(job.trace ?? []),
+                    {
+                        ...job.progress,
+                        state: "failed",
+                        message: "Ingestion interrupted by service restart",
+                        timestamp,
+                    },
+                ],
+            };
+            this.jobs.set(job.jobId, recovered);
+            await writeJsonAtomic(this.jobPath(job.jobId), recovered);
+        }
     }
 
     private enqueueRootWrite<T>(operation: () => Promise<T>): Promise<T> {
@@ -560,11 +1247,18 @@ export class FileMemoryService implements MemoryService {
                 message: "Validating source",
             });
             this.throwIfAborted(signal);
-            const runtime = await this.getCorpus(request.corpusId);
+            const runtime = await this.getCorpusRuntime(request.corpusId);
             const existing = runtime.manifest.sources.find(
                 (source) => source.sourceId === sourceId,
             );
             const policy = request.pipeline?.updatePolicy ?? "skipIfUnchanged";
+            const expectedRevision = request.pipeline?.expectedActiveRevisionId;
+            if (
+                expectedRevision !== undefined &&
+                existing?.activeRevisionId !== expectedRevision
+            ) {
+                throw new Error(`Source '${sourceId}' active revision changed`);
+            }
             if (existing?.activeRevisionId === revisionId) {
                 if (policy === "failIfExists") {
                     throw new Error(`Source '${sourceId}' already exists`);
@@ -580,44 +1274,17 @@ export class FileMemoryService implements MemoryService {
                 throw new Error(`Source '${sourceId}' already exists`);
             }
             const timestamp = now();
-            const revision: StoredRevision = {
-                revisionId,
-                sourceId,
-                contentHash,
-                mimeType: this.mimeType(request.source.sourceType),
-                ...(request.source.capturedAt === undefined
-                    ? {}
-                    : { capturedAt: request.source.capturedAt }),
-                ...(request.source.sourceModifiedAt === undefined
-                    ? {}
-                    : { sourceModifiedAt: request.source.sourceModifiedAt }),
-                pipelineVersion,
-                state: "processing",
+            const { source, revision } = createStoredSource(
+                request,
                 content,
-            };
-            const source: StoredSource = {
+                contentHash,
                 sourceId,
-                corpusId: request.corpusId,
-                sourceType: request.source.sourceType,
-                ...(request.source.canonicalUri === undefined
-                    ? {}
-                    : { canonicalUri: request.source.canonicalUri }),
-                title: request.source.title,
-                ...(request.source.tags === undefined
-                    ? {}
-                    : { tags: request.source.tags }),
-                ...(request.source.metadata === undefined
-                    ? {}
-                    : { metadata: request.source.metadata }),
-                activeRevisionId: revisionId,
-                revisions:
-                    existing === undefined
-                        ? [revision]
-                        : policy === "retainRevisionHistory"
-                          ? [...existing.revisions, revision]
-                          : [revision],
-            };
+                revisionId,
+                this.mimeType(request.source.sourceType),
+                existing,
+            );
             const candidateManifest = structuredClone(runtime.manifest);
+            delete candidateManifest.pendingSourceForget;
             candidateManifest.sources = [
                 ...candidateManifest.sources.filter(
                     (item) => item.sourceId !== sourceId,
@@ -644,14 +1311,52 @@ export class FileMemoryService implements MemoryService {
                 message: "Building corpus indexes",
             });
             const documents = this.activeDocuments(candidateManifest);
-            await raceWithAbort(
-                candidateIndex.rebuild(documents, signal, async (progress) => {
-                    if (!signal.aborted) {
-                        await this.updateJob(job, "building-indexes", progress);
-                    }
-                }),
-                signal,
-            );
+            const canAppend =
+                existing === undefined &&
+                runtime.manifest.sources.length > 0 &&
+                runtime.manifest.indexGeneration !== undefined &&
+                candidateIndex.append !== undefined;
+            const reportProgress = async (progress: JobProgress) => {
+                if (!signal.aborted) {
+                    await this.updateJob(
+                        job,
+                        progress.stage ?? "building-indexes",
+                        progress,
+                    );
+                }
+            };
+            if (canAppend) {
+                await cp(
+                    this.indexDirectory(
+                        request.corpusId,
+                        runtime.manifest.indexGeneration,
+                    ),
+                    candidateIndexDirectory,
+                    { recursive: true },
+                );
+                await raceWithAbort(
+                    candidateIndex.append!(
+                        [
+                            {
+                                source,
+                                revision,
+                                content,
+                                pipeline: revision.pipeline ?? {
+                                    mode: "content",
+                                },
+                            },
+                        ],
+                        signal,
+                        reportProgress,
+                    ),
+                    signal,
+                );
+            } else {
+                await raceWithAbort(
+                    candidateIndex.rebuild(documents, signal, reportProgress),
+                    signal,
+                );
+            }
             this.throwIfAborted(signal);
             revision.state = "ready";
             revision.indexedAt = now();
@@ -668,6 +1373,10 @@ export class FileMemoryService implements MemoryService {
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
             candidateIndexDirectory = undefined;
+            await this.removeInactiveIndexGenerations(
+                request.corpusId,
+                indexGeneration,
+            );
             await this.updateJob(job, "complete", {
                 completed: 1,
                 total: 1,
@@ -701,7 +1410,7 @@ export class FileMemoryService implements MemoryService {
         corpusId: string,
         operation: () => Promise<void>,
     ): Promise<void> {
-        const runtime = await this.getCorpus(corpusId);
+        const runtime = await this.getCorpusRuntime(corpusId);
         const queued = runtime.writeTail.then(operation, operation);
         runtime.writeTail = queued.then(
             () => undefined,
@@ -710,7 +1419,7 @@ export class FileMemoryService implements MemoryService {
         return queued;
     }
 
-    private async getCorpus(corpusId: string): Promise<CorpusRuntime> {
+    private async getCorpusRuntime(corpusId: string): Promise<CorpusRuntime> {
         const cached = this.corpora.get(corpusId);
         if (cached !== undefined) {
             return cached;
@@ -759,7 +1468,12 @@ export class FileMemoryService implements MemoryService {
                     `Source '${source.sourceId}' has no active revision`,
                 );
             }
-            return { source, revision, content: revision.content };
+            return {
+                source,
+                revision,
+                content: revision.content,
+                pipeline: revision.pipeline ?? { mode: "content" },
+            };
         });
     }
 
@@ -784,13 +1498,18 @@ export class FileMemoryService implements MemoryService {
         progress: JobProgress,
         error?: string,
     ): Promise<void> {
-        job.state = state;
-        job.progress = progress;
-        job.updatedAt = now();
-        if (error !== undefined) {
-            job.error = error;
-        }
-        await this.saveJob(job);
+        const timestamp = now();
+        const updated: IngestionJobStatus = {
+            ...job,
+            state,
+            progress,
+            updatedAt: timestamp,
+            trace: [...(job.trace ?? []), { state, timestamp, ...progress }],
+            ...(error === undefined ? {} : { error }),
+        };
+        await writeJsonAtomic(this.jobPath(job.jobId), updated);
+        Object.assign(job, updated);
+        this.jobs.set(job.jobId, job);
     }
 
     private manifestPath(corpusId: string): string {

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { PythonNumber } from "../../pythonLiteral.js";
+import { isRecord } from "../../rawJsonScan.js";
 
 const SCORER_REVISION = "3f7ba458bee480a86c602edff6cc7ec9cfd555db";
 const NUMBER_LEXEME = "__pythonNumber";
@@ -54,9 +55,6 @@ type DroidCallOverride = {
     comparison: "presence-only";
 };
 type ValueRecord = Record<string, unknown>;
-function isRecord(value: unknown): value is ValueRecord {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 function hasOwn(value: ValueRecord, key: string): boolean {
     return Object.prototype.hasOwnProperty.call(value, key);
 }

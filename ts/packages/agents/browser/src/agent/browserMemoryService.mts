@@ -7,6 +7,7 @@ import type {
     JobProgress,
     MemoryEvidence,
     MemoryKnowledgeGraph,
+    MemoryServiceCapabilities,
     MemoryService,
     MemorySource,
 } from "@typeagent/memory-service";
@@ -43,6 +44,13 @@ export interface BrowserMemoryMatch {
     source: MemorySource;
 }
 
+export interface BrowserSourceKnowledge {
+    source: MemorySource;
+    entities: MemoryKnowledgeGraph["entities"];
+    topics: MemoryKnowledgeGraph["topics"];
+    relationships: MemoryKnowledgeGraph["relationships"];
+}
+
 export class BrowserMemoryService {
     private corpusIdPromise: Promise<string> | undefined;
     private graphVersion = 0;
@@ -55,8 +63,9 @@ export class BrowserMemoryService {
         options: {
             signal?: AbortSignal;
             onProgress?: (progress: JobProgress) => void;
+            maxCharsPerChunk?: number;
         } = {},
-    ): Promise<void> {
+    ): Promise<BrowserSourceKnowledge> {
         const corpusId = await this.getCorpusId();
         const result = await this.client.ingestDocument({
             corpusId,
@@ -82,7 +91,13 @@ export class BrowserMemoryService {
                         : { source: document.source }),
                 },
             },
-            pipeline: { mode, updatePolicy: "skipIfUnchanged" },
+            pipeline: {
+                mode,
+                updatePolicy: "skipIfUnchanged",
+                ...(options.maxCharsPerChunk === undefined
+                    ? {}
+                    : { maxCharsPerChunk: options.maxCharsPerChunk }),
+            },
         });
         const job = await waitForMemoryJob(this.client, result.jobId, options);
         if (job.state !== "complete" && job.state !== "partial") {
@@ -92,6 +107,13 @@ export class BrowserMemoryService {
             );
         }
         this.graphVersion++;
+        const knowledge = await this.getSourceKnowledge(document.url);
+        if (knowledge === undefined) {
+            throw new Error(
+                `Memory ingestion completed but source '${document.url}' was not found`,
+            );
+        }
+        return knowledge;
     }
 
     public async search(
@@ -143,6 +165,22 @@ export class BrowserMemoryService {
         return this.client.getSource(await this.getCorpusId(), sourceId);
     }
 
+    public async getSourceKnowledge(
+        url: string,
+    ): Promise<BrowserSourceKnowledge | undefined> {
+        const source = await this.getSource(url);
+        if (source === undefined) {
+            return undefined;
+        }
+        return {
+            source,
+            ...(await this.client.getSourceKnowledge(
+                await this.getCorpusId(),
+                source.sourceId,
+            )),
+        };
+    }
+
     public async listSources(): Promise<MemorySource[]> {
         return this.client.listSources(await this.getCorpusId());
     }
@@ -157,6 +195,10 @@ export class BrowserMemoryService {
 
     public async getKnowledgeGraph(): Promise<MemoryKnowledgeGraph> {
         return this.client.getKnowledgeGraph(await this.getCorpusId());
+    }
+
+    public async getCapabilities(): Promise<MemoryServiceCapabilities> {
+        return this.client.getCapabilities();
     }
 
     public getGraphVersion(): number {
