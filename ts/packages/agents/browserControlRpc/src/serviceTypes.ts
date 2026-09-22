@@ -144,6 +144,67 @@ export type MemoryCenterIngestResult = {
     statusUri: string;
 };
 
+export type MemoryCenterHowToSettings = {
+    revision: number;
+    updatedAt: string;
+    enabled: boolean;
+    detectCandidates: boolean;
+    preferences?: Record<string, unknown>;
+};
+
+export type MemoryCenterProcedureCitation = {
+    sourceId: string;
+    revisionId: string;
+    locator?: string;
+    excerpt?: string;
+};
+
+export type MemoryCenterProcedureDocument = {
+    title: string;
+    summary?: string;
+    steps: string[];
+    citations: MemoryCenterProcedureCitation[];
+    additionalSections?: Array<{ heading: string; content: string }>;
+};
+
+export type MemoryCenterProcedureCandidate = MemoryCenterProcedureDocument & {
+    candidateId: string;
+    corpusId: string;
+    state: "detected" | "draft" | "rejected" | "saved";
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type MemoryCenterProcedureSummary = {
+    corpusId: string;
+    procedureId: string;
+    title: string;
+    state: "saved" | "stale" | "archived";
+    latestVersion: number;
+    updatedAt: string;
+};
+
+export type MemoryCenterProcedureVersion = {
+    corpusId: string;
+    procedureId: string;
+    version: number;
+    state: "saved" | "stale" | "archived";
+    document: MemoryCenterProcedureDocument;
+    canonicalJson: string;
+    markdown: string;
+    createdAt: string;
+    jsonHash: string;
+    markdownHash: string;
+    basedOnCandidateId?: string;
+    previousVersion?: number;
+};
+
+export type MemoryCenterProcedureSearchMatch = {
+    procedure: MemoryCenterProcedureSummary;
+    version: MemoryCenterProcedureVersion;
+    score: number;
+};
+
 export type MemoryCenterReindexResult = {
     corpusId: string;
     sourceId?: string;
@@ -210,6 +271,13 @@ export type MemoryCenterInvokeFunctions = {
         corpusId: string;
         sourceId: string;
     }): Promise<MemoryCenterKnowledge>;
+    memoryImportDocument(params: {
+        corpusId: string;
+        title: string;
+        markdown: string;
+        canonicalUri?: string;
+        tags?: string[];
+    }): Promise<MemoryCenterIngestResult>;
     memoryReplaceSource(params: {
         corpusId: string;
         sourceId: string;
@@ -247,6 +315,60 @@ export type MemoryCenterInvokeFunctions = {
     memoryCancelJob(params: {
         jobId: string;
     }): Promise<MemoryCenterJob | undefined>;
+    memoryGetHowToSettings(params: {
+        corpusId: string;
+    }): Promise<MemoryCenterHowToSettings>;
+    memoryUpdateHowToSettings(params: {
+        corpusId: string;
+        expectedRevision: number;
+        enabled?: boolean;
+        detectCandidates?: boolean;
+        preferences?: Record<string, unknown>;
+    }): Promise<MemoryCenterHowToSettings>;
+    memoryCreateProcedureCandidate(
+        params: MemoryCenterProcedureDocument & {
+            corpusId: string;
+            candidateId?: string;
+            state?: "detected" | "draft";
+        },
+    ): Promise<MemoryCenterProcedureCandidate>;
+    memoryListProcedureCandidates(params: {
+        corpusId: string;
+        states?: MemoryCenterProcedureCandidate["state"][];
+    }): Promise<MemoryCenterProcedureCandidate[]>;
+    memoryRejectProcedureCandidate(params: {
+        corpusId: string;
+        candidateId: string;
+    }): Promise<MemoryCenterProcedureCandidate>;
+    memorySaveProcedure(params: {
+        corpusId: string;
+        procedureId?: string;
+        candidateId?: string;
+        expectedVersion?: number;
+        document?: MemoryCenterProcedureDocument;
+        markdown?: string;
+    }): Promise<MemoryCenterProcedureVersion>;
+    memoryListProcedures(params: {
+        corpusId: string;
+        states?: MemoryCenterProcedureSummary["state"][];
+    }): Promise<MemoryCenterProcedureSummary[]>;
+    memoryGetProcedure(params: {
+        corpusId: string;
+        procedureId: string;
+        version?: number;
+    }): Promise<MemoryCenterProcedureVersion | undefined>;
+    memorySearchProcedures(params: {
+        corpusId: string;
+        query: string;
+        states?: MemoryCenterProcedureSummary["state"][];
+        limit?: number;
+    }): Promise<MemoryCenterProcedureSearchMatch[]>;
+    memoryArchiveProcedure(params: {
+        corpusId: string;
+        procedureId: string;
+        expectedVersion?: number;
+    }): Promise<MemoryCenterProcedureVersion>;
+
     memoryListActivity(
         params: MemoryCenterActivityFilter,
     ): Promise<MemoryCenterPage<MemoryCenterActivity>>;

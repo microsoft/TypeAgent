@@ -10,15 +10,19 @@ import {
 import { UserIdentity } from "@typeagent/agent-server-protocol";
 import { DispatcherOptions } from "agent-dispatcher";
 import os from "node:os";
+import path from "node:path";
 import registerDebug from "debug";
 import { MacroManager } from "@typeagent/copilot-macros";
 import { McpReplayHost } from "default-agent-provider";
+import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
 
 import {
     createConversationManager,
     ConversationManager,
 } from "./conversationManager.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
+import { createLocalSkillServices } from "./skillCatalog.js";
+import { createDurableMemoryService } from "./durableMemoryService.js";
 
 const debug = registerDebug("agent-server:in-process");
 
@@ -46,6 +50,8 @@ export type InProcessAgentServerOptions = {
     idleTimeoutMs?: number;
     /** Disable background content indexing for isolated test instances. */
     testMode?: boolean;
+    /** Optional acquisition dependencies; the server still owns staging. */
+    skillAcquisition?: Omit<SkillAcquirerOptions, "stagingRoot">;
 };
 
 export type InProcessAgentServer = {
@@ -83,12 +89,22 @@ export async function createInProcessAgentServer(
     // Pre-warm so the first join is fast and conversation metadata exists.
     await conversationManager.prewarmMostRecentConversation();
 
+    const memoryService = createDurableMemoryService(
+        path.join(instanceDir, "memory"),
+    );
+    const { skillCatalog, skillAcquirer } = await createLocalSkillServices(
+        instanceDir,
+        options.skillAcquisition,
+    );
     const { handler } = createAgentServerConnectionHandler({
         conversationManager,
         macroManager: new MacroManager(
             instanceDir,
             new McpReplayHost(instanceDir),
         ),
+        skillCatalog,
+        skillAcquirer,
+        procedureService: memoryService,
         shutdown: options.shutdown,
         getUserIdentity: options.getUserIdentity ?? defaultUserIdentity,
         // No discovery RPC here: embedded hosts run their own discovery
@@ -138,7 +154,10 @@ export async function createInProcessAgentServer(
         conversationManager,
         async close(): Promise<void> {
             closeTransport();
-            await conversationManager.close();
+            await Promise.all([
+                conversationManager.close(),
+                memoryService.close(),
+            ]);
         },
     };
 }

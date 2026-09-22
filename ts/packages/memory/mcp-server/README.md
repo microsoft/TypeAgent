@@ -6,6 +6,9 @@ bounded content, derived knowledge, revision replacement, preview/confirm
 deletion, reindex, and filtered job management surface. Destructive tools are
 annotated accordingly.
 
+Personal how-to tools cover optimistic settings updates, procedure candidate
+create/get/list/reject, and immutable procedure save/get/list/search/archive.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

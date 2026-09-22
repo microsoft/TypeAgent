@@ -136,8 +136,6 @@ function validateBrowserRuntime(root) {
         "src/agent/indexing/schema/summarization.mts",
         "src/agent/knowledge/actions/schema/topicRelationship.mts",
         "src/agent/knowledge/schema/pageQuestionSchema.mts",
-        "src/agent/search/schema/answerEnhancement.mts",
-        "src/agent/search/schema/queryAnalysis.mts",
         "src/agent/webFlows/schema/browserApi.mts",
         "src/agent/webFlows/schema/webFlowGeneration.mts",
         "src/agent/webFlows/webFlowSandbox.d.ts",

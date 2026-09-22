@@ -31,6 +31,26 @@ import type {
     TraceSummary,
     ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
+import type {
+    CatalogEntry,
+    CatalogSearchResult,
+    CatalogState,
+    SkillIdentity,
+    SkillGrammarRoutingResult,
+    SkillScope,
+    SkillAcquisitionPreview,
+    SkillAcquisitionRequest,
+    SkillUpdateCheck,
+} from "@typeagent/skill-catalog";
+import type {
+    MacroDraftResult,
+    ProcedureLineage,
+} from "@typeagent/procedure-artifacts";
+
+export type {
+    MacroDraftResult,
+    ProcedureLineage,
+} from "@typeagent/procedure-artifacts";
 
 export type {
     ApproveMacroRequest,
@@ -198,6 +218,119 @@ export type SpeechToken = {
     endpoint: string;
 };
 
+export type ListSkillsRequest = {
+    states?: CatalogState[];
+    scopes?: SkillScope[];
+    activeOnly?: boolean;
+};
+
+export type SearchSkillsRequest = {
+    query: string;
+    scopes?: SkillScope[];
+    limit?: number;
+};
+
+export type GetSkillRequest = {
+    identity: SkillIdentity;
+    revision?: string;
+};
+
+export type ReadSkillFileRequest = {
+    identity: SkillIdentity;
+    revision: string;
+    path: string;
+};
+
+export type ReadSkillFileResponse = {
+    content: string;
+    encoding: "base64";
+    mimeType: string;
+};
+
+export type PublishSkillRequest = {
+    identity: SkillIdentity;
+    displayName?: string;
+    description?: string;
+    schemaFingerprint: string;
+    files: {
+        path: string;
+        content: string;
+        encoding?: "utf8" | "base64";
+    }[];
+};
+
+export type ChangeSkillStateRequest = {
+    identity: SkillIdentity;
+    revision: string;
+    state: CatalogState;
+};
+
+export type SelectSkillRevisionRequest = {
+    identity: SkillIdentity;
+    revision: string;
+};
+
+export type CheckSkillUpdateResponse = SkillUpdateCheck & {
+    currentState?: CatalogState;
+};
+
+export type SkillAcquisitionRevisionResponse = {
+    entry: CatalogEntry;
+    revision: string;
+    state: CatalogState;
+    active: boolean;
+    updated: boolean;
+    sourceFingerprint: string;
+    manifestDigest: string;
+};
+
+export type ProcedureVersionReference = {
+    corpusId: string;
+    procedureId: string;
+    version: number;
+};
+
+export type ProcedureSkillArtifact = {
+    path?: string;
+    content: string;
+    encoding?: "utf8" | "base64";
+};
+
+export type ProcedureArtifactRequest =
+    | (ProcedureVersionReference & {
+          kind: "skill";
+          skill: {
+              identity: SkillIdentity;
+              description?: string;
+              schema?: ProcedureSkillArtifact;
+              grammar?: ProcedureSkillArtifact;
+          };
+      })
+    | (ProcedureVersionReference & { kind: "macro" });
+
+export type ProcedureArtifactPreview =
+    | {
+          kind: "skill";
+          lineage: ProcedureLineage;
+          skill: PublishSkillRequest;
+      }
+    | {
+          kind: "macro";
+          result: MacroDraftResult;
+      };
+
+export type ProcedureArtifactPromotion =
+    | {
+          kind: "skill";
+          lineage: ProcedureLineage;
+          entry: CatalogEntry;
+      }
+    | {
+          kind: "macro";
+          lineage: ProcedureLineage;
+          macro: MacroVersionRef;
+      };
+
 export type AgentServerInvokeFunctions = {
     armMacroRecording: (
         request: ArmRecordingRequest,
@@ -236,6 +369,45 @@ export type AgentServerInvokeFunctions = {
     ) => Promise<MacroVersionRef>;
     cancelMacroRun: (runId: string) => Promise<void>;
     getMacroRun: (runId: string) => Promise<MacroRunRecord>;
+    listSkills: (request?: ListSkillsRequest) => Promise<CatalogEntry[]>;
+    searchSkills: (
+        request: SearchSkillsRequest,
+    ) => Promise<readonly CatalogSearchResult[]>;
+    matchSkillGrammar: (
+        utterance: string,
+    ) => Promise<SkillGrammarRoutingResult>;
+    getSkill: (request: GetSkillRequest) => Promise<CatalogEntry | undefined>;
+    readSkillFile: (
+        request: ReadSkillFileRequest,
+    ) => Promise<ReadSkillFileResponse>;
+    publishSkill: (request: PublishSkillRequest) => Promise<CatalogEntry>;
+    changeSkillState: (
+        request: ChangeSkillStateRequest,
+    ) => Promise<CatalogEntry>;
+    activateSkill: (
+        request: SelectSkillRevisionRequest,
+    ) => Promise<CatalogEntry>;
+    rollbackSkill: (
+        request: SelectSkillRevisionRequest,
+    ) => Promise<CatalogEntry>;
+    previewSkillAcquisition: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<SkillAcquisitionPreview>;
+    checkSkillUpdate: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<CheckSkillUpdateResponse>;
+    acquireAndPublishSkill: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<SkillAcquisitionRevisionResponse>;
+    updateSkill: (
+        request: SkillAcquisitionRequest,
+    ) => Promise<SkillAcquisitionRevisionResponse>;
+    previewProcedureArtifact: (
+        request: ProcedureArtifactRequest,
+    ) => Promise<ProcedureArtifactPreview>;
+    promoteProcedureArtifact: (
+        request: ProcedureArtifactRequest,
+    ) => Promise<ProcedureArtifactPromotion>;
 
     joinConversation: (
         options?: DispatcherConnectOptions,
