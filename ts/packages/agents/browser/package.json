@@ -218,7 +218,6 @@
         "src/agent/indexing/schema",
         "src/agent/knowledge/actions/schema",
         "src/agent/knowledge/schema",
-        "src/agent/search/schema",
         "src/agent/webFlows/samples",
         "src/agent/webFlows/schema"
       ],
