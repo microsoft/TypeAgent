@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2b1f1b909ce7d5a90840f0d9bbeea1cc9960efe426ccadb78a37bbf32cc4fdc3 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=35f168c8e48e6cad8ddf2ff4a59cad32e208c99ac2474ada4112ef9ef68d89d0 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -51,10 +51,10 @@ _None._
 - [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
+- [./src/core/fileJson.ts](./src/core/fileJson.ts)
 - [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
 - [./src/core/paths.ts](./src/core/paths.ts)
-- [./src/core/prices.ts](./src/core/prices.ts)
-- _…and 72 more under `./src/`._
+- _…and 75 more under `./src/`._
 
 ### Environment variables
 
@@ -66,6 +66,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `b3ce7b09fad73d8000e21507a976afce040bc249` on `2026-09-18T17:42:00.907Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `1e90f36ac85323f0ffc3bad7de54f2a9a32835cc` on `2026-09-22T21:27:13.339Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
