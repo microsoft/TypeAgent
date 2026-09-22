@@ -6,19 +6,26 @@ import {
     ResourceTemplate,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type {
     AgentServerConnection,
     CatalogEntry,
+    ProcedureArtifactRequest,
     GetSkillRequest,
     ListSkillsRequest,
-    ReadSkillFileRequest,
     SearchSkillsRequest,
-    SkillIdentity,
+    SkillAcquisitionRequest,
 } from "@typeagent/agent-server-client";
 import { z } from "zod";
 import { parse as parseYaml } from "yaml";
 import { connectToAgentServer } from "../shared/typeagent-client.js";
+import {
+    parseSkillResourceUri,
+    skillResourceUri,
+} from "../shared/skill-resource.js";
+
+export { parseSkillResourceUri, skillResourceUri };
 
 export interface SkillsServerDependencies {
     connect: () => Promise<AgentServerConnection>;
@@ -66,51 +73,6 @@ function toolError(error: unknown): CallToolResult {
     };
 }
 
-export function skillResourceUri(
-    identity: SkillIdentity,
-    revision: string,
-    filePath: string,
-): string {
-    validateResourcePath(filePath);
-    return `skill://typeagent/${encodeSegment(
-        JSON.stringify(identity),
-    )}/${encodeURIComponent(revision)}/${encodeURIComponent(
-        identity.name,
-    )}/${filePath
-        .split("/")
-        .map((segment) => encodeURIComponent(segment))
-        .join("/")}`;
-}
-
-export function parseSkillResourceUri(uri: URL): ReadSkillFileRequest {
-    if (uri.protocol !== "skill:" || uri.hostname !== "typeagent") {
-        throw new Error(`Unsupported skill resource URI: ${uri.href}`);
-    }
-    const parts = uri.pathname.split("/").filter(Boolean);
-    if (parts.length < 4) {
-        throw new Error(`Invalid skill resource URI: ${uri.href}`);
-    }
-    let identity: SkillIdentity;
-    try {
-        identity = JSON.parse(decodeSegment(parts[0])) as SkillIdentity;
-    } catch {
-        throw new Error(`Invalid skill identity in resource URI: ${uri.href}`);
-    }
-    if (decodeURIComponent(parts[2]) !== identity.name) {
-        throw new Error(`Skill name does not match resource URI: ${uri.href}`);
-    }
-    const filePath = parts
-        .slice(3)
-        .map((part) => decodeURIComponent(part))
-        .join("/");
-    validateResourcePath(filePath, uri.href);
-    return {
-        identity,
-        revision: decodeURIComponent(parts[1]),
-        path: filePath,
-    };
-}
-
 export class SkillsCatalogAdapter {
     public constructor(
         private readonly dependencies: SkillsServerDependencies = defaultDependencies,
@@ -141,6 +103,42 @@ export class SkillsCatalogAdapter {
             }
             return connection.getSkill(request);
         });
+    }
+
+    public previewProcedureArtifact(
+        request: ProcedureArtifactRequest,
+    ): Promise<CallToolResult> {
+        return this.managementToolCall("previewProcedureArtifact", request);
+    }
+
+    public promoteProcedureArtifact(
+        request: ProcedureArtifactRequest,
+    ): Promise<CallToolResult> {
+        return this.managementToolCall("promoteProcedureArtifact", request);
+    }
+
+    public previewSkillAcquisition(
+        request: SkillAcquisitionRequest,
+    ): Promise<CallToolResult> {
+        return this.managementToolCall("previewSkillAcquisition", request);
+    }
+
+    public checkSkillUpdate(
+        request: SkillAcquisitionRequest,
+    ): Promise<CallToolResult> {
+        return this.managementToolCall("checkSkillUpdate", request);
+    }
+
+    public acquireAndPublishSkill(
+        request: SkillAcquisitionRequest,
+    ): Promise<CallToolResult> {
+        return this.managementToolCall("acquireAndPublishSkill", request);
+    }
+
+    public updateSkill(
+        request: SkillAcquisitionRequest,
+    ): Promise<CallToolResult> {
+        return this.managementToolCall("updateSkill", request);
     }
 
     public async listProtocolSkills(cursor?: string): Promise<{
@@ -270,6 +268,39 @@ export class SkillsCatalogAdapter {
         }
     }
 
+    private managementToolCall<
+        TName extends
+            | "previewProcedureArtifact"
+            | "promoteProcedureArtifact"
+            | "previewSkillAcquisition"
+            | "checkSkillUpdate"
+            | "acquireAndPublishSkill"
+            | "updateSkill",
+    >(
+        name: TName,
+        request: Parameters<NonNullable<AgentServerConnection[TName]>>[0],
+    ): Promise<CallToolResult> {
+        return this.toolCall(async (connection) => {
+            const operation = connection[name];
+            if (operation === undefined) {
+                throw new Error(
+                    `The connected TypeAgent server does not support ${name}. Upgrade or restart the agent server and retry.`,
+                );
+            }
+            try {
+                return await (
+                    operation as (value: typeof request) => Promise<unknown>
+                )(request);
+            } catch (error) {
+                const detail =
+                    error instanceof Error ? error.message : String(error);
+                throw new Error(
+                    `${name} failed: ${detail}. Check the request and agent-server logs, then retry.`,
+                );
+            }
+        });
+    }
+
     private async withConnection<T>(
         operation: (connection: AgentServerConnection) => Promise<T>,
     ): Promise<T> {
@@ -337,6 +368,148 @@ const identitySchema = {
     origin: z.string().min(1),
     name: z.string().min(1),
 };
+
+const skillIdentitySchema = z.object(identitySchema);
+const skillAcquisitionSourceSchema = z.discriminatedUnion("type", [
+    z.object({
+        type: z.literal("directory"),
+        path: z.string(),
+    }),
+    z.object({
+        type: z.literal("git"),
+        repository: z.string(),
+        ref: z.string(),
+        subdirectory: z.string().optional(),
+    }),
+    z.object({
+        type: z.literal("archive"),
+        path: z.string(),
+        format: z.enum(["zip", "tar", "tar.gz"]).optional(),
+    }),
+]);
+const skillAcquisitionRequestSchema = z.object({
+    identity: skillIdentitySchema,
+    schemaFingerprint: z.string(),
+    source: skillAcquisitionSourceSchema,
+    displayName: z.string().optional(),
+    description: z.string().optional(),
+});
+const procedureSkillArtifactSchema = z.object({
+    path: z.string().optional(),
+    content: z.string(),
+    encoding: z.enum(["utf8", "base64"]).optional(),
+});
+const procedureArtifactRequestSchema = z.discriminatedUnion("kind", [
+    z.object({
+        corpusId: z.string(),
+        procedureId: z.string(),
+        version: z.number(),
+        kind: z.literal("skill"),
+        skill: z.object({
+            identity: skillIdentitySchema,
+            description: z.string().optional(),
+            schema: procedureSkillArtifactSchema.optional(),
+            grammar: procedureSkillArtifactSchema.optional(),
+        }),
+    }),
+    z.object({
+        corpusId: z.string(),
+        procedureId: z.string(),
+        version: z.number(),
+        kind: z.literal("macro"),
+    }),
+]);
+
+type SkillAcquisitionToolRequest = z.infer<
+    typeof skillAcquisitionRequestSchema
+>;
+type ProcedureArtifactToolRequest = z.infer<
+    typeof procedureArtifactRequestSchema
+>;
+
+function toSkillAcquisitionRequest(
+    request: SkillAcquisitionToolRequest,
+): SkillAcquisitionRequest {
+    const source =
+        request.source.type === "git"
+            ? {
+                  type: request.source.type,
+                  repository: request.source.repository,
+                  ref: request.source.ref,
+                  ...(request.source.subdirectory === undefined
+                      ? {}
+                      : { subdirectory: request.source.subdirectory }),
+              }
+            : request.source.type === "archive"
+              ? {
+                    type: request.source.type,
+                    path: request.source.path,
+                    ...(request.source.format === undefined
+                        ? {}
+                        : { format: request.source.format }),
+                }
+              : request.source;
+    return {
+        identity: request.identity,
+        schemaFingerprint: request.schemaFingerprint,
+        source,
+        ...(request.displayName === undefined
+            ? {}
+            : { displayName: request.displayName }),
+        ...(request.description === undefined
+            ? {}
+            : { description: request.description }),
+    };
+}
+
+function toProcedureArtifactRequest(
+    request: ProcedureArtifactToolRequest,
+): ProcedureArtifactRequest {
+    if (request.kind === "macro") {
+        return request;
+    }
+    const optionalArtifact = (
+        artifact: z.infer<typeof procedureSkillArtifactSchema> | undefined,
+    ) =>
+        artifact === undefined
+            ? undefined
+            : {
+                  content: artifact.content,
+                  ...(artifact.path === undefined
+                      ? {}
+                      : { path: artifact.path }),
+                  ...(artifact.encoding === undefined
+                      ? {}
+                      : { encoding: artifact.encoding }),
+              };
+    const schema = optionalArtifact(request.skill.schema);
+    const grammar = optionalArtifact(request.skill.grammar);
+    return {
+        corpusId: request.corpusId,
+        procedureId: request.procedureId,
+        version: request.version,
+        kind: request.kind,
+        skill: {
+            identity: request.skill.identity,
+            ...(request.skill.description === undefined
+                ? {}
+                : { description: request.skill.description }),
+            ...(schema === undefined ? {} : { schema }),
+            ...(grammar === undefined ? {} : { grammar }),
+        },
+    };
+}
+
+const readOnlyToolAnnotations = {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+} as const;
+
+const mutatingToolAnnotations = {
+    readOnlyHint: false,
+    destructiveHint: false,
+} as const;
 
 export class TypeAgentSkillsMcpServer {
     private readonly server = new McpServer({
@@ -455,6 +628,86 @@ export class TypeAgentSkillsMcpServer {
                         : { revision: request.revision }),
                 }),
         );
+        this.server.registerTool(
+            "typeagent-previewProcedureArtifact",
+            {
+                title: "Preview procedure artifact (read-only)",
+                description:
+                    "READ-ONLY: Preview the skill package or macro that would be generated from a saved procedure. Does not publish or modify anything.",
+                inputSchema: procedureArtifactRequestSchema,
+                annotations: readOnlyToolAnnotations,
+            },
+            (request) =>
+                adapter.previewProcedureArtifact(
+                    toProcedureArtifactRequest(request),
+                ),
+        );
+        this.server.registerTool(
+            "typeagent-promoteProcedureArtifact",
+            {
+                title: "Promote procedure artifact (mutating)",
+                description:
+                    "MUTATING: Generate and publish a skill draft or macro from a saved procedure.",
+                inputSchema: procedureArtifactRequestSchema,
+                annotations: mutatingToolAnnotations,
+            },
+            (request) =>
+                adapter.promoteProcedureArtifact(
+                    toProcedureArtifactRequest(request),
+                ),
+        );
+        this.server.registerTool(
+            "typeagent-previewSkillAcquisition",
+            {
+                title: "Preview skill acquisition (read-only)",
+                description:
+                    "READ-ONLY: Inspect and validate a directory, Git, or archive skill source without publishing it.",
+                inputSchema: skillAcquisitionRequestSchema,
+                annotations: readOnlyToolAnnotations,
+            },
+            (request) =>
+                adapter.previewSkillAcquisition(
+                    toSkillAcquisitionRequest(request),
+                ),
+        );
+        this.server.registerTool(
+            "typeagent-checkSkillUpdate",
+            {
+                title: "Check skill update (read-only)",
+                description:
+                    "READ-ONLY: Compare a skill source with the catalog revision without publishing an update.",
+                inputSchema: skillAcquisitionRequestSchema,
+                annotations: readOnlyToolAnnotations,
+            },
+            (request) =>
+                adapter.checkSkillUpdate(toSkillAcquisitionRequest(request)),
+        );
+        this.server.registerTool(
+            "typeagent-acquireAndPublishSkill",
+            {
+                title: "Acquire and publish skill draft (mutating)",
+                description:
+                    "MUTATING: Acquire a directory, Git, or archive source and publish the validated package as a new catalog draft.",
+                inputSchema: skillAcquisitionRequestSchema,
+                annotations: mutatingToolAnnotations,
+            },
+            (request) =>
+                adapter.acquireAndPublishSkill(
+                    toSkillAcquisitionRequest(request),
+                ),
+        );
+        this.server.registerTool(
+            "typeagent-updateSkill",
+            {
+                title: "Update skill from source (mutating)",
+                description:
+                    "MUTATING: Reacquire a skill source and publish a new draft revision when its content or metadata changed.",
+                inputSchema: skillAcquisitionRequestSchema,
+                annotations: mutatingToolAnnotations,
+            },
+            (request) =>
+                adapter.updateSkill(toSkillAcquisitionRequest(request)),
+        );
         this.server.registerResource(
             "typeagent-skill-file",
             new ResourceTemplate(
@@ -467,30 +720,15 @@ export class TypeAgentSkillsMcpServer {
     }
 
     public async start(): Promise<void> {
-        await this.server.connect(new StdioServerTransport());
+        await this.connect(new StdioServerTransport());
     }
-}
 
-function encodeSegment(value: string): string {
-    return Buffer.from(value).toString("base64url");
-}
+    public async connect(transport: Transport): Promise<void> {
+        await this.server.connect(transport);
+    }
 
-function decodeSegment(value: string): string {
-    return Buffer.from(value, "base64url").toString("utf8");
-}
-
-function validateResourcePath(filePath: string, uri?: string): void {
-    if (
-        filePath.length === 0 ||
-        filePath.startsWith("/") ||
-        filePath.includes("\\") ||
-        filePath.split("/").some((part) => part === "." || part === "..")
-    ) {
-        throw new Error(
-            uri === undefined
-                ? `Unsafe skill file path: ${filePath}`
-                : `Unsafe skill file path in resource URI: ${uri}`,
-        );
+    public async close(): Promise<void> {
+        await this.server.close();
     }
 }
 

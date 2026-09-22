@@ -38,6 +38,8 @@ describe("staged plugin artifact", () => {
 
         expect(manifest.extensions).toBe("extensions/");
         expect(bundle).toContain('from "@github/copilot-sdk/extension"');
+        expect(bundle).toContain("TYPEAGENT_SELECTED_SKILLS");
+        expect(bundle).toContain("skillDirectories");
     });
 
     it("registers the structured Direct bridge in the actual bundled agent server", async () => {
@@ -152,7 +154,23 @@ describe("staged plugin artifact", () => {
                 "typeagent-listSkills",
                 "typeagent-searchSkills",
                 "typeagent-getSkill",
+                "typeagent-previewProcedureArtifact",
+                "typeagent-promoteProcedureArtifact",
+                "typeagent-previewSkillAcquisition",
+                "typeagent-checkSkillUpdate",
+                "typeagent-acquireAndPublishSkill",
+                "typeagent-updateSkill",
             ]);
+            expect(
+                catalog.tools.find(
+                    ({ name }) => name === "typeagent-previewProcedureArtifact",
+                )?.annotations,
+            ).toMatchObject({ readOnlyHint: true });
+            expect(
+                catalog.tools.find(
+                    ({ name }) => name === "typeagent-updateSkill",
+                )?.annotations,
+            ).toMatchObject({ readOnlyHint: false });
             const templates = await client.listResourceTemplates();
             expect(templates.resourceTemplates).toEqual([
                 expect.objectContaining({

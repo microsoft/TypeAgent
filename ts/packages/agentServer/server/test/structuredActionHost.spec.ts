@@ -22,7 +22,7 @@ import {
 } from "@typeagent/agent-rpc/channel";
 import { createAgentServerConnection } from "@typeagent/agent-server-client";
 import type { MacroManager } from "@typeagent/copilot-macros";
-import type { SkillCatalog } from "@typeagent/skill-catalog";
+import type { LiveSkillCatalog } from "@typeagent/skill-catalog";
 import type { ConversationManager } from "../src/conversationManager.js";
 import { createAgentServerConnectionHandler } from "../src/connectionHandler.js";
 import { createSharedDispatcher } from "../src/sharedDispatcher.js";
@@ -147,7 +147,7 @@ async function fixture() {
     const { handler } = createAgentServerConnectionHandler({
         conversationManager: manager,
         macroManager: {} as MacroManager,
-        skillCatalog: {} as SkillCatalog,
+        skillCatalog: {} as LiveSkillCatalog,
         shutdown() {},
         getUserIdentity: () => ({
             username: "test",

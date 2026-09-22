@@ -289,6 +289,95 @@ export function procedureFromMarkdown(markdown: string): ProcedureDocument {
     return document;
 }
 
+function procedureHeading(title: string): boolean {
+    return /\b(how to|steps?|procedure|instructions?|workflow|checklist|setup|install(?:ation)?|configur(?:e|ation)|deploy(?:ment)?|publish|troubleshoot)\b/i.test(
+        title,
+    );
+}
+
+function listStep(line: string): string | undefined {
+    const match =
+        /^\s*(?:\d+[.)]\s+|[-*+]\s+\[[ xX]\]\s+)(?<step>.+?)\s*$/.exec(line);
+    return match?.groups?.step;
+}
+
+function headingAt(line: string): string | undefined {
+    const markdown = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
+    if (markdown !== null) {
+        return markdown[1];
+    }
+    if (listStep(line) !== undefined) {
+        return undefined;
+    }
+    const plain = line.trim().replace(/:\s*$/, "");
+    return procedureHeading(plain) ? plain : undefined;
+}
+
+export function detectProcedureCandidates(
+    corpusId: string,
+    sourceId: string,
+    revisionId: string,
+    content: string,
+): ProcedureCandidateCreateRequest[] {
+    const lines = content.replace(/\r\n?/g, "\n").split("\n");
+    const headings = lines
+        .map((line, index) => {
+            const heading = headingAt(line);
+            return heading === undefined ? undefined : { heading, index };
+        })
+        .filter(
+            (
+                item,
+            ): item is {
+                heading: string;
+                index: number;
+            } => item !== undefined,
+        );
+    let documentTitle: string | undefined;
+    const firstMarkdownHeading = lines.find((line) =>
+        /^\s{0,3}#\s+/.test(line),
+    );
+    if (firstMarkdownHeading !== undefined) {
+        documentTitle = headingAt(firstMarkdownHeading);
+    }
+    const detected: ProcedureCandidateCreateRequest[] = [];
+    for (const [headingIndex, item] of headings.entries()) {
+        if (!procedureHeading(item.heading)) {
+            continue;
+        }
+        const end = headings[headingIndex + 1]?.index ?? lines.length;
+        const steps = lines
+            .slice(item.index + 1, end)
+            .map(listStep)
+            .filter((step): step is string => step !== undefined);
+        if (steps.length < 2) {
+            continue;
+        }
+        const title =
+            /^(steps?|instructions?|procedure|checklist)$/i.test(
+                item.heading,
+            ) && documentTitle !== undefined
+                ? documentTitle
+                : item.heading;
+        const identity = `${sourceId}\n${revisionId}\n${item.index}\n${title}\n${steps.join("\n")}`;
+        detected.push({
+            corpusId,
+            candidateId: `auto:${hash(identity).slice(0, 32)}`,
+            state: "detected",
+            title,
+            steps,
+            citations: [
+                {
+                    sourceId,
+                    revisionId,
+                    locator: `lines ${item.index + 1}-${end}`,
+                },
+            ],
+        });
+    }
+    return detected;
+}
+
 export class PersonalHowToStore {
     public constructor(private readonly rootDirectory: string) {}
 
@@ -367,6 +456,62 @@ export class PersonalHowToStore {
         index.candidates.push(candidate);
         await this.writeIndex(request.corpusId, index);
         return structuredClone(candidate);
+    }
+
+    public async createDetectedCandidates(
+        requests: ProcedureCandidateCreateRequest[],
+    ): Promise<ProcedureCandidate[]> {
+        if (requests.length === 0) {
+            return [];
+        }
+        const corpusId = requests[0].corpusId;
+        if (requests.some((request) => request.corpusId !== corpusId)) {
+            throw new Error("Detected candidates must belong to one corpus");
+        }
+        const index = await this.readIndex(corpusId);
+        const existingIds = new Set(
+            index.candidates.map((candidate) => candidate.candidateId),
+        );
+        const created: ProcedureCandidate[] = [];
+        for (const request of requests) {
+            validateDocument(request);
+            const candidateId = request.candidateId;
+            if (candidateId === undefined) {
+                throw new Error("Detected candidates require an identifier");
+            }
+            validateIdentifier("candidate ID", candidateId);
+            if (existingIds.has(candidateId)) {
+                continue;
+            }
+            const createdAt = timestamp();
+            const candidate: ProcedureCandidate = {
+                candidateId,
+                corpusId,
+                state: "detected",
+                title: request.title.trim(),
+                ...(request.summary === undefined
+                    ? {}
+                    : { summary: request.summary }),
+                steps: structuredClone(request.steps),
+                citations: structuredClone(request.citations),
+                ...(request.additionalSections === undefined
+                    ? {}
+                    : {
+                          additionalSections: structuredClone(
+                              request.additionalSections,
+                          ),
+                      }),
+                createdAt,
+                updatedAt: createdAt,
+            };
+            existingIds.add(candidateId);
+            index.candidates.push(candidate);
+            created.push(candidate);
+        }
+        if (created.length > 0) {
+            await this.writeIndex(corpusId, index);
+        }
+        return structuredClone(created);
     }
 
     public async getCandidate(

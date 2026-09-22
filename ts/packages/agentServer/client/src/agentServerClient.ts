@@ -61,12 +61,20 @@ import {
     CatalogSearchResult,
     ListSkillsRequest,
     SearchSkillsRequest,
+    SkillGrammarRoutingResult,
     GetSkillRequest,
     ReadSkillFileRequest,
     ReadSkillFileResponse,
     PublishSkillRequest,
     ChangeSkillStateRequest,
     SelectSkillRevisionRequest,
+    SkillAcquisitionPreview,
+    SkillAcquisitionRequest,
+    CheckSkillUpdateResponse,
+    SkillAcquisitionRevisionResponse,
+    ProcedureArtifactRequest,
+    ProcedureArtifactPreview,
+    ProcedureArtifactPromotion,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -203,6 +211,7 @@ export type AgentServerConnection = {
     searchSkills?(
         request: SearchSkillsRequest,
     ): Promise<readonly CatalogSearchResult[]>;
+    matchSkillGrammar?(utterance: string): Promise<SkillGrammarRoutingResult>;
     getSkill?(request: GetSkillRequest): Promise<CatalogEntry | undefined>;
     readSkillFile?(
         request: ReadSkillFileRequest,
@@ -211,6 +220,24 @@ export type AgentServerConnection = {
     changeSkillState?(request: ChangeSkillStateRequest): Promise<CatalogEntry>;
     activateSkill?(request: SelectSkillRevisionRequest): Promise<CatalogEntry>;
     rollbackSkill?(request: SelectSkillRevisionRequest): Promise<CatalogEntry>;
+    previewSkillAcquisition?(
+        request: SkillAcquisitionRequest,
+    ): Promise<SkillAcquisitionPreview>;
+    checkSkillUpdate?(
+        request: SkillAcquisitionRequest,
+    ): Promise<CheckSkillUpdateResponse>;
+    acquireAndPublishSkill?(
+        request: SkillAcquisitionRequest,
+    ): Promise<SkillAcquisitionRevisionResponse>;
+    updateSkill?(
+        request: SkillAcquisitionRequest,
+    ): Promise<SkillAcquisitionRevisionResponse>;
+    previewProcedureArtifact?(
+        request: ProcedureArtifactRequest,
+    ): Promise<ProcedureArtifactPreview>;
+    promoteProcedureArtifact?(
+        request: ProcedureArtifactRequest,
+    ): Promise<ProcedureArtifactPromotion>;
 
     joinConversation(
         clientIO: ClientIO,
@@ -511,6 +538,12 @@ export function createAgentServerConnection(
             return rpc.invoke("searchSkills", request);
         },
 
+        async matchSkillGrammar(
+            utterance: string,
+        ): Promise<SkillGrammarRoutingResult> {
+            return rpc.invoke("matchSkillGrammar", utterance);
+        },
+
         async getSkill(
             request: GetSkillRequest,
         ): Promise<CatalogEntry | undefined> {
@@ -545,6 +578,42 @@ export function createAgentServerConnection(
             request: SelectSkillRevisionRequest,
         ): Promise<CatalogEntry> {
             return rpc.invoke("rollbackSkill", request);
+        },
+
+        async previewSkillAcquisition(
+            request: SkillAcquisitionRequest,
+        ): Promise<SkillAcquisitionPreview> {
+            return rpc.invoke("previewSkillAcquisition", request);
+        },
+
+        async checkSkillUpdate(
+            request: SkillAcquisitionRequest,
+        ): Promise<CheckSkillUpdateResponse> {
+            return rpc.invoke("checkSkillUpdate", request);
+        },
+
+        async acquireAndPublishSkill(
+            request: SkillAcquisitionRequest,
+        ): Promise<SkillAcquisitionRevisionResponse> {
+            return rpc.invoke("acquireAndPublishSkill", request);
+        },
+
+        async updateSkill(
+            request: SkillAcquisitionRequest,
+        ): Promise<SkillAcquisitionRevisionResponse> {
+            return rpc.invoke("updateSkill", request);
+        },
+
+        async previewProcedureArtifact(
+            request: ProcedureArtifactRequest,
+        ): Promise<ProcedureArtifactPreview> {
+            return rpc.invoke("previewProcedureArtifact", request);
+        },
+
+        async promoteProcedureArtifact(
+            request: ProcedureArtifactRequest,
+        ): Promise<ProcedureArtifactPromotion> {
+            return rpc.invoke("promoteProcedureArtifact", request);
         },
 
         async joinConversation(

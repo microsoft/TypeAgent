@@ -8,12 +8,19 @@ import {
 import { createAgentServerConnection } from "@typeagent/agent-server-client";
 import type { MacroManager } from "@typeagent/copilot-macros";
 import {
-    SkillCatalog,
+    LiveSkillCatalog,
+    type ProcessRunner,
+    type SkillAcquisitionProvider,
+    type SkillAcquisitionSource,
     type InstanceStorage,
     type SkillIdentity,
 } from "@typeagent/skill-catalog";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
 import type { ConversationManager } from "../src/conversationManager.js";
 import { createAgentServerConnectionHandler } from "../src/connectionHandler.js";
+import { createLocalSkillServices } from "../src/skillCatalog.js";
 
 class MemoryStorage implements InstanceStorage {
     private readonly values = new Map<string, Uint8Array>();
@@ -98,10 +105,11 @@ describe("skill catalog RPC", () => {
             "skills-rpc:client",
             (message) => serverAdapter.notifyMessage(message),
         );
+        const skillCatalog = await LiveSkillCatalog.create(new MemoryStorage());
         const { handler } = createAgentServerConnectionHandler({
             conversationManager: {} as ConversationManager,
             macroManager: {} as MacroManager,
-            skillCatalog: new SkillCatalog(new MemoryStorage()),
+            skillCatalog,
             shutdown: () => {},
             getUserIdentity: () => ({
                 username: "test",
@@ -121,7 +129,27 @@ describe("skill catalog RPC", () => {
             identity,
             displayName: "Calendar",
             schemaFingerprint: "schema-1",
-            files: [{ path: "SKILL.md", content: "first" }],
+            files: [
+                { path: "SKILL.md", content: "first" },
+                {
+                    path: "routing/main.ag.json",
+                    content: JSON.stringify({
+                        rules: [
+                            {
+                                parts: [
+                                    {
+                                        type: "string",
+                                        value: ["pause"],
+                                        partId: 0,
+                                    },
+                                ],
+                                value: { type: "literal", value: true },
+                            },
+                        ],
+                        ruleArrays: [[0]],
+                    }),
+                },
+            ],
         });
         const second = await connection.publishSkill!({
             identity,
@@ -154,6 +182,21 @@ describe("skill catalog RPC", () => {
         await connection.activateSkill!({
             identity,
             revision: first.revision.revision,
+        });
+        expect(await connection.searchSkills!({ query: "pause" })).toEqual([
+            expect.objectContaining({
+                source: "grammar",
+                entry: {
+                    revision: expect.objectContaining({
+                        revision: first.revision.revision,
+                    }),
+                    state: "active",
+                    active: true,
+                },
+            }),
+        ]);
+        expect(await connection.matchSkillGrammar!("pause")).toMatchObject({
+            outcome: { status: "match" },
         });
         await connection.changeSkillState!({
             identity,
@@ -189,4 +232,218 @@ describe("skill catalog RPC", () => {
         });
         await connection.close();
     });
+
+    it("previews, checks, acquires, and updates through an injected provider", async () => {
+        const instanceDir = path.join(
+            process.cwd(),
+            `.skill-acquisition-rpc-test-${randomUUID()}`,
+        );
+        const runner = new OfflineProcessRunner();
+        const provider = new FixtureGitProvider(instanceDir);
+        try {
+            const { skillCatalog, skillAcquirer } =
+                await createLocalSkillServices(instanceDir, {
+                    processRunner: runner,
+                    providers: [provider],
+                });
+            let clientAdapter: ChannelProviderAdapter | undefined;
+            const serverAdapter = createChannelProviderAdapter(
+                "skill-acquisition-rpc:server",
+                (message) => clientAdapter?.notifyMessage(message),
+            );
+            clientAdapter = createChannelProviderAdapter(
+                "skill-acquisition-rpc:client",
+                (message) => serverAdapter.notifyMessage(message),
+            );
+            const { handler } = createAgentServerConnectionHandler({
+                conversationManager: {} as ConversationManager,
+                macroManager: {} as MacroManager,
+                skillCatalog,
+                skillAcquirer,
+                shutdown: () => {},
+                getUserIdentity: () => ({
+                    username: "test",
+                    displayName: "Test",
+                    initial: "T",
+                }),
+            });
+            handler(serverAdapter, () => {});
+            const connection = createAgentServerConnection(
+                clientAdapter,
+                () => {},
+            );
+            const request = {
+                identity: {
+                    scope: "project" as const,
+                    origin: "offline-test",
+                    name: "calendar",
+                },
+                schemaFingerprint: "schema-1",
+                source: {
+                    type: "git" as const,
+                    repository: "https://example.invalid/skills.git",
+                    ref: "main",
+                },
+            };
+
+            const preview = await connection.previewSkillAcquisition!(request);
+            expect(preview).toMatchObject({
+                sourceFingerprint: "commit-one",
+                manifest: expect.arrayContaining([
+                    expect.objectContaining({ path: "SKILL.md" }),
+                ]),
+            });
+            expect(await connection.checkSkillUpdate!(request)).toMatchObject({
+                updateAvailable: true,
+                sourceFingerprint: "commit-one",
+            });
+            const first = await connection.acquireAndPublishSkill!(request);
+            expect(first).toMatchObject({
+                updated: true,
+                revision: first.entry.revision.revision,
+                state: "draft",
+                active: false,
+                sourceFingerprint: "commit-one",
+                entry: { state: "draft", active: false },
+            });
+            await approveAndActivate(
+                connection,
+                request.identity,
+                first.entry.revision.revision,
+            );
+            expect(await connection.searchSkills!({ query: "pause" })).toEqual([
+                expect.objectContaining({ source: "grammar" }),
+            ]);
+            expect(await connection.checkSkillUpdate!(request)).toMatchObject({
+                updateAvailable: false,
+                currentState: "active",
+            });
+
+            provider.fingerprint = "commit-two";
+            provider.utterance = "resume";
+            expect(await connection.checkSkillUpdate!(request)).toMatchObject({
+                updateAvailable: true,
+                sourceChanged: true,
+                contentChanged: true,
+            });
+            const second = await connection.updateSkill!(request);
+            expect(second).toMatchObject({
+                updated: true,
+                sourceFingerprint: "commit-two",
+                entry: { state: "draft", active: false },
+            });
+            expect(second.entry.revision.revision).not.toBe(
+                first.entry.revision.revision,
+            );
+            await approveAndActivate(
+                connection,
+                request.identity,
+                second.entry.revision.revision,
+            );
+            expect(await connection.searchSkills!({ query: "resume" })).toEqual(
+                [expect.objectContaining({ source: "grammar" })],
+            );
+            await expect(
+                connection.previewSkillAcquisition!({
+                    ...request,
+                    source: { ...request.source, ref: "" },
+                }),
+            ).rejects.toThrow(/explicit/);
+            expect(runner.calls).toBeGreaterThan(0);
+            expect(provider.stagedInsideOwnedRoot).toBe(true);
+            await connection.close();
+        } finally {
+            await rm(instanceDir, {
+                recursive: true,
+                force: true,
+            });
+        }
+    });
 });
+
+type GitSource = Extract<SkillAcquisitionSource, { type: "git" }>;
+
+class FixtureGitProvider implements SkillAcquisitionProvider<GitSource> {
+    public readonly type = "git" as const;
+    public fingerprint = "commit-one";
+    public utterance = "pause";
+    public stagedInsideOwnedRoot = false;
+
+    public constructor(private readonly instanceDir: string) {}
+
+    public async stage(
+        source: GitSource,
+        context: Parameters<SkillAcquisitionProvider<GitSource>["stage"]>[1],
+    ) {
+        expect(source).toMatchObject({
+            repository: "https://example.invalid/skills.git",
+            ref: "main",
+        });
+        this.stagedInsideOwnedRoot = context.stagingDirectory.startsWith(
+            path.join(this.instanceDir, "skill-acquisition-staging"),
+        );
+        await context.processRunner.run("offline-fixture", [], {
+            timeoutMs: context.limits.processTimeoutMs,
+            maxOutputBytes: context.limits.maxProcessOutputBytes,
+        });
+        const root = path.join(context.stagingDirectory, "content");
+        await mkdir(path.join(root, "routing"), { recursive: true });
+        await writeFile(
+            path.join(root, "SKILL.md"),
+            "---\nname: calendar\ndescription: Offline calendar\n---\n",
+        );
+        await writeFile(
+            path.join(root, "routing", "main.ag.json"),
+            JSON.stringify({
+                rules: [
+                    {
+                        parts: [
+                            {
+                                type: "string",
+                                value: [this.utterance],
+                                partId: 0,
+                            },
+                        ],
+                        value: { type: "literal", value: true },
+                    },
+                ],
+                ruleArrays: [[0]],
+            }),
+        );
+        return {
+            root,
+            sourceFingerprint: this.fingerprint,
+            sourceDescription: `${source.repository}#${source.ref}`,
+        };
+    }
+}
+
+class OfflineProcessRunner implements ProcessRunner {
+    public calls = 0;
+
+    public async run() {
+        this.calls++;
+        return {
+            stdout: new Uint8Array(),
+            stderr: new Uint8Array(),
+        };
+    }
+}
+
+async function approveAndActivate(
+    connection: ReturnType<typeof createAgentServerConnection>,
+    identity: SkillIdentity,
+    revision: string,
+): Promise<void> {
+    await connection.changeSkillState!({
+        identity,
+        revision,
+        state: "validated",
+    });
+    await connection.changeSkillState!({
+        identity,
+        revision,
+        state: "approved",
+    });
+    await connection.activateSkill!({ identity, revision });
+}

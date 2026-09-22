@@ -18,6 +18,7 @@ import {
     canonicalJson,
     qualifySkill,
     sha256,
+    skillManifestDigest,
     skillStorageKey,
     validateSkillPath,
 } from "./util.js";
@@ -228,6 +229,17 @@ export class SkillCatalog {
         if (files.length === 0) {
             throw new Error("A skill package must contain at least one file.");
         }
+        const manifestDigest = skillManifestDigest(
+            files.map((file) => file.manifest),
+        );
+        if (
+            input.acquisition !== undefined &&
+            input.acquisition.manifestDigest !== manifestDigest
+        ) {
+            throw new Error(
+                "Acquisition manifest digest does not match package files.",
+            );
+        }
         const revision = sha256(
             canonicalJson({
                 identity: input.identity,
@@ -235,6 +247,16 @@ export class SkillCatalog {
                 description: input.description ?? "",
                 schemaFingerprint: input.schemaFingerprint,
                 manifest: files.map((file) => file.manifest),
+                acquisition:
+                    input.acquisition === undefined
+                        ? undefined
+                        : {
+                              provider: input.acquisition.provider,
+                              source: input.acquisition.source,
+                              sourceFingerprint:
+                                  input.acquisition.sourceFingerprint,
+                              manifestDigest: input.acquisition.manifestDigest,
+                          },
             }),
         );
         const stored: SkillRevision = {
@@ -245,6 +267,9 @@ export class SkillCatalog {
             description: input.description ?? "",
             schemaFingerprint: input.schemaFingerprint,
             manifest: files.map((file) => file.manifest),
+            ...(input.acquisition === undefined
+                ? {}
+                : { acquisition: structuredClone(input.acquisition) }),
             createdAt: new Date().toISOString(),
         };
         const target = this.revisionBase(input.identity, revision);

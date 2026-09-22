@@ -39,6 +39,7 @@ export interface SkillPackageInput {
     description?: string;
     schemaFingerprint: string;
     files: readonly SkillFileInput[];
+    acquisition?: SkillAcquisitionMetadata;
 }
 
 export interface SkillRevision {
@@ -49,7 +50,33 @@ export interface SkillRevision {
     readonly description: string;
     readonly schemaFingerprint: string;
     readonly manifest: readonly SkillFileManifest[];
+    readonly acquisition?: SkillAcquisitionMetadata;
     readonly createdAt: string;
+}
+
+export type SkillAcquisitionSource =
+    | {
+          readonly type: "directory";
+          readonly path: string;
+      }
+    | {
+          readonly type: "git";
+          readonly repository: string;
+          readonly ref: string;
+          readonly subdirectory?: string;
+      }
+    | {
+          readonly type: "archive";
+          readonly path: string;
+          readonly format?: "zip" | "tar" | "tar.gz";
+      };
+
+export interface SkillAcquisitionMetadata {
+    readonly provider: SkillAcquisitionSource["type"];
+    readonly source: string;
+    readonly sourceFingerprint: string;
+    readonly manifestDigest: string;
+    readonly acquiredAt: string;
 }
 
 export interface CatalogEntry {
@@ -67,7 +94,8 @@ export interface CatalogSearchQuery {
 export interface CatalogSearchResult {
     entry: CatalogEntry;
     score: number;
-    source: "exact" | "semantic";
+    source: "exact" | "semantic" | "grammar";
+    routing?: SkillGrammarRoutingResult;
 }
 
 export interface SemanticSkillSearch {
@@ -184,4 +212,34 @@ export interface StoredCorrection {
     readonly schemaFingerprint: string;
     readonly grammar: GrammarJson;
     readonly createdAt: string;
+}
+
+export interface SkillGrammarDiagnostic {
+    readonly code:
+        | "artifactRead"
+        | "artifactParse"
+        | "artifactCompile"
+        | "staleMatch";
+    readonly message: string;
+    readonly skill?: SkillIdentity;
+    readonly skillRevision?: string;
+    readonly path?: string;
+}
+
+export interface SkillGrammarRoutingResult {
+    readonly snapshotId: string;
+    readonly outcome: GrammarRouteOutcome;
+    readonly diagnostics: readonly SkillGrammarDiagnostic[];
+}
+
+export interface PersistedRoutingSnapshot {
+    readonly snapshotId: string;
+    readonly createdAt: string;
+    readonly activeRevisions: readonly {
+        readonly skill: SkillIdentity;
+        readonly revision: string;
+        readonly schemaFingerprint: string;
+    }[];
+    readonly rules: readonly SkillGrammarRule[];
+    readonly diagnostics: readonly SkillGrammarDiagnostic[];
 }

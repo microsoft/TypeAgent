@@ -109,7 +109,6 @@ let procedures: MemoryCenterProcedureSummary[] = [];
 let selectedProcedure: MemoryCenterProcedureVersion | undefined;
 let isNewProcedure = false;
 
-
 function setError(error?: unknown): void {
     if (error === undefined) {
         errorBanner.textContent = "";

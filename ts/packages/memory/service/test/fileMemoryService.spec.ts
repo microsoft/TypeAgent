@@ -1281,6 +1281,206 @@ describe("FileMemoryService", () => {
         ]);
     });
 
+    test("detects deterministic candidates from procedural source sections", async () => {
+        const corpus = await service.createCorpus("Detected how-tos");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "router-guide",
+                sourceType: "markdown",
+                title: "Router guide",
+                markdown: [
+                    "# Reset a router",
+                    "",
+                    "## Steps",
+                    "1. Unplug the router",
+                    "2. Wait thirty seconds",
+                    "3. Plug it back in",
+                    "",
+                    "## Troubleshooting checklist",
+                    "- [ ] Check the power light",
+                    "- [x] Check the network cable",
+                ].join("\n"),
+            },
+        });
+        expect((await waitForTerminalJob(service, accepted.jobId)).state).toBe(
+            "complete",
+        );
+
+        const candidates = await service.listProcedureCandidates(
+            corpus.corpusId,
+        );
+        expect(candidates).toHaveLength(2);
+        expect(candidates[0]).toMatchObject({
+            candidateId: expect.stringMatching(/^auto:[a-f0-9]{32}$/),
+            state: "detected",
+            title: "Reset a router",
+            steps: [
+                "Unplug the router",
+                "Wait thirty seconds",
+                "Plug it back in",
+            ],
+            citations: [
+                {
+                    sourceId: accepted.sourceId,
+                    revisionId: accepted.revisionId,
+                    locator: expect.stringMatching(/^lines /),
+                },
+            ],
+        });
+        expect(candidates[1]).toMatchObject({
+            title: "Troubleshooting checklist",
+            steps: ["Check the power light", "Check the network cable"],
+        });
+    });
+
+    test.each([
+        { enabled: false, detectCandidates: true },
+        { enabled: true, detectCandidates: false },
+    ])(
+        "respects personal how-to detection settings %#",
+        async ({ enabled, detectCandidates }) => {
+            const corpus = await service.createCorpus(
+                `Disabled detection ${enabled}`,
+            );
+            const settings = await service.updatePersonalHowToSettings(
+                corpus.corpusId,
+                {
+                    expectedRevision: 0,
+                    enabled,
+                    detectCandidates,
+                },
+            );
+            const accepted = await service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceType: "text",
+                    title: "Text guide",
+                    text: [
+                        "How to prepare tea:",
+                        "1) Heat water",
+                        "2) Steep the tea",
+                    ].join("\n"),
+                },
+            });
+            await waitForTerminalJob(service, accepted.jobId);
+
+            expect(
+                await service.listProcedureCandidates(corpus.corpusId),
+            ).toEqual([]);
+            expect(
+                await service.getPersonalHowToSettings(corpus.corpusId),
+            ).toEqual(settings);
+        },
+    );
+
+    test("does not duplicate detected candidates after re-import or restart", async () => {
+        const corpus = await service.createCorpus("Idempotent detection");
+        const request = {
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "tea-guide",
+                sourceType: "text" as const,
+                title: "Tea guide",
+                text: [
+                    "How to prepare tea",
+                    "1. Heat water",
+                    "2. Steep the tea",
+                ].join("\n"),
+            },
+        };
+        const first = await service.ingestDocument(request);
+        await waitForTerminalJob(service, first.jobId);
+        const firstCandidates = await service.listProcedureCandidates(
+            corpus.corpusId,
+        );
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => new FakeCorpusIndex(),
+        });
+
+        const replay = await service.ingestDocument(request);
+        expect((await waitForTerminalJob(service, replay.jobId)).state).toBe(
+            "complete",
+        );
+        expect(await service.listProcedureCandidates(corpus.corpusId)).toEqual(
+            firstCandidates,
+        );
+    });
+
+    test("reports extraction failure without rolling back the source", async () => {
+        const corpus = await service.createCorpus("Extraction failure");
+        const howToDirectory = path.join(
+            rootDirectory,
+            corpus.corpusId,
+            "personal-how-to",
+        );
+        await mkdir(howToDirectory, { recursive: true });
+        await writeFile(path.join(howToDirectory, "index.json"), "{broken");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "committed-guide",
+                sourceType: "markdown",
+                title: "Committed guide",
+                markdown: [
+                    "# Deploy safely",
+                    "1. Run tests",
+                    "2. Deploy the build",
+                ].join("\n"),
+            },
+        });
+
+        const job = await waitForTerminalJob(service, accepted.jobId);
+        expect(job.state).toBe("complete");
+        expect(job.warnings).toEqual(
+            expect.arrayContaining([
+                expect.stringContaining(
+                    "Procedure candidate extraction failed:",
+                ),
+            ]),
+        );
+        await expect(
+            service.getSource(corpus.corpusId, "committed-guide"),
+        ).resolves.toMatchObject({
+            activeRevisionId: accepted.revisionId,
+        });
+        expect(index.documents).toHaveLength(1);
+    });
+
+    test("automatic detection does not modify authored procedures", async () => {
+        const corpus = await service.createCorpus("Authored procedures");
+        const authored = await service.saveProcedure({
+            corpusId: corpus.corpusId,
+            procedureId: "authored",
+            document: {
+                title: "Authored procedure",
+                steps: ["Keep this", "Unchanged"],
+                citations: [],
+            },
+        });
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceType: "markdown",
+                title: "Imported guide",
+                markdown: [
+                    "# How to import",
+                    "1. Select a file",
+                    "2. Confirm the import",
+                ].join("\n"),
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+
+        expect(await service.getProcedure(corpus.corpusId, "authored")).toEqual(
+            authored,
+        );
+        expect(
+            await service.listProcedureCandidates(corpus.corpusId),
+        ).toHaveLength(1);
+    });
+
     test("round trips deterministic procedure Markdown with free-form sections", () => {
         const document = {
             title: "Publish a package",

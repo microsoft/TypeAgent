@@ -31,6 +31,7 @@
     "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
+    "@typeagent/procedure-artifacts": "workspace:*",
     "@typeagent/skill-catalog": "workspace:*"
   },
   "devDependencies": {

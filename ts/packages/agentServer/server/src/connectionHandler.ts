@@ -19,13 +19,20 @@ import {
 } from "@typeagent/agent-server-protocol";
 import type { ConfigDrift } from "@typeagent/config";
 import type { MacroManager } from "@typeagent/copilot-macros";
-import type { SkillCatalog } from "@typeagent/skill-catalog";
+import type { PersonalHowToService } from "@typeagent/memory-service";
+import type {
+    LiveSkillCatalog,
+    SkillAcquirer,
+    SkillAcquisitionResult,
+} from "@typeagent/skill-catalog";
+import type { SkillAcquisitionRevisionResponse } from "@typeagent/agent-server-protocol";
 import type { Dispatcher } from "agent-dispatcher";
 import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
 import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
 import { getSpeechToken } from "./speechToken.js";
 import { validateStructuredActionJoin } from "./structuredActionBindings.js";
+import { ProcedureArtifactRpcService } from "./procedureArtifacts.js";
 import registerDebug from "debug";
 
 // Disconnect cleanup is best effort, so a failure cannot be surfaced to anyone:
@@ -85,11 +92,31 @@ function getSkillMimeType(filePath: string): string {
     return "application/octet-stream";
 }
 
+function acquisitionResponse(
+    result: SkillAcquisitionResult,
+): SkillAcquisitionRevisionResponse {
+    const metadata = result.entry.revision.acquisition;
+    if (metadata === undefined) {
+        throw new Error("Acquired skill revision is missing source metadata.");
+    }
+    return {
+        entry: result.entry,
+        revision: result.entry.revision.revision,
+        state: result.entry.state,
+        active: result.entry.active,
+        updated: result.updated,
+        sourceFingerprint: metadata.sourceFingerprint,
+        manifestDigest: metadata.manifestDigest,
+    };
+}
+
 export type ConnectionHandlerDeps = {
     /** The conversation manager backing this server. */
     conversationManager: ConversationManager;
     macroManager: MacroManager;
-    skillCatalog: SkillCatalog;
+    skillCatalog: LiveSkillCatalog;
+    skillAcquirer?: SkillAcquirer;
+    procedureService?: Pick<PersonalHowToService, "getProcedure">;
     /**
      * Invoked when the dispatcher (or an RPC client) requests a server
      * shutdown. For the standalone agent-server this kills the process; for an
@@ -235,6 +262,28 @@ export function createAgentServerConnectionHandler(
         onConnect,
         onDisconnect,
     } = deps;
+    const procedureArtifacts =
+        deps.procedureService === undefined
+            ? undefined
+            : new ProcedureArtifactRpcService(
+                  deps.procedureService,
+                  skillCatalog,
+                  macroManager,
+              );
+    const requireProcedureArtifacts = () => {
+        if (procedureArtifacts === undefined) {
+            throw new Error(
+                "Procedure artifact promotion is not configured on this server.",
+            );
+        }
+        return procedureArtifacts;
+    };
+    const requireSkillAcquirer = () => {
+        if (deps.skillAcquirer === undefined) {
+            throw new Error("Skill acquisition is unavailable on this host.");
+        }
+        return deps.skillAcquirer;
+    };
 
     // Built once from the startup config-drift snapshot (undefined when the
     // local config matches the vault, no vault is configured, or drift
@@ -366,6 +415,8 @@ export function createAgentServerConnectionHandler(
                         ? {}
                         : { limit: request.limit }),
                 }),
+            matchSkillGrammar: async (utterance) =>
+                skillCatalog.routeGrammar(utterance),
             getSkill: async (request) =>
                 skillCatalog.get(request.identity, request.revision),
             readSkillFile: async (request) => {
@@ -408,6 +459,31 @@ export function createAgentServerConnectionHandler(
                 skillCatalog.activate(request.identity, request.revision),
             rollbackSkill: async (request) =>
                 skillCatalog.rollback(request.identity, request.revision),
+            previewSkillAcquisition: async (request) =>
+                requireSkillAcquirer().preview(request),
+            checkSkillUpdate: async (request) => {
+                const check =
+                    await requireSkillAcquirer().checkForUpdate(request);
+                const current = await skillCatalog.get(request.identity);
+                return {
+                    ...check,
+                    ...(current === undefined
+                        ? {}
+                        : { currentState: current.state }),
+                };
+            },
+            acquireAndPublishSkill: async (request) =>
+                acquisitionResponse(
+                    await requireSkillAcquirer().acquireAndPublish(request),
+                ),
+            updateSkill: async (request) =>
+                acquisitionResponse(
+                    await requireSkillAcquirer().update(request),
+                ),
+            previewProcedureArtifact: async (request) =>
+                requireProcedureArtifacts().preview(request),
+            promoteProcedureArtifact: async (request) =>
+                requireProcedureArtifacts().promote(request),
 
             joinConversation: async (options?: DispatcherConnectOptions) => {
                 validateStructuredActionJoin(options);

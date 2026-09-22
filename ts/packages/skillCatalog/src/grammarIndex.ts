@@ -19,6 +19,7 @@ import type {
     RoutingSnapshot,
     SchemaValidator,
     SkillGrammarRule,
+    SkillScope,
 } from "./types.js";
 import { canonicalJson, cloneAndFreeze, qualifySkill, sha256 } from "./util.js";
 
@@ -116,7 +117,11 @@ export class SkillGrammarIndex {
         return this.snapshots.get(id);
     }
 
-    public match(snapshotId: string, utterance: string): GrammarRouteOutcome {
+    public match(
+        snapshotId: string,
+        utterance: string,
+        scopes?: readonly SkillScope[],
+    ): GrammarRouteOutcome {
         if (utterance.trim().length === 0) {
             throw new Error("An utterance is required.");
         }
@@ -126,6 +131,9 @@ export class SkillGrammarIndex {
         }
         const candidates: GrammarCandidate[] = [];
         for (const rule of snapshot.rules) {
+            if (scopes !== undefined && !scopes.includes(rule.skill.scope)) {
+                continue;
+            }
             for (const match of this.runtime.matchGrammar(
                 rule.grammar,
                 utterance,
@@ -210,6 +218,16 @@ export class SkillGrammarIndex {
                 prior.count++;
             }
         }
+        const bestSourceByRevision = new Map<string, number>();
+        for (const equivalent of equivalents.values()) {
+            const candidate = equivalent.candidate;
+            const key = `${qualifySkill(candidate.skill)}:${candidate.skillRevision}`;
+            const rank = sourceRank(candidate.ruleSource);
+            const previous = bestSourceByRevision.get(key);
+            if (previous === undefined || rank < previous) {
+                bestSourceByRevision.set(key, rank);
+            }
+        }
         const valid: {
             candidate: GrammarCandidate;
             count: number;
@@ -217,6 +235,14 @@ export class SkillGrammarIndex {
         const invalid: GrammarCandidate[] = [];
         const errors: string[] = [];
         for (const equivalent of equivalents.values()) {
+            const candidate = equivalent.candidate;
+            const key = `${qualifySkill(candidate.skill)}:${candidate.skillRevision}`;
+            if (
+                sourceRank(candidate.ruleSource) !==
+                bestSourceByRevision.get(key)
+            ) {
+                continue;
+            }
             const validation = this.validate(
                 equivalent.candidate.skill,
                 equivalent.candidate.schemaFingerprint,

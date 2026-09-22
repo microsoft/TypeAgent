@@ -1695,6 +1695,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../dispatcher/types
+      '@typeagent/procedure-artifacts':
+        specifier: workspace:*
+        version: link:../../procedureArtifacts
       '@typeagent/skill-catalog':
         specifier: workspace:*
         version: link:../../skillCatalog
@@ -1759,6 +1762,9 @@ importers:
       '@typeagent/memory-service':
         specifier: workspace:*
         version: link:../../memory/service
+      '@typeagent/procedure-artifacts':
+        specifier: workspace:*
+        version: link:../../procedureArtifacts
       '@typeagent/skill-catalog':
         specifier: workspace:*
         version: link:../../skillCatalog
@@ -5979,6 +5985,40 @@ importers:
       test-lib:
         specifier: workspace:*
         version: link:../../testLib
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/procedureArtifacts:
+    dependencies:
+      '@typeagent/copilot-macros':
+        specifier: workspace:*
+        version: link:../copilot-macros
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../memory/service
+      '@typeagent/skill-catalog':
+        specifier: workspace:*
+        version: link:../skillCatalog
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.40
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@20.19.40)(ts-node@10.9.2(@types/node@20.19.40)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
       typescript:
         specifier: ~5.4.5
         version: 5.4.5

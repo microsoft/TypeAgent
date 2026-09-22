@@ -15,7 +15,10 @@ import {
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import { createKnowProCorpusIndex } from "./knowProCorpusIndex.js";
-import { PersonalHowToStore } from "./personalHowToStore.js";
+import {
+    detectProcedureCandidates,
+    PersonalHowToStore,
+} from "./personalHowToStore.js";
 import type {
     CorpusIndex,
     CorpusIndexFactory,
@@ -1766,6 +1769,14 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 if (policy === "failIfExists") {
                     throw new Error(`Source '${sourceId}' already exists`);
                 }
+                job.warnings.push(
+                    ...(await this.updatePersonalHowToAfterIngestion(
+                        request,
+                        sourceId,
+                        revisionId,
+                        content,
+                    )),
+                );
                 await this.updateJob(job, "complete", {
                     completed: 1,
                     total: 1,
@@ -1875,15 +1886,18 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             );
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
-            await this.personalHowToStore.markStale(
-                request.corpusId,
-                sourceId,
-                revisionId,
-            );
             candidateIndexDirectory = undefined;
             await this.removeInactiveIndexGenerations(
                 request.corpusId,
                 indexGeneration,
+            );
+            job.warnings.push(
+                ...(await this.updatePersonalHowToAfterIngestion(
+                    request,
+                    sourceId,
+                    revisionId,
+                    content,
+                )),
             );
             await this.updateJob(job, "complete", {
                 completed: 1,
@@ -1912,6 +1926,53 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         } finally {
             this.controllers.delete(job.jobId);
         }
+    }
+
+    private async updatePersonalHowToAfterIngestion(
+        request: DocumentIngestRequest,
+        sourceId: string,
+        revisionId: string,
+        content: string,
+    ): Promise<string[]> {
+        const warnings: string[] = [];
+        try {
+            await this.personalHowToStore.markStale(
+                request.corpusId,
+                sourceId,
+                revisionId,
+            );
+        } catch (error) {
+            warnings.push(
+                `Personal how-to stale update failed: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+        if (request.source.html !== undefined) {
+            return warnings;
+        }
+        try {
+            const settings = await this.personalHowToStore.getSettings(
+                request.corpusId,
+            );
+            if (!settings.enabled || !settings.detectCandidates) {
+                return warnings;
+            }
+            const candidates = detectProcedureCandidates(
+                request.corpusId,
+                sourceId,
+                revisionId,
+                content,
+            );
+            await this.personalHowToStore.createDetectedCandidates(candidates);
+        } catch (error) {
+            warnings.push(
+                `Procedure candidate extraction failed: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+        return warnings;
     }
 
     private async enqueueWrite<T>(
