@@ -1504,10 +1504,7 @@ export class FileMemoryService implements MemoryService {
             state,
             progress,
             updatedAt: timestamp,
-            trace: [
-                ...(job.trace ?? []),
-                { state, timestamp, ...progress },
-            ],
+            trace: [...(job.trace ?? []), { state, timestamp, ...progress }],
             ...(error === undefined ? {} : { error }),
         };
         await writeJsonAtomic(this.jobPath(job.jobId), updated);
