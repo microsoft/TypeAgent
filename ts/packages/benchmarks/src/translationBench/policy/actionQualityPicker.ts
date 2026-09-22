@@ -341,25 +341,12 @@ export function loadPackagedGraderForEligibility(): GraderByAction {
     return raw;
 }
 
-function uniqueAllowlist(
-    artifact: EligibleGoldActionsArtifact,
+function assertAllowlistAgainstPolicy(
+    unique: Set<string>,
     sourcePath: string,
-): Set<string> {
-    const unique = new Set(artifact.allowlist);
-    if (unique.size !== artifact.allowlist.length) {
-        throw new Error(
-            `Duplicate allowlist ids in eligible gold actions at ${sourcePath}`,
-        );
-    }
-    return unique;
-}
-
-function assertPolicyExclusions(
-    unique: ReadonlySet<string>,
-    policy: ReturnType<typeof getPackagedActionEligibilityPolicy>["policy"],
-    sourcePath: string,
-): void {
-    for (const entry of policy.removedActions) {
+): ReturnType<typeof getPackagedActionEligibilityPolicy> {
+    const policy = getPackagedActionEligibilityPolicy();
+    for (const entry of policy.policy.removedActions) {
         if (entry.type === "action" && unique.has(entry.id)) {
             throw new Error(
                 `eligible gold allowlist contains human-removed '${entry.id}' at ${sourcePath}`,
@@ -374,123 +361,14 @@ function assertPolicyExclusions(
             );
         }
     }
+    return policy;
 }
 
-function loadIntegrityCatalog(
+function assertAllowlistAgainstGrader(
     artifact: EligibleGoldActionsArtifact,
+    unique: Set<string>,
     sourcePath: string,
-): GeneratedActionCatalog {
-    const catalogPath = resolvePackagedJsonPath("catalog.generated.json");
-    const catalog = JSON.parse(
-        readFileSync(catalogPath, "utf8"),
-    ) as GeneratedActionCatalog;
-    if (artifact.catalogVersion !== catalog.catalogVersion) {
-        throw new Error(
-            `eligible gold actions catalogVersion mismatch at ${sourcePath} ` +
-                `(artifact=${artifact.catalogVersion}, live=${catalog.catalogVersion})`,
-        );
-    }
-    return catalog;
-}
-
-function assertCatalogMembership(
-    unique: ReadonlySet<string>,
-    catalog: GeneratedActionCatalog,
-    sourcePath: string,
-): void {
-    const catalogIds = new Set(catalog.actions.map((a) => catalogActionId(a)));
-    for (const id of unique) {
-        if (!catalogIds.has(id)) {
-            throw new Error(
-                `eligible gold allowlist id '${id}' not in catalog at ${sourcePath}`,
-            );
-        }
-    }
-}
-
-function assertHardExclusions(
-    unique: ReadonlySet<string>,
-    human: ReadonlySet<string>,
-    ambiguous: ReadonlySet<string>,
-    sourcePath: string,
-): void {
-    for (const id of unique) {
-        if (human.has(id) || ambiguous.has(id)) {
-            throw new Error(
-                `eligible gold allowlist contains hard-excluded '${id}' at ${sourcePath}`,
-            );
-        }
-    }
-}
-
-function collectDecisionIds(
-    artifact: EligibleGoldActionsArtifact,
-    sourcePath: string,
-): { decisionIds: Set<string>; included: Set<string> } {
-    const decisionIds = new Set<string>();
-    const included = new Set<string>();
-    for (const decision of artifact.decisions) {
-        if (decisionIds.has(decision.id)) {
-            throw new Error(
-                `eligible gold decisions contain duplicate id '${decision.id}' at ${sourcePath}`,
-            );
-        }
-        decisionIds.add(decision.id);
-        if (decision.include) included.add(decision.id);
-    }
-    return { decisionIds, included };
-}
-
-function assertAllowlistMatchesDecisions(
-    unique: ReadonlySet<string>,
-    included: ReadonlySet<string>,
-    sourcePath: string,
-): void {
-    for (const id of unique) {
-        if (!included.has(id)) {
-            throw new Error(
-                `eligible gold allowlist id '${id}' lacks an include decision at ${sourcePath}`,
-            );
-        }
-    }
-    for (const id of included) {
-        if (!unique.has(id)) {
-            throw new Error(
-                `eligible gold include decision '${id}' missing from allowlist at ${sourcePath}`,
-            );
-        }
-    }
-}
-
-function assertCompleteDecisions(
-    catalog: GeneratedActionCatalog,
-    decisionIds: ReadonlySet<string>,
-    excludedIds: ReadonlySet<string>,
-    sourcePath: string,
-): void {
-    for (const action of catalog.actions) {
-        const id = catalogActionId(action);
-        if (!excludedIds.has(id) && !decisionIds.has(id)) {
-            throw new Error(
-                `eligible gold decisions missing catalog action '${id}' at ${sourcePath}`,
-            );
-        }
-    }
-}
-
-function assertAllowlistIntegrity(
-    artifact: EligibleGoldActionsArtifact,
-    sourcePath: string,
-): void {
-    const unique = uniqueAllowlist(artifact, sourcePath);
-    const policy = getPackagedActionEligibilityPolicy();
-    if (artifact.policyHash !== policy.contentHash) {
-        throw new Error(
-            `eligible gold actions policyHash mismatch at ${sourcePath}`,
-        );
-    }
-    assertPolicyExclusions(unique, policy.policy, sourcePath);
-
+): ReadonlySet<string> {
     const grader = loadPackagedGraderForEligibility();
     if (artifact.graderRulesFingerprint !== grader.rulesFingerprint) {
         throw new Error(
@@ -507,25 +385,145 @@ function assertAllowlistIntegrity(
             );
         }
     }
+    return llmJudgeIds;
+}
 
-    const catalog = loadIntegrityCatalog(artifact, sourcePath);
-    assertCatalogMembership(unique, catalog, sourcePath);
+function assertAllowlistAgainstCatalog(
+    artifact: EligibleGoldActionsArtifact,
+    unique: Set<string>,
+    policy: ReturnType<typeof getPackagedActionEligibilityPolicy>,
+    sourcePath: string,
+): {
+    catalog: GeneratedActionCatalog;
+    human: ReadonlySet<string>;
+    ambiguous: ReadonlySet<string>;
+} {
+    const catalogPath = resolvePackagedJsonPath("catalog.generated.json");
+    const catalog = JSON.parse(
+        readFileSync(catalogPath, "utf8"),
+    ) as GeneratedActionCatalog;
+    if (artifact.catalogVersion !== catalog.catalogVersion) {
+        throw new Error(
+            `eligible gold actions catalogVersion mismatch at ${sourcePath} ` +
+                `(artifact=${artifact.catalogVersion}, live=${catalog.catalogVersion})`,
+        );
+    }
+    const catalogIds = new Set(catalog.actions.map((a) => catalogActionId(a)));
+    for (const id of unique) {
+        if (!catalogIds.has(id)) {
+            throw new Error(
+                `eligible gold allowlist id '${id}' not in catalog at ${sourcePath}`,
+            );
+        }
+    }
     const refs = catalogRefsFromGenerated(catalog);
     const human = expandRemovedActions(policy.policy, refs, {
         allowMissingExactIds: true,
     }).removedActionIds;
     const ambiguous = ambiguousCrossSchemaActionIds(refs, human);
-    assertHardExclusions(unique, human, ambiguous, sourcePath);
+    for (const id of unique) {
+        if (human.has(id) || ambiguous.has(id)) {
+            throw new Error(
+                `eligible gold allowlist contains hard-excluded '${id}' at ${sourcePath}`,
+            );
+        }
+    }
+    return { catalog, human, ambiguous };
+}
 
+function assertDecisionsMatchAllowlist(
+    artifact: EligibleGoldActionsArtifact,
+    unique: Set<string>,
+    catalog: GeneratedActionCatalog,
+    excluded: {
+        human: ReadonlySet<string>;
+        ambiguous: ReadonlySet<string>;
+        llmJudgeIds: ReadonlySet<string>;
+    },
+    sourcePath: string,
+): void {
     // Every catalog action decision must carry a non-empty explanation, and the
     // allowlist must be exactly the set of include=true decisions. This makes
     // each include/exclude auditable and keeps the two fields from drifting.
-    const { decisionIds, included } = collectDecisionIds(artifact, sourcePath);
-    assertAllowlistMatchesDecisions(unique, included, sourcePath);
-    assertCompleteDecisions(
+    const decisionIds = new Set<string>();
+    const included = new Set<string>();
+    for (const d of artifact.decisions) {
+        if (decisionIds.has(d.id)) {
+            throw new Error(
+                `eligible gold decisions contain duplicate id '${d.id}' at ${sourcePath}`,
+            );
+        }
+        decisionIds.add(d.id);
+        if (d.include) {
+            included.add(d.id);
+        }
+    }
+    for (const id of unique) {
+        if (!included.has(id)) {
+            throw new Error(
+                `eligible gold allowlist id '${id}' lacks an include decision at ${sourcePath}`,
+            );
+        }
+    }
+    for (const id of included) {
+        if (!unique.has(id)) {
+            throw new Error(
+                `eligible gold include decision '${id}' missing from allowlist at ${sourcePath}`,
+            );
+        }
+    }
+    for (const a of catalog.actions) {
+        const id = catalogActionId(a);
+        if (
+            excluded.human.has(id) ||
+            excluded.ambiguous.has(id) ||
+            excluded.llmJudgeIds.has(id)
+        ) {
+            continue;
+        }
+        if (!decisionIds.has(id)) {
+            throw new Error(
+                `eligible gold decisions missing catalog action '${id}' at ${sourcePath}`,
+            );
+        }
+    }
+}
+
+function assertAllowlistIntegrity(
+    artifact: EligibleGoldActionsArtifact,
+    sourcePath: string,
+): void {
+    const unique = new Set(artifact.allowlist);
+    if (unique.size !== artifact.allowlist.length) {
+        throw new Error(
+            `Duplicate allowlist ids in eligible gold actions at ${sourcePath}`,
+        );
+    }
+
+    const policy = getPackagedActionEligibilityPolicy();
+    if (artifact.policyHash !== policy.contentHash) {
+        throw new Error(
+            `eligible gold actions policyHash mismatch at ${sourcePath}`,
+        );
+    }
+
+    assertAllowlistAgainstPolicy(unique, sourcePath);
+    const llmJudgeIds = assertAllowlistAgainstGrader(
+        artifact,
+        unique,
+        sourcePath,
+    );
+    const { catalog, human, ambiguous } = assertAllowlistAgainstCatalog(
+        artifact,
+        unique,
+        policy,
+        sourcePath,
+    );
+    assertDecisionsMatchAllowlist(
+        artifact,
+        unique,
         catalog,
-        decisionIds,
-        new Set([...human, ...ambiguous, ...llmJudgeIds]),
+        { human, ambiguous, llmJudgeIds },
         sourcePath,
     );
 }

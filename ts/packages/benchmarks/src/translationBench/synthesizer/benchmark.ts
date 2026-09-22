@@ -1950,10 +1950,9 @@ export function parseTranslationBenchBenchmarkForEvaluation(
     return benchmark;
 }
 
-export function assertTranslationBenchBenchmarkReadyForEvaluation(
+function assertTranslationBenchConstructionProvenance(
     benchmark: TranslationBenchBenchmark,
 ): void {
-    validateTranslationBenchBenchmark(benchmark);
     const construction = benchmark.metadata.construction;
     if (
         construction.method !== "llm-assisted" ||
@@ -1965,38 +1964,6 @@ export function assertTranslationBenchBenchmarkReadyForEvaluation(
             "Translation-bench evaluation requires complete LLM-assisted construction provenance",
         );
     }
-    // Synthesizer-generated benches pin eligible-gold; builder-path fixtures omit generation.
-    const generation = construction.generation;
-    if (generation !== undefined) {
-        if (generation.applyEligibleGoldAllowlist === false) {
-            throw new Error(
-                "Translation-bench evaluation forbids applyEligibleGoldAllowlist=false",
-            );
-        }
-        if (generation.allowMissingRemovedActions === true) {
-            throw new Error(
-                "Translation-bench evaluation forbids allowMissingRemovedActions=true",
-            );
-        }
-        const packaged = getPackagedEligibleGoldActionIds();
-        if (
-            generation.eligibleGoldActionsHash === undefined ||
-            generation.eligibleGoldActionsHash !== packaged.contentHash
-        ) {
-            throw new Error(
-                `Translation-bench evaluation eligibleGoldActionsHash drift ` +
-                    `(bench=${generation.eligibleGoldActionsHash ?? "missing"}, packaged=${packaged.contentHash})`,
-            );
-        }
-        for (const evalCase of benchmark.cases) {
-            const id = `${evalCase.targetAction.schemaName}.${evalCase.targetAction.actionName}`;
-            if (!packaged.allowlist.has(id)) {
-                throw new Error(
-                    `Translation-bench evaluation schedules non-allowlisted gold target '${id}'`,
-                );
-            }
-        }
-    }
     if (
         construction.sourceManifestHash === undefined ||
         !SHA256_PATTERN.test(construction.sourceManifestHash)
@@ -2005,6 +1972,48 @@ export function assertTranslationBenchBenchmarkReadyForEvaluation(
             "Translation-bench benchmark requires a pinned sourceManifestHash on construction",
         );
     }
+}
+
+function assertTranslationBenchGenerationPin(
+    benchmark: TranslationBenchBenchmark,
+): void {
+    // Synthesizer-generated benches pin eligible-gold; builder-path fixtures omit generation.
+    const generation = benchmark.metadata.construction.generation;
+    if (generation === undefined) return;
+    if (generation.applyEligibleGoldAllowlist === false) {
+        throw new Error(
+            "Translation-bench evaluation forbids applyEligibleGoldAllowlist=false",
+        );
+    }
+    if (generation.allowMissingRemovedActions === true) {
+        throw new Error(
+            "Translation-bench evaluation forbids allowMissingRemovedActions=true",
+        );
+    }
+    const packaged = getPackagedEligibleGoldActionIds();
+    if (
+        generation.eligibleGoldActionsHash === undefined ||
+        generation.eligibleGoldActionsHash !== packaged.contentHash
+    ) {
+        throw new Error(
+            `Translation-bench evaluation eligibleGoldActionsHash drift ` +
+                `(bench=${generation.eligibleGoldActionsHash ?? "missing"}, packaged=${packaged.contentHash})`,
+        );
+    }
+    for (const evalCase of benchmark.cases) {
+        const id = `${evalCase.targetAction.schemaName}.${evalCase.targetAction.actionName}`;
+        if (!packaged.allowlist.has(id)) {
+            throw new Error(
+                `Translation-bench evaluation schedules non-allowlisted gold target '${id}'`,
+            );
+        }
+    }
+}
+
+function assertTranslationBenchCatalogPins(
+    benchmark: TranslationBenchBenchmark,
+): void {
+    const construction = benchmark.metadata.construction;
     const catalogHashes = construction.catalogSchemaHashes;
     if (
         catalogHashes === undefined ||
@@ -2024,7 +2033,12 @@ export function assertTranslationBenchBenchmarkReadyForEvaluation(
             );
         }
     }
-    const decisionLedger = construction.decisionLedger;
+}
+
+function assertTranslationBenchDecisionLedger(
+    benchmark: TranslationBenchBenchmark,
+): void {
+    const decisionLedger = benchmark.metadata.construction.decisionLedger;
     if (decisionLedger === undefined || decisionLedger.length === 0) {
         throw new Error(
             "Translation-bench benchmark requires a complete builder decision ledger",
@@ -2051,6 +2065,11 @@ export function assertTranslationBenchBenchmarkReadyForEvaluation(
             "Translation-bench builder decision ledger does not match scored benchmark turns",
         );
     }
+}
+
+function assertTranslationBenchProbesShareSourcePin(
+    benchmark: TranslationBenchBenchmark,
+): void {
     // All probes must share one source pin (dataset/revision/config/split/url).
     const first = benchmark.cases[0]?.seed.lineage;
     if (first === undefined) {
@@ -2074,6 +2093,17 @@ export function assertTranslationBenchBenchmarkReadyForEvaluation(
             }
         }
     }
+}
+
+export function assertTranslationBenchBenchmarkReadyForEvaluation(
+    benchmark: TranslationBenchBenchmark,
+): void {
+    validateTranslationBenchBenchmark(benchmark);
+    assertTranslationBenchConstructionProvenance(benchmark);
+    assertTranslationBenchGenerationPin(benchmark);
+    assertTranslationBenchCatalogPins(benchmark);
+    assertTranslationBenchDecisionLedger(benchmark);
+    assertTranslationBenchProbesShareSourcePin(benchmark);
 }
 
 export function assertTranslationBenchBenchmarkMatchesTypeAgentCatalog(

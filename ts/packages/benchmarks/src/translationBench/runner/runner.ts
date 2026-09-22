@@ -8,6 +8,7 @@ import {
     parseToolsJsonSchema,
     toJSONParsedActionSchema,
     validateAction,
+    type ParsedActionSchema,
     type ParsedActionSchemaJSON,
 } from "@typeagent/action-schema";
 import type {
@@ -1458,6 +1459,311 @@ function requireLineageText(
     }
 }
 
+function validateTranslationBenchProbeActions(
+    evalCase: TranslationBenchCase,
+    probe: TranslationBenchExplainerProbe,
+    parsedSchemas: Map<string, ParsedActionSchema>,
+): void {
+    for (const action of probe.expectedActions) {
+        if (!evalCase.activeSchemas.includes(action.schemaName)) {
+            throw new Error(
+                `Case '${evalCase.id}' explainer probe '${probe.id}' expects an inactive schema`,
+            );
+        }
+        const definition = parsedSchemas
+            .get(action.schemaName)!
+            .actionSchemas.get(action.actionName);
+        if (!definition) {
+            throw new Error(
+                `Case '${evalCase.id}' explainer probe '${probe.id}' expects an unknown action`,
+            );
+        }
+        validateAction(definition, action);
+    }
+}
+
+function validateTranslationBenchPricing(
+    pricing: NonNullable<TranslationBenchSuite["pricing"]>,
+): void {
+    for (const [model, modelPricing] of Object.entries(pricing)) {
+        if (
+            !model.trim() ||
+            modelPricing === null ||
+            typeof modelPricing !== "object"
+        ) {
+            throw new Error(
+                `Translation bench pricing for '${model}' is invalid`,
+            );
+        }
+        if (model !== model.trim()) {
+            throw new Error(
+                `Translation bench pricing model key '${model}' must not contain surrounding whitespace`,
+            );
+        }
+        for (const field of [
+            "inputUsdPerMToken",
+            "cachedInputUsdPerMToken",
+            "outputUsdPerMToken",
+        ] as const) {
+            const value = modelPricing[field];
+            if (!Number.isFinite(value) || value < 0) {
+                throw new Error(
+                    `Translation bench pricing '${model}.${field}' must be a finite non-negative number`,
+                );
+            }
+        }
+        if (!modelPricing.source?.trim() || !modelPricing.asOf?.trim()) {
+            throw new Error(
+                `Translation bench pricing for '${model}' requires source and asOf`,
+            );
+        }
+    }
+}
+
+function validateTranslationBenchCaseLineage(
+    evalCase: TranslationBenchCase,
+    trustedSources: ReturnType<typeof sourceManifestMap>,
+): void {
+    for (const field of [
+        "dataset",
+        "revision",
+        "config",
+        "split",
+        "rowId",
+        "sourceUrl",
+        "sourceHash",
+    ] as const) {
+        requireLineageText(evalCase, field);
+    }
+    if (
+        !Number.isInteger(evalCase.lineage.rowIndex) ||
+        evalCase.lineage.rowIndex < 0
+    ) {
+        throw new Error(
+            `Case '${evalCase.id}' has an invalid lineage.rowIndex`,
+        );
+    }
+    if (
+        !Number.isInteger(evalCase.lineage.transformVersion) ||
+        evalCase.lineage.transformVersion < 1
+    ) {
+        throw new Error(
+            `Case '${evalCase.id}' has an invalid lineage.transformVersion`,
+        );
+    }
+    const trusted = trustedSources.get(lineageKey(evalCase.lineage));
+    if (trusted === undefined) {
+        throw new Error(
+            `Case '${evalCase.id}' is not present in the trusted source manifest`,
+        );
+    }
+    if (!lineageMatches(evalCase.lineage, trusted)) {
+        throw new Error(
+            `Case '${evalCase.id}' lineage differs from the trusted source manifest`,
+        );
+    }
+    const url = new URL(evalCase.lineage.sourceUrl);
+    // Curated offline banks may use curated:; public rows stay on HTTP(S).
+    if (
+        url.protocol !== "https:" &&
+        url.protocol !== "http:" &&
+        url.protocol !== "curated:"
+    ) {
+        throw new Error(
+            `Case '${evalCase.id}' lineage.sourceUrl must use HTTP(S) or curated:`,
+        );
+    }
+    if (evalCase.lineage.sourcePart !== undefined) {
+        for (const field of [
+            "sourcePart",
+            "rawRowHash",
+            "sourceSliceHash",
+            "canonicalPayloadHash",
+        ] as const) {
+            requireLineageText(evalCase, field);
+        }
+        if (
+            !/^[a-f0-9]{64}$/.test(evalCase.lineage.rawRowHash!) ||
+            !/^[a-f0-9]{64}$/.test(evalCase.lineage.sourceSliceHash!)
+        ) {
+            throw new Error(
+                `Case '${evalCase.id}' has invalid public source hashes`,
+            );
+        }
+    }
+}
+
+function validateTranslationBenchCaseSeed(
+    evalCase: TranslationBenchCase,
+    schemas: ReturnType<typeof schemaMap>,
+): void {
+    if (!evalCase.seed.utterance.trim()) {
+        throw new Error(`Case '${evalCase.id}' has an empty utterance`);
+    }
+    if (
+        evalCase.seed.history !== undefined &&
+        !isChatHistoryInput(evalCase.seed.history)
+    ) {
+        throw new Error(`Case '${evalCase.id}' has invalid seed.history`);
+    }
+    if (evalCase.seed.order !== "strict" && evalCase.seed.order !== "any") {
+        throw new Error(`Case '${evalCase.id}' has an invalid seed.order`);
+    }
+    validateParameterScoreSpecs(evalCase, evalCase.seed.parameterScore);
+    if (evalCase.activeSchemas.length === 0) {
+        throw new Error(`Case '${evalCase.id}' has no active schemas`);
+    }
+    for (const active of evalCase.activeSchemas) {
+        if (!schemas.has(active)) {
+            throw new Error(
+                `Case '${evalCase.id}' uses unknown active schema '${active}'`,
+            );
+        }
+    }
+}
+
+function validateTranslationBenchExpectedActions(
+    evalCase: TranslationBenchCase,
+    parsedSchemas: Map<string, ParsedActionSchema>,
+    validate: boolean,
+): void {
+    for (const action of evalCase.seed.expectedActions) {
+        if (!evalCase.activeSchemas.includes(action.schemaName)) {
+            throw new Error(
+                `Case '${evalCase.id}' expects inactive schema '${action.schemaName}'`,
+            );
+        }
+        if (validate) {
+            const parsed = parsedSchemas.get(action.schemaName)!;
+            const definition = parsed.actionSchemas.get(action.actionName);
+            if (!definition) {
+                throw new Error(
+                    `Case '${evalCase.id}' expects unknown action '${action.actionName}' in '${action.schemaName}'`,
+                );
+            }
+            validateAction(definition, action);
+        }
+    }
+}
+
+function validateTranslationBenchExplainer(
+    suite: TranslationBenchSuite,
+    evalCase: TranslationBenchCase,
+    parsedSchemas: Map<string, ParsedActionSchema>,
+    trustedSources: ReturnType<typeof sourceManifestMap>,
+    shared: {
+        caseSources: Set<string>;
+        translationNegativeSources: Map<string, TranslationBenchLineage>;
+        explainerNegativeSources: Map<string, TranslationBenchLineage>;
+    },
+): void {
+    const explainer = evalCase.explainer;
+    if (explainer === undefined) return;
+    if (evalCase.seed.expectedActions.length === 0) {
+        throw new Error(
+            `Case '${evalCase.id}' cannot explain an abstention seed`,
+        );
+    }
+    if (
+        typeof explainer.valueInRequest !== "boolean" ||
+        typeof explainer.noReferences !== "boolean"
+    ) {
+        throw new Error(`Case '${evalCase.id}' has invalid explainer options`);
+    }
+    const probeIds = new Set<string>();
+    let positives = 0;
+    let negatives = 0;
+    for (const probe of explainer.probes) {
+        if (!probe.id.trim() || probeIds.has(probe.id)) {
+            throw new Error(
+                `Case '${evalCase.id}' has a duplicate or empty explainer probe id`,
+            );
+        }
+        probeIds.add(probe.id);
+        if (probe.role === "positive") positives++;
+        else if (probe.role === "negative") negatives++;
+        else {
+            throw new Error(
+                `Case '${evalCase.id}' has an invalid explainer probe role`,
+            );
+        }
+        if (
+            (probe.role === "positive" && probe.expectedActions.length === 0) ||
+            (probe.role === "negative" && probe.expectedActions.length !== 0)
+        ) {
+            throw new Error(
+                `Case '${evalCase.id}' explainer probe '${probe.id}' conflicts with its role`,
+            );
+        }
+        if (probe.history !== undefined && !isChatHistoryInput(probe.history)) {
+            throw new Error(
+                `Case '${evalCase.id}' explainer probe '${probe.id}' has invalid history`,
+            );
+        }
+        const turnKey = sourceRowKey(probe.lineage);
+        const matchingTranslationNegative =
+            shared.translationNegativeSources.get(turnKey);
+        const reusesTranslationNegative =
+            probe.role === "negative" &&
+            !shared.explainerNegativeSources.has(turnKey) &&
+            matchingTranslationNegative !== undefined &&
+            lineageMatches(probe.lineage, matchingTranslationNegative);
+        if (shared.caseSources.has(turnKey) && !reusesTranslationNegative) {
+            throw new Error(
+                `Duplicate translation bench public turn '${probe.lineage.rowId}:${probe.lineage.sourcePart ?? ""}'`,
+            );
+        }
+        shared.caseSources.add(turnKey);
+        if (probe.role === "negative") {
+            shared.explainerNegativeSources.set(turnKey, probe.lineage);
+        }
+        validateTranslationBenchProbeSource(
+            suite,
+            evalCase,
+            probe,
+            trustedSources,
+        );
+        validateTranslationBenchProbeActions(evalCase, probe, parsedSchemas);
+    }
+    if (positives === 0 || negatives === 0) {
+        throw new Error(
+            `Case '${evalCase.id}' explainer requires positive and negative probes`,
+        );
+    }
+}
+
+function validateTranslationBenchProbeSource(
+    suite: TranslationBenchSuite,
+    evalCase: TranslationBenchCase,
+    probe: TranslationBenchExplainerProbe,
+    trustedSources: ReturnType<typeof sourceManifestMap>,
+): void {
+    const trustedProbe = trustedSources.get(lineageKey(probe.lineage));
+    if (
+        trustedProbe === undefined ||
+        !lineageMatches(probe.lineage, trustedProbe)
+    ) {
+        throw new Error(
+            `Case '${evalCase.id}' explainer probe '${probe.id}' is absent from the trusted source manifest`,
+        );
+    }
+    const probeHash = computeTranslationBenchProbeHash(
+        suite,
+        evalCase.activeSchemas,
+        probe,
+        probe.lineage.transformVersion >= 2,
+    );
+    if (
+        probe.lineage.sourcePart === undefined ||
+        probe.lineage.canonicalPayloadHash !== probeHash ||
+        probe.lineage.sourceHash !== probeHash
+    ) {
+        throw new Error(
+            `Case '${evalCase.id}' explainer probe '${probe.id}' canonical payload hash drift`,
+        );
+    }
+}
+
 export function validateTranslationBenchSuite(
     suite: TranslationBenchSuite,
     sourceManifest: TranslationBenchSuiteSourceIndex,
@@ -1480,39 +1786,7 @@ export function validateTranslationBenchSuite(
         validateTranslationBenchScenarios(suite.scenarios);
     }
     if (suite.pricing !== undefined) {
-        for (const [model, pricing] of Object.entries(suite.pricing)) {
-            if (
-                !model.trim() ||
-                pricing === null ||
-                typeof pricing !== "object"
-            ) {
-                throw new Error(
-                    `Translation bench pricing for '${model}' is invalid`,
-                );
-            }
-            if (model !== model.trim()) {
-                throw new Error(
-                    `Translation bench pricing model key '${model}' must not contain surrounding whitespace`,
-                );
-            }
-            for (const field of [
-                "inputUsdPerMToken",
-                "cachedInputUsdPerMToken",
-                "outputUsdPerMToken",
-            ] as const) {
-                const value = pricing[field];
-                if (!Number.isFinite(value) || value < 0) {
-                    throw new Error(
-                        `Translation bench pricing '${model}.${field}' must be a finite non-negative number`,
-                    );
-                }
-            }
-            if (!pricing.source?.trim() || !pricing.asOf?.trim()) {
-                throw new Error(
-                    `Translation bench pricing for '${model}' requires source and asOf`,
-                );
-            }
-        }
+        validateTranslationBenchPricing(suite.pricing);
     }
 
     const schemas = schemaMap(suite);
@@ -1520,16 +1794,7 @@ export function validateTranslationBenchSuite(
     if (schemas.size !== suite.schemas.length) {
         throw new Error("Translation bench schema names must be unique");
     }
-    const parsedSchemas = new Map(
-        suite.schemas.map((schema) => [
-            schema.schemaName,
-            schema.typeAgent === undefined
-                ? parseToolsJsonSchema(normalizeTools(schema))
-                : fromJSONParsedActionSchema(
-                      structuredClone(schema.typeAgent.parsedActionSchema),
-                  ),
-        ]),
-    );
+    const parsedSchemas = parseTranslationBenchSchemas(suite);
     const caseIds = new Set<string>();
     const caseSources = new Set<string>();
     const translationNegativeSources = new Map<
@@ -1537,6 +1802,11 @@ export function validateTranslationBenchSuite(
         TranslationBenchLineage
     >();
     const explainerNegativeSources = new Map<string, TranslationBenchLineage>();
+    const shared = {
+        caseSources,
+        translationNegativeSources,
+        explainerNegativeSources,
+    };
     for (const evalCase of suite.cases) {
         if (!evalCase.id.trim() || caseIds.has(evalCase.id)) {
             throw new Error(
@@ -1564,236 +1834,50 @@ export function validateTranslationBenchSuite(
         if (isTranslationNegative) {
             translationNegativeSources.set(sourceKey, evalCase.lineage);
         }
-        for (const field of [
-            "dataset",
-            "revision",
-            "config",
-            "split",
-            "rowId",
-            "sourceUrl",
-            "sourceHash",
-        ] as const) {
-            requireLineageText(evalCase, field);
-        }
-        if (
-            !Number.isInteger(evalCase.lineage.rowIndex) ||
-            evalCase.lineage.rowIndex < 0
-        ) {
-            throw new Error(
-                `Case '${evalCase.id}' has an invalid lineage.rowIndex`,
-            );
-        }
-        if (
-            !Number.isInteger(evalCase.lineage.transformVersion) ||
-            evalCase.lineage.transformVersion < 1
-        ) {
-            throw new Error(
-                `Case '${evalCase.id}' has an invalid lineage.transformVersion`,
-            );
-        }
-        const trusted = trustedSources.get(lineageKey(evalCase.lineage));
-        if (trusted === undefined) {
-            throw new Error(
-                `Case '${evalCase.id}' is not present in the trusted source manifest`,
-            );
-        }
-        if (!lineageMatches(evalCase.lineage, trusted)) {
-            throw new Error(
-                `Case '${evalCase.id}' lineage differs from the trusted source manifest`,
-            );
-        }
-        const url = new URL(evalCase.lineage.sourceUrl);
-        // Curated offline banks may use curated:; public rows stay on HTTP(S).
-        if (
-            url.protocol !== "https:" &&
-            url.protocol !== "http:" &&
-            url.protocol !== "curated:"
-        ) {
-            throw new Error(
-                `Case '${evalCase.id}' lineage.sourceUrl must use HTTP(S) or curated:`,
-            );
-        }
-        if (!evalCase.seed.utterance.trim()) {
-            throw new Error(`Case '${evalCase.id}' has an empty utterance`);
-        }
-        if (
-            evalCase.seed.history !== undefined &&
-            !isChatHistoryInput(evalCase.seed.history)
-        ) {
-            throw new Error(`Case '${evalCase.id}' has invalid seed.history`);
-        }
-        if (evalCase.seed.order !== "strict" && evalCase.seed.order !== "any") {
-            throw new Error(`Case '${evalCase.id}' has an invalid seed.order`);
-        }
-        validateParameterScoreSpecs(evalCase, evalCase.seed.parameterScore);
-        if (evalCase.activeSchemas.length === 0) {
-            throw new Error(`Case '${evalCase.id}' has no active schemas`);
-        }
-        for (const active of evalCase.activeSchemas) {
-            if (!schemas.has(active)) {
-                throw new Error(
-                    `Case '${evalCase.id}' uses unknown active schema '${active}'`,
-                );
-            }
-        }
-        for (const action of evalCase.seed.expectedActions) {
-            if (!evalCase.activeSchemas.includes(action.schemaName)) {
-                throw new Error(
-                    `Case '${evalCase.id}' expects inactive schema '${action.schemaName}'`,
-                );
-            }
-            if (validateExpectedActions) {
-                const parsed = parsedSchemas.get(action.schemaName)!;
-                const definition = parsed.actionSchemas.get(action.actionName);
-                if (!definition) {
-                    throw new Error(
-                        `Case '${evalCase.id}' expects unknown action '${action.actionName}' in '${action.schemaName}'`,
-                    );
-                }
-                validateAction(definition, action);
-            }
-        }
+        validateTranslationBenchCaseLineage(evalCase, trustedSources);
+        validateTranslationBenchCaseSeed(evalCase, schemas);
+        validateTranslationBenchExpectedActions(
+            evalCase,
+            parsedSchemas,
+            validateExpectedActions,
+        );
         const actualHash = computeTranslationBenchSourceHash(suite, evalCase);
         if (actualHash !== evalCase.lineage.sourceHash) {
             throw new Error(
                 `Case '${evalCase.id}' sourceHash does not match its utterance, active schemas, and calls`,
             );
         }
-        if (evalCase.lineage.sourcePart !== undefined) {
-            for (const field of [
-                "sourcePart",
-                "rawRowHash",
-                "sourceSliceHash",
-                "canonicalPayloadHash",
-            ] as const) {
-                requireLineageText(evalCase, field);
-            }
-            if (
-                evalCase.lineage.canonicalPayloadHash !== actualHash ||
-                !/^[a-f0-9]{64}$/.test(evalCase.lineage.rawRowHash!) ||
-                !/^[a-f0-9]{64}$/.test(evalCase.lineage.sourceSliceHash!)
-            ) {
-                throw new Error(
-                    `Case '${evalCase.id}' has invalid public source hashes`,
-                );
-            }
+        if (
+            evalCase.lineage.sourcePart !== undefined &&
+            evalCase.lineage.canonicalPayloadHash !== actualHash
+        ) {
+            throw new Error(
+                `Case '${evalCase.id}' has invalid public source hashes`,
+            );
         }
-        if (evalCase.explainer !== undefined) {
-            if (evalCase.seed.expectedActions.length === 0) {
-                throw new Error(
-                    `Case '${evalCase.id}' cannot explain an abstention seed`,
-                );
-            }
-            if (
-                typeof evalCase.explainer.valueInRequest !== "boolean" ||
-                typeof evalCase.explainer.noReferences !== "boolean"
-            ) {
-                throw new Error(
-                    `Case '${evalCase.id}' has invalid explainer options`,
-                );
-            }
-            const probeIds = new Set<string>();
-            let positives = 0;
-            let negatives = 0;
-            for (const probe of evalCase.explainer.probes) {
-                if (!probe.id.trim() || probeIds.has(probe.id)) {
-                    throw new Error(
-                        `Case '${evalCase.id}' has a duplicate or empty explainer probe id`,
-                    );
-                }
-                probeIds.add(probe.id);
-                if (probe.role === "positive") positives++;
-                else if (probe.role === "negative") negatives++;
-                else {
-                    throw new Error(
-                        `Case '${evalCase.id}' has an invalid explainer probe role`,
-                    );
-                }
-                if (
-                    (probe.role === "positive" &&
-                        probe.expectedActions.length === 0) ||
-                    (probe.role === "negative" &&
-                        probe.expectedActions.length !== 0)
-                ) {
-                    throw new Error(
-                        `Case '${evalCase.id}' explainer probe '${probe.id}' conflicts with its role`,
-                    );
-                }
-                if (
-                    probe.history !== undefined &&
-                    !isChatHistoryInput(probe.history)
-                ) {
-                    throw new Error(
-                        `Case '${evalCase.id}' explainer probe '${probe.id}' has invalid history`,
-                    );
-                }
-                const turnKey = sourceRowKey(probe.lineage);
-                const matchingTranslationNegative =
-                    translationNegativeSources.get(turnKey);
-                const reusesTranslationNegative =
-                    probe.role === "negative" &&
-                    !explainerNegativeSources.has(turnKey) &&
-                    matchingTranslationNegative !== undefined &&
-                    lineageMatches(probe.lineage, matchingTranslationNegative);
-                if (caseSources.has(turnKey) && !reusesTranslationNegative) {
-                    throw new Error(
-                        `Duplicate translation bench public turn '${probe.lineage.rowId}:${probe.lineage.sourcePart ?? ""}'`,
-                    );
-                }
-                caseSources.add(turnKey);
-                if (probe.role === "negative") {
-                    explainerNegativeSources.set(turnKey, probe.lineage);
-                }
-                const trustedProbe = trustedSources.get(
-                    lineageKey(probe.lineage),
-                );
-                if (
-                    trustedProbe === undefined ||
-                    !lineageMatches(probe.lineage, trustedProbe)
-                ) {
-                    throw new Error(
-                        `Case '${evalCase.id}' explainer probe '${probe.id}' is absent from the trusted source manifest`,
-                    );
-                }
-                const probeHash = computeTranslationBenchProbeHash(
-                    suite,
-                    evalCase.activeSchemas,
-                    probe,
-                    probe.lineage.transformVersion >= 2,
-                );
-                if (
-                    probe.lineage.sourcePart === undefined ||
-                    probe.lineage.canonicalPayloadHash !== probeHash ||
-                    probe.lineage.sourceHash !== probeHash
-                ) {
-                    throw new Error(
-                        `Case '${evalCase.id}' explainer probe '${probe.id}' canonical payload hash drift`,
-                    );
-                }
-                for (const action of probe.expectedActions) {
-                    if (!evalCase.activeSchemas.includes(action.schemaName)) {
-                        throw new Error(
-                            `Case '${evalCase.id}' explainer probe '${probe.id}' expects an inactive schema`,
-                        );
-                    }
-                    const definition = parsedSchemas
-                        .get(action.schemaName)!
-                        .actionSchemas.get(action.actionName);
-                    if (!definition) {
-                        throw new Error(
-                            `Case '${evalCase.id}' explainer probe '${probe.id}' expects an unknown action`,
-                        );
-                    }
-                    validateAction(definition, action);
-                }
-            }
-            if (positives === 0 || negatives === 0) {
-                throw new Error(
-                    `Case '${evalCase.id}' explainer requires positive and negative probes`,
-                );
-            }
-        }
+        validateTranslationBenchExplainer(
+            suite,
+            evalCase,
+            parsedSchemas,
+            trustedSources,
+            shared,
+        );
     }
+}
+
+function parseTranslationBenchSchemas(
+    suite: TranslationBenchSuite,
+): Map<string, ParsedActionSchema> {
+    return new Map(
+        suite.schemas.map((schema) => [
+            schema.schemaName,
+            schema.typeAgent === undefined
+                ? parseToolsJsonSchema(normalizeTools(schema))
+                : fromJSONParsedActionSchema(
+                      structuredClone(schema.typeAgent.parsedActionSchema),
+                  ),
+        ]),
+    );
 }
 
 export function createTranslationBenchProvider(

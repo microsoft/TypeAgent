@@ -451,6 +451,41 @@ function typeScriptIdentifier(name: string): string {
     return /^[A-Za-z_$]/u.test(sanitized) ? sanitized : `_${sanitized}`;
 }
 
+function jsonSchemaObjectProperties(
+    schema: Record<string, unknown>,
+    indent: string,
+): string {
+    const properties =
+        typeof schema.properties === "object" &&
+        schema.properties !== null &&
+        !Array.isArray(schema.properties)
+            ? (schema.properties as Record<string, unknown>)
+            : {};
+    const required = new Set(
+        Array.isArray(schema.required)
+            ? schema.required.filter(
+                  (item): item is string => typeof item === "string",
+              )
+            : [],
+    );
+    const innerIndent = `${indent}  `;
+    const lines = ["{"];
+    for (const [name, property] of Object.entries(properties)) {
+        const propertySchema =
+            typeof property === "object" &&
+            property !== null &&
+            !Array.isArray(property)
+                ? (property as Record<string, unknown>)
+                : {};
+        lines.push(...commentLines(propertySchema.description, innerIndent));
+        lines.push(
+            `${innerIndent}${typeScriptPropertyName(name)}${required.has(name) ? "" : "?"}: ${jsonSchemaType(propertySchema, innerIndent)};`,
+        );
+    }
+    lines.push(`${indent}}`);
+    return lines.join("\n");
+}
+
 function jsonSchemaType(value: unknown, indent: string): string {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
         return "unknown";
@@ -475,37 +510,7 @@ function jsonSchemaType(value: unknown, indent: string): string {
         return `Array<${jsonSchemaType(schema.items, indent)}>`;
     }
     if (schema.type === "object" || schema.properties !== undefined) {
-        const properties =
-            typeof schema.properties === "object" &&
-            schema.properties !== null &&
-            !Array.isArray(schema.properties)
-                ? (schema.properties as Record<string, unknown>)
-                : {};
-        const required = new Set(
-            Array.isArray(schema.required)
-                ? schema.required.filter(
-                      (item): item is string => typeof item === "string",
-                  )
-                : [],
-        );
-        const innerIndent = `${indent}  `;
-        const lines = ["{"];
-        for (const [name, property] of Object.entries(properties)) {
-            const propertySchema =
-                typeof property === "object" &&
-                property !== null &&
-                !Array.isArray(property)
-                    ? (property as Record<string, unknown>)
-                    : {};
-            lines.push(
-                ...commentLines(propertySchema.description, innerIndent),
-            );
-            lines.push(
-                `${innerIndent}${typeScriptPropertyName(name)}${required.has(name) ? "" : "?"}: ${jsonSchemaType(propertySchema, innerIndent)};`,
-            );
-        }
-        lines.push(`${indent}}`);
-        return lines.join("\n");
+        return jsonSchemaObjectProperties(schema, indent);
     }
     switch (schema.type) {
         case "string":

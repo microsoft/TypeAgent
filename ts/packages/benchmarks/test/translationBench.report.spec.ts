@@ -457,7 +457,7 @@ describe("renderTranslationBenchHtml", () => {
         expect(html).toContain("// Retrieve a Discord user profile");
         expect(html).toContain("// The Discord user identifier");
         expect(html).toContain('actionName: \\"getUser\\"');
-        for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
+        for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/gi)) {
             expect(() => new Function(match[1])).not.toThrow();
         }
         // Payload is JSON-embedded (not HTML-escaped entity form inside the script).

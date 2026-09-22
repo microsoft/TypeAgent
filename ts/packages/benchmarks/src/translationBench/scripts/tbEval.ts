@@ -32,6 +32,7 @@ import {
     computeTranslationBenchBenchmarkApprovalHash,
     parseTranslationBenchBenchmarkJsonl,
     parseTranslationBenchBenchmarkForEvaluation,
+    type TranslationBenchBenchmark,
 } from "../synthesizer/benchmark.js";
 import { translationBenchBenchmarkToSuite } from "../synthesizer/benchmarkAdapter.js";
 import {
@@ -54,6 +55,9 @@ import {
     type TranslationBenchRow,
     type TranslationBenchRunResult,
     type TranslationBenchRunnerOptions,
+    type TranslationBenchScenario,
+    type TranslationBenchSuite,
+    type TranslationBenchSuiteSourceIndex,
 } from "../runner/runner.js";
 import {
     createRunnerRateLimiter,
@@ -67,6 +71,10 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "../../..");
+
+function writeLine(message: string): void {
+    process.stdout.write(`${message}\n`);
+}
 
 function defaultApprovedPath(draftPath: string): string {
     const dir = path.dirname(draftPath);
@@ -101,7 +109,7 @@ function createHeadlessActionContext(
     } as unknown as ActionContext<CommandHandlerContext>;
 }
 
-async function main(): Promise<void> {
+function parseEvalOptions(): TbEvalOptions {
     const program = new Command()
         .name("tb-eval")
         .description(
@@ -149,25 +157,30 @@ async function main(): Promise<void> {
         .option("--no-rate-limit", "disable TPM limiter")
         .parse();
 
-    const opts = program.opts<{
-        draft: string;
-        approved?: string;
-        out?: string;
-        html?: string;
-        checkpoint?: string;
-        config?: string;
-        batch: string;
-        models?: string;
-        headroom?: number;
-        concurrency?: number;
-        modelConcurrency?: number;
-        maxCases?: number;
-        envFile?: string[];
-        instanceDir: string;
-        rateLimiterDb?: string;
-        rateLimit?: boolean;
-    }>();
+    return program.opts<TbEvalOptions>();
+}
 
+function prepareEvalPaths(opts: TbEvalOptions): {
+    draftPath: string;
+    approvedPath: string;
+    outPath: string;
+    checkpointPath: string;
+} {
+    const draftPath = resolveExistingFile(opts.draft, "draft");
+    const approvedPath = path.resolve(
+        opts.approved ?? defaultApprovedPath(draftPath),
+    );
+    const outPath = path.resolve(
+        opts.out ?? path.join(path.dirname(draftPath), "eval-results.json"),
+    );
+    const checkpointPath = path.resolve(
+        opts.checkpoint ??
+            path.join(path.dirname(outPath), "eval-checkpoint.jsonl"),
+    );
+    return { draftPath, approvedPath, outPath, checkpointPath };
+}
+
+async function prepareEvalRun(opts: TbEvalOptions): Promise<TbEvalRunInputs> {
     loadDotEnvFiles([
         path.join(PACKAGE_ROOT, ".env"),
         path.join(PACKAGE_ROOT, ".env.real"),
@@ -180,19 +193,10 @@ async function main(): Promise<void> {
         process.env.OPENAI_MODEL = "azure/gpt-4.1";
     }
 
-    const draftPath = resolveExistingFile(opts.draft, "draft");
-    const approvedPath = path.resolve(
-        opts.approved ?? defaultApprovedPath(draftPath),
-    );
-    const outPath = path.resolve(
-        opts.out ?? path.join(path.dirname(draftPath), "eval-results.json"),
-    );
+    const { draftPath, approvedPath, outPath, checkpointPath } =
+        prepareEvalPaths(opts);
     const htmlPath = path.resolve(
         opts.html ?? path.join(path.dirname(outPath), "eval-report.html"),
-    );
-    const checkpointPath = path.resolve(
-        opts.checkpoint ??
-            path.join(path.dirname(outPath), "eval-checkpoint.jsonl"),
     );
 
     const configArgs: { config?: string; batch?: string; headroom?: number } = {
@@ -239,9 +243,11 @@ async function main(): Promise<void> {
                 `(case/metadata drift). Re-approve the draft before eval.`,
         );
     }
-    console.log(`using approved → ${approvedPath}`);
+    writeLine(`using approved → ${approvedPath}`);
 
-    let { suite, sourceManifest } = translationBenchBenchmarkToSuite(benchmark);
+    const converted = translationBenchBenchmarkToSuite(benchmark);
+    let { suite } = converted;
+    const { sourceManifest } = converted;
     if (resolved.caseOrder !== undefined) {
         suite = {
             ...suite,
@@ -282,7 +288,7 @@ async function main(): Promise<void> {
         shardCount: 1,
     };
 
-    let seedRows: TranslationBenchRow[] = [];
+    const seedRows: TranslationBenchRow[] = [];
     let checkpointState:
         | TranslationBenchCheckpoint<TranslationBenchRow>
         | undefined;
@@ -303,9 +309,7 @@ async function main(): Promise<void> {
             seedRows.push(row.value);
             completed.add(translationBenchResumeKey(row));
         }
-        console.log(
-            `resuming ${seedRows.length} row(s) from ${checkpointPath}`,
-        );
+        writeLine(`resuming ${seedRows.length} row(s) from ${checkpointPath}`);
     }
 
     const limiterArgs: { dbPath?: string; disabled?: boolean } = {
@@ -367,6 +371,92 @@ async function main(): Promise<void> {
         runnerOptions.rateLimiter = rateLimiter;
     }
 
+    const onProgress = (done: number, total: number) => {
+        if (done === total || done % 25 === 0) {
+            writeLine(`progress ${done}/${total}`);
+        }
+    };
+
+    return {
+        suite,
+        benchmark,
+        models,
+        scenarios,
+        sourceManifest,
+        seedRows,
+        completed,
+        checkpointState,
+        checkpointHeader,
+        checkpointPath,
+        outPath,
+        htmlPath,
+        rateLimiter,
+        resolved,
+        actionContext,
+        handlerContext,
+        onProgress,
+    };
+}
+
+interface TbEvalOptions {
+    draft: string;
+    approved?: string;
+    out?: string;
+    html?: string;
+    checkpoint?: string;
+    config?: string;
+    batch: string;
+    models?: string;
+    headroom?: number;
+    concurrency?: number;
+    modelConcurrency?: number;
+    maxCases?: number;
+    envFile?: string[];
+    instanceDir: string;
+    rateLimiterDb?: string;
+    rateLimit?: boolean;
+}
+
+interface TbEvalRunInputs {
+    suite: TranslationBenchSuite;
+    benchmark: TranslationBenchBenchmark;
+    models: string[];
+    scenarios: TranslationBenchScenario[];
+    sourceManifest: TranslationBenchSuiteSourceIndex;
+    seedRows: TranslationBenchRow[];
+    completed: Set<string>;
+    checkpointState:
+        | TranslationBenchCheckpoint<TranslationBenchRow>
+        | undefined;
+    checkpointHeader: TranslationBenchCheckpointHeader;
+    checkpointPath: string;
+    outPath: string;
+    htmlPath: string;
+    rateLimiter: ReturnType<typeof createRunnerRateLimiter>;
+    resolved: ReturnType<typeof loadResolvedConfig>["resolved"];
+    actionContext: ActionContext<CommandHandlerContext>;
+    handlerContext: CommandHandlerContext;
+    onProgress: (done: number, total: number) => void;
+}
+
+async function executeEval(
+    opts: TbEvalOptions,
+    inputs: TbEvalRunInputs,
+): Promise<TranslationBenchRunResult> {
+    const {
+        suite,
+        benchmark,
+        models,
+        completed,
+        checkpointState: initialCheckpointState,
+        checkpointHeader,
+        checkpointPath,
+        rateLimiter,
+        actionContext,
+        handlerContext,
+        onProgress,
+    } = inputs;
+
     // Openai gateway (e.g. LiteLLM): the requested model id is carried by
     // OPENAI_MODEL, a process-global that runtime-config reads at init, and the
     // ids are gateway routes rather than typed-config entries. So run each
@@ -377,19 +467,49 @@ async function main(): Promise<void> {
         process.env.TYPEAGENT_MODEL_PROVIDER === "openai" &&
         process.env.OPENAI_ENDPOINT !== undefined;
 
-    const onProgress = (done: number, total: number) => {
-        if (done === total || done % 25 === 0) {
-            console.log(`progress ${done}/${total}`);
-        }
-    };
-
     const started = Date.now();
+    let checkpointState = initialCheckpointState;
     let result: TranslationBenchRunResult;
     try {
+        const runnerOptions: TranslationBenchRunnerOptions = {
+            models,
+            scenarios: inputs.scenarios,
+            sourceManifest: inputs.sourceManifest,
+            concurrencyByModel: inputs.resolved.concurrencyByModel,
+            modelConcurrency:
+                opts.modelConcurrency ?? inputs.resolved.modelConcurrency,
+            seedRows: inputs.seedRows,
+            isWorkComplete: ({ model, scenarioId, caseId }) =>
+                completed.has(
+                    translationBenchResumeKey({
+                        phase: "translation",
+                        model,
+                        scenario: scenarioId,
+                        caseId,
+                    }),
+                ),
+            onRowComplete: async (row) => {
+                const ckptRow =
+                    createTranslationBenchTranslationCheckpointRow(row);
+                checkpointState = appendTranslationBenchCheckpointRows(
+                    checkpointPath,
+                    checkpointHeader,
+                    [ckptRow],
+                    checkpointState,
+                );
+                completed.add(translationBenchResumeKey(ckptRow));
+            },
+        };
+        if (opts.concurrency !== undefined) {
+            runnerOptions.concurrency = opts.concurrency;
+        }
+        if (rateLimiter !== undefined) {
+            runnerOptions.rateLimiter = rateLimiter;
+        }
         if (useGateway) {
             let last: TranslationBenchRunResult | undefined;
             for (const model of models) {
-                console.log(`=== ${model} ===`);
+                writeLine(`=== ${model} ===`);
                 process.env.OPENAI_MODEL = model;
                 initRuntimeConfigFromProcessEnv();
                 last = await runTranslationBench(
@@ -439,6 +559,7 @@ async function main(): Promise<void> {
         }
     }
 
+    const { outPath, htmlPath } = inputs;
     ensureParentDir(outPath);
     fs.writeFileSync(outPath, JSON.stringify(result, null, 2), "utf8");
     ensureParentDir(htmlPath);
@@ -451,11 +572,18 @@ async function main(): Promise<void> {
     );
 
     const elapsedSec = ((Date.now() - started) / 1000).toFixed(1);
-    console.log(
+    writeLine(
         `done rows=${result.rows.length} pass=${(result.summary.passRate * 100).toFixed(1)}% in ${elapsedSec}s`,
     );
-    console.log(`results → ${outPath}`);
-    console.log(`report  → ${htmlPath}`);
+    writeLine(`results → ${outPath}`);
+    writeLine(`report  → ${htmlPath}`);
+    return result;
+}
+
+async function main(): Promise<void> {
+    const opts = parseEvalOptions();
+    const inputs = await prepareEvalRun(opts);
+    await executeEval(opts, inputs);
 }
 
 main().catch((error) => {
