@@ -1,6 +1,25 @@
 # @typeagent/memory-service
 
-Transport-independent memory corpus service
+Transport-independent durable memory corpus service.
+
+Phase 0 management APIs provide corpus status and revision/job counts,
+deterministically paged source and job listings, bounded revision content reads,
+source-scoped derived knowledge, optimistic source replacement, and atomic
+source/corpus reindexing. Source deletion is a two-step operation: callers first
+request a preview and short-lived confirmation token, then confirm deletion.
+Confirmation survives a service restart, and activation rebuilds the complete
+corpus index before removing superseded index generations.
+
+The ingestion pipeline persists `mode` and `maxCharsPerChunk` with each
+revision. `basic` mode is model-free and contributes bounded exact-search
+evidence without semantic knowledge extraction; the remaining modes use the
+structured KnowPro index. Nonterminal jobs found after a service restart are
+marked failed with an explicit interruption reason so they are never left
+permanently active.
+
+`getCapabilities()` reports `management: true` and `groundedAnswer: true`.
+`answer` is deliberately extractive: it returns bounded source-linked evidence
+with explicit citations and does not claim model-generated synthesis.
 
 ## Trademarks
 

@@ -266,6 +266,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const libraryMapping: Record<string, string> = {
                 "/annotationsLibrary.html": "views/annotationsLibrary.html",
                 "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
+                "/memoryCenter.html": "views/memoryCenter.html",
                 "/macrosLibrary.html": "views/macrosLibrary.html",
                 "/entityGraphView.html": "views/entityGraphView.html",
                 "/topicGraphView.html": "views/topicGraphView.html",

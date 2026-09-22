@@ -536,7 +536,7 @@ class MemoryAnswerCommandHandler implements CommandHandler {
 
 export function getMemoryCommandHandlers(): CommandHandlerTable {
     return {
-        description: "Memory commands",
+        description: "Legacy per-conversation memory commands",
         commands: {
             legacy: getToggleHandlerTable("legacy", async (context, enable) => {
                 await changeContextConfig(

@@ -62,6 +62,7 @@
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/list-agent": "workspace:*",
     "@typeagent/markdown-agent": "workspace:*",
+    "@typeagent/memory-agent": "workspace:*",
     "@typeagent/montage-agent": "workspace:*",
     "@typeagent/music": "workspace:*",
     "@typeagent/music-local": "workspace:*",

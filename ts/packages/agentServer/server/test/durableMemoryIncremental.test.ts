@@ -31,6 +31,24 @@ async function waitForTerminalJob(
     throw new Error(`Job '${jobId}' did not finish`);
 }
 
+function fullPageFixture(): string {
+    return [
+        "# Atlas Observatory Operations Guide",
+        ...Array.from({ length: 24 }, (_, index) => {
+            const section = index + 1;
+            return [
+                `## Procedure ${section}: Calibrate sensor bank ${section}`,
+                "",
+                `Technician Rowan calibrates sensor bank ${section} at the Atlas polar observatory in Reykjavik.`,
+                `The procedure uses cobalt reference cell C-${section}, quartz alignment scope Q-${section}, and telemetry console T-${section}.`,
+                `Before calibration, verify the isolation relay, record ambient temperature, and confirm that maintenance ticket M-${section} is approved.`,
+                `If drift exceeds ${section + 2} millivolts, stop the procedure, preserve the diagnostic log, and notify the observatory operations lead.`,
+                `After calibration, archive the readings under project Atlas and link them to sensor bank ${section}.`,
+            ].join("\n");
+        }),
+    ].join("\n\n");
+}
+
 describe("durable memory incremental production path", () => {
     test("appends a second source and preserves both indexes after restart", async () => {
         const rootDirectory = await mkdtemp(
@@ -97,4 +115,65 @@ describe("durable memory incremental production path", () => {
             await rm(rootDirectory, { recursive: true, force: true });
         }
     }, 300_000);
+
+    test("indexes a repeatable full-page fixture within the Luna acceptance budget", async () => {
+        const rootDirectory = await mkdtemp(
+            path.join(os.tmpdir(), "typeagent-live-full-page-"),
+        );
+        const service = createDurableMemoryService(rootDirectory);
+        try {
+            const corpus = await service.createCorpus(
+                "Full-page performance acceptance",
+            );
+            const startedAt = Date.now();
+            const accepted = await service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceId: "atlas-operations-guide",
+                    sourceType: "markdown",
+                    title: "Atlas Observatory Operations Guide",
+                    markdown: fullPageFixture(),
+                },
+                pipeline: {
+                    mode: "full",
+                    maxCharsPerChunk: 8_000,
+                },
+            });
+            const job = await waitForTerminalJob(service, accepted.jobId);
+            const elapsedMs = Date.now() - startedAt;
+            const maxElapsedMs = Number(
+                process.env.TYPEAGENT_MEMORY_FULL_PAGE_MAX_MS ?? 90_000,
+            );
+
+            expect(job.state).toBe("complete");
+            expect(elapsedMs).toBeLessThanOrEqual(maxElapsedMs);
+            expect(job.trace).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        operation: "rebuild",
+                        stage: "extracting-knowledge",
+                    }),
+                    expect.objectContaining({
+                        stage: "building-indexes",
+                    }),
+                ]),
+            );
+            await expect(
+                service.search({
+                    corpusId: corpus.corpusId,
+                    query: "cobalt reference cell",
+                    sourceIds: ["atlas-operations-guide"],
+                }),
+            ).resolves.toMatchObject({
+                matches: [
+                    expect.objectContaining({
+                        sourceId: "atlas-operations-guide",
+                    }),
+                ],
+            });
+        } finally {
+            await service.close();
+            await rm(rootDirectory, { recursive: true, force: true });
+        }
+    }, 180_000);
 });

@@ -5,6 +5,222 @@
 // Agent-side operations (forwarded via WebSocket)
 // =============================================
 
+export type MemoryCenterCorpus = {
+    corpusId: string;
+    name: string;
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+    status: "ready" | "indexing" | "degraded" | "error";
+    documentCount: number;
+};
+
+export type MemoryCenterCorpusStatus = MemoryCenterCorpus & {
+    sourceCount: number;
+    revisionCount: number;
+    readyRevisionCount: number;
+    failedRevisionCount: number;
+    activeJobCount: number;
+    indexVersion: string;
+};
+
+export type MemoryCenterRevision = {
+    revisionId: string;
+    sourceId: string;
+    contentHash: string;
+    mimeType: string;
+    capturedAt?: string;
+    sourceModifiedAt?: string;
+    indexedAt?: string;
+    pipelineVersion: string;
+    pipeline?: {
+        mode: "basic" | "summary" | "content" | "full";
+        maxCharsPerChunk?: number;
+    };
+    state: "accepted" | "processing" | "ready" | "failed" | "deleted";
+};
+
+export type MemoryCenterSource = {
+    sourceId: string;
+    corpusId: string;
+    sourceType: "web" | "markdown" | "text" | "html" | "vtt";
+    canonicalUri?: string;
+    title: string;
+    tags?: string[];
+    metadata?: Record<string, unknown>;
+    activeRevisionId: string;
+    revisions: MemoryCenterRevision[];
+};
+
+export type MemoryCenterPage<T> = {
+    items: T[];
+    total: number;
+    nextContinuationToken?: string;
+};
+
+export type MemoryCenterContent = {
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    mimeType: string;
+    offset: number;
+    content: string;
+    totalChars: number;
+    truncated: boolean;
+    nextOffset?: number;
+};
+
+export type MemoryCenterKnowledge = {
+    entities: Array<{
+        name: string;
+        types: string[];
+        mentionCount: number;
+        sourceIds: string[];
+    }>;
+    topics: Array<{
+        name: string;
+        mentionCount: number;
+        sourceIds: string[];
+    }>;
+    relationships: Array<{
+        fromEntity: string;
+        toEntity: string;
+        relationshipType: string;
+        count: number;
+        sourceIds: string[];
+    }>;
+};
+
+export type MemoryCenterJobState =
+    | "accepted"
+    | "validating"
+    | "normalizing"
+    | "chunking"
+    | "extracting-knowledge"
+    | "embedding"
+    | "building-indexes"
+    | "persisting"
+    | "complete"
+    | "partial"
+    | "failed"
+    | "cancelling"
+    | "cancelled";
+
+export type MemoryCenterJob = {
+    jobId: string;
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    state: MemoryCenterJobState;
+    progress: {
+        completed: number;
+        total?: number;
+        message?: string;
+        stage?: MemoryCenterJobState;
+    };
+    createdAt: string;
+    updatedAt: string;
+    error?: string;
+    warnings: string[];
+};
+
+export type MemoryCenterForgetPreview = {
+    corpusId: string;
+    sourceId: string;
+    activeRevisionId: string;
+    revisionCount: number;
+    derivedEntityCount: number;
+    derivedTopicCount: number;
+    derivedRelationshipCount: number;
+    confirmationToken: string;
+    expiresAt: string;
+};
+
+export type MemoryCenterIngestResult = {
+    jobId: string;
+    sourceId: string;
+    revisionId: string;
+    state: MemoryCenterJobState;
+    statusUri: string;
+};
+
+export type MemoryCenterReindexResult = {
+    corpusId: string;
+    sourceId?: string;
+    sourceCount: number;
+    indexVersion: string;
+};
+
+export type MemoryCenterInvokeFunctions = {
+    memoryCreateCorpus(params: {
+        name: string;
+        description?: string;
+    }): Promise<MemoryCenterCorpus>;
+    memoryListCorpora(params: {}): Promise<MemoryCenterCorpus[]>;
+    memoryGetCorpus(params: {
+        corpusId: string;
+    }): Promise<MemoryCenterCorpusStatus | undefined>;
+    memoryListSources(params: {
+        corpusId: string;
+        pageSize?: number;
+        continuationToken?: string;
+        query?: string;
+        sourceTypes?: MemoryCenterSource["sourceType"][];
+    }): Promise<MemoryCenterPage<MemoryCenterSource>>;
+    memoryGetSource(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterSource | undefined>;
+    memoryGetSourceContent(params: {
+        corpusId: string;
+        sourceId: string;
+        revisionId?: string;
+        offset?: number;
+        maxChars?: number;
+    }): Promise<MemoryCenterContent>;
+    memoryGetSourceKnowledge(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterKnowledge>;
+    memoryReplaceSource(params: {
+        corpusId: string;
+        sourceId: string;
+        expectedActiveRevisionId: string;
+        text: string;
+        retainRevisionHistory?: boolean;
+    }): Promise<MemoryCenterIngestResult>;
+    memoryPreviewForgetSource(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterForgetPreview>;
+    memoryForgetSource(params: {
+        corpusId: string;
+        sourceId: string;
+        confirmationToken: string;
+    }): Promise<{
+        corpusId: string;
+        sourceId: string;
+        deletedRevisionCount: number;
+        indexVersion: string;
+    }>;
+    memoryReindexCorpus(params: {
+        corpusId: string;
+    }): Promise<MemoryCenterReindexResult>;
+    memoryReindexSource(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterReindexResult>;
+    memoryListJobs(params: {
+        corpusId?: string;
+        sourceId?: string;
+        pageSize?: number;
+        continuationToken?: string;
+    }): Promise<MemoryCenterPage<MemoryCenterJob>>;
+    memoryCancelJob(params: {
+        jobId: string;
+    }): Promise<MemoryCenterJob | undefined>;
+};
+
 export type BrowserAgentInvokeFunctions = {
     // Knowledge extraction
     extractKnowledgeFromPage(params: {
@@ -249,7 +465,7 @@ export type BrowserAgentInvokeFunctions = {
     deleteTabIdFromIndex(params: any): Promise<any>;
     getTabIdFromIndex(params: any): Promise<any>;
     resetTabIdToIndex(params: any): Promise<any>;
-};
+} & MemoryCenterInvokeFunctions;
 
 // Fire-and-forget events from agent → extension
 export type BrowserAgentCallFunctions = {
@@ -462,7 +678,8 @@ export type ChatPanelCallFunctions = {
 // =============================================
 
 export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
-    ChatPanelInvokeFunctions & {
+    ChatPanelInvokeFunctions &
+    MemoryCenterInvokeFunctions & {
         // Agent-forwarded operations (the service worker forwards these to the agent)
         // Listed separately because the service worker acts as a proxy
         getLibraryStats(params?: any): Promise<any>;

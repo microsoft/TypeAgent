@@ -16,6 +16,9 @@
     "list": {
       "name": "@typeagent/list-agent"
     },
+    "memory": {
+      "name": "@typeagent/memory-agent"
+    },
     "browser": {
       "name": "@typeagent/browser"
     },

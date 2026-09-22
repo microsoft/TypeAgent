@@ -15,29 +15,50 @@ import type {
     DocumentIngestRequest,
     DocumentIngestResult,
     IngestionJobStatus,
+    JobListRequest,
     JobProgress,
     MemoryCorpus,
+    MemoryCorpusStatus,
+    MemoryAnswerRequest,
+    MemoryAnswerResult,
     MemoryKnowledgeGraph,
+    MemoryPage,
     MemorySearchRequest,
     MemorySearchResult,
     MemoryService,
     MemoryServiceCapabilities,
     MemorySource,
+    ReindexResult,
+    SourceContent,
+    SourceContentRequest,
+    SourceForgetPreview,
+    SourceForgetRequest,
+    SourceForgetResult,
+    SourceListRequest,
+    SourceReplaceRequest,
 } from "@typeagent/memory-service";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
 import type { z } from "zod";
 import {
     capabilitiesSchema,
+    answerResultSchema,
     clearedCountSchema,
     corpusSchema,
     ingestResultSchema,
     jobStatusSchema,
+    jobPageSchema,
     knowledgeGraphSchema,
     memoryToolNames,
     optionalJobStatusSchema,
+    optionalCorpusStatusSchema,
     optionalSourceSchema,
     searchResultSchema,
     sourceSchema,
+    sourceContentSchema,
+    sourceForgetPreviewSchema,
+    sourceForgetResultSchema,
+    sourcePageSchema,
+    reindexResultSchema,
 } from "./protocol.js";
 
 export interface MemoryClientCallOptions {
@@ -68,6 +89,10 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.listCorpora();
     }
 
+    public getCorpus(corpusId: string) {
+        return this.service.getCorpus(corpusId);
+    }
+
     public clearCorpus(corpusId: string) {
         return this.service.clearCorpus(corpusId);
     }
@@ -76,8 +101,20 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.listSources(corpusId);
     }
 
+    public listSourcesPage(request: SourceListRequest) {
+        return this.service.listSourcesPage(request);
+    }
+
     public getSource(corpusId: string, sourceId: string) {
         return this.service.getSource(corpusId, sourceId);
+    }
+
+    public getSourceContent(request: SourceContentRequest) {
+        return this.service.getSourceContent(request);
+    }
+
+    public getSourceKnowledge(corpusId: string, sourceId: string) {
+        return this.service.getSourceKnowledge(corpusId, sourceId);
     }
 
     public ingestDocument(
@@ -87,8 +124,36 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.ingestDocument(request, signal);
     }
 
+    public replaceSource(request: SourceReplaceRequest, signal?: AbortSignal) {
+        return this.service.replaceSource(request, signal);
+    }
+
+    public previewForgetSource(corpusId: string, sourceId: string) {
+        return this.service.previewForgetSource(corpusId, sourceId);
+    }
+
+    public forgetSource(request: SourceForgetRequest) {
+        return this.service.forgetSource(request);
+    }
+
+    public reindexCorpus(corpusId: string, signal?: AbortSignal) {
+        return this.service.reindexCorpus(corpusId, signal);
+    }
+
+    public reindexSource(
+        corpusId: string,
+        sourceId: string,
+        signal?: AbortSignal,
+    ) {
+        return this.service.reindexSource(corpusId, sourceId, signal);
+    }
+
     public getJob(jobId: string) {
         return this.service.getJob(jobId);
+    }
+
+    public listJobs(request: JobListRequest = {}) {
+        return this.service.listJobs(request);
     }
 
     public cancelJob(jobId: string) {
@@ -97,6 +162,10 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
 
     public search(request: MemorySearchRequest) {
         return this.service.search(request);
+    }
+
+    public answer(request: MemoryAnswerRequest) {
+        return this.service.answer(request);
     }
 
     public getKnowledgeGraph(corpusId: string) {
@@ -184,6 +253,16 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
+    public getCorpus(
+        corpusId: string,
+    ): Promise<MemoryCorpusStatus | undefined> {
+        return this.invoke<MemoryCorpusStatus | null>(
+            memoryToolNames.corpusGet,
+            { corpusId },
+            optionalCorpusStatusSchema,
+        ).then((corpus) => corpus ?? undefined);
+    }
+
     public clearCorpus(corpusId: string): Promise<number> {
         return this.invoke(
             memoryToolNames.corpusClear,
@@ -200,6 +279,16 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
+    public listSourcesPage(
+        request: SourceListRequest,
+    ): Promise<MemoryPage<MemorySource>> {
+        return this.invoke(
+            memoryToolNames.sourceListPage,
+            request,
+            sourcePageSchema,
+        );
+    }
+
     public getSource(
         corpusId: string,
         sourceId: string,
@@ -209,6 +298,27 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             { corpusId, sourceId },
             optionalSourceSchema,
         ).then((source) => source ?? undefined);
+    }
+
+    public getSourceContent(
+        request: SourceContentRequest,
+    ): Promise<SourceContent> {
+        return this.invoke(
+            memoryToolNames.sourceContentGet,
+            request,
+            sourceContentSchema,
+        );
+    }
+
+    public getSourceKnowledge(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<MemoryKnowledgeGraph> {
+        return this.invoke(
+            memoryToolNames.sourceKnowledgeGet,
+            { corpusId, sourceId },
+            knowledgeGraphSchema,
+        );
     }
 
     public ingestDocument(
@@ -223,12 +333,76 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
+    public replaceSource(
+        request: SourceReplaceRequest,
+        signal?: AbortSignal,
+    ): Promise<DocumentIngestResult> {
+        return this.invoke(
+            memoryToolNames.sourceReplace,
+            request,
+            ingestResultSchema,
+            signal === undefined ? {} : { signal },
+        );
+    }
+
+    public previewForgetSource(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<SourceForgetPreview> {
+        return this.invoke(
+            memoryToolNames.sourceForgetPreview,
+            { corpusId, sourceId },
+            sourceForgetPreviewSchema,
+        );
+    }
+
+    public forgetSource(
+        request: SourceForgetRequest,
+    ): Promise<SourceForgetResult> {
+        return this.invoke(
+            memoryToolNames.sourceForget,
+            request,
+            sourceForgetResultSchema,
+        );
+    }
+
+    public reindexCorpus(
+        corpusId: string,
+        signal?: AbortSignal,
+    ): Promise<ReindexResult> {
+        return this.invoke(
+            memoryToolNames.corpusReindex,
+            { corpusId },
+            reindexResultSchema,
+            signal === undefined ? {} : { signal },
+        );
+    }
+
+    public reindexSource(
+        corpusId: string,
+        sourceId: string,
+        signal?: AbortSignal,
+    ): Promise<ReindexResult> {
+        return this.invoke(
+            memoryToolNames.sourceReindex,
+            { corpusId, sourceId },
+            reindexResultSchema,
+            signal === undefined ? {} : { signal },
+        );
+    }
+
     public getJob(jobId: string): Promise<IngestionJobStatus | undefined> {
         return this.invoke<IngestionJobStatus | null>(
             memoryToolNames.jobGet,
             { jobId },
             optionalJobStatusSchema,
         ).then((job) => job ?? undefined);
+    }
+
+    public listJobs(
+        request: JobListRequest = {},
+    ): Promise<MemoryPage<IngestionJobStatus>> {
+        return this.invoke(memoryToolNames.jobList, request, jobPageSchema);
     }
 
     public cancelJob(jobId: string): Promise<IngestionJobStatus | undefined> {
@@ -241,6 +415,10 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
 
     public search(request: MemorySearchRequest): Promise<MemorySearchResult> {
         return this.invoke(memoryToolNames.search, request, searchResultSchema);
+    }
+
+    public answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult> {
+        return this.invoke(memoryToolNames.answer, request, answerResultSchema);
     }
 
     public getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph> {

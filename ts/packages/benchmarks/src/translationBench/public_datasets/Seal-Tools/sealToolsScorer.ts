@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { PythonNumber } from "../pythonLiteral.js";
+import { isRecord, parsePythonLexemeJson } from "../rawJsonScan.js";
 
 export interface SealToolsGoldAction {
     api: string;
@@ -61,9 +62,7 @@ function metric(
 }
 
 function parameterRecord(value: unknown): Readonly<Record<string, unknown>> {
-    return typeof value === "object" && value !== null && !Array.isArray(value)
-        ? (value as Readonly<Record<string, unknown>>)
-        : {};
+    return isRecord(value) ? value : {};
 }
 
 function validateCase(
@@ -262,70 +261,6 @@ export interface SealToolsRawActionCandidates {
     finalizedActionNames: string[];
 }
 
-// Return the end of one balanced object or array candidate.
-function findJsonEnd(text: string, start: number): number | undefined {
-    const stack: string[] = [];
-    let quote = false;
-    let escaped = false;
-    for (let index = start; index < text.length; index++) {
-        const character = text[index]!;
-        if (quote) {
-            if (escaped) escaped = false;
-            else if (character === "\\") escaped = true;
-            else if (character === '"') quote = false;
-            continue;
-        }
-        if (character === '"') {
-            quote = true;
-            continue;
-        }
-        if (character === "{" || character === "[") {
-            stack.push(character);
-            continue;
-        }
-        if (character !== "}" && character !== "]") continue;
-
-        const opener = stack.pop();
-        const matches =
-            (opener === "{" && character === "}") ||
-            (opener === "[" && character === "]");
-        if (!matches) return undefined;
-        if (stack.length === 0) return index + 1;
-    }
-    return undefined;
-}
-
-// Preserve JSON number lexemes because Seal compares their Python spellings.
-function parseJsonWithNumberLexemes(text: string): unknown {
-    const parse = JSON.parse as unknown as (
-        source: string,
-        reviver: (
-            key: string,
-            value: unknown,
-            context?: { source?: string },
-        ) => unknown,
-    ) => unknown;
-    for (let start = 0; start < text.length; start++) {
-        if (text[start] !== "{" && text[start] !== "[") continue;
-        const end = findJsonEnd(text, start);
-        if (end === undefined) continue;
-        try {
-            return parse(text.slice(start, end), (_key, value, context) => {
-                if (typeof value !== "number") return value;
-                if (context?.source === undefined) {
-                    throw new Error(
-                        "JSON.parse does not expose number lexemes",
-                    );
-                }
-                return new PythonNumber(context.source);
-            });
-        } catch {
-            // A balanced prose fragment may precede the actual JSON document.
-        }
-    }
-    throw new SyntaxError("Response does not contain valid JSON");
-}
-
 // Add one action and the name produced after dispatcher finalization.
 function addAction(
     action: Readonly<Record<string, unknown>>,
@@ -414,7 +349,7 @@ export function parseSealToolsRawResponse(
         actions: [],
         finalizedActionNames: [],
     };
-    collectRawActions(parseJsonWithNumberLexemes(text), result);
+    collectRawActions(parsePythonLexemeJson(text), result);
     return result;
 }
 

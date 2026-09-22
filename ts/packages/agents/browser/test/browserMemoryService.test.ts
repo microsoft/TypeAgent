@@ -20,9 +20,34 @@ function createClient(): jest.Mocked<MemoryServiceClient> {
             documentCount: 0,
         })),
         listCorpora: jest.fn(async () => []),
+        getCorpus: jest.fn(),
         clearCorpus: jest.fn(async () => 0),
         listSources: jest.fn(async () => []),
-        getSource: jest.fn(),
+        listSourcesPage: jest.fn(async () => ({ items: [], total: 0 })),
+        getSource: jest.fn(async (corpusId, sourceId) => ({
+            sourceId,
+            corpusId,
+            sourceType: "web",
+            title: "Captured page",
+            canonicalUri: "https://example.test/page",
+            activeRevisionId: "revision-1",
+            revisions: [
+                {
+                    revisionId: "revision-1",
+                    sourceId,
+                    contentHash: "hash",
+                    mimeType: "text/markdown",
+                    pipelineVersion: "1",
+                    state: "ready",
+                },
+            ],
+        })),
+        getSourceContent: jest.fn(),
+        getSourceKnowledge: jest.fn(async () => ({
+            entities: [],
+            topics: [],
+            relationships: [],
+        })),
         ingestDocument: jest.fn(async () => ({
             jobId: "job-1",
             sourceId: "source-1",
@@ -30,6 +55,11 @@ function createClient(): jest.Mocked<MemoryServiceClient> {
             state: "accepted",
             statusUri: "typeagent-memory://jobs/job-1",
         })),
+        replaceSource: jest.fn(),
+        previewForgetSource: jest.fn(),
+        forgetSource: jest.fn(),
+        reindexCorpus: jest.fn(),
+        reindexSource: jest.fn(),
         getJob: jest.fn(async () => ({
             jobId: "job-1",
             corpusId: "browser-corpus",
@@ -42,6 +72,7 @@ function createClient(): jest.Mocked<MemoryServiceClient> {
             warnings: [],
         })),
         cancelJob: jest.fn(),
+        listJobs: jest.fn(async () => ({ items: [], total: 0 })),
         search: jest.fn(async (request) => ({
             query: request.query,
             matches: [],
@@ -49,12 +80,31 @@ function createClient(): jest.Mocked<MemoryServiceClient> {
             capabilitiesUsed: ["structured-search"],
             indexVersion: "test",
         })),
+        answer: jest.fn(async (request) => ({
+            question: request.question,
+            answer: "No supporting memory evidence was found.",
+            citations: [],
+            grounded: true,
+            indexVersion: "test",
+            warnings: [],
+        })),
         getKnowledgeGraph: jest.fn(async () => ({
             entities: [],
             topics: [],
             relationships: [],
         })),
-        getCapabilities: jest.fn(),
+        getCapabilities: jest.fn(async () => ({
+            features: {
+                knowledgeExtraction: true,
+                queryTranslation: true,
+                vectorSimilarity: true,
+                structuredSearch: true,
+                exactSearch: true,
+                management: true,
+                groundedAnswer: false,
+            },
+            warnings: [],
+        })),
         waitForJob: jest.fn(async () => ({
             jobId: "job-1",
             corpusId: "browser-corpus",
@@ -136,6 +186,74 @@ describe("BrowserMemoryService", () => {
             total: 3,
             message: "Creating embeddings",
         });
+        expect(onProgress).toHaveBeenCalledTimes(1);
+    });
+
+    test("reports terminal progress before returning ingestion knowledge", async () => {
+        const client = createClient();
+        const onProgress = jest.fn();
+
+        await new BrowserMemoryService(client).ingest(
+            {
+                url: "https://example.test/terminal",
+                title: "Terminal progress",
+                markdown: "Original content",
+            },
+            "content",
+            { onProgress },
+        );
+
+        expect(onProgress).toHaveBeenLastCalledWith({
+            completed: 1,
+            total: 1,
+        });
+        expect(client.getSourceKnowledge).toHaveBeenCalledTimes(1);
+    });
+
+    test("cancels an accepted ingestion job when already aborted", async () => {
+        const client = createClient();
+        const controller = new AbortController();
+        const reason = new Error("Import cancelled");
+        controller.abort(reason);
+
+        await expect(
+            new BrowserMemoryService(client).ingest(
+                {
+                    url: "https://example.test/cancelled",
+                    title: "Cancelled import",
+                    markdown: "Original content",
+                },
+                "content",
+                { signal: controller.signal },
+            ),
+        ).rejects.toBe(reason);
+
+        expect(client.cancelJob).toHaveBeenCalledWith("job-1");
+        expect(client.getSourceKnowledge).not.toHaveBeenCalled();
+    });
+
+    test("forwards model-free mode and chunk policy to durable ingestion", async () => {
+        const client = createClient();
+
+        await new BrowserMemoryService(client).ingest(
+            {
+                url: "https://example.test/basic",
+                title: "Basic page",
+                markdown: "Exact-search content",
+            },
+            "basic",
+            { maxCharsPerChunk: 512 },
+        );
+
+        expect(client.ingestDocument).toHaveBeenCalledWith(
+            expect.objectContaining({
+                pipeline: {
+                    mode: "basic",
+                    updatePolicy: "skipIfUnchanged",
+                    maxCharsPerChunk: 512,
+                },
+            }),
+        );
     });
 
     test("reads source metadata and graph data from the browser corpus", async () => {
@@ -150,6 +268,49 @@ describe("BrowserMemoryService", () => {
             expect.stringMatching(/^web:[a-f0-9]{64}$/),
         );
         expect(client.getKnowledgeGraph).toHaveBeenCalledWith("browser-corpus");
+    });
+
+    test("returns durable source-scoped knowledge after ingestion", async () => {
+        const client = createClient();
+        const sourceId = expect.stringMatching(/^web:[a-f0-9]{64}$/);
+        client.getSourceKnowledge.mockImplementation(
+            async (corpusId, requestedSourceId) => {
+                const ingestedSourceId = client.ingestDocument.mock.calls[0][0]
+                    .source.sourceId as string;
+                expect(corpusId).toBe("browser-corpus");
+                expect(requestedSourceId).toBe(ingestedSourceId);
+                return {
+                    entities: [
+                        {
+                            name: "TypeAgent",
+                            types: ["project"],
+                            mentionCount: 1,
+                            sourceIds: [ingestedSourceId],
+                        },
+                    ],
+                    topics: [],
+                    relationships: [],
+                };
+            },
+        );
+
+        const result = await new BrowserMemoryService(client).ingest(
+            {
+                url: "https://example.test/page",
+                title: "Page",
+                markdown: "TypeAgent memory",
+            },
+            "content",
+        );
+
+        expect(client.ingestDocument).toHaveBeenCalledWith(
+            expect.objectContaining({
+                source: expect.objectContaining({ sourceId }),
+            }),
+        );
+        expect(result.entities.map((entity) => entity.name)).toEqual([
+            "TypeAgent",
+        ]);
     });
 
     test("clears the durable browser corpus", async () => {

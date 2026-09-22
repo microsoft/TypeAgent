@@ -19,7 +19,7 @@ import {
 } from "./durableWebSearch.mjs";
 import * as website from "@typeagent/website-memory";
 import registerDebug from "debug";
-import { docPartsFromHtml } from "@typeagent/conversation-memory";
+import { convert } from "html-to-text";
 import {
     importProgressEvents,
     ImportProgressEvent,
@@ -101,6 +101,23 @@ function logStructuredProgress(
         importProgressEvents.emitProgress(progressEvent);
     }
 }
+
+function importPhaseForMemoryStage(
+    stage: string | undefined,
+): ImportProgressEvent["phase"] {
+    switch (stage) {
+        case "extracting-knowledge":
+        case "embedding":
+            return "extracting";
+        case "building-indexes":
+            return "graph-building";
+        case "persisting":
+        case "complete":
+            return "persisting";
+        default:
+            return "processing";
+    }
+}
 import { WebsiteData } from "./htmlUtils.mjs";
 import {
     enumerateHtmlFiles,
@@ -112,7 +129,7 @@ import {
     DEFAULT_FOLDER_OPTIONS,
 } from "./folderUtils.mjs";
 import { processHtmlFolder } from "./websiteImport.mjs";
-import { DirectFolderProcessor } from "./htmlProcessor.mjs";
+import type { BrowserSourceKnowledge } from "./browserMemoryService.mjs";
 
 const debug = registerDebug("typeagent:browser:website-memory");
 
@@ -235,6 +252,7 @@ export async function importWebsiteDataFromSession(
     parameters: ImportWebsiteData["parameters"] & {
         importId?: string;
         url?: string;
+        maxCharsPerChunk?: number;
     },
     context: SessionContext<BrowserActionContext>,
 ) {
@@ -261,6 +279,7 @@ export async function importWebsiteDataFromSession(
             mode,
             maxConcurrent,
             contentTimeout,
+            maxCharsPerChunk,
         } = parameters;
 
         logStructuredProgress(
@@ -322,6 +341,8 @@ export async function importWebsiteDataFromSession(
             importOptions.maxConcurrent = maxConcurrent;
         if (contentTimeout !== undefined)
             importOptions.contentTimeout = contentTimeout;
+        if (maxCharsPerChunk !== undefined)
+            importOptions.maxCharsPerChunk = maxCharsPerChunk;
 
         let websites: any[] = [];
 
@@ -377,8 +398,8 @@ export async function importWebsiteDataFromSession(
                 );
 
                 const htmlFetcher = new website.HtmlFetcher();
-                const htmlProcessor = new DirectFolderProcessor();
                 let persistedCount = 0;
+                persistedDuringExtraction = true;
 
                 for (let i = 0; i < metadataWebsites.length; i++) {
                     const site = metadataWebsites[i];
@@ -389,37 +410,30 @@ export async function importWebsiteDataFromSession(
 
                     if (fetchResult.html) {
                         try {
-                            const reduced =
-                                await htmlProcessor.processHtmlContent(
-                                    fetchResult.html,
-                                    site.metadata.url,
-                                    { mode: "content" },
-                                );
-                            const parts = docPartsFromHtml(
-                                reduced.processedHtml,
-                                false,
-                                importOptions.maxCharsPerChunk || 8000,
-                                site.metadata.url,
-                            );
-                            if (parts.length > 0) {
+                            if (fetchResult.html.trim().length > 0) {
                                 const completedWebsite: any = {
                                     ...site,
-                                    textChunks: [
-                                        parts
-                                            .flatMap((part) => part.textChunks)
-                                            .join("\n\n"),
-                                    ],
+                                    textChunks: [fetchResult.html],
                                 };
+                                const knowledge =
+                                    await ingestWebsitesIntoMemoryService(
+                                        [completedWebsite],
+                                        extractionMode,
+                                        context.agentContext,
+                                        importContext,
+                                        i,
+                                        metadataWebsites.length,
+                                        importOptions.maxCharsPerChunk,
+                                        "html",
+                                    );
                                 websites.push(completedWebsite);
-                                await ingestWebsitesIntoMemoryService(
-                                    [completedWebsite],
-                                    extractionMode,
-                                    context.agentContext,
-                                    importContext,
-                                    i,
-                                    metadataWebsites.length,
-                                );
-                                persistedDuringExtraction = true;
+                                completedWebsite.knowledge = {
+                                    entities: knowledge[0].entities,
+                                    topics: knowledge[0].topics.map(
+                                        (topic) => topic.name,
+                                    ),
+                                    actions: knowledge[0].relationships,
+                                };
                                 persistedCount++;
                                 importState.processedWebsites = persistedCount;
                                 importState.lastSavePoint = persistedCount;
@@ -507,14 +521,23 @@ export async function importWebsiteDataFromSession(
                 },
             );
 
-            await ingestWebsitesIntoMemoryService(
+            const knowledge = await ingestWebsitesIntoMemoryService(
                 chunk,
                 extractionMode,
                 context.agentContext,
                 importContext,
                 i,
                 websites.length,
+                importOptions.maxCharsPerChunk,
             );
+            for (const [itemIndex, item] of chunk.entries()) {
+                const itemKnowledge = knowledge[itemIndex];
+                item.knowledge = {
+                    entities: itemKnowledge.entities,
+                    topics: itemKnowledge.topics.map((topic) => topic.name),
+                    actions: itemKnowledge.relationships,
+                };
+            }
 
             // Check if we should save progress
             if (
@@ -854,6 +877,10 @@ export async function importHtmlFolderFromSession(
             }
         }
 
+        const importedEntities = new Set<string>();
+        const importedTopics = new Set<string>();
+        let importedRelationshipCount = 0;
+
         // Add all processed websites to the collection
         if (websiteDataResults.length > 0) {
             const websites = websiteDataResults.map((data) =>
@@ -875,14 +902,25 @@ export async function importHtmlFolderFromSession(
                     importContext,
                 );
 
-                await ingestWebsitesIntoMemoryService(
+                const knowledge = await ingestWebsitesIntoMemoryService(
                     chunk,
                     extractionMode,
                     context.agentContext,
                     importContext,
                     i,
                     websites.length,
+                    options?.maxCharsPerChunk,
                 );
+                for (const itemKnowledge of knowledge) {
+                    for (const entity of itemKnowledge.entities) {
+                        importedEntities.add(entity.name.toLowerCase());
+                    }
+                    for (const topic of itemKnowledge.topics) {
+                        importedTopics.add(topic.name.toLowerCase());
+                    }
+                    importedRelationshipCount +=
+                        itemKnowledge.relationships.length;
+                }
             }
 
             debug(`HTML file import completed for ${websites.length} files`);
@@ -890,46 +928,14 @@ export async function importHtmlFolderFromSession(
 
         const duration = Date.now() - startTime;
 
-        // Calculate knowledge statistics
-        let totalEntities = 0;
-        const uniqueTopics = new Set<string>();
-        let totalActions = 0;
-
-        websiteDataResults.forEach((data) => {
-            if (data.extractionResult?.knowledge) {
-                // Count entities
-                if (data.extractionResult.knowledge.entities?.length > 0) {
-                    totalEntities +=
-                        data.extractionResult.knowledge.entities.length;
-                }
-
-                // Collect unique topics
-                if (data.extractionResult.knowledge.topics?.length > 0) {
-                    data.extractionResult.knowledge.topics.forEach(
-                        (topic: string) => {
-                            uniqueTopics.add(topic.toLowerCase().trim());
-                        },
-                    );
-                }
-            }
-
-            // Count detected actions
-            if (
-                data.extractionResult?.detectedActions &&
-                data.extractionResult.detectedActions.length > 0
-            ) {
-                totalActions += data.extractionResult.detectedActions.length;
-            }
-        });
-
         const summaryStats = {
             totalFiles: htmlFiles.length,
             totalProcessed: htmlFiles.length,
             successfullyImported: successCount,
             knowledgeExtracted: options?.mode !== "basic" ? successCount : 0,
-            entitiesFound: totalEntities,
-            topicsIdentified: uniqueTopics.size,
-            actionsDetected: totalActions,
+            entitiesFound: importedEntities.size,
+            topicsIdentified: importedTopics.size,
+            actionsDetected: importedRelationshipCount,
         };
 
         // Send final progress event with summary
@@ -1054,6 +1060,21 @@ function convertWebsiteDataToWebsite(data: WebsiteData): any {
     return websiteInstance;
 }
 
+function normalizeImportedContent(content: string | string[]): string {
+    const original = Array.isArray(content) ? content.join("\n\n") : content;
+    return original.replace(/\r\n?/g, "\n").trim();
+}
+
+function normalizeImportedHtml(content: string | string[]): string {
+    return convert(normalizeImportedContent(content), {
+        wordwrap: false,
+        selectors: [
+            { selector: "script", format: "skip" },
+            { selector: "style", format: "skip" },
+        ],
+    }).trim();
+}
+
 async function ingestWebsitesIntoMemoryService(
     websites: website.Website[],
     mode: website.ExtractionMode,
@@ -1066,17 +1087,23 @@ async function ingestWebsitesIntoMemoryService(
     },
     offset: number,
     total: number,
-): Promise<void> {
+    maxCharsPerChunk?: number,
+    contentFormat: "markdown" | "html" = "markdown",
+): Promise<BrowserSourceKnowledge[]> {
     const memoryService = agentContext.browserMemoryService;
     if (memoryService === undefined) {
-        return;
+        throw new Error("Durable browser memory is not available");
     }
+    const results: BrowserSourceKnowledge[] = [];
     for (const [index, item] of websites.entries()) {
-        await memoryService.ingest(
+        const knowledge = await memoryService.ingest(
             {
                 url: item.metadata.url,
                 title: item.metadata.title ?? item.metadata.url,
-                markdown: item.textChunks.join("\n\n"),
+                markdown:
+                    contentFormat === "html"
+                        ? normalizeImportedHtml(item.textChunks)
+                        : normalizeImportedContent(item.textChunks),
                 source: item.metadata.websiteSource,
                 ...(item.metadata.domain === undefined
                     ? {}
@@ -1091,13 +1118,17 @@ async function ingestWebsitesIntoMemoryService(
             },
             mode,
             {
+                ...(maxCharsPerChunk === undefined ? {} : { maxCharsPerChunk }),
                 onProgress: (progress) =>
                     logStructuredProgress(
-                        offset + index,
+                        offset +
+                            index +
+                            progress.completed /
+                                Math.max(progress.total ?? 1, 1),
                         total,
                         progress.message ??
                             `Indexing ${item.metadata.title ?? item.metadata.url}`,
-                        "persisting",
+                        importPhaseForMemoryStage(progress.stage),
                         importContext,
                         undefined,
                         {
@@ -1110,6 +1141,7 @@ async function ingestWebsitesIntoMemoryService(
                     ),
             },
         );
+        results.push(knowledge);
         logStructuredProgress(
             offset + index + 1,
             total,
@@ -1118,6 +1150,7 @@ async function ingestWebsitesIntoMemoryService(
             importContext,
         );
     }
+    return results;
 }
 
 /**

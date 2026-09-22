@@ -167,6 +167,12 @@ export function initializeContextMenu(): void {
         id: "showWebsiteLibrary",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
+
+    chrome.contextMenus.create({
+        title: "Memory Center",
+        id: "showMemoryCenter",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
 }
 
 /**
@@ -259,6 +265,29 @@ export async function handleContextMenuClick(
                 });
             }
 
+            break;
+        }
+
+        case "showMemoryCenter": {
+            const memoryCenterUrl = chrome.runtime.getURL(
+                "views/memoryCenter.html",
+            );
+            const existingTabs = await chrome.tabs.query({
+                url: memoryCenterUrl,
+            });
+            if (existingTabs.length > 0) {
+                await chrome.tabs.update(existingTabs[0].id!, { active: true });
+                if (existingTabs[0].windowId) {
+                    await chrome.windows.update(existingTabs[0].windowId, {
+                        focused: true,
+                    });
+                }
+            } else {
+                await chrome.tabs.create({
+                    url: memoryCenterUrl,
+                    active: true,
+                });
+            }
             break;
         }
 

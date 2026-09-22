@@ -112,7 +112,7 @@ export const systemHandlers: CommandHandlerTable = {
         collision: getCollisionCommandHandlers(),
         grammar: getGrammarCommandHandlers(),
         history: getHistoryCommandHandlers(),
-        memory: getMemoryCommandHandlers(),
+        "conversation-memory": getMemoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
         config: getConfigCommandHandlers(),
         feedback: getFeedbackCommandHandlers(),

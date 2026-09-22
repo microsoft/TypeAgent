@@ -1956,9 +1956,6 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
-      '@typeagent/conversation-memory':
-        specifier: workspace:*
-        version: link:../../memory/conversation
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
@@ -2786,6 +2783,31 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@26.4.1)(ts-node@10.9.2(@types/node@26.4.1)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/agents/memory:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../../memory/service
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -4792,6 +4814,9 @@ importers:
       '@typeagent/list-agent':
         specifier: workspace:*
         version: link:../agents/list
+      '@typeagent/memory-agent':
+        specifier: workspace:*
+        version: link:../agents/memory
       '@typeagent/markdown-agent':
         specifier: workspace:*
         version: link:../agents/markdown
