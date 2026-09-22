@@ -16,6 +16,36 @@ const zipEndSignature = 0x06054b50;
 const zipCentralSignature = 0x02014b50;
 const zipLocalSignature = 0x04034b50;
 
+interface ZipEntry {
+    readonly flags: number;
+    readonly method: number;
+    readonly checksum: number;
+    readonly compressedSize: number;
+    readonly uncompressedSize: number;
+    readonly diskStart: number;
+    readonly unixMode: number;
+    readonly localOffset: number;
+    readonly name: string;
+    readonly directory: boolean;
+    readonly relativePath: string;
+    readonly nextOffset: number;
+}
+
+interface TarEntry {
+    readonly mode: number;
+    readonly size: number;
+    readonly type: number;
+    readonly contentOffset: number;
+    readonly nextOffset: number;
+    readonly path: string;
+}
+
+interface TarExtractionState {
+    files: number;
+    entries: number;
+    totalBytes: number;
+}
+
 export async function extractArchive(
     archivePath: string,
     requestedFormat: "zip" | "tar" | "tar.gz" | undefined,
@@ -103,80 +133,90 @@ async function extractZip(
     let totalBytes = 0;
     let fileCount = 0;
     for (let index = 0; index < entryCount; index++) {
-        requireRange(archive, offset, 46, "ZIP central directory");
-        if (archive.readUInt32LE(offset) !== zipCentralSignature) {
-            throw new Error("Malformed ZIP central directory.");
-        }
-        const flags = archive.readUInt16LE(offset + 8);
-        const method = archive.readUInt16LE(offset + 10);
-        const checksum = archive.readUInt32LE(offset + 16);
-        const compressedSize = archive.readUInt32LE(offset + 20);
-        const uncompressedSize = archive.readUInt32LE(offset + 24);
-        const nameLength = archive.readUInt16LE(offset + 28);
-        const extraLength = archive.readUInt16LE(offset + 30);
-        const commentLength = archive.readUInt16LE(offset + 32);
-        const diskStart = archive.readUInt16LE(offset + 34);
-        const externalAttributes = archive.readUInt32LE(offset + 38);
-        const localOffset = archive.readUInt32LE(offset + 42);
-        requireRange(
-            archive,
-            offset + 46,
-            nameLength + extraLength + commentLength,
-            "ZIP entry",
-        );
-        const name = decodeArchivePath(
-            archive.subarray(offset + 46, offset + 46 + nameLength),
-        );
-        offset += 46 + nameLength + extraLength + commentLength;
-        const directory = name.endsWith("/");
-        const relativePath = normalizeArchivePath(
-            directory ? name.slice(0, -1) : name,
-        );
-        if (directory && relativePath.length === 0) {
+        const entry = readZipEntry(archive, offset);
+        offset = entry.nextOffset;
+        if (entry.directory && entry.relativePath.length === 0) {
             continue;
         }
-        validateAcquisitionPath(relativePath, limits, foldedPaths);
-        const unixMode = externalAttributes >>> 16;
-        const fileType = unixMode & 0o170000;
-        if (
-            diskStart !== 0 ||
-            (flags & 1) !== 0 ||
-            ![0, 8].includes(method) ||
-            (!directory && fileType !== 0 && fileType !== 0o100000) ||
-            (directory && fileType !== 0 && fileType !== 0o040000)
-        ) {
-            throw new Error(`Unsafe or unsupported ZIP entry: ${name}`);
-        }
-        if (directory) {
+        validateAcquisitionPath(entry.relativePath, limits, foldedPaths);
+        validateZipEntry(entry);
+        if (entry.directory) {
             continue;
         }
         fileCount++;
         if (fileCount > limits.maxFiles) {
             throw new Error(`Skill package exceeds ${limits.maxFiles} files.`);
         }
-        validateExecutable(relativePath, unixMode);
+        validateExecutable(entry.relativePath, entry.unixMode);
         totalBytes = accountFile(
-            relativePath,
-            uncompressedSize,
+            entry.relativePath,
+            entry.uncompressedSize,
             totalBytes,
             limits,
         );
         const content = inflateZipEntry(
             archive,
-            localOffset,
-            compressedSize,
-            uncompressedSize,
-            method,
-            name,
+            entry.localOffset,
+            entry.compressedSize,
+            entry.uncompressedSize,
+            entry.method,
+            entry.name,
             limits,
         );
-        if (crc32(content) !== checksum) {
-            throw new Error(`ZIP checksum mismatch: ${relativePath}`);
+        if (crc32(content) !== entry.checksum) {
+            throw new Error(`ZIP checksum mismatch: ${entry.relativePath}`);
         }
-        await writeStagedFile(target, relativePath, content);
+        await writeStagedFile(target, entry.relativePath, content);
     }
     if (offset !== centralOffset + centralSize) {
         throw new Error("ZIP central directory size is inconsistent.");
+    }
+}
+
+function readZipEntry(archive: Buffer, offset: number): ZipEntry {
+    requireRange(archive, offset, 46, "ZIP central directory");
+    if (archive.readUInt32LE(offset) !== zipCentralSignature) {
+        throw new Error("Malformed ZIP central directory.");
+    }
+    const nameLength = archive.readUInt16LE(offset + 28);
+    const extraLength = archive.readUInt16LE(offset + 30);
+    const commentLength = archive.readUInt16LE(offset + 32);
+    const variableLength = nameLength + extraLength + commentLength;
+    requireRange(archive, offset + 46, variableLength, "ZIP entry");
+    const name = decodeArchivePath(
+        archive.subarray(offset + 46, offset + 46 + nameLength),
+    );
+    const directory = name.endsWith("/");
+    return {
+        flags: archive.readUInt16LE(offset + 8),
+        method: archive.readUInt16LE(offset + 10),
+        checksum: archive.readUInt32LE(offset + 16),
+        compressedSize: archive.readUInt32LE(offset + 20),
+        uncompressedSize: archive.readUInt32LE(offset + 24),
+        diskStart: archive.readUInt16LE(offset + 34),
+        unixMode: archive.readUInt32LE(offset + 38) >>> 16,
+        localOffset: archive.readUInt32LE(offset + 42),
+        name,
+        directory,
+        relativePath: normalizeArchivePath(
+            directory ? name.slice(0, -1) : name,
+        ),
+        nextOffset: offset + 46 + variableLength,
+    };
+}
+
+function validateZipEntry(entry: ZipEntry): void {
+    const fileType = entry.unixMode & 0o170000;
+    const invalidFileType = entry.directory
+        ? fileType !== 0 && fileType !== 0o040000
+        : fileType !== 0 && fileType !== 0o100000;
+    if (
+        entry.diskStart !== 0 ||
+        (entry.flags & 1) !== 0 ||
+        ![0, 8].includes(entry.method) ||
+        invalidFileType
+    ) {
+        throw new Error(`Unsafe or unsupported ZIP entry: ${entry.name}`);
     }
 }
 
@@ -230,95 +270,132 @@ async function extractTar(
     const data = Buffer.from(archive);
     const foldedPaths = new Map<string, string>();
     let offset = 0;
-    let totalBytes = 0;
-    let files = 0;
-    let entries = 0;
     let pendingPath: string | undefined;
+    const state: TarExtractionState = {
+        files: 0,
+        entries: 0,
+        totalBytes: 0,
+    };
     while (offset + tarBlockSize <= data.byteLength) {
         const header = data.subarray(offset, offset + tarBlockSize);
         if (header.every((value) => value === 0)) {
             return;
         }
-        validateTarChecksum(header);
-        const name = readTarString(header, 0, 100);
-        const prefix = readTarString(header, 345, 155);
-        const mode = readTarOctal(header, 100, 8, "mode");
-        const size = readTarOctal(header, 124, 12, "size");
-        const type = header[156];
-        const contentOffset = offset + tarBlockSize;
-        requireRange(data, contentOffset, size, "TAR file data");
-        if (type === 0x67 || type === 0x78) {
-            const attributes = parsePaxAttributes(
-                data.subarray(contentOffset, contentOffset + size),
-            );
-            const unsupported = [...attributes.keys()].filter(
-                (key) => !["comment", "mtime", "path"].includes(key),
-            );
-            if (
-                unsupported.length > 0 ||
-                (type === 0x67 && attributes.has("path"))
-            ) {
-                throw new Error(
-                    `Unsupported TAR extended attribute: ${unsupported[0] ?? "path"}`,
-                );
-            }
-            pendingPath = attributes.get("path");
-            offset +=
-                tarBlockSize + Math.ceil(size / tarBlockSize) * tarBlockSize;
+        const entry = readTarEntry(data, offset);
+        offset = entry.nextOffset;
+        if (isPaxHeader(entry)) {
+            pendingPath = readPaxPath(data, entry);
             continue;
         }
-        const relativePath = normalizeArchivePath(
-            pendingPath ?? (prefix.length === 0 ? name : `${prefix}/${name}`),
-        );
+        const relativePath = normalizeArchivePath(pendingPath ?? entry.path);
         pendingPath = undefined;
-        const directory = type === 0x35;
-        const regular = type === 0 || type === 0x30;
-        entries++;
-        if (entries > limits.maxEntries) {
-            throw new Error(
-                `Skill package exceeds ${limits.maxEntries} entries.`,
-            );
-        }
-        if (directory && relativePath.length === 0) {
-            offset +=
-                tarBlockSize + Math.ceil(size / tarBlockSize) * tarBlockSize;
-            continue;
-        }
-        validateAcquisitionPath(
-            directory && relativePath.endsWith("/")
-                ? relativePath.slice(0, -1)
-                : relativePath,
+        await extractTarEntry(
+            data,
+            entry,
+            relativePath,
+            target,
             limits,
             foldedPaths,
+            state,
         );
-        if (!regular && !directory) {
-            throw new Error(
-                `TAR links, devices, and extended entries are forbidden: ${relativePath}`,
-            );
-        }
-        if (directory) {
-            if (size !== 0) {
-                throw new Error(`TAR directory has data: ${relativePath}`);
-            }
-        } else {
-            validateExecutable(relativePath, mode);
-            files++;
-            if (files > limits.maxFiles) {
-                throw new Error(
-                    `Skill package exceeds ${limits.maxFiles} files.`,
-                );
-            }
-            totalBytes = accountFile(relativePath, size, totalBytes, limits);
-            await writeStagedFile(
-                target,
-                relativePath,
-                data.subarray(contentOffset, contentOffset + size),
-            );
-        }
-
-        offset += tarBlockSize + Math.ceil(size / tarBlockSize) * tarBlockSize;
     }
     throw new Error("TAR archive is missing its end marker.");
+}
+
+function readTarEntry(data: Buffer, offset: number): TarEntry {
+    const header = data.subarray(offset, offset + tarBlockSize);
+    validateTarChecksum(header);
+    const name = readTarString(header, 0, 100);
+    const prefix = readTarString(header, 345, 155);
+    const mode = readTarOctal(header, 100, 8, "mode");
+    const size = readTarOctal(header, 124, 12, "size");
+    const contentOffset = offset + tarBlockSize;
+    requireRange(data, contentOffset, size, "TAR file data");
+    return {
+        mode,
+        size,
+        type: header[156],
+        contentOffset,
+        nextOffset:
+            contentOffset + Math.ceil(size / tarBlockSize) * tarBlockSize,
+        path: prefix.length === 0 ? name : `${prefix}/${name}`,
+    };
+}
+
+function isPaxHeader(entry: TarEntry): boolean {
+    return entry.type === 0x67 || entry.type === 0x78;
+}
+
+function readPaxPath(data: Buffer, entry: TarEntry): string | undefined {
+    const attributes = parsePaxAttributes(
+        data.subarray(entry.contentOffset, entry.contentOffset + entry.size),
+    );
+    const unsupported = [...attributes.keys()].filter(
+        (key) => !["comment", "mtime", "path"].includes(key),
+    );
+    if (
+        unsupported.length > 0 ||
+        (entry.type === 0x67 && attributes.has("path"))
+    ) {
+        throw new Error(
+            `Unsupported TAR extended attribute: ${unsupported[0] ?? "path"}`,
+        );
+    }
+    return attributes.get("path");
+}
+
+async function extractTarEntry(
+    data: Buffer,
+    entry: TarEntry,
+    relativePath: string,
+    target: string,
+    limits: SkillAcquisitionLimits,
+    foldedPaths: Map<string, string>,
+    state: TarExtractionState,
+): Promise<void> {
+    const directory = entry.type === 0x35;
+    const regular = entry.type === 0 || entry.type === 0x30;
+    state.entries++;
+    if (state.entries > limits.maxEntries) {
+        throw new Error(`Skill package exceeds ${limits.maxEntries} entries.`);
+    }
+    if (directory && relativePath.length === 0) {
+        return;
+    }
+    validateAcquisitionPath(
+        directory && relativePath.endsWith("/")
+            ? relativePath.slice(0, -1)
+            : relativePath,
+        limits,
+        foldedPaths,
+    );
+    if (!regular && !directory) {
+        throw new Error(
+            `TAR links, devices, and extended entries are forbidden: ${relativePath}`,
+        );
+    }
+    if (directory) {
+        if (entry.size !== 0) {
+            throw new Error(`TAR directory has data: ${relativePath}`);
+        }
+        return;
+    }
+    validateExecutable(relativePath, entry.mode);
+    state.files++;
+    if (state.files > limits.maxFiles) {
+        throw new Error(`Skill package exceeds ${limits.maxFiles} files.`);
+    }
+    state.totalBytes = accountFile(
+        relativePath,
+        entry.size,
+        state.totalBytes,
+        limits,
+    );
+    await writeStagedFile(
+        target,
+        relativePath,
+        data.subarray(entry.contentOffset, entry.contentOffset + entry.size),
+    );
 }
 
 function findZipEnd(archive: Buffer): number {
