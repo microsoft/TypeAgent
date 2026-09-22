@@ -156,74 +156,95 @@ function toTemplateTypeUnion(
 ): TemplateType | undefined {
     const disc = getObjectUnionDiscriminator(types);
     if (disc !== undefined) {
-        const { fieldName, values, arms } = disc;
-        let selectedIndex = 0;
-        if (
-            data !== null &&
-            typeof data === "object" &&
-            !Array.isArray(data) &&
-            fieldName in (data as object)
-        ) {
-            const current = (data as Record<string, unknown>)[fieldName];
-            if (typeof current === "string") {
-                const idx = values.indexOf(current);
-                if (idx >= 0) {
-                    selectedIndex = idx;
-                }
-            }
-        }
-        const selectedArm = arms[selectedIndex];
-        const template = toTemplateTypeObject(selectedArm, visited, data);
-        // Full kind enum; arm fields from data.
-        template.fields[fieldName] = {
-            optional: false,
-            type: {
-                type: "string-union",
-                typeEnum: values,
-                discriminator: values[selectedIndex],
-            },
-        };
-        return template;
+        return toTemplateTypeDiscriminated(disc, visited, data);
     }
 
     // Prefer arm that matches current data shape.
     if (data !== undefined) {
-        for (const t of types) {
-            const resolved = resolveTypeReference(t) ?? t;
-            try {
-                if (
-                    resolved.type === "object" &&
-                    data !== null &&
-                    typeof data === "object" &&
-                    !Array.isArray(data)
-                ) {
-                    return toTemplateType(t, visited, data);
-                }
-                if (resolved.type === "array" && Array.isArray(data)) {
-                    return toTemplateType(t, visited, data);
-                }
-                if (
-                    (resolved.type === "string" ||
-                        resolved.type === "number" ||
-                        resolved.type === "boolean" ||
-                        resolved.type === "string-union") &&
-                    typeof data === resolved.type
-                ) {
-                    return toTemplateType(t, visited, data);
-                }
-                if (
-                    resolved.type === "string-union" &&
-                    typeof data === "string"
-                ) {
-                    return toTemplateType(t, visited, data);
-                }
-            } catch {
-                // try next arm
-            }
+        const matched = matchUnionArm(types, visited, data);
+        if (matched !== undefined) {
+            return matched;
         }
     }
     // Historical fallback: first arm.
     return toTemplateType(types[0], visited, data);
+}
+
+function toTemplateTypeDiscriminated(
+    disc: {
+        fieldName: string;
+        values: string[];
+        arms: ActionParamObject[];
+    },
+    visited: ReadonlySet<string>,
+    data: unknown,
+): TemplateType | undefined {
+    const { fieldName, values, arms } = disc;
+    let selectedIndex = 0;
+    if (
+        data !== null &&
+        typeof data === "object" &&
+        !Array.isArray(data) &&
+        fieldName in (data as object)
+    ) {
+        const current = (data as Record<string, unknown>)[fieldName];
+        if (typeof current === "string") {
+            const idx = values.indexOf(current);
+            if (idx >= 0) {
+                selectedIndex = idx;
+            }
+        }
+    }
+    const selectedArm = arms[selectedIndex];
+    const template = toTemplateTypeObject(selectedArm, visited, data);
+    // Full kind enum; arm fields from data.
+    template.fields[fieldName] = {
+        optional: false,
+        type: {
+            type: "string-union",
+            typeEnum: values,
+            discriminator: values[selectedIndex],
+        },
+    };
+    return template;
+}
+
+function matchUnionArm(
+    types: readonly ActionParamType[],
+    visited: ReadonlySet<string>,
+    data: unknown,
+): TemplateType | undefined {
+    for (const t of types) {
+        const resolved = resolveTypeReference(t) ?? t;
+        try {
+            if (
+                resolved.type === "object" &&
+                data !== null &&
+                typeof data === "object" &&
+                !Array.isArray(data)
+            ) {
+                return toTemplateType(t, visited, data);
+            }
+            if (resolved.type === "array" && Array.isArray(data)) {
+                return toTemplateType(t, visited, data);
+            }
+            if (
+                (resolved.type === "string" ||
+                    resolved.type === "number" ||
+                    resolved.type === "boolean" ||
+                    resolved.type === "string-union") &&
+                typeof data === resolved.type
+            ) {
+                return toTemplateType(t, visited, data);
+            }
+            if (resolved.type === "string-union" && typeof data === "string") {
+                return toTemplateType(t, visited, data);
+            }
+        } catch {
+            // try next arm
+        }
+    }
+    return undefined;
 }
 
 function toTemplateType(
