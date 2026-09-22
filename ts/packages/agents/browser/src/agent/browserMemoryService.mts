@@ -90,6 +90,13 @@ export interface BrowserSourceKnowledge {
     relationships: MemoryKnowledgeGraph["relationships"];
 }
 
+export interface BrowserSourceKnowledge {
+    source: MemorySource;
+    entities: MemoryKnowledgeGraph["entities"];
+    topics: MemoryKnowledgeGraph["topics"];
+    relationships: MemoryKnowledgeGraph["relationships"];
+}
+
 export class BrowserMemoryService {
     private corpusIdPromise: Promise<string> | undefined;
     private graphVersion = 0;

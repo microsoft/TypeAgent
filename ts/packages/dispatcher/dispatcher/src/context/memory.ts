@@ -732,8 +732,7 @@ function requireDurableMemory(
 
 export function getMemoryCommandHandlers(): CommandHandlerTable {
     return {
-        description:
-            "Conversation memory commands (durable with legacy parity fallback)",
+        description: "Legacy per-conversation memory commands",
         commands: {
             legacy: getToggleHandlerTable("legacy", async (context, enable) => {
                 await changeContextConfig(

@@ -16,6 +16,7 @@ import {
 import {
     createClientIO,
     connectToTypeAgent,
+    formatPendingNaturalLanguageInteraction,
 } from "../shared/typeagent-client.js";
 import { emitProgress } from "../shared/hook-progress.js";
 import type { HookInput, HookOutput } from "./types.js";
@@ -75,7 +76,15 @@ export async function handleDirect(
     dependencies.emitProgress("Routing to TypeAgent...", { temporary: true });
 
     const responseCollector = { messages: [] as string[] };
+    const pendingPrompts: unknown[] = [];
+    const pendingResult = (): HookOutput => ({
+        handled: true,
+        responseContent:
+            formatPendingNaturalLanguageInteraction(pendingPrompts),
+        handledBy: "typeagent",
+    });
     const clientIO = createClientIO({
+        onPendingPrompt: (prompt) => pendingPrompts.push(prompt),
         onSetDisplay: (message) => {
             collectMessage(message, undefined, responseCollector);
         },
@@ -139,6 +148,7 @@ export async function handleDirect(
         });
         const result = await awaitCommand(dispatcher, input.prompt);
 
+        if (pendingPrompts.length > 0) return pendingResult();
         if (options.forceHandled) {
             return toForcedCommandOutput(result, responseCollector.messages);
         }
@@ -170,6 +180,7 @@ export async function handleDirect(
             handledBy: "typeagent",
         };
     } catch (error) {
+        if (pendingPrompts.length > 0) return pendingResult();
         console.error("TypeAgent error:", error);
         if (options.forceHandled) {
             return {
