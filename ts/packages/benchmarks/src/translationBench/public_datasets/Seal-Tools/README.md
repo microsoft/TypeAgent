@@ -6,16 +6,17 @@ TypeAgent translation-bench dataset named **`seal-tools-validation`**.
 
 ## Files
 
-- `get-dataset.ts` — downloads the HuggingFace **`validation`** split (700 rows)
-  via the datasets-server rows API (JSON, no parquet reader) and caches it as
-  `seal-tools-validation.hf.jsonl`.
-- `pythonLiteral.ts` — tolerant parser for the Python `repr()` literals embedded
-  in each row's conversation (`api_list = [...]`, and the gold call list).
+- `getDataset.ts` — shared Seal-Tools source support: pinned download of the
+  HuggingFace **`validation`** split (700 rows) through
+  `../huggingFaceRows.ts`, row parsing through `../pythonLiteral.ts`
+  (`api_list = [...]`, `task_instruction`, gold call list), and conversion of
+  each tool to an OpenAI function schema.
 - `toTypeAgentSchema.ts` — `toTypeAgentEvalRow()` casts one row into a
   self-contained TypeAgent **eval row**: the utterance plus **only that row's
   own `api_list` tools** (OpenAI function form) and the gold ordered actions.
 - `typeAgentOverrides.ts` — audited corrections and exclusions used only by the
   supplemental TypeAgent score. Raw Seal gold remains unchanged.
+- `sealToolsScorer.ts` — Seal-compatible tool and parameter scoring.
 - `index.ts` — entry point that runs download → convert → write JSONL.
 
 ## Mapping

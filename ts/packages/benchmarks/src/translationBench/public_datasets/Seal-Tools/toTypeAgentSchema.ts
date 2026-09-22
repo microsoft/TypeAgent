@@ -17,13 +17,14 @@ import type {
     TranslationBenchTargetAction,
 } from "../../synthesizer/benchmark.js";
 
-import { SEAL_TOOLS_HF, type SealToolsHfRow } from "./get-dataset.js";
 import {
-    decodePythonStringContents,
-    isPythonNumber,
-    parsePythonLiteral,
-    type PyValue,
-} from "./pythonLiteral.js";
+    parseSealToolsRow,
+    sealToolsSource,
+    toSealToolsFunctionTool,
+    type SealToolsCall,
+    type SealToolsSourceRow,
+} from "./getDataset.js";
+import { PythonNumber } from "../pythonLiteral.js";
 import {
     getSealToolsTypeAgentOverride,
     type SealToolsParameterScoreSpec,
@@ -34,199 +35,72 @@ export const DATASET_NAME = "seal-tools-validation";
 
 const REF = /^API_call_\d+$/;
 
-// Seal-Tools loose type strings -> JSON-Schema types for the function tool.
-const JSON_TYPE: Record<string, string> = {
-    str: "string",
-    string: "string",
-    int: "integer",
-    integer: "integer",
-    float: "number",
-    number: "number",
-    double: "number",
-    bool: "boolean",
-    boolean: "boolean",
-    list: "array",
-    array: "array",
-    dict: "object",
-    object: "object",
-};
-
 const sha256 = (text: string): string =>
     createHash("sha256").update(text).digest("hex");
 
-interface SealTool {
-    api_name: string;
-    api_description?: string;
-    parameters: Record<string, { type?: string; description?: string }>;
-    required: string[];
-}
-
-export interface SealToolsGoldAction {
+// Seal gold as serialized in the eval row; numbers keep their Python `str()`
+// spelling as `{ __pythonNumber }` so exact Seal scoring can be replayed.
+export interface SealToolsGoldCall {
     api: string;
     parameters: Record<string, unknown>;
     responses: string[];
 }
 
-type SealCall = SealToolsGoldAction;
-
-function asRecord(value: PyValue): Record<string, PyValue> {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        throw new Error("expected an object");
+// Python `str()` spelling of a numeric lexeme (e.g. `1.50` -> `1.5`).
+function toPythonNumberString(lexeme: string): string {
+    const value = Number(lexeme);
+    const isFloat = /[.eE]/.test(lexeme);
+    if (!isFloat) return BigInt(lexeme).toString();
+    if (Object.is(value, -0)) return "-0.0";
+    const absolute = Math.abs(value);
+    if (Number.isInteger(value) && absolute < 1e16) {
+        return `${String(value)}.0`;
     }
-    return value as Record<string, PyValue>;
+    const text =
+        absolute !== 0 && (absolute < 1e-4 || absolute >= 1e16)
+            ? value.toExponential()
+            : String(value);
+    return text.replace(/e([+-])(\d)$/, "e$10$2");
 }
 
-function toSealTool(value: PyValue): SealTool {
-    const obj = asRecord(value);
-    const params: SealTool["parameters"] = {};
-    const rawParams = obj.parameters;
-    if (
-        typeof rawParams === "object" &&
-        rawParams !== null &&
-        !Array.isArray(rawParams)
-    ) {
-        for (const [name, spec] of Object.entries(rawParams)) {
-            const s =
-                spec && typeof spec === "object" && !Array.isArray(spec)
-                    ? (spec as Record<string, PyValue>)
-                    : {};
-            const paramSpec: { type?: string; description?: string } = {
-                type: typeof s.type === "string" ? s.type : "str",
-            };
-            if (typeof s.description === "string") {
-                paramSpec.description = s.description;
-            }
-            params[name] = paramSpec;
-        }
+function mapPythonNumbers(
+    value: unknown,
+    map: (lexeme: string) => unknown,
+): unknown {
+    if (value instanceof PythonNumber) return map(value.lexeme);
+    if (Array.isArray(value)) {
+        return value.map((item) => mapPythonNumbers(item, map));
     }
-    const required = Array.isArray(obj.required)
-        ? obj.required.filter((r): r is string => typeof r === "string")
-        : [];
-    const tool: SealTool = {
-        api_name: String(obj.api_name),
-        parameters: params,
-        required,
-    };
-    if (typeof obj.api_description === "string") {
-        tool.api_description = obj.api_description;
-    }
-    return tool;
-}
-
-function toFunctionTool(tool: SealTool): OpenAIFunctionTool {
-    const properties: Record<string, Record<string, unknown>> = {};
-    for (const [name, spec] of Object.entries(tool.parameters)) {
-        const jtype =
-            JSON_TYPE[String(spec.type ?? "str").toLowerCase()] ?? "string";
-        const prop: Record<string, unknown> = { type: jtype };
-        if (spec.description) prop.description = spec.description;
-        if (jtype === "array") prop.items = { type: "string" };
-        properties[name] = prop;
-    }
-    return {
-        type: "function",
-        function: {
-            name: tool.api_name,
-            description: tool.api_description ?? "",
-            parameters: {
-                type: "object",
-                properties,
-                required: [...tool.required],
-                additionalProperties: false,
-            },
-        },
-    };
-}
-
-// Extract the per-row `api_list` catalog and the `task_instruction` utterance
-// from the `human` turn.
-function parseHumanTurn(value: string): {
-    tools: SealTool[];
-    utterance: string;
-} {
-    const apiListMarker = "api_list = ";
-    const apiIdx = value.indexOf(apiListMarker);
-    if (apiIdx < 0) throw new Error("human turn has no api_list");
-    const { value: apiList, end } = parsePythonLiteral(
-        value,
-        apiIdx + apiListMarker.length,
-    );
-    if (!Array.isArray(apiList)) throw new Error("api_list is not an array");
-
-    const taskKey = "task_instruction = ";
-    const taskIdx = value.indexOf(taskKey, end);
-    if (taskIdx < 0) throw new Error("human turn has no task_instruction");
-    const instructionStart = taskIdx + taskKey.length;
-    const parsed = parsePythonLiteral(value, instructionStart);
-    let instruction = parsed.value;
-    if (typeof instruction !== "string") {
-        throw new Error("task_instruction is not a string");
-    }
-    const outputIdx = value.indexOf("\nOutput:", parsed.end);
-    if (
-        outputIdx >= 0 &&
-        value.slice(parsed.end, outputIdx).trim().length > 0
-    ) {
-        const raw = value.slice(instructionStart, outputIdx).trim();
-        if (raw[0] !== '"' && raw[0] !== "'") {
-            throw new Error("task_instruction has no opening quote");
-        }
-        instruction = decodePythonStringContents(raw.slice(1));
-    }
-    return { tools: apiList.map(toSealTool), utterance: instruction };
-}
-
-// Parse the `gpt` turn: a Python-repr list of {api, parameters, responses}.
-function parseGptTurn(
-    value: string,
-    preserveNumberLexemes = false,
-): SealCall[] {
-    const trimmed = value.trim();
-    if (trimmed === "-1" || trimmed === "") return [];
-    const { value: calls } = parsePythonLiteral(
-        trimmed,
-        0,
-        preserveNumberLexemes,
-    );
-    if (!Array.isArray(calls)) return [];
-    return calls.map((raw) => {
-        const obj = asRecord(raw);
-        const parameters: Record<string, unknown> = {};
-        if (
-            typeof obj.parameters === "object" &&
-            obj.parameters !== null &&
-            !Array.isArray(obj.parameters)
-        ) {
-            for (const [k, v] of Object.entries(obj.parameters)) {
-                parameters[k] = v; // keep structured values (lists/objects) intact
-            }
-        }
-        const responses = Array.isArray(obj.responses)
-            ? obj.responses.filter((r): r is string => typeof r === "string")
-            : [];
-        return { api: String(obj.api), parameters, responses };
-    });
-}
-
-function unwrapPythonNumbers(value: unknown): unknown {
-    if (isPythonNumber(value)) return Number(value.__pythonNumber);
-    if (Array.isArray(value)) return value.map(unwrapPythonNumbers);
     if (typeof value === "object" && value !== null) {
         return Object.fromEntries(
             Object.entries(value).map(([key, item]) => [
                 key,
-                unwrapPythonNumbers(item),
+                mapPythonNumbers(item, map),
             ]),
         );
     }
     return value;
 }
 
+function toGoldCall(
+    call: SealToolsCall,
+    map: (lexeme: string) => unknown,
+): SealToolsGoldCall {
+    return {
+        api: call.api,
+        parameters: mapPythonNumbers(call.parameters, map) as Record<
+            string,
+            unknown
+        >,
+        responses: [...call.responses],
+    };
+}
+
 // Map Seal-Tools calls to expected actions. A parameter value equal to another
 // call's `API_call_N` response marks the row as ordered, but the literal gold
 // value is preserved. The benchmark must not introduce synthetic `${...}`
 // placeholders that the Seal grader never sees.
-function toExpectedActions(calls: SealCall[]): {
+function toExpectedActions(calls: SealToolsGoldCall[]): {
     actions: TranslationBenchBenchmarkAction[];
     ordered: boolean;
 } {
@@ -308,7 +182,7 @@ export interface TypeAgentEvalRow {
     utterance: string;
     schemaName: string;
     tools: OpenAIFunctionTool[];
-    sealToolsGoldActions: SealToolsGoldAction[];
+    sealToolsGoldActions: SealToolsGoldCall[];
     expectedActions: TranslationBenchBenchmarkAction[];
     order: TranslationBenchOrder;
     parameterScore: SealToolsParameterScoreSpec[];
@@ -379,33 +253,26 @@ export function applySealToolsTypeAgentOverride(
 // Convert one Seal-Tools row into a TypeAgent eval row, or `undefined` when the
 // row is unparseable or has no gold calls.
 export function toTypeAgentEvalRow(
-    row: SealToolsHfRow,
+    row: SealToolsSourceRow,
     rowIndex: number,
 ): TypeAgentEvalRow | undefined {
     const human = row.conversations.find((c) => c.from === "human")?.value;
-    const gpt = row.conversations.find((c) => c.from === "gpt")?.value;
-    if (human === undefined || gpt === undefined) return undefined;
+    if (human === undefined) return undefined;
 
-    let parsedHuman: { tools: SealTool[]; utterance: string };
-    let calls: SealCall[];
+    let parsed: ReturnType<typeof parseSealToolsRow>;
+    let tools: OpenAIFunctionTool[];
     try {
-        parsedHuman = parseHumanTurn(human);
-        calls = parseGptTurn(gpt, true);
+        parsed = parseSealToolsRow(row);
+        tools = parsed?.tools.map(toSealToolsFunctionTool) ?? [];
     } catch {
         return undefined;
     }
-    if (calls.length === 0) return undefined;
+    if (parsed === undefined) return undefined;
 
-    const plainCalls = calls.map((call) => ({
-        ...call,
-        parameters: unwrapPythonNumbers(call.parameters) as Record<
-            string,
-            unknown
-        >,
-    }));
-    const { actions, ordered } = toExpectedActions(plainCalls);
+    const { actions, ordered } = toExpectedActions(
+        parsed.calls.map((call) => toGoldCall(call, Number)),
+    );
     const order: TranslationBenchOrder = ordered ? "strict" : "any";
-    const tools = parsedHuman.tools.map(toFunctionTool);
     const parameterScore = createSealToolsParameterScore(actions, tools);
     const targetAction: TranslationBenchTargetAction = {
         schemaName: SEAL_SCHEMA_NAME,
@@ -413,18 +280,18 @@ export function toTypeAgentEvalRow(
     };
     const difficulty = difficultyOf(row.id);
     const canonical = JSON.stringify({
-        utterance: parsedHuman.utterance,
+        utterance: parsed.utterance,
         expectedActions: actions,
         order,
     });
     const lineage: TranslationBenchPublicTurnLineage = {
-        dataset: SEAL_TOOLS_HF.dataset,
-        revision: SEAL_TOOLS_HF.revision,
-        config: SEAL_TOOLS_HF.config,
-        split: SEAL_TOOLS_HF.split,
+        dataset: sealToolsSource.dataset,
+        revision: sealToolsSource.revision,
+        config: sealToolsSource.config,
+        split: sealToolsSource.split,
         rowIndex,
         rowId: row.id,
-        sourceUrl: `https://huggingface.co/datasets/${SEAL_TOOLS_HF.dataset}`,
+        sourceUrl: `https://huggingface.co/datasets/${sealToolsSource.dataset}`,
         sourcePart: "conversations",
         rawRowHash: sha256(JSON.stringify(row)),
         sourceSliceHash: sha256(human),
@@ -434,10 +301,14 @@ export function toTypeAgentEvalRow(
 
     return applySealToolsTypeAgentOverride({
         id: `sealtools-${row.id}`,
-        utterance: parsedHuman.utterance,
+        utterance: parsed.utterance,
         schemaName: SEAL_SCHEMA_NAME,
         tools,
-        sealToolsGoldActions: structuredClone(calls),
+        sealToolsGoldActions: parsed.calls.map((call) =>
+            toGoldCall(call, (lexeme) => ({
+                __pythonNumber: toPythonNumberString(lexeme),
+            })),
+        ),
         expectedActions: actions,
         order,
         parameterScore,
@@ -460,7 +331,7 @@ export interface SealToolsEvalRows {
 }
 
 export function buildSealToolsValidationRows(
-    hfRows: SealToolsHfRow[],
+    hfRows: SealToolsSourceRow[],
 ): SealToolsEvalRows {
     const rows: TypeAgentEvalRow[] = [];
     let skipped = 0;
