@@ -14,6 +14,7 @@ export * from "./dataQualityVerifier.js";
 export * from "./ambiguityProbe.js";
 export * from "./synthesizerPrompts.js";
 export * from "./utteranceDisambiguation.js";
+export * from "./catalogGenerator/index.js";
 export * from "./emptyGoldUtterance.js";
 export * from "./actionValidation.js";
 export * from "./negativeFairness.js";

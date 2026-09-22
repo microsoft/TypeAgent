@@ -18,12 +18,6 @@ export const TRANSLATION_BENCH_SYNTHESIZER_PROMPTS_DIR = path.dirname(
     fileURLToPath(import.meta.url),
 );
 
-/** Parameter-grader prompt lives under policy/ (colocated with policyGenerator). */
-export const TRANSLATION_BENCH_POLICY_PROMPTS_DIR = path.resolve(
-    TRANSLATION_BENCH_SYNTHESIZER_PROMPTS_DIR,
-    "../policy",
-);
-
 const SYNTHESIZER_PROMPT_FILE = "synthesizer.prompt.yaml";
 const QUALITY_VERIFIER_PROMPT_FILE = "quality-verifier.prompt.yaml";
 const PARAMETER_GRADER_PROMPT_FILE = "parameter-grader.prompt.yaml";
@@ -416,7 +410,7 @@ export function loadTranslationBenchParameterGraderPromptPack(
     return loadPack(
         PARAMETER_GRADER_PROMPT_FILE,
         translationBenchParameterGraderPromptPackSchema,
-        promptsDir ?? TRANSLATION_BENCH_POLICY_PROMPTS_DIR,
+        promptsDir,
         (pack, raw) => ({ ...pack, raw }),
     );
 }
