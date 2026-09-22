@@ -14,6 +14,14 @@ import {
     answerResultSchema,
     clearedCountSchema,
     corpusSchema,
+    eventAppendRequestSchema,
+    eventAppendResultSchema,
+    eventForgetRequestSchema,
+    eventForgetResultSchema,
+    eventListRequestSchema,
+    eventPageSchema,
+    eventSearchRequestSchema,
+    eventSearchResultSchema,
     optionalCorpusStatusSchema,
     identifierSchema,
     ingestRequestSchema,
@@ -24,6 +32,7 @@ import {
     knowledgeGraphSchema,
     memoryToolNames,
     optionalJobStatusSchema,
+    optionalEventSchema,
     optionalSourceSchema,
     searchRequestSchema,
     searchResultSchema,
@@ -42,6 +51,10 @@ import type {
     DocumentIngestRequest,
     JobListRequest,
     MemoryAnswerRequest,
+    MemoryEventAppendRequest,
+    MemoryEventForgetRequest,
+    MemoryEventListRequest,
+    MemoryEventSearchRequest,
     MemorySearchRequest,
     MemoryService,
     SourceContentRequest,
@@ -61,6 +74,10 @@ const sourceGetInputSchema = z.object({
     sourceId: identifierSchema,
 });
 const jobInputSchema = z.object({ jobId: identifierSchema });
+const eventInputSchema = z.object({
+    corpusId: identifierSchema,
+    eventId: identifierSchema,
+});
 const jobWaitInputSchema = jobInputSchema.extend({
     pollIntervalMs: z.number().int().min(25).max(5_000).optional(),
 });
@@ -412,6 +429,81 @@ export class MemoryMcpServer {
                         );
                     }
                 }),
+        );
+        this.server.registerTool(
+            memoryToolNames.eventAppend,
+            {
+                description: "Append a durable event to a memory corpus.",
+                inputSchema: eventAppendRequestSchema,
+                outputSchema: outputSchema(eventAppendResultSchema),
+                annotations: { destructiveHint: false },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.appendEvent(
+                        request as MemoryEventAppendRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.eventGet,
+            {
+                description: "Get a durable event by identifier.",
+                inputSchema: eventInputSchema,
+                outputSchema: outputSchema(optionalEventSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId, eventId }) =>
+                this.run(
+                    async () =>
+                        (await this.service.getEvent(corpusId, eventId)) ??
+                        null,
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.eventList,
+            {
+                description:
+                    "List durable events with filters and deterministic pagination.",
+                inputSchema: eventListRequestSchema,
+                outputSchema: outputSchema(eventPageSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.listEvents(request as MemoryEventListRequest),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.eventSearch,
+            {
+                description: "Search durable events with optional filters.",
+                inputSchema: eventSearchRequestSchema,
+                outputSchema: outputSchema(eventSearchResultSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.searchEvents(
+                        request as MemoryEventSearchRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.eventForget,
+            {
+                description:
+                    "Delete durable events and optionally their linked sources.",
+                inputSchema: eventForgetRequestSchema,
+                outputSchema: outputSchema(eventForgetResultSchema),
+                annotations: { destructiveHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.forgetEvents(
+                        request as MemoryEventForgetRequest,
+                    ),
+                ),
         );
         this.server.registerTool(
             memoryToolNames.search,

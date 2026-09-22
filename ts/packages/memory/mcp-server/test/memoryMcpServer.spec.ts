@@ -13,6 +13,8 @@ import type {
     DocumentIngestResult,
     IngestionJobStatus,
     MemoryCorpus,
+    MemoryEvent,
+    MemoryEventAppendRequest,
     MemoryAnswerRequest,
     MemoryAnswerResult,
     MemoryKnowledgeGraph,
@@ -88,6 +90,22 @@ class FakeMemoryService implements MemoryService {
                 state: "ready",
             },
         ],
+    };
+    public readonly event: MemoryEvent = {
+        eventId: "event-1",
+        corpusId: this.corpus.corpusId,
+        idempotencyKey: "event-key-1",
+        producer: {
+            producerId: "test-producer",
+            producerType: "test",
+        },
+        eventType: "conversation-turn",
+        sourceKind: "conversation",
+        observedAt: "2026-01-01T00:00:00.000Z",
+        eventTime: "2026-01-01T00:00:00.000Z",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        content: "Remember this fixture",
+        conversationId: "conversation-1",
     };
 
     public async createCorpus(
@@ -226,6 +244,47 @@ class FakeMemoryService implements MemoryService {
 
     public async cancelJob(jobId: string) {
         return this.getJob(jobId);
+    }
+
+    public async appendEvent(request: MemoryEventAppendRequest) {
+        return {
+            event: {
+                ...this.event,
+                idempotencyKey: request.idempotencyKey,
+                producer: request.producer,
+                eventType: request.eventType,
+                sourceKind: request.sourceKind,
+                ...(request.content === undefined
+                    ? {}
+                    : { content: request.content }),
+            },
+            replayed: false,
+        };
+    }
+
+    public async getEvent(_corpusId: string, eventId: string) {
+        return eventId === this.event.eventId ? this.event : undefined;
+    }
+
+    public async listEvents() {
+        return { items: [this.event], total: 1 };
+    }
+
+    public async searchEvents(request: { query: string }) {
+        return {
+            query: request.query,
+            matches: [{ event: this.event, snippet: "fixture", score: 1 }],
+        };
+    }
+
+    public async forgetEvents() {
+        return {
+            corpusId: this.corpus.corpusId,
+            deletedEventCount: 1,
+            deletedSourceCount: 0,
+            retainedLinkedSourceIds: [],
+            indexVersion: "fixture",
+        };
     }
 
     public async search(
@@ -493,6 +552,55 @@ describe("MemoryServiceHost", () => {
                 }),
             ).toMatchObject({ jobId: "job-1", state: "complete" });
             expect(progress).toEqual([1]);
+            const appended = await client.appendEvent({
+                corpusId: "corpus-1",
+                idempotencyKey: "client-event-1",
+                producer: {
+                    producerId: "test-producer",
+                    producerType: "test",
+                },
+                eventType: "conversation-turn",
+                sourceKind: "conversation",
+                content: "Remember this",
+            });
+            expect(appended).toMatchObject({
+                replayed: false,
+                event: {
+                    eventId: "event-1",
+                    idempotencyKey: "client-event-1",
+                    content: "Remember this",
+                },
+            });
+            await expect(
+                client.getEvent("corpus-1", "event-1"),
+            ).resolves.toMatchObject({ eventId: "event-1" });
+            await expect(
+                client.listEvents({
+                    corpusId: "corpus-1",
+                    sourceKinds: ["conversation"],
+                }),
+            ).resolves.toMatchObject({
+                total: 1,
+                items: [{ eventId: "event-1" }],
+            });
+            await expect(
+                client.searchEvents({
+                    corpusId: "corpus-1",
+                    query: "fixture",
+                }),
+            ).resolves.toMatchObject({
+                query: "fixture",
+                matches: [{ event: { eventId: "event-1" } }],
+            });
+            await expect(
+                client.forgetEvents({
+                    corpusId: "corpus-1",
+                    eventIds: ["event-1"],
+                }),
+            ).resolves.toMatchObject({
+                corpusId: "corpus-1",
+                deletedEventCount: 1,
+            });
             expect(
                 await client.answer({
                     corpusId: "corpus-1",

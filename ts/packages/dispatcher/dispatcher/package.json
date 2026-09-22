@@ -66,6 +66,7 @@
     "@typeagent/image-memory": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-service": "workspace:*",
     "@typeagent/selfhelp": "workspace:*",
     "@typeagent/taskflow-typeagent": "workspace:*",
     "@typeagent/telemetry": "workspace:*",

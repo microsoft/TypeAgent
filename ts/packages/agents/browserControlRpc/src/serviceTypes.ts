@@ -151,6 +151,34 @@ export type MemoryCenterReindexResult = {
     indexVersion: string;
 };
 
+export type MemoryCenterActivityType =
+    | "visited"
+    | "bookmarked"
+    | "captured"
+    | "imported";
+
+export type MemoryCenterActivity = {
+    eventId: string;
+    corpusId: string;
+    eventType: MemoryCenterActivityType;
+    observedAt: string;
+    eventTime: string;
+    linkedSourceIds?: string[];
+    metadata?: Record<string, unknown>;
+};
+
+export type MemoryCenterActivityFilter = {
+    dateFrom?: string;
+    dateTo?: string;
+    domains?: string[];
+    eventTypes?: MemoryCenterActivityType[];
+    sources?: string[];
+    sourceIds?: string[];
+    pageTypes?: string[];
+    pageSize?: number;
+    continuationToken?: string;
+};
+
 export type MemoryCenterInvokeFunctions = {
     memoryCreateCorpus(params: {
         name: string;
@@ -219,6 +247,23 @@ export type MemoryCenterInvokeFunctions = {
     memoryCancelJob(params: {
         jobId: string;
     }): Promise<MemoryCenterJob | undefined>;
+    memoryListActivity(
+        params: MemoryCenterActivityFilter,
+    ): Promise<MemoryCenterPage<MemoryCenterActivity>>;
+    memoryForgetActivity(
+        params: Omit<
+            MemoryCenterActivityFilter,
+            "pageSize" | "continuationToken"
+        > & {
+            eventIds?: string[];
+        },
+    ): Promise<{
+        corpusId: string;
+        deletedEventCount: number;
+        deletedSourceCount: number;
+        retainedLinkedSourceIds: string[];
+        indexVersion: string;
+    }>;
 };
 
 export type BrowserAgentInvokeFunctions = {

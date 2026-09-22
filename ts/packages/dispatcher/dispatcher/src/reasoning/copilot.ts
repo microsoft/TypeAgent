@@ -45,6 +45,7 @@ import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { createLimiter } from "@typeagent/common-utils";
+import { searchDurableConversationMemory } from "../context/conversationDurableMemory.js";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import {
     SUBAGENT_TOOL_DESCRIPTIONS,
@@ -1527,6 +1528,16 @@ function getCopilotSessionConfig(
         handler: async (args: any) => {
             const { question } = args;
             debug(`Searching memory: ${question}`);
+            const durableResult = await searchDurableConversationMemory(
+                systemContext,
+                question,
+            );
+            if (durableResult !== undefined) {
+                return {
+                    textResultForLlm: durableResult,
+                    resultType: "success" as const,
+                };
+            }
             const memory = systemContext.conversationMemory;
             if (memory === undefined) {
                 return {
@@ -1566,25 +1577,53 @@ function getCopilotSessionConfig(
                     type: "string",
                     description: "The information to remember",
                 },
+                kind: {
+                    type: "string",
+                    enum: ["decision", "task-outcome", "context"],
+                    description:
+                        "Whether this is an explicit decision, completed task outcome, or contextual evidence",
+                },
             },
             required: ["text"],
         },
         handler: async (args: any) => {
-            const { text } = args;
+            const { text, kind } = args;
             debug(`Remembering: ${text}`);
             const memory = systemContext.conversationMemory;
-            if (memory === undefined) {
+            if (
+                memory === undefined &&
+                systemContext.conversationDurableMemory === undefined
+            ) {
                 return {
                     textResultForLlm: "Conversation memory is not available.",
                     resultType: "success" as const,
                 };
             }
-            memory.queueAddMessage(
+            memory?.queueAddMessage(
                 new ConversationMessage(
                     text,
                     new ConversationMessageMeta("reasoning", ["user"]),
                 ),
             );
+            const turnId = systemContext.currentRequestId?.requestId;
+            if (turnId !== undefined) {
+                if (kind === "task-outcome") {
+                    systemContext.conversationDurableMemory?.recordTaskOutcome(
+                        text,
+                        turnId,
+                    );
+                } else if (kind === "decision") {
+                    systemContext.conversationDurableMemory?.recordDecision(
+                        text,
+                        turnId,
+                    );
+                } else {
+                    systemContext.conversationDurableMemory?.recordAssistantEvidence(
+                        text,
+                        turnId,
+                    );
+                }
+            }
             return {
                 textResultForLlm: "Remembered.",
                 resultType: "success" as const,

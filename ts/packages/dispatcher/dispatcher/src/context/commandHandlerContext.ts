@@ -121,6 +121,11 @@ import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
 import { ActionContextWithClose } from "../execute/actionContext.js";
 import { initializeMemory } from "./memory.js";
+import type { MemoryService } from "@typeagent/memory-service";
+import {
+    ConversationDurableMemory,
+    getMemoryServiceFromAgentOptions,
+} from "./conversationDurableMemory.js";
 import { StorageProvider } from "../storageProvider/storageProvider.js";
 import {
     AgentGrammarRegistry,
@@ -341,6 +346,8 @@ export type CommandHandlerContext = {
     activityContext?: ActivityContext | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
     conversationMemory?: ConversationMemory | undefined;
+    conversationDurableMemory?: ConversationDurableMemory | undefined;
+    readonly durableMemoryService?: MemoryService | undefined;
     /**
      * Host-provided enumeration of sibling conversations (id + name), used to
      * offer `@conversation switch/rename/delete` name completions. Undefined
@@ -363,6 +370,8 @@ export type CommandHandlerContext = {
      * without a unified index.
      */
     readonly conversationContentSink?: ConversationContentSink | undefined;
+    /** Stable host conversation identifier used by durable event provenance. */
+    readonly conversationId?: string | undefined;
     /**
      * Host-provided cross-conversation content search (see
      * {@link ConversationSearcher}). Injected by the agent-server; undefined
@@ -645,6 +654,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
         requestKnowledgeExtraction?: boolean;
         actionResultEntityStorage?: boolean;
         actionResultKnowledgeExtraction?: boolean;
+        durableMemoryService?: MemoryService;
     };
 
     /**
@@ -671,6 +681,8 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
      * by the agent-server; omitted by standalone hosts.
      */
     conversationContentSink?: ConversationContentSink | undefined;
+    /** Stable host conversation identifier for durable event provenance. */
+    conversationId?: string | undefined;
 
     /**
      * Cross-conversation content search over the host's unified message index
@@ -1314,6 +1326,10 @@ export async function initializeCommandHandlerContext(
             getConversationList: options?.getConversationList,
             copilotImport: options?.copilotImport,
             conversationContentSink: options?.conversationContentSink,
+            conversationId: options?.conversationId,
+            durableMemoryService:
+                options?.conversationMemorySettings?.durableMemoryService ??
+                getMemoryServiceFromAgentOptions(options?.agentInitOptions),
             searchConversations: options?.searchConversations,
             summarizeConversation: options?.summarizeConversation,
             indexConversations: options?.indexConversations,

@@ -18,6 +18,7 @@ export async function indexWebPageContent(
         textOnly?: boolean;
         mode?: "basic" | "content" | "full";
         extractedKnowledge?: any;
+        activityType?: "visited" | "captured";
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -56,6 +57,7 @@ export async function indexWebPageContent(
                 markdown: combinedTextContent,
                 source: "current-page",
                 capturedAt: parameters.timestamp,
+                activityType: parameters.activityType ?? "captured",
             },
             parameters.mode ?? "content",
         );

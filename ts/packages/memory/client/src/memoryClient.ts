@@ -19,6 +19,14 @@ import type {
     JobProgress,
     MemoryCorpus,
     MemoryCorpusStatus,
+    MemoryEvent,
+    MemoryEventAppendRequest,
+    MemoryEventAppendResult,
+    MemoryEventForgetRequest,
+    MemoryEventForgetResult,
+    MemoryEventListRequest,
+    MemoryEventSearchRequest,
+    MemoryEventSearchResult,
     MemoryAnswerRequest,
     MemoryAnswerResult,
     MemoryKnowledgeGraph,
@@ -44,6 +52,10 @@ import {
     answerResultSchema,
     clearedCountSchema,
     corpusSchema,
+    eventAppendResultSchema,
+    eventForgetResultSchema,
+    eventPageSchema,
+    eventSearchResultSchema,
     ingestResultSchema,
     jobStatusSchema,
     jobPageSchema,
@@ -51,6 +63,7 @@ import {
     memoryToolNames,
     optionalJobStatusSchema,
     optionalCorpusStatusSchema,
+    optionalEventSchema,
     optionalSourceSchema,
     searchResultSchema,
     sourceSchema,
@@ -158,6 +171,26 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
 
     public cancelJob(jobId: string) {
         return this.service.cancelJob(jobId);
+    }
+
+    public appendEvent(request: MemoryEventAppendRequest) {
+        return this.service.appendEvent(request);
+    }
+
+    public getEvent(corpusId: string, eventId: string) {
+        return this.service.getEvent(corpusId, eventId);
+    }
+
+    public listEvents(request: MemoryEventListRequest) {
+        return this.service.listEvents(request);
+    }
+
+    public searchEvents(request: MemoryEventSearchRequest) {
+        return this.service.searchEvents(request);
+    }
+
+    public forgetEvents(request: MemoryEventForgetRequest) {
+        return this.service.forgetEvents(request);
     }
 
     public search(request: MemorySearchRequest) {
@@ -411,6 +444,53 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             { jobId },
             optionalJobStatusSchema,
         ).then((job) => job ?? undefined);
+    }
+
+    public appendEvent(
+        request: MemoryEventAppendRequest,
+    ): Promise<MemoryEventAppendResult> {
+        return this.invoke(
+            memoryToolNames.eventAppend,
+            request,
+            eventAppendResultSchema,
+        );
+    }
+
+    public getEvent(
+        corpusId: string,
+        eventId: string,
+    ): Promise<MemoryEvent | undefined> {
+        return this.invoke<MemoryEvent | null>(
+            memoryToolNames.eventGet,
+            { corpusId, eventId },
+            optionalEventSchema,
+        ).then((event) => event ?? undefined);
+    }
+
+    public listEvents(
+        request: MemoryEventListRequest,
+    ): Promise<MemoryPage<MemoryEvent>> {
+        return this.invoke(memoryToolNames.eventList, request, eventPageSchema);
+    }
+
+    public searchEvents(
+        request: MemoryEventSearchRequest,
+    ): Promise<MemoryEventSearchResult> {
+        return this.invoke(
+            memoryToolNames.eventSearch,
+            request,
+            eventSearchResultSchema,
+        );
+    }
+
+    public forgetEvents(
+        request: MemoryEventForgetRequest,
+    ): Promise<MemoryEventForgetResult> {
+        return this.invoke(
+            memoryToolNames.eventForget,
+            request,
+            eventForgetResultSchema,
+        );
     }
 
     public search(request: MemorySearchRequest): Promise<MemorySearchResult> {
