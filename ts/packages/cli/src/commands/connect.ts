@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import type { Dispatcher } from "@typeagent/dispatcher-types";
+import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-types";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import { createCompletionController } from "agent-dispatcher/helpers/completion";
 import {
@@ -150,6 +150,11 @@ export default class Connect extends Command {
             description:
                 "Shut down the agent server after this many seconds with no connected clients. 0 disables. Only applies when the server is spawned by this command. Omit to use saved user setting.",
         }),
+        scrollback: Flags.boolean({
+            description:
+                "Use the primary terminal buffer so session output remains available in terminal scrollback",
+            default: false,
+        }),
     };
     static args = {
         input: Args.file({
@@ -202,13 +207,15 @@ export default class Connect extends Command {
         const isDefaultConversation = flags.conversation === undefined;
         const isEphemeral = flags.memory;
 
-        await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
+        const runConnected = async (
+            clientIO: ClientIO,
+            bindDispatcher: (dispatcher: Dispatcher) => void,
+        ) => {
             const url = `ws://localhost:${flags.port}`;
 
             const onDisconnect = () => {
-                // Print on the restored main buffer (after the alt screen
-                // is torn down by the exit handler) so the user sees why
-                // the CLI exited rather than a blank shell prompt.
+                // In alternate-screen mode this is deferred until the main
+                // buffer is restored; scrollback mode prints it immediately.
                 setPendingExitMessage("Disconnected from dispatcher");
                 exitCli(1);
             };
@@ -463,7 +470,12 @@ export default class Connect extends Command {
                     await activeDispatcher.close();
                 }
             }
-        });
+        };
+        await withEnhancedConsoleClientIO(
+            runConnected,
+            undefined,
+            !flags.scrollback,
+        );
 
         // Some background network (like mongo) might keep the process live.
         exitCli(0);

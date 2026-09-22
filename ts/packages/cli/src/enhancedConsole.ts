@@ -144,6 +144,10 @@ function exitAltScreen(): void {
  * CLI exits the alternate screen (e.g., disconnect reasons).
  */
 export function setPendingExitMessage(message: string): void {
+    if (!altScreenActive) {
+        process.stderr.write(message + "\n");
+        return;
+    }
     pendingExitMessage = message;
 }
 
@@ -1739,14 +1743,8 @@ export function createEnhancedClientIO(
 /** Stable key for the visible badge state, used to detect meaningful changes. */
 function computeBadgeState(snap: QueueSnapshot | undefined): string {
     if (!snap) return "none";
-    const queuedCount = snap.queued.length;
-    const runningOther =
-        snap.running &&
-        snap.running.requestId !== currentRequestId &&
-        !recentlySubmittedRequestIds.has(snap.running.requestId)
-            ? 1
-            : 0;
-    return `q${queuedCount}r${runningOther}p${snap.paused ? 1 : 0}`;
+    const { processing, queueCount } = getQueueBadgeState(snap);
+    return `q${queueCount}r${processing ? 1 : 0}p${snap.paused ? 1 : 0}`;
 }
 
 /** Redraw the active prompt; no-op when no interactive UI is active. */
@@ -2592,15 +2590,18 @@ export async function withEnhancedConsoleClientIO(
         bindDispatcher: (d: Dispatcher) => void,
     ) => Promise<void>,
     rl?: readline.promises.Interface,
+    alternateScreen: boolean = true,
 ) {
     if (usingEnhancedConsole) {
         throw new Error("Cannot have multiple enhanced console clients");
     }
     usingEnhancedConsole = true;
 
-    // Run the session in the terminal's alternate screen buffer so the
-    // parent shell is restored on any exit path.
-    enterAltScreen();
+    if (alternateScreen) {
+        // Restore the parent shell on exit. Scrollback mode stays on the
+        // primary buffer so the terminal can retain the session output.
+        enterAltScreen();
+    }
 
     try {
         const dispatcherRef: { current?: Dispatcher } = {};
@@ -3001,22 +3002,34 @@ function getNextInput(
 }
 
 /**
- * Live `(queue: N) ` prefix for the interactive prompt; empty when nothing to surface.
+ * Live processing / queue prefix for the interactive prompt; empty when idle.
  * Re-derived at render time so it stays in sync with the queue mirror between Enter presses.
- * A `running` entry that matches `currentRequestId` or was recently submitted from THIS
- * CLI is not counted — the spinner / "▶ running" marker already conveys it.
  */
 export function formatQueueBadge(snap?: QueueSnapshot | undefined): string {
     const s = snap ?? queueMirror.snapshot;
-    const queuedCount = s?.queued.length ?? 0;
-    const runningOther =
-        s?.running &&
-        s.running.requestId !== currentRequestId &&
-        !recentlySubmittedRequestIds.has(s.running.requestId)
-            ? 1
-            : 0;
-    const total = queuedCount + runningOther;
-    return total > 0 ? chalk.yellow(`(queue: ${total}) `) : "";
+    const { processing, queueCount } = getQueueBadgeState(s);
+    if (processing) {
+        const queue = queueCount > 0 ? ` · queue: ${queueCount}` : "";
+        return chalk.yellow(`(processing${queue}) `);
+    }
+    return queueCount > 0 ? chalk.yellow(`(queue: ${queueCount}) `) : "";
+}
+
+function getQueueBadgeState(snap: QueueSnapshot | undefined): {
+    processing: boolean;
+    queueCount: number;
+} {
+    const running = snap?.running;
+    const processing =
+        running !== null &&
+        running !== undefined &&
+        (isOurEntry(running) ||
+            recentlySubmittedRequestIds.has(running.requestId));
+    return {
+        processing,
+        queueCount:
+            (snap?.queued.length ?? 0) + (running && !processing ? 1 : 0),
+    };
 }
 
 /**
