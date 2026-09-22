@@ -27,6 +27,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import type {
     IngestionMode,
+    IngestionJobStatus,
     JobState,
     MemoryEvidence,
     MemoryService,
@@ -953,6 +954,65 @@ const terminalJobStates = new Set<JobState>([
     "cancelled",
 ]);
 
+interface ImportJobSummary {
+    activeJobIds: string[];
+    jobStates: Record<string, number>;
+    missingJobs: number;
+    unchangedJobs: number;
+}
+
+function summarizeImportJobs(
+    jobEntries: { jobId: string; job: IngestionJobStatus | undefined }[],
+): ImportJobSummary {
+    const summary: ImportJobSummary = {
+        activeJobIds: [],
+        jobStates: {},
+        missingJobs: 0,
+        unchangedJobs: 0,
+    };
+    for (const { jobId, job } of jobEntries) {
+        if (job === undefined) {
+            summary.missingJobs++;
+            continue;
+        }
+        summary.jobStates[job.state] = (summary.jobStates[job.state] ?? 0) + 1;
+        if (!terminalJobStates.has(job.state)) {
+            summary.activeJobIds.push(jobId);
+        }
+        if (job.progress.message === "Source is unchanged") {
+            summary.unchangedJobs++;
+        }
+    }
+    return summary;
+}
+
+function importBatchState(
+    batch: ImportBatchState,
+    summary: ImportJobSummary,
+): string {
+    if (batch.error !== undefined) {
+        return "failed";
+    }
+    if (summary.activeJobIds.length > 0) {
+        return batch.cancellationRequested ? "cancelling" : "running";
+    }
+    if (
+        (batch.manifest?.failed ?? 0) > 0 ||
+        (summary.jobStates.failed ?? 0) > 0 ||
+        (summary.jobStates.partial ?? 0) > 0 ||
+        summary.missingJobs > 0
+    ) {
+        return "partial";
+    }
+    if (
+        (summary.jobStates.cancelled ?? 0) > 0 ||
+        batch.manifest?.cancelled === true
+    ) {
+        return batch.cancellationRequested ? "cancelled" : "partial";
+    }
+    return "complete";
+}
+
 async function inspectImportBatch(
     context: MemoryAgentContext,
     batchId: string,
@@ -982,65 +1042,28 @@ async function inspectImportBatch(
             job: await context.service.getJob(jobId),
         })),
     );
-    const jobStates: Record<string, number> = {};
-    let missingJobs = 0;
-    for (const { job } of jobEntries) {
-        if (job === undefined) {
-            missingJobs++;
-            continue;
-        }
-        jobStates[job.state] = (jobStates[job.state] ?? 0) + 1;
-    }
-    const activeJobIds = jobEntries
-        .filter(
-            (entry) =>
-                entry.job !== undefined &&
-                !terminalJobStates.has(entry.job.state),
-        )
-        .map((entry) => entry.jobId);
-    const failedJobs = jobStates.failed ?? 0;
-    const partialJobs = jobStates.partial ?? 0;
-    const cancelledJobs = jobStates.cancelled ?? 0;
-    const unchangedJobs = jobEntries.filter(
-        ({ job }) => job?.progress.message === "Source is unchanged",
-    ).length;
-    let state = "complete";
-    if (batch.error !== undefined) {
-        state = "failed";
-    } else if (batch.cancellationRequested && activeJobIds.length > 0) {
-        state = "cancelling";
-    } else if (activeJobIds.length > 0) {
-        state = "running";
-    } else if (
-        (batch.manifest?.failed ?? 0) > 0 ||
-        failedJobs > 0 ||
-        partialJobs > 0 ||
-        missingJobs > 0
-    ) {
-        state = "partial";
-    } else if (cancelledJobs > 0) {
-        state = batch.cancellationRequested ? "cancelled" : "partial";
-    } else if (batch.manifest?.cancelled === true) {
-        state = batch.cancellationRequested ? "cancelled" : "partial";
-    }
+    const summary = summarizeImportJobs(jobEntries);
+    const failedJobs = summary.jobStates.failed ?? 0;
+    const partialJobs = summary.jobStates.partial ?? 0;
+    const cancelledJobs = summary.jobStates.cancelled ?? 0;
     return {
         status: {
             batchId,
-            state,
+            state: importBatchState(batch, summary),
             profile: batch.profile,
             pipeline: batch.pipeline,
-            jobStates,
+            jobStates: summary.jobStates,
             failedJobs,
             partialJobs,
             cancelledJobs,
-            unchangedJobs,
-            missingJobs,
+            unchangedJobs: summary.unchangedJobs,
+            missingJobs: summary.missingJobs,
             ...(batch.error === undefined ? {} : { error: batch.error }),
             manifest: batch.manifest,
         },
-        activeJobIds,
+        activeJobIds: summary.activeJobIds,
         terminal:
-            activeJobIds.length === 0 &&
+            summary.activeJobIds.length === 0 &&
             (batch.manifest !== undefined ||
                 batch.error !== undefined ||
                 (batch.controller === undefined &&

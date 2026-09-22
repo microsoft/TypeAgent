@@ -166,6 +166,67 @@ function hashContent(content: string): string {
     return createHash("sha256").update(content).digest("hex");
 }
 
+function createStoredSource(
+    request: DocumentIngestRequest,
+    content: string,
+    contentHash: string,
+    sourceId: string,
+    revisionId: string,
+    mimeType: string,
+    existing: StoredSource | undefined,
+): { source: StoredSource; revision: StoredRevision } {
+    const revision: StoredRevision = {
+        revisionId,
+        sourceId,
+        contentHash,
+        mimeType,
+        ...(request.source.capturedAt === undefined
+            ? {}
+            : { capturedAt: request.source.capturedAt }),
+        ...(request.source.sourceModifiedAt === undefined
+            ? {}
+            : { sourceModifiedAt: request.source.sourceModifiedAt }),
+        pipelineVersion,
+        pipeline: {
+            mode: request.pipeline?.mode ?? "content",
+            ...(request.pipeline?.maxCharsPerChunk === undefined
+                ? {}
+                : { maxCharsPerChunk: request.pipeline.maxCharsPerChunk }),
+        },
+        state: "processing",
+        content,
+    };
+    const policy = request.pipeline?.updatePolicy ?? "skipIfUnchanged";
+    const source: StoredSource = {
+        sourceId,
+        corpusId: request.corpusId,
+        sourceType: request.source.sourceType,
+        ...(request.source.canonicalUri === undefined
+            ? {}
+            : { canonicalUri: request.source.canonicalUri }),
+        title: request.source.title,
+        ...(request.source.tags === undefined
+            ? {}
+            : { tags: request.source.tags }),
+        ...(request.source.metadata === undefined
+            ? {}
+            : { metadata: request.source.metadata }),
+        activeRevisionId: revisionId,
+        revisions:
+            existing === undefined
+                ? [revision]
+                : policy === "retainRevisionHistory"
+                  ? [
+                        ...existing.revisions.filter(
+                            (item) => item.revisionId !== revisionId,
+                        ),
+                        revision,
+                    ]
+                  : [revision],
+    };
+    return { source, revision };
+}
+
 function validateIdentifier(kind: string, value: string): void {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) {
         throw new Error(`Invalid ${kind} '${value}'`);
@@ -1578,57 +1639,15 @@ export class FileMemoryService implements MemoryService {
                 throw new Error(`Source '${sourceId}' already exists`);
             }
             const timestamp = now();
-            const revision: StoredRevision = {
-                revisionId,
-                sourceId,
-                contentHash,
-                mimeType: this.mimeType(request.source.sourceType),
-                ...(request.source.capturedAt === undefined
-                    ? {}
-                    : { capturedAt: request.source.capturedAt }),
-                ...(request.source.sourceModifiedAt === undefined
-                    ? {}
-                    : { sourceModifiedAt: request.source.sourceModifiedAt }),
-                pipelineVersion,
-                pipeline: {
-                    mode: request.pipeline?.mode ?? "content",
-                    ...(request.pipeline?.maxCharsPerChunk === undefined
-                        ? {}
-                        : {
-                              maxCharsPerChunk:
-                                  request.pipeline.maxCharsPerChunk,
-                          }),
-                },
-                state: "processing",
+            const { source, revision } = createStoredSource(
+                request,
                 content,
-            };
-            const source: StoredSource = {
+                contentHash,
                 sourceId,
-                corpusId: request.corpusId,
-                sourceType: request.source.sourceType,
-                ...(request.source.canonicalUri === undefined
-                    ? {}
-                    : { canonicalUri: request.source.canonicalUri }),
-                title: request.source.title,
-                ...(request.source.tags === undefined
-                    ? {}
-                    : { tags: request.source.tags }),
-                ...(request.source.metadata === undefined
-                    ? {}
-                    : { metadata: request.source.metadata }),
-                activeRevisionId: revisionId,
-                revisions:
-                    existing === undefined
-                        ? [revision]
-                        : policy === "retainRevisionHistory"
-                          ? [
-                                ...existing.revisions.filter(
-                                    (item) => item.revisionId !== revisionId,
-                                ),
-                                revision,
-                            ]
-                          : [revision],
-            };
+                revisionId,
+                this.mimeType(request.source.sourceType),
+                existing,
+            );
             const candidateManifest = structuredClone(runtime.manifest);
             delete candidateManifest.pendingSourceForget;
             candidateManifest.sources = [
@@ -2060,15 +2079,17 @@ export class FileMemoryService implements MemoryService {
         error?: string,
     ): Promise<void> {
         const timestamp = now();
-        job.state = state;
-        job.progress = progress;
-        job.updatedAt = timestamp;
-        job.trace ??= [];
-        job.trace.push({ state, timestamp, ...progress });
-        if (error !== undefined) {
-            job.error = error;
-        }
-        await this.saveJob(job);
+        const updated: IngestionJobStatus = {
+            ...job,
+            state,
+            progress,
+            updatedAt: timestamp,
+            trace: [...(job.trace ?? []), { state, timestamp, ...progress }],
+            ...(error === undefined ? {} : { error }),
+        };
+        await writeJsonAtomic(this.jobPath(job.jobId), updated);
+        Object.assign(job, updated);
+        this.jobs.set(job.jobId, job);
     }
 
     private manifestPath(corpusId: string): string {
