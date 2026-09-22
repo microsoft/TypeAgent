@@ -13,7 +13,7 @@ export type RecallAnswer = {
     whyNoAnswer?: string;
 };
 
-export function formatMemoryContext(answer: string): string {
+function formatMemoryContext(answer: string): string {
     return [
         MEMORY_CONTEXT_MARKER,
         "Relevant memory from earlier sessions in this workspace:",

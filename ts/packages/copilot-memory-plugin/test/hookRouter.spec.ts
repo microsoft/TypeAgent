@@ -12,27 +12,26 @@ import { MEMORY_CONTEXT_MARKER } from "../src/shared/context.js";
 
 function fakeClient(
     answer = "use pnpm",
-): MemoryClient & { requests: string[] } {
-    const cache = new Map<string, string>();
+): MemoryClient & { requests: string[]; recalls: string[] } {
     const requests: string[] = [];
+    const recalls: string[] = [];
     return {
         requests,
+        recalls,
         captureRequest: async (text) => {
             requests.push(text);
         },
         captureResult: async () => undefined,
         remember: async () => ({ ok: true }),
-        recall: async () => ({ type: "Answered", answer }),
-        readRecallCache: async (sessionId, prompt) =>
-            cache.get(`${sessionId}:${prompt}`),
-        writeRecallCache: async (sessionId, prompt, context) => {
-            cache.set(`${sessionId}:${prompt}`, context);
+        recall: async (query) => {
+            recalls.push(query);
+            return { type: "Answered", answer };
         },
     };
 }
 
 describe("prompt hooks", () => {
-    it("captures the request and returns recalled context", async () => {
+    it("captures the request without recalling", async () => {
         const client = fakeClient();
         const output = await handleUserPromptSubmitted(
             {
@@ -44,25 +43,25 @@ describe("prompt hooks", () => {
         );
 
         expect(client.requests).toEqual(["how do I install dependencies?"]);
-        expect(output.additionalContext).toContain("use pnpm");
-        expect(output.additionalContext).toContain(MEMORY_CONTEXT_MARKER);
+        expect(client.recalls).toEqual([]);
+        expect(output).toEqual({});
     });
 
-    it("injects the cached recall into the transformed prompt", async () => {
+    it("recalls once and injects into the transformed prompt", async () => {
         const client = fakeClient();
-        const input = {
-            sessionId: "s1",
-            cwd: "/repo",
-            prompt: "how do I install dependencies?",
-        };
-        await handleUserPromptSubmitted(input, client);
         const output = await handleUserPromptTransformed(
-            { ...input, transformedPrompt: "how do I install dependencies?" },
+            {
+                sessionId: "s1",
+                cwd: "/repo",
+                prompt: "how do I install dependencies?",
+                transformedPrompt: "how do I install dependencies?",
+            },
             client,
         );
 
         expect(output.modifiedTransformedPrompt).toContain("use pnpm");
-        expect(client.requests).toHaveLength(1);
+        expect(client.recalls).toHaveLength(1);
+        expect(client.requests).toEqual([]);
     });
 
     it("does not inject a second copy when the marker is already present", async () => {

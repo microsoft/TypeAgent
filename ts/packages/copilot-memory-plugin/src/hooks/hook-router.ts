@@ -2,21 +2,17 @@
 // Licensed under the MIT License.
 
 /**
- * userPromptSubmitted: capture the request and recall.
- * userPromptTransformed: inject that recall into the model-facing prompt.
+ * userPromptSubmitted: capture the request only.
+ * userPromptTransformed: recall memory and inject it into the model-facing
+ * prompt.
  *
- * Copilot CLI drops command-hook output from userPromptSubmitted, including
- * additionalContext. userPromptTransformed is the hook whose
- * modifiedTransformedPrompt actually reaches the model. Both are wired so
- * hosts that still honor additionalContext keep working.
+ * Copilot CLI drops command-hook output from userPromptSubmitted, so recall is
+ * done once in userPromptTransformed, whose modifiedTransformedPrompt is the
+ * text that actually reaches the model.
  */
 
 import { fileURLToPath } from "node:url";
-import {
-    appendMemoryContext,
-    formatMemoryContext,
-    type RecallAnswer,
-} from "../shared/context.js";
+import { appendMemoryContext, type RecallAnswer } from "../shared/context.js";
 import {
     withWorkspaceMemory,
     type MemoryClient,
@@ -25,28 +21,18 @@ import { isTransformInput, parsePromptInput } from "./parse-input.js";
 import { logHookError, readStdin, writeHookOutput } from "./stdio.js";
 import type { HookOutput, PromptHookInput } from "./types.js";
 
-export async function recallContext(
+async function recallContext(
     client: MemoryClient,
-    input: PromptHookInput,
+    prompt: string,
 ): Promise<string> {
-    const cached = await client.readRecallCache(input.sessionId, input.prompt);
-    if (cached !== undefined) {
-        return cached;
-    }
     let answer: RecallAnswer;
     try {
-        answer = await client.recall(input.prompt);
+        answer = await client.recall(prompt);
     } catch (error) {
         logHookError(error);
         return "";
     }
-    const context = answer.type === "Answered" ? (answer.answer ?? "") : "";
-    try {
-        await client.writeRecallCache(input.sessionId, input.prompt, context);
-    } catch (error) {
-        logHookError(error);
-    }
-    return context;
+    return answer.type === "Answered" ? (answer.answer ?? "") : "";
 }
 
 export async function handleUserPromptSubmitted(
@@ -57,16 +43,12 @@ export async function handleUserPromptSubmitted(
     if (!prompt) {
         return {};
     }
-    const context = await recallContext(client, { ...input, prompt });
     try {
         await client.captureRequest(prompt);
     } catch (error) {
         logHookError(error);
     }
-    if (!context.trim()) {
-        return {};
-    }
-    return { additionalContext: formatMemoryContext(context) };
+    return {};
 }
 
 export async function handleUserPromptTransformed(
@@ -78,7 +60,7 @@ export async function handleUserPromptTransformed(
     if (!prompt) {
         return {};
     }
-    const context = await recallContext(client, { ...input, prompt });
+    const context = await recallContext(client, prompt);
     if (!context.trim()) {
         return {};
     }

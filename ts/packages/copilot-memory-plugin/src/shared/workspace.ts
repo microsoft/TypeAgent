@@ -54,8 +54,3 @@ export function resolveMemoryPaths(
         baseFileName: MEMORY_FILE_NAME,
     };
 }
-
-export function recallCachePath(dirPath: string, sessionId: string): string {
-    const safe = sessionId.replace(/[^A-Za-z0-9._-]/g, "_") || "default";
-    return path.join(dirPath, "recall-cache", `${safe}.json`);
-}

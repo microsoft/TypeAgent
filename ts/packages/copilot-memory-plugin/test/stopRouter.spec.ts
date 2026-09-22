@@ -19,8 +19,6 @@ function fakeClient(): MemoryClient & {
         },
         remember: async () => ({ ok: true }),
         recall: async () => ({ type: "NoAnswer" }),
-        readRecallCache: async () => undefined,
-        writeRecallCache: async () => undefined,
     };
 }
 

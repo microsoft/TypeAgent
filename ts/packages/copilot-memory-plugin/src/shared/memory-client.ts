@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import fs from "node:fs/promises";
-import path from "node:path";
 import { loadConfigSync } from "@typeagent/config";
 import {
     ConversationMemory,
@@ -11,11 +9,7 @@ import {
     createConversationMemory,
 } from "@typeagent/conversation-memory";
 import { withMemoryLock } from "./lock.js";
-import {
-    recallCachePath,
-    resolveMemoryPaths,
-    type MemoryPaths,
-} from "./workspace.js";
+import { resolveMemoryPaths, type MemoryPaths } from "./workspace.js";
 import type { KnowledgePayload } from "./transcript.js";
 import type { RecallAnswer } from "./context.js";
 
@@ -52,24 +46,7 @@ export type MemoryClient = {
     captureResult(text: string, knowledge?: KnowledgePayload): Promise<void>;
     remember(memory: string, source?: string): Promise<{ ok: true }>;
     recall(query: string): Promise<RecallAnswer>;
-    readRecallCache(
-        sessionId: string,
-        prompt: string,
-    ): Promise<string | undefined>;
-    writeRecallCache(
-        sessionId: string,
-        prompt: string,
-        context: string,
-    ): Promise<void>;
 };
-
-type RecallCache = {
-    prompt: string;
-    context: string;
-    at: number;
-};
-
-const CACHE_MAX_AGE_MS = 120_000;
 
 function log(message: string): void {
     const safe = message.replace(/https?:\/\/\S+/g, "<endpoint>");
@@ -199,10 +176,7 @@ export async function captureDirect(
     }
 }
 
-export function createMemoryClient(
-    store: MemoryStore,
-    paths: Pick<MemoryPaths, "dirPath">,
-): MemoryClient {
+export function createMemoryClient(store: MemoryStore): MemoryClient {
     return {
         captureRequest(text) {
             return captureQueued(store, userMessage(text));
@@ -217,48 +191,7 @@ export function createMemoryClient(
         async recall(query) {
             return toRecallAnswer(await store.getAnswerFromLanguage(query));
         },
-        readRecallCache(sessionId, prompt) {
-            return readRecallCache(paths.dirPath, sessionId, prompt);
-        },
-        writeRecallCache(sessionId, prompt, context) {
-            return writeRecallCache(paths.dirPath, sessionId, prompt, context);
-        },
     };
-}
-
-async function readRecallCache(
-    dirPath: string,
-    sessionId: string,
-    prompt: string,
-): Promise<string | undefined> {
-    try {
-        const raw = await fs.readFile(
-            recallCachePath(dirPath, sessionId),
-            "utf8",
-        );
-        const cache = JSON.parse(raw) as RecallCache;
-        if (
-            cache.prompt !== prompt ||
-            Date.now() - cache.at > CACHE_MAX_AGE_MS
-        ) {
-            return undefined;
-        }
-        return cache.context;
-    } catch {
-        return undefined;
-    }
-}
-
-async function writeRecallCache(
-    dirPath: string,
-    sessionId: string,
-    prompt: string,
-    context: string,
-): Promise<void> {
-    const filePath = recallCachePath(dirPath, sessionId);
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    const cache: RecallCache = { prompt, context, at: Date.now() };
-    await fs.writeFile(filePath, JSON.stringify(cache), "utf8");
 }
 
 function ensureModelConfig(): void {
@@ -291,7 +224,7 @@ export async function withWorkspaceMemory<T>(
     return withMemoryLock(paths.dirPath, async () => {
         const store = await openStore(paths);
         try {
-            return await fn(createMemoryClient(store, paths));
+            return await fn(createMemoryClient(store));
         } finally {
             await store.waitForPendingTasks();
         }
