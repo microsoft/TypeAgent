@@ -1,0 +1,40 @@
+{
+  "name": "@typeagent/copilot-memory-plugin",
+  "version": "0.0.1",
+  "description": "TypeAgent conversation memory plugin for GitHub Copilot CLI",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/copilot-memory-plugin"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "npm run tsc && npm run bundle",
+    "bundle": "node scripts/bundle.mjs",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@typeagent/config": "workspace:*",
+    "@typeagent/conversation-memory": "workspace:*",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@types/jest": "^29.5.7",
+    "@types/node": "^20.10.0",
+    "esbuild": "^0.28.2",
+    "jest": "^29.7.0",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}

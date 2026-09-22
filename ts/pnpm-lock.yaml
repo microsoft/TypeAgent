@@ -1956,6 +1956,9 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../../memory/conversation
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
@@ -2137,9 +2140,6 @@ importers:
       dompurify:
         specifier: ^3.4.13
         version: 3.4.13
-      jsdom:
-        specifier: ^28.1.0
-        version: 28.1.0
     devDependencies:
       prettier:
         specifier: ^3.5.3
@@ -2940,31 +2940,6 @@ importers:
       vite:
         specifier: ^6.4.3
         version: 6.4.3(@types/node@26.4.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
-
-  packages/agents/memory:
-    dependencies:
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../../agentSdk
-      '@typeagent/memory-service':
-        specifier: workspace:*
-        version: link:../../memory/service
-    devDependencies:
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.14
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@26.4.1)(ts-node@10.9.2(@types/node@26.4.1)(typescript@5.4.5))
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
 
   packages/agents/montage:
     dependencies:
@@ -4676,6 +4651,43 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/copilot-memory-plugin:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 1.26.0
+        version: 1.26.0(zod@3.25.76)
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../config
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../memory/conversation
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.40
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@20.19.40)(ts-node@10.9.2(@types/node@20.19.40)(typescript@5.4.5))
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/copilot-plugin:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -4718,9 +4730,6 @@ importers:
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.40
-      agent-dispatcher:
-        specifier: workspace:*
-        version: link:../dispatcher/dispatcher
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -4817,9 +4826,6 @@ importers:
       '@typeagent/markdown-agent':
         specifier: workspace:*
         version: link:../agents/markdown
-      '@typeagent/memory-agent':
-        specifier: workspace:*
-        version: link:../agents/memory
       '@typeagent/montage-agent':
         specifier: workspace:*
         version: link:../agents/montage
@@ -5031,9 +5037,6 @@ importers:
       '@typeagent/knowpro':
         specifier: workspace:*
         version: link:../../knowPro
-      '@typeagent/memory-service':
-        specifier: workspace:*
-        version: link:../../memory/service
       '@typeagent/selfhelp':
         specifier: workspace:*
         version: link:../../agents/selfhelp
@@ -5640,9 +5643,6 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      gpt-tokenizer:
-        specifier: ^2.9.0
-        version: 2.9.0
       mailparser:
         specifier: 3.9.6
         version: 3.9.6

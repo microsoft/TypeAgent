@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hooks": {
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "command": "node ${PLUGIN_ROOT}/scripts/launch.mjs dist/hooks/hook-router.js",
+        "timeout": 300000
+      }
+    ],
+    "userPromptTransformed": [
+      {
+        "type": "command",
+        "command": "node ${PLUGIN_ROOT}/scripts/launch.mjs dist/hooks/hook-router.js",
+        "timeout": 300000
+      }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "command": "node ${PLUGIN_ROOT}/scripts/launch.mjs dist/hooks/stop-router.js",
+        "timeout": 300000
+      }
+    ]
+  }
+}
