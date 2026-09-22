@@ -56,5 +56,26 @@ describe("Context Menu Module", () => {
 
             expect(chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 123 });
         });
+
+        it("should open the Memory Center", async () => {
+            const mockTab = { id: 123, url: "https://example.com" };
+            chrome.runtime.getURL.mockReturnValue(
+                "chrome-extension://abcdefgh/views/memoryCenter.html",
+            );
+            chrome.tabs.query.mockResolvedValue([]);
+
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "showMemoryCenter" },
+                mockTab,
+            );
+
+            expect(chrome.tabs.query).toHaveBeenCalledWith({
+                url: "chrome-extension://abcdefgh/views/memoryCenter.html",
+            });
+            expect(chrome.tabs.create).toHaveBeenCalledWith({
+                url: "chrome-extension://abcdefgh/views/memoryCenter.html",
+                active: true,
+            });
+        });
     });
 });

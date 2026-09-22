@@ -13,12 +13,15 @@ import type {
     DocumentIngestResult,
     IngestionJobStatus,
     MemoryCorpus,
+    MemoryAnswerRequest,
+    MemoryAnswerResult,
     MemoryKnowledgeGraph,
     MemorySearchRequest,
     MemorySearchResult,
     MemoryService,
     MemoryServiceCapabilities,
     MemorySource,
+    SourceReplaceRequest,
 } from "@typeagent/memory-service";
 import { MemoryMcpServer } from "../src/memoryMcpServer.js";
 import { MemoryServiceHost } from "../src/memoryServiceHost.js";
@@ -102,6 +105,18 @@ class FakeMemoryService implements MemoryService {
         return [this.corpus];
     }
 
+    public async getCorpus() {
+        return {
+            ...this.corpus,
+            sourceCount: 1,
+            revisionCount: 1,
+            readyRevisionCount: 1,
+            failedRevisionCount: 0,
+            activeJobCount: 0,
+            indexVersion: "fixture",
+        };
+    }
+
     public async clearCorpus(): Promise<number> {
         return 1;
     }
@@ -110,8 +125,29 @@ class FakeMemoryService implements MemoryService {
         return [this.source];
     }
 
+    public async listSourcesPage() {
+        return { items: [this.source], total: 1 };
+    }
+
     public async getSource(): Promise<MemorySource> {
         return this.source;
+    }
+
+    public async getSourceContent() {
+        return {
+            corpusId: this.corpus.corpusId,
+            sourceId: this.source.sourceId,
+            revisionId: this.source.activeRevisionId,
+            mimeType: "text/markdown",
+            offset: 0,
+            content: "fixture",
+            totalChars: 7,
+            truncated: false,
+        };
+    }
+
+    public async getSourceKnowledge() {
+        return this.getKnowledgeGraph();
     }
 
     public async ingestDocument(
@@ -127,8 +163,65 @@ class FakeMemoryService implements MemoryService {
         };
     }
 
+    public async replaceSource(
+        _request: SourceReplaceRequest,
+        _signal?: AbortSignal,
+    ) {
+        return {
+            jobId: this.job.jobId,
+            sourceId: this.job.sourceId,
+            revisionId: this.job.revisionId,
+            state: "accepted" as const,
+            statusUri: `typeagent-memory://jobs/${this.job.jobId}`,
+        };
+    }
+
+    public async previewForgetSource() {
+        return {
+            corpusId: this.corpus.corpusId,
+            sourceId: this.source.sourceId,
+            activeRevisionId: this.source.activeRevisionId,
+            revisionCount: 1,
+            derivedEntityCount: 1,
+            derivedTopicCount: 0,
+            derivedRelationshipCount: 0,
+            confirmationToken: "confirmation-1",
+            expiresAt: "2026-01-01T00:10:00.000Z",
+        };
+    }
+
+    public async forgetSource() {
+        return {
+            corpusId: this.corpus.corpusId,
+            sourceId: this.source.sourceId,
+            deletedRevisionCount: 1,
+            indexVersion: "fixture",
+        };
+    }
+
+    public async reindexCorpus() {
+        return {
+            corpusId: this.corpus.corpusId,
+            sourceCount: 1,
+            indexVersion: "fixture",
+        };
+    }
+
+    public async reindexSource() {
+        return {
+            corpusId: this.corpus.corpusId,
+            sourceId: this.source.sourceId,
+            sourceCount: 1,
+            indexVersion: "fixture",
+        };
+    }
+
     public async getJob(jobId: string) {
         return jobId === this.job.jobId ? this.job : undefined;
+    }
+
+    public async listJobs() {
+        return { items: [this.job], total: 1 };
     }
 
     public async cancelJob(jobId: string) {
@@ -143,6 +236,19 @@ class FakeMemoryService implements MemoryService {
             matches: [],
             warnings: [],
             capabilitiesUsed: ["structured-search"],
+            indexVersion: "fixture",
+        };
+    }
+
+    public async answer(
+        request: MemoryAnswerRequest,
+    ): Promise<MemoryAnswerResult> {
+        return {
+            question: request.question,
+            answer: "No supporting memory evidence was found.",
+            citations: [],
+            grounded: true,
+            warnings: [],
             indexVersion: "fixture",
         };
     }
@@ -170,6 +276,8 @@ class FakeMemoryService implements MemoryService {
                 vectorSimilarity: true,
                 structuredSearch: true,
                 exactSearch: true,
+                management: true,
+                groundedAnswer: true,
             },
             warnings: [],
         };
@@ -350,12 +458,54 @@ describe("MemoryServiceHost", () => {
             expect(await client.listCorpora()).toEqual([
                 expect.objectContaining({ corpusId: "corpus-1" }),
             ]);
+            expect(await client.getCorpus("corpus-1")).toMatchObject({
+                sourceCount: 1,
+                revisionCount: 1,
+            });
+            expect(
+                await client.listSourcesPage({
+                    corpusId: "corpus-1",
+                    pageSize: 1,
+                }),
+            ).toMatchObject({
+                total: 1,
+                items: [{ sourceId: "source-1" }],
+            });
+            expect(
+                await client.getSourceContent({
+                    corpusId: "corpus-1",
+                    sourceId: "source-1",
+                    maxChars: 10,
+                }),
+            ).toMatchObject({ content: "fixture", truncated: false });
+            expect(
+                await client.listJobs({
+                    corpusId: "corpus-1",
+                    states: ["complete"],
+                }),
+            ).toMatchObject({
+                total: 1,
+                items: [{ jobId: "job-1" }],
+            });
             expect(
                 await client.waitForJob("job-1", {
                     onProgress: (update) => progress.push(update.completed),
                 }),
             ).toMatchObject({ jobId: "job-1", state: "complete" });
             expect(progress).toEqual([1]);
+            expect(
+                await client.answer({
+                    corpusId: "corpus-1",
+                    question: "What is stored?",
+                }),
+            ).toEqual({
+                question: "What is stored?",
+                answer: "No supporting memory evidence was found.",
+                citations: [],
+                grounded: true,
+                warnings: [],
+                indexVersion: "fixture",
+            });
             expect(await client.getKnowledgeGraph("corpus-1")).toEqual({
                 entities: [
                     {
@@ -367,6 +517,12 @@ describe("MemoryServiceHost", () => {
                 ],
                 topics: [],
                 relationships: [],
+            });
+            expect(await client.getCapabilities()).toMatchObject({
+                features: {
+                    management: true,
+                    groundedAnswer: true,
+                },
             });
             expect(await (await fetch(host.healthEndpoint)).json()).toEqual({
                 status: "ready",

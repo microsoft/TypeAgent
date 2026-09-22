@@ -56,49 +56,13 @@ async function checkKnowledgeInIndex(
 
 async function saveKnowledgeToIndex(
     url: string,
-    knowledge: any,
+    _knowledge: any,
     context: ActionContext<BrowserActionContext> | any,
 ): Promise<void> {
-    try {
-        if (!knowledge || !url) {
-            debug(
-                `Indexing knowledge failed. The URL is ${url} and the knowledge was (${JSON.stringify(knowledge)})`,
-            );
-            return;
-        }
-
-        debug(
-            `Indexing knowledge started. The URL is ${url} and the knowledge was (${JSON.stringify(knowledge)})`,
+    if ((await checkKnowledgeInIndex(url, context)) === null) {
+        throw new Error(
+            "Durable extraction completed without indexing the original page",
         );
-
-        // Use the existing indexWebPageContent function with extracted knowledge
-        const parameters = {
-            url,
-            title: knowledge.title || "Extracted Page",
-            extractKnowledge: true,
-            timestamp: new Date().toISOString(),
-            extractedKnowledge: knowledge,
-        };
-
-        // Get the session context - either directly or from action context
-        const sessionContext =
-            "sessionContext" in context ? context.sessionContext : context;
-
-        const result = await handleKnowledgeAction(
-            "indexWebPageContent",
-            parameters,
-            sessionContext,
-        );
-
-        if (result.indexed) {
-            debug(
-                `Successfully indexed knowledge for ${url} (${result.entityCount} entities)`,
-            );
-        } else {
-            console.warn(`Failed to index knowledge for ${url}`);
-        }
-    } catch (error) {
-        console.error("Failed to save knowledge to index:", error);
     }
 }
 

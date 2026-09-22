@@ -73,7 +73,7 @@ flowchart TD
     UNI[(Unified knowPro index<br/>tagged by conversationId)] --> SRCH["@conversation search (content)"]
   end
   subgraph PC[per-conversation dispatcher]
-    PMEM[(per-conv knowPro index<br/>source of truth)] --> MEMQ["@memory Q&A"]
+    PMEM[(per-conv knowPro index<br/>source of truth)] --> MEMQ["@conversation-memory Q&A"]
   end
   TURN[live turn] --> PMEM
   TURN -. tee w/ conversationId .-> UNI

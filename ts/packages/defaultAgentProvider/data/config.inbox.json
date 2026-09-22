@@ -8,6 +8,9 @@
     "list": {
       "name": "@typeagent/list-agent"
     },
+    "memory": {
+      "name": "@typeagent/memory-agent"
+    },
     "timer": {
       "name": "@typeagent/timer-agent"
     },

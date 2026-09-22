@@ -1,6 +1,10 @@
 # @typeagent/memory-mcp-server
 
-MCP transport adapter for the TypeAgent memory service
+MCP transport adapter for the TypeAgent memory service. It exposes the complete
+typed ingestion, search, extractive grounded answers, status, pagination,
+bounded content, derived knowledge, revision replacement, preview/confirm
+deletion, reindex, and filtered job management surface. Destructive tools are
+annotated accordingly.
 
 ## Trademarks
 
