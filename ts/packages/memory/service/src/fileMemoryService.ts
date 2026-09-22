@@ -1499,15 +1499,20 @@ export class FileMemoryService implements MemoryService {
         error?: string,
     ): Promise<void> {
         const timestamp = now();
-        job.state = state;
-        job.progress = progress;
-        job.updatedAt = timestamp;
-        job.trace ??= [];
-        job.trace.push({ state, timestamp, ...progress });
-        if (error !== undefined) {
-            job.error = error;
-        }
-        await this.saveJob(job);
+        const updated: IngestionJobStatus = {
+            ...job,
+            state,
+            progress,
+            updatedAt: timestamp,
+            trace: [
+                ...(job.trace ?? []),
+                { state, timestamp, ...progress },
+            ],
+            ...(error === undefined ? {} : { error }),
+        };
+        await writeJsonAtomic(this.jobPath(job.jobId), updated);
+        Object.assign(job, updated);
+        this.jobs.set(job.jobId, job);
     }
 
     private manifestPath(corpusId: string): string {
