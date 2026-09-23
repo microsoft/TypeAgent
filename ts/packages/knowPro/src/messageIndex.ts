@@ -117,12 +117,14 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     ): Promise<ScoredMessageOrdinal[]> {
         maxMatches ??= this.settings.embeddingIndexSettings.maxMatches;
         thresholdScore ??= this.settings.embeddingIndexSettings.minScore;
+        // Chunks are ranked without a limit so several chunks of one message
+        // cannot consume maxMatches; the limit applies per message below.
         const scoredTextLocations = await this.textLocationIndex.lookupText(
             messageText,
-            maxMatches,
+            undefined,
             thresholdScore,
         );
-        return this.toScoredMessageOrdinals(scoredTextLocations);
+        return this.toScoredMessageOrdinals(scoredTextLocations, maxMatches);
     }
 
     public async lookupMessagesInSubset(
@@ -164,13 +166,14 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             ? (chunkPos: number) =>
                   predicate(this.textLocationIndex.get(chunkPos).messageOrdinal)
             : undefined;
+        // Same per-message limit rule as lookupMessages: do not cap chunks.
         const scoredTextLocations = this.textLocationIndex.lookupByEmbedding(
             textEmbedding,
-            maxMatches,
+            undefined,
             thresholdScore,
             chunkPredicate,
         );
-        return this.toScoredMessageOrdinals(scoredTextLocations);
+        return this.toScoredMessageOrdinals(scoredTextLocations, maxMatches);
     }
 
     public lookupInSubsetByEmbedding(
@@ -228,7 +231,7 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     // Since a message has multiple chunks, each of which is indexed individually, we can end up
     // with a message matching multiple times. The message accumulator dedupes those and also
     // supports smoothing the scores if needed
-    // Subset lookups rank every chunk and apply maxMatches here, per message,
+    // Lookups rank every chunk and apply maxMatches here, per message,
     // so several chunks of one message cannot use up maxMatches.
     private toScoredMessageOrdinals(
         scoredLocations: ScoredTextLocation[],
