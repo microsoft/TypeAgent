@@ -4,14 +4,14 @@
 import type { CommandDefinition } from "@github/copilot-sdk";
 import {
     getConfigPath,
-    getMode,
+    getModeLabel,
     readConfig,
-    writeConfig,
-    type Mode,
 } from "../shared/plugin-config.js";
+import {
+    getModeDescription,
+    handleModeSetting,
+} from "../shared/mode-command.js";
 import { connectToAgentServer } from "../shared/typeagent-client.js";
-
-const modes = new Set<Mode>(["direct", "mcp", "dev", "bypass"]);
 
 function statusText(): string {
     const config = readConfig();
@@ -19,10 +19,12 @@ function statusText(): string {
     const port = process.env.TYPEAGENT_PORT || "8999";
     return [
         "TypeAgent configuration",
-        `Mode: ${getMode()}`,
+        `Mode: ${getModeLabel()}`,
+        `Routing: ${getModeDescription()}`,
         `TypeAgent PowerShell: ${(config?.powershell?.enabled ?? true) ? "on" : "off"}`,
         `Server: ws://${host}:${port}`,
         `Config: ${getConfigPath()}`,
+        "Mode settings are shared by sessions using this config.",
     ].join("\n");
 }
 
@@ -37,21 +39,10 @@ export function createExtensionCommands(
         },
         {
             name: "typeagent-mode",
-            description: "Show or set the TypeAgent routing mode",
+            description:
+                "Show or set TypeAgent mode: direct, mcp [delegate|mixed], dev, bypass. MCP preserves saved policy; default delegate uses processCommand, mixed enables Copilot-selected discovery/direct routing.",
             handler: async ({ args }) => {
-                const value = args.trim().toLowerCase();
-                if (!value) {
-                    await log(`TypeAgent mode: ${getMode()}`);
-                    return;
-                }
-                if (!modes.has(value as Mode)) {
-                    await log("Usage: /typeagent-mode direct|mcp|dev|bypass");
-                    return;
-                }
-                const config = readConfig() ?? { mode: "direct" };
-                config.mode = value as Mode;
-                writeConfig(config);
-                await log(`TypeAgent mode switched to ${value}.`);
+                await log(handleModeSetting(args, "/typeagent-mode"));
             },
         },
         {

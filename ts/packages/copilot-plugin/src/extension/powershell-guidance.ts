@@ -3,8 +3,10 @@
 
 import {
     getMode,
+    isMixedMcpMode,
     isPowerShellGuidanceEnabled,
 } from "../shared/plugin-config.js";
+import { mixedPowerShellGuidance } from "../shared/mcp-guidance.js";
 
 interface PowerShellHookOutput {
     additionalContext: string;
@@ -55,6 +57,10 @@ export function getPowerShellHookOutput(
     const firstWord = command?.trim().split(/\s+/)[0].toLowerCase();
     if (!command || (firstWord && passthroughCommands.has(firstWord))) {
         return undefined;
+    }
+
+    if (isMixedMcpMode()) {
+        return { additionalContext: mixedPowerShellGuidance };
     }
 
     return {

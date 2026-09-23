@@ -94,6 +94,18 @@ describe("dispatcher", () => {
                 expect(output).toHaveLength(2);
                 expect(output[1].message).toMatch(/Random number: [0-9.]+/);
             });
+
+            it("displays errors reserved for reasoning fallback", async () => {
+                await awaitCommand(dispatcher, "@action test fallbackError");
+
+                expect(output).toHaveLength(2);
+                expect(output[1].message).toMatchObject({
+                    type: "text",
+                    kind: "error",
+                    content: "Fallback action failed",
+                });
+            });
+
             const errorCommands = [
                 {
                     name: "Empty Command",

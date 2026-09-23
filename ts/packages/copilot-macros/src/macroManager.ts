@@ -241,6 +241,55 @@ export class MacroManager {
         });
     }
 
+    async saveDraft(macro: CopilotToolMacro): Promise<MacroVersionRef> {
+        this.validateMacroId(macro.macroId);
+        if (macro.state !== "draft") {
+            throw new Error("Only draft macros can be persisted.");
+        }
+        const report = validateMacro(macro);
+        if (!report.valid) {
+            const errors = report.issues
+                .filter((item) => item.severity === "error")
+                .map((item) => item.message)
+                .join("; ");
+            throw new Error(`Macro validation failed: ${errors}`);
+        }
+        return this.mutateCatalog(async () => {
+            const existing = await this.readVersionIfPresent(
+                macro.macroId,
+                macro.version,
+            );
+            if (existing !== undefined) {
+                if (JSON.stringify(existing) !== JSON.stringify(macro)) {
+                    throw new Error(
+                        `Macro version already exists with different content: ${macro.macroId}@${macro.version}`,
+                    );
+                }
+                const summary = (await this.readCatalog()).find(
+                    (item) => item.macroId === macro.macroId,
+                );
+                if (
+                    summary === undefined ||
+                    summary.version <= existing.version
+                ) {
+                    await this.upsertSummary(existing);
+                }
+                return this.versionRef(existing);
+            }
+            const latest = (await this.readCatalog()).find(
+                (item) => item.macroId === macro.macroId,
+            );
+            if (latest !== undefined && latest.version >= macro.version) {
+                throw new Error(
+                    `Macro version must be newer than ${macro.macroId}@${latest.version}.`,
+                );
+            }
+            await this.writeVersion(macro);
+            await this.upsertSummary(macro);
+            return this.versionRef(macro);
+        });
+    }
+
     async listMacros(request: ListMacrosRequest = {}): Promise<MacroSummary[]> {
         const limit = Math.min(Math.max(request.limit ?? 100, 1), 500);
         const summaries = await this.readCatalog();
@@ -310,7 +359,9 @@ export class MacroManager {
         request: ValidateMacroRequest,
     ): Promise<MacroValidationReport> {
         const macro = await this.inspectMacro(request);
-        const trace = await this.readTrace(macro.sourceTraceId);
+        const trace = macro.sourceTraceId.startsWith("procedure:")
+            ? undefined
+            : await this.readTrace(macro.sourceTraceId);
         return validateMacro(macro, trace);
     }
 
@@ -334,13 +385,17 @@ export class MacroManager {
                 this.replayHost !== undefined &&
                 current.executionClass === "replayable"
             ) {
-                const trace = await this.readTrace(current.sourceTraceId);
+                const trace = current.sourceTraceId.startsWith("procedure:")
+                    ? undefined
+                    : await this.readTrace(current.sourceTraceId);
                 steps = await Promise.all(
                     current.steps.map(async (step) => {
                         const descriptor = await this.replayHost!.inspectTool(
                             step.mcpServerName,
                             step.toolName,
-                            { cwd: trace.cwd },
+                            trace === undefined
+                                ? undefined
+                                : { cwd: trace.cwd },
                         );
                         if (!descriptor) {
                             throw new Error(
@@ -767,6 +822,22 @@ export class MacroManager {
             encoding: "utf8",
             flag: "wx",
         });
+    }
+
+    private async readVersionIfPresent(
+        macroId: string,
+        version: number,
+    ): Promise<CopilotToolMacro | undefined> {
+        try {
+            return JSON.parse(
+                await readFile(this.versionPath(macroId, version), "utf8"),
+            ) as CopilotToolMacro;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                return undefined;
+            }
+            throw error;
+        }
     }
 
     private async writeJsonAtomic(

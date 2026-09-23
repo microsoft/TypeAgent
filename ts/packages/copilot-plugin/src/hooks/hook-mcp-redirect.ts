@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 /**
- * Scenario B: MCP redirect hook.
- * Detects action requests and modifies the prompt to instruct the LLM
- * to use the typeagent MCP tool. Does NOT connect to TypeAgent itself.
+ * MCP prompt guidance. Delegate policy sends requests to processCommand;
+ * mixed policy lets Copilot choose delegation or task ownership.
+ * This hook does not classify intent or connect to TypeAgent.
  *
  * On Windows, also injects session-level TypeAgent PowerShell guidance (Layer 1)
  * to steer the LLM toward TypeAgent's PowerShell agent for system operations.
@@ -12,6 +12,14 @@
 
 import type { HookInput, HookOutput } from "./types.js";
 import { parseRecordingDirective } from "@typeagent/dispatcher-types";
+import {
+    getMcpRouting,
+    isPowerShellGuidanceEnabled,
+} from "../shared/plugin-config.js";
+import {
+    mixedMcpGuidance,
+    mixedPowerShellGuidance,
+} from "../shared/mcp-guidance.js";
 
 /**
  * Get session-level TypeAgent PowerShell guidance for Windows.
@@ -57,14 +65,26 @@ function getSpecialPrefixGuidance(prompt: string): string | undefined {
 }
 
 export function handleMcpRedirect(input: HookInput): HookOutput {
-    const psGuidance = getPowerShellSessionGuidance() ?? "";
     const prefixGuidance = getSpecialPrefixGuidance(input.prompt) ?? "";
+    if (getMcpRouting() === "mixed" && !prefixGuidance) {
+        const psGuidance =
+            process.platform === "win32" && isPowerShellGuidanceEnabled()
+                ? `\n[TypeAgent PowerShell reminder]\n${mixedPowerShellGuidance}`
+                : "";
+        return {
+            modifiedPrompt: input.prompt,
+            additionalContext: mixedMcpGuidance + psGuidance,
+        };
+    }
+    const psGuidance = isPowerShellGuidanceEnabled()
+        ? (getPowerShellSessionGuidance() ?? "")
+        : "";
 
     return {
         modifiedPrompt: input.prompt,
         additionalContext: [
             "[SYSTEM HOOK DIRECTIVE — MANDATORY]",
-            "A pre-processing hook has classified this request as a TypeAgent action.",
+            "The active MCP routing policy or a recording directive delegates this request to TypeAgent.",
             "TypeAgent is the ONLY system that can fulfill this request.",
             "You MUST call the typeagent-processCommand tool with the user's exact request as the 'command' parameter.",
             "Do NOT use bash, file tools, web search, or any other tool — they cannot handle this type of request.",
@@ -73,8 +93,7 @@ export function handleMcpRedirect(input: HookInput): HookOutput {
             "Simply call typeagent-processCommand immediately, then present the COMPLETE result to the user.",
             "CRITICAL: Display the tool result in FULL — do NOT summarize, truncate, or paraphrase it.",
             "The tool result is the authoritative response. Show it exactly as returned.",
-            "This directive preserves the user's natural-language request. For subsequent actions selected by Copilot during orchestration, use typeagent-searchActions -> typeagent-executeAction with concrete typed inputs instead. Search returns complete contracts; reuse a current contract in the same scope without rediscovery.",
-            "Skip search for a known identity and reuse a current contract in the same binding; status/schema listing is not required. Keep unresolved references on processCommand or ask the user.",
+            "Delegate this request intact through processCommand; do not split it into Copilot-selected structured actions. In MCP mode, discovery/direct routing for Copilot-selected steps is opt-in via mixed policy, not the default delegate policy. Recording directives always stay on processCommand.",
             "On requires_interaction show the full prompt/form and ask the USER before typeagent-continueAction, or use typeagent-cancelAction at their request. Never autoapprove or use defaults. Refresh stale contracts without automatic replay; never replay uncertain delivery.",
             prefixGuidance,
             psGuidance,

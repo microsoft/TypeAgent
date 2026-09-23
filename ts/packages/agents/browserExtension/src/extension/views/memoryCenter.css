@@ -196,6 +196,57 @@ button.danger {
   gap: 14px;
 }
 
+.howto-section {
+  margin-top: 18px;
+}
+
+.howto-workspace {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(280px, 0.9fr) minmax(
+      420px,
+      1.5fr
+    );
+  gap: 14px;
+  align-items: start;
+}
+
+.howto-settings,
+.howto-list-panel,
+.howto-editor-panel {
+  min-width: 0;
+}
+
+.howto-settings > label {
+  margin-bottom: 10px;
+}
+
+.subsection-heading {
+  margin-top: 20px;
+}
+
+.compact-list {
+  max-height: 300px;
+}
+
+#howToInstructions {
+  min-height: 110px;
+  resize: vertical;
+}
+
+#procedureEditor {
+  width: 100%;
+  min-height: 430px;
+  resize: vertical;
+  white-space: pre-wrap;
+  font-family: Consolas, "Courier New", monospace;
+  line-height: 1.45;
+}
+
+#importDocumentDialog textarea {
+  width: 100%;
+  min-height: 320px;
+}
+
 .section-heading,
 .content-heading,
 .content-actions,
@@ -402,12 +453,17 @@ dialog .checkbox {
     grid-column: 1 / -1;
     grid-template-columns: 1fr 1fr;
   }
+
+  .howto-workspace {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
   .toolbar,
   .workspace,
-  .side-column {
+  .side-column,
+  .howto-workspace {
     display: grid;
     grid-template-columns: 1fr;
   }
