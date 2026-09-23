@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=87f61cdb2aa546b86d98a7e74438ae868f1457df9f755cd35984cc972fdf9d6c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d819fdca8f7d378a095ae130929801ae0b5501b88fe8543cb81a878e788d8963 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-memory-plugin — AI-generated documentation
@@ -29,7 +29,7 @@ Workspace:
 - [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/conversation-memory](../../packages/memory/conversation/README.md)
 
-External: `@modelcontextprotocol/sdk`, `zod`
+External: `@modelcontextprotocol/sdk`, `proper-lockfile`, `zod`
 
 ### Files of interest
 
@@ -37,14 +37,13 @@ External: `@modelcontextprotocol/sdk`, `zod`
 
 ### Environment variables
 
-_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_2 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `COPILOT_PLUGIN_ROOT`
 - `PLUGIN_ROOT`
-- `TYPEAGENT_MODEL_PROVIDER`
 
 ---
 
-_Auto-generated against commit `381e7674484ab4dd761a296bfd0e8395bcbdfaa5` on `2026-09-22T23:29:57.248Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-memory-plugin docs:verify-links` to spot-check._
+_Auto-generated against commit `dfb41795661d0bd3e856b6719b0178671b8e041d` on `2026-09-23T23:23:23.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-memory-plugin docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
