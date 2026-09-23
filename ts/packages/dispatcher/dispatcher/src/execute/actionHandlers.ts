@@ -912,7 +912,13 @@ export async function executeActions(
 
         if (result.error !== undefined) {
             // Stop executing further action on error.
-            return { error: result.error, failedAction: executableAction };
+            return {
+                error: result.error,
+                failedAction: executableAction,
+                ...(result.fallbackToReasoning === undefined
+                    ? {}
+                    : { fallbackToReasoning: result.fallbackToReasoning }),
+            };
         }
 
         const resultEntityId = executableAction.resultEntityId;
