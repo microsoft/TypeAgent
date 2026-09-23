@@ -392,7 +392,7 @@ not contact Key Vault. For `AISYSTEMS`, the MSI
 (interactive) custom action `ProvisionAiSystemsConfig` that runs
 `node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in
 as the installing user). It is **non-fatal**: if sign-in is unavailable during
-the install, the final page (ExitDialog) reminds the user to run `provision`
+the install, the final page (`TypeAgentExitDlg`) shows the `provision` command to run
 manually.
 
 The MSI rejects `PROVIDER=OLLAMA` and the legacy `EMBEDDING` and `OLLAMAHOST`
@@ -419,7 +419,14 @@ msiexec /i TypeAgent-<version>-win32-x64.msi STARTSERVER=0 AUTOSTART=0
 ```
 
 Both CLIs require a one-time interactive sign-in (`claude`, then `copilot`)
-before agent actions work; the ExitDialog reminds the user of this.
+before agent actions work. The final page (`TypeAgentExitDlg`, a custom
+replacement for the stock WixUI `ExitDialog`) reminds the user to sign in on
+first use. Provisioning runs automatically during install. Copilot provisioning
+failures roll back the install, so only for `AISYSTEMS` (non-fatal Azure
+sign-in) does the page check `%USERPROFILE%\.typeagent\config.local.yaml`
+(`CheckTypeAgentConfig`); if it's missing, the page shows the `provision` retry
+command, with the resolved install path, in a selectable text box with a
+**Copy** button. Both actions live in `exit-dialog.vbs`.
 
 ## Optional: install the TypeAgent Shell (desktop app)
 

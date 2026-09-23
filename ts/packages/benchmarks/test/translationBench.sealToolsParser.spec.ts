@@ -44,4 +44,38 @@ describe("Seal-Tools source parser", () => {
             ).counts.correctParameters,
         ).toBe(1);
     });
+
+    it.each([
+        ['task_instruction = "Show post "abc."\nOutput:', 'Show post "abc."'],
+        ['task_instruction = "Show post "abc"."\nOutput:', 'Show post "abc".'],
+    ])(
+        "balances quotes that share the closing delimiter",
+        (task, utterance) => {
+            const parsed = parseSealToolsRow({
+                id: "easy-2",
+                domain: "social",
+                conversations: [
+                    {
+                        from: "human",
+                        value:
+                            "api_list = [{'api_name': 'show', 'parameters': {'items': {'type': 'list'}}, 'required': []}]\n" +
+                            task,
+                    },
+                    {
+                        from: "gpt",
+                        value: "[{'api': 'show', 'parameters': {}}]",
+                    },
+                ],
+            });
+
+            expect(parsed?.utterance).toBe(utterance);
+            expect(
+                toSealToolsFunctionTool(parsed!.tools[0]!).function.parameters,
+            ).toMatchObject({
+                properties: {
+                    items: { type: "array", items: { type: "string" } },
+                },
+            });
+        },
+    );
 });
