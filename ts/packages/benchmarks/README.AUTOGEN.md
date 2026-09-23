@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=09ffeced6cc37767c9d15bbd76cf9d10e8d41788e9b3675028584618b5c00ffe -->
+<!-- AUTOGEN:DOCS:HASH:sha256=06cacf1cad395cbc152af0837823f7af2754d01b73e20866839cedea5939d089 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -44,6 +44,7 @@ _None._
 
 - [./src/index.ts](./src/index.ts)
 - [./src/translationBench/index.ts](./src/translationBench/index.ts)
+- [./src/translationBench/policy/index.ts](./src/translationBench/policy/index.ts)
 - [./src/translationBench/public_datasets/Seal-Tools/index.ts](./src/translationBench/public_datasets/Seal-Tools/index.ts)
 - [./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts](./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts)
 - [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
@@ -51,11 +52,10 @@ _None._
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
 - [./src/core/fileJson.ts](./src/core/fileJson.ts)
 - [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
-- [./src/core/paths.ts](./src/core/paths.ts)
-- _…and 68 more under `./src/`._
+- _…and 73 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `1bb7b19c01f933b9c1faed68eeccd6366c8ee886` on `2026-09-22T21:26:47.165Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `d23e0d2516299e5356e720bf2ee781b0a4c82017` on `2026-09-23T00:06:05.252Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
