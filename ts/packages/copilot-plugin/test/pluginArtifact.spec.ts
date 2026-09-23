@@ -65,15 +65,12 @@ describe("staged plugin artifact", () => {
             );
             expect(titles).toMatchObject({
                 "typeagent-processCommand":
-                    "TypeAgent: Natural-language delegation (processCommand)",
-                "typeagent-searchActions":
-                    "TypeAgent: Structured discovery (searchActions)",
-                "typeagent-executeAction":
-                    "TypeAgent: Structured execution (executeAction)",
+                    "TypeAgent: Natural-language delegation",
+                "typeagent-searchActions": "TypeAgent: Structured discovery",
+                "typeagent-executeAction": "TypeAgent: Structured execution",
                 "typeagent-continueAction":
-                    "TypeAgent: Structured continuation (continueAction)",
-                "typeagent-cancelAction":
-                    "TypeAgent: Structured cancellation (cancelAction)",
+                    "TypeAgent: Structured continuation",
+                "typeagent-cancelAction": "TypeAgent: Structured cancellation",
             });
             expect(catalog.tools.map((tool) => tool.name)).toEqual(
                 expect.arrayContaining([

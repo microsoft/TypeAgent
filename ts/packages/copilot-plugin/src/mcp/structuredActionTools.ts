@@ -164,7 +164,7 @@ export function registerStructuredActionTools(
     server.registerTool(
         "typeagent-searchActions",
         {
-            title: "TypeAgent: Structured discovery (searchActions)",
+            title: "TypeAgent: Structured discovery",
             description:
                 "Search complete TypeAgent action contracts with a required free-text query. Each candidate includes its exact identity, closed input types, effects, output and interaction requirements. Select a candidate and execute with concrete parameters; no separate contract/status/schema-list stage. Reuse a current contract in the same scope without repeating discovery. Discovery does not authorize execution. Clarify unresolved inputs or use natural language.",
             inputSchema: z
@@ -183,7 +183,7 @@ export function registerStructuredActionTools(
     server.registerTool(
         "typeagent-executeAction",
         {
-            title: "TypeAgent: Structured execution (executeAction)",
+            title: "TypeAgent: Structured execution",
             description:
                 "Execute one Copilot-selected typed action through Dispatcher using its exact schemaName/actionName, scopeId and concrete parameters. The service resolves the current definition and revalidates parameters, availability and confirmation policy before effects, independently of discovery ranking. No command strings or NL translation. Unknown/state-changing effects require USER confirmation; selection is not consent. Preserve all six result statuses and true nested results. For requires_interaction show the full prompt/form and ask the USER, then continue or cancel. Never invent/default/autoapprove a response or replay an uncertain call. Recording directives stay on processCommand with exact prefixes.",
             inputSchema: z
@@ -208,7 +208,7 @@ export function registerStructuredActionTools(
     server.registerTool(
         "typeagent-continueAction",
         {
-            title: "TypeAgent: Structured continuation (continueAction)",
+            title: "TypeAgent: Structured continuation",
             description:
                 "Submit the actual USER response to a pending TypeAgent prompt using its exact operationId, interactionId and scopeId. Show all choices/form fields to the user first. Never choose a default or approve on the user's behalf. A new requires_interaction needs another user response; pending interaction is not completion or a tool error.",
             inputSchema: z
@@ -234,7 +234,7 @@ export function registerStructuredActionTools(
     server.registerTool(
         "typeagent-cancelAction",
         {
-            title: "TypeAgent: Structured cancellation (cancelAction)",
+            title: "TypeAgent: Structured cancellation",
             description:
                 "Cancel a pending TypeAgent operation at the USER's request with its exact scopeId/operationId and interactionId when supplied. Remains available after switching out of Direct/MCP mode so pending work can be stopped. Return the authoritative service status; cancellation or disconnect is not proof effects were rolled back.",
             inputSchema: z

@@ -662,9 +662,9 @@ switching policy never authorizes an action or retries it.
 MCP tool titles identify the **actual route** in Copilot's tool cards:
 
 ```text
-TypeAgent: Natural-language delegation (processCommand)
-TypeAgent: Structured discovery (searchActions)
-TypeAgent: Structured execution (executeAction)
+TypeAgent: Natural-language delegation
+TypeAgent: Structured discovery
+TypeAgent: Structured execution
 ```
 
 These are tool metadata, not model reasoning or a predicted route. They apply
