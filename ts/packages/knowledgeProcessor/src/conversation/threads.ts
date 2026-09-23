@@ -51,7 +51,8 @@ export async function createThreadIndexOnStorage(
     const textIndex = await storageProvider.createTextIndex<ThreadId>(
         {
             caseSensitive: false,
-            semanticIndex: settings?.semanticIndex ?? true,
+            semanticIndex:
+                settings === undefined ? true : settings.semanticIndex,
             concurrency: 1,
             embeddingModel: settings?.embeddingModel,
         },

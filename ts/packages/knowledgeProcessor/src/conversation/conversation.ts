@@ -73,7 +73,7 @@ export function createConversationSettings(
             caseSensitive: false,
             concurrency: 2,
             embeddingModel,
-            semanticIndex: embeddingModel !== undefined,
+            semanticIndex: true,
         },
     };
 }

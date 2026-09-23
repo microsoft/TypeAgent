@@ -11,6 +11,7 @@ import {
     addMessageToConversation,
 } from "../src/conversation/conversationManager.js";
 import {
+    ConversationSettings,
     createConversation,
     createConversationSettings,
 } from "../src/conversation/conversation.js";
@@ -38,6 +39,16 @@ const testEmbeddingModel: TextEmbeddingModel = {
     }),
 };
 
+function createNoEmbeddingSettings(): ConversationSettings {
+    return {
+        indexSettings: {
+            caseSensitive: false,
+            concurrency: 2,
+            semanticIndex: false,
+        },
+    };
+}
+
 describe("Conversation without embeddings", () => {
     beforeEach(async () => {
         await cleanDir(rootPath);
@@ -48,7 +59,7 @@ describe("Conversation without embeddings", () => {
     });
 
     test("does not create a semantic message index", async () => {
-        const settings = createConversationSettings();
+        const settings = createNoEmbeddingSettings();
 
         expect(settings.indexSettings.semanticIndex).toBe(false);
 
@@ -59,7 +70,7 @@ describe("Conversation without embeddings", () => {
     });
 
     test("stores messages and preserves exact lookup", async () => {
-        const settings = createConversationSettings();
+        const settings = createNoEmbeddingSettings();
         let conversation = await createConversation(settings, rootPath);
 
         await addMessageToConversation(
@@ -105,7 +116,7 @@ describe("Conversation without embeddings", () => {
     });
 
     test("keeps thread lookup available without semantic indexing", async () => {
-        const settings = createConversationSettings();
+        const settings = createNoEmbeddingSettings();
         const conversation = await createConversation(settings, rootPath);
         const threadIndex = await conversation.getThreadIndex();
         const thread = {
@@ -121,11 +132,46 @@ describe("Conversation without embeddings", () => {
         await threadIndex.add(thread);
 
         expect(await threadIndex.get(thread.description)).toEqual([thread]);
+        expect(await threadIndex.getNearest("Unrelated thread", 1)).toEqual([]);
         expect(
             fs.existsSync(
                 path.join(rootPath, "threads", "description", "embeddings"),
             ),
         ).toBe(false);
+    });
+
+    test("treats an omitted semantic flag as disabled when settings are provided", async () => {
+        const settings: ConversationSettings = {
+            indexSettings: {
+                caseSensitive: false,
+                concurrency: 2,
+            },
+        };
+        const conversation = await createConversation(settings, rootPath);
+        const threadIndex = await conversation.getThreadIndex();
+
+        await threadIndex.add({
+            type: "temporal",
+            description: "No implicit hosted embeddings",
+            timeRange: {
+                startDate: {
+                    date: { day: 1, month: 9, year: 2026 },
+                },
+            },
+        });
+
+        await expect(conversation.getMessageIndex()).resolves.toBeUndefined();
+        expect(
+            fs.existsSync(
+                path.join(rootPath, "threads", "description", "embeddings"),
+            ),
+        ).toBe(false);
+    });
+
+    test("preserves the default hosted embedding setting", () => {
+        const settings = createConversationSettings();
+
+        expect(settings.indexSettings.semanticIndex).toBe(true);
     });
 
     test("keeps semantic message indexing enabled with a model", async () => {
