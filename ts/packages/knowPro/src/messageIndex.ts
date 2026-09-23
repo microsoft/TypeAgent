@@ -30,6 +30,9 @@ export type MessageTextIndexSettings = {
 
 export interface IMessageTextIndexData {
     indexData?: ITextToTextLocationIndexData | undefined;
+    // Number of messages indexed. Absent in data serialized before ordinals
+    // were tracked independently of chunk positions.
+    messageCount?: number | undefined;
 }
 
 export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
@@ -52,6 +55,9 @@ export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
 
 export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     public textLocationIndex: TextToTextLocationIndex;
+    // Next unassigned message ordinal. Tracked independently of chunk
+    // positions because a message can index zero chunks.
+    private messageCount: number = 0;
 
     constructor(public settings: MessageTextIndexSettings) {
         this.textLocationIndex = new TextToTextLocationIndex(
@@ -64,10 +70,7 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
      * chunks, and each chunk is one entry in textLocationIndex.
      */
     public get size(): number {
-        const chunkCount = this.textLocationIndex.size;
-        return chunkCount > 0
-            ? this.textLocationIndex.get(chunkCount - 1).messageOrdinal + 1
-            : 0;
+        return this.messageCount;
     }
 
     /**
@@ -103,6 +106,7 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             }
             ++i;
         }
+        this.messageCount = baseMessageOrdinal + i;
         return this.textLocationIndex.addTextLocations(allChunks, eventHandler);
     }
 
@@ -201,6 +205,7 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     public serialize(): IMessageTextIndexData {
         return {
             indexData: this.textLocationIndex.serialize(),
+            messageCount: this.messageCount,
         };
     }
 
@@ -209,6 +214,15 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             this.textLocationIndex.clear();
             this.textLocationIndex.deserialize(data.indexData);
         }
+        // Older data has no messageCount; the last chunk's ordinal is the
+        // best available bound (undercounts only trailing messages that
+        // had no indexed chunks).
+        this.messageCount =
+            data.messageCount ??
+            (this.textLocationIndex.size > 0
+                ? this.textLocationIndex.get(this.textLocationIndex.size - 1)
+                      .messageOrdinal + 1
+                : 0);
     }
 
     // Since a message has multiple chunks, each of which is indexed individually, we can end up
