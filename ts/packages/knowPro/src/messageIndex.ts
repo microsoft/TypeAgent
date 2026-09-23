@@ -59,8 +59,15 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         );
     }
 
+    /**
+     * Number of messages in the index. A message can have several text
+     * chunks, and each chunk is one entry in textLocationIndex.
+     */
     public get size(): number {
-        return this.textLocationIndex.size;
+        const chunkCount = this.textLocationIndex.size;
+        return chunkCount > 0
+            ? this.textLocationIndex.get(chunkCount - 1).messageOrdinal + 1
+            : 0;
     }
 
     /**
@@ -123,11 +130,11 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         const scoredTextLocations =
             await this.textLocationIndex.lookupTextInSubset(
                 messageText,
-                ordinalsToSearch,
-                maxMatches,
+                this.getChunkPositions(ordinalsToSearch),
+                undefined,
                 thresholdScore,
             );
-        return this.toScoredMessageOrdinals(scoredTextLocations);
+        return this.toScoredMessageOrdinals(scoredTextLocations, maxMatches);
     }
 
     public generateEmbedding(text: string): Promise<NormalizedEmbedding> {
@@ -148,11 +155,16 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         thresholdScore?: number,
         predicate?: (messageOrdinal: MessageOrdinal) => boolean,
     ): ScoredMessageOrdinal[] {
+        // The text location index passes chunk positions to its predicate
+        const chunkPredicate = predicate
+            ? (chunkPos: number) =>
+                  predicate(this.textLocationIndex.get(chunkPos).messageOrdinal)
+            : undefined;
         const scoredTextLocations = this.textLocationIndex.lookupByEmbedding(
             textEmbedding,
             maxMatches,
             thresholdScore,
-            predicate,
+            chunkPredicate,
         );
         return this.toScoredMessageOrdinals(scoredTextLocations);
     }
@@ -166,11 +178,24 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         const scoredTextLocations =
             this.textLocationIndex.lookupInSubsetByEmbedding(
                 textEmbedding,
-                ordinalsToSearch,
-                maxMatches,
+                this.getChunkPositions(ordinalsToSearch),
+                undefined,
                 thresholdScore,
             );
-        return this.toScoredMessageOrdinals(scoredTextLocations);
+        return this.toScoredMessageOrdinals(scoredTextLocations, maxMatches);
+    }
+
+    // Subset lookups take message ordinals, but the embedding index is
+    // addressed by chunk position. Return every chunk position of those messages.
+    private getChunkPositions(messageOrdinals: MessageOrdinal[]): number[] {
+        const wanted = new Set(messageOrdinals);
+        const positions: number[] = [];
+        for (let pos = 0; pos < this.textLocationIndex.size; ++pos) {
+            if (wanted.has(this.textLocationIndex.get(pos).messageOrdinal)) {
+                positions.push(pos);
+            }
+        }
+        return positions;
     }
 
     public serialize(): IMessageTextIndexData {
@@ -189,12 +214,16 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     // Since a message has multiple chunks, each of which is indexed individually, we can end up
     // with a message matching multiple times. The message accumulator dedupes those and also
     // supports smoothing the scores if needed
+    // Subset lookups rank every chunk and apply maxMatches here, per message,
+    // so several chunks of one message cannot use up maxMatches.
     private toScoredMessageOrdinals(
         scoredLocations: ScoredTextLocation[],
+        maxMatches?: number,
     ): ScoredMessageOrdinal[] {
         const messageMatches = new MessageAccumulator();
         messageMatches.addMessagesFromLocations(scoredLocations);
-        return messageMatches.toScoredMessageOrdinals();
+        const scored = messageMatches.toScoredMessageOrdinals();
+        return maxMatches ? scored.slice(0, maxMatches) : scored;
     }
 }
 
