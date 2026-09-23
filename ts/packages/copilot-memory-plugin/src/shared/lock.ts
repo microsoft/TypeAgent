@@ -2,10 +2,11 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs/promises";
-import path from "node:path";
+import lockfile from "proper-lockfile";
 
 const LOCK_WAIT_MS = 120_000;
-const LOCK_POLL_MS = 50;
+const LOCK_STALE_MS = 10_000;
+const LOCK_POLL_MS = 500;
 
 function isErrno(error: unknown, code: string): boolean {
     return (
@@ -16,70 +17,46 @@ function isErrno(error: unknown, code: string): boolean {
     );
 }
 
-async function lockHolderDead(lockPath: string): Promise<boolean> {
-    let raw: string;
-    try {
-        raw = await fs.readFile(lockPath, "utf8");
-    } catch (error) {
-        return isErrno(error, "ENOENT");
-    }
-    const pid = Number(raw.trim());
-    if (!Number.isInteger(pid) || pid <= 0) {
-        return true;
-    }
-    try {
-        process.kill(pid, 0);
-        return false;
-    } catch (error) {
-        return !isErrno(error, "EPERM");
-    }
-}
-
-async function tryAcquire(lockPath: string): Promise<boolean> {
-    try {
-        const handle = await fs.open(lockPath, "wx");
-        try {
-            await handle.writeFile(String(process.pid));
-        } finally {
-            await handle.close();
-        }
-        return true;
-    } catch (error) {
-        if (!isErrno(error, "EEXIST")) {
-            throw error;
-        }
-        return false;
-    }
-}
-
 /**
  * Exclusive lock so hook and MCP processes do not interleave JSON saves.
- * A lock whose owning pid is gone is stolen.
+ * Uses proper-lockfile like the instance directory lock: acquisition is an
+ * atomic mkdir, a live holder keeps the lock fresh through an mtime
+ * heartbeat, and a dead holder's lock is broken only after it stays stale.
+ * Release removes only the lock this process acquired, so a waiter can
+ * never delete another owner's lock the way a manual unlink could.
  */
 export async function withMemoryLock<T>(
     dirPath: string,
     fn: () => Promise<T>,
 ): Promise<T> {
     await fs.mkdir(dirPath, { recursive: true });
-    const lockPath = path.join(dirPath, ".lock");
-    const started = Date.now();
-    while (!(await tryAcquire(lockPath))) {
-        if (await lockHolderDead(lockPath)) {
-            await fs.unlink(lockPath).catch((error: unknown) => {
-                if (!isErrno(error, "ENOENT")) {
-                    throw error;
-                }
-            });
-            continue;
+    let release: () => Promise<void>;
+    try {
+        release = await lockfile.lock(dirPath, {
+            stale: LOCK_STALE_MS,
+            retries: {
+                retries: Math.ceil(LOCK_WAIT_MS / LOCK_POLL_MS),
+                minTimeout: LOCK_POLL_MS,
+                maxTimeout: LOCK_POLL_MS,
+                factor: 1,
+            },
+            onCompromised: (error) => {
+                process.stderr.write(
+                    `[typeagent-memory] Memory lock at ${dirPath}.lock compromised: ${error}\n`,
+                );
+            },
+        });
+    } catch (error) {
+        if (isErrno(error, "ELOCKED")) {
+            throw new Error(
+                `Timed out waiting for memory lock at ${dirPath}.lock`,
+            );
         }
-        if (Date.now() - started > LOCK_WAIT_MS) {
-            throw new Error(`Timed out waiting for memory lock at ${lockPath}`);
-        }
-        await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_MS));
+        throw error;
     }
     try {
         return await fn();
     } finally {
-        await fs.unlink(lockPath).catch(() => undefined);
+        await release().catch(() => undefined);
     }
 }
