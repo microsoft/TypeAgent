@@ -28,7 +28,6 @@ function resolve({
         env,
         platform: "win32",
         pathCopilot,
-        exists: () => true,
         logger,
         probe,
     });
@@ -59,8 +58,8 @@ test("working PATH npm shim wins over a stale WinGet fallback", () => {
     assert.match(result.lines.join("\n"), /Selected Copilot CLI/);
 });
 
-test("COPILOT_CLI_PATH remains the highest-priority override", () => {
-    const override = String.raw`C:\custom\copilot.cmd`;
+test("extensionless COPILOT_CLI_PATH remains the highest-priority override", () => {
+    const override = String.raw`C:\custom\copilot`;
     const pathCandidate = String.raw`C:\path\copilot.cmd`;
     const result = resolve({
         env: { COPILOT_CLI_PATH: override },

@@ -307,7 +307,6 @@ export function resolveCopilotCli({
     env = process.env,
     platform = process.platform,
     pathCopilot,
-    exists = fs.existsSync,
     probe = (candidate) =>
         spawnCopilot(candidate, ["--version"], copilotVersionTimeoutMs),
 } = {}) {
@@ -324,14 +323,6 @@ export function resolveCopilotCli({
         );
         if (isVsCodeCopilotShimPath(candidate.path, env, platform)) {
             logger.write(`Rejected VS Code Copilot shim: ${candidate.path}`);
-            continue;
-        }
-        const isFilePath =
-            path.isAbsolute(candidate.path) || /[\\/]/.test(candidate.path);
-        if (isFilePath && !exists(candidate.path)) {
-            logger.write(
-                `Rejected missing Copilot CLI candidate: ${candidate.path}`,
-            );
             continue;
         }
 
