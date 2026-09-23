@@ -35,7 +35,10 @@ import {
     writeConfig,
     type Mode,
 } from "../shared/plugin-config.js";
-import { handleModeSetting } from "../shared/mode-command.js";
+import {
+    getModeDescription,
+    handleModeSetting,
+} from "../shared/mode-command.js";
 
 async function handleMacroCommand(
     input: HookInput,
@@ -129,7 +132,7 @@ function handleRunCommand(
 }
 
 function handleModeCommand(lower: string): HookOutput | undefined {
-    const match = lower.match(/^@typeagent\s+mode(?:\s+(.*))?$/);
+    const match = lower.match(/^@typeagent\s+mode(?:\s+(.*))?$/s);
     if (!match) return undefined;
     return {
         handled: true,
@@ -185,6 +188,7 @@ function handleStatusCommand(lower: string): HookOutput | undefined {
             "**TypeAgent Configuration**",
             "",
             `- Mode: **${getModeLabel()}**`,
+            `- Routing: ${getModeDescription()}`,
             `- TypeAgent PowerShell: **${powershellEnabled ? "on" : "off"}**`,
             `- Macro workspace tools: **${mode === "bypass" ? "disabled" : "available"}**`,
             `- Server: ws://${host}:${port}`,
@@ -194,8 +198,8 @@ function handleStatusCommand(lower: string): HookOutput | undefined {
             "**Commands:**",
             "- `@typeagent run <command>` — send command directly to TypeAgent",
             "- `@typeagent mode direct` — switch to direct mode",
-            "- `@typeagent mode mcp` — switch to MCP mode",
-            "- `@typeagent mode mcp mixed` — let Copilot choose delegation or orchestration",
+            "- `@typeagent mode mcp` — switch to MCP mode, preserving saved policy (default: delegate)",
+            "- `@typeagent mode mcp mixed` — delegate whole requests or use searchActions/executeAction for Copilot-selected steps",
             "- `@typeagent mode mcp delegate` — delegate user prompts to TypeAgent (default)",
             "- `@typeagent mode dev` — route registered PowerShell flows and recording directives",
             "- `@typeagent mode bypass` — disable TypeAgent routing",

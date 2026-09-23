@@ -7,7 +7,10 @@ import {
     getModeLabel,
     readConfig,
 } from "../shared/plugin-config.js";
-import { handleModeSetting } from "../shared/mode-command.js";
+import {
+    getModeDescription,
+    handleModeSetting,
+} from "../shared/mode-command.js";
 import { connectToAgentServer } from "../shared/typeagent-client.js";
 
 function statusText(): string {
@@ -17,6 +20,7 @@ function statusText(): string {
     return [
         "TypeAgent configuration",
         `Mode: ${getModeLabel()}`,
+        `Routing: ${getModeDescription()}`,
         `TypeAgent PowerShell: ${(config?.powershell?.enabled ?? true) ? "on" : "off"}`,
         `Server: ws://${host}:${port}`,
         `Config: ${getConfigPath()}`,
@@ -36,7 +40,7 @@ export function createExtensionCommands(
         {
             name: "typeagent-mode",
             description:
-                "Show or set TypeAgent mode: direct, mcp [delegate|mixed], dev, bypass",
+                "Show or set TypeAgent mode: direct, mcp [delegate|mixed], dev, bypass. MCP preserves saved policy; default delegate uses processCommand, mixed enables Copilot-selected discovery/direct routing.",
             handler: async ({ args }) => {
                 await log(handleModeSetting(args, "/typeagent-mode"));
             },

@@ -45,13 +45,22 @@ describe("mixed MCP routing", () => {
         else process.env.TYPEAGENT_MODE = originalMode;
     });
 
-    it("defaults to delegation and preserves existing prompt guidance", () => {
+    it("defaults to delegation without steering selected steps to structured calls", () => {
         expect(getMcpRouting()).toBe("delegate");
         handleModeSetting("mcp", "@typeagent mode");
         const output = handleMcpRedirect(input);
         expect(output.modifiedPrompt).toBe(input.prompt);
         expect(output.additionalContext).toContain(
             "You MUST call the typeagent-processCommand tool with the user's exact request",
+        );
+        expect(output.additionalContext).toContain(
+            "do not split it into Copilot-selected structured actions",
+        );
+        expect(output.additionalContext).not.toContain(
+            "typeagent-searchActions",
+        );
+        expect(output.additionalContext).not.toContain(
+            "typeagent-executeAction",
         );
     });
 
@@ -85,15 +94,20 @@ describe("mixed MCP routing", () => {
                         { ...input, prompt: `@typeagent mode ${args}`.trim() },
                         { direct },
                     );
+                    expect(output?.handled).toBe(true);
                     messages.push(output?.responseContent ?? "");
                 }
             };
             await run("MCP MIXED");
             await run("");
-            expect(messages).toEqual([
-                "TypeAgent mode switched to mcp (mixed).",
-                "TypeAgent mode: mcp (mixed)",
-            ]);
+            expect(messages[0]).toMatch(
+                /^TypeAgent mode switched to mcp \(mixed\)\./,
+            );
+            expect(messages[1]).toMatch(/^TypeAgent mode: mcp \(mixed\)/);
+            for (const message of messages) {
+                expect(message).toContain("Mixed policy:");
+                expect(message).toContain("searchActions/executeAction");
+            }
             await run("direct");
             expect(isMixedMcpMode()).toBe(false);
             await run("mcp");
@@ -115,6 +129,9 @@ describe("mixed MCP routing", () => {
             });
             await run("mcp delegate");
             expect(getModeLabel()).toBe("mcp (delegate)");
+            expect(messages[messages.length - 1]).toContain(
+                "Delegate policy (default):",
+            );
             expect(direct).not.toHaveBeenCalled();
         },
     );
@@ -125,6 +142,8 @@ describe("mixed MCP routing", () => {
         "direct mixed",
         "mixed",
         "dev delegate",
+        "mcp mixed\nextra",
+        "mcp\ninvalid",
     ])(
         "rejects invalid mode arguments without delegating or changing config: %s",
         async (args) => {
@@ -135,6 +154,15 @@ describe("mixed MCP routing", () => {
                 { direct },
             );
             expect(output?.responseContent).toContain("Usage:");
+            expect(output?.handled).toBe(true);
+            const messages: string[] = [];
+            const command = createExtensionCommands(async (message) => {
+                messages.push(message);
+            }).find(({ name }) => name === "typeagent-mode")!;
+            await command.handler({ args } as never);
+            expect(messages).toEqual([
+                "Usage: /typeagent-mode direct|mcp [delegate|mixed]|dev|bypass",
+            ]);
             expect(readConfig()).toEqual({ mode: "mcp", mcpRouting: "mixed" });
             expect(direct).not.toHaveBeenCalled();
         },
@@ -142,34 +170,69 @@ describe("mixed MCP routing", () => {
 
     it("reports effective mode when an environment override prevents activation", () => {
         process.env.TYPEAGENT_MODE = "direct";
-        expect(handleModeSetting("mcp mixed", "@typeagent mode")).toBe(
+        const message = handleModeSetting("mcp mixed", "@typeagent mode");
+        expect(message).toContain(
             "Saved TypeAgent mode: mcp (mixed). Effective mode: direct (TYPEAGENT_MODE override).",
+        );
+        expect(message).not.toContain("Mixed policy:");
+        expect(message).toContain(
+            "The hook handles user natural language directly.",
         );
         expect(isMixedMcpMode()).toBe(false);
         delete process.env.TYPEAGENT_MODE;
         expect(isMixedMcpMode()).toBe(true);
     });
 
-    it("shows the policy and shared scope in both status surfaces", async () => {
-        writeConfig({ mode: "mcp", mcpRouting: "mixed" });
-        const output = await handleSlashCommand({
-            ...input,
-            prompt: "@typeagent status",
-        });
-        expect(output?.responseContent).toContain("mcp (mixed)");
-        expect(output?.responseContent).toContain("shared by sessions");
-        const log = jest.fn(async (_message: string) => {});
-        const command = createExtensionCommands(log).find(
-            ({ name }) => name === "typeagent-status",
-        )!;
-        await command.handler({} as never);
-        expect(log).toHaveBeenCalledWith(
-            expect.stringContaining("mcp (mixed)"),
-        );
-        expect(log).toHaveBeenCalledWith(
-            expect.stringContaining("shared by sessions"),
-        );
-    });
+    it.each(["delegate", "mixed"] as const)(
+        "shows %s routing and shared scope in both status surfaces",
+        async (mcpRouting) => {
+            writeConfig({ mode: "mcp", mcpRouting });
+            const output = await handleSlashCommand({
+                ...input,
+                prompt: "@typeagent status",
+            });
+            expect(output?.responseContent).toContain(`mcp (${mcpRouting})`);
+            expect(output?.responseContent).toContain("shared by sessions");
+            const description =
+                mcpRouting === "mixed"
+                    ? "Mixed policy: Copilot chooses"
+                    : "Delegate policy (default): delegate the user's exact request through processCommand.";
+            expect(output?.responseContent).toContain(description);
+            expect(output?.responseContent).toContain(
+                "preserving saved policy (default: delegate)",
+            );
+            const log = jest.fn(async (_message: string) => {});
+            const command = createExtensionCommands(log).find(
+                ({ name }) => name === "typeagent-status",
+            )!;
+            await command.handler({} as never);
+            expect(log).toHaveBeenCalledWith(
+                expect.stringContaining(`mcp (${mcpRouting})`),
+            );
+            expect(log).toHaveBeenCalledWith(
+                expect.stringContaining(description),
+            );
+            expect(log).toHaveBeenCalledWith(
+                expect.stringContaining("shared by sessions"),
+            );
+        },
+    );
+
+    it.each(["direct", "mcp", "dev", "bypass"] as const)(
+        "consumes multiline mode arguments locally from %s mode",
+        async (mode) => {
+            writeConfig({ mode });
+            const direct = jest.fn(async () => ({}));
+            const output = await handleSlashCommand(
+                { ...input, prompt: " \t@TYPEAGENT mode MCP\nMIXED \n" },
+                { direct },
+            );
+            expect(output?.handled).toBe(true);
+            expect(output?.responseContent).toContain("mcp (mixed)");
+            expect(readConfig()).toEqual({ mode: "mcp", mcpRouting: "mixed" });
+            expect(direct).not.toHaveBeenCalled();
+        },
+    );
 
     it.each([
         "Show my lists",
@@ -213,6 +276,12 @@ describe("mixed MCP routing", () => {
             expect(output.additionalContext).toContain(
                 "SPECIAL PREFIX DETECTED",
             );
+            expect(output.additionalContext).not.toContain(
+                "typeagent-searchActions",
+            );
+            expect(output.additionalContext).not.toContain(
+                "typeagent-executeAction",
+            );
         },
     );
 
@@ -230,14 +299,16 @@ describe("mixed MCP routing", () => {
         expect(
             getPowerShellHookOutput("powershell", args)?.additionalContext,
         ).toContain("typeagent-processCommand instead of direct PowerShell");
-        writeConfig({
-            mode: "mcp",
-            mcpRouting: "mixed",
-            powershell: { enabled: false },
-        });
-        expect(getPowerShellHookOutput("powershell", args)).toBeUndefined();
-        expect(handleMcpRedirect(input).additionalContext).not.toContain(
-            "[TypeAgent PowerShell reminder]",
-        );
+        for (const mcpRouting of ["delegate", "mixed"] as const) {
+            writeConfig({
+                mode: "mcp",
+                mcpRouting,
+                powershell: { enabled: false },
+            });
+            expect(getPowerShellHookOutput("powershell", args)).toBeUndefined();
+            expect(handleMcpRedirect(input).additionalContext).not.toContain(
+                "[TypeAgent PowerShell reminder]",
+            );
+        }
     });
 });

@@ -151,12 +151,16 @@ There are two intentional entry paths:
   this path for user requests delegated intact to TypeAgent, while allowing
   Copilot to own broader tasks. Preserve `learn:`, `dev:`,
   `record:`, and `dev: learn:` exactly. Do not replace them with typed calls.
-- **Copilot-selected actions with concrete inputs:** fixed MCP tools call the
+- **Copilot-selected actions with concrete inputs (MCP mixed routing, or Direct's
+  structured bridge):** fixed MCP tools call the
   real shared Dispatcher structured-action interface. They do not build command
   strings, parse contracts, hash schemas, determine effect policy, or translate
   natural language locally.
 
-The normal sequence is **search complete action contracts -> execute**.
+The structured sequence is **search complete action contracts -> execute**,
+not the default MCP delegate routing policy. In MCP mode, only mixed policy
+steers Copilot-selected steps to this path. Structured tools remain available
+under delegate policy; tool availability is not a routing instruction.
 Search requires one free-text `query` and returns `protocolVersion`, `scopeId`
 and `actions`: complete contracts with exact identities, closed TypeScript input
 schemas including referenced types, policy, outputs and interactions. The shared
@@ -588,13 +592,23 @@ and registration stages only that self-contained runtime without
 
 ### Updating after a code change
 
-The global install is a **snapshot copy**, not a live reference. After editing
-the plugin, rebuild and refresh the global copy:
+The global install is a **snapshot copy**, not a live reference. Switching
+repository branches does not update it. After editing the plugin, rebuild with
+its dependencies and refresh the global copy from `ts`:
 
 ```powershell
-pnpm run build       # re-bundle
-pnpm run register    # stages and installs a fresh snapshot
+pnpm exec fluid-build '^@typeagent/copilot-plugin$' -t build --dep
+pnpm --filter @typeagent/copilot-plugin run register
+copilot plugin list
 ```
+
+Start a fresh Copilot session after installation to load the updated extension
+and MCP tools. Existing sessions are not guaranteed to reload those assets.
+If `@typeagent mode mcp mixed` prints "Processing command..." or reaches
+TypeAgent's natural-language dispatcher, check for an old installed snapshot:
+the current plugin consumes valid and invalid mode arguments locally, without
+an agent-server connection. A downstream translation error is not evidence
+that mode selection requires natural-language dispatch.
 
 > For rapid local development with live edits, prefer `pnpm copilot`
 > (`--plugin-dir`), which runs your working directory directly and skips the
@@ -624,7 +638,10 @@ above; this does not reinterpret or alter the user prompt hook.
 MCP mode has two routing policies. **Delegate** is the backward-compatible
 default: the hook instructs Copilot to call `typeagent-processCommand` with the
 original request and present the complete result. TypeAgent's MCP server streams
-progress notifications to the CLI timeline.
+progress notifications to the CLI timeline. Delegate policy does not steer
+subsequent Copilot-selected steps to discovery/direct calls; that guidance
+belongs only to mixed policy. Both policies retain the same structured tools
+and permission checks.
 
 **Mixed** lets Copilot judge whether to delegate the request intact or own the
 task. It does not classify prompts deterministically or force discovery first:
@@ -647,7 +664,9 @@ Native extension commands `/typeagent-mode mcp mixed`,
 `/typeagent-mode mcp delegate`, and `/typeagent-status` expose the same settings.
 Plain `mode mcp` preserves the saved policy; absent policy defaults to delegate.
 Other modes ignore the policy but preserve it for the next switch to MCP.
-Commands take effect on subsequent prompts without restarting. Settings persist
+Commands take effect on subsequent prompts without restarting an up-to-date
+plugin; installing updated plugin assets requires a fresh Copilot session.
+Settings persist
 in the plugin config and are **shared by sessions using that config**, not
 session-local. `TYPEAGENT_MODE` still overrides the saved top-level mode; commands
 report when that prevents the selected mode from taking effect.

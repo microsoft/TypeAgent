@@ -30,7 +30,10 @@ saved policy. `@typeagent mode`, `@typeagent status`, and `/typeagent-status`
 report the effective policy. Mixed mode is not search-first: user requests
 such as "show my lists" still delegate intact via `processCommand`. Copilot
 uses `searchActions`/`executeAction` for TypeAgent steps it selects while
-coordinating broader work. Recording prefixes always preserve natural-language
+coordinating broader work **only under MCP mixed routing**, not the default
+delegate policy. Structured tools remain available in both policies; switching
+policy changes routing guidance, not the tool catalog or permissions.
+Recording prefixes always preserve natural-language
 delegation. MCP tool-card titles distinguish natural-language delegation from
 structured discovery/execution in both policies, without relying on model
 narration or claiming action success.
@@ -54,7 +57,10 @@ Write the configuration to `${PLUGIN_DATA}/config.json`:
 ```
 
 Mode and MCP routing policy changes take effect on subsequent prompts without
-restarting. These settings persist and are shared by sessions using this config.
+restarting an up-to-date plugin. After updating the installed plugin snapshot,
+start a fresh Copilot session to load its extension and MCP tools; switching
+repository branches alone does not update that snapshot.
+These settings persist and are shared by sessions using this config.
 Restart Copilot CLI after changing connection settings or environment variables.
 They can also override temporarily with environment variables:
 
