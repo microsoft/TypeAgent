@@ -9,6 +9,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const scriptPath = fileURLToPath(import.meta.url);
+export const copilotVersionTimeoutMs = 10_000;
 
 function parseArgs(argv) {
     const opts = {
@@ -25,7 +26,7 @@ function parseArgs(argv) {
         pluginVersion: "",
         uninstall: false,
         logPath: "",
-        copilotPath: process.env.COPILOT_CLI_PATH || "copilot",
+        copilotPath: "",
     };
 
     for (let i = 2; i < argv.length; i++) {
@@ -142,7 +143,10 @@ function resolveWindowsLauncher(copilotPath) {
         return directCandidate;
     }
 
-    const where = spawnSync("where.exe", [copilotPath], { encoding: "utf8" });
+    const where = spawnSync("where.exe", [copilotPath], {
+        encoding: "utf8",
+        timeout: copilotVersionTimeoutMs,
+    });
     if (where.status !== 0) return copilotPath;
     for (const line of where.stdout.split(/\r?\n/)) {
         const candidate = line.trim();
@@ -151,7 +155,7 @@ function resolveWindowsLauncher(copilotPath) {
     return copilotPath;
 }
 
-function spawnCopilot(copilotPath, args) {
+function spawnCopilot(copilotPath, args, timeout) {
     const launcherPath =
         process.platform === "win32"
             ? resolveWindowsLauncher(copilotPath)
@@ -168,6 +172,7 @@ function spawnCopilot(copilotPath, args) {
             {
                 encoding: "utf8",
                 shell: false,
+                timeout,
                 windowsVerbatimArguments: true,
             },
         );
@@ -186,13 +191,173 @@ function spawnCopilot(copilotPath, args) {
             {
                 encoding: "utf8",
                 shell: false,
+                timeout,
             },
         );
     }
     return spawnSync(launcherPath, args, {
         encoding: "utf8",
         shell: false,
+        timeout,
     });
+}
+
+function discoverPathCopilots(platform = process.platform, env = process.env) {
+    const command = platform === "win32" ? "where.exe" : "which";
+    const args = platform === "win32" ? ["copilot"] : ["-a", "copilot"];
+    const result = spawnSync(command, args, {
+        encoding: "utf8",
+        env,
+        shell: false,
+        timeout: copilotVersionTimeoutMs,
+    });
+    if (result.status !== 0) return [];
+    return result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+}
+
+export function isVsCodeCopilotShimPath(
+    candidate,
+    env = process.env,
+    platform = process.platform,
+) {
+    const pathApi = platform === "win32" ? path.win32 : path;
+    const shimRoot = env.APPDATA
+        ? pathApi.join(
+              env.APPDATA,
+              "Code",
+              "User",
+              "globalStorage",
+              "github.copilot-chat",
+              "copilotCli",
+          )
+        : "";
+    const paths = [candidate, shimRoot].map((value) => {
+        try {
+            const resolved =
+                platform === process.platform
+                    ? fs.realpathSync(value)
+                    : pathApi.resolve(value);
+            return platform === "win32" ? resolved.toLowerCase() : resolved;
+        } catch {
+            const resolved = pathApi.resolve(value);
+            return platform === "win32" ? resolved.toLowerCase() : resolved;
+        }
+    });
+    return (
+        shimRoot !== "" &&
+        (paths[0] === paths[1] ||
+            paths[0].startsWith(`${paths[1]}${pathApi.sep}`))
+    );
+}
+
+export function copilotCandidates({
+    copilotPath = "",
+    env = process.env,
+    platform = process.platform,
+    pathCopilot = discoverPathCopilots(platform, env),
+} = {}) {
+    const candidates = [];
+    const add = (source, candidate) => {
+        if (candidate?.trim()) candidates.push({ source, path: candidate });
+    };
+    const addAll = (source, candidateOrCandidates) => {
+        for (const candidate of Array.isArray(candidateOrCandidates)
+            ? candidateOrCandidates
+            : [candidateOrCandidates]) {
+            add(source, candidate);
+        }
+    };
+
+    add("COPILOT_CLI_PATH", env.COPILOT_CLI_PATH);
+    add("supplied PATH candidate", copilotPath);
+    addAll("current PATH", pathCopilot);
+    if (platform === "win32") {
+        if (env.APPDATA) {
+            add(
+                "npm fallback",
+                path.win32.join(env.APPDATA, "npm", "copilot.cmd"),
+            );
+            add(
+                "npm fallback",
+                path.win32.join(env.APPDATA, "npm", "copilot.ps1"),
+            );
+        }
+        if (env.LOCALAPPDATA) {
+            add(
+                "WinGet fallback",
+                path.win32.join(
+                    env.LOCALAPPDATA,
+                    "Microsoft",
+                    "WinGet",
+                    "Links",
+                    "copilot.exe",
+                ),
+            );
+        }
+    }
+
+    const seen = new Set();
+    return candidates.filter(({ path: candidate }) => {
+        const key = platform === "win32" ? candidate.toLowerCase() : candidate;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+export function resolveCopilotCli({
+    copilotPath = "",
+    logger,
+    env = process.env,
+    platform = process.platform,
+    pathCopilot,
+    probe = (candidate) =>
+        spawnCopilot(candidate, ["--version"], copilotVersionTimeoutMs),
+} = {}) {
+    const candidates = copilotCandidates({
+        copilotPath,
+        env,
+        platform,
+        ...(pathCopilot === undefined ? {} : { pathCopilot }),
+    });
+
+    for (const candidate of candidates) {
+        logger.write(
+            `Considering Copilot CLI (${candidate.source}): ${candidate.path}`,
+        );
+        if (isVsCodeCopilotShimPath(candidate.path, env, platform)) {
+            logger.write(`Rejected VS Code Copilot shim: ${candidate.path}`);
+            continue;
+        }
+
+        const result = probe(candidate.path);
+        if (result.error?.code === "ETIMEDOUT") {
+            logger.write(
+                `Copilot CLI validation timed out after ${copilotVersionTimeoutMs} ms: ${candidate.path}`,
+            );
+            continue;
+        }
+        if (result.error) {
+            logger.write(
+                `Copilot CLI validation failed for ${candidate.path}: ${result.error.message}`,
+            );
+            continue;
+        }
+        if (result.status !== 0) {
+            logger.write(
+                `Copilot CLI validation failed with exit code ${result.status}: ${candidate.path}`,
+            );
+            continue;
+        }
+
+        logger.write(`Selected Copilot CLI: ${candidate.path}`);
+        return candidate.path;
+    }
+
+    throw new Error("No working GitHub Copilot CLI was found.");
 }
 
 function runCopilot(copilotPath, args, logger, allowFailure = false) {
@@ -469,10 +634,6 @@ function migrateMarketplaceRegistration(opts, logger) {
     return false;
 }
 
-function ensureCopilotAvailable(copilotPath, logger) {
-    runCopilot(copilotPath, ["--version"], logger);
-}
-
 function installPlugin(opts, logger) {
     const { pluginVersion, pluginDescription } = resolvePluginMetadata(opts);
     logger.write(`Plugin source ready: ${opts.pluginSourceDir}`);
@@ -591,7 +752,10 @@ function main() {
     logger.write(`MarketplaceRoot: ${opts.marketplaceRoot}`);
     logger.write(`Uninstall: ${opts.uninstall}`);
 
-    ensureCopilotAvailable(opts.copilotPath, logger);
+    opts.copilotPath = resolveCopilotCli({
+        copilotPath: opts.copilotPath,
+        logger,
+    });
 
     if (opts.uninstall) {
         uninstallPlugin(opts, logger);
