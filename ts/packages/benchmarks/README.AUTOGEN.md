@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=bd4a9814bc1fe778d16c309980a7de7452c9e895cf33f9be681ca0358ac5f09b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=902d358a098d6c3c1da9be2ce05ed0278d56fe9e37b938c57f971041b40f62ea -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -47,14 +47,14 @@ _None._
 - [./src/index.ts](./src/index.ts)
 - [./src/translationBench/index.ts](./src/translationBench/index.ts)
 - [./src/translationBench/policy/index.ts](./src/translationBench/policy/index.ts)
+- [./src/translationBench/public_datasets/Seal-Tools/index.ts](./src/translationBench/public_datasets/Seal-Tools/index.ts)
+- [./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts](./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts)
 - [./src/translationBench/runner/index.ts](./src/translationBench/runner/index.ts)
 - [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
 - [./src/core/fileJson.ts](./src/core/fileJson.ts)
-- [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
-- [./src/core/paths.ts](./src/core/paths.ts)
-- _…and 74 more under `./src/`._
+- _…and 79 more under `./src/`._
 
 ### Environment variables
 
@@ -66,6 +66,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `ad830c7ffaf05d70ab788d53fa1b904da349391a` on `2026-09-22T23:17:26.350Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `86eebaeec19db822f5de0581539ec67c963fcd96` on `2026-09-23T01:45:36.754Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
