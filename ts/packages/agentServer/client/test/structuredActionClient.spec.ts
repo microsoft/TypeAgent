@@ -51,6 +51,89 @@ function fakeConnection() {
 }
 
 describe("private structured connector binding lifecycle", () => {
+    it("resolves context once and pins its explicit ID across concurrent calls and reconnects", async () => {
+        const fake = fakeConnection();
+        const resolveConversationId = jest.fn(async () => "nl-context");
+        let disconnect: (() => void) | undefined;
+        const client = new StructuredActionClient({
+            resolveConversationId,
+            connect: async (callback) => {
+                disconnect = callback;
+                return fake.connection;
+            },
+        });
+        try {
+            await Promise.all([
+                client.searchActions({ query: "first" }),
+                client.searchActions({ query: "second" }),
+            ]);
+            disconnect!();
+            await client.searchActions({ query: "reconnected" });
+            expect(resolveConversationId).toHaveBeenCalledTimes(1);
+            expect(resolveConversationId).toHaveBeenCalledWith(fake.connection);
+            expect(fake.createConversation).not.toHaveBeenCalled();
+            expect(
+                fake.joinConversation.mock.calls.map((call) => call[1]),
+            ).toEqual([
+                { conversationId: "nl-context", structuredActions: {} },
+                {
+                    conversationId: "nl-context",
+                    structuredActions: {
+                        resumeToken: "private-test-capability",
+                    },
+                },
+            ]);
+        } finally {
+            await client.close();
+        }
+    });
+
+    it("prefers explicit configuration over context resolution", async () => {
+        const fake = fakeConnection();
+        const resolveConversationId = jest.fn(async () => "ignored");
+        const client = new StructuredActionClient({
+            conversationId: "configured",
+            resolveConversationId,
+            connect: async () => fake.connection,
+        });
+        try {
+            await client.searchActions({ query: "read" });
+            expect(resolveConversationId).not.toHaveBeenCalled();
+            expect(client.binding.conversationId).toBe("configured");
+            expect(fake.createConversation).not.toHaveBeenCalled();
+        } finally {
+            await client.close();
+        }
+    });
+
+    it.each(["throws", "empty"] as const)(
+        "does not replace failed context resolution (%s) with an empty conversation",
+        async (failure) => {
+            const fake = fakeConnection();
+            const client = new StructuredActionClient({
+                connect: async () => fake.connection,
+                resolveConversationId: async () => {
+                    if (failure === "throws")
+                        throw new Error("Unavailable context");
+                    return "";
+                },
+            });
+            try {
+                await expect(
+                    client.searchActions({ query: "read" }),
+                ).rejects.toMatchObject({
+                    dispatched: false,
+                    reason: "connection_failed",
+                });
+                expect(fake.createConversation).not.toHaveBeenCalled();
+                expect(fake.joinConversation).not.toHaveBeenCalled();
+                expect(fake.close).toHaveBeenCalledTimes(1);
+            } finally {
+                await client.close();
+            }
+        },
+    );
+
     it("uses a supplied name once and never defaults an out-of-band question", async () => {
         const fake = fakeConnection();
         const createConversationName = jest.fn(

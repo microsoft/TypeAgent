@@ -72,8 +72,10 @@ strings. Ordinary natural language, including legacy setup choices, is unchanged
 
 The fixed MCP tools are available in both Direct and MCP modes. Direct's
 ordinary user-prompt hook remains natural-language; the persistent MCP process
-is its structured bridge. Binding is process-local and explicitly joined by
-conversation ID. Public IDs/scope metadata are not secrets or credentials;
+is its structured bridge. Mixed policy uses the same conversation data for
+natural-language and structured operations; Direct/delegate retain a dedicated
+structured conversation unless configured. Structured ownership is process-local
+and explicitly joined by conversation ID. Public IDs/scope metadata are not secrets or credentials;
 resume capability is private volatile connector state, never something to ask
 for, print, save, or include in model context. A fresh process cannot resume
 another owner's interactions even on the same conversation.

@@ -82,6 +82,12 @@ export function isMixedMcpMode(): boolean {
     return getMode() === "mcp" && getMcpRouting() === "mixed";
 }
 
+export function getConversationId(): string | undefined {
+    return (
+        process.env.TYPEAGENT_CONVERSATION_ID ?? readConfig()?.conversationId
+    );
+}
+
 export function getModeLabel(): string {
     const mode = getMode();
     return mode === "mcp" ? `mcp (${getMcpRouting()})` : mode;

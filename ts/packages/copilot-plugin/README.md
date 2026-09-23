@@ -274,18 +274,28 @@ pending prompts/unsupported interaction rather than pretending completion.
 
 ### Explicit binding, reconnect, and trust
 
-Stdio provides no intrinsic Copilot session identity. Each structured MCP
-process finds/creates a dedicated named conversation with a random process-local
-name, then explicitly joins its **concrete conversation ID** with
-`structuredActions: {}`. All four operations share that one owner and concurrent
+Stdio provides no intrinsic Copilot session identity. In MCP mixed policy,
+the structured client first resolves the same default conversation used by
+natural-language delegation, leaves that ordinary connection's conversation,
+then explicitly joins its **concrete conversation ID** with
+`structuredActions: {}`. This lets both routes see the same lists and other
+conversation-local data without sharing structured approval or resume authority.
+Outside mixed policy, an unconfigured structured MCP process still finds/creates
+a dedicated named conversation with a random process-local name.
+All four operations share that one owner and concurrent
 connection attempts are singleflight. This does not implicitly share context
-with the ordinary Direct NL hook's conversation.
+with the ordinary Direct NL hook's conversation. Context is selected on the
+first structured call; a bound client keeps its concrete ID across policy
+switches and reconnects. Start a fresh Copilot session when changing an already
+bound client's conversation selection.
 
 To intentionally use a known conversation, set `TYPEAGENT_CONVERSATION_ID`, or
 set public `conversationId` in the plugin `config.json`. Environment wins over
 config. The ID must exist: an explicit failed join does not silently fall back to
 another conversation. An explicit ID selects context, **not** a prior owner's
-authority. Two fresh processes using the same public ID get isolated owners.
+authority. In mixed policy this setting also selects the natural-language
+conversation, so the two routes stay aligned. Two fresh processes using the
+same public ID get isolated owners.
 
 The server's structured resume token is retained only in private volatile
 connector memory. It is never logged, printed, persisted, put in config, or sent

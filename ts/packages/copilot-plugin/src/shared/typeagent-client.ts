@@ -14,6 +14,7 @@ import {
     type IAgentMessage,
 } from "@typeagent/agent-server-client";
 import { randomUUID } from "node:crypto";
+import { getConversationId, isMixedMcpMode } from "./plugin-config.js";
 import type { DisplayAppendMode } from "@typeagent/agent-sdk";
 import {
     QueueFullError,
@@ -120,9 +121,11 @@ export function createClientIO(callbacks: DisplayCallbacks): ClientIO {
 export async function connectToTypeAgent(
     clientIO: ClientIO,
 ): Promise<Dispatcher> {
+    const conversationId = isMixedMcpMode() ? getConversationId() : undefined;
     return connectDispatcher(clientIO, TYPEAGENT_URL, {
         filter: true,
         clientType: "shell",
+        ...(conversationId === undefined ? {} : { conversationId }),
     });
 }
 

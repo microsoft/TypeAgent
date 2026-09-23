@@ -20,6 +20,10 @@ import { findOrCreateNamedConversation } from "./conversation/lifecycle.js";
 export interface StructuredActionClientOptions {
     url?: string;
     conversationId?: string;
+    /** Resolve caller context before the first structured join. Undefined keeps a dedicated conversation. */
+    resolveConversationId?: (
+        connection: AgentServerConnection,
+    ) => Promise<string | undefined>;
     clientIO?: ClientIO;
     /** Called once when this client needs its own named conversation. */
     createConversationName?: () => string;
@@ -146,6 +150,7 @@ export class StructuredActionClient {
     #generation = 0;
     #name: string | undefined;
     readonly #createConversationName: () => string;
+    readonly #resolveConversationId: StructuredActionClientOptions["resolveConversationId"];
     readonly #clientIO: ClientIO;
     readonly #connect: NonNullable<StructuredActionClientOptions["connect"]>;
 
@@ -158,6 +163,7 @@ export class StructuredActionClient {
             throw new Error("TypeAgent conversationId must not be empty.");
         }
         this.#conversationId = configured;
+        this.#resolveConversationId = options.resolveConversationId;
         this.#clientIO = options.clientIO ?? defaultClientIO();
         this.#createConversationName =
             options.createConversationName ??
@@ -280,14 +286,7 @@ export class StructuredActionClient {
                     this.#connection = undefined;
                 }
             });
-            if (this.#conversationId === undefined) {
-                this.#name ??= this.#createConversationName();
-                const conversation = await findOrCreateNamedConversation(
-                    connection,
-                    this.#name,
-                );
-                this.#conversationId = conversation.conversationId;
-            }
+            this.#conversationId ??= await this.selectConversation(connection);
             if (this.#closed)
                 throw new StructuredActionClientError(false, "client_closed");
             this.#joinAttempted = true;
@@ -331,6 +330,24 @@ export class StructuredActionClient {
                     : "connection_failed",
             );
         }
+    }
+
+    private async selectConversation(
+        connection: AgentServerConnection,
+    ): Promise<string> {
+        const resolved = await this.#resolveConversationId?.(connection);
+        if (resolved !== undefined) {
+            if (typeof resolved !== "string" || !resolved.trim()) {
+                throw new Error("TypeAgent conversationId must not be empty.");
+            }
+            return resolved;
+        }
+        this.#name ??= this.#createConversationName();
+        const conversation = await findOrCreateNamedConversation(
+            connection,
+            this.#name,
+        );
+        return conversation.conversationId;
     }
 
     /** Disconnect without claiming pending work was cancelled or rolled back. */
