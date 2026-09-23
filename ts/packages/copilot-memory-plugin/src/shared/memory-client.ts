@@ -26,6 +26,7 @@ type StoreResult<T> = {
 };
 
 export interface MemoryStore {
+    readonly messages: { readonly length: number };
     queueAddMessage(
         message: ConversationMessage,
         completionCallback?: (error?: unknown) => void,
@@ -142,15 +143,21 @@ async function queueMessage(
 /**
  * Implicit capture uses `queueAddMessage`, matching the dispatcher. If
  * knowledge extraction fails, the turn text is still stored so a later
- * recall can search it.
+ * recall can search it. The retry is only safe when the first call failed
+ * before appending: addMessage appends the message before indexing and
+ * autosave, so retrying after those steps would persist a duplicate.
  */
 export async function captureQueued(
     store: MemoryStore,
     message: ConversationMessage,
 ): Promise<void> {
+    const before = store.messages.length;
     const failure = await queueMessage(store, message, true);
     if (!failure) {
         return;
+    }
+    if (store.messages.length > before) {
+        throw new Error(failure);
     }
     log(`Knowledge extraction failed (${failure}); storing turn text only.`);
     const retry = await queueMessage(store, message, false);
@@ -163,9 +170,15 @@ export async function captureDirect(
     store: MemoryStore,
     message: ConversationMessage,
 ): Promise<void> {
+    const before = store.messages.length;
     const extracted = await store.addMessage(message, true, false);
     if (extracted.success) {
         return;
+    }
+    if (store.messages.length > before) {
+        // The append already happened, so the failure was indexing or
+        // autosave. Retrying would write a second copy of the message.
+        throw new Error(extracted.message ?? "Failed to store memory.");
     }
     log(
         `Knowledge extraction failed (${extracted.message ?? "unknown"}); storing fact text only.`,
@@ -194,15 +207,28 @@ export function createMemoryClient(store: MemoryStore): MemoryClient {
     };
 }
 
+const PROVIDER_ENV_VARS = [
+    "TYPEAGENT_MODEL_PROVIDER",
+    "TYPEAGENT_EMBEDDING_PROVIDER",
+] as const;
+
 function ensureModelConfig(): void {
-    // Copilot does not load TypeAgent config. Without this, extraction and
-    // recall throw Missing ApiSetting before any model request.
-    // The machine default provider is Copilot itself. Using it inside a
-    // Copilot hook launches another Copilot process and deadlocks the hook.
-    if (process.env.COPILOT_PLUGIN_ROOT || process.env.PLUGIN_ROOT) {
-        process.env.TYPEAGENT_MODEL_PROVIDER ??= "azure";
-    }
+    // Copilot does not load TypeAgent config, so load it before anything
+    // reads provider or endpoint settings. Config values only fill env vars
+    // that are unset, so this must run first for user providers to win.
     loadConfigSync();
+    if (!process.env.COPILOT_PLUGIN_ROOT && !process.env.PLUGIN_ROOT) {
+        return;
+    }
+    // A copilot provider inside a Copilot hook launches another Copilot
+    // process and deadlocks the hook. Reject it so resolution falls through
+    // to a configured non-Copilot provider or a clear missing-settings
+    // error. Other configured providers (openai, ollama, azure) are kept.
+    for (const key of PROVIDER_ENV_VARS) {
+        if (process.env[key]?.trim().toLowerCase() === "copilot") {
+            delete process.env[key];
+        }
+    }
 }
 
 async function openStore(paths: MemoryPaths): Promise<ConversationMemory> {
