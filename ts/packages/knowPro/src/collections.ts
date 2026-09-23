@@ -501,9 +501,11 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
                 relatedScore: 0,
             };
             this.setMatch(match);
-        } else if (score > match.score) {
-            match.score = score;
+        } else {
             match.hitCount++;
+            if (score > match.score) {
+                match.score = score;
+            }
         }
     }
 
