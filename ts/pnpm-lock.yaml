@@ -6017,6 +6017,40 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/procedureArtifacts:
+    dependencies:
+      '@typeagent/copilot-macros':
+        specifier: workspace:*
+        version: link:../copilot-macros
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../memory/service
+      '@typeagent/skill-catalog':
+        specifier: workspace:*
+        version: link:../skillCatalog
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.40
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@20.19.40)(ts-node@10.9.2(@types/node@20.19.40)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/schemaAuthor:
     dependencies:
       '@typeagent/action-schema':
@@ -6263,6 +6297,28 @@ importers:
       vite:
         specifier: ^6.4.3
         version: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0)
+
+  packages/skillCatalog:
+    dependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../actionGrammar
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@26.4.1)(ts-node@10.9.2(@types/node@26.4.1)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/studio-service:
     dependencies:
