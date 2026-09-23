@@ -6,9 +6,8 @@
     Registers (or unregisters) the TypeAgent plugin with GitHub Copilot CLI.
 
 .DESCRIPTION
-    Thin Windows wrapper that discovers a safe Copilot CLI path in MSI context
-    and delegates all registration logic to the shared Node script:
-    register-plugin.mjs.
+    Thin Windows wrapper that refreshes the stale MSI environment and delegates
+    Copilot CLI discovery and registration to the shared Node script.
 #>
 param(
     [string]$InstallDir = $PSScriptRoot,
@@ -29,6 +28,12 @@ if (-not (Test-Path $registerScript)) {
     exit 1
 }
 
+$nodeExe = Resolve-NodeExe
+if (-not $nodeExe) {
+    Write-Host "[TypeAgent] Registration failed. Node.js was not found (needed to run register-plugin.mjs)."
+    exit 1
+}
+
 $args = @(
     $registerScript,
     "--install-dir", $InstallDir,
@@ -40,12 +45,6 @@ if ($pathCommand -and $pathCommand.Source) {
 }
 if ($Uninstall) {
     $args += "--uninstall"
-}
-
-$nodeExe = Resolve-NodeExe
-if (-not $nodeExe) {
-    Write-Host "[TypeAgent] Registration failed. Node.js was not found (needed to run register-plugin.mjs)."
-    exit 1
 }
 
 & $nodeExe @args

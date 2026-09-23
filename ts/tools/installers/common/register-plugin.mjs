@@ -202,20 +202,20 @@ function spawnCopilot(copilotPath, args, timeout) {
     });
 }
 
-function discoverPathCopilot(platform = process.platform) {
+function discoverPathCopilots(platform = process.platform, env = process.env) {
     const command = platform === "win32" ? "where.exe" : "which";
-    const result = spawnSync(command, ["copilot"], {
+    const args = platform === "win32" ? ["copilot"] : ["-a", "copilot"];
+    const result = spawnSync(command, args, {
         encoding: "utf8",
+        env,
         shell: false,
         timeout: copilotVersionTimeoutMs,
     });
-    if (result.status !== 0) return "";
-    return (
-        result.stdout
-            .split(/\r?\n/)
-            .find((line) => line.trim())
-            ?.trim() ?? ""
-    );
+    if (result.status !== 0) return [];
+    return result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
 }
 
 export function isVsCodeCopilotShimPath(
@@ -257,16 +257,23 @@ export function copilotCandidates({
     copilotPath = "",
     env = process.env,
     platform = process.platform,
-    pathCopilot = discoverPathCopilot(platform),
+    pathCopilot = discoverPathCopilots(platform, env),
 } = {}) {
     const candidates = [];
     const add = (source, candidate) => {
         if (candidate?.trim()) candidates.push({ source, path: candidate });
     };
+    const addAll = (source, candidateOrCandidates) => {
+        for (const candidate of Array.isArray(candidateOrCandidates)
+            ? candidateOrCandidates
+            : [candidateOrCandidates]) {
+            add(source, candidate);
+        }
+    };
 
     add("COPILOT_CLI_PATH", env.COPILOT_CLI_PATH);
     add("supplied PATH candidate", copilotPath);
-    add("current PATH", pathCopilot);
+    addAll("current PATH", pathCopilot);
     if (platform === "win32") {
         if (env.APPDATA) {
             add(
