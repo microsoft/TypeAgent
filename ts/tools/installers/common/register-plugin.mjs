@@ -529,19 +529,17 @@ function ensureLocalPluginMarketplace({
 
 function resolvePluginMetadata(opts) {
     const pluginJsonPath = path.join(opts.pluginSourceDir, "plugin.json");
-    const pluginMcpServer = path.join(
-        opts.pluginSourceDir,
-        "dist",
-        "mcp",
-        "server.js",
-    );
+    const pluginMcpEntries = [
+        path.join(opts.pluginSourceDir, "dist", "mcp", "server.js"),
+        path.join(opts.pluginSourceDir, "dist", "bundle", "mcp", "server.js"),
+    ];
 
     if (!fs.existsSync(pluginJsonPath)) {
         throw new Error(`Plugin source missing plugin.json: ${pluginJsonPath}`);
     }
-    if (!fs.existsSync(pluginMcpServer)) {
+    if (!pluginMcpEntries.some((entry) => fs.existsSync(entry))) {
         throw new Error(
-            `Plugin source missing MCP server entrypoint: ${pluginMcpServer}`,
+            `Plugin source missing MCP server entrypoint. Expected one of: ${pluginMcpEntries.join(", ")}`,
         );
     }
 
