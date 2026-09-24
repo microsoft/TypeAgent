@@ -854,7 +854,7 @@ const order = balancedOrder(
 const specification =
     JSON.stringify(
         {
-            protocolVersion: 2,
+            protocolVersion: 3,
             runnerSha256: createHash("sha256")
                 .update(fs.readFileSync(fileURLToPath(import.meta.url)))
                 .digest("hex"),

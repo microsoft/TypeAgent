@@ -106,6 +106,14 @@ and never after a terminal execution failure. The internal fallback toolset
 and candidate entry interfaces are unchanged. Freeze a new run after validating
 these paths; do not overwrite or selectively replay the historical run.
 
+**Protocol 3:** native domain tool failures now enter the same terminal
+no-replay gate as failed TypeAgent execution, including SDK failures with no
+error payload. Failed `ask_user` interactions are not domain effects. This
+prospective guard correction does not relabel or rerun protocol-two evidence:
+audit earlier native/mixed traces for operations after failed native calls,
+and do not count those recoveries as policy-valid successes merely because
+their final answers are correct.
+
 The user-authorized cumulative ceiling is now 50,000 Copilot AI credits. This
 raises the maximum accepted ledger cap, not the balance of any existing run:
 reconcile all prior charges, preserve the original ledger and budget amendment,

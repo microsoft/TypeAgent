@@ -2,6 +2,12 @@
 // Licensed under the MIT License.
 
 export function terminalExecutionFailure(toolName, result, success) {
+    if (
+        /^(?:functions[.-])?(?:powershell|view|glob|rg|web_fetch)$/.test(
+            toolName,
+        )
+    )
+        return success === false;
     if (!/processCommand|executeAction|continueAction/.test(toolName))
         return false;
     return (

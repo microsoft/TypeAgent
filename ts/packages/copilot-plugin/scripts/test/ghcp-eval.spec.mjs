@@ -144,6 +144,44 @@ test("nested/parallel tool durations are not double-counted and empty tails are 
     assert.equal(percentile([9, 1, 3], 0.5), 3);
     assert.equal(percentile([9, 1, 3], 0.95), 9);
 });
+test("native domain failures stop execution even without an SDK error payload", () => {
+    for (const tool of [
+        "powershell",
+        "view",
+        "glob",
+        "rg",
+        "web_fetch",
+        "functions.powershell",
+        "functions-web_fetch",
+    ]) {
+        assert.equal(terminalExecutionFailure(tool, undefined, false), true);
+        assert.equal(terminalExecutionFailure(tool, {}, true), false);
+    }
+    assert.equal(terminalExecutionFailure("ask_user", undefined, false), false);
+});
+test("failed native execution cannot trigger a scripted continuation", async () => {
+    let stopped = false;
+    let calls = 0;
+    await sendWithClarification({
+        session: {
+            sendAndWait: async () => {
+                calls++;
+                stopped = terminalExecutionFailure(
+                    "powershell",
+                    undefined,
+                    false,
+                );
+                return { data: { content: "Which file?" } };
+            },
+        },
+        prompt: "Read that file.",
+        timeoutMs: 1000,
+        testCase: corpus.find((entry) => entry.id === "A5"),
+        canClarify: () => !stopped,
+        clarify: () => assert.fail("cannot continue after native failure"),
+    });
+    assert.equal(calls, 1);
+});
 test("independent PR file evidence must be complete", () => {
     const snapshot = {
         status: "passed",
