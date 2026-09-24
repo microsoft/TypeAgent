@@ -65,10 +65,6 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         );
     }
 
-    /**
-     * Number of messages in the index. A message can have several text
-     * chunks, and each chunk is one entry in textLocationIndex.
-     */
     public get size(): number {
         return this.messageCount;
     }
