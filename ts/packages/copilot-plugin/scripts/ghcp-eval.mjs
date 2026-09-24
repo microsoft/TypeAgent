@@ -293,6 +293,22 @@ function prepareTrial(candidate, directory, workspace) {
     fs.cpSync(path.join(template, "plugin-data"), env.TYPEAGENT_PLUGIN_DATA, {
         recursive: true,
     });
+    const routingPath = path.join(env.TYPEAGENT_PLUGIN_DATA, "config.json");
+    const routingConfig = fs.existsSync(routingPath)
+        ? JSON.parse(fs.readFileSync(routingPath, "utf8"))
+        : {};
+    fs.writeFileSync(
+        routingPath,
+        JSON.stringify(
+            {
+                ...routingConfig,
+                mode: "mcp",
+                mcpRouting: candidate.id >= 5 ? "mixed" : "delegate",
+            },
+            null,
+            2,
+        ),
+    );
     const stores = findListStores(env.TYPEAGENT_USER_DATA_DIR);
     if (stores.length !== 1)
         throw new Error("Expected exactly one disposable list store");
@@ -453,7 +469,12 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 candidate.id === 7
                     ? Object.fromEntries(
                           Object.entries(env).filter(
-                              ([key]) => !key.startsWith("TYPEAGENT_"),
+                              ([key]) =>
+                                  !key.startsWith("TYPEAGENT_") &&
+                                  ![
+                                      "CLAUDE_PLUGIN_DATA",
+                                      "INSTANCE_NAME",
+                                  ].includes(key),
                           ),
                       )
                     : env,
