@@ -129,13 +129,17 @@ function quoteCmdArgument(value) {
 
 function resolveWindowsLauncher(copilotPath) {
     const resolveCandidate = (candidate) => {
-        if (path.extname(candidate) !== "") return candidate;
-        return (
-            [".exe", ".cmd", ".bat", ".ps1"]
-                .map((extension) => `${candidate}${extension}`)
-                .find((withExtension) => fs.existsSync(withExtension)) ??
-            candidate
-        );
+        if (path.extname(candidate) === "") {
+            candidate =
+                [".exe", ".cmd", ".bat", ".ps1"]
+                    .map((extension) => `${candidate}${extension}`)
+                    .find((withExtension) => fs.existsSync(withExtension)) ??
+                candidate;
+        }
+        // WinGet links can fail with spawn UNKNOWN in the MSI context.
+        return fs.existsSync(candidate)
+            ? fs.realpathSync.native(candidate)
+            : candidate;
     };
 
     const directCandidate = resolveCandidate(copilotPath);
@@ -333,7 +337,12 @@ export function resolveCopilotCli({
             continue;
         }
 
-        const result = probe(candidate.path);
+        let result;
+        try {
+            result = probe(candidate.path);
+        } catch (error) {
+            result = { error };
+        }
         if (result.error?.code === "ETIMEDOUT") {
             logger.write(
                 `Copilot CLI validation timed out after ${copilotVersionTimeoutMs} ms: ${candidate.path}`,

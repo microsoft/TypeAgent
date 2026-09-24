@@ -502,6 +502,28 @@ az pipelines run --name "azure-build-publish-all" --branch main
 
 ## Troubleshooting
 
+### Copilot plugin registration fails with "spawn UNKNOWN"
+
+WinGet's `Microsoft\WinGet\Links\copilot.exe` can be a symbolic link that Node
+cannot launch in the MSI context, even when Copilot works in a terminal.
+Registration resolves Windows launcher paths with `fs.realpathSync.native()`
+before spawning them. Failed version probes, including synchronous exceptions,
+are logged and discovery continues to the next CLI candidate.
+
+For an older installer without this fix, set `COPILOT_CLI_PATH` to the real
+WinGet package executable and rerun registration from PowerShell:
+
+```powershell
+$link = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\copilot.exe"
+$env:COPILOT_CLI_PATH = (Get-Item -LiteralPath $link).ResolveLinkTarget($true).FullName
+& "$env:LOCALAPPDATA\TypeAgent\register-plugin.ps1"
+```
+
+`ResolveLinkTarget` requires PowerShell 7. Alternatively, set `COPILOT_CLI_PATH`
+directly to the existing executable under the WinGet package directory.
+Repair with the same older MSI may repeat the failure. Registration diagnostics
+are in `%LOCALAPPDATA%\TypeAgent\logs\msi-register-plugin.log`.
+
 ### "WiX Toolset not found"
 
 **Error:**
@@ -545,11 +567,31 @@ az artifacts universal download: ... (404 or auth error)
 
 ### "Unable to clear payload directory"
 
-An upgrade cannot replace the agent-server while TypeAgent or another process
-is using a native module from the install directory. Setup reports the process
-ID and loaded module when Windows allows module inspection. Close TypeAgent,
-stop the agent server, and retry setup. Restart Windows if the file remains
-locked.
+Setup stops the installed agent server automatically before upgrade, repair, or
+uninstall. It pauses the installation's scheduled task, requests graceful
+shutdown on ports owned by that instance, and waits before terminating remaining
+verified processes and their captured children. Processes are checked by their
+installation paths, user identity, and creation times; unrelated Node processes
+are not stopped.
+
+The maintenance action runs before an older MSI's uninstall actions and before
+any payload is removed. It checks for remaining file locks, then preserves the
+old agent-server and plugin directories in a transaction-specific temporary
+folder. Rollback restores those directories and the previous scheduled-task
+definition, and attempts to restart a previously running server using its
+original Node executable and arguments (or its restored running task). Rollback
+also blocks startup again if installation had already restarted the new server.
+A successful
+install uses `STARTSERVER` and `AUTOSTART` as usual; uninstall never restarts the
+server. The updated launcher and server reject startup while
+`%LOCALAPPDATA%\TypeAgent\.msi-maintenance` exists.
+
+Shutdown errors abort setup before payload deletion and are logged in
+`%LOCALAPPDATA%\TypeAgent\logs\msi-maintenance.log`. External/protected processes
+can still prevent replacement; setup reports the locked file rather than
+partially deleting the payload. If maintenance is interrupted outside normal
+MSI rollback (for example by power loss), the marker and backup are retained
+instead of silently discarding the recovery state.
 
 Detailed extraction diagnostics are written to
 `%LOCALAPPDATA%\TypeAgent\logs\msi-extract-payload.log` and to the verbose MSI
