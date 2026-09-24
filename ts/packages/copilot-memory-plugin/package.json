@@ -15,9 +15,11 @@
     "build": "npm run tsc && npm run bundle",
     "bundle": "node scripts/bundle.mjs",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "install:global": "node scripts/install-plugin.mjs",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "register": "node scripts/install-plugin.mjs",
     "test": "npm run test:local",
     "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
