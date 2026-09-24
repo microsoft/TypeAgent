@@ -84,10 +84,7 @@ describe("plugin structured client configuration", () => {
             try {
                 await client.searchActions({ query: "lists" });
                 await client.searchActions({ query: "lists again" });
-                const expected =
-                    policy === "mixed"
-                        ? "existing-nl-conversation"
-                        : "dedicated";
+                const expected = "existing-nl-conversation";
                 expect(client.binding.conversationId).toBe(expected);
                 expect(joinConversation).toHaveBeenLastCalledWith(
                     expect.anything(),
@@ -96,24 +93,16 @@ describe("plugin structured client configuration", () => {
                         structuredActions: {},
                     },
                 );
-                if (policy === "mixed") {
-                    expect(joinConversation).toHaveBeenCalledTimes(2);
-                    expect(joinConversation.mock.calls[0][1]).toEqual({
-                        filter: true,
-                        clientType: "shell",
-                    });
-                    expect(leaveConversation).toHaveBeenCalledWith(expected);
-                    expect(
-                        leaveConversation.mock.invocationCallOrder[0],
-                    ).toBeLessThan(
-                        joinConversation.mock.invocationCallOrder[1],
-                    );
-                    expect(createConversation).not.toHaveBeenCalled();
-                } else {
-                    expect(joinConversation).toHaveBeenCalledTimes(1);
-                    expect(leaveConversation).not.toHaveBeenCalled();
-                    expect(createConversation).toHaveBeenCalledTimes(1);
-                }
+                expect(joinConversation).toHaveBeenCalledTimes(2);
+                expect(joinConversation.mock.calls[0][1]).toEqual({
+                    filter: true,
+                    clientType: "shell",
+                });
+                expect(leaveConversation).toHaveBeenCalledWith(expected);
+                expect(
+                    leaveConversation.mock.invocationCallOrder[0],
+                ).toBeLessThan(joinConversation.mock.invocationCallOrder[1]);
+                expect(createConversation).not.toHaveBeenCalled();
                 expect(searchActions).toHaveBeenCalledTimes(2);
             } finally {
                 await client.close();

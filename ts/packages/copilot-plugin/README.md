@@ -274,28 +274,43 @@ pending prompts/unsupported interaction rather than pretending completion.
 
 ### Explicit binding, reconnect, and trust
 
-Stdio provides no intrinsic Copilot session identity. In MCP mixed policy,
-the structured client first resolves the same default conversation used by
-natural-language delegation, leaves that ordinary connection's conversation,
-then explicitly joins its **concrete conversation ID** with
-`structuredActions: {}`. This lets both routes see the same lists and other
-conversation-local data without sharing structured approval or resume authority.
-Outside mixed policy, an unconfigured structured MCP process still finds/creates
-a dedicated named conversation with a random process-local name.
-All four operations share that one owner and concurrent
-connection attempts are singleflight. This does not implicitly share context
-with the ordinary Direct NL hook's conversation. Context is selected on the
-first structured call; a bound client keeps its concrete ID across policy
-switches and reconnects. Start a fresh Copilot session when changing an already
-bound client's conversation selection.
+NL and structured calls use the same conversation selection in every routing
+mode. With no explicit ID, the first caller resolves the server default and
+saves its **concrete conversation ID** under the plugin data directory's
+`conversation-bindings` folder, keyed by server URL. Later hooks, MCP processes,
+and reconnects reuse that ID even if the server default changes. Concurrent
+first callers atomically adopt the same saved ID. Routing mode does not change
+which conversation data is visible.
+
+This is shared plugin/server context, not one conversation per Copilot chat:
+stdio does not provide an intrinsic Copilot session identity. Sessions using the
+same plugin data directory and server share the saved default, as NL callers
+already shared the server default. Separate plugin data directories or explicit
+IDs select separate context.
+
+The two routes keep separate connections. Structured calls explicitly join the
+selected ID with `structuredActions: {}` to obtain an independent owner; the
+saved binding contains only the public conversation ID, never approval state
+or a resume capability. All four structured operations share that process's
+owner and connection attempts are singleflight.
 
 To intentionally use a known conversation, set `TYPEAGENT_CONVERSATION_ID`, or
 set public `conversationId` in the plugin `config.json`. Environment wins over
 config. The ID must exist: an explicit failed join does not silently fall back to
 another conversation. An explicit ID selects context, **not** a prior owner's
-authority. In mixed policy this setting also selects the natural-language
-conversation, so the two routes stay aligned. Two fresh processes using the
-same public ID get isolated owners.
+authority. The setting applies to NL and structured calls in every mode. A
+bound structured client refuses new calls if the selected ID changes instead
+of continuing against a different conversation from NL. Close active sessions
+before changing selection, then start fresh sessions; pending work is not
+automatically moved or replayed. Two fresh processes using the same public ID
+still get isolated structured owners.
+
+A missing/deleted conversation or an unreadable/corrupt saved binding is an
+error, not a reason to silently choose a new default. To select another existing
+conversation, configure its ID. To intentionally resolve the default again,
+close sessions, remove only the matching server's saved binding file, and start
+fresh sessions with no explicit ID. Configuration fields such as selected
+skills are not rewritten when the default ID is saved.
 
 The server's structured resume token is retained only in private volatile
 connector memory. It is never logged, printed, persisted, put in config, or sent

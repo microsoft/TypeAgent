@@ -8,15 +8,25 @@ import { join } from "node:path";
 import { writeConfig } from "../src/shared/plugin-config.js";
 
 const connectDispatcher = jest.fn(async () => ({}));
+const joinConversation = jest.fn(async () => ({
+    conversationId: "default-first",
+}));
+const leaveConversation = jest.fn(async () => {});
+const close = jest.fn(async () => {});
+const connectAgentServer = jest.fn(async () => ({
+    joinConversation,
+    leaveConversation,
+    close,
+}));
 jest.unstable_mockModule("@typeagent/agent-server-client", () => ({
     connectDispatcher,
-    connectAgentServer: jest.fn(),
+    connectAgentServer,
 }));
 const { connectToTypeAgent, createClientIO } = await import(
     "../src/shared/typeagent-client.js"
 );
 
-describe("mixed natural-language conversation selection", () => {
+describe("shared natural-language conversation selection", () => {
     let directory: string;
     const environment = {
         TYPEAGENT_PLUGIN_DATA: process.env.TYPEAGENT_PLUGIN_DATA,
@@ -29,6 +39,11 @@ describe("mixed natural-language conversation selection", () => {
         delete process.env.TYPEAGENT_MODE;
         delete process.env.TYPEAGENT_CONVERSATION_ID;
         connectDispatcher.mockClear();
+        connectAgentServer.mockClear();
+        joinConversation.mockClear();
+        joinConversation.mockResolvedValue({ conversationId: "default-first" });
+        leaveConversation.mockClear();
+        close.mockClear();
     });
     afterEach(() => {
         rmSync(directory, { recursive: true, force: true });
@@ -58,30 +73,84 @@ describe("mixed natural-language conversation selection", () => {
                 {
                     filter: true,
                     clientType: "shell",
-                    ...(source === "default"
-                        ? {}
-                        : {
-                              conversationId:
-                                  source === "config"
-                                      ? "configured"
-                                      : "environment",
-                          }),
+                    conversationId:
+                        source === "default"
+                            ? "default-first"
+                            : source === "config"
+                              ? "configured"
+                              : "environment",
                 },
             );
         },
     );
 
-    it("preserves default delegate selection despite structured-only configuration", async () => {
-        writeConfig({
-            mode: "mcp",
-            mcpRouting: "delegate",
-            conversationId: "structured-only",
-        });
+    it.each(["direct", "mcp", "dev"] as const)(
+        "honors the same explicit ID in %s mode",
+        async (mode) => {
+            writeConfig({
+                mode,
+                mcpRouting: "delegate",
+                conversationId: "shared",
+            });
+            const io = createClientIO({});
+            await connectToTypeAgent(io);
+            expect(connectDispatcher).toHaveBeenCalledWith(
+                io,
+                expect.any(String),
+                {
+                    filter: true,
+                    clientType: "shell",
+                    conversationId: "shared",
+                },
+            );
+            expect(connectAgentServer).not.toHaveBeenCalled();
+        },
+    );
+
+    it("pins default selection across NL calls and mode changes without reconnecting to resolve it", async () => {
+        writeConfig({ mode: "direct" });
         const io = createClientIO({});
         await connectToTypeAgent(io);
-        expect(connectDispatcher).toHaveBeenCalledWith(io, expect.any(String), {
-            filter: true,
-            clientType: "shell",
+        joinConversation.mockResolvedValue({
+            conversationId: "default-changed",
         });
+        writeConfig({ mode: "mcp", mcpRouting: "mixed" });
+        await connectToTypeAgent(io);
+        expect(connectAgentServer).toHaveBeenCalledTimes(1);
+        expect(close).toHaveBeenCalledTimes(1);
+        expect(leaveConversation).toHaveBeenCalledWith("default-first");
+        expect(connectDispatcher.mock.calls).toHaveLength(2);
+        expect(connectDispatcher).toHaveBeenLastCalledWith(
+            io,
+            expect.any(String),
+            {
+                filter: true,
+                clientType: "shell",
+                conversationId: "default-first",
+            },
+        );
+    });
+
+    it("closes the resolution connection and does not dispatch after a resolution failure", async () => {
+        joinConversation.mockRejectedValueOnce(
+            new Error("Unavailable default"),
+        );
+        await expect(connectToTypeAgent(createClientIO({}))).rejects.toThrow(
+            "Unavailable default",
+        );
+        expect(close).toHaveBeenCalledTimes(1);
+        expect(connectDispatcher).not.toHaveBeenCalled();
+    });
+
+    it("does not replace a missing pinned conversation after an NL join failure", async () => {
+        const io = createClientIO({});
+        await connectToTypeAgent(io);
+        connectDispatcher.mockRejectedValueOnce(
+            new Error("Conversation not found: default-first"),
+        );
+        await expect(connectToTypeAgent(io)).rejects.toThrow(
+            "Conversation not found",
+        );
+        expect(connectAgentServer).toHaveBeenCalledTimes(1);
     });
 });

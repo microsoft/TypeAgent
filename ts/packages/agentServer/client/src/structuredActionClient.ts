@@ -24,6 +24,8 @@ export interface StructuredActionClientOptions {
     resolveConversationId?: (
         connection: AgentServerConnection,
     ) => Promise<string | undefined>;
+    /** Check caller-owned context selection before dispatch, including on reused bindings. */
+    validateConversationId?: (conversationId: string) => Promise<void>;
     clientIO?: ClientIO;
     /** Called once when this client needs its own named conversation. */
     createConversationName?: () => string;
@@ -43,6 +45,7 @@ export type StructuredActionClientErrorReason =
     | "resume_rejected"
     | "resume_failed"
     | "conversation_not_found"
+    | "conversation_changed"
     | "client_closed"
     | "caller_cancelled"
     | "delivery_uncertain";
@@ -58,6 +61,8 @@ const errorMessages: Record<StructuredActionClientErrorReason, string> = {
         "Unable to resume the existing structured binding. No replacement owner was created. Prior delivery may be uncertain; do not replay interrupted work.",
     conversation_not_found:
         "The requested structured conversation no longer exists. No replacement conversation or owner was created. Do not replay interrupted work.",
+    conversation_changed:
+        "The selected TypeAgent conversation changed. This request was not dispatched. Start a fresh Copilot session to use the new context; do not replay interrupted work.",
     client_closed:
         "The structured client is closed; this request was not dispatched. Closing does not imply cancellation or rollback of prior work.",
     caller_cancelled:
@@ -151,6 +156,7 @@ export class StructuredActionClient {
     #name: string | undefined;
     readonly #createConversationName: () => string;
     readonly #resolveConversationId: StructuredActionClientOptions["resolveConversationId"];
+    readonly #validateConversationId: StructuredActionClientOptions["validateConversationId"];
     readonly #clientIO: ClientIO;
     readonly #connect: NonNullable<StructuredActionClientOptions["connect"]>;
 
@@ -164,6 +170,7 @@ export class StructuredActionClient {
         }
         this.#conversationId = configured;
         this.#resolveConversationId = options.resolveConversationId;
+        this.#validateConversationId = options.validateConversationId;
         this.#clientIO = options.clientIO ?? defaultClientIO();
         this.#createConversationName =
             options.createConversationName ??
@@ -227,10 +234,18 @@ export class StructuredActionClient {
                     "caller_cancelled",
                 );
             const dispatcher = await this.dispatcher();
+            await this.#validateConversationId?.(this.#conversationId!);
             if (signal?.aborted)
                 throw new StructuredActionClientError(
                     false,
                     "caller_cancelled",
+                );
+            if (this.#closed)
+                throw new StructuredActionClientError(false, "client_closed");
+            if (dispatcher !== this.#dispatcher)
+                throw new StructuredActionClientError(
+                    false,
+                    "connection_failed",
                 );
             dispatched = true;
             return operation(dispatcher);
