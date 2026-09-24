@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import childProcess from "node:child_process";
 import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -23,7 +25,9 @@ function resolve({
     const logger = { write: (line) => lines.push(line) };
     const probe = (candidate) => {
         probed.push(candidate);
-        return outcomes.get(candidate) ?? { status: 0 };
+        const outcome = outcomes.get(candidate) ?? { status: 0 };
+        if (outcome instanceof Error) throw outcome;
+        return outcome;
     };
     const selected = resolveCopilotCli({
         copilotPath,
@@ -130,6 +134,52 @@ test("extensionless COPILOT_CLI_PATH remains the highest-priority override", () 
     assert.deepEqual(result.probed, [override]);
 });
 
+test("linked Windows executables are canonicalized before spawning", (t) => {
+    const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-copilot-link-"),
+    );
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const link = path.join(root, "WinGet Links");
+    fs.symlinkSync(
+        path.dirname(process.execPath),
+        link,
+        process.platform === "win32" ? "junction" : "dir",
+    );
+    const linkedExecutable = path.join(link, path.basename(process.execPath));
+    const spawned = [];
+    const spawnSync = childProcess.spawnSync;
+    const spawnMock = t.mock.method(childProcess, "spawnSync", (...args) => {
+        spawned.push(args[0]);
+        return spawnSync(...args);
+    });
+    syncBuiltinESMExports();
+    t.after(() => {
+        spawnMock.mock.restore();
+        syncBuiltinESMExports();
+    });
+
+    const candidates = [linkedExecutable];
+    if (process.platform === "win32") {
+        candidates.push(linkedExecutable.replace(/\.exe$/i, ""));
+    }
+    for (const candidate of candidates) {
+        const selected = resolveCopilotCli({
+            env: { COPILOT_CLI_PATH: candidate },
+            pathCopilot: [],
+            logger: { write() {} },
+        });
+        assert.equal(selected, candidate);
+    }
+    assert.deepEqual(
+        spawned,
+        candidates.map(() =>
+            process.platform === "win32"
+                ? fs.realpathSync.native(process.execPath)
+                : linkedExecutable,
+        ),
+    );
+});
+
 test("VS Code Copilot shim is rejected before a working fallback", () => {
     const appData = String.raw`C:\Users\test\AppData\Roaming`;
     const shim = path.win32.join(
@@ -184,6 +234,51 @@ test("no usable candidate produces an explicit error", () => {
             resolve({
                 pathCopilot: candidate,
                 outcomes: new Map([[candidate, { status: 1 }]]),
+            }),
+        /No working GitHub Copilot CLI was found/,
+    );
+});
+
+test("synchronous probe failures are logged before trying fallbacks", () => {
+    const broken = String.raw`C:\WinGet\Links\copilot.exe`;
+    const timedOut = String.raw`C:\hung\copilot.cmd`;
+    const working = String.raw`C:\npm\copilot.cmd`;
+    const result = resolve({
+        env: { COPILOT_CLI_PATH: broken },
+        copilotPath: timedOut,
+        pathCopilot: working,
+        outcomes: new Map([
+            [broken, new Error("spawn UNKNOWN")],
+            [
+                timedOut,
+                Object.assign(new Error("spawn ETIMEDOUT"), {
+                    code: "ETIMEDOUT",
+                }),
+            ],
+        ]),
+    });
+
+    assert.equal(result.selected, working);
+    assert.deepEqual(result.probed, [broken, timedOut, working]);
+    assert.ok(
+        result.lines.includes(
+            `Copilot CLI validation failed for ${broken}: spawn UNKNOWN`,
+        ),
+    );
+    assert.ok(
+        result.lines.includes(
+            `Copilot CLI validation timed out after ${copilotVersionTimeoutMs} ms: ${timedOut}`,
+        ),
+    );
+});
+
+test("a thrown probe failure does not replace the no-working-CLI error", () => {
+    const candidate = String.raw`C:\broken\copilot.exe`;
+    assert.throws(
+        () =>
+            resolve({
+                pathCopilot: candidate,
+                outcomes: new Map([[candidate, new Error("spawn UNKNOWN")]]),
             }),
         /No working GitHub Copilot CLI was found/,
     );

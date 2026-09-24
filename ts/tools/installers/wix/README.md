@@ -502,6 +502,28 @@ az pipelines run --name "azure-build-publish-all" --branch main
 
 ## Troubleshooting
 
+### Copilot plugin registration fails with "spawn UNKNOWN"
+
+WinGet's `Microsoft\WinGet\Links\copilot.exe` can be a symbolic link that Node
+cannot launch in the MSI context, even when Copilot works in a terminal.
+Registration resolves Windows launcher paths with `fs.realpathSync.native()`
+before spawning them. Failed version probes, including synchronous exceptions,
+are logged and discovery continues to the next CLI candidate.
+
+For an older installer without this fix, set `COPILOT_CLI_PATH` to the real
+WinGet package executable and rerun registration from PowerShell:
+
+```powershell
+$link = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\copilot.exe"
+$env:COPILOT_CLI_PATH = (Get-Item -LiteralPath $link).ResolveLinkTarget($true).FullName
+& "$env:LOCALAPPDATA\TypeAgent\register-plugin.ps1"
+```
+
+`ResolveLinkTarget` requires PowerShell 7. Alternatively, set `COPILOT_CLI_PATH`
+directly to the existing executable under the WinGet package directory.
+Repair with the same older MSI may repeat the failure. Registration diagnostics
+are in `%LOCALAPPDATA%\TypeAgent\logs\msi-register-plugin.log`.
+
 ### "WiX Toolset not found"
 
 **Error:**
