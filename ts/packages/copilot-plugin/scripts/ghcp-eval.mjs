@@ -47,8 +47,6 @@ const [
     outputDirectory,
     configDirectory,
     ledgerPath,
-    templateDirectory: path.resolve(template),
-    fixtureReset: "Copy the same catalog-only state, exclude stale lock directories, restore all seven lists and three files per trial",
     selection = "1,2,3,4,5,6,7",
     phase = "pilot",
     evidencePath,
@@ -345,18 +343,37 @@ function prepareTrial(candidate, directory, workspace) {
     return { env, config, stores, sessionDataPath, sessionData, sessionId };
 }
 
-function persistTrial({ result, env, executionStopped, sessionData, sessionDataPath, evidence, network, directory, started }) {
+function persistTrial({
+    result,
+    env,
+    executionStopped,
+    sessionData,
+    sessionDataPath,
+    evidence,
+    network,
+    directory,
+    started,
+}) {
     result.totalIncludingSetupMs = performance.now() - started;
     collectObservations(result, env.TYPEAGENT_GHCP_EVAL_TRACE);
     result.terminalExecutionFailure = executionStopped;
     result.providerUsage = {
         before: sessionData.tokens ?? null,
-        after: JSON.parse(fs.readFileSync(sessionDataPath, "utf8")).tokens ?? null,
-        coverage: "Persisted TypeAgent token counters only; unflushed calls and embedding usage may be absent. Not Copilot credits.",
+        after:
+            JSON.parse(fs.readFileSync(sessionDataPath, "utf8")).tokens ?? null,
+        coverage:
+            "Persisted TypeAgent token counters only; unflushed calls and embedding usage may be absent. Not Copilot credits.",
     };
     result.preliminaryGrade = preliminaryGrade(result, evidence ?? {});
-    if (network) fs.writeFileSync(path.join(directory, "private-network-evidence.json"), JSON.stringify(network, null, 2));
-    fs.writeFileSync(path.join(directory, "result.json"), JSON.stringify(result, null, 2) + "\n");
+    if (network)
+        fs.writeFileSync(
+            path.join(directory, "private-network-evidence.json"),
+            JSON.stringify(network, null, 2),
+        );
+    fs.writeFileSync(
+        path.join(directory, "result.json"),
+        JSON.stringify(result, null, 2) + "\n",
+    );
 }
 
 async function trial(candidate, directory, testCase, workspace, evidence) {
@@ -675,7 +692,17 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             try {
                 if (server) await stopProcess(server);
             } finally {
-                persistTrial({ result, env, executionStopped, sessionData, sessionDataPath, evidence, network, directory, started });
+                persistTrial({
+                    result,
+                    env,
+                    executionStopped,
+                    sessionData,
+                    sessionDataPath,
+                    evidence,
+                    network,
+                    directory,
+                    started,
+                });
             }
         }
     }
@@ -783,6 +810,9 @@ const specification =
             requestCreditReservation: 2118,
             sessionCreditSoftLimit: 60,
             ledgerPath,
+            templateDirectory: path.resolve(template),
+            fixtureReset:
+                "Copy catalog-only state, exclude stale locks, restore seven lists and three files per trial",
             gradingStatus:
                 "independent fixture oracles; explicit final-answer review required",
             nativeTools,
@@ -792,7 +822,11 @@ const specification =
             internalTools:
                 "Unmodified production TypeAgent reasoning toolset; effects and credits gated",
             disabledShippedMcpSchemas: excludedSchemas,
-            disabledAuxiliaryOuterMcpServers: ["typeagent-workspace", "typeagent-macros", "typeagent-skills"],
+            disabledAuxiliaryOuterMcpServers: [
+                "typeagent-workspace",
+                "typeagent-macros",
+                "typeagent-skills",
+            ],
             safety: "Normal confirmation retained; no replay after failed/denied/cancelled/uncertain execution, including internal error-triggered retries. Translation fallback toolset retained.",
         },
         null,
