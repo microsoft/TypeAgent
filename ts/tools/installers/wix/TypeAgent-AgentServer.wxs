@@ -169,9 +169,21 @@
                   VBScriptCall="CopySetupCommand"
                   Execute="immediate"
                   Return="ignore" />
+    <CustomAction Id="CheckTypeAgentPlugin"
+                  BinaryKey="ExitDialogVbs"
+                  VBScriptCall="CheckTypeAgentPlugin"
+                  Execute="immediate"
+                  Return="ignore" />
+    <CustomAction Id="ResetTypeAgentPluginStatus"
+                  BinaryKey="ExitDialogVbs"
+                  VBScriptCall="ResetTypeAgentPluginStatus"
+                  Execute="immediate"
+                  Return="ignore" />
 
     <InstallUISequence>
+      <Custom Action="ResetTypeAgentPluginStatus" Before="ExecuteAction">NOT REMOVE~="ALL"</Custom>
       <Custom Action="CheckTypeAgentConfig" After="ExecuteAction">NOT Installed AND PROVIDER="AISYSTEMS"</Custom>
+      <Custom Action="CheckTypeAgentPlugin" After="CheckTypeAgentConfig">NOT REMOVE~="ALL"</Custom>
     </InstallUISequence>
 
     <!-- ═══════════════════════════════════════════════
@@ -363,7 +375,8 @@
     <!-- ═══════════════════════════════════════════════
          Custom actions — Copilot CLI plugin registration
          Runs register-plugin.ps1 as the installing user.
-          Registration failures are fatal.
+         Registration failures are non-fatal and shown on the completion page.
+         Repair retries registration, including the prerequisite setup retry.
          ═══════════════════════════════════════════════ -->
 
     <!-- Pass the PowerShell command as CustomActionData to the deferred CA -->
@@ -844,18 +857,18 @@
       <!-- ═══ Completion dialog ═══
            Replaces the stock WixUI ExitDialog so the post-install setup command
            is shown in a selectable, copyable Edit control with a Copy button. -->
-      <Dialog Id="TypeAgentExitDlg" Width="370" Height="270" Title="!(loc.ExitDialog_Title)">
-        <Control Id="Finish" Type="PushButton" X="236" Y="243" Width="56" Height="17"
+      <Dialog Id="TypeAgentExitDlg" Width="370" Height="320" Title="!(loc.ExitDialog_Title)">
+        <Control Id="Finish" Type="PushButton" X="236" Y="293" Width="56" Height="17"
                  Default="yes" Cancel="yes" Text="!(loc.WixUIFinish)">
           <Publish Event="EndDialog" Value="Return">1</Publish>
         </Control>
-        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17"
+        <Control Id="Cancel" Type="PushButton" X="304" Y="293" Width="56" Height="17"
                  Disabled="yes" Text="!(loc.WixUICancel)" />
-        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234"
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="284"
                  TabSkip="no" Text="!(loc.ExitDialogBitmap)" />
-        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"
+        <Control Id="Back" Type="PushButton" X="180" Y="293" Width="56" Height="17"
                  Disabled="yes" Text="!(loc.WixUIBack)" />
-        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="284" Width="370" Height="0" />
         <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="40"
                  Transparent="yes" NoPrefix="yes" Text="!(loc.ExitDialogTitle)" />
         
@@ -909,6 +922,11 @@
         <Control Id="DescriptionAfterRetry" Type="Text" X="135" Y="156" Width="220" Height="20"
                  Transparent="yes" NoPrefix="yes" Hidden="yes" Text="!(loc.ExitDialogDescription)">
           <Condition Action="show">NOT Installed AND TYPEAGENTCONFIGMISSING="1"</Condition>
+        </Control>
+        <Control Id="PluginRepairText" Type="Text" X="135" Y="185" Width="220" Height="70"
+                 Transparent="yes" NoPrefix="yes" Hidden="yes"
+                 Text="Copilot plugin setup did not complete. Reopen this TypeAgent installer and choose Repair to retry automatically. If Repair fails, check msi-register-plugin.log in %LOCALAPPDATA%\TypeAgent\logs. Restart Copilot after a successful repair.">
+          <Condition Action="show">NOT REMOVE~="ALL" AND TYPEAGENTPLUGININCOMPLETE="1"</Condition>
         </Control>
       </Dialog>
 
