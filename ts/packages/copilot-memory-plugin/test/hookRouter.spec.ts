@@ -59,7 +59,9 @@ describe("prompt hooks", () => {
             client,
         );
 
-        expect(output.modifiedTransformedPrompt).toContain("use pnpm");
+        expect(output.modifiedTransformedPrompt).toBe(
+            "<typeagent-memory>\nRelevant memory from earlier sessions in this workspace:\nuse pnpm\n</typeagent-memory>\n\nhow do I install dependencies?",
+        );
         expect(client.recalls).toHaveLength(1);
         expect(client.requests).toEqual([]);
     });
