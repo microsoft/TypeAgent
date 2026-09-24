@@ -19,12 +19,33 @@ function Write-MaintenanceLog([string]$message) {
     }
 }
 
-function Test-PayloadCommand([string]$command, [string]$payload) {
-    foreach ($entry in @("dist\server.js", "typeagent-serve.mjs")) {
-        $file = [regex]::Escape((Join-Path $payload $entry))
-        if ($command -match "(?i)(?:^|\s)`"?$file`"?(?:\s|$)") { return $true }
+function Get-NodeScript([string]$command) {
+    $tokens = @([regex]::Matches($command, '"[^"]*"|\S+') | ForEach-Object { $_.Value.Trim('"') })
+    for ($index = 1; $index -lt $tokens.Count; $index++) {
+        $token = $tokens[$index]
+        if ($token -in @("-e", "--eval", "-p", "--print") -or $token -match "^--(eval|print)=") { return }
+        if ($token -in @("-r", "--require", "--import", "--loader", "--experimental-loader", "--inspect-port")) {
+            $index++
+            continue
+        }
+        if ($token -eq "--") {
+            $index++
+            if ($index -ge $tokens.Count) { return }
+            $token = $tokens[$index]
+        } elseif ($token.StartsWith("-")) {
+            continue
+        }
+        if ([IO.Path]::IsPathRooted($token)) { return [IO.Path]::GetFullPath($token) }
+        return
     }
-    return $false
+}
+
+function Test-PayloadCommand([string]$command, [string]$payload) {
+    $script = Get-NodeScript $command
+    return $script -and $script -in @(
+        (Join-Path $payload "dist\server.js"),
+        (Join-Path $payload "typeagent-serve.mjs")
+    )
 }
 
 function Get-PayloadProcesses([string]$payload) {
@@ -79,23 +100,55 @@ function Get-SameProcess($snapshot) {
     if ($current -and $current.CreationDate -eq $snapshot.CreationDate) { return $current }
 }
 
+function Get-RestartCommands($processes, [string]$payload) {
+    $entry = Join-Path $payload "dist\server.js"
+    $servers = @($processes | Where-Object {
+        $_.Name -eq "node.exe" -and $_.ExecutablePath -and
+        (Get-NodeScript $_.CommandLine) -ieq $entry
+    })
+    foreach ($server in $servers) {
+        if ($server.ParentProcessId -in $servers.ProcessId) { continue }
+        if ($server.CommandLine -match '^(?:"[^"]+"|\S+)\s+(.+)$') {
+            @{
+                Executable = $server.ExecutablePath
+                Arguments = $Matches[1]
+                ProcessId = $server.ProcessId
+                CreationDate = $server.CreationDate
+            }
+        }
+    }
+}
+
+function Get-GracefulShutdownPorts($processes, $listeners) {
+    $localAddresses = @("127.0.0.1", "::1", "0.0.0.0", "::")
+    foreach ($port in @($listeners.LocalPort | Sort-Object -Unique)) {
+        $local = @($listeners | Where-Object {
+            $_.LocalPort -eq $port -and $_.LocalAddress -in $localAddresses
+        })
+        if (
+            $local.Count -gt 0 -and
+            @($local | Where-Object { $_.OwningProcess -notin $processes.ProcessId }).Count -eq 0
+        ) {
+            $port
+        }
+    }
+}
+
 function Stop-PayloadProcesses([string]$payload) {
     $processes = @(Get-PayloadProcesses $payload)
     if (-not $processes.Count) { return }
     Write-MaintenanceLog "Stopping installed TypeAgent processes: $($processes.ProcessId -join ', ')."
 
     $stopScript = Join-Path $payload "dist\stop.js"
-    $listeners = @(Get-NetTCPConnection -State Listen | Where-Object {
-        $listener = $_
-        @($processes | Where-Object {
-            $_.ProcessId -eq $listener.OwningProcess -and
-            (Test-PayloadCommand $_.CommandLine $payload)
-        }).Count -gt 0
+    $listeners = @(Get-NetTCPConnection -State Listen)
+    $servers = @($processes | Where-Object {
+        (Test-PayloadCommand $_.CommandLine $payload) -and (Get-SameProcess $_)
     })
     $node = $processes | Where-Object { $_.Name -eq "node.exe" -and $_.ExecutablePath } | Select-Object -First 1
     if ($node -and (Test-Path -LiteralPath $stopScript)) {
         $requestDeadline = [DateTime]::UtcNow.AddSeconds(10)
-        foreach ($port in @($listeners.LocalPort | Sort-Object -Unique)) {
+        # stop.js connects to localhost, not an arbitrary owned listen address.
+        foreach ($port in @(Get-GracefulShutdownPorts $servers $listeners)) {
             $remainingMs = [int]($requestDeadline - [DateTime]::UtcNow).TotalMilliseconds
             if ($remainingMs -le 0) { break }
             Write-MaintenanceLog "Requesting graceful shutdown on port $port."
@@ -180,10 +233,13 @@ function Invoke-Maintenance {
             throw "A previous TypeAgent maintenance operation is incomplete. See '$LogPath'."
         }
         $task = Get-OwnedAutostart $payload
+        $processes = @(Get-PayloadProcesses $payload)
         $state = @{
             Root = $Root
-            WasRunning = @(Get-PayloadProcesses $payload).Count -gt 0
+            WasRunning = $processes.Count -gt 0
+            RestartCommands = @(Get-RestartCommands $processes $payload)
             TaskXml = $(if ($task) { Export-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath } else { $null })
+            TaskWasRunning = ($task -and $task.State -eq "Running")
             SavedPayloads = @("agent-server", "copilot-plugin" | Where-Object {
                 Test-Path -LiteralPath (Join-Path $Root $_)
             })
@@ -213,6 +269,18 @@ function Invoke-Maintenance {
     $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
     if ($state.Root -ine $Root) { throw "Maintenance state does not match the installation." }
     if ($Action -eq "Rollback") {
+        if (
+            (Test-Path -LiteralPath $marker) -and
+            (Get-Content -LiteralPath $marker -Raw).Trim() -ne $TransactionDir
+        ) {
+            throw "Maintenance marker belongs to another transaction."
+        }
+        Set-Content -LiteralPath $marker -Value $TransactionDir
+        $task = Get-OwnedAutostart $payload
+        if ($task) {
+            Disable-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath | Out-Null
+            Stop-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath
+        }
         $backups = @($state.SavedPayloads | Where-Object {
             Test-Path -LiteralPath (Join-Path $TransactionDir $_)
         })
@@ -250,13 +318,18 @@ function Invoke-Maintenance {
         Remove-Item -LiteralPath $marker
     }
     if ($Action -eq "Rollback" -and $state.WasRunning) {
-        $launcher = Join-Path $payload "typeagent-serve.mjs"
-        if (Test-Path -LiteralPath $launcher) {
-            $node = (Get-Command node.exe -ErrorAction Stop).Source
-            Start-Process -FilePath $node -ArgumentList @("`"$launcher`"", "start") -WindowStyle Hidden | Out-Null
-            Write-MaintenanceLog "Requested restart of the restored TypeAgent server."
+        if ($state.TaskXml -and $state.TaskWasRunning) {
+            Start-ScheduledTask -TaskName "TypeAgent Agent Server" -TaskPath "\"
+            Write-MaintenanceLog "Restarted the restored TypeAgent scheduled task."
         } else {
-            Write-MaintenanceLog "WARNING: Restored server launcher is unavailable; unable to restart."
+            foreach ($command in $state.RestartCommands) {
+                if (Get-SameProcess $command) { continue }
+                Start-Process -FilePath $command.Executable -ArgumentList $command.Arguments -WindowStyle Hidden | Out-Null
+                Write-MaintenanceLog "Requested restart using the original Node executable and server arguments."
+            }
+            if (-not $state.RestartCommands.Count) {
+                Write-MaintenanceLog "WARNING: No verified server launch command was available to restore."
+            }
         }
     }
     if ($Action -in @("Commit", "Rollback")) {
@@ -265,6 +338,11 @@ function Invoke-Maintenance {
             if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Recurse -Force }
         }
         Remove-Item -LiteralPath $statePath
+        $stagedScript = Join-Path $TransactionDir "maintain-server.ps1"
+        if (Test-Path -LiteralPath $stagedScript) {
+            Remove-Item -LiteralPath $stagedScript
+            [IO.Directory]::Delete($TransactionDir)
+        }
     }
     Write-MaintenanceLog "TypeAgent maintenance $Action complete."
 }

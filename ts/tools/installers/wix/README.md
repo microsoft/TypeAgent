@@ -578,7 +578,10 @@ The maintenance action runs before an older MSI's uninstall actions and before
 any payload is removed. It checks for remaining file locks, then preserves the
 old agent-server and plugin directories in a transaction-specific temporary
 folder. Rollback restores those directories and the previous scheduled-task
-definition, and attempts to restart a previously running server. A successful
+definition, and attempts to restart a previously running server using its
+original Node executable and arguments (or its restored running task). Rollback
+also blocks startup again if installation had already restarted the new server.
+A successful
 install uses `STARTSERVER` and `AUTOSTART` as usual; uninstall never restarts the
 server. The updated launcher and server reject startup while
 `%LOCALAPPDATA%\TypeAgent\.msi-maintenance` exists.

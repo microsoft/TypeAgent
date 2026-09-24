@@ -22,6 +22,11 @@ function Export-ScheduledTask { param($TaskName, $TaskPath); return "<original-t
 function Register-ScheduledTask { param($TaskName, $TaskPath, $Xml, [switch]$Force); $script:taskEvents += "restored:$Xml" }
 function Unregister-ScheduledTask { param($TaskName, $TaskPath, $Confirm); $script:taskEvents += "removed"; $script:tasks = @() }
 function Get-CimInstance { param($ClassName, $Filter); return @() }
+$originalStop = ${function:Stop-PayloadProcesses}
+function Stop-PayloadProcesses([string]$payload) {
+    Assert (Test-Path (Join-Path $Root ".msi-maintenance")) "shutdown ran without blocking startup"
+    & $originalStop $payload
+}
 
 try {
     New-Item -ItemType Directory -Path $Root, $TransactionDir | Out-Null
@@ -100,13 +105,40 @@ try {
     Invoke-Maintenance
     Assert (-not (Test-Path $payload)) "first-install rollback left a payload"
 
+    # Rollback must not depend on MSI's PATH or lose custom server arguments.
+    $Action = "Begin"
+    Invoke-Maintenance
+    $state = Get-Content (Join-Path $TransactionDir "state.json") -Raw | ConvertFrom-Json
+    $state.WasRunning = $true
+    $state.RestartCommands = @(@{
+        Executable = "C:\version-manager\node.exe"
+        Arguments = '"' + (Join-Path $payload "dist\server.js") + '" --port 9123 --config inbox'
+        ProcessId = 999999
+        CreationDate = Get-Date
+    })
+    Save-MaintenanceState $state
+    $script:restarts = @()
+    function Start-Process {
+        param($FilePath, $ArgumentList, $WindowStyle)
+        Assert (-not (Test-Path (Join-Path $Root ".msi-maintenance"))) "restart occurred while maintenance was active"
+        $script:restarts += @{ Executable = $FilePath; Arguments = $ArgumentList }
+    }
+    $Action = "Rollback"
+    Invoke-Maintenance
+    Assert ($script:restarts.Count -eq 1) "rollback did not request a restart"
+    Assert ($script:restarts[0].Executable -eq "C:\version-manager\node.exe") "rollback resolved a different Node"
+    Assert ($script:restarts[0].Arguments -match "--port 9123 --config inbox") "rollback lost startup arguments"
+    Remove-Item Function:Start-Process
+
     $command = '"C:\Program Files\nodejs\node.exe" "' + (Join-Path $payload "dist\server.js") + '"'
     Assert (Test-PayloadCommand $command $payload) "quoted installed entry was not recognized"
     Assert (-not (Test-PayloadCommand ($command.Replace("agent-server\", "agent-server-other\")) $payload)) "sibling install matched"
+    Assert (-not (Test-PayloadCommand ('node.exe C:\tools\linter.js "' + (Join-Path $payload "dist\server.js") + '"') $payload)) "a data argument was mistaken for the running script"
+    Assert (Test-PayloadCommand ($command.Replace('" "' , '" --enable-source-maps "')) $payload) "Node runtime flags hid the installed entry"
 
     $now = Get-Date
     $script:processes = @(
-        [pscustomobject]@{ ProcessId = 100; ParentProcessId = 1; CreationDate = $now; Name = "node.exe"; CommandLine = $command },
+        [pscustomobject]@{ ProcessId = 100; ParentProcessId = 1; CreationDate = $now; Name = "node.exe"; CommandLine = $command + " --port 9123"; ExecutablePath = "C:\Program Files\nodejs\node.exe" },
         [pscustomobject]@{ ProcessId = 101; ParentProcessId = 100; CreationDate = $now.AddSeconds(1); Name = "helper.exe" },
         [pscustomobject]@{ ProcessId = 102; ParentProcessId = 101; CreationDate = $now.AddSeconds(2); Name = "helper.exe" },
         [pscustomobject]@{ ProcessId = 103; ParentProcessId = 100; CreationDate = $now.AddSeconds(-1); Name = "unrelated.exe" }
@@ -124,6 +156,18 @@ try {
     }
     $owned = @(Get-PayloadProcesses $payload)
     Assert (($owned.ProcessId | Sort-Object) -join "," -eq "100,101,102") "process-tree scope is incorrect"
+    $commands = @(Get-RestartCommands $owned $payload)
+    Assert ($commands.Count -eq 1) "restart command selection included non-server children"
+    Assert ($commands[0].Arguments -eq ('"' + (Join-Path $payload "dist\server.js") + '" --port 9123')) "restart arguments were not retained verbatim"
+    $listeners = @(
+        @{ LocalAddress = "192.168.1.20"; LocalPort = 8999; OwningProcess = 100 },
+        @{ LocalAddress = "127.0.0.1"; LocalPort = 8999; OwningProcess = 999 },
+        @{ LocalAddress = "::1"; LocalPort = 9123; OwningProcess = 100 },
+        @{ LocalAddress = "127.0.0.1"; LocalPort = 9123; OwningProcess = 999 },
+        @{ LocalAddress = "0.0.0.0"; LocalPort = 9124; OwningProcess = 100 }
+    )
+    $ports = @(Get-GracefulShutdownPorts $owned $listeners)
+    Assert ($ports.Count -eq 1 -and $ports[0] -eq 9124) "localhost-only shutdown could reach an unrelated listener"
     $snapshot = $script:processes[0].PSObject.Copy()
     $script:processes[0].CreationDate = $now.AddMinutes(1)
     Assert (-not (Get-SameProcess $snapshot)) "reused PID was accepted"
@@ -131,6 +175,7 @@ try {
     # Exercise real shutdown against an isolated Node parent and orphaned child.
     Remove-Item Function:Get-CimInstance
     Remove-Item Function:Invoke-CimMethod
+    Set-Item Function:Stop-PayloadProcesses -Value $originalStop
     New-Item -ItemType Directory -Path (Join-Path $payload "dist") -Force | Out-Null
     $serverFile = Join-Path $payload "dist\server.js"
     $stopFile = Join-Path $payload "dist\stop.js"
