@@ -12,7 +12,7 @@ import {
     resolveCopilotCli,
 } from "../../installers/common/register-plugin.mjs";
 
-function resolve({
+async function resolve({
     env = {},
     pathCopilot = "",
     copilotPath = "",
@@ -25,7 +25,7 @@ function resolve({
         probed.push(candidate);
         return outcomes.get(candidate) ?? { status: 0 };
     };
-    const selected = resolveCopilotCli({
+    const selected = await resolveCopilotCli({
         copilotPath,
         env,
         platform: "win32",
@@ -36,7 +36,7 @@ function resolve({
     return { selected, probed, lines };
 }
 
-test("working PATH npm shim wins over a stale WinGet fallback", () => {
+test("working PATH npm shim wins over a stale WinGet fallback", async () => {
     const pathShim = String.raw`C:\.tools\.npm-global\copilot.cmd`;
     const localAppData = String.raw`C:\Users\test\AppData\Local`;
     const staleWinGet = path.win32.join(
@@ -46,7 +46,7 @@ test("working PATH npm shim wins over a stale WinGet fallback", () => {
         "Links",
         "copilot.exe",
     );
-    const result = resolve({
+    const result = await resolve({
         env: { LOCALAPPDATA: localAppData },
         pathCopilot: pathShim,
         outcomes: new Map([
@@ -60,10 +60,10 @@ test("working PATH npm shim wins over a stale WinGet fallback", () => {
     assert.match(result.lines.join("\n"), /Selected Copilot CLI/);
 });
 
-test("later PATH candidate is tried when the first candidate fails", () => {
+test("later PATH candidate is tried when the first candidate fails", async () => {
     const stale = String.raw`C:\stale\copilot.exe`;
     const working = String.raw`C:\.tools\.npm-global\copilot.cmd`;
-    const result = resolve({
+    const result = await resolve({
         pathCopilot: [stale, working],
         outcomes: new Map([
             [stale, { status: 1 }],
@@ -75,7 +75,7 @@ test("later PATH candidate is tried when the first candidate fails", () => {
     assert.deepEqual(result.probed, [stale, working]);
 });
 
-test("PATH discovery probes a later working executable", (t) => {
+test("PATH discovery probes a later working executable", async (t) => {
     const root = fs.mkdtempSync(
         path.join(os.tmpdir(), "typeagent-copilot-resolution-"),
     );
@@ -101,7 +101,7 @@ test("PATH discovery probes a later working executable", (t) => {
     }
 
     const lines = [];
-    const selected = resolveCopilotCli({
+    const selected = await resolveCopilotCli({
         env: {
             ...process.env,
             PATH: [staleDir, workingDir, process.env.PATH]
@@ -118,10 +118,10 @@ test("PATH discovery probes a later working executable", (t) => {
     assert.match(lines.join("\n"), /validation failed/);
 });
 
-test("extensionless COPILOT_CLI_PATH remains the highest-priority override", () => {
+test("extensionless COPILOT_CLI_PATH remains the highest-priority override", async () => {
     const override = String.raw`C:\custom\copilot`;
     const pathCandidate = String.raw`C:\path\copilot.cmd`;
-    const result = resolve({
+    const result = await resolve({
         env: { COPILOT_CLI_PATH: override },
         pathCopilot: pathCandidate,
     });
@@ -130,7 +130,7 @@ test("extensionless COPILOT_CLI_PATH remains the highest-priority override", () 
     assert.deepEqual(result.probed, [override]);
 });
 
-test("VS Code Copilot shim is rejected before a working fallback", () => {
+test("VS Code Copilot shim is rejected before a working fallback", async () => {
     const appData = String.raw`C:\Users\test\AppData\Roaming`;
     const shim = path.win32.join(
         appData,
@@ -142,7 +142,7 @@ test("VS Code Copilot shim is rejected before a working fallback", () => {
         "copilot.exe",
     );
     const fallback = String.raw`C:\tools\copilot.cmd`;
-    const result = resolve({
+    const result = await resolve({
         env: { APPDATA: appData },
         copilotPath: shim,
         pathCopilot: fallback,
@@ -153,11 +153,11 @@ test("VS Code Copilot shim is rejected before a working fallback", () => {
     assert.match(result.lines.join("\n"), /Rejected VS Code Copilot shim/);
 });
 
-test("failed and timed out candidates are skipped for a working candidate", () => {
+test("failed and timed out candidates are skipped for a working candidate", async () => {
     const failed = String.raw`C:\failed\copilot.exe`;
     const timedOut = String.raw`C:\timed-out\copilot.cmd`;
     const working = String.raw`C:\working\copilot.cmd`;
-    const result = resolve({
+    const result = await resolve({
         env: { COPILOT_CLI_PATH: failed },
         copilotPath: timedOut,
         pathCopilot: working,
@@ -177,9 +177,9 @@ test("failed and timed out candidates are skipped for a working candidate", () =
     );
 });
 
-test("no usable candidate produces an explicit error", () => {
+test("no usable candidate produces an explicit error", async () => {
     const candidate = String.raw`C:\broken\copilot.exe`;
-    assert.throws(
+    await assert.rejects(
         () =>
             resolve({
                 pathCopilot: candidate,
