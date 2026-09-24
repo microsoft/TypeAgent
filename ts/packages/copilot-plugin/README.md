@@ -91,6 +91,17 @@ sanitized results contain hashes. Unobserved internal stage durations are
 null, not zero. Keep pilot/harness failures separate from measured outcomes,
 and do not pool fast refusals with successful-completion latency.
 
+**Live-run limitations:** the initial measured pass was paused, not completed.
+The fixture-only confirmation policy does not authorize SDK-created oversized
+tool-output files or intermediate `list.startEditList` interactions. The runner
+also answers clarification callbacks but does not continue a conversation when
+a candidate returns its clarification as final-response text. These are harness
+limitations, not evidence of inferior candidate accuracy. Do not use affected
+paired cases for comparative scores or resume paid execution until these paths
+have safe, scoped support and representative live validation. A correction
+requires a newly frozen protocol; preserve the original results and cumulative
+credit ledger rather than rewriting or selectively replaying them.
+
 ## Structured actions in Direct and MCP modes
 
 ### One-command discovery E2E session (Windows)
