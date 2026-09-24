@@ -75,6 +75,28 @@ test("registration commands time out and retain diagnostic output", async () => 
     assert.match(lines.join("\n"), /Copilot invocation failed/);
 });
 
+test(
+    "PowerShell launchers use File mode with literal paths and arguments",
+    { skip: process.platform !== "win32" },
+    async (t) => {
+        const root = temporaryDirectory(t);
+        const script = path.join(root, "copilot & literal.ps1");
+        fs.writeFileSync(
+            script,
+            "ConvertTo-Json -InputObject @($args) -Compress\n",
+        );
+        const args = [
+            "path with spaces",
+            "value & echo injected",
+            "$(Get-Date)",
+            "%PATH%",
+        ];
+        const result = await runCopilot(script, args, { write() {} });
+        assert.equal(result.failed, false);
+        assert.deepEqual(JSON.parse(result.output), args);
+    },
+);
+
 test("allowed command failures still report timeout rather than success", async () => {
     const result = await runCopilot(
         process.execPath,

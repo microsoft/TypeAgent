@@ -156,14 +156,8 @@ function resolveWindowsLauncher(copilotPath) {
     return copilotPath;
 }
 
-function runBoundedProcess(command, args, { timeout, ...options }) {
+function waitForCopilot(child, timeout) {
     return new Promise((resolve) => {
-        const child = spawn(command, args, {
-            ...options,
-            shell: false,
-            stdio: ["ignore", "pipe", "pipe"],
-            windowsHide: true,
-        });
         let stdout = "";
         let stderr = "";
         let error;
@@ -216,19 +210,20 @@ function spawnCopilot(copilotPath, args, timeout) {
             quoteCmdArgument(launcherPath),
             ...args.map(quoteCmdArgument),
         ].join(" ");
-        return runBoundedProcess(
+        const child = spawn(
             process.env.ComSpec ?? "cmd.exe",
             ["/d", "/s", "/c", commandLine],
             {
-                encoding: "utf8",
                 shell: false,
-                timeout,
+                stdio: ["ignore", "pipe", "pipe"],
+                windowsHide: true,
                 windowsVerbatimArguments: true,
             },
         );
+        return waitForCopilot(child, timeout);
     }
     if (process.platform === "win32" && /\.ps1$/i.test(launcherPath)) {
-        return runBoundedProcess(
+        const child = spawn(
             "powershell.exe",
             [
                 "-NoProfile",
@@ -239,17 +234,19 @@ function spawnCopilot(copilotPath, args, timeout) {
                 ...args,
             ],
             {
-                encoding: "utf8",
                 shell: false,
-                timeout,
+                stdio: ["ignore", "pipe", "pipe"],
+                windowsHide: true,
             },
         );
+        return waitForCopilot(child, timeout);
     }
-    return runBoundedProcess(launcherPath, args, {
-        encoding: "utf8",
+    const child = spawn(launcherPath, args, {
         shell: false,
-        timeout,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
     });
+    return waitForCopilot(child, timeout);
 }
 
 function discoverPathCopilots(platform = process.platform, env = process.env) {
