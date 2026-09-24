@@ -7,8 +7,38 @@ import {
     createClientIO,
     submitCancellableCommand,
 } from "../src/shared/typeagent-client.js";
+import { translationFallbackOptions } from "../src/mcp/agentServer.js";
 
 describe("unchanged user-originated natural-language requests", () => {
+    it("changes only translation-to-reasoning fallback and preserves exact NL", async () => {
+        const submitCommand = jest.fn(async () => ({
+            ok: true,
+            entry: {
+                requestId: "id",
+                completion: Promise.resolve(undefined),
+            },
+        }));
+        const dispatcher = { submitCommand } as unknown as Dispatcher;
+        await submitCancellableCommand(
+            dispatcher,
+            "Show my lists.",
+            undefined,
+            translationFallbackOptions("disabled"),
+        );
+        expect(submitCommand).toHaveBeenCalledWith(
+            "Show my lists.",
+            undefined,
+            { translationReasoningFallback: false },
+            expect.any(String),
+        );
+        expect(translationFallbackOptions("enabled")).toEqual({
+            translationReasoningFallback: true,
+        });
+        expect(translationFallbackOptions(undefined)).toBeUndefined();
+        expect(() => translationFallbackOptions("false")).toThrow(
+            "must be enabled or disabled",
+        );
+    });
     it.each([
         "list my playlists",
         "learn: create a playlist",

@@ -47,6 +47,16 @@ function toolError(text: string): CallToolResult {
     return { isError: true, content: [{ type: "text", text }] };
 }
 
+export function translationFallbackOptions(value: string | undefined) {
+    if (value === undefined) return undefined;
+    if (value !== "enabled" && value !== "disabled") {
+        throw new Error(
+            "TYPEAGENT_TRANSLATION_REASONING_FALLBACK must be enabled or disabled",
+        );
+    }
+    return { translationReasoningFallback: value === "enabled" };
+}
+
 /**
  * Format a large result for display. Strips markdown formatting and wraps
  * in a code fence so the CLI preserves newlines and structured layout.
@@ -295,6 +305,9 @@ export class TypeAgentMcpServer {
                 dispatcher,
                 command,
                 extra?.signal,
+                translationFallbackOptions(
+                    process.env.TYPEAGENT_TRANSLATION_REASONING_FALLBACK,
+                ),
             );
 
             if (pendingPrompts.length > 0) {

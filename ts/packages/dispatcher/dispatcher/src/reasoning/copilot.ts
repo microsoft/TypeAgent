@@ -95,6 +95,8 @@ import {
     pruneStaleCodingSessions,
 } from "./codingSessionLifecycle.js";
 import { getCodingAttachmentPaths } from "./codingContext.js";
+import { getCopilotCreditBudget } from "./copilotCreditBudget.js";
+import { ghcpEvalExecutionStopped } from "../execute/ghcpEvalPolicy.js";
 import {
     REASONING_DENY,
     getReasoningPermissionChoices,
@@ -376,8 +378,14 @@ async function createCopilotClient(
         path.join(os.tmpdir(), "typeagent-copilot-"),
     );
 
+    const creditBudget = getCopilotCreditBudget();
     const client = new CopilotClient({
-        connection: RuntimeConnection.forStdio(),
+        connection: RuntimeConnection.forStdio(
+            creditBudget && process.env.TYPEAGENT_GHCP_EVAL_CLI
+                ? { path: process.env.TYPEAGENT_GHCP_EVAL_CLI }
+                : undefined,
+        ),
+        ...(creditBudget ? { requestHandler: creditBudget } : {}),
         env: {
             ...process.env,
             CLAUDE_CONFIG_DIR: isolatedConfigDir,
@@ -713,6 +721,11 @@ function createCopilotPermissionHandler(
     allowedRoot?: string,
 ): PermissionHandler {
     return async (request) => {
+        if (ghcpEvalExecutionStopped()) {
+            return {
+                kind: "denied-no-approval-rule-and-could-not-request-from-user",
+            };
+        }
         const agentContext = context.sessionContext.agentContext;
         const scopeViolation = getCopilotPermissionScopeViolation(
             request,
@@ -2110,6 +2123,13 @@ function getCopilotSessionConfig(
     return {
         clientName: "TypeAgent",
         model,
+        ...(process.env.TYPEAGENT_COPILOT_CREDIT_LEDGER
+            ? {
+                  capi: { enableWebSocketResponses: false },
+                  sessionLimits: { maxAiCredits: 60 },
+                  contextTier: "default" as const,
+              }
+            : {}),
         ...(reasoningEffort ? { reasoningEffort } : {}),
         streaming: true,
         tools: [

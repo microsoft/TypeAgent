@@ -31,6 +31,60 @@ Registered alongside routing (calls are disabled in bypass mode):
 
 The hook output fields `handled`, `responseContent`, and `handledBy` are supported in current Copilot CLI behavior, allowing the hook to skip the agentic loop entirely when TypeAgent handles a request. For local runtime debugging against the runtime repo, use `pnpm copilot:dev`.
 
+## Guarded GHCP evaluation harness
+
+The `scripts/ghcp-eval*.mjs` tools run actual Copilot SDK conversations for seven
+MCP/native routing candidates and twenty cases (four five-case cohorts). They
+are separate from the discovery smoke launcher below. Build the plugin and
+agent-server dependencies first; run script tests with `pnpm test:ghcp-eval`
+from this package.
+
+The harness requires an existing reconciled credit ledger, an authenticated
+Copilot executable, and an existing TypeAgent model-configuration directory.
+It never creates a fresh spending allowance or fetches credentials. The ledger
+includes opening parent/implementation usage, reporting headroom, and a
+catalog-verified conservative maximum reservation per model request. The
+request proxy admits before forwarding, settles explicit Copilot billing
+fields, retains unknown charges, rejects other models/WebSockets, and limits
+each scoped session to 24 requests and the cumulative ledger to 2,000 requests.
+The SDK's 60-credit session limit is only an additional **soft** limit.
+This is not a general-purpose pricing service: verify the model's current
+credit rates and maximum context/output bounds before constructing a ledger.
+
+From `ts`, invoke:
+
+```text
+node packages\copilot-plugin\scripts\ghcp-eval-preflight.mjs <new-preflight-dir> <model-config-dir> <ledger> --external-evidence
+node packages\copilot-plugin\scripts\ghcp-eval.mjs <copilot.exe> <preflight-dir> <run-dir> <model-config-dir> <ledger> <candidate-ids> pilot <oracle.json> <case-ids>
+node packages\copilot-plugin\scripts\ghcp-eval.mjs <copilot.exe> <preflight-dir> <run-dir> <model-config-dir> <ledger> 1,2,3,4,5,6,7 measured <oracle.json> S1 <batch-start> 7 1
+```
+
+Use a nonsynchronized local directory for live databases/locks. Preserve
+sanitized results, the frozen specification, and the cumulative ledger in
+durable storage. Measured batches contain one paired case across all seven
+candidates; advance the zero-based start by seven only after reconciliation.
+One complete balanced pass contains 140 trials; freeze additional repetitions
+only when the reconciled allowance permits them. A changed specification or a mismatched
+persisted trial count blocks resumption instead of replaying uncertain work.
+The oracle JSON pins public issue/PR evidence and a relative `readinessFile`
+pointing to the successful preflight result.
+
+The four domain agents are lists, GitHub CLI, registered PowerShell file
+actions, and IP configuration. Fixtures are restored per trial. Shipped MCP
+domain schemas outside that scope are disabled only in the disposable
+session. The production internal reasoning toolset is unchanged. The
+`translationReasoningFallback` request option controls only the existing
+unknown/clarification translation-to-reasoning transition, not ordinary
+orchestration. Optional `TYPEAGENT_GHCP_EVAL_TRACE` records its actual decision,
+entry, and outcome. No global configuration or shared service is modified.
+
+**`completed_ungraded` is not task success.** Final-answer faithfulness must
+be reviewed against the independent fixtures/external evidence after timing.
+Network answers and raw evidence remain in clearly named private local files;
+sanitized results contain hashes. Unobserved internal stage durations are
+null, not zero. Keep pilot/harness failures separate from measured outcomes,
+and do not pool fast refusals with successful-completion latency.
+
 ## Structured actions in Direct and MCP modes
 
 ### One-command discovery E2E session (Windows)
