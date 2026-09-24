@@ -62,6 +62,12 @@ describe("mixed MCP routing", () => {
         expect(output.additionalContext).not.toContain(
             "typeagent-executeAction",
         );
+        expect(output.additionalContext).toContain(
+            "TypeAgent is the preferred action provider in MCP mode",
+        );
+        expect(output.additionalContext).toContain(
+            "explicitly reports an unsupported capability before any action executes",
+        );
     });
 
     it.each(["hook", "extension"])(
@@ -107,6 +113,9 @@ describe("mixed MCP routing", () => {
             for (const message of messages) {
                 expect(message).toContain("Mixed policy:");
                 expect(message).toContain("searchActions/executeAction");
+                expect(message).toContain(
+                    "Native tools are fallback only when no suitable TypeAgent capability is available",
+                );
             }
             await run("direct");
             expect(isMixedMcpMode()).toBe(false);
@@ -239,6 +248,7 @@ describe("mixed MCP routing", () => {
         "Create a list and add these three items",
         "Review this diff and track missing tests in a list",
         "Explain this function",
+        "Compare PRs #3058, #3059, and #2993 and recommend smoke tests",
         'Keep "quotes", \u6771\u4eac and\nnewlines',
     ])("lets Copilot judge ownership without rewriting: %s", (prompt) => {
         writeConfig({ mode: "mcp", mcpRouting: "mixed" });
@@ -256,6 +266,25 @@ describe("mixed MCP routing", () => {
         );
         expect(output.additionalContext).toContain(
             "Never replay uncertain delivery",
+        );
+        expect(output.additionalContext).toContain(
+            "Copilot owning the analysis does not change this preference",
+        );
+        expect(output.additionalContext).toContain(
+            "Before using a native tool for an intermediate operation",
+        );
+        expect(output.additionalContext).toContain(
+            "refine the query before concluding",
+        );
+        expect(output.additionalContext).toContain(
+            "rather than native GitHub tools, gh, or web/API fetches",
+        );
+        expect(output.additionalContext).toContain(
+            "Never bypass a denial or retry a failed, cancelled, or uncertain action through native tools",
+        );
+        expect(output.additionalContext).not.toContain("use your normal tools");
+        expect(output.additionalContext).not.toContain(
+            "Native coding, file, search, and terminal tools remain available for Copilot-owned work",
         );
         expect(output.additionalContext).not.toContain("SYSTEM HOOK DIRECTIVE");
         expect(output.additionalContext).not.toContain(
@@ -275,6 +304,9 @@ describe("mixed MCP routing", () => {
             );
             expect(output.additionalContext).toContain(
                 "SPECIAL PREFIX DETECTED",
+            );
+            expect(output.additionalContext).toContain(
+                "Recording directives must never fall back to native tools",
             );
             expect(output.additionalContext).not.toContain(
                 "typeagent-searchActions",
@@ -305,10 +337,51 @@ describe("mixed MCP routing", () => {
                 mcpRouting,
                 powershell: { enabled: false },
             });
+
             expect(getPowerShellHookOutput("powershell", args)).toBeUndefined();
             expect(handleMcpRedirect(input).additionalContext).not.toContain(
                 "[TypeAgent PowerShell reminder]",
             );
         }
     });
+
+    it.each(["delegate", "mixed"] as const)(
+        "does not exempt native CLI or HTTP commands from %s MCP provider guidance",
+        (mcpRouting) => {
+            writeConfig({ mode: "mcp", mcpRouting });
+            for (const command of [
+                "gh pr view 3058",
+                "git show HEAD",
+                "node -e \"fetch('https://api.github.com')\"",
+                "python fetch_pr.py",
+                "curl https://api.github.com",
+                "Invoke-RestMethod https://api.github.com",
+            ]) {
+                const output = getPowerShellHookOutput("powershell", {
+                    command,
+                });
+                expect(output?.additionalContext).toContain(
+                    "TypeAgent is the preferred action provider in MCP mode",
+                );
+                expect(output?.additionalContext).toContain(
+                    "Native tools are a fallback only after establishing",
+                );
+                expect(output?.additionalContext).toContain(
+                    "Never bypass a denial or retry a failed, cancelled, or uncertain action",
+                );
+                if (mcpRouting === "mixed") {
+                    expect(output?.additionalContext).toContain(
+                        "otherwise discover a suitable capability before choosing native tools",
+                    );
+                } else {
+                    expect(output?.additionalContext).toContain(
+                        "user's intact request",
+                    );
+                    expect(output?.additionalContext).not.toContain(
+                        "typeagent-searchActions",
+                    );
+                }
+            }
+        },
+    );
 });

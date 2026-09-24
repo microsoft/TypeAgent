@@ -14,7 +14,8 @@ User prompt
   +-> mcp delegate (default): Copilot calls typeagent-processCommand
   |
   +-> mcp mixed: Copilot chooses whole-request delegation or owns the task
-  |              and uses structured TypeAgent tools for selected steps
+  |              and prefers structured TypeAgent tools for operations
+  |              (native tools only when no suitable capability is available)
   |
   +-> dev: registered PowerShell action/flow
   |           -> handled response
@@ -142,6 +143,31 @@ Run launcher regression checks with
 `npm run test:e2e-launcher` from `ts\packages\copilot-plugin`.
 
 ### Routing and tool contracts
+
+**In MCP mode, TypeAgent is the preferred action provider.** Copilot owning
+the reasoning does not mean using native tools for the operations underneath
+it. For example, Copilot can compare PRs and recommend smoke tests while using
+TypeAgent to read PR details and changed-file lists, rather than native GitHub
+tools, `gh`, or direct web/API requests.
+
+In mixed policy, reuse an existing suitable action contract or discover one
+before selecting a native tool. Refine unrelated discovery results before
+concluding that no suitable TypeAgent capability is available. Native tools
+are fallback only for an established capability gap; explain that gap and
+preserve the user's scope and permissions. Reasoning and explanation without
+an external operation do not require a TypeAgent call.
+
+Delegate policy still sends the user's intact request to `processCommand`
+first, without a structured-discovery stage. Native fallback requires an
+explicit unsupported-capability result before any action executes. Errors,
+partial results, connection failures, denials, cancellation, and uncertain
+delivery do not authorize repeating an action through native tools or another
+provider. Recording directives always stay with TypeAgent.
+
+These are routing instructions, not removal of native tools or a runtime
+permission gate. PowerShell reminders apply even to commands such as `gh`,
+`git`, and scripting runtimes in MCP mode; Direct mode's existing command
+exemptions and dev/bypass behavior are unchanged.
 
 There are two intentional entry paths:
 

@@ -40,7 +40,7 @@ export function createExtensionCommands(
         {
             name: "typeagent-mode",
             description:
-                "Show or set TypeAgent mode: direct, mcp [delegate|mixed], dev, bypass. MCP preserves saved policy; default delegate uses processCommand, mixed enables Copilot-selected discovery/direct routing.",
+                "Show or set TypeAgent mode: direct, mcp [delegate|mixed], dev, bypass. MCP preserves saved policy; default delegate uses processCommand, mixed prefers TypeAgent discovery/execution for Copilot-selected operations. Native tools are fallback only for capability gaps.",
             handler: async ({ args }) => {
                 await log(handleModeSetting(args, "/typeagent-mode"));
             },

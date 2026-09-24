@@ -17,6 +17,7 @@ import {
     isPowerShellGuidanceEnabled,
 } from "../shared/plugin-config.js";
 import {
+    mcpActionProviderGuidance,
     mixedMcpGuidance,
     mixedPowerShellGuidance,
 } from "../shared/mcp-guidance.js";
@@ -84,11 +85,12 @@ export function handleMcpRedirect(input: HookInput): HookOutput {
         modifiedPrompt: input.prompt,
         additionalContext: [
             "[SYSTEM HOOK DIRECTIVE — MANDATORY]",
+            mcpActionProviderGuidance,
             "The active MCP routing policy or a recording directive delegates this request to TypeAgent.",
-            "TypeAgent is the ONLY system that can fulfill this request.",
             "You MUST call the typeagent-processCommand tool with the user's exact request as the 'command' parameter.",
-            "Do NOT use bash, file tools, web search, or any other tool — they cannot handle this type of request.",
-            "Do NOT attempt to answer or fulfill the request yourself.",
+            "Do NOT substitute bash, file tools, web search, or another provider for this initial delegation.",
+            "Native fallback is allowed only if TypeAgent explicitly reports an unsupported capability before any action executes; a generic error or partial result does not qualify. Recording directives must never fall back to native tools.",
+            "Do NOT attempt to answer or fulfill the request yourself before delegation.",
             "Do NOT add any reasoning or commentary before calling the tool.",
             "Simply call typeagent-processCommand immediately, then present the COMPLETE result to the user.",
             "CRITICAL: Display the tool result in FULL — do NOT summarize, truncate, or paraphrase it.",

@@ -6,7 +6,10 @@ import {
     isMixedMcpMode,
     isPowerShellGuidanceEnabled,
 } from "../shared/plugin-config.js";
-import { mixedPowerShellGuidance } from "../shared/mcp-guidance.js";
+import {
+    mcpActionProviderGuidance,
+    mixedPowerShellGuidance,
+} from "../shared/mcp-guidance.js";
 
 interface PowerShellHookOutput {
     additionalContext: string;
@@ -55,12 +58,30 @@ export function getPowerShellHookOutput(
 
     const command = commandFromArgs(toolArgs);
     const firstWord = command?.trim().split(/\s+/)[0].toLowerCase();
-    if (!command || (firstWord && passthroughCommands.has(firstWord))) {
+    if (!command) {
         return undefined;
     }
 
     if (isMixedMcpMode()) {
-        return { additionalContext: mixedPowerShellGuidance };
+        return {
+            additionalContext: [
+                mcpActionProviderGuidance,
+                mixedPowerShellGuidance,
+            ].join("\n"),
+        };
+    }
+    if (mode === "mcp") {
+        return {
+            additionalContext: [
+                mcpActionProviderGuidance,
+                "Use typeagent-processCommand instead of direct PowerShell for the user's intact request under MCP delegate policy.",
+                "Pass the user's original natural language, not shell code or a synthetic request for an intermediate step.",
+                "Native fallback requires an explicit unsupported-capability result before any action executes, never a generic error or partial result. Recording directives must never fall back to native tools.",
+            ].join("\n"),
+        };
+    }
+    if (firstWord && passthroughCommands.has(firstWord)) {
+        return undefined;
     }
 
     return {
