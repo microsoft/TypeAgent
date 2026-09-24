@@ -23,14 +23,23 @@ describe("plugin manifests", () => {
         const mcp = JSON.parse(
             await readFile(path.join(root, plugin.mcpServers), "utf8"),
         ) as {
-            mcpServers: Record<string, { tools: string[] }>;
+            mcpServers: Record<string, { args: string[]; tools: string[] }>;
         };
 
         expect(plugin.name).toBe("typeagent-memory");
-        expect(hooks.hooks.userPromptSubmitted?.[0]?.command).toContain(
-            "hook-router.js",
+        // Entry points must be the esbuild output so installed copies do not
+        // depend on workspace packages resolved via pnpm symlinks.
+        for (const event of ["userPromptSubmitted", "userPromptTransformed"]) {
+            expect(hooks.hooks[event]?.[0]?.command).toContain(
+                "dist/bundle/hooks/hook-router.js",
+            );
+        }
+        expect(hooks.hooks.agentStop?.[0]?.command).toContain(
+            "dist/bundle/hooks/stop-router.js",
         );
-        expect(hooks.hooks.agentStop?.[0]?.command).toContain("stop-router.js");
+        expect(mcp.mcpServers["typeagent-memory"]?.args).toContain(
+            "${PLUGIN_ROOT}/dist/bundle/mcp/server.js",
+        );
         expect(mcp.mcpServers["typeagent-memory"]?.tools).toEqual([
             "remember",
             "recall",

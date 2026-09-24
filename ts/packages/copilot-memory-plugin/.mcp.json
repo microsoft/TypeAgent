@@ -4,7 +4,7 @@
       "command": "node",
       "args": [
         "${PLUGIN_ROOT}/scripts/launch.mjs",
-        "${PLUGIN_ROOT}/dist/mcp/server.js"
+        "${PLUGIN_ROOT}/dist/bundle/mcp/server.js"
       ],
       "tools": ["remember", "recall"]
     }
