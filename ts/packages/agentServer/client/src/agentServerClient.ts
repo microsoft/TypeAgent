@@ -1468,10 +1468,18 @@ export async function connectDispatcher(
     onDisconnect?: () => void,
 ): Promise<Dispatcher> {
     const connection = await connectAgentServer(url, onDisconnect);
-    const { dispatcher } = await connection.joinConversation(clientIO, options);
-    // Override close to also close the WebSocket (old behavior)
-    dispatcher.close = async () => {
+    try {
+        const { dispatcher } = await connection.joinConversation(
+            clientIO,
+            options,
+        );
+        // Override close to also close the WebSocket (old behavior)
+        dispatcher.close = async () => {
+            await connection.close();
+        };
+        return dispatcher;
+    } catch (error) {
         await connection.close();
-    };
-    return dispatcher;
+        throw error;
+    }
 }

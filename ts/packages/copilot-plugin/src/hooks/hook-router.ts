@@ -199,7 +199,7 @@ function handleStatusCommand(lower: string): HookOutput | undefined {
             "- `@typeagent run <command>` — send command directly to TypeAgent",
             "- `@typeagent mode direct` — switch to direct mode",
             "- `@typeagent mode mcp` — switch to MCP mode, preserving saved policy (default: delegate)",
-            "- `@typeagent mode mcp mixed` — delegate whole requests or use searchActions/executeAction for Copilot-selected steps",
+            "- `@typeagent mode mcp mixed` — delegate whole requests or prefer TypeAgent searchActions/executeAction for Copilot-selected operations; native tools only for capability gaps",
             "- `@typeagent mode mcp delegate` — delegate user prompts to TypeAgent (default)",
             "- `@typeagent mode dev` — route registered PowerShell flows and recording directives",
             "- `@typeagent mode bypass` — disable TypeAgent routing",

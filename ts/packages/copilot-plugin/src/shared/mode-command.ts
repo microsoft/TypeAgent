@@ -13,8 +13,8 @@ export function getModeDescription(): string {
     switch (getMode()) {
         case "mcp":
             return getMcpRouting() === "mixed"
-                ? "Mixed policy: Copilot chooses whole-request delegation through processCommand or owns the task and uses searchActions/executeAction for TypeAgent steps it selects."
-                : "Delegate policy (default): delegate the user's exact request through processCommand. Copilot-selected discovery/direct calls are routing guidance only in MCP mixed policy; structured tools remain available.";
+                ? "Mixed policy: Copilot chooses whole-request delegation through processCommand or owns the analysis and prefers TypeAgent searchActions/executeAction for intermediate operations. Native tools are fallback only when no suitable TypeAgent capability is available, never to bypass a denial or retry failed or uncertain actions."
+                : "Delegate policy (default): delegate the user's exact request through processCommand. TypeAgent is the preferred action provider; native fallback requires an explicit unsupported capability before any action executes, never an error or denial. Recording stays with TypeAgent. Copilot-selected discovery/direct calls are routing guidance only in MCP mixed policy; structured tools remain available.";
         case "direct":
             return "The hook handles user natural language directly. The persistent MCP bridge remains available for structured actions.";
         case "dev":

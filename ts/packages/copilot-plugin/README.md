@@ -14,7 +14,8 @@ User prompt
   +-> mcp delegate (default): Copilot calls typeagent-processCommand
   |
   +-> mcp mixed: Copilot chooses whole-request delegation or owns the task
-  |              and uses structured TypeAgent tools for selected steps
+  |              and prefers structured TypeAgent tools for operations
+  |              (native tools only when no suitable capability is available)
   |
   +-> dev: registered PowerShell action/flow
   |           -> handled response
@@ -142,6 +143,31 @@ Run launcher regression checks with
 `npm run test:e2e-launcher` from `ts\packages\copilot-plugin`.
 
 ### Routing and tool contracts
+
+**In MCP mode, TypeAgent is the preferred action provider.** Copilot owning
+the reasoning does not mean using native tools for the operations underneath
+it. For example, Copilot can compare PRs and recommend smoke tests while using
+TypeAgent to read PR details and changed-file lists, rather than native GitHub
+tools, `gh`, or direct web/API requests.
+
+In mixed policy, reuse an existing suitable action contract or discover one
+before selecting a native tool. Refine unrelated discovery results before
+concluding that no suitable TypeAgent capability is available. Native tools
+are fallback only for an established capability gap; explain that gap and
+preserve the user's scope and permissions. Reasoning and explanation without
+an external operation do not require a TypeAgent call.
+
+Delegate policy still sends the user's intact request to `processCommand`
+first, without a structured-discovery stage. Native fallback requires an
+explicit unsupported-capability result before any action executes. Errors,
+partial results, connection failures, denials, cancellation, and uncertain
+delivery do not authorize repeating an action through native tools or another
+provider. Recording directives always stay with TypeAgent.
+
+These are routing instructions, not removal of native tools or a runtime
+permission gate. PowerShell reminders apply even to commands such as `gh`,
+`git`, and scripting runtimes in MCP mode; Direct mode's existing command
+exemptions and dev/bypass behavior are unchanged.
 
 There are two intentional entry paths:
 
@@ -274,18 +300,43 @@ pending prompts/unsupported interaction rather than pretending completion.
 
 ### Explicit binding, reconnect, and trust
 
-Stdio provides no intrinsic Copilot session identity. Each structured MCP
-process finds/creates a dedicated named conversation with a random process-local
-name, then explicitly joins its **concrete conversation ID** with
-`structuredActions: {}`. All four operations share that one owner and concurrent
-connection attempts are singleflight. This does not implicitly share context
-with the ordinary Direct NL hook's conversation.
+NL and structured calls use the same conversation selection in every routing
+mode. With no explicit ID, the first caller resolves the server default and
+saves its **concrete conversation ID** under the plugin data directory's
+`conversation-bindings` folder, keyed by server URL. Later hooks, MCP processes,
+and reconnects reuse that ID even if the server default changes. Concurrent
+first callers atomically adopt the same saved ID. Routing mode does not change
+which conversation data is visible.
+
+This is shared plugin/server context, not one conversation per Copilot chat:
+stdio does not provide an intrinsic Copilot session identity. Sessions using the
+same plugin data directory and server share the saved default, as NL callers
+already shared the server default. Separate plugin data directories or explicit
+IDs select separate context.
+
+The two routes keep separate connections. Structured calls explicitly join the
+selected ID with `structuredActions: {}` to obtain an independent owner; the
+saved binding contains only the public conversation ID, never approval state
+or a resume capability. All four structured operations share that process's
+owner and connection attempts are singleflight.
 
 To intentionally use a known conversation, set `TYPEAGENT_CONVERSATION_ID`, or
 set public `conversationId` in the plugin `config.json`. Environment wins over
 config. The ID must exist: an explicit failed join does not silently fall back to
 another conversation. An explicit ID selects context, **not** a prior owner's
-authority. Two fresh processes using the same public ID get isolated owners.
+authority. The setting applies to NL and structured calls in every mode. A
+bound structured client refuses new calls if the selected ID changes instead
+of continuing against a different conversation from NL. Close active sessions
+before changing selection, then start fresh sessions; pending work is not
+automatically moved or replayed. Two fresh processes using the same public ID
+still get isolated structured owners.
+
+A missing/deleted conversation or an unreadable/corrupt saved binding is an
+error, not a reason to silently choose a new default. To select another existing
+conversation, configure its ID. To intentionally resolve the default again,
+close sessions, remove only the matching server's saved binding file, and start
+fresh sessions with no explicit ID. Configuration fields such as selected
+skills are not rewritten when the default ID is saved.
 
 The server's structured resume token is retained only in private volatile
 connector memory. It is never logged, printed, persisted, put in config, or sent

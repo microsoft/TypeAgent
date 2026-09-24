@@ -58,19 +58,10 @@ describe("staged plugin artifact", () => {
                 TYPEAGENT_PLUGIN_DATA: directory,
                 TYPEAGENT_HOST: "127.0.0.1",
                 TYPEAGENT_PORT: String(address.port),
+                TYPEAGENT_MACRO_RECORDING_ENABLED: "false",
             };
             delete env.TYPEAGENT_MODE;
-            for (const [args, response] of [
-                ["mcp mixed", "TypeAgent mode switched to mcp (mixed)."],
-                ["", "TypeAgent mode: mcp (mixed)"],
-                ["mcp typo", "Usage:"],
-                ["mcp mixed extra", "Usage:"],
-                ["direct mixed", "Usage:"],
-                ["mcp\nmixed\nextra", "Usage:"],
-                ["mcp\ndelegate", "TypeAgent mode switched to mcp (delegate)."],
-                ["mcp", "TypeAgent mode switched to mcp (delegate)."],
-                ["MCP MIXED", "TypeAgent mode switched to mcp (mixed)."],
-            ]) {
+            const runHook = async (prompt: string): Promise<HookOutput> => {
                 const child = spawn(
                     process.execPath,
                     [path.join(pluginRoot, "dist", "hooks", "hook-router.js")],
@@ -89,12 +80,25 @@ describe("staged plugin artifact", () => {
                         sessionId: "mode-artifact",
                         timestamp: 1,
                         cwd: directory,
-                        prompt: `@typeagent mode ${args}`,
+                        prompt,
                     }),
                 );
                 const [code] = await once(child, "close");
                 expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
-                const output = JSON.parse(stdout) as HookOutput;
+                return JSON.parse(stdout) as HookOutput;
+            };
+            for (const [args, response] of [
+                ["mcp mixed", "TypeAgent mode switched to mcp (mixed)."],
+                ["", "TypeAgent mode: mcp (mixed)"],
+                ["mcp typo", "Usage:"],
+                ["mcp mixed extra", "Usage:"],
+                ["direct mixed", "Usage:"],
+                ["mcp\nmixed\nextra", "Usage:"],
+                ["mcp\ndelegate", "TypeAgent mode switched to mcp (delegate)."],
+                ["mcp", "TypeAgent mode switched to mcp (delegate)."],
+                ["MCP MIXED", "TypeAgent mode switched to mcp (mixed)."],
+            ]) {
+                const output = await runHook(`@typeagent mode ${args}`);
                 expect(output.handled).toBe(true);
                 expect(output.responseContent).toContain(response);
                 expect(output.modifiedPrompt).toBeUndefined();
@@ -106,6 +110,32 @@ describe("staged plugin artifact", () => {
                 mcpRouting: "mixed",
                 powershell: { enabled: false },
             });
+            const prompt =
+                "Compare PRs #3058, #3059, and #2993 and recommend smoke tests.";
+            for (const policy of ["mixed", "delegate"]) {
+                await runHook(`@typeagent mode mcp ${policy}`);
+                const output = await runHook(prompt);
+                expect(output.modifiedPrompt).toBe(prompt);
+                expect(output.additionalContext).toContain(
+                    "TypeAgent is the preferred action provider in MCP mode",
+                );
+                expect(output.additionalContext).toContain(
+                    "Native tools are a fallback only after establishing",
+                );
+                if (policy === "mixed") {
+                    expect(output.additionalContext).toContain(
+                        "rather than native GitHub tools, gh, or web/API fetches",
+                    );
+                } else {
+                    expect(output.additionalContext).toContain(
+                        "You MUST call the typeagent-processCommand",
+                    );
+                    expect(output.additionalContext).not.toContain(
+                        "typeagent-searchActions",
+                    );
+                }
+                expect(connections).toBe(0);
+            }
         } finally {
             await new Promise<void>((resolve, reject) => {
                 server.close((error) => (error ? reject(error) : resolve()));
@@ -135,6 +165,12 @@ describe("staged plugin artifact", () => {
         expect(bundle).toContain('from "@github/copilot-sdk/extension"');
         expect(bundle).toContain("TYPEAGENT_SELECTED_SKILLS");
         expect(bundle).toContain("skillDirectories");
+        expect(bundle).toContain(
+            "TypeAgent is the preferred action provider in MCP mode",
+        );
+        expect(bundle).toContain(
+            "otherwise discover a suitable capability before choosing native tools",
+        );
     });
 
     it("registers the structured Direct bridge in the actual bundled agent server", async () => {

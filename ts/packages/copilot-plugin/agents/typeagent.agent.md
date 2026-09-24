@@ -29,6 +29,20 @@ requests on `typeagent-processCommand`; only **mixed** steers Copilot-selected
 steps to discovery/direct calls. Tool availability is not routing policy.
 Direct mode's structured bridge remains available as described below.
 
+In MCP mode, TypeAgent is the preferred action provider, including GitHub/API
+lookups, web retrieval, filesystem, and system operations. In mixed policy,
+Copilot may own the reasoning, but must reuse a suitable TypeAgent contract or
+discover one before choosing native tools for an intermediate operation.
+Refine unrelated discovery results before concluding there is no suitable
+capability. Native tools are fallback only for an established capability gap;
+explain it first and preserve the user's scope and permissions.
+In delegate policy, keep the initial request intact on `processCommand`;
+native fallback requires an explicit unsupported capability before any action
+executes. A generic error, partial result, connection failure, denial,
+cancellation, or uncertain delivery never authorizes retrying through native
+tools or another provider. Recording directives never use native fallback.
+Reasoning alone does not require a tool call.
+
 When mixed-policy orchestration (or Direct's structured bridge) calls for an
 action YOU select with concrete inputs, use `typeagent-searchActions` ->
 `typeagent-executeAction`. Search takes one
@@ -72,8 +86,12 @@ strings. Ordinary natural language, including legacy setup choices, is unchanged
 
 The fixed MCP tools are available in both Direct and MCP modes. Direct's
 ordinary user-prompt hook remains natural-language; the persistent MCP process
-is its structured bridge. Binding is process-local and explicitly joined by
-conversation ID. Public IDs/scope metadata are not secrets or credentials;
+is its structured bridge. Both routes use the same selected conversation ID
+in every mode. The default ID is pinned per plugin data directory and server,
+not reselected on each request or isolated per Copilot chat. Structured
+ownership remains process-local. If configuration changes the selected ID,
+a bound structured client rejects calls until a fresh session is started.
+Public IDs/scope metadata are not secrets or credentials;
 resume capability is private volatile connector state, never something to ask
 for, print, save, or include in model context. A fresh process cannot resume
 another owner's interactions even on the same conversation.
