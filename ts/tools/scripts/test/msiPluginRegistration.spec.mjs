@@ -34,6 +34,29 @@ function launcher(root, name, script) {
     return command;
 }
 
+test("direct executable arguments preserve shell metacharacters literally", async () => {
+    const args = [
+        "path with spaces",
+        "value & echo injected",
+        "value; echo injected",
+        "$(echo injected)",
+        "%PATH%",
+        '"quoted"',
+    ];
+    const result = await runCopilot(
+        process.execPath,
+        [
+            "-e",
+            "console.log(JSON.stringify(process.argv.slice(1)))",
+            "--",
+            ...args,
+        ],
+        { write() {} },
+    );
+    assert.equal(result.failed, false);
+    assert.deepEqual(JSON.parse(result.output), args);
+});
+
 test("registration commands time out and retain diagnostic output", async () => {
     const lines = [];
     const started = Date.now();

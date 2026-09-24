@@ -160,6 +160,7 @@ function runBoundedProcess(command, args, { timeout, ...options }) {
     return new Promise((resolve) => {
         const child = spawn(command, args, {
             ...options,
+            shell: false,
             stdio: ["ignore", "pipe", "pipe"],
             windowsHide: true,
         });
