@@ -107,6 +107,11 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             ++i;
         }
         this.messageCount = baseMessageOrdinal + i;
+        // A count that stops being a safe integer would silently reuse
+        // ordinals on the next append.
+        if (!Number.isSafeInteger(this.messageCount)) {
+            throw new Error("Message ordinal exceeds Number.MAX_SAFE_INTEGER");
+        }
         return this.textLocationIndex.addTextLocations(allChunks, eventHandler);
     }
 
@@ -217,15 +222,19 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             this.textLocationIndex.clear();
             this.textLocationIndex.deserialize(data.indexData);
         }
-        if (data.messageCount !== undefined) {
+        if (
+            data.messageCount !== undefined &&
+            Number.isSafeInteger(data.messageCount) &&
+            data.messageCount >= 0
+        ) {
             this.messageCount = data.messageCount;
             return;
         }
-        // Data written before messageCount existed assigned ordinals from
-        // chunk counts, so stored ordinals do not match message positions.
-        // Each message's chunks share one ordinal, so rank-compressing the
-        // distinct stored ordinals restores message positions. Messages with
-        // no chunks left no locations; their positions are unrecoverable.
+        // Reached when messageCount is absent (older data assigned ordinals
+        // from chunk counts) or unsafe. Rank-compressing the distinct stored
+        // ordinals restores message positions because each message's chunks
+        // share one ordinal. Messages with no chunks left no locations; their
+        // positions are unrecoverable.
         this.messageCount = 0;
         let previous: MessageOrdinal = -1;
         for (let i = 0; i < this.textLocationIndex.size; ++i) {
