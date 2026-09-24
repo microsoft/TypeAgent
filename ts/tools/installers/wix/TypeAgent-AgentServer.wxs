@@ -53,7 +53,22 @@
     <Binary Id="ProgressVbs" SourceFile="$(var.InstallerSourceDir)\progress.vbs" />
 
     <!-- Upgrade: replaces older versions, blocks downgrades -->
-    <MajorUpgrade DowngradeErrorMessage="A newer version of TypeAgent is already installed." />
+    <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer version of TypeAgent is already installed." />
+
+    <Binary Id="MaintainServerPs1" SourceFile="$(var.InstallerSourceDir)\maintain-server.ps1" />
+    <Binary Id="MaintenanceVbs" SourceFile="$(var.InstallerSourceDir)\maintenance.vbs" />
+    <CustomAction Id="PrepareMaintenance" BinaryKey="MaintenanceVbs"
+                  VBScriptCall="PrepareMaintenance" Execute="immediate" Return="check" />
+    <!-- Immediate execution is required before an older MSI's removal script.
+         Rollback is registered first, after InstallInitialize opens the transaction. -->
+    <CustomAction Id="BeginMaintenance" BinaryKey="MaintenanceVbs"
+                  VBScriptCall="BeginMaintenance" Execute="immediate" Return="check" />
+    <CustomAction Id="RollbackMaintenance" BinaryKey="WixCA" DllEntry="WixQuietExec64"
+                  Execute="rollback" Return="ignore" Impersonate="yes" />
+    <CustomAction Id="CompleteMaintenance" BinaryKey="WixCA" DllEntry="WixQuietExec64"
+                  Execute="deferred" Return="check" Impersonate="yes" />
+    <CustomAction Id="CommitMaintenance" BinaryKey="WixCA" DllEntry="WixQuietExec64"
+                  Execute="commit" Return="ignore" Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
          Endpoint provider selection
@@ -702,6 +717,10 @@
                   Impersonate="yes" />
 
     <InstallExecuteSequence>
+      <Custom Action="PrepareMaintenance" Before="RollbackMaintenance">NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="RollbackMaintenance" Before="BeginMaintenance">NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="BeginMaintenance" Before="RemoveExistingProducts">NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="CommitMaintenance" After="BeginMaintenance">NOT UPGRADINGPRODUCTCODE</Custom>
       <Custom Action="ResetMainProgress"        After="InstallFiles">NOT REMOVE~="ALL"</Custom>
       <Custom Action="MainProgress1"            After="ResetMainProgress">NOT REMOVE~="ALL"</Custom>
       <Custom Action="ExtractAgentServerPayload" After="MainProgress1">NOT REMOVE~="ALL"</Custom>
@@ -720,7 +739,8 @@
       <Custom Action="MainProgress6"           After="ProvisionAiSystemsConfig">NOT REMOVE~="ALL"</Custom>
       <Custom Action="InstallPrereqs"          After="MainProgress6">NOT REMOVE~="ALL"</Custom>
       <Custom Action="MainProgress7"           After="InstallPrereqs">NOT REMOVE~="ALL"</Custom>
-      <Custom Action="StartAgentServer"        After="MainProgress7">(NOT REMOVE~="ALL") AND (STARTSERVER="1")</Custom>
+      <Custom Action="CompleteMaintenance"     After="MainProgress7">NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="StartAgentServer"        After="CompleteMaintenance">(NOT REMOVE~="ALL") AND (STARTSERVER="1")</Custom>
       <Custom Action="MainProgress8"           After="StartAgentServer">NOT REMOVE~="ALL"</Custom>
       <Custom Action="EnableAutostart"         After="MainProgress8">(NOT REMOVE~="ALL") AND (AUTOSTART="1")</Custom>
       <Custom Action="ShellLocationMissing"    After="EnableAutostart">(NOT REMOVE~="ALL") AND (SHELL="1") AND (NOT SHELLBASEURL) AND (NOT SHELLSTORAGE) AND ((NOT SHELLFEED) OR (NOT SHELLPACKAGE) OR (NOT SHELLORG) OR (NOT SHELLPROJECT))</Custom>
