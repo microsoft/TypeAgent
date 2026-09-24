@@ -3,6 +3,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { isGhcpEvalArtifact } from "./ghcpEvalArtifacts.js";
 
 let executionFailureObserved = false;
 
@@ -77,7 +78,8 @@ export function assertGhcpEvalAction(
             (file) =>
                 fs.realpathSync(path.join(fixtureRoot, file)).toLowerCase(),
         );
-        if (allowed.includes(requested)) return;
+        if (allowed.includes(requested) || isGhcpEvalArtifact(parameters.path))
+            return;
     }
     recordGhcpEvalEvent("action.denied", { schemaName, actionName });
     markGhcpEvalExecutionFailure();

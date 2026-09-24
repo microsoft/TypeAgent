@@ -91,16 +91,25 @@ sanitized results contain hashes. Unobserved internal stage durations are
 null, not zero. Keep pilot/harness failures separate from measured outcomes,
 and do not pool fast refusals with successful-completion latency.
 
-**Live-run limitations:** the initial measured pass was paused, not completed.
-The fixture-only confirmation policy does not authorize SDK-created oversized
-tool-output files or intermediate `list.startEditList` interactions. The runner
-also answers clarification callbacks but does not continue a conversation when
-a candidate returns its clarification as final-response text. These are harness
-limitations, not evidence of inferior candidate accuracy. Do not use affected
-paired cases for comparative scores or resume paid execution until these paths
-have safe, scoped support and representative live validation. A correction
-requires a newly frozen protocol; preserve the original results and cumulative
-credit ledger rather than rewriting or selectively replaying them.
+**Protocol 2:** the original partial pass remains historical, with affected
+paired cases excluded rather than scored as candidate failures. Each new trial
+gets a private SDK temp directory. Overflow files are registered only from SDK
+completion notices, must be regular single-link direct children with the SDK
+filename pattern, and are SHA256-checked again before registered file reads.
+This does not authorize arbitrary temp files, native replacement actions, or
+retrying failed execution. Provenance failures stop the run as harness failures.
+
+Fixture confirmations also permit `list.startEditList` only for the specific
+case's disposable target list. A final-text clarification receives the same
+single scripted answer as a callback, within the original end-to-end deadline
+and never after a terminal execution failure. The internal fallback toolset
+and candidate entry interfaces are unchanged. Freeze a new run after validating
+these paths; do not overwrite or selectively replay the historical run.
+
+The user-authorized cumulative ceiling is now 50,000 Copilot AI credits. This
+raises the maximum accepted ledger cap, not the balance of any existing run:
+reconcile all prior charges, preserve the original ledger and budget amendment,
+and retain reporting headroom before admitting new work.
 
 ## Structured actions in Direct and MCP modes
 

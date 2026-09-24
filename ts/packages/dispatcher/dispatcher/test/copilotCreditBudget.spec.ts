@@ -197,9 +197,11 @@ describe("Copilot credit admission", () => {
         },
     );
 
-    it("rejects cap increases and unbounded requests", () => {
+    it("accepts the amended ceiling but rejects excess and unbounded requests", () => {
         const state = ledger();
-        state.capNanoAiu = 20_000_000_000_001;
+        state.capNanoAiu = 50_000_000_000_000;
+        expect(() => validateCreditLedger(state)).not.toThrow();
+        state.capNanoAiu = 50_000_000_000_001;
         expect(() => validateCreditLedger(state)).toThrow("ceiling");
         state.capNanoAiu = 20_000;
         state.requestMaximumNanoAiu = 0;

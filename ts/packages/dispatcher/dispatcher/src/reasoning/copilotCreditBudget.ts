@@ -51,8 +51,8 @@ export function validateCreditLedger(ledger: CopilotCreditLedger): void {
     ] as const) {
         requireAmount(ledger[name], name);
     }
-    if (ledger.capNanoAiu > 20_000_000_000_000) {
-        throw new Error("Credit ledger exceeds the 20,000-credit ceiling");
+    if (ledger.capNanoAiu > 50_000_000_000_000) {
+        throw new Error("Credit ledger exceeds the 50,000-credit ceiling");
     }
     if (ledger.requestMaximumNanoAiu === 0) {
         throw new Error("A positive request reservation is required");

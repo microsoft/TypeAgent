@@ -12,6 +12,10 @@ import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
 import { CopilotCreditBudget } from "../../dispatcher/dispatcher/dist/reasoning/copilotCreditBudget.js";
 import { getCopilotPermissionDefault } from "../../dispatcher/dispatcher/dist/reasoning/copilot.js";
 import {
+    registerGhcpEvalArtifact,
+    isGhcpEvalArtifact,
+} from "../../dispatcher/dispatcher/dist/execute/ghcpEvalArtifacts.js";
+import {
     balancedOrder,
     buildCorpus,
     expectedLists,
@@ -21,6 +25,7 @@ import {
     listFixture,
     normalizeLists,
     shuffled,
+    sendWithClarification,
 } from "./ghcp-eval-corpus.mjs";
 import { stageCopilotPlugin } from "../../../tools/scripts/stageCopilotPlugin.mjs";
 import {
@@ -286,6 +291,14 @@ function prepareTrial(candidate, directory, workspace) {
     const sessionId = randomUUID();
     env.TYPEAGENT_COPILOT_CREDIT_SESSION_SCOPE = sessionId;
     env.TYPEAGENT_GHCP_EVAL_TRACE = path.join(directory, "events.jsonl");
+    const temporaryRoot = path.resolve(directory, "sdk-temp");
+    fs.mkdirSync(temporaryRoot);
+    env.TEMP = env.TMP = env.TMPDIR = temporaryRoot;
+    env.TYPEAGENT_GHCP_EVAL_ARTIFACTS = path.join(directory, "artifacts.json");
+    fs.writeFileSync(
+        env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
+        JSON.stringify({ root: temporaryRoot, artifacts: [] }),
+    );
     fs.cpSync(path.join(template, "data"), env.TYPEAGENT_USER_DATA_DIR, {
         recursive: true,
         filter: (entry) => !entry.endsWith(".lock"),
@@ -370,6 +383,10 @@ function persistTrial({
     directory,
     started,
 }) {
+    if (result.harnessError) {
+        result.status = "harness_failed";
+        result.error = result.harnessError;
+    }
     result.totalIncludingSetupMs = performance.now() - started;
     collectObservations(result, env.TYPEAGENT_GHCP_EVAL_TRACE);
     result.terminalExecutionFailure = executionStopped;
@@ -424,6 +441,17 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         ? { toolResults: [] }
         : undefined;
     const approvedInteractions = new Set();
+    const clarify = (question, source) => {
+        if (executionStopped || clarificationGiven)
+            throw new Error("Clarification cannot replay stopped work");
+        clarificationGiven = true;
+        result.stateAtClarification = normalizeLists(
+            JSON.parse(fs.readFileSync(stores[0], "utf8")),
+        );
+        result.clarificationSource = source;
+        result.clarificationQuestion = question;
+        return testCase.clarification;
+    };
     const started = performance.now();
     try {
         if (candidate.id !== 7) {
@@ -551,12 +579,8 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                             "Clarification is required before effect confirmation.",
                         );
                     }
-                    clarificationGiven = true;
-                    result.stateAtClarification = normalizeLists(
-                        JSON.parse(fs.readFileSync(stores[0], "utf8")),
-                    );
                     return {
-                        answer: testCase.clarification,
+                        answer: clarify(request.question, "callback"),
                         wasFreeform: true,
                     };
                 }
@@ -567,14 +591,22 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 )?.result.structuredContent;
                 const action = pending?.prompt?.action;
                 if (
-                    confirmationCount < 4 &&
+                    !executionStopped &&
+                    confirmationCount < 8 &&
                     pending?.prompt?.type === "confirmation" &&
-                    fixtureConfirmationAllowed(
+                    (fixtureConfirmationAllowed(
                         testCase.id,
                         action,
                         workspace,
                         evidence?.issueTitle,
-                    )
+                    ) ||
+                        (action?.schemaName === "powershell.powershell-files" &&
+                            action.actionName === "readFile" &&
+                            typeof action.parameters?.path === "string" &&
+                            isGhcpEvalArtifact(
+                                action.parameters.path,
+                                env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
+                            )))
                 ) {
                     const yes = request.choices?.find((choice) =>
                         /^(yes|approve|confirm|proceed|allow)\b/i.test(choice),
@@ -637,6 +669,20 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             }),
         );
         session.on("tool.execution_complete", (event) => {
+            try {
+                const artifact = registerGhcpEvalArtifact(
+                    event.data.result,
+                    env.TEMP,
+                    env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
+                );
+                if (artifact) {
+                    result.outputArtifacts ??= [];
+                    result.outputArtifacts.push(artifact);
+                }
+            } catch (error) {
+                result.harnessError = `Artifact provenance failed: ${String(error)}`;
+                executionStopped = true;
+            }
             if (network) network.toolResults.push(event.data);
             const tool = result.tools.find(
                 (tool) => tool.toolCallId === event.data.toolCallId,
@@ -676,10 +722,14 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         }
         measuredStart = performance.now();
         result.promptAcceptedAt = new Date().toISOString();
-        const answer = await session.sendAndWait(
-            { prompt: result.prompt },
-            90_000,
-        );
+        const answer = await sendWithClarification({
+            session,
+            prompt: result.prompt,
+            timeoutMs: 90_000,
+            testCase,
+            canClarify: () => !clarificationGiven && !executionStopped,
+            clarify,
+        });
         result.e2eMs = performance.now() - measuredStart;
         result.finalResponseAt = new Date().toISOString();
         result.answer = answer?.data.content ?? "";
@@ -804,6 +854,7 @@ const order = balancedOrder(
 const specification =
     JSON.stringify(
         {
+            protocolVersion: 2,
             runnerSha256: createHash("sha256")
                 .update(fs.readFileSync(fileURLToPath(import.meta.url)))
                 .digest("hex"),
@@ -829,6 +880,11 @@ const specification =
             perSessionRequestLimit: 24,
             cumulativeRequestLimit: 2000,
             requestCreditReservation: 2118,
+            cumulativeCreditCap: 50000,
+            overflowPolicy:
+                "Trial-private temp artifacts registered from SDK completion notices; canonical direct child, regular unlinked file, SHA256 rechecked before registered reads.",
+            clarificationPolicy:
+                "One scripted corpus answer through callback or final text, same 90-second end-to-end deadline; no continuation after execution failure.",
             sessionCreditSoftLimit: 60,
             ledgerPath,
             templateDirectory: path.resolve(template),
@@ -889,6 +945,7 @@ for (const entry of order.slice(batchStart, batchStart + batchSize)) {
         }) + "\n",
     );
     if (
+        result.status === "harness_failed" ||
         (phase === "pilot" && result.status !== "completed_ungraded") ||
         /credit|budget|reservation|Agent server|permission orchestrator/i.test(
             result.error ?? "",

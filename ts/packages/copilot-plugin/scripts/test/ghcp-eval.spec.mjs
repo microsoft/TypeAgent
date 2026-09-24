@@ -18,9 +18,80 @@ import {
     listFixture,
     normalizeLists,
     shuffled,
+    sendWithClarification,
 } from "../ghcp-eval-corpus.mjs";
 
 const corpus = buildCorpus("C:\\fixtures", "owner/repo", 10, 20, 30);
+test("intermediate edit confirmation is limited to the case's disposable list", () => {
+    const action = {
+        schemaName: "list",
+        actionName: "startEditList",
+        parameters: { listName: "errand" },
+    };
+    assert.equal(
+        fixtureConfirmationAllowed("R5", action, "C:\\fixtures"),
+        true,
+    );
+    assert.equal(
+        fixtureConfirmationAllowed("S1", action, "C:\\fixtures"),
+        false,
+    );
+    assert.equal(
+        fixtureConfirmationAllowed("A1", action, "C:\\fixtures"),
+        false,
+    );
+});
+test("final-text clarification gets exactly one answer within the same deadline", async () => {
+    const calls = [];
+    const session = {
+        sendAndWait: async (input, timeout) => {
+            calls.push({ input, timeout });
+            return {
+                data: {
+                    content:
+                        calls.length === 1
+                            ? "Which list should receive apples?"
+                            : "Done",
+                },
+            };
+        },
+    };
+    const testCase = corpus.find((entry) => entry.id === "A1");
+    const result = await sendWithClarification({
+        session,
+        prompt: testCase.prompt,
+        timeoutMs: 1000,
+        testCase,
+        canClarify: () => true,
+        clarify: () => testCase.clarification,
+    });
+    assert.equal(result.data.content, "Done");
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].input.prompt, "The grocery list.");
+    assert.ok(calls[1].timeout <= calls[0].timeout);
+});
+test("text continuation never replays stopped work or confirms a guessed target", async () => {
+    for (const [text, allowed] of [
+        ["Which list?", false],
+        ["Confirm adding apples to grocery?", true],
+    ]) {
+        let calls = 0;
+        await sendWithClarification({
+            session: {
+                sendAndWait: async () => {
+                    calls++;
+                    return { data: { content: text } };
+                },
+            },
+            prompt: "Add apples to my list.",
+            timeoutMs: 1000,
+            testCase: corpus.find((entry) => entry.id === "A1"),
+            canClarify: () => allowed,
+            clarify: () => assert.fail("must not answer"),
+        });
+        assert.equal(calls, 1);
+    }
+});
 test("failure detection preserves structured status and NL errors, not check-result words", () => {
     assert.equal(
         terminalExecutionFailure(

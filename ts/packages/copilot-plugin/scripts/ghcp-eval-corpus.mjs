@@ -173,6 +173,18 @@ export function fixtureConfirmationAllowed(
     }
 
     if (schemaName !== "list") return false;
+    if (actionName === "startEditList") {
+        const target = {
+            S4: "grocery",
+            M3: "grocery",
+            M5: "errand",
+            R4: "packing",
+            R5: "errand",
+            A1: "grocery",
+            A4: "grocery",
+        }[id];
+        return target !== undefined && parameters.listName === target;
+    }
     if (actionName === "clearList") {
         return ["M3", "A4"].includes(id) && parameters.listName === "grocery";
     }
@@ -208,6 +220,31 @@ export function isClarificationQuestion(id, question) {
         subject?.test(question) &&
             /\b(which|what|how|choose|specify|mean)\b/i.test(question),
     );
+}
+
+export async function sendWithClarification({
+    session,
+    prompt,
+    timeoutMs,
+    testCase,
+    canClarify,
+    clarify,
+}) {
+    const start = performance.now();
+    const first = await session.sendAndWait({ prompt }, timeoutMs);
+    const text = first?.data.content ?? "";
+    if (
+        canClarify() &&
+        testCase.clarification &&
+        isClarificationQuestion(testCase.id, text)
+    ) {
+        const remaining = timeoutMs - (performance.now() - start);
+        if (remaining <= 0)
+            throw new Error("Clarification exhausted trial timeout");
+        const answer = clarify(text, "final_text");
+        return session.sendAndWait({ prompt: answer }, remaining);
+    }
+    return first;
 }
 
 export function shuffled(values, seed) {
