@@ -217,15 +217,25 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             this.textLocationIndex.clear();
             this.textLocationIndex.deserialize(data.indexData);
         }
-        // Older data has no messageCount; the last chunk's ordinal is the
-        // best available bound (undercounts only trailing messages that
-        // had no indexed chunks).
-        this.messageCount =
-            data.messageCount ??
-            (this.textLocationIndex.size > 0
-                ? this.textLocationIndex.get(this.textLocationIndex.size - 1)
-                      .messageOrdinal + 1
-                : 0);
+        if (data.messageCount !== undefined) {
+            this.messageCount = data.messageCount;
+            return;
+        }
+        // Data written before messageCount existed assigned ordinals from
+        // chunk counts, so stored ordinals do not match message positions.
+        // Each message's chunks share one ordinal, so rank-compressing the
+        // distinct stored ordinals restores message positions. Messages with
+        // no chunks left no locations; their positions are unrecoverable.
+        this.messageCount = 0;
+        let previous: MessageOrdinal = -1;
+        for (let i = 0; i < this.textLocationIndex.size; ++i) {
+            const location = this.textLocationIndex.get(i);
+            if (location.messageOrdinal !== previous) {
+                previous = location.messageOrdinal;
+                ++this.messageCount;
+            }
+            location.messageOrdinal = this.messageCount - 1;
+        }
     }
 
     // Since a message has multiple chunks, each of which is indexed individually, we can end up
