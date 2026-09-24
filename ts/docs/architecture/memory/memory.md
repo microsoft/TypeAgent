@@ -1,5 +1,148 @@
 # Memory architecture
 
+TypeAgent currently has three cooperating memory paths. They share KnowPro
+building blocks, but they serve different scopes and have different lifecycle
+semantics.
+
+| Path                       | Scope                                                  | Primary purpose                                                         | Runtime state                                                               |
+| -------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Per-conversation memory    | One conversation                                       | Structured recall and question answering within the active conversation | Enabled in connected mode; knowledge extraction is queued in the background |
+| Unified conversation index | All conversations in one profile                       | Find, summarize, and backfill conversations by content                  | Enabled in agent-server mode; unavailable when model initialization fails   |
+| Durable memory service     | Profile-level corpora, sources, events, and procedures | Managed document, browser, event, and procedural memory                 | Started by agent-server and exposed to native agents and MCP clients        |
+
+These paths are complementary. The per-conversation store preserves detailed
+conversation-local context. The unified index is a derived, rebuildable search
+surface. The durable service provides source revisions, provenance, jobs,
+correction, forgetting, and interfaces shared by several producers.
+
+## Views by audience
+
+| Audience                                       | Document                                                     |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| Maintainers and agent authors                  | [Current system](current-system.md)                          |
+| Product engineers, evaluators, and demo owners | [Memory scenarios](scenarios.md)                             |
+| Feature owners and release planners            | [Implementation status](../../plans/memory-system/STATUS.md) |
+| Structured RAG readers                         | [Structured RAG](#structured-rag) on this page               |
+
+```mermaid
+flowchart LR
+    USER[User or external client]
+    SERVER[agent-server]
+    DISPATCHER[Per-conversation dispatcher]
+    LOCAL[(ConversationMemory)]
+    UNIFIED[(Unified conversation index)]
+    SERVICE[Durable memory service]
+    MCP[Authenticated MCP endpoint]
+    MEMORY[Native @memory agent]
+    BROWSER[Browser agent and Memory Center]
+
+    USER --> SERVER
+    SERVER --> DISPATCHER
+    DISPATCHER --> LOCAL
+    DISPATCHER --> UNIFIED
+    SERVER --> SERVICE
+    USER --> MEMORY --> SERVICE
+    BROWSER --> SERVICE
+    USER --> MCP --> SERVICE
+```
+
+## Current capabilities
+
+### Conversation recall and discovery
+
+- User and assistant turns can be indexed in a per-conversation
+  `ConversationMemory` with extracted entities, topics, relationships, and
+  message text.
+- The unified index tags content by conversation and supports
+  `@conversation search`, `@conversation summarize`, and historical backfill
+  through `@conversation index`.
+- Conversation names support hybrid lexical and embedding-based lookup through
+  `@conversation find`.
+- Connected-mode conversation turns and verified action outcomes also produce
+  durable events. Event search distinguishes user assertions and verified
+  observations from assistant prose.
+
+### Managed document memory
+
+- The native `@memory` agent creates and selects corpora, imports Markdown
+  files or folders, searches sources, returns extractive grounded answers, and
+  manages jobs.
+- Sources retain revisions, ingestion settings, bounded content, and derived
+  entities, topics, and relationships.
+- Replacement uses optimistic revision checks. Forgetting and corpus clearing
+  use preview-and-confirm tokens and rebuild the published index atomically.
+- Import profiles cover model-free exact indexing (`fast`), content indexing
+  (`balanced`), and deeper structured extraction (`deep`).
+
+### Browser and web-activity memory
+
+- Browser capture, bookmark/history import, and HTML-folder import submit
+  normalized source content to the durable service.
+- Visited, bookmarked, captured, and imported activity is stored as events
+  linked to page sources, with domain, page type, source, and time filters.
+- The browser Memory Center exposes corpus, source, revision, knowledge, job,
+  replacement, forgetting, and reindex operations.
+
+### Procedural memory
+
+- The durable service stores immutable, versioned personal procedures with
+  source-revision citations and stale-version tracking.
+- It supports candidate detection, drafting, rejection, saving, searching,
+  archiving, and optimistic personal-how-to settings.
+- Procedure retrieval is implemented as guidance. Automatic execution,
+  feedback-driven promotion, and workflow or macro approval remain future
+  product work.
+
+## Enablement and maturity
+
+| Capability                               | Availability            | Notes                                                                                    |
+| ---------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------- |
+| Per-conversation extraction              | Enabled by agent-server | Runs asynchronously and requires configured models                                       |
+| Unified live indexing                    | Enabled by agent-server | User and assistant turns are tagged with conversation and turn identifiers               |
+| Historical conversation backfill         | Command-driven          | `@conversation index` indexes historical user turns from display logs                    |
+| Native durable-memory agent              | Shipped provider        | `@memory` is the preferred TypeAgent UX                                                  |
+| Memory MCP endpoint                      | Enabled by agent-server | Authenticated loopback endpoint for external clients; not a second memory implementation |
+| Browser durable memory and Memory Center | Implemented             | Live browser acceptance and performance validation remain pending                        |
+| Durable conversation events              | Implemented             | Parity and end-to-end acceptance remain pending                                          |
+| Procedural service APIs                  | Implemented             | Grounded editing and approved execution are not complete                                 |
+
+## Storage and ownership
+
+In connected mode, memory is rooted under the active TypeAgent profile:
+
+```text
+<instanceDir>/
+  memory/                         durable service corpora and event stores
+  conversations/
+    conversations.json           conversation registry
+    _unified/                     derived cross-conversation index
+    <conversationId>/
+      conversationMemory*        conversation-local KnowPro data
+      displayLog.json             source for historical backfill
+```
+
+The durable memory service owns extraction, chunking, indexing, revisions,
+jobs, search, correction, and forgetting for its corpora. Producers such as
+the browser and dispatcher capture source material and provenance; they do not
+maintain parallel durable extraction pipelines.
+
+## Known boundaries
+
+- The unified conversation index is append-only. Deleted conversations are
+  tombstoned and filtered immediately, but physical compaction is still
+  pending.
+- Historical backfill indexes user turns, while live indexing includes user
+  and assistant turns.
+- Durable grounded answers are extractive and citation-bearing; model-backed
+  synthesis is not currently part of the contract.
+- The Memory Center and newer event paths have focused automated coverage, but
+  their live end-to-end acceptance checklists are not complete.
+- Temporal claims, bitemporal validity, contradiction resolution, entity
+  merge/split, remote synchronization, and enterprise governance are planned
+  rather than current capabilities.
+
+## Structured RAG
+
 TypeAgent memory uses a method called **Structured RAG** for indexing and querying agent conversations.
 
 Classic RAG is defined as embedding each conversation turn into a vector, and then for each user request embedding the user request and then placing into the answer generation prompt the top conversation turns by cosine similarity to the user request.
@@ -33,9 +176,19 @@ Structured RAG has the following advantages over state-of-the-art memory using c
 5. **Associative memory**:  Structured RAG can support pre-fetching associations as a user types their request.  For example, if the user types "what was the cactus...", the agent can begin fetching memories associated with cactus even before the user finishes typing their request.  Having discrete index terms also enables agents to use completion hints when a user is typing or speaking a request.  For example a user may type or say "play walk..." and the agent can supply completions "walk this way", "walk on the wild side" etc.
 6. **Tools for memory exploration and management**:  When memories are stored as embeddings, little can be done to manage the memories.  Structured indices and tables on the other hand can be explored and managed using additional tools that employ direct query languages or even natural language query coupled with a set of management and exploration tools.
 
-## Implementations
+## Implementations and interfaces
 
-- The [KnowPro](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/knowPro/README.md) package (in-development) contains the most recent implementation exploring the ideas of Structured RAG.
+- [KnowPro](../../../packages/knowPro/README.md) implements the structured
+  conversation indexes and search primitives.
+- [Conversation memory](../../../packages/memory/conversation/README.md) wraps
+  KnowPro for persisted conversations and document import.
+- [Memory service](../../../packages/memory/service/README.md) provides durable
+  corpora, sources, revisions, jobs, events, procedures, and management
+  semantics.
+- [Memory MCP server](../../../packages/memory/mcp-server/README.md) exposes the
+  service contract to external MCP clients.
+- [Memory agent](../../../packages/agents/memory/README.md) provides the native
+  `@memory` command and action experience over the same service.
 
 ## Demos
 
