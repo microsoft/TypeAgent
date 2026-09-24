@@ -57,6 +57,24 @@ import {
     SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
+    CatalogEntry,
+    CatalogSearchResult,
+    ListSkillsRequest,
+    SearchSkillsRequest,
+    SkillGrammarRoutingResult,
+    GetSkillRequest,
+    ReadSkillFileRequest,
+    ReadSkillFileResponse,
+    PublishSkillRequest,
+    ChangeSkillStateRequest,
+    SelectSkillRevisionRequest,
+    SkillAcquisitionPreview,
+    SkillAcquisitionRequest,
+    CheckSkillUpdateResponse,
+    SkillAcquisitionRevisionResponse,
+    ProcedureArtifactRequest,
+    ProcedureArtifactPreview,
+    ProcedureArtifactPromotion,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -189,6 +207,37 @@ export type AgentServerConnection = {
     ): Promise<MacroVersionRef>;
     cancelMacroRun(runId: string): Promise<void>;
     getMacroRun(runId: string): Promise<MacroRunRecord>;
+    listSkills?(request?: ListSkillsRequest): Promise<CatalogEntry[]>;
+    searchSkills?(
+        request: SearchSkillsRequest,
+    ): Promise<readonly CatalogSearchResult[]>;
+    matchSkillGrammar?(utterance: string): Promise<SkillGrammarRoutingResult>;
+    getSkill?(request: GetSkillRequest): Promise<CatalogEntry | undefined>;
+    readSkillFile?(
+        request: ReadSkillFileRequest,
+    ): Promise<ReadSkillFileResponse>;
+    publishSkill?(request: PublishSkillRequest): Promise<CatalogEntry>;
+    changeSkillState?(request: ChangeSkillStateRequest): Promise<CatalogEntry>;
+    activateSkill?(request: SelectSkillRevisionRequest): Promise<CatalogEntry>;
+    rollbackSkill?(request: SelectSkillRevisionRequest): Promise<CatalogEntry>;
+    previewSkillAcquisition?(
+        request: SkillAcquisitionRequest,
+    ): Promise<SkillAcquisitionPreview>;
+    checkSkillUpdate?(
+        request: SkillAcquisitionRequest,
+    ): Promise<CheckSkillUpdateResponse>;
+    acquireAndPublishSkill?(
+        request: SkillAcquisitionRequest,
+    ): Promise<SkillAcquisitionRevisionResponse>;
+    updateSkill?(
+        request: SkillAcquisitionRequest,
+    ): Promise<SkillAcquisitionRevisionResponse>;
+    previewProcedureArtifact?(
+        request: ProcedureArtifactRequest,
+    ): Promise<ProcedureArtifactPreview>;
+    promoteProcedureArtifact?(
+        request: ProcedureArtifactRequest,
+    ): Promise<ProcedureArtifactPromotion>;
 
     joinConversation(
         clientIO: ClientIO,
@@ -477,6 +526,94 @@ export function createAgentServerConnection(
 
         async getMacroRun(runId: string): Promise<MacroRunRecord> {
             return rpc.invoke("getMacroRun", runId);
+        },
+
+        async listSkills(request?: ListSkillsRequest): Promise<CatalogEntry[]> {
+            return rpc.invoke("listSkills", request);
+        },
+
+        async searchSkills(
+            request: SearchSkillsRequest,
+        ): Promise<readonly CatalogSearchResult[]> {
+            return rpc.invoke("searchSkills", request);
+        },
+
+        async matchSkillGrammar(
+            utterance: string,
+        ): Promise<SkillGrammarRoutingResult> {
+            return rpc.invoke("matchSkillGrammar", utterance);
+        },
+
+        async getSkill(
+            request: GetSkillRequest,
+        ): Promise<CatalogEntry | undefined> {
+            return rpc.invoke("getSkill", request);
+        },
+
+        async readSkillFile(
+            request: ReadSkillFileRequest,
+        ): Promise<ReadSkillFileResponse> {
+            return rpc.invoke("readSkillFile", request);
+        },
+
+        async publishSkill(
+            request: PublishSkillRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("publishSkill", request);
+        },
+
+        async changeSkillState(
+            request: ChangeSkillStateRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("changeSkillState", request);
+        },
+
+        async activateSkill(
+            request: SelectSkillRevisionRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("activateSkill", request);
+        },
+
+        async rollbackSkill(
+            request: SelectSkillRevisionRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("rollbackSkill", request);
+        },
+
+        async previewSkillAcquisition(
+            request: SkillAcquisitionRequest,
+        ): Promise<SkillAcquisitionPreview> {
+            return rpc.invoke("previewSkillAcquisition", request);
+        },
+
+        async checkSkillUpdate(
+            request: SkillAcquisitionRequest,
+        ): Promise<CheckSkillUpdateResponse> {
+            return rpc.invoke("checkSkillUpdate", request);
+        },
+
+        async acquireAndPublishSkill(
+            request: SkillAcquisitionRequest,
+        ): Promise<SkillAcquisitionRevisionResponse> {
+            return rpc.invoke("acquireAndPublishSkill", request);
+        },
+
+        async updateSkill(
+            request: SkillAcquisitionRequest,
+        ): Promise<SkillAcquisitionRevisionResponse> {
+            return rpc.invoke("updateSkill", request);
+        },
+
+        async previewProcedureArtifact(
+            request: ProcedureArtifactRequest,
+        ): Promise<ProcedureArtifactPreview> {
+            return rpc.invoke("previewProcedureArtifact", request);
+        },
+
+        async promoteProcedureArtifact(
+            request: ProcedureArtifactRequest,
+        ): Promise<ProcedureArtifactPromotion> {
+            return rpc.invoke("promoteProcedureArtifact", request);
         },
 
         async joinConversation(

@@ -32,6 +32,17 @@ export const memoryToolNames = {
     answer: "memory_answer",
     knowledgeGraphGet: "memory_knowledge_graph_get",
     capabilities: "memory_capabilities",
+    howToSettingsGet: "memory_how_to_settings_get",
+    howToSettingsUpdate: "memory_how_to_settings_update",
+    procedureCandidateCreate: "memory_procedure_candidate_create",
+    procedureCandidateGet: "memory_procedure_candidate_get",
+    procedureCandidateList: "memory_procedure_candidate_list",
+    procedureCandidateReject: "memory_procedure_candidate_reject",
+    procedureSave: "memory_procedure_save",
+    procedureGet: "memory_procedure_get",
+    procedureList: "memory_procedure_list",
+    procedureSearch: "memory_procedure_search",
+    procedureArchive: "memory_procedure_archive",
 } as const;
 
 export const identifierSchema = z
@@ -486,8 +497,145 @@ export const capabilitiesSchema = z.object({
     warnings: z.array(z.string()),
 });
 
+export const personalHowToSettingsSchema = z.object({
+    revision: z.number().int().nonnegative(),
+    updatedAt: z.string(),
+    enabled: z.boolean(),
+    detectCandidates: z.boolean(),
+    preferences: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const personalHowToSettingsUpdateSchema = z.object({
+    corpusId: identifierSchema,
+    expectedRevision: z.number().int().nonnegative(),
+    enabled: z.boolean().optional(),
+    detectCandidates: z.boolean().optional(),
+    preferences: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const procedureStateSchema = z.enum([
+    "detected",
+    "draft",
+    "saved",
+    "stale",
+    "archived",
+    "rejected",
+]);
+
+export const procedureCitationSchema = z.object({
+    sourceId: identifierSchema,
+    revisionId: identifierSchema,
+    locator: z.string().optional(),
+    excerpt: z.string().optional(),
+});
+
+export const procedureSectionSchema = z.object({
+    heading: z.string().min(1),
+    content: z.string(),
+});
+
+export const procedureDocumentSchema = z.object({
+    title: z.string().min(1),
+    summary: z.string().optional(),
+    steps: z.array(z.string().min(1)).min(1),
+    citations: z.array(procedureCitationSchema),
+    additionalSections: z.array(procedureSectionSchema).optional(),
+});
+
+export const procedureCandidateSchema = procedureDocumentSchema.extend({
+    candidateId: identifierSchema,
+    corpusId: identifierSchema,
+    state: z.enum(["detected", "draft", "rejected", "saved"]),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+});
+
+export const procedureCandidateCreateRequestSchema =
+    procedureDocumentSchema.extend({
+        corpusId: identifierSchema,
+        candidateId: identifierSchema.optional(),
+        state: z.enum(["detected", "draft"]).optional(),
+    });
+
+export const procedureCandidateListRequestSchema = z.object({
+    corpusId: identifierSchema,
+    states: z
+        .array(z.enum(["detected", "draft", "rejected", "saved"]))
+        .optional(),
+});
+
+export const procedureCandidateInputSchema = z.object({
+    corpusId: identifierSchema,
+    candidateId: identifierSchema,
+});
+
+export const procedureVersionSchema = z.object({
+    corpusId: identifierSchema,
+    procedureId: identifierSchema,
+    version: z.number().int().positive(),
+    state: z.enum(["saved", "stale", "archived"]),
+    document: procedureDocumentSchema,
+    canonicalJson: z.string(),
+    markdown: z.string(),
+    createdAt: z.string(),
+    jsonHash: z.string(),
+    markdownHash: z.string(),
+    basedOnCandidateId: identifierSchema.optional(),
+    previousVersion: z.number().int().positive().optional(),
+});
+
+export const procedureSummarySchema = z.object({
+    corpusId: identifierSchema,
+    procedureId: identifierSchema,
+    title: z.string(),
+    state: z.enum(["saved", "stale", "archived"]),
+    latestVersion: z.number().int().positive(),
+    updatedAt: z.string(),
+});
+
+export const procedureSaveRequestSchema = z.object({
+    corpusId: identifierSchema,
+    procedureId: identifierSchema.optional(),
+    candidateId: identifierSchema.optional(),
+    expectedVersion: z.number().int().nonnegative().optional(),
+    document: procedureDocumentSchema.optional(),
+    markdown: z.string().optional(),
+});
+
+export const procedureGetRequestSchema = z.object({
+    corpusId: identifierSchema,
+    procedureId: identifierSchema,
+    version: z.number().int().positive().optional(),
+});
+
+export const procedureListRequestSchema = z.object({
+    corpusId: identifierSchema,
+    states: z.array(z.enum(["saved", "stale", "archived"])).optional(),
+});
+
+export const procedureSearchRequestSchema = procedureListRequestSchema.extend({
+    query: z.string().min(1),
+    limit: z.number().int().positive().max(100).optional(),
+});
+
+export const procedureSearchMatchSchema = z.object({
+    procedure: procedureSummarySchema,
+    version: procedureVersionSchema,
+    score: z.number(),
+});
+
+export const procedureArchiveRequestSchema = z.object({
+    corpusId: identifierSchema,
+    procedureId: identifierSchema,
+    expectedVersion: z.number().int().positive().optional(),
+});
+
 export const optionalJobStatusSchema = jobStatusSchema.nullable();
 export const optionalSourceSchema = sourceSchema.nullable();
 export const optionalCorpusStatusSchema = corpusStatusSchema.nullable();
 export const optionalEventSchema = eventSchema.nullable();
+export const optionalProcedureCandidateSchema =
+    procedureCandidateSchema.nullable();
+export const optionalProcedureVersionSchema = procedureVersionSchema.nullable();
+
 export const clearedCountSchema = z.number().int().nonnegative();

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=80ee12afb5116e185ba5e778ad964f469bf66d5b4af546b16a9f386fb17780d3 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=06cacf1cad395cbc152af0837823f7af2754d01b73e20866839cedea5939d089 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -44,18 +44,18 @@ _None._
 
 - [./src/index.ts](./src/index.ts)
 - [./src/translationBench/index.ts](./src/translationBench/index.ts)
+- [./src/translationBench/policy/index.ts](./src/translationBench/policy/index.ts)
+- [./src/translationBench/public_datasets/Seal-Tools/index.ts](./src/translationBench/public_datasets/Seal-Tools/index.ts)
+- [./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts](./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts)
 - [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
+- [./src/core/fileJson.ts](./src/core/fileJson.ts)
 - [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
-- [./src/core/paths.ts](./src/core/paths.ts)
-- [./src/core/prices.ts](./src/core/prices.ts)
-- [./src/core/rateLimiter.ts](./src/core/rateLimiter.ts)
-- [./src/core/tokenEstimate.ts](./src/core/tokenEstimate.ts)
-- _…and 62 more under `./src/`._
+- _…and 73 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `e80a50f158f089066243ec0b56dc9b5e74d2d1d3` on `2026-09-22T06:36:21.262Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `d23e0d2516299e5356e720bf2ee781b0a4c82017` on `2026-09-23T00:06:05.252Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

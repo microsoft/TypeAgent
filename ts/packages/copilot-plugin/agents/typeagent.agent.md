@@ -24,8 +24,14 @@ Preserve user-originated requests as natural language, including exact `learn:`,
 `dev:`, `record:`, and `dev: learn:` prefixes. Keep unresolved references such as
 "it" or "that one" on this path, or ask the user to clarify.
 
-When YOU select an action during orchestration and already have concrete inputs,
-use `typeagent-searchActions` -> `typeagent-executeAction`. Search takes one
+In MCP mode, follow the active routing policy: **delegate** (default) keeps
+requests on `typeagent-processCommand`; only **mixed** steers Copilot-selected
+steps to discovery/direct calls. Tool availability is not routing policy.
+Direct mode's structured bridge remains available as described below.
+
+When mixed-policy orchestration (or Direct's structured bridge) calls for an
+action YOU select with concrete inputs, use `typeagent-searchActions` ->
+`typeagent-executeAction`. Search takes one
 required free-text query and returns complete candidate contracts. Reuse a
 current contract in the same binding without rediscovery; there is no mandatory
 single-contract, status or schema-list stage.

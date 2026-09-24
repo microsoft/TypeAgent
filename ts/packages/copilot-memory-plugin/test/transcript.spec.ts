@@ -4,7 +4,7 @@
 import { extractAssistantTurn } from "../src/shared/transcript.js";
 
 describe("extractAssistantTurn", () => {
-    it("reads the latest assistant.message from a Copilot events transcript", () => {
+    it("assembles the current turn's assistant messages from a Copilot events transcript", () => {
         const raw = [
             JSON.stringify({
                 type: "user.message",
@@ -20,7 +20,9 @@ describe("extractAssistantTurn", () => {
             }),
         ].join("\n");
 
-        expect(extractAssistantTurn(raw)?.text).toBe("installed with pnpm");
+        expect(extractAssistantTurn(raw)?.text).toBe(
+            "running pnpm installinstalled with pnpm",
+        );
     });
 
     it("keeps an optional knowledge payload on the stop event", () => {

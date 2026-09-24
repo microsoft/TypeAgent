@@ -439,7 +439,7 @@ async function handleListAction(
                         { kind: "heading", level: 3, text: "Lists" },
                         { kind: "text", text: "There are no lists yet." },
                     ],
-                    { entities: [] },
+                    { entities: [], rawData: { lists: names } },
                 );
             } else {
                 result = createStructuredResult(
@@ -463,6 +463,14 @@ async function handleListAction(
                     },
                 );
             }
+            // Dependent requests need a collection result even when no lists
+            // exist; individual list entities cannot represent that result.
+            result.resultEntity = {
+                name: "list inventory",
+                type: ["listInventory"],
+                facets: [{ name: "lists", value: names }],
+            };
+            result.resultValue = { lists: names };
             break;
         }
         case "clearList": {

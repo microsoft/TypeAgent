@@ -23,6 +23,15 @@ import type {
     MemoryService,
     MemoryServiceCapabilities,
     MemorySource,
+    PersonalHowToService,
+    PersonalHowToSettings,
+    PersonalHowToSettingsUpdate,
+    ProcedureCandidate,
+    ProcedureCandidateCreateRequest,
+    ProcedureListRequest,
+    ProcedureSaveRequest,
+    ProcedureSearchRequest,
+    ProcedureVersion,
     SourceReplaceRequest,
 } from "@typeagent/memory-service";
 import { MemoryMcpServer } from "../src/memoryMcpServer.js";
@@ -53,7 +62,7 @@ function createTransportPair(): [PairedTransport, PairedTransport] {
     return [client, server];
 }
 
-class FakeMemoryService implements MemoryService {
+class FakeMemoryService implements MemoryService, PersonalHowToService {
     public readonly corpus: MemoryCorpus = {
         corpusId: "corpus-1",
         name: "Test corpus",
@@ -106,6 +115,48 @@ class FakeMemoryService implements MemoryService {
         createdAt: "2026-01-01T00:00:00.000Z",
         content: "Remember this fixture",
         conversationId: "conversation-1",
+    };
+    public settings: PersonalHowToSettings = {
+        revision: 0,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        enabled: true,
+        detectCandidates: true,
+    };
+    public readonly candidate: ProcedureCandidate = {
+        candidateId: "candidate-1",
+        corpusId: this.corpus.corpusId,
+        state: "detected",
+        title: "Publish a package",
+        steps: ["Build", "Publish"],
+        citations: [
+            {
+                sourceId: this.source.sourceId,
+                revisionId: this.source.activeRevisionId,
+            },
+        ],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    public readonly procedure: ProcedureVersion = {
+        corpusId: this.corpus.corpusId,
+        procedureId: "procedure-1",
+        version: 1,
+        state: "saved",
+        document: {
+            title: "Publish a package",
+            steps: ["Build", "Publish"],
+            citations: [
+                {
+                    sourceId: this.source.sourceId,
+                    revisionId: this.source.activeRevisionId,
+                },
+            ],
+        },
+        canonicalJson: '{"title":"Publish a package"}\n',
+        markdown: "# Publish a package\n",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        jsonHash: "json-hash",
+        markdownHash: "markdown-hash",
     };
 
     public async createCorpus(
@@ -339,6 +390,115 @@ class FakeMemoryService implements MemoryService {
                 groundedAnswer: true,
             },
             warnings: [],
+        };
+    }
+
+    public async getPersonalHowToSettings() {
+        return this.settings;
+    }
+
+    public async updatePersonalHowToSettings(
+        _corpusId: string,
+        update: PersonalHowToSettingsUpdate,
+    ) {
+        this.settings = {
+            ...this.settings,
+            revision: this.settings.revision + 1,
+            updatedAt: "2026-01-02T00:00:00.000Z",
+            ...(update.enabled === undefined
+                ? {}
+                : { enabled: update.enabled }),
+            ...(update.detectCandidates === undefined
+                ? {}
+                : { detectCandidates: update.detectCandidates }),
+            ...(update.preferences === undefined
+                ? {}
+                : { preferences: update.preferences }),
+        };
+        return this.settings;
+    }
+
+    public async createProcedureCandidate(
+        request: ProcedureCandidateCreateRequest,
+    ) {
+        return {
+            ...this.candidate,
+            candidateId: request.candidateId ?? this.candidate.candidateId,
+            state: request.state ?? this.candidate.state,
+            title: request.title,
+            steps: request.steps,
+            citations: request.citations,
+        };
+    }
+
+    public async getProcedureCandidate(_corpusId: string, candidateId: string) {
+        return candidateId === this.candidate.candidateId
+            ? this.candidate
+            : undefined;
+    }
+
+    public async listProcedureCandidates(
+        _corpusId: string,
+        states?: ProcedureCandidate["state"][],
+    ) {
+        return states === undefined || states.includes(this.candidate.state)
+            ? [this.candidate]
+            : [];
+    }
+
+    public async rejectProcedureCandidate() {
+        return { ...this.candidate, state: "rejected" as const };
+    }
+
+    public async saveProcedure(_request: ProcedureSaveRequest) {
+        return this.procedure;
+    }
+
+    public async listProcedures(_request: ProcedureListRequest) {
+        return [
+            {
+                corpusId: this.procedure.corpusId,
+                procedureId: this.procedure.procedureId,
+                title: this.procedure.document.title,
+                state: this.procedure.state,
+                latestVersion: this.procedure.version,
+                updatedAt: this.procedure.createdAt,
+            },
+        ];
+    }
+
+    public async getProcedure(
+        _corpusId: string,
+        procedureId: string,
+        _version?: number,
+    ) {
+        return procedureId === this.procedure.procedureId
+            ? this.procedure
+            : undefined;
+    }
+
+    public async searchProcedures(request: ProcedureSearchRequest) {
+        return request.query.toLowerCase().includes("publish")
+            ? [
+                  {
+                      procedure: (await this.listProcedures(request))[0],
+                      version: this.procedure,
+                      score: 1,
+                  },
+              ]
+            : [];
+    }
+
+    public async archiveProcedure(
+        _corpusId: string,
+        _procedureId: string,
+        _expectedVersion?: number,
+    ) {
+        return {
+            ...this.procedure,
+            version: 2,
+            state: "archived" as const,
+            previousVersion: 1,
         };
     }
 }
@@ -631,6 +791,88 @@ describe("MemoryServiceHost", () => {
                     management: true,
                     groundedAnswer: true,
                 },
+            });
+            expect(
+                await client.getPersonalHowToSettings("corpus-1"),
+            ).toMatchObject({ revision: 0, detectCandidates: true });
+            expect(
+                await client.updatePersonalHowToSettings("corpus-1", {
+                    expectedRevision: 0,
+                    enabled: false,
+                }),
+            ).toMatchObject({ revision: 1, enabled: false });
+            expect(
+                await client.createProcedureCandidate({
+                    corpusId: "corpus-1",
+                    candidateId: "candidate-1",
+                    state: "draft",
+                    title: "Publish a package",
+                    steps: ["Build", "Publish"],
+                    citations: [
+                        {
+                            sourceId: "source-1",
+                            revisionId: "revision-1",
+                        },
+                    ],
+                }),
+            ).toMatchObject({ candidateId: "candidate-1", state: "draft" });
+            await expect(
+                client.getProcedureCandidate("corpus-1", "candidate-1"),
+            ).resolves.toMatchObject({ state: "detected" });
+            await expect(
+                client.getProcedureCandidate("corpus-1", "missing"),
+            ).resolves.toBeUndefined();
+            await expect(
+                client.listProcedureCandidates("corpus-1", ["detected"]),
+            ).resolves.toHaveLength(1);
+            await expect(
+                client.rejectProcedureCandidate("corpus-1", "candidate-1"),
+            ).resolves.toMatchObject({ state: "rejected" });
+            await expect(
+                client.saveProcedure({
+                    corpusId: "corpus-1",
+                    candidateId: "candidate-1",
+                    expectedVersion: 0,
+                }),
+            ).resolves.toMatchObject({
+                procedureId: "procedure-1",
+                version: 1,
+                state: "saved",
+            });
+            await expect(
+                client.listProcedures({
+                    corpusId: "corpus-1",
+                    states: ["saved"],
+                }),
+            ).resolves.toEqual([
+                expect.objectContaining({ procedureId: "procedure-1" }),
+            ]);
+            await expect(
+                client.getProcedure("corpus-1", "procedure-1", 1),
+            ).resolves.toMatchObject({ version: 1 });
+            await expect(
+                client.getProcedure("corpus-1", "missing"),
+            ).resolves.toBeUndefined();
+            await expect(
+                client.searchProcedures({
+                    corpusId: "corpus-1",
+                    query: "publish",
+                    limit: 1,
+                }),
+            ).resolves.toEqual([
+                expect.objectContaining({
+                    procedure: expect.objectContaining({
+                        procedureId: "procedure-1",
+                    }),
+                    score: 1,
+                }),
+            ]);
+            await expect(
+                client.archiveProcedure("corpus-1", "procedure-1", 1),
+            ).resolves.toMatchObject({
+                version: 2,
+                previousVersion: 1,
+                state: "archived",
             });
             expect(await (await fetch(host.healthEndpoint)).json()).toEqual({
                 status: "ready",

@@ -34,6 +34,22 @@ import {
     optionalJobStatusSchema,
     optionalEventSchema,
     optionalSourceSchema,
+    optionalProcedureCandidateSchema,
+    optionalProcedureVersionSchema,
+    personalHowToSettingsSchema,
+    personalHowToSettingsUpdateSchema,
+    procedureArchiveRequestSchema,
+    procedureCandidateCreateRequestSchema,
+    procedureCandidateInputSchema,
+    procedureCandidateListRequestSchema,
+    procedureCandidateSchema,
+    procedureGetRequestSchema,
+    procedureListRequestSchema,
+    procedureSaveRequestSchema,
+    procedureSearchMatchSchema,
+    procedureSearchRequestSchema,
+    procedureSummarySchema,
+    procedureVersionSchema,
     searchRequestSchema,
     searchResultSchema,
     sourceContentRequestSchema,
@@ -57,6 +73,12 @@ import type {
     MemoryEventSearchRequest,
     MemorySearchRequest,
     MemoryService,
+    PersonalHowToService,
+    PersonalHowToSettingsUpdate,
+    ProcedureCandidateCreateRequest,
+    ProcedureListRequest,
+    ProcedureSaveRequest,
+    ProcedureSearchRequest,
     SourceContentRequest,
     SourceForgetRequest,
     SourceListRequest,
@@ -104,7 +126,9 @@ function toolError(error: unknown): CallToolResult {
 export class MemoryMcpServer {
     public readonly server: McpServer;
 
-    public constructor(private readonly service: MemoryService) {
+    public constructor(
+        private readonly service: MemoryService & PersonalHowToService,
+    ) {
         this.server = new McpServer({
             name: "typeagent-memory",
             version: "0.0.1",
@@ -502,6 +526,174 @@ export class MemoryMcpServer {
                 this.run(() =>
                     this.service.forgetEvents(
                         request as MemoryEventForgetRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.howToSettingsGet,
+            {
+                description: "Get corpus-owned personal how-to settings.",
+                inputSchema: corpusIdInputSchema,
+                outputSchema: outputSchema(personalHowToSettingsSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId }) =>
+                this.run(() => this.service.getPersonalHowToSettings(corpusId)),
+        );
+        this.server.registerTool(
+            memoryToolNames.howToSettingsUpdate,
+            {
+                description:
+                    "Update personal how-to settings using an expected revision.",
+                inputSchema: personalHowToSettingsUpdateSchema,
+                outputSchema: outputSchema(personalHowToSettingsSchema),
+                annotations: { destructiveHint: false },
+            },
+            async ({ corpusId, ...update }) =>
+                this.run(() =>
+                    this.service.updatePersonalHowToSettings(
+                        corpusId,
+                        update as PersonalHowToSettingsUpdate,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.procedureCandidateCreate,
+            {
+                description: "Create a detected or draft procedure candidate.",
+                inputSchema: procedureCandidateCreateRequestSchema,
+                outputSchema: outputSchema(procedureCandidateSchema),
+                annotations: { destructiveHint: false },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.createProcedureCandidate(
+                        request as ProcedureCandidateCreateRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.procedureCandidateGet,
+            {
+                description: "Get a procedure candidate by identifier.",
+                inputSchema: procedureCandidateInputSchema,
+                outputSchema: outputSchema(optionalProcedureCandidateSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId, candidateId }) =>
+                this.run(
+                    async () =>
+                        (await this.service.getProcedureCandidate(
+                            corpusId,
+                            candidateId,
+                        )) ?? null,
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.procedureCandidateList,
+            {
+                description: "List procedure candidates with state filtering.",
+                inputSchema: procedureCandidateListRequestSchema,
+                outputSchema: outputSchema(procedureCandidateSchema.array()),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId, states }) =>
+                this.run(() =>
+                    this.service.listProcedureCandidates(corpusId, states),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.procedureCandidateReject,
+            {
+                description: "Reject a procedure candidate.",
+                inputSchema: procedureCandidateInputSchema,
+                outputSchema: outputSchema(procedureCandidateSchema),
+                annotations: { destructiveHint: true },
+            },
+            async ({ corpusId, candidateId }) =>
+                this.run(() =>
+                    this.service.rejectProcedureCandidate(
+                        corpusId,
+                        candidateId,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.procedureSave,
+            {
+                description:
+                    "Save canonical procedure JSON or validated Markdown.",
+                inputSchema: procedureSaveRequestSchema,
+                outputSchema: outputSchema(procedureVersionSchema),
+                annotations: { destructiveHint: false },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.saveProcedure(request as ProcedureSaveRequest),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.procedureGet,
+            {
+                description: "Get the latest or a named procedure version.",
+                inputSchema: procedureGetRequestSchema,
+                outputSchema: outputSchema(optionalProcedureVersionSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId, procedureId, version }) =>
+                this.run(
+                    async () =>
+                        (await this.service.getProcedure(
+                            corpusId,
+                            procedureId,
+                            version,
+                        )) ?? null,
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.procedureList,
+            {
+                description: "List saved procedures with state filtering.",
+                inputSchema: procedureListRequestSchema,
+                outputSchema: outputSchema(procedureSummarySchema.array()),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.listProcedures(
+                        request as ProcedureListRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.procedureSearch,
+            {
+                description: "Search saved procedure content.",
+                inputSchema: procedureSearchRequestSchema,
+                outputSchema: outputSchema(procedureSearchMatchSchema.array()),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() =>
+                    this.service.searchProcedures(
+                        request as ProcedureSearchRequest,
+                    ),
+                ),
+        );
+        this.server.registerTool(
+            memoryToolNames.procedureArchive,
+            {
+                description: "Create an immutable archived procedure version.",
+                inputSchema: procedureArchiveRequestSchema,
+                outputSchema: outputSchema(procedureVersionSchema),
+                annotations: { destructiveHint: true },
+            },
+            async ({ corpusId, procedureId, expectedVersion }) =>
+                this.run(() =>
+                    this.service.archiveProcedure(
+                        corpusId,
+                        procedureId,
+                        expectedVersion,
                     ),
                 ),
         );

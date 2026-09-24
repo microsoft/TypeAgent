@@ -12,6 +12,7 @@
  * Slash commands (intercepted before routing):
  *   @typeagent mode direct   — switch to direct mode
  *   @typeagent mode mcp      — switch to MCP mode
+ *   @typeagent mode mcp mixed - let Copilot choose delegation or orchestration
  *   @typeagent mode          — show current mode
  *   @typeagent status        — show current configuration
  */
@@ -29,17 +30,15 @@ import { getMacroFeatures } from "../shared/macro-features.js";
 import {
     getConfigPath,
     getMode,
+    getModeLabel,
     readConfig,
     writeConfig,
     type Mode,
 } from "../shared/plugin-config.js";
-
-const modeDescriptions: Record<Mode, string> = {
-    direct: "Hook handles user natural language directly. Copilot-selected structured actions use the persistent TypeAgent MCP tools. Workspace macro tools remain available.",
-    mcp: "Hook redirects user natural language to processCommand; Copilot-selected actions use searchActions and executeAction. Workspace macro tools remain available.",
-    dev: "TypeAgent handles registered PowerShell flows and recording directives; other requests fall through to Copilot. Workspace macro tools remain available.",
-    bypass: "TypeAgent is disabled. All requests bypass TypeAgent routing and fall through to other handlers.",
-};
+import {
+    getModeDescription,
+    handleModeSetting,
+} from "../shared/mode-command.js";
 
 async function handleMacroCommand(
     input: HookInput,
@@ -133,27 +132,11 @@ function handleRunCommand(
 }
 
 function handleModeCommand(lower: string): HookOutput | undefined {
-    const match = lower.match(
-        /^@typeagent\s+mode(?:\s+(direct|mcp|dev|bypass))?\s*$/,
-    );
+    const match = lower.match(/^@typeagent\s+mode(?:\s+(.*))?$/s);
     if (!match) return undefined;
-
-    const newMode = match[1] as Mode | undefined;
-    if (!newMode) {
-        const current = getMode();
-        return {
-            handled: true,
-            responseContent: `TypeAgent mode: **${current}**\n\nUse \`@typeagent mode direct\`, \`@typeagent mode mcp\`, \`@typeagent mode dev\`, or \`@typeagent mode bypass\` to switch.`,
-            handledBy: "typeagent",
-        };
-    }
-
-    const config = readConfig() ?? { mode: "direct" };
-    config.mode = newMode;
-    writeConfig(config);
     return {
         handled: true,
-        responseContent: `TypeAgent mode switched to **${newMode}**.  \n${modeDescriptions[newMode]}`,
+        responseContent: handleModeSetting(match[1] ?? "", "@typeagent mode"),
         handledBy: "typeagent",
     };
 }
@@ -204,16 +187,20 @@ function handleStatusCommand(lower: string): HookOutput | undefined {
         responseContent: [
             "**TypeAgent Configuration**",
             "",
-            `- Mode: **${mode}**`,
+            `- Mode: **${getModeLabel()}**`,
+            `- Routing: ${getModeDescription()}`,
             `- TypeAgent PowerShell: **${powershellEnabled ? "on" : "off"}**`,
             `- Macro workspace tools: **${mode === "bypass" ? "disabled" : "available"}**`,
             `- Server: ws://${host}:${port}`,
             `- Config: ${configPath}`,
+            "- Mode settings are shared by sessions using this config.",
             "",
             "**Commands:**",
             "- `@typeagent run <command>` — send command directly to TypeAgent",
             "- `@typeagent mode direct` — switch to direct mode",
-            "- `@typeagent mode mcp` — switch to MCP mode",
+            "- `@typeagent mode mcp` — switch to MCP mode, preserving saved policy (default: delegate)",
+            "- `@typeagent mode mcp mixed` — delegate whole requests or use searchActions/executeAction for Copilot-selected steps",
+            "- `@typeagent mode mcp delegate` — delegate user prompts to TypeAgent (default)",
             "- `@typeagent mode dev` — route registered PowerShell flows and recording directives",
             "- `@typeagent mode bypass` — disable TypeAgent routing",
             "- `@typeagent powershell on/off` — toggle TypeAgent PowerShell redirect",

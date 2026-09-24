@@ -178,11 +178,18 @@ function parseTaskInstruction(value: string, offset: number): string {
     // Escape interior delimiters, then reuse the Python escape decoder.
     let escaped = quote;
     let backslashes = 0;
+    let interiorQuotes = 0;
     for (const character of literal.slice(1, -1)) {
-        if (character === quote && backslashes % 2 === 0) escaped += "\\";
+        if (character === quote && backslashes % 2 === 0) {
+            escaped += "\\";
+            interiorQuotes++;
+        }
         escaped += character;
         backslashes = character === "\\" ? backslashes + 1 : 0;
     }
+    // An odd interior count means the final quote also closes an inner quote,
+    // as in `"the ID "abc."`; keep it in the text.
+    if (interiorQuotes % 2 === 1) escaped += `\\${quote}`;
     const instruction = parsePythonLiteral(escaped + quote);
     if (typeof instruction !== "string") {
         throw new Error("task instruction must be a string");
@@ -294,6 +301,8 @@ export function toSealToolsFunctionTool(
                     ...(parameter.description === undefined
                         ? {}
                         : { description: parameter.description }),
+                    // Seal list types are untyped; strict tool schemas need items.
+                    ...(type === "array" ? { items: { type: "string" } } : {}),
                 },
             ];
         }),
