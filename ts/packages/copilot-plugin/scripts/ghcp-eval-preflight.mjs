@@ -262,12 +262,12 @@ try {
             JSON.stringify(result, null, 2) + "\n",
         );
     }
-    console.log(
+    process.stdout.write(
         JSON.stringify({
             status: result.status,
             contractCount: result.contracts.length,
             missing: result.missing,
             error: result.error,
-        }),
+        }) + "\n",
     );
 }

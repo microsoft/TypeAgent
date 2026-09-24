@@ -73,6 +73,12 @@ The four domain agents are lists, GitHub CLI, registered PowerShell file
 actions, and IP configuration. Fixtures are restored per trial. Shipped MCP
 domain schemas outside that scope are disabled only in the disposable
 session. The production internal reasoning toolset is unchanged. The
+mixed candidates keep production routing guidance and the pinned native tools.
+Auxiliary outer workspace/macro/skill MCP servers are omitted to keep the
+declared entry interfaces in scope. After failed or uncertain execution,
+the eval policy blocks replay (including internal error-triggered retries);
+it does not repair the underlying product failure or substitute an action.
+These controls are identical across the relevant candidate pairs. The
 `translationReasoningFallback` request option controls only the existing
 unknown/clarification translation-to-reasoning transition, not ordinary
 orchestration. Optional `TYPEAGENT_GHCP_EVAL_TRACE` records its actual decision,

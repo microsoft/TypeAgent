@@ -47,6 +47,8 @@ const [
     outputDirectory,
     configDirectory,
     ledgerPath,
+    templateDirectory: path.resolve(template),
+    fixtureReset: "Copy the same catalog-only state, exclude stale lock directories, restore all seven lists and three files per trial",
     selection = "1,2,3,4,5,6,7",
     phase = "pilot",
     evidencePath,
@@ -201,7 +203,72 @@ function collectObservations(result, tracePath) {
     };
 }
 
-async function trial(candidate, directory, testCase, workspace, evidence) {
+function captureNetworkEvidence(includeDns) {
+    return {
+        capturedAt: new Date().toISOString(),
+        configuration: execFileSync("ipconfig.exe", ["/all"], {
+            encoding: "utf8",
+            timeout: 15_000,
+        }),
+        dns: includeDns
+            ? execFileSync("ipconfig.exe", ["/displaydns"], {
+                  encoding: "utf8",
+                  timeout: 15_000,
+              })
+            : null,
+    };
+}
+
+function gradeCompletedTrial({
+    result,
+    testCase,
+    store,
+    workspace,
+    evidence,
+    clarificationGiven,
+}) {
+    const after = JSON.parse(fs.readFileSync(store, "utf8"));
+    const correctNames = Object.keys(fixtures).every((name) =>
+        new RegExp(`\\b${name}\\b`, "i").test(result.answer),
+    );
+    const expected = expectedLists(testCase.id, 2617, evidence?.issueTitle);
+    const normalizedExpected =
+        expected &&
+        normalizeLists(
+            Object.entries(expected).map(([name, items]) => ({ name, items })),
+        );
+    result.grade = {
+        listStateMatchesOracle: normalizedExpected
+            ? JSON.stringify(normalizeLists(after)) ===
+              JSON.stringify(normalizedExpected)
+            : null,
+        filesUnchanged: Object.entries(fileFixture).every(
+            ([name, content]) =>
+                fs.readFileSync(path.join(workspace, name), "utf8") === content,
+        ),
+        containsAllNames: testCase.id === "S1" ? correctNames : null,
+        clarificationRequested: testCase.clarification
+            ? clarificationGiven
+            : null,
+        noPrematureListMutation: testCase.clarification
+            ? JSON.stringify(result.stateAtClarification) ===
+              JSON.stringify(normalizeLists(seededLists))
+            : null,
+        requiresManualFaithfulnessCheck: true,
+    };
+    result.finalLists = normalizeLists(after);
+    result.status = "completed_ungraded";
+    if (
+        phase === "pilot" &&
+        result.candidate !== 7 &&
+        ((testCase.id === "S1" && !correctNames) ||
+            result.grade.listStateMatchesOracle === false ||
+            !result.grade.filesUnchanged)
+    )
+        result.status = "pilot_needs_review";
+}
+
+function prepareTrial(candidate, directory, workspace) {
     fs.mkdirSync(directory);
     const { env, mcp } = makeConfiguration(
         directory,
@@ -275,6 +342,26 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         config.env.TYPEAGENT_TRANSLATION_REASONING_FALLBACK =
             env.TYPEAGENT_TRANSLATION_REASONING_FALLBACK;
     }
+    return { env, config, stores, sessionDataPath, sessionData, sessionId };
+}
+
+function persistTrial({ result, env, executionStopped, sessionData, sessionDataPath, evidence, network, directory, started }) {
+    result.totalIncludingSetupMs = performance.now() - started;
+    collectObservations(result, env.TYPEAGENT_GHCP_EVAL_TRACE);
+    result.terminalExecutionFailure = executionStopped;
+    result.providerUsage = {
+        before: sessionData.tokens ?? null,
+        after: JSON.parse(fs.readFileSync(sessionDataPath, "utf8")).tokens ?? null,
+        coverage: "Persisted TypeAgent token counters only; unflushed calls and embedding usage may be absent. Not Copilot credits.",
+    };
+    result.preliminaryGrade = preliminaryGrade(result, evidence ?? {});
+    if (network) fs.writeFileSync(path.join(directory, "private-network-evidence.json"), JSON.stringify(network, null, 2));
+    fs.writeFileSync(path.join(directory, "result.json"), JSON.stringify(result, null, 2) + "\n");
+}
+
+async function trial(candidate, directory, testCase, workspace, evidence) {
+    const { env, config, stores, sessionDataPath, sessionData, sessionId } =
+        prepareTrial(candidate, directory, workspace);
     const result = {
         phase,
         candidate: candidate.id,
@@ -335,7 +422,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             await waitForServer(
                 server,
                 port,
-                30,
+                90,
                 new AbortController().signal,
                 stderrPath,
             );
@@ -547,20 +634,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             preparation = false;
         }
         if (network) {
-            network.before = {
-                capturedAt: new Date().toISOString(),
-                configuration: execFileSync("ipconfig.exe", ["/all"], {
-                    encoding: "utf8",
-                    timeout: 15_000,
-                }),
-                dns:
-                    testCase.id === "M2"
-                        ? execFileSync("ipconfig.exe", ["/displaydns"], {
-                              encoding: "utf8",
-                              timeout: 15_000,
-                          })
-                        : null,
-            };
+            network.before = captureNetworkEvidence(testCase.id === "M2");
         }
         measuredStart = performance.now();
         result.promptAcceptedAt = new Date().toISOString();
@@ -571,71 +645,22 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         result.e2eMs = performance.now() - measuredStart;
         result.finalResponseAt = new Date().toISOString();
         result.answer = answer?.data.content ?? "";
-        const after = JSON.parse(fs.readFileSync(stores[0], "utf8"));
-        const correctNames = Object.keys(fixtures).every((name) =>
-            new RegExp(`\\b${name}\\b`, "i").test(result.answer),
-        );
-        const expected = expectedLists(testCase.id, 2617, evidence?.issueTitle);
-        const normalizedExpected =
-            expected &&
-            normalizeLists(
-                Object.entries(expected).map(([name, items]) => ({
-                    name,
-                    items,
-                })),
-            );
-        result.grade = {
-            listStateMatchesOracle: normalizedExpected
-                ? JSON.stringify(normalizeLists(after)) ===
-                  JSON.stringify(normalizedExpected)
-                : null,
-            filesUnchanged: Object.entries(fileFixture).every(
-                ([name, content]) =>
-                    fs.readFileSync(path.join(workspace, name), "utf8") ===
-                    content,
-            ),
-            containsAllNames: testCase.id === "S1" ? correctNames : null,
-            clarificationRequested: testCase.clarification
-                ? clarificationGiven
-                : null,
-            noPrematureListMutation: testCase.clarification
-                ? JSON.stringify(result.stateAtClarification) ===
-                  JSON.stringify(normalizeLists(seededLists))
-                : null,
-            requiresManualFaithfulnessCheck: true,
-        };
-        result.finalLists = normalizeLists(after);
+        gradeCompletedTrial({
+            result,
+            testCase,
+            store: stores[0],
+            workspace,
+            evidence,
+            clarificationGiven,
+        });
         if (testCase.id === "S5" || testCase.id === "M2") {
             network.answer = result.answer;
-            network.after = {
-                capturedAt: new Date().toISOString(),
-                configuration: execFileSync("ipconfig.exe", ["/all"], {
-                    encoding: "utf8",
-                    timeout: 15_000,
-                }),
-                dns:
-                    testCase.id === "M2"
-                        ? execFileSync("ipconfig.exe", ["/displaydns"], {
-                              encoding: "utf8",
-                              timeout: 15_000,
-                          })
-                        : null,
-            };
+            network.after = captureNetworkEvidence(testCase.id === "M2");
             result.answerSha256 = createHash("sha256")
                 .update(result.answer)
                 .digest("hex");
             result.answer =
                 "[network response withheld from sanitized results]";
-        }
-        result.status = "completed_ungraded";
-        if (
-            phase === "pilot" &&
-            candidate.id !== 7 &&
-            ((testCase.id === "S1" && !correctNames) ||
-                result.grade.listStateMatchesOracle === false ||
-                !result.grade.filesUnchanged)
-        ) {
-            result.status = "pilot_needs_review";
         }
     } catch (error) {
         result.status = "failed";
@@ -650,30 +675,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             try {
                 if (server) await stopProcess(server);
             } finally {
-                result.totalIncludingSetupMs = performance.now() - started;
-                collectObservations(result, env.TYPEAGENT_GHCP_EVAL_TRACE);
-                result.terminalExecutionFailure = executionStopped;
-                result.providerUsage = {
-                    before: sessionData.tokens ?? null,
-                    after:
-                        JSON.parse(fs.readFileSync(sessionDataPath, "utf8"))
-                            .tokens ?? null,
-                    coverage:
-                        "Persisted TypeAgent token counters only; unflushed calls and embedding usage may be absent. Not Copilot credits.",
-                };
-                result.preliminaryGrade = preliminaryGrade(
-                    result,
-                    evidence ?? {},
-                );
-                if (network)
-                    fs.writeFileSync(
-                        path.join(directory, "private-network-evidence.json"),
-                        JSON.stringify(network, null, 2),
-                    );
-                fs.writeFileSync(
-                    path.join(directory, "result.json"),
-                    JSON.stringify(result, null, 2) + "\n",
-                );
+                persistTrial({ result, env, executionStopped, sessionData, sessionDataPath, evidence, network, directory, started });
             }
         }
     }
@@ -790,6 +792,8 @@ const specification =
             internalTools:
                 "Unmodified production TypeAgent reasoning toolset; effects and credits gated",
             disabledShippedMcpSchemas: excludedSchemas,
+            disabledAuxiliaryOuterMcpServers: ["typeagent-workspace", "typeagent-macros", "typeagent-skills"],
+            safety: "Normal confirmation retained; no replay after failed/denied/cancelled/uncertain execution, including internal error-triggered retries. Translation fallback toolset retained.",
         },
         null,
         2,
@@ -820,18 +824,18 @@ for (const entry of order.slice(batchStart, batchStart + batchSize)) {
         path.join(outputDirectory, "results.json"),
         JSON.stringify(results, null, 2) + "\n",
     );
-    console.log(
+    process.stdout.write(
         JSON.stringify({
             candidate: candidate.id,
             caseId: testCase.id,
             repetition: entry.repetition,
             status: result.status,
             error: result.error,
-        }),
+        }) + "\n",
     );
     if (
         (phase === "pilot" && result.status !== "completed_ungraded") ||
-        /credit|budget|reservation|Agent server exited|permission orchestrator/i.test(
+        /credit|budget|reservation|Agent server|permission orchestrator/i.test(
             result.error ?? "",
         )
     ) {

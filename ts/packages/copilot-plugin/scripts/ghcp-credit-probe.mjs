@@ -73,5 +73,5 @@ try {
         path.join(outputDirectory, "result.json"),
         JSON.stringify(result, null, 2) + "\n",
     );
-    console.log(JSON.stringify(result));
+    process.stdout.write(JSON.stringify(result) + "\n");
 }
