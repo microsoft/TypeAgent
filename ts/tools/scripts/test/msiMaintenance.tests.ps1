@@ -136,6 +136,7 @@ try {
     Assert (-not (Test-PayloadCommand ($command.Replace("agent-server\", "agent-server-other\")) $payload)) "sibling install matched"
     Assert (-not (Test-PayloadCommand ('node.exe C:\tools\linter.js "' + (Join-Path $payload "dist\server.js") + '"') $payload)) "a data argument was mistaken for the running script"
     Assert (Test-PayloadCommand ($command.Replace('" "' , '" --enable-source-maps "')) $payload) "Node runtime flags hid the installed entry"
+    Assert (Test-PayloadCommand ($command.Replace('" "' , '" --disable-warning DEP0190 "')) $payload) "value-taking Node option hid the installed entry"
 
     $now = Get-Date
     $script:processes = @(
@@ -163,6 +164,16 @@ try {
     Assert ($commands.Count -eq 1) "restart command selection included non-server children"
     Assert ($commands[0].Arguments -eq ('"' + (Join-Path $payload "dist\server.js") + '" --port 9123')) "restart arguments were not retained verbatim"
     Assert ($commands[0].LaunchContext -eq "protected-test-context") "manual launch context was not retained"
+    $script:processes[0].CommandLine = $command.Replace('" "' , '" --disable-warning DEP0190 "')
+    Assert (@(Get-RestartCommands $owned $payload).Count -eq 1) "value-taking Node option lost restart command"
+    $script:processes[0].CommandLine = $command.Replace('" "' , '" --unknown-future-option value "')
+    $failed = $false
+    try { Get-RestartCommands $owned $payload } catch {
+        $failed = $true
+        Assert ($_.Exception.Message -match "unrecognized Node entry point") "unknown option error changed"
+    }
+    Assert $failed "unknown root Node entry was stopped without recovery context"
+    $script:processes[0].CommandLine = $command + " --port 9123"
     $roundTrip = (Get-ProcessIdentity $script:processes[0]) | ConvertTo-Json | ConvertFrom-Json
     Assert (!!(Get-SameProcess $roundTrip)) "serialized identity rejected a surviving process"
 
@@ -369,6 +380,10 @@ setInterval(() => { if (fs.existsSync($jsSignal)) process.exit(0); }, 20);
         $unrelated.Dispose()
     }
     Write-Host "All maintenance scenarios passed"
+} catch {
+    $recoveryLog = Join-Path $Root "logs\msi-restored-server.log"
+    if (Test-Path $recoveryLog) { Write-Host (Get-Content $recoveryLog -Raw) }
+    throw
 } finally {
     Remove-Item -LiteralPath $testDir -Recurse -Force
 }

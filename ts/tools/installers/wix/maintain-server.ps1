@@ -24,7 +24,13 @@ function Get-NodeScript([string]$command) {
     for ($index = 1; $index -lt $tokens.Count; $index++) {
         $token = $tokens[$index]
         if ($token -in @("-e", "--eval", "-p", "--print") -or $token -match "^--(eval|print)=") { return }
-        if ($token -in @("-r", "--require", "--import", "--loader", "--experimental-loader", "--inspect-port")) {
+        if ($token -in @(
+            "-r", "--require", "--import", "--loader", "--experimental-loader", "--inspect-port",
+            "-C", "--conditions", "--disable-warning", "--disable-proto", "--dns-result-order",
+            "--env-file", "--env-file-if-exists", "--icu-data-dir", "--openssl-config",
+            "--redirect-warnings", "--diagnostic-dir", "--title", "--input-type",
+            "--max-old-space-size", "--max-semi-space-size", "--stack-trace-limit"
+        )) {
             $index++
             continue
         }
@@ -141,6 +147,79 @@ namespace TypeAgentMaintenance {
         static extern bool GetProcessTimes(SafeProcessHandle handle, out long created, out long exited, out long kernel, out long user);
         [DllImport("ntdll.dll")]
         static extern int NtQueryInformationProcess(SafeProcessHandle handle, int info, IntPtr[] buffer, int size, out int returned);
+        [StructLayout(LayoutKind.Sequential)]
+        struct SecurityAttributes { public int Size; public IntPtr Descriptor; public int Inherit; }
+        [StructLayout(LayoutKind.Sequential)]
+        struct StartupInfo {
+            public int Size;
+            public IntPtr Reserved, Desktop, Title;
+            public int X, Y, Width, Height, CharsX, CharsY, Fill, Flags;
+            public short Show, ReservedSize;
+            public IntPtr ReservedBytes, Input, Output, Error;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        struct StartupInfoEx { public StartupInfo Info; public IntPtr Attributes; }
+        [StructLayout(LayoutKind.Sequential)]
+        struct ProcessInformation { public IntPtr Process, Thread; public int Id, ThreadId; }
+        [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+        static extern SafeFileHandle CreateFileW(string name, uint access, uint share, ref SecurityAttributes security, uint disposition, uint flags, IntPtr template);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, int flags, ref IntPtr size);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern bool UpdateProcThreadAttribute(IntPtr list, uint flags, IntPtr attribute, IntPtr value, IntPtr size, IntPtr previous, IntPtr returned);
+        [DllImport("kernel32.dll")]
+        static extern void DeleteProcThreadAttributeList(IntPtr list);
+        [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+        static extern bool CreateProcessW(string executable, StringBuilder command, IntPtr processSecurity, IntPtr threadSecurity,
+            bool inherit, uint flags, IntPtr environment, string directory, ref StartupInfoEx startup, out ProcessInformation process);
+        [DllImport("kernel32.dll")]
+        static extern bool CloseHandle(IntPtr handle);
+
+        public static int Start(string executable, string arguments, string directory, string environment, string log) {
+            var security = new SecurityAttributes { Size = Marshal.SizeOf(typeof(SecurityAttributes)), Inherit = 1 };
+            using (var input = CreateFileW("NUL", 0x80000000, 7, ref security, 3, 0x80, IntPtr.Zero))
+            using (var output = CreateFileW(log, 4, 7, ref security, 4, 0x80, IntPtr.Zero)) {
+                if (input.IsInvalid || output.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+                IntPtr size = IntPtr.Zero;
+                InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+                IntPtr attributes = Marshal.AllocHGlobal(size);
+                IntPtr handles = Marshal.AllocHGlobal(2 * IntPtr.Size);
+                IntPtr env = Marshal.StringToHGlobalUni(environment + "\0");
+                bool initialized = false;
+                try {
+                    if (!InitializeProcThreadAttributeList(attributes, 1, 0, ref size))
+                        throw new Win32Exception(Marshal.GetLastWin32Error());
+                    initialized = true;
+                    Marshal.WriteIntPtr(handles, input.DangerousGetHandle());
+                    Marshal.WriteIntPtr(handles, IntPtr.Size, output.DangerousGetHandle());
+                    // Only these two handles may reach the server. Inheriting
+                    // MSI's other pipe handles prevents QuietExec reaching EOF.
+                    if (!UpdateProcThreadAttribute(attributes, 0, new IntPtr(0x20002), handles,
+                        new IntPtr(2 * IntPtr.Size), IntPtr.Zero, IntPtr.Zero))
+                        throw new Win32Exception(Marshal.GetLastWin32Error());
+                    var startup = new StartupInfoEx {
+                        Info = new StartupInfo {
+                            Size = Marshal.SizeOf(typeof(StartupInfoEx)), Flags = 0x100,
+                            Input = input.DangerousGetHandle(), Output = output.DangerousGetHandle(), Error = output.DangerousGetHandle()
+                        },
+                        Attributes = attributes
+                    };
+                    ProcessInformation process;
+                    var command = new StringBuilder("\"" + executable + "\" " + arguments);
+                    if (!CreateProcessW(executable, command, IntPtr.Zero, IntPtr.Zero, true,
+                        0x08080400, env, directory, ref startup, out process))
+                        throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot restart TypeAgent.");
+                    CloseHandle(process.Thread);
+                    CloseHandle(process.Process);
+                    return process.Id;
+                } finally {
+                    if (initialized) DeleteProcThreadAttributeList(attributes);
+                    Marshal.FreeHGlobal(attributes);
+                    Marshal.FreeHGlobal(handles);
+                    Marshal.ZeroFreeGlobalAllocUnicode(env);
+                }
+            }
+        }
         static byte[] Bytes(SafeProcessHandle handle, long address, int size) {
             var bytes = new byte[size];
             IntPtr read;
@@ -218,23 +297,16 @@ function Start-RestoredServer($command) {
         [Convert]::FromBase64String($command.LaunchContext), $null, [Security.Cryptography.DataProtectionScope]::CurrentUser
     )
     $context = [Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json
-    $start = New-Object Diagnostics.ProcessStartInfo
-    $start.FileName = $command.Executable
-    $start.Arguments = $command.Arguments
-    $start.WorkingDirectory = $context.Directory
-    $start.UseShellExecute = $false
-    $start.CreateNoWindow = $true
-    $start.EnvironmentVariables.Clear()
-    foreach ($entry in $context.Environment.Split([char]0)) {
-        if (-not $entry) { continue }
-        $separator = $entry.IndexOf('=', 1)
-        if ($separator -lt 1) { throw "Invalid saved TypeAgent environment entry." }
-        $start.EnvironmentVariables[$entry.Substring(0, $separator)] = $entry.Substring($separator + 1)
-    }
-    $process = [Diagnostics.Process]::Start($start)
+    Initialize-ProcessContext
+    $recoveryLog = Join-Path $Root "logs\msi-restored-server.log"
+    New-Item -ItemType Directory -Force -Path (Split-Path $recoveryLog) | Out-Null
+    $childId = [TypeAgentMaintenance.ProcessContext]::Start(
+        $command.Executable, $command.Arguments, $context.Directory, $context.Environment, $recoveryLog
+    )
+    $process = Get-Process -Id $childId -ErrorAction Stop
     try {
         if ($process.WaitForExit(1000)) {
-            throw "Restored TypeAgent server exited with code $($process.ExitCode)."
+            throw "Restored TypeAgent server exited. See '$recoveryLog'."
         }
     } finally { $process.Dispose() }
 }
@@ -256,6 +328,12 @@ function Get-RestartCommands($processes, [string]$payload, $task) {
         $_.Name -eq "node.exe" -and $_.ExecutablePath -and
         (Get-NodeScript $_.CommandLine) -ieq $entry
     })
+    foreach ($process in $processes) {
+        if ($process.Name -eq "node.exe" -and $process.ProcessId -notin $servers.ProcessId -and
+            $process.ParentProcessId -notin $processes.ProcessId -and (Get-SameProcess $process)) {
+            throw "Cannot capture restart context for payload PID $($process.ProcessId): unrecognized Node entry point."
+        }
+    }
     foreach ($server in $servers) {
         if ($server.ParentProcessId -in $servers.ProcessId) { continue }
         if ($server.CommandLine -match '^(?:"[^"]+"|\S+)\s+(.+)$') {

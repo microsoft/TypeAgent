@@ -586,6 +586,10 @@ process's Windows process parameters through a read-only handle before shutdown.
 The captured environment is encrypted with current-user Windows DPAPI in the
 transaction state, never written to the log, and removed after recovery or commit.
 Failure to capture a live server's context aborts before stopping it.
+Unrecognized root Node entry points also fail before shutdown rather than losing
+their restart commands. Restored manual servers receive only null input and file
+output handles, not MSI's inherited pipes; their output is written to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-restored-server.log`.
 
 Rollback also blocks startup again if installation had already restarted the
 new server. Even when the original shutdown failed, rollback reconciles surviving
