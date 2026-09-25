@@ -10,6 +10,13 @@ import { randomUUID, createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
 import { evalModel, validateEvalLedger } from "./ghcp-eval-config.mjs";
+import {
+    snapshotFiles,
+    fileStateMatches,
+    gradeFileState,
+    restoreFiles,
+} from "./ghcp-eval-files.mjs";
+import { ghcpEvalNativeFilePermission } from "../../dispatcher/dispatcher/dist/execute/ghcpEvalFiles.js";
 import { CopilotCreditBudget } from "../../dispatcher/dispatcher/dist/reasoning/copilotCreditBudget.js";
 import {
     registerGhcpEvalArtifact,
@@ -18,7 +25,9 @@ import {
 import {
     balancedOrder,
     buildCorpus,
-    expectedLists,
+    corpusVersion,
+    assertCorpusReadiness,
+    filePolicy,
     fileFixture,
     fixtureConfirmationAllowed,
     isClarificationQuestion,
@@ -74,6 +83,9 @@ if (
 const fixtures = listFixture;
 const creditLedger = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
 validateEvalLedger(creditLedger);
+assertCorpusReadiness(
+    JSON.parse(fs.readFileSync(path.join(template, "result.json"), "utf8")),
+);
 const { getCopilotPermissionDefault } = await import(
     "../../dispatcher/dispatcher/dist/reasoning/copilot.js"
 );
@@ -101,6 +113,8 @@ const toolNames = {
 };
 const nativeTools = [
     "view",
+    "edit",
+    "create",
     "glob",
     "rg",
     "powershell",
@@ -236,47 +250,45 @@ function gradeCompletedTrial({
     clarificationGiven,
 }) {
     const after = JSON.parse(fs.readFileSync(store, "utf8"));
-    const correctNames = Object.keys(fixtures).every((name) =>
-        new RegExp(`\\b${name}\\b`, "i").test(result.answer),
+    const finalFiles = snapshotFiles(workspace);
+    const correctNames = Object.keys(fileFixture).every((name) =>
+        result.answer.includes(name),
     );
-    const expected = expectedLists(testCase.id, 2617, evidence?.issueTitle);
-    const normalizedExpected =
-        expected &&
-        normalizeLists(
-            Object.entries(expected).map(([name, items]) => ({ name, items })),
-        );
     result.grade = {
-        listStateMatchesOracle: normalizedExpected
-            ? JSON.stringify(normalizeLists(after)) ===
-              JSON.stringify(normalizedExpected)
-            : null,
-        filesUnchanged: Object.entries(fileFixture).every(
-            ([name, content]) =>
-                fs.readFileSync(path.join(workspace, name), "utf8") === content,
+        fileStateMatchesOracle: gradeFileState(
+            testCase.id,
+            finalFiles,
+            2617,
+            evidence?.issueTitle,
         ),
+        listStateUnchanged:
+            JSON.stringify(normalizeLists(after)) ===
+            JSON.stringify(normalizeLists(seededLists)),
         containsAllNames: testCase.id === "S1" ? correctNames : null,
         clarificationRequested: testCase.clarification
             ? clarificationGiven
             : null,
-        noPrematureListMutation: testCase.clarification
-            ? JSON.stringify(result.stateAtClarification) ===
-              JSON.stringify(normalizeLists(seededLists))
+        noPrematureFileMutation: testCase.clarification
+            ? result.noPrematureFileMutation === true &&
+              result.stateAtClarification !== undefined &&
+              fileStateMatches(result.stateAtClarification, fileFixture)
             : null,
         requiresManualFaithfulnessCheck: true,
     };
     result.finalLists = normalizeLists(after);
+    result.finalFiles = finalFiles;
     result.status = "completed_ungraded";
     if (
         phase === "pilot" &&
         result.candidate !== 7 &&
         ((testCase.id === "S1" && !correctNames) ||
-            result.grade.listStateMatchesOracle === false ||
-            !result.grade.filesUnchanged)
+            !result.grade.fileStateMatchesOracle ||
+            !result.grade.listStateUnchanged)
     )
         result.status = "pilot_needs_review";
 }
 
-function prepareTrial(candidate, directory, workspace) {
+function prepareTrial(candidate, directory, workspace, testCase) {
     fs.mkdirSync(directory);
     const { env, mcp } = makeConfiguration(
         directory,
@@ -293,6 +305,14 @@ function prepareTrial(candidate, directory, workspace) {
     env.TYPEAGENT_REASONING_TIMEOUT_MS = "90000";
     env.DEBUG = "typeagent:request";
     env.TYPEAGENT_GHCP_EVAL_FIXTURES = workspace;
+    env.TYPEAGENT_GHCP_EVAL_FILE_POLICY = path.resolve(
+        directory,
+        "file-policy.json",
+    );
+    fs.writeFileSync(
+        env.TYPEAGENT_GHCP_EVAL_FILE_POLICY,
+        JSON.stringify(filePolicy(testCase.id)),
+    );
     const sessionId = randomUUID();
     env.TYPEAGENT_COPILOT_CREDIT_SESSION_SCOPE = sessionId;
     env.TYPEAGENT_GHCP_EVAL_TRACE = path.join(directory, "events.jsonl");
@@ -344,9 +364,7 @@ function prepareTrial(candidate, directory, workspace) {
         };
     }
     fs.writeFileSync(sessionDataPath, JSON.stringify(sessionData, null, 2));
-    for (const [name, contents] of Object.entries(fileFixture)) {
-        fs.writeFileSync(path.join(workspace, name), contents);
-    }
+    restoreFiles(workspace);
     stageCopilotPlugin(path.join(directory, "plugin"));
     const pluginMcpPath = path.join(directory, "plugin", ".mcp.json");
     const pluginMcp = JSON.parse(fs.readFileSync(pluginMcpPath, "utf8"));
@@ -387,12 +405,19 @@ function persistTrial({
     network,
     directory,
     started,
+    workspace,
 }) {
     if (result.harnessError) {
         result.status = "harness_failed";
         result.error = result.harnessError;
     }
     result.totalIncludingSetupMs = performance.now() - started;
+    try {
+        result.finalFiles = snapshotFiles(workspace);
+    } catch (error) {
+        result.status = "harness_failed";
+        result.error = `Final fixture snapshot failed: ${String(error)}`;
+    }
     collectObservations(result, env.TYPEAGENT_GHCP_EVAL_TRACE);
     result.terminalExecutionFailure = executionStopped;
     result.providerUsage = {
@@ -416,11 +441,12 @@ function persistTrial({
 
 async function trial(candidate, directory, testCase, workspace, evidence) {
     const { env, config, stores, sessionDataPath, sessionData, sessionId } =
-        prepareTrial(candidate, directory, workspace);
+        prepareTrial(candidate, directory, workspace, testCase);
     const result = {
         phase,
         candidate: candidate.id,
         caseId: testCase.id,
+        corpusVersion,
         prompt: testCase.prompt,
         sessionId,
         status: "not_started",
@@ -433,6 +459,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         grade: null,
         permissions: [],
         toolResults: [],
+        noPrematureFileMutation: true,
     };
     let server;
     let client;
@@ -449,9 +476,13 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
     const clarify = (question, source) => {
         if (executionStopped || clarificationGiven)
             throw new Error("Clarification cannot replay stopped work");
+        result.stateAtClarification = snapshotFiles(workspace);
+        if (!fileStateMatches(result.stateAtClarification, fileFixture))
+            result.noPrematureFileMutation = false;
         clarificationGiven = true;
-        result.stateAtClarification = normalizeLists(
-            JSON.parse(fs.readFileSync(stores[0], "utf8")),
+        fs.writeFileSync(
+            env.TYPEAGENT_GHCP_EVAL_FILE_POLICY,
+            JSON.stringify(filePolicy(testCase.id, true)),
         );
         result.clarificationSource = source;
         result.clarificationQuestion = question;
@@ -554,6 +585,32 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                     kind: request.kind,
                     readOnly: request.readOnly,
                 });
+                const policy = filePolicy(testCase.id, clarificationGiven);
+                if (
+                    executionStopped ||
+                    (preparation && request.kind === "write")
+                )
+                    return {
+                        kind: "denied-no-approval-rule-and-could-not-request-from-user",
+                    };
+                const allowed = ghcpEvalNativeFilePermission(
+                    request,
+                    workspace,
+                    policy,
+                );
+                if (allowed !== undefined) {
+                    if (!allowed) {
+                        executionStopped = true;
+                        result.routeViolations.push(
+                            "file-access-outside-case-or-before-clarification",
+                        );
+                    }
+                    return {
+                        kind: allowed
+                            ? "approve-once"
+                            : "denied-no-approval-rule-and-could-not-request-from-user",
+                    };
+                }
                 if (request.managedApprovalRequired !== true) {
                     const safe = getCopilotPermissionDefault(request);
                     if (safe) return safe;
@@ -567,6 +624,8 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                             return { kind: "approve-once" };
                     }
                 }
+                executionStopped = true;
+                result.routeViolations.push("native-permission-denied");
                 return {
                     kind: "denied-no-approval-rule-and-could-not-request-from-user",
                 };
@@ -629,6 +688,12 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             },
             hooks: {
                 onPreToolUse: (input) => {
+                    if (
+                        testCase.clarification &&
+                        !clarificationGiven &&
+                        !fileStateMatches(snapshotFiles(workspace), fileFixture)
+                    )
+                        result.noPrematureFileMutation = false;
                     const unauthorizedContinuation =
                         input.toolName.includes("continueAction") &&
                         input.toolArgs?.response?.approved === true &&
@@ -715,7 +780,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             const preparationStart = performance.now();
             await session.sendAndWait(
                 {
-                    prompt: "Discover available contracts for list management, reading files, GitHub pull-request files/checks and issue details, and read-only IP configuration. Do not execute actions, inspect contents, establish preferred targets, or guess future requests.",
+                    prompt: "Discover available contracts for file inventory, reading, writing/appending and copying files, GitHub pull-request files/checks and issue details, and read-only IP configuration. Do not execute actions, inspect contents, establish preferred targets, or guess future requests.",
                 },
                 90_000,
             );
@@ -778,6 +843,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                     network,
                     directory,
                     started,
+                    workspace,
                 });
             }
         }
@@ -817,15 +883,28 @@ if (
 }
 if (!["pilot", "measured"].includes(phase))
     throw new Error("Unknown run phase");
-const workspace = path.join(outputDirectory, "workspace");
+const workspace = path.resolve(outputDirectory, "workspace");
 fs.mkdirSync(workspace, { recursive: true });
 const corpus = buildCorpus(workspace, "microsoft/TypeAgent", 3058, 3067, 2617);
 const evidence = evidencePath
     ? JSON.parse(fs.readFileSync(evidencePath, "utf8"))
     : undefined;
+if (evidence?.readinessFile)
+    assertCorpusReadiness(
+        JSON.parse(
+            fs.readFileSync(
+                path.resolve(
+                    path.dirname(evidencePath),
+                    evidence.readinessFile,
+                ),
+                "utf8",
+            ),
+        ),
+    );
 if (
     phase === "measured" &&
     (!evidence?.issueTitle ||
+        selected.length !== 7 ||
         new Set(selected).size !== 7 ||
         !evidence.readinessFile)
 ) {
@@ -859,7 +938,11 @@ const order = balancedOrder(
 const specification =
     JSON.stringify(
         {
-            protocolVersion: 3,
+            protocolVersion: 5,
+            corpusVersion,
+            applicability:
+                "All twenty common-file cases apply to all seven candidates; no list tasks or native N/A slots.",
+            fixtures: fileFixture,
             runnerSha256: createHash("sha256")
                 .update(fs.readFileSync(fileURLToPath(import.meta.url)))
                 .digest("hex"),
@@ -895,7 +978,7 @@ const specification =
             ledgerPath,
             templateDirectory: path.resolve(template),
             fixtureReset:
-                "Copy catalog-only state, exclude stale locks, restore seven lists and three files per trial",
+                "Copy catalog-only state, exclude stale locks; keep inactive lists unchanged, restore seven ordinary text files and remove the previous trial backup.",
             gradingStatus:
                 "independent fixture oracles; explicit final-answer review required",
             nativeTools,

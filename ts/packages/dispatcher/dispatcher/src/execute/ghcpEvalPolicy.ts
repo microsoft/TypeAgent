@@ -4,6 +4,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isGhcpEvalArtifact } from "./ghcpEvalArtifacts.js";
+import {
+    ghcpEvalFileActionAllowed,
+    readGhcpEvalFilePolicy,
+} from "./ghcpEvalFiles.js";
 
 let executionFailureObserved = false;
 
@@ -58,7 +62,10 @@ export function assertGhcpEvalAction(
             "GHCP eval stopped execution after a failed or cancelled action",
         );
     if (
-        schemaName === "list" ||
+        (schemaName === "list" &&
+            (!process.env.TYPEAGENT_GHCP_EVAL_FILE_POLICY ||
+                (actionName === "listLists" &&
+                    readGhcpEvalFilePolicy()?.allowListInventory === true))) ||
         schemaName === "dispatcher" ||
         schemaName.startsWith("dispatcher.") ||
         reads.get(schemaName)?.has(actionName)
@@ -67,19 +74,40 @@ export function assertGhcpEvalAction(
     }
     if (
         schemaName === "powershell.powershell-files" &&
-        actionName === "readFile" &&
         typeof parameters === "object" &&
-        parameters !== null &&
-        "path" in parameters &&
-        typeof parameters.path === "string"
+        parameters !== null
     ) {
-        const requested = fs.realpathSync(parameters.path).toLowerCase();
-        const allowed = ["report-a.txt", "report-b.txt", "trip.txt"].map(
-            (file) =>
-                fs.realpathSync(path.join(fixtureRoot, file)).toLowerCase(),
-        );
-        if (allowed.includes(requested) || isGhcpEvalArtifact(parameters.path))
+        const policy = readGhcpEvalFilePolicy();
+        if (
+            policy &&
+            ghcpEvalFileActionAllowed(
+                actionName,
+                parameters as Record<string, unknown>,
+                fixtureRoot,
+                policy,
+            )
+        )
             return;
+        if (
+            actionName === "readFile" &&
+            "path" in parameters &&
+            typeof parameters.path === "string"
+        ) {
+            if (isGhcpEvalArtifact(parameters.path)) return;
+            if (!policy) {
+                const requested = fs
+                    .realpathSync(parameters.path)
+                    .toLowerCase();
+                const allowed = [
+                    "report-a.txt",
+                    "report-b.txt",
+                    "trip.txt",
+                ].map((file) =>
+                    fs.realpathSync(path.join(fixtureRoot, file)).toLowerCase(),
+                );
+                if (allowed.includes(requested)) return;
+            }
+        }
     }
     recordGhcpEvalEvent("action.denied", { schemaName, actionName });
     markGhcpEvalExecutionFailure();

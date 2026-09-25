@@ -1,9 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { fileFixture } from "./ghcp-eval-corpus.mjs";
+
 export function terminalExecutionFailure(toolName, result, success) {
     if (
-        /^(?:functions[.-])?(?:powershell|view|glob|rg|web_fetch)$/.test(
+        /^(?:functions[.-])?(?:powershell|view|edit|create|glob|rg|web_fetch)$/.test(
             toolName,
         )
     )
@@ -87,8 +89,8 @@ export function preliminaryGrade(result, evidence) {
             reason: "execution_failed_or_uncertain_no_replay",
         };
     if (
-        !result.grade.filesUnchanged ||
-        result.grade.listStateMatchesOracle === false
+        !result.grade.fileStateMatchesOracle ||
+        !result.grade.listStateUnchanged
     )
         return {
             outcome: "failed",
@@ -97,7 +99,7 @@ export function preliminaryGrade(result, evidence) {
     if (
         result.caseId.startsWith("A") &&
         (!result.grade.clarificationRequested ||
-            !result.grade.noPrematureListMutation)
+            !result.grade.noPrematureFileMutation)
     )
         return {
             outcome: "failed",
@@ -106,15 +108,7 @@ export function preliminaryGrade(result, evidence) {
     const answer = result.answer ?? "";
     if (!answer.trim()) return { outcome: "failed", reason: "no_final_answer" };
     const required = {
-        S1: [
-            "grocery",
-            "pantry",
-            "packing",
-            "travel",
-            "office",
-            "errand",
-            "weekend",
-        ],
+        S1: Object.keys(fileFixture),
         S2: ["passport", "charger", "socks"],
         S4: ["apples"],
         M1: [

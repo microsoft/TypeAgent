@@ -14,10 +14,11 @@ import {
 import {
     balancedOrder,
     buildCorpus,
-    expectedLists,
+    expectedFiles,
+    fileFixture,
+    corpusVersion,
     fixtureConfirmationAllowed,
     isClarificationQuestion,
-    listFixture,
     normalizeLists,
     shuffled,
     sendWithClarification,
@@ -35,13 +36,13 @@ test("evaluation pins Luna 5.6 and rejects another model before paid work", () =
     }
 });
 const corpus = buildCorpus(fixtures, "owner/repo", 10, 20, 30);
-test("intermediate edit confirmation is limited to the case's disposable list", () => {
+test("legacy list confirmations are not approved in the file corpus", () => {
     const action = {
         schemaName: "list",
         actionName: "startEditList",
         parameters: { listName: "errand" },
     };
-    assert.equal(fixtureConfirmationAllowed("R5", action, fixtures), true);
+    assert.equal(fixtureConfirmationAllowed("R5", action, fixtures), false);
     assert.equal(fixtureConfirmationAllowed("S1", action, fixtures), false);
     assert.equal(fixtureConfirmationAllowed("A1", action, fixtures), false);
 });
@@ -54,7 +55,7 @@ test("final-text clarification gets exactly one answer within the same deadline"
                 data: {
                     content:
                         calls.length === 1
-                            ? "Which list should receive apples?"
+                            ? "Which file should receive apples?"
                             : "Done",
                 },
             };
@@ -71,7 +72,7 @@ test("final-text clarification gets exactly one answer within the same deadline"
     });
     assert.equal(result.data.content, "Done");
     assert.equal(calls.length, 2);
-    assert.equal(calls[1].input.prompt, "The grocery list.");
+    assert.equal(calls[1].input.prompt, "grocery.txt.");
     assert.ok(calls[1].timeout <= calls[0].timeout);
 });
 test("text continuation never replays stopped work or confirms a guessed target", async () => {
@@ -151,6 +152,8 @@ test("nested/parallel tool durations are not double-counted and empty tails are 
 test("native domain failures stop execution even without an SDK error payload", () => {
     for (const tool of [
         "powershell",
+        "edit",
+        "create",
         "view",
         "glob",
         "rg",
@@ -204,7 +207,7 @@ test("independent PR file evidence must be complete", () => {
 });
 test("confirmation of a guessed referent is not clarification", () => {
     assert.equal(
-        isClarificationQuestion("A1", "Which list should receive apples?"),
+        isClarificationQuestion("A1", "Which file should receive apples?"),
         true,
     );
     assert.equal(
@@ -220,15 +223,19 @@ test("confirmation of a guessed referent is not clarification", () => {
         false,
     );
     assert.equal(
-        isClarificationQuestion(
-            "A4",
-            "How should I clean up your grocery list?",
-        ),
+        isClarificationQuestion("A4", "Which item should I remove?"),
         true,
     );
 });
 test("the full workload has exactly four five-case cohorts", () => {
     assert.equal(corpus.length, 20);
+    assert.equal(corpusVersion, "common-files-v1");
+    assert.ok(
+        corpus.every(
+            ({ prompt }) =>
+                !/\b(my|grocery|packing|errand) list\b/.test(prompt),
+        ),
+    );
     assert.equal(new Set(corpus.map(({ id }) => id)).size, 20);
     for (const cohort of ["S", "M", "R", "A"]) {
         assert.equal(
@@ -240,12 +247,32 @@ test("the full workload has exactly four five-case cohorts", () => {
 });
 test("scripted confirmations are limited to exact disposable fixture actions", () => {
     const add = {
-        schemaName: "list",
-        actionName: "addItems",
-        parameters: { listName: "grocery", items: ["apples"] },
+        schemaName: "powershell.powershell-files",
+        actionName: "writeFile",
+        parameters: {
+            path: path.join(fixtures, "grocery.txt"),
+            content: "apples",
+            append: true,
+        },
     };
     assert.equal(fixtureConfirmationAllowed("S4", add, fixtures), true);
     assert.equal(fixtureConfirmationAllowed("S1", add, fixtures), false);
+    assert.equal(
+        fixtureConfirmationAllowed(
+            "S4",
+            { ...add, parameters: { ...add.parameters, content: "eggs" } },
+            fixtures,
+        ),
+        false,
+    );
+    assert.equal(
+        fixtureConfirmationAllowed(
+            "S4",
+            { ...add, parameters: { ...add.parameters, append: false } },
+            fixtures,
+        ),
+        false,
+    );
     assert.equal(
         fixtureConfirmationAllowed(
             "S4",
@@ -292,10 +319,7 @@ test("seeded ordering is reproducible without dropping examples", () => {
     assert.equal(new Set(shuffled(corpus, 42).map(({ id }) => id)).size, 20);
 });
 test("answers are separate from prompts and fixed inputs are substituted", () => {
-    assert.equal(
-        corpus.find(({ id }) => id === "A1").prompt,
-        "Add apples to my list.",
-    );
+    assert.match(corpus.find(({ id }) => id === "A1").prompt, /shopping files/);
     assert.equal(
         corpus.find(({ id }) => id === "A3").clarification,
         "Pull request 10.",
@@ -318,17 +342,27 @@ test("balanced rotations retain every candidate/case/repetition", () => {
     );
     assert.throws(() => balancedOrder(corpus, [1], 0), /positive integer/);
 });
-test("independent list oracles preserve all unrelated state", () => {
-    assert.deepEqual(expectedLists("M3", 30).grocery, ["bread", "oranges"]);
-    assert.deepEqual(expectedLists("A4", 30).grocery, []);
-    assert.deepEqual(expectedLists("S4", 30).pantry, listFixture.pantry);
-    assert.deepEqual(expectedLists("S1", 30), listFixture);
-    assert.equal(expectedLists("R5", 30), undefined);
+test("independent file oracles preserve all unrelated state and conditional semantics", () => {
+    assert.equal(expectedFiles("M3", 30)["grocery.txt"], "bread\noranges\n");
     assert.equal(
-        expectedLists("R5", 30, "Exact title").errand.at(-1),
-        "Exact title",
+        expectedFiles("M3", 30)["grocery-backup.txt"],
+        fileFixture["grocery.txt"],
     );
-    assert.equal(listFixture.grocery.includes("apples"), false);
+    assert.equal(expectedFiles("A4", 30)["grocery.txt"], "milk\nrice\n");
+    assert.equal(
+        expectedFiles("S4", 30)["pantry.txt"],
+        fileFixture["pantry.txt"],
+    );
+    assert.deepEqual(expectedFiles("S1", 30), fileFixture);
+    assert.equal(expectedFiles("R5", 30), undefined);
+    assert.equal(
+        expectedFiles("R5", 30, "Exact title")["errands.txt"],
+        fileFixture["errands.txt"] + "Exact title\n",
+    );
+    const present = { ...fileFixture, "errands.txt": "Exact title\n" };
+    assert.deepEqual(expectedFiles("R5", 30, "Exact title", present), present);
+    const noJacket = { ...fileFixture, "trip.txt": "jacket: not required\n" };
+    assert.deepEqual(expectedFiles("R4", 30, "", noJacket), noJacket);
     assert.deepEqual(normalizeLists([{ name: "a", items: ["b", "a"] }]), {
         a: ["a", "b"],
     });
