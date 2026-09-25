@@ -172,6 +172,40 @@ try {
     $script:processes[0].CreationDate = $now.AddMinutes(1)
     Assert (-not (Get-SameProcess $snapshot)) "reused PID was accepted"
 
+    $script:stopCalls = 0
+    function Stop-Process {
+        param($Id, [switch]$Force, $ErrorAction)
+        $script:stopCalls++
+    }
+    $current = $script:processes[0].PSObject.Copy()
+    Stop-RemainingPayloadProcesses @($current, $current.PSObject.Copy())
+    Assert ($script:stopCalls -eq 1) "duplicate snapshots caused repeated termination"
+    Stop-RemainingPayloadProcesses @($snapshot)
+    Assert ($script:stopCalls -eq 1) "a reused PID was terminated"
+
+    function Stop-Process {
+        param($Id, [switch]$Force, $ErrorAction)
+        $script:stopCalls++
+        $script:processes = @($script:processes | Where-Object { $_.ProcessId -ne $Id })
+        throw "Cannot find a process with the process identifier $Id."
+    }
+    Stop-RemainingPayloadProcesses @($current)
+    Assert ($script:stopCalls -eq 2) "concurrent exit scenario did not exercise termination"
+    Assert ((Get-Content $LogPath -Raw) -match "PID 100 already exited") "concurrent exit was not logged"
+
+    $script:processes = @($current)
+    function Stop-Process {
+        param($Id, [switch]$Force, $ErrorAction)
+        throw "Access is denied for PID $Id."
+    }
+    $failed = $false
+    try { Stop-RemainingPayloadProcesses @($current) } catch {
+        $failed = $true
+        Assert ($_.Exception.Message -eq "Access is denied for PID 100.") "termination error was replaced"
+    }
+    Assert $failed "failure to stop a still-live process was swallowed"
+    Remove-Item Function:Stop-Process
+
     # Exercise real shutdown against an isolated Node parent and orphaned child.
     Remove-Item Function:Get-CimInstance
     Remove-Item Function:Invoke-CimMethod

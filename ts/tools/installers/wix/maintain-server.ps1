@@ -134,6 +134,21 @@ function Get-GracefulShutdownPorts($processes, $listeners) {
     }
 }
 
+function Stop-RemainingPayloadProcesses($processes) {
+    $unique = $processes | Sort-Object -Property ProcessId, CreationDate -Unique
+    foreach ($process in ($unique | Sort-Object CreationDate -Descending)) {
+        if (-not (Get-SameProcess $process)) { continue }
+        Write-MaintenanceLog "Terminating remaining TypeAgent PID $($process.ProcessId)."
+        try {
+            Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
+        } catch {
+            # A worker can exit after the identity check, including when its parent stops.
+            if (Get-SameProcess $process) { throw }
+            Write-MaintenanceLog "TypeAgent PID $($process.ProcessId) already exited."
+        }
+    }
+}
+
 function Stop-PayloadProcesses([string]$payload) {
     $processes = @(Get-PayloadProcesses $payload)
     if (-not $processes.Count) { return }
@@ -175,12 +190,7 @@ function Stop-PayloadProcesses([string]$payload) {
 
     # Keep the original snapshots so orphaned children remain in scope.
     $remaining = @($processes) + @(Get-PayloadProcesses $payload)
-    foreach ($process in ($remaining | Sort-Object CreationDate -Descending)) {
-        if (Get-SameProcess $process) {
-            Write-MaintenanceLog "Terminating remaining TypeAgent PID $($process.ProcessId)."
-            Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
-        }
-    }
+    Stop-RemainingPayloadProcesses $remaining
     $deadline = [DateTime]::UtcNow.AddSeconds(5)
     do {
         $live = @($remaining | Where-Object { Get-SameProcess $_ }) + @(Get-PayloadProcesses $payload)
