@@ -16,4 +16,4 @@ import { PhotoAction } from "./photoSchema.ts";
 
 <PhotoCommand> = ('take' ('a' ('photo' | 'picture' | 'pic' | 'shot'))?) | 'snap' ('a' ('picture' | 'pic' | 'shot'))? | 'photograph' | 'photo';
 
-<OptionalOf> = 'of'?;
+<OptionalOf> = ('of')?;

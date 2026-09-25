@@ -861,17 +861,17 @@ function maybeEscapeWord(
  *     space character as part of the token, not a separator.
  *
  * Grammar-special chars (`|`, `(`, `)`, `<`, `>`, `$`, `-`, `;`,
- * `{`, `}`, `[`, `]`, `\`) and comment starters (`/`) are
- * excluded - they require backslash escapes that the parser handles
- * via the broader `escapeProb` knob, not via embedded-separator
- * semantics.
+ * `{`, `}`, `[`, `]`, `?`, `*`, `+`, `\`) and comment starters (`/`) are
+ * excluded from bare embedding — `?`/`*`/`+` require escapes in source
+ * (they are postfix quantifiers). Entries below that are special use the
+ * escaped source form.
  */
 const SEPARATOR_LITERAL_CHARS: ReadonlyArray<readonly [string, string]> = [
     [",", ","],
     [".", "."],
     [":", ":"],
     ["!", "!"],
-    ["?", "?"],
+    ["\\?", "?"],
     ["=", "="],
     ["@", "@"],
     ["#", "#"],
@@ -879,7 +879,7 @@ const SEPARATOR_LITERAL_CHARS: ReadonlyArray<readonly [string, string]> = [
     ["&", "&"],
     ["'", "'"],
     ['"', '"'],
-    ["+", "+"],
+    ["\\+", "+"],
     // Escaped space: source `\ ` decodes to a single space char that
     // is treated as part of the literal (not a flex-space).
     ["\\ ", " "],

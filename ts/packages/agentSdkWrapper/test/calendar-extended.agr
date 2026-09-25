@@ -11,9 +11,9 @@
 
 <addParticipant> = <Polite> ('add' | 'invite' | 'include' | 'bring in') <ParticipantName> ('to' | 'in' | 'on') <EventDescriptionTarget> -> { actionName: "addParticipant", parameters: { description, participant } };
 
-<findTodaysEvents> = <Polite> ('show me' | 'find' | 'get' | 'what is' | 'what\'s' | 'tell me' | 'can you tell me') ('on my calendar'? 'today' | 'today\'s' ('events' | 'schedule' | 'calendar' | 'meetings' | 'appointments')? | ('what I have' | 'what\'s scheduled') ('for'? 'today')) -> { actionName: "findTodaysEvents", parameters: {} };
+<findTodaysEvents> = <Polite> ('show me' | 'find' | 'get' | 'what is' | 'what\'s' | 'tell me' | 'can you tell me') (('on my calendar')? 'today' | 'today\'s' ('events' | 'schedule' | 'calendar' | 'meetings' | 'appointments')? | ('what I have' | 'what\'s scheduled') (('for')? 'today')) -> { actionName: "findTodaysEvents", parameters: {} };
 
-<findThisWeeksEvents> = <Polite> ('show me' | 'find' | 'get' | 'what is' | 'what\'s' | 'tell me') ('on my calendar'? ('this week' | 'for this week') | 'this week\'s' ('events' | 'schedule' | 'calendar' | 'meetings' | 'appointments')?) -> { actionName: "findThisWeeksEvents", parameters: {} };
+<findThisWeeksEvents> = <Polite> ('show me' | 'find' | 'get' | 'what is' | 'what\'s' | 'tell me') (('on my calendar')? ('this week' | 'for this week') | 'this week\'s' ('events' | 'schedule' | 'calendar' | 'meetings' | 'appointments')?) -> { actionName: "findThisWeeksEvents", parameters: {} };
 
 // Shared sub-rules
 <Polite> = ('can you' | 'please' | 'would you' | 'could you')?;
@@ -32,7 +32,7 @@
 
 <LocationSpec> = ('in' | 'at' | 'location') ($(location:string) | 'TBD');
 
-<ParticipantSpec> = ('please'? ('invite' | 'include' | 'bring in') | 'with') <ParticipantList>;
+<ParticipantSpec> = (('please')? ('invite' | 'include' | 'bring in') | 'with') <ParticipantList>;
 
 <ParticipantList> = $(participant:string) ((',' | 'and') $(participant:string))*;
 
