@@ -11,7 +11,7 @@ import {
     docPartsFromVtt,
 } from "@typeagent/conversation-memory";
 import * as kp from "@typeagent/knowpro";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
     CorpusIndex,
@@ -106,11 +106,6 @@ export class KnowProCorpusIndex implements CorpusIndex {
     ) {}
 
     public async initialize(): Promise<void> {
-        this.memory = await DocMemory.readFromFile(
-            this.indexDirectory,
-            indexBaseName,
-            this.settingsFactory?.(),
-        );
         try {
             this.basicDocuments = JSON.parse(
                 await readFile(
@@ -123,6 +118,21 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 throw error;
             }
             this.basicDocuments = [];
+        }
+        const semanticIndexPath = path.join(
+            this.indexDirectory,
+            `${indexBaseName}_data.json`,
+        );
+        const hasSemanticIndex = await access(semanticIndexPath).then(
+            () => true,
+            () => false,
+        );
+        if (this.settingsFactory !== undefined || hasSemanticIndex) {
+            this.memory = await DocMemory.readFromFile(
+                this.indexDirectory,
+                indexBaseName,
+                this.settingsFactory?.(),
+            );
         }
     }
 
@@ -149,6 +159,22 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
+        if (semanticDocuments.length === 0) {
+            await kp.removeConversationData(this.indexDirectory, indexBaseName);
+            await this.persistBasicDocuments();
+            this.memory = undefined;
+            await onProgress({
+                completed: parts.length,
+                total: parts.length,
+                message: "Index persisted",
+                stage: "persisting",
+                operation: "rebuild",
+                elapsedMs: performance.now() - startedAt,
+                documentCount: documents.length,
+                docPartCount: parts.length,
+            });
+            return;
+        }
         const memory = new DocMemory(
             this.corpusId,
             parts,
@@ -228,9 +254,6 @@ export class KnowProCorpusIndex implements CorpusIndex {
     ): Promise<void> {
         const startedAt = performance.now();
         await this.initialize();
-        if (this.memory === undefined) {
-            throw new Error(`Corpus '${this.corpusId}' has not been indexed`);
-        }
         const semanticDocuments = documents.filter(
             (document) => document.pipeline.mode !== "basic",
         );
@@ -239,6 +262,35 @@ export class KnowProCorpusIndex implements CorpusIndex {
             ...documents.filter(
                 (document) => document.pipeline.mode === "basic",
             ),
+        );
+        if (semanticDocuments.length === 0) {
+            await onProgress({
+                completed: parts.length,
+                total: parts.length,
+                message: "Documents chunked",
+                stage: "chunking",
+                operation: "append",
+                elapsedMs: performance.now() - startedAt,
+                documentCount: documents.length,
+                docPartCount: parts.length,
+            });
+            await this.persistBasicDocuments();
+            await onProgress({
+                completed: parts.length,
+                total: parts.length,
+                message: "Index persisted",
+                stage: "persisting",
+                operation: "append",
+                elapsedMs: performance.now() - startedAt,
+                documentCount: documents.length,
+                docPartCount: parts.length,
+            });
+            return;
+        }
+        this.memory ??= new DocMemory(
+            this.corpusId,
+            [],
+            this.settingsFactory?.(),
         );
         await onProgress({
             completed: parts.length,
@@ -323,22 +375,21 @@ export class KnowProCorpusIndex implements CorpusIndex {
         query: string,
         limit: number,
     ): Promise<CorpusIndexMatch[]> {
-        if (this.memory === undefined) {
-            throw new Error(`Corpus '${this.corpusId}' has not been indexed`);
-        }
-        const options = kp.createLanguageSearchOptionsTypical();
-        options.maxMessageMatches = limit;
-        options.maxKnowledgeMatches = limit;
-        const result = await this.memory.searchWithLanguage(query, options);
-        if (!result.success) {
-            throw new Error(result.message);
-        }
         const matches = new Map<number, number>();
-        for (const searchResult of result.data) {
-            for (const match of searchResult.messageMatches) {
-                const previous = matches.get(match.messageOrdinal);
-                if (previous === undefined || match.score > previous) {
-                    matches.set(match.messageOrdinal, match.score);
+        if (this.memory !== undefined) {
+            const options = kp.createLanguageSearchOptionsTypical();
+            options.maxMessageMatches = limit;
+            options.maxKnowledgeMatches = limit;
+            const result = await this.memory.searchWithLanguage(query, options);
+            if (!result.success) {
+                throw new Error(result.message);
+            }
+            for (const searchResult of result.data) {
+                for (const match of searchResult.messageMatches) {
+                    const previous = matches.get(match.messageOrdinal);
+                    if (previous === undefined || match.score > previous) {
+                        matches.set(match.messageOrdinal, match.score);
+                    }
                 }
             }
         }
@@ -398,7 +449,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         sourceIds?: ReadonlySet<string>,
     ): Promise<MemoryKnowledgeGraph> {
         if (this.memory === undefined) {
-            throw new Error(`Corpus '${this.corpusId}' has not been indexed`);
+            return { entities: [], topics: [], relationships: [] };
         }
         const entities = new Map<
             string,
