@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=06cacf1cad395cbc152af0837823f7af2754d01b73e20866839cedea5939d089 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=902d358a098d6c3c1da9be2ce05ed0278d56fe9e37b938c57f971041b40f62ea -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -23,12 +23,14 @@ TypeAgent translation bench: catalog, action-parameters grader, simple-action da
 - default → `./dist/index.js` _(not found on disk)_
 - `./translationBench` → `./dist/translationBench/index.js` _(not found on disk)_
 - `./internal` → `./dist/index.js` _(not found on disk)_
+- `./translationBench/runner` → `./dist/translationBench/runner/index.js` _(not found on disk)_
 
 ### Dependencies
 
 Workspace:
 
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
+- [@typeagent/agent-cache](../../packages/cache/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
@@ -47,15 +49,23 @@ _None._
 - [./src/translationBench/policy/index.ts](./src/translationBench/policy/index.ts)
 - [./src/translationBench/public_datasets/Seal-Tools/index.ts](./src/translationBench/public_datasets/Seal-Tools/index.ts)
 - [./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts](./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts)
+- [./src/translationBench/runner/index.ts](./src/translationBench/runner/index.ts)
 - [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
 - [./src/core/fileJson.ts](./src/core/fileJson.ts)
-- [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
-- _…and 73 more under `./src/`._
+- _…and 79 more under `./src/`._
+
+### Environment variables
+
+_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+
+- `OPENAI_ENDPOINT`
+- `OPENAI_MODEL`
+- `TYPEAGENT_MODEL_PROVIDER`
 
 ---
 
-_Auto-generated against commit `d23e0d2516299e5356e720bf2ee781b0a4c82017` on `2026-09-23T00:06:05.252Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `86eebaeec19db822f5de0581539ec67c963fcd96` on `2026-09-23T01:45:36.754Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
