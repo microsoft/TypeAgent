@@ -1,17 +1,24 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadConfigSync } from "@typeagent/config";
 import type {
     FileMemoryService,
     IngestionJobStatus,
+    MemoryKnowledgeGraph,
 } from "@typeagent/memory-service";
 import { createDurableMemoryService } from "../src/durableMemoryService.js";
 
 loadConfigSync();
+
+const memoryValidationFixtureDirectory = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../../memory/service/test/data/memory-validation",
+);
 
 async function waitForTerminalJob(
     service: FileMemoryService,
@@ -47,6 +54,15 @@ function fullPageFixture(): string {
             ].join("\n");
         }),
     ].join("\n\n");
+}
+
+function hasSourceLinkedKnowledge(
+    graph: MemoryKnowledgeGraph,
+    sourceId: string,
+): boolean {
+    return [graph.entities, graph.topics, graph.relationships]
+        .flat()
+        .some((item) => item.sourceIds.includes(sourceId));
 }
 
 describe("durable memory incremental production path", () => {
@@ -176,4 +192,119 @@ describe("durable memory incremental production path", () => {
             await rm(rootDirectory, { recursive: true, force: true });
         }
     }, 180_000);
+
+    test("preserves semantic evidence and source-linked knowledge in full mode after restart", async () => {
+        const rootDirectory = await mkdtemp(
+            path.join(os.tmpdir(), "typeagent-live-structured-rag-"),
+        );
+        let service = createDurableMemoryService(rootDirectory);
+        try {
+            const corpus = await service.createCorpus(
+                "Full-mode structured RAG acceptance",
+            );
+            const sources = [
+                {
+                    sourceId: "smoke-alpha",
+                    title: "Aurora-7 telemetry incident report AR-204",
+                    fileName: "smoke-alpha.md",
+                },
+                {
+                    sourceId: "smoke-beta",
+                    title: "Meridian shift handoff MH-88",
+                    fileName: "smoke-beta.md",
+                },
+            ];
+
+            for (const source of sources) {
+                const accepted = await service.ingestDocument({
+                    corpusId: corpus.corpusId,
+                    source: {
+                        sourceId: source.sourceId,
+                        sourceType: "markdown",
+                        title: source.title,
+                        markdown: await readFile(
+                            path.join(
+                                memoryValidationFixtureDirectory,
+                                source.fileName,
+                            ),
+                            "utf8",
+                        ),
+                    },
+                    pipeline: { mode: "full", maxCharsPerChunk: 8_000 },
+                });
+                const job = await waitForTerminalJob(
+                    service,
+                    accepted.jobId,
+                );
+                expect(job.state).toBe("complete");
+                expect(job.trace).toEqual(
+                    expect.arrayContaining([
+                        expect.objectContaining({
+                            stage: "extracting-knowledge",
+                        }),
+                        expect.objectContaining({ stage: "embedding" }),
+                        expect.objectContaining({
+                            stage: "building-indexes",
+                        }),
+                    ]),
+                );
+            }
+
+            const semanticQuery =
+                "relay R-17 diagnostic latch inspection interlock";
+            const semanticResult = await service.search({
+                corpusId: corpus.corpusId,
+                query: semanticQuery,
+                limit: 3,
+            });
+            expect(semanticResult.matches).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        sourceId: "smoke-alpha",
+                        locator: expect.stringMatching(/^message:/),
+                    }),
+                ]),
+            );
+
+            for (const source of sources) {
+                const graph = await service.getSourceKnowledge(
+                    corpus.corpusId,
+                    source.sourceId,
+                );
+                expect(hasSourceLinkedKnowledge(graph, source.sourceId)).toBe(
+                    true,
+                );
+            }
+
+            await service.close();
+            service = createDurableMemoryService(rootDirectory);
+
+            await expect(
+                service.search({
+                    corpusId: corpus.corpusId,
+                    query: semanticQuery,
+                    limit: 3,
+                }),
+            ).resolves.toMatchObject({
+                matches: expect.arrayContaining([
+                    expect.objectContaining({
+                        sourceId: "smoke-alpha",
+                        locator: expect.stringMatching(/^message:/),
+                    }),
+                ]),
+            });
+            expect(
+                hasSourceLinkedKnowledge(
+                    await service.getSourceKnowledge(
+                        corpus.corpusId,
+                        "smoke-alpha",
+                    ),
+                    "smoke-alpha",
+                ),
+            ).toBe(true);
+        } finally {
+            await service.close();
+            await rm(rootDirectory, { recursive: true, force: true });
+        }
+    }, 420_000);
 });

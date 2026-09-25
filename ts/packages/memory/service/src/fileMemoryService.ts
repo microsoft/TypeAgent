@@ -815,11 +815,15 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (source === undefined) {
             throw new Error(`Unknown source '${request.sourceId}'`);
         }
+        const activePipeline = source.revisions.find(
+            (revision) => revision.revisionId === source.activeRevisionId,
+        )?.pipeline;
         return this.ingestDocument(
             {
                 corpusId: request.corpusId,
                 source: { ...request.source, sourceId: request.sourceId },
                 pipeline: {
+                    ...activePipeline,
                     updatePolicy:
                         request.retainRevisionHistory === false
                             ? "replaceActiveRevision"
