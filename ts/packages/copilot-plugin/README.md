@@ -63,7 +63,8 @@ Use a nonsynchronized local directory for live databases/locks. Preserve
 sanitized results, the frozen specification, and the cumulative ledger in
 durable storage. Measured batches contain one paired case across all seven
 candidates; advance the zero-based start by seven only after reconciliation.
-One complete balanced pass contains 140 trials; freeze additional repetitions
+One complete balanced pass contains 140 slots (131 executed trials and nine
+native N/A records in protocol 4); freeze additional repetitions
 only when the reconciled allowance permits them. A changed specification or a mismatched
 persisted trial count blocks resumption instead of replaying uncertain work.
 The oracle JSON pins public issue/PR evidence and a relative `readinessFile`
@@ -75,7 +76,7 @@ domain schemas outside that scope are disabled only in the disposable
 session. The production internal reasoning toolset is unchanged. The
 mixed candidates keep production routing guidance and the pinned native tools.
 Auxiliary outer workspace/macro/skill MCP servers are omitted to keep the
-declared entry interfaces in scope. After failed or uncertain execution,
+declared entry interfaces in scope. After terminal or uncertain execution,
 the eval policy blocks replay (including internal error-triggered retries);
 it does not repair the underlying product failure or substitute an action.
 These controls are identical across the relevant candidate pairs. The
@@ -113,6 +114,59 @@ prospective guard correction does not relabel or rerun protocol-two evidence:
 audit earlier native/mixed traces for operations after failed native calls,
 and do not count those recoveries as policy-valid successes merely because
 their final answers are correct.
+
+**Protocol 4 (prospective, not measured):** ordinary failures are not inherently
+terminal. A native `view`, `glob`, `rg` or `web_fetch` failure can continue only
+when the SDK supplies an ordinary read I/O error (`ENOENT`, `ENOTDIR`, `EISDIR`,
+`ETIMEDOUT`, `ECONNRESET`, or `EAI_AGAIN`). Shell errors remain terminal because
+the shell can mutate state. TypeAgent read failures use the same positive error
+check plus a complete per-tool backend trace containing only known read actions.
+The isolated server also permits these read failures to recover internally.
+Missing errors, unclassified errors, incomplete traces, denied/cancelled work,
+mutation failures and uncertain side effects remain fail-closed. A later safe
+failure cannot clear an earlier stop. Recovery never changes allowed routes,
+confirmation, filesystem scope, deadlines, or credit/request budgets. It is
+recorded for review, not automatically graded as success. There is no retry
+loop added by the harness.
+
+Native-only C7 has no list provider. S1, S4, M3, M5, R1, R4, R5, A1 and A4 now
+produce `not_applicable` records **before session/fixture preparation**. Preserve
+their slots in the seven-candidate paired order, but exclude them from C7
+accuracy and latency denominators: C1-C6 each have 20 applicable cases and C7
+has 11 per repetition. N/A is neither a pass nor a failure, and does not stop a
+pilot batch. The master corpus remains twenty cases in four five-case cohorts.
+Cross-candidate accuracy comparisons must use common applicable cases, not
+compare the 11-case and 20-case aggregate percentages as like-for-like.
+
+The only corpus replacement is **A4**:
+
+| Field                          | Protocol-4 decision                                                                                                                                                                                                                                                                                            |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Original ID and prompt         | A4: "Clean up my grocery list."                                                                                                                                                                                                                                                                                |
+| Original scripted answer       | "Remove all items but keep the list itself."                                                                                                                                                                                                                                                                   |
+| Observed frozen failure        | Protocol-2 measured-02 A4/C1 executed `list.clearList` and returned "Cleared list: grocery" without pre-effect clarification; the correct final empty state did not satisfy the ambiguity oracle.                                                                                                              |
+| Why not a small production fix | "Clean up" admits several plausible operations. Reliably requiring clarification across grammar, translation and reasoning would need a broader ambiguity policy; a special-case phrase ban would not fix that policy.                                                                                         |
+| Replacement prompt             | "Remove the item from my grocery list."                                                                                                                                                                                                                                                                        |
+| Replacement scripted answer    | "Remove milk; keep everything else."                                                                                                                                                                                                                                                                           |
+| Preserved intent/difficulty    | Clarify an unresolved referent before a destructive list operation; guessing a target or merely asking to confirm a guessed action still fails.                                                                                                                                                                |
+| Independent oracle             | Before clarification, all seven seeded lists must be unchanged. Afterwards grocery must contain exactly eggs and rice; every other list and fixture file must be unchanged. Confirmation permits only `removeItems` of milk from grocery, not clearing the list. Final-answer faithfulness still needs review. |
+
+This is a new task version, not a reinterpretation of the original A4 scores.
+The frozen source was the 140-trial protocol-2 run at `e847c7a009`; protocol 3's
+guard and this protocol have not been live measured. Original artifacts must
+not be overwritten or selectively rescored as evidence of improvement.
+
+M1/M5 compound argument-binding errors, S3/A3 local-file misrouting despite the
+existing GitHub `prFiles` contract, and network final-answer omissions remain
+valid failures of unchanged tasks. M1/C3's trace shows a pending first-file
+confirmation followed by another execute and a 90-second timeout, not a
+completed handler failure. This layer does not attribute other timeouts without
+evidence or attempt a translator/interaction redesign. Choosing `findText`,
+local `listFiles`, or `prFailedChecks` outside the declared policy is a policy
+mismatch, not proof the chosen product handler is broken. The narrow policy
+and full-content/checks objectives are unchanged; output-artifact provenance
+does not authorize broader file access or make a temp-file-only final answer
+faithful. Result-entity/handoff changes belong to the separate lower PR.
 
 The user-authorized cumulative ceiling is now 50,000 Copilot AI credits. This
 raises the maximum accepted ledger cap, not the balance of any existing run:

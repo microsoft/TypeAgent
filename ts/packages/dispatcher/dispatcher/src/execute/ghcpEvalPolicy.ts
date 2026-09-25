@@ -7,8 +7,8 @@ import { isGhcpEvalArtifact } from "./ghcpEvalArtifacts.js";
 
 let executionFailureObserved = false;
 
-export function markGhcpEvalExecutionFailure(): void {
-    if (process.env.TYPEAGENT_GHCP_EVAL_FIXTURES !== undefined)
+export function markGhcpEvalExecutionFailure(recoverable = false): void {
+    if (process.env.TYPEAGENT_GHCP_EVAL_FIXTURES !== undefined && !recoverable)
         executionFailureObserved = true;
 }
 
@@ -44,6 +44,31 @@ const reads = new Map<string, Set<string>>([
         ]),
     ],
 ]);
+
+export function isGhcpEvalReadOnlyAction(
+    schemaName: string,
+    actionName: string,
+): boolean {
+    return (
+        reads.get(schemaName)?.has(actionName) === true ||
+        (schemaName === "powershell.powershell-files" &&
+            actionName === "readFile") ||
+        (schemaName === "list" &&
+            (actionName === "getList" || actionName === "listLists"))
+    );
+}
+
+// An ordinary I/O failure is positive evidence, unlike an absent SDK error.
+// Authorization, cancellation and uncertain delivery always take precedence.
+export function isGhcpEvalRecoverableReadError(error: unknown): boolean {
+    return (
+        typeof error === "string" &&
+        !/\b(denied|access_denied|permission_denied|unauthorized|forbidden|permission|policy|sandbox|rejected|EACCES|EPERM|401|403|cancel(?:led|ed|lation)?|execution_uncertain|uncertain|abort(?:ed)?)\b/i.test(
+            error,
+        ) &&
+        /\b(ENOENT|ENOTDIR|EISDIR|ETIMEDOUT|ECONNRESET|EAI_AGAIN)\b/.test(error)
+    );
+}
 
 /** Apply only to an explicitly isolated evaluation server, never normal sessions. */
 export function assertGhcpEvalAction(

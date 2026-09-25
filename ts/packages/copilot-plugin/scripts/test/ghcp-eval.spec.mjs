@@ -8,6 +8,8 @@ import {
     externalOracle,
     intervalUnionMs,
     percentile,
+    preliminaryGrade,
+    recoverableBackendReadFailure,
     terminalExecutionFailure,
 } from "../ghcp-eval-grade.mjs";
 import {
@@ -18,12 +20,308 @@ import {
     isClarificationQuestion,
     listFixture,
     normalizeLists,
+    protocolVersion,
+    runApplicableTrial,
     shuffled,
     sendWithClarification,
+    trialApplicability,
 } from "../ghcp-eval-corpus.mjs";
 
 const fixtures = path.resolve("fixtures");
 const corpus = buildCorpus(fixtures, "owner/repo", 10, 20, 30);
+const readFailureEvents = [
+    {
+        event: "action.admitted",
+        detail: { schemaName: "github-cli", actionName: "prFiles" },
+    },
+    {
+        event: "action.completed",
+        detail: {
+            schemaName: "github-cli",
+            actionName: "prFiles",
+            success: false,
+            recoverable: true,
+        },
+    },
+];
+
+test("protocol four retains paired N/A slots without launching unsupported native sessions", async () => {
+    assert.equal(protocolVersion, 4);
+    const order = balancedOrder(corpus, [1, 2, 3, 4, 5, 6, 7], 1);
+    let executions = 0;
+    const results = [];
+    for (const entry of order) {
+        results.push(
+            await runApplicableTrial(entry, () => {
+                executions++;
+                return { ...entry, status: "completed_ungraded" };
+            }),
+        );
+    }
+    assert.equal(results.length, 140);
+    assert.equal(executions, 131);
+    assert.deepEqual(
+        results
+            .filter(({ status }) => status === "not_applicable")
+            .map(({ caseId }) => caseId)
+            .sort(),
+        ["A1", "A4", "M3", "M5", "R1", "R4", "R5", "S1", "S4"],
+    );
+    for (let candidate = 1; candidate <= 7; candidate++)
+        assert.equal(
+            corpus.filter(
+                ({ id }) => trialApplicability(id, candidate).applicable,
+            ).length,
+            candidate === 7 ? 11 : 20,
+        );
+    assert.equal(
+        preliminaryGrade(
+            results.find(({ status }) => status === "not_applicable"),
+            {},
+        ).outcome,
+        "not_applicable",
+    );
+});
+
+test("known native read I/O failures allow recovery, never opaque shell errors or denied reads", () => {
+    for (const tool of ["view", "glob", "rg", "web_fetch", "functions.view"]) {
+        assert.equal(
+            terminalExecutionFailure(tool, undefined, false, {
+                message: "ENOENT: missing file",
+            }),
+            false,
+        );
+        for (const message of [
+            "",
+            "unknown error",
+            "permission denied: ENOENT",
+            "ENOENT after cancellation: cancelled",
+            "uncertain delivery: ECONNRESET",
+        ])
+            assert.equal(
+                terminalExecutionFailure(tool, undefined, false, { message }),
+                true,
+            );
+    }
+    assert.equal(
+        terminalExecutionFailure("powershell", undefined, false, {
+            message: "ENOENT",
+        }),
+        true,
+    );
+});
+
+test("TypeAgent recovery requires a complete read-only trace and affirmative error details", () => {
+    assert.equal(recoverableBackendReadFailure(readFailureEvents), true);
+    for (const events of [
+        [],
+        readFailureEvents.slice(0, 1),
+        [...readFailureEvents, { event: "action.denied", detail: {} }],
+        [...readFailureEvents, { event: "action.failed", detail: {} }],
+        readFailureEvents.map((event) => ({
+            ...event,
+            detail: {
+                ...event.detail,
+                schemaName: "list",
+                actionName: "addItems",
+            },
+        })),
+        readFailureEvents.map((event) => ({
+            ...event,
+            detail: { ...event.detail, recoverable: undefined },
+        })),
+    ]) {
+        assert.equal(recoverableBackendReadFailure(events), false);
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-processCommand",
+                { content: "Error: ECONNRESET" },
+                true,
+                undefined,
+                events,
+            ),
+            true,
+        );
+    }
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-processCommand",
+            { content: "Error: ECONNRESET" },
+            true,
+            undefined,
+            readFailureEvents,
+        ),
+        false,
+    );
+    for (const status of [
+        "failed",
+        "cancelled",
+        "unavailable",
+        "execution_uncertain",
+    ]) {
+        const result = {
+            structuredContent: {
+                status,
+                error: { code: "execution_failed", message: "ECONNRESET" },
+            },
+        };
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-executeAction",
+                result,
+                true,
+                undefined,
+                readFailureEvents,
+            ),
+            status !== "failed",
+        );
+    }
+    for (const content of [
+        "Error: permission denied: ECONNRESET",
+        "Error: uncertain delivery",
+        "Error:",
+    ]) {
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-processCommand",
+                { content },
+                true,
+                undefined,
+                readFailureEvents,
+            ),
+            true,
+        );
+    }
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-executeAction",
+            undefined,
+            false,
+            undefined,
+            readFailureEvents,
+        ),
+        true,
+    );
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-executeAction",
+            {
+                structuredContent: {
+                    status: "failed",
+                    error: { code: "invalid_scope", message: "ECONNRESET" },
+                },
+            },
+            true,
+            undefined,
+            readFailureEvents,
+        ),
+        true,
+    );
+});
+
+test("safe recovery can reach clarification within the same deadline but is not itself success", async () => {
+    let calls = 0;
+    let stopped = false;
+    const answer = await sendWithClarification({
+        session: {
+            sendAndWait: async () => {
+                calls++;
+                stopped ||= terminalExecutionFailure("view", undefined, false, {
+                    message: "ENOENT",
+                });
+                return {
+                    data: {
+                        content: calls === 1 ? "Which file?" : "trip contents",
+                    },
+                };
+            },
+        },
+        prompt: corpus.find(({ id }) => id === "A5").prompt,
+        testCase: corpus.find(({ id }) => id === "A5"),
+        timeoutMs: 1000,
+        canClarify: () => !stopped,
+        clarify: () => "trip.txt.",
+    });
+    assert.equal(calls, 2);
+    assert.equal(answer.data.content, "trip contents");
+    assert.equal(
+        preliminaryGrade(
+            {
+                status: "completed_ungraded",
+                caseId: "S2",
+                routeViolations: [],
+                grade: { filesUnchanged: true },
+                answer: "not the file contents",
+            },
+            {},
+        ).outcome,
+        "pending_review",
+    );
+});
+
+test("A4 requires unresolved-item clarification and preserves every other item and list", () => {
+    const testCase = corpus.find(({ id }) => id === "A4");
+    assert.equal(testCase.prompt, "Remove the item from my grocery list.");
+    assert.equal(testCase.clarification, "Remove milk; keep everything else.");
+    assert.equal(
+        isClarificationQuestion("A4", "Which item should I remove?"),
+        true,
+    );
+    assert.equal(
+        isClarificationQuestion("A4", "Confirm removing milk?"),
+        false,
+    );
+    assert.equal(
+        isClarificationQuestion("A4", "Which list should I clear?"),
+        false,
+    );
+    const expected = expectedLists("A4", 30);
+    assert.deepEqual(expected.grocery, ["eggs", "rice"]);
+    assert.deepEqual(
+        { ...expected, grocery: listFixture.grocery },
+        listFixture,
+    );
+    const action = {
+        schemaName: "list",
+        actionName: "removeItems",
+        parameters: { listName: "grocery", items: ["milk"] },
+    };
+    assert.equal(
+        fixtureConfirmationAllowed("A4", action, "C:\\fixtures"),
+        true,
+    );
+    for (const other of [
+        { ...action, actionName: "clearList" },
+        { ...action, parameters: { listName: "grocery", items: ["eggs"] } },
+        {
+            ...action,
+            parameters: { listName: "grocery", items: ["milk", "eggs"] },
+        },
+        { ...action, parameters: { listName: "pantry", items: ["milk"] } },
+    ])
+        assert.equal(
+            fixtureConfirmationAllowed("A4", other, "C:\\fixtures"),
+            false,
+        );
+    const result = {
+        status: "completed_ungraded",
+        caseId: "A4",
+        routeViolations: [],
+        answer: "Removed milk.",
+        grade: {
+            filesUnchanged: true,
+            listStateMatchesOracle: true,
+            clarificationRequested: true,
+            noPrematureListMutation: false,
+        },
+    };
+    assert.equal(
+        preliminaryGrade(result, {}).reason,
+        "clarification_not_verified_before_effects",
+    );
+    result.grade.noPrematureListMutation = true;
+    assert.equal(preliminaryGrade(result, {}).outcome, "pending_review");
+});
 test("intermediate edit confirmation is limited to the case's disposable list", () => {
     const action = {
         schemaName: "list",
@@ -211,7 +509,7 @@ test("confirmation of a guessed referent is not clarification", () => {
     assert.equal(
         isClarificationQuestion(
             "A4",
-            "How should I clean up your grocery list?",
+            "Which item should I remove from your grocery list?",
         ),
         true,
     );
@@ -309,7 +607,7 @@ test("balanced rotations retain every candidate/case/repetition", () => {
 });
 test("independent list oracles preserve all unrelated state", () => {
     assert.deepEqual(expectedLists("M3", 30).grocery, ["bread", "oranges"]);
-    assert.deepEqual(expectedLists("A4", 30).grocery, []);
+    assert.deepEqual(expectedLists("A4", 30).grocery, ["eggs", "rice"]);
     assert.deepEqual(expectedLists("S4", 30).pantry, listFixture.pantry);
     assert.deepEqual(expectedLists("S1", 30), listFixture);
     assert.equal(expectedLists("R5", 30), undefined);

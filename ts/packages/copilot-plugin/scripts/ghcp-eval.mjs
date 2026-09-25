@@ -24,8 +24,12 @@ import {
     isClarificationQuestion,
     listFixture,
     normalizeLists,
+    nativeListCases,
+    protocolVersion,
+    runApplicableTrial,
     shuffled,
     sendWithClarification,
+    trialApplicability,
 } from "./ghcp-eval-corpus.mjs";
 import { stageCopilotPlugin } from "../../../tools/scripts/stageCopilotPlugin.mjs";
 import {
@@ -136,16 +140,20 @@ function findListStores(directory) {
         .map((name) => path.join(directory, name));
 }
 
-function collectObservations(result, tracePath) {
+function readBackendEvents(tracePath) {
     const trace = fs.existsSync(tracePath)
         ? fs.readFileSync(tracePath, "utf8")
         : "";
-    result.typeagentEvents = trace.trim()
+    return trace.trim()
         ? trace
               .trim()
               .split("\n")
               .map((line) => JSON.parse(line))
         : [];
+}
+
+function collectObservations(result, tracePath) {
+    result.typeagentEvents = readBackendEvents(tracePath);
     result.fallback =
         result.candidate === 7
             ? null
@@ -428,6 +436,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         grade: null,
         permissions: [],
         toolResults: [],
+        recoverableToolFailures: [],
     };
     let server;
     let client;
@@ -541,7 +550,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 : {
                       systemMessage: {
                           mode: "append",
-                          content: `${candidate.policy}. Use only the exposed TypeAgent MCP interface. Preserve confirmation and clarification; never replay failed or uncertain effects through another route.`,
+                          content: `${candidate.policy}. Use only the exposed TypeAgent MCP interface. Preserve confirmation and clarification. Ordinary read failures may be corrected within this route; denials, cancellation and uncertain effects never authorize replay or a permission bypass.`,
                       },
                   }),
             onPermissionRequest: (request) => {
@@ -562,6 +571,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                             return { kind: "approve-once" };
                     }
                 }
+                executionStopped = true;
                 return {
                     kind: "denied-no-approval-rule-and-could-not-request-from-user",
                 };
@@ -575,6 +585,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                         result.routeViolations.push(
                             "confirmation-or-unrelated-question-before-clarification",
                         );
+                        executionStopped = true;
                         throw new Error(
                             "Clarification is required before effect confirmation.",
                         );
@@ -618,6 +629,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                         wasFreeform: yes === undefined,
                     };
                 }
+                executionStopped = true;
                 throw new Error(
                     "No authorized scripted answer for this interaction.",
                 );
@@ -640,6 +652,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                                 (preparation &&
                                     input.toolName.includes("executeAction"))));
                     if (forbidden) {
+                        executionStopped = true;
                         result.routeViolations.push(input.toolName);
                         return {
                             permissionDecision: "deny",
@@ -659,15 +672,23 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 preparation,
             }),
         );
-        session.on("tool.execution_start", (event) =>
-            result.tools.push({
-                toolCallId: event.data.toolCallId,
-                name: event.data.toolName,
-                arguments: event.data.arguments,
-                preparation,
-                startMs: performance.now() - started,
-            }),
-        );
+        session.on("tool.execution_start", (event) => {
+            try {
+                result.tools.push({
+                    toolCallId: event.data.toolCallId,
+                    name: event.data.toolName,
+                    arguments: event.data.arguments,
+                    preparation,
+                    startMs: performance.now() - started,
+                    backendEventOffset: readBackendEvents(
+                        env.TYPEAGENT_GHCP_EVAL_TRACE,
+                    ).length,
+                });
+            } catch (error) {
+                result.harnessError = `Backend trace failed: ${String(error)}`;
+                executionStopped = true;
+            }
+        });
         session.on("tool.execution_complete", (event) => {
             try {
                 const artifact = registerGhcpEvalArtifact(
@@ -688,14 +709,33 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 (tool) => tool.toolCallId === event.data.toolCallId,
             );
             if (tool) tool.endMs = performance.now() - started;
-            if (
-                terminalExecutionFailure(
-                    tool?.name ?? "",
-                    event.data.result,
-                    event.data.success,
+            try {
+                if (
+                    terminalExecutionFailure(
+                        tool?.name ?? "",
+                        event.data.result,
+                        event.data.success,
+                        event.data.error,
+                        tool
+                            ? readBackendEvents(
+                                  env.TYPEAGENT_GHCP_EVAL_TRACE,
+                              ).slice(tool.backendEventOffset)
+                            : [],
+                    )
                 )
-            )
+                    executionStopped = true;
+                else if (
+                    terminalExecutionFailure(
+                        tool?.name ?? "",
+                        event.data.result,
+                        event.data.success,
+                    )
+                )
+                    result.recoverableToolFailures.push(event.data.toolCallId);
+            } catch (error) {
+                result.harnessError = `Backend trace failed: ${String(error)}`;
                 executionStopped = true;
+            }
             result.toolResults.push({
                 toolCallId: event.data.toolCallId,
                 success: event.data.success,
@@ -850,11 +890,14 @@ const order = balancedOrder(
     cases,
     phase === "pilot" ? selected : shuffled(selected, seed),
     repetitions,
-);
+).map((entry) => ({
+    ...entry,
+    ...trialApplicability(entry.caseId, entry.candidate),
+}));
 const specification =
     JSON.stringify(
         {
-            protocolVersion: 3,
+            protocolVersion,
             runnerSha256: createHash("sha256")
                 .update(fs.readFileSync(fileURLToPath(import.meta.url)))
                 .digest("hex"),
@@ -869,6 +912,10 @@ const specification =
             order,
             cases,
             candidates,
+            applicability: {
+                nativeListCases,
+                policy: "Keep all 140 paired slots; record nine native list slots as N/A without starting sessions. Denominators: C1-C6 20 each, C7 11 per repetition.",
+            },
             model: "gpt-5.6-sol",
             reasoningEffort: "high",
             concurrency: 1,
@@ -884,7 +931,7 @@ const specification =
             overflowPolicy:
                 "Trial-private temp artifacts registered from SDK completion notices; canonical direct child, regular unlinked file, SHA256 rechecked before registered reads.",
             clarificationPolicy:
-                "One scripted corpus answer through callback or final text, same 90-second end-to-end deadline; no continuation after execution failure.",
+                "One scripted corpus answer through callback or final text, same 90-second end-to-end deadline; no continuation after terminal failure.",
             sessionCreditSoftLimit: 60,
             ledgerPath,
             templateDirectory: path.resolve(template),
@@ -904,7 +951,7 @@ const specification =
                 "typeagent-macros",
                 "typeagent-skills",
             ],
-            safety: "Normal confirmation retained; no replay after failed/denied/cancelled/uncertain execution, including internal error-triggered retries. Translation fallback toolset retained.",
+            safety: "Ordinary read I/O errors require affirmative safe evidence for recovery within existing routes, permissions and budgets. Denied/cancelled/uncertain execution and missing error details remain terminal. Translation fallback toolset retained.",
         },
         null,
         2,
@@ -919,17 +966,21 @@ fs.writeFileSync(specificationPath, specification);
 for (const entry of order.slice(batchStart, batchStart + batchSize)) {
     const candidate = candidates.find(({ id }) => id === entry.candidate);
     const testCase = cases.find(({ id }) => id === entry.caseId);
-    const result = await trial(
-        candidate,
-        path.join(
-            outputDirectory,
-            `${entry.repetition}-${entry.caseId}-candidate-${candidate.id}`,
-        ),
-        testCase,
-        workspace,
-        evidence,
+    const directory = path.join(
+        outputDirectory,
+        `${entry.repetition}-${entry.caseId}-candidate-${candidate.id}`,
+    );
+    const result = await runApplicableTrial(entry, () =>
+        trial(candidate, directory, testCase, workspace, evidence),
     );
     result.repetition = entry.repetition;
+    if (result.status === "not_applicable") {
+        fs.mkdirSync(directory);
+        fs.writeFileSync(
+            path.join(directory, "result.json"),
+            JSON.stringify(result, null, 2) + "\n",
+        );
+    }
     results.push(result);
     fs.writeFileSync(
         path.join(outputDirectory, "results.json"),
@@ -946,7 +997,10 @@ for (const entry of order.slice(batchStart, batchStart + batchSize)) {
     );
     if (
         result.status === "harness_failed" ||
-        (phase === "pilot" && result.status !== "completed_ungraded") ||
+        (phase === "pilot" &&
+            !["completed_ungraded", "not_applicable"].includes(
+                result.status,
+            )) ||
         /credit|budget|reservation|Agent server|permission orchestrator/i.test(
             result.error ?? "",
         )

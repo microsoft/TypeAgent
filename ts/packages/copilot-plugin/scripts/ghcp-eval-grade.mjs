@@ -1,19 +1,71 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export function terminalExecutionFailure(toolName, result, success) {
+import {
+    isGhcpEvalReadOnlyAction,
+    isGhcpEvalRecoverableReadError,
+} from "../../dispatcher/dispatcher/dist/execute/ghcpEvalPolicy.js";
+
+export function recoverableBackendReadFailure(events) {
+    const actions = events.filter(({ event }) => event.startsWith("action."));
+    const admitted = actions.filter(({ event }) => event === "action.admitted");
+    const completed = actions.filter(
+        ({ event }) => event === "action.completed",
+    );
+    return (
+        admitted.length > 0 &&
+        admitted.length === completed.length &&
+        actions.length === admitted.length + completed.length &&
+        actions.every(({ detail }) =>
+            isGhcpEvalReadOnlyAction(detail.schemaName, detail.actionName),
+        ) &&
+        completed.some(({ detail }) => detail.success === false) &&
+        completed.every(
+            ({ detail }) =>
+                detail.success === true || detail.recoverable === true,
+        )
+    );
+}
+
+export function terminalExecutionFailure(
+    toolName,
+    result,
+    success,
+    error,
+    backendEvents = [],
+) {
     if (
         /^(?:functions[.-])?(?:powershell|view|glob|rg|web_fetch)$/.test(
             toolName,
         )
     )
-        return success === false;
+        return (
+            success === false &&
+            !(
+                /^(?:functions[.-])?(?:view|glob|rg|web_fetch)$/.test(
+                    toolName,
+                ) && isGhcpEvalRecoverableReadError(error?.message)
+            )
+        );
     if (!/processCommand|executeAction|continueAction/.test(toolName))
+        return false;
+    // Never infer safety from a missing payload or an uncertain transport.
+    if (
+        success === true &&
+        isGhcpEvalRecoverableReadError(
+            result?.structuredContent?.error?.message ?? result?.content,
+        ) &&
+        ((result?.structuredContent?.status === "failed" &&
+            result.structuredContent.error?.code === "execution_failed") ||
+            (toolName.includes("processCommand") &&
+                /^Error:(?:\s|$)/.test(result?.content ?? ""))) &&
+        recoverableBackendReadFailure(backendEvents)
+    )
         return false;
     return (
         success === false ||
         (toolName.includes("processCommand") &&
-            /^Error:\s/.test(result?.content ?? "")) ||
+            /^Error:(?:\s|$)/.test(result?.content ?? "")) ||
         ["failed", "cancelled", "unavailable", "execution_uncertain"].includes(
             result?.structuredContent?.status,
         )
@@ -77,6 +129,8 @@ export function externalOracle(readiness) {
 // These are conservative evidence checks, not a semantic grader. A human/AI
 // reviewer must resolve pending faithfulness grades before accuracy claims.
 export function preliminaryGrade(result, evidence) {
+    if (result.status === "not_applicable")
+        return { outcome: "not_applicable", reason: result.reason };
     if (result.status !== "completed_ungraded")
         return { outcome: "incomplete", reason: result.error ?? result.status };
     if (result.routeViolations.length)

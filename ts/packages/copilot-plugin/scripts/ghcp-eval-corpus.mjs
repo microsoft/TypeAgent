@@ -3,6 +3,42 @@
 
 import path from "node:path";
 
+export const protocolVersion = 4;
+export const nativeListCases = [
+    "S1",
+    "S4",
+    "M3",
+    "M5",
+    "R1",
+    "R4",
+    "R5",
+    "A1",
+    "A4",
+];
+
+export function trialApplicability(caseId, candidate) {
+    return candidate === 7 && nativeListCases.includes(caseId)
+        ? { applicable: false, reason: "native_list_capability_unavailable" }
+        : { applicable: true };
+}
+
+// Keep N/A slots in the paired schedule, but never start a session for them.
+export async function runApplicableTrial(entry, run) {
+    const applicability = trialApplicability(entry.caseId, entry.candidate);
+    return applicability.applicable
+        ? run()
+        : {
+              ...entry,
+              status: "not_applicable",
+              reason: applicability.reason,
+              e2eMs: null,
+              preliminaryGrade: {
+                  outcome: "not_applicable",
+                  reason: applicability.reason,
+              },
+          };
+}
+
 export const listFixture = {
     grocery: ["milk", "eggs", "rice"],
     pantry: ["rice", "beans"],
@@ -86,8 +122,8 @@ export function buildCorpus(files, repo, prA, prB, issueA) {
         },
         {
             id: "A4",
-            prompt: "Clean up my grocery list.",
-            clarification: "Remove all items but keep the list itself.",
+            prompt: "Remove the item from my grocery list.",
+            clarification: "Remove milk; keep everything else.",
         },
         {
             id: "A5",
@@ -107,7 +143,7 @@ export function expectedLists(id, issueA, issueTitle) {
         if (!issueTitle) return undefined;
         state.errand.push(issueTitle);
     }
-    if (id === "A4") state.grocery = [];
+    if (id === "A4") state.grocery = ["eggs", "rice"];
     return state;
 }
 
@@ -186,8 +222,14 @@ export function fixtureConfirmationAllowed(
         return target !== undefined && parameters.listName === target;
     }
     if (actionName === "clearList") {
-        return ["M3", "A4"].includes(id) && parameters.listName === "grocery";
+        return id === "M3" && parameters.listName === "grocery";
     }
+    if (actionName === "removeItems")
+        return (
+            id === "A4" &&
+            parameters.listName === "grocery" &&
+            JSON.stringify(parameters.items) === JSON.stringify(["milk"])
+        );
     if (actionName !== "addItems") return false;
     const additions = {
         S4: ["grocery", ["apples"]],
@@ -213,7 +255,7 @@ export function isClarificationQuestion(id, question) {
         A1: /\blist\b/i,
         A2: /\b(report|file)\b/i,
         A3: /\b(pull request|PR|number)\b/i,
-        A4: /\b(clean|remove|empty|change|list)\b/i,
+        A4: /\b(item|remove)\b/i,
         A5: /\bfile\b/i,
     }[id];
     return Boolean(
