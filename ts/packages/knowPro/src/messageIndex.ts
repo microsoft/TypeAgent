@@ -80,7 +80,7 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         );
     }
 
-    public addMessages(
+    public async addMessages(
         messages: Iterable<IMessage>,
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
@@ -102,13 +102,23 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             }
             ++i;
         }
-        this.messageCount = baseMessageOrdinal + i;
+        const messageCount = baseMessageOrdinal + i;
         // A count that stops being a safe integer would silently reuse
         // ordinals on the next append.
-        if (!Number.isSafeInteger(this.messageCount)) {
+        if (!Number.isSafeInteger(messageCount)) {
             throw new Error("Message ordinal exceeds Number.MAX_SAFE_INTEGER");
         }
-        return this.textLocationIndex.addTextLocations(allChunks, eventHandler);
+        const result = await this.textLocationIndex.addTextLocations(
+            allChunks,
+            eventHandler,
+        );
+        if (
+            result.error === undefined &&
+            result.numberCompleted === allChunks.length
+        ) {
+            this.messageCount = messageCount;
+        }
+        return result;
     }
 
     public async lookupMessages(
@@ -226,20 +236,18 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             this.messageCount = data.messageCount;
             return;
         }
-        // Reached when messageCount is absent (older data assigned ordinals
-        // from chunk counts) or unsafe. Rank-compressing the distinct stored
-        // ordinals restores message positions because each message's chunks
-        // share one ordinal. Messages with no chunks left no locations; their
-        // positions are unrecoverable.
-        this.messageCount = 0;
-        let previous: MessageOrdinal = -1;
+        // Older data assigned message ordinals from chunk positions. Preserve
+        // those ordinals and continue after the highest one when appending.
+        let highestMessageOrdinal: MessageOrdinal = -1;
         for (let i = 0; i < this.textLocationIndex.size; ++i) {
-            const location = this.textLocationIndex.get(i);
-            if (location.messageOrdinal !== previous) {
-                previous = location.messageOrdinal;
-                ++this.messageCount;
-            }
-            location.messageOrdinal = this.messageCount - 1;
+            highestMessageOrdinal = Math.max(
+                highestMessageOrdinal,
+                this.textLocationIndex.get(i).messageOrdinal,
+            );
+        }
+        this.messageCount = highestMessageOrdinal + 1;
+        if (!Number.isSafeInteger(this.messageCount)) {
+            throw new Error("Message ordinal exceeds Number.MAX_SAFE_INTEGER");
         }
     }
 
