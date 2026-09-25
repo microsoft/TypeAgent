@@ -578,9 +578,24 @@ The maintenance action runs before an older MSI's uninstall actions and before
 any payload is removed. It checks for remaining file locks, then preserves the
 old agent-server and plugin directories in a transaction-specific temporary
 folder. Rollback restores those directories and the previous scheduled-task
-definition, and attempts to restart a previously running server using its
-original Node executable and arguments (or its restored running task). Rollback
-also blocks startup again if installation had already restarted the new server.
+definition, and attempts to restart each previously running server. It restores
+the running task and independently restores manually launched instances, using
+their original Node executable, arguments, working directory, and environment.
+For older launchers without saved launch metadata, maintenance reads the owned
+process's Windows process parameters through a read-only handle before shutdown.
+The captured environment is encrypted with current-user Windows DPAPI in the
+transaction state, never written to the log, and removed after recovery or commit.
+Failure to capture a live server's context aborts before stopping it.
+
+Rollback also blocks startup again if installation had already restarted the
+new server. Even when the original shutdown failed, rollback reconciles surviving
+processes and captured children before restarting anything. Failed rollback keeps
+the marker and recovery state instead of starting duplicate servers. Persisted
+process identities use UTC ticks rather than JSON dates, which lose precision in
+Windows PowerShell 5.1. A process exiting during ownership checks or termination
+is harmless only after its original identity is confirmed gone; errors affecting
+a still-live process remain fatal.
+
 A successful
 install uses `STARTSERVER` and `AUTOSTART` as usual; uninstall never restarts the
 server. The updated launcher and server reject startup while

@@ -23,9 +23,9 @@ function Register-ScheduledTask { param($TaskName, $TaskPath, $Xml, [switch]$For
 function Unregister-ScheduledTask { param($TaskName, $TaskPath, $Confirm); $script:taskEvents += "removed"; $script:tasks = @() }
 function Get-CimInstance { param($ClassName, $Filter); return @() }
 $originalStop = ${function:Stop-PayloadProcesses}
-function Stop-PayloadProcesses([string]$payload) {
+function Stop-PayloadProcesses([string]$payload, $captured = @()) {
     Assert (Test-Path (Join-Path $Root ".msi-maintenance")) "shutdown ran without blocking startup"
-    & $originalStop $payload
+    & $originalStop $payload $captured
 }
 
 try {
@@ -114,21 +114,22 @@ try {
         Executable = "C:\version-manager\node.exe"
         Arguments = '"' + (Join-Path $payload "dist\server.js") + '" --port 9123 --config inbox'
         ProcessId = 999999
-        CreationDate = Get-Date
+        CreationTime = (Get-Date).ToUniversalTime().Ticks.ToString()
+        TaskOwned = $false
     })
     Save-MaintenanceState $state
     $script:restarts = @()
-    function Start-Process {
-        param($FilePath, $ArgumentList, $WindowStyle)
+    $originalRestart = ${function:Start-RestoredServer}
+    function Start-RestoredServer($command) {
         Assert (-not (Test-Path (Join-Path $Root ".msi-maintenance"))) "restart occurred while maintenance was active"
-        $script:restarts += @{ Executable = $FilePath; Arguments = $ArgumentList }
+        $script:restarts += @{ Executable = $command.Executable; Arguments = $command.Arguments }
     }
     $Action = "Rollback"
     Invoke-Maintenance
     Assert ($script:restarts.Count -eq 1) "rollback did not request a restart"
     Assert ($script:restarts[0].Executable -eq "C:\version-manager\node.exe") "rollback resolved a different Node"
     Assert ($script:restarts[0].Arguments -match "--port 9123 --config inbox") "rollback lost startup arguments"
-    Remove-Item Function:Start-Process
+    Set-Item Function:Start-RestoredServer -Value $originalRestart
 
     $command = '"C:\Program Files\nodejs\node.exe" "' + (Join-Path $payload "dist\server.js") + '"'
     Assert (Test-PayloadCommand $command $payload) "quoted installed entry was not recognized"
@@ -156,9 +157,94 @@ try {
     }
     $owned = @(Get-PayloadProcesses $payload)
     Assert (($owned.ProcessId | Sort-Object) -join "," -eq "100,101,102") "process-tree scope is incorrect"
+    $originalContext = ${function:Get-LaunchContext}
+    function Get-LaunchContext($server) { return "protected-test-context" }
     $commands = @(Get-RestartCommands $owned $payload)
     Assert ($commands.Count -eq 1) "restart command selection included non-server children"
     Assert ($commands[0].Arguments -eq ('"' + (Join-Path $payload "dist\server.js") + '" --port 9123')) "restart arguments were not retained verbatim"
+    Assert ($commands[0].LaunchContext -eq "protected-test-context") "manual launch context was not retained"
+    $roundTrip = (Get-ProcessIdentity $script:processes[0]) | ConvertTo-Json | ConvertFrom-Json
+    Assert (!!(Get-SameProcess $roundTrip)) "serialized identity rejected a surviving process"
+
+    # Ownership failures are benign only when the captured identity has disappeared.
+    $originalOwner = ${function:Invoke-CimMethod}
+    $originalProcesses = @($script:processes)
+    foreach ($childId in @(100, 101)) {
+        foreach ($throwError in @($true, $false)) {
+            $script:processes = @($originalProcesses)
+            function Invoke-CimMethod {
+                param($InputObject, $MethodName)
+                if ($InputObject.ProcessId -eq $childId) {
+                    $script:processes = @($script:processes | Where-Object { $_.ProcessId -ne $childId })
+                    if ($throwError) { throw "Process has exited." }
+                    return @{ ReturnValue = 2 }
+                }
+                & $originalOwner $InputObject $MethodName
+            }
+            $discovered = @(Get-PayloadProcesses $payload)
+            Assert ($childId -notin $discovered.ProcessId) "exited process was retained after ownership failure"
+        }
+    }
+    $script:processes = @($originalProcesses)
+    function Invoke-CimMethod { param($InputObject, $MethodName); return @{ ReturnValue = 2 } }
+    $failed = $false
+    try { Get-PayloadProcesses $payload } catch {
+        $failed = $true
+        Assert ($_.Exception.Message -match "Cannot verify ownership") "live ownership failure changed"
+    }
+    Assert $failed "live ownership failure was ignored"
+    Set-Item Function:Invoke-CimMethod -Value $originalOwner
+
+    # Identify the actual task wrapper, not all instances sharing its server path.
+    $task = [pscustomobject]@{ State = "Running" }
+    $script:processes += [pscustomobject]@{
+        ProcessId = 1; ParentProcessId = 0; CreationDate = $now.AddSeconds(-1); Name = "wscript.exe"
+        CommandLine = 'wscript.exe "' + (Join-Path $payload "autostart-run.vbs") + '"'
+    }
+    $taskCommands = @(Get-RestartCommands $owned $payload $task)
+    Assert $taskCommands[0].TaskOwned "scheduled server was not associated with its wrapper"
+    Assert (-not $taskCommands[0].LaunchContext) "scheduled server captured unnecessary environment"
+    $script:processes = @($originalProcesses)
+
+    # A failed Begin must reconcile survivors before restarting any instance.
+    $state = @{
+        Root = $Root; WasRunning = $true; Prepared = $false; SavedPayloads = @()
+        TaskXml = "<original-task />"; TaskWasRunning = $true
+        Processes = @((Get-ProcessIdentity $script:processes[0]))
+        RestartCommands = @($taskCommands[0], $commands[0])
+    }
+    Save-MaintenanceState $state
+    $savedStop = ${function:Stop-PayloadProcesses}
+    $script:rollbackEvents = @()
+    function Stop-PayloadProcesses([string]$payload, $captured) {
+        Assert ($captured.Count -eq 1) "rollback lost captured process identities"
+        $script:rollbackEvents += "stop"
+        throw "Survivor is still locked."
+    }
+    function Start-ScheduledTask { param($TaskName, $TaskPath); $script:rollbackEvents += "task" }
+    function Start-RestoredServer($command) { $script:rollbackEvents += "manual" }
+    $Action = "Rollback"
+    $failed = $false
+    try { Invoke-Maintenance } catch {
+        $failed = $true
+        Assert ($_.Exception.Message -eq "Survivor is still locked.") "rollback stop error changed"
+    }
+    Assert $failed "rollback ignored surviving process"
+    Assert (($script:rollbackEvents -join ",") -eq "stop") "rollback restarted over a survivor"
+    Assert (Test-Path (Join-Path $TransactionDir "state.json")) "failed rollback discarded state"
+    Assert (Test-Path (Join-Path $Root ".msi-maintenance")) "failed rollback unblocked startup"
+    function Stop-PayloadProcesses([string]$payload, $captured) {
+        $script:rollbackEvents += "stop"
+        $script:processes = @()
+    }
+    $script:rollbackEvents = @()
+    Invoke-Maintenance
+    Assert (($script:rollbackEvents -join ",") -eq "stop,task,manual") "mixed instances were not restored exactly once"
+    Remove-Item Function:Start-ScheduledTask
+    Set-Item Function:Start-RestoredServer -Value $originalRestart
+    Set-Item Function:Stop-PayloadProcesses -Value $savedStop
+    Set-Item Function:Get-LaunchContext -Value $originalContext
+    $script:processes = @($originalProcesses)
     $listeners = @(
         @{ LocalAddress = "192.168.1.20"; LocalPort = 8999; OwningProcess = 100 },
         @{ LocalAddress = "127.0.0.1"; LocalPort = 8999; OwningProcess = 999 },
@@ -225,14 +311,23 @@ const fs = require("node:fs");
 const net = require("node:net");
 const child = require("node:child_process").spawn(process.execPath, [$jsChild], {stdio:"ignore"});
 const server = net.createServer();
-server.listen(0, "127.0.0.1", () => fs.writeFileSync($jsReady, JSON.stringify({parent:process.pid,child:child.pid})));
+server.listen(0, "127.0.0.1", () => fs.writeFileSync($jsReady, JSON.stringify({parent:process.pid,child:child.pid,cwd:process.cwd(),config:process.env.TYPEAGENT_CONFIG_DIR})));
 setInterval(() => { if (fs.existsSync($jsSignal)) process.exit(0); }, 20);
 "@
     Set-Content -LiteralPath $stopFile -Value "require('node:fs').writeFileSync($jsSignal, 'stop');"
     $node = (Get-Command node.exe).Source
     $unrelated = Start-Process -FilePath $node -ArgumentList "`"$childFile`"" -PassThru -WindowStyle Hidden
-    $parent = Start-Process -FilePath $node -ArgumentList "`"$serverFile`"" -PassThru -WindowStyle Hidden
+    $start = New-Object Diagnostics.ProcessStartInfo
+    $start.FileName = $node
+    $start.Arguments = "`"$serverFile`""
+    $start.WorkingDirectory = $testDir
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.EnvironmentVariables["TYPEAGENT_CONFIG_DIR"] = "test-context=preserved"
+    $parent = [Diagnostics.Process]::Start($start)
     $childId = $null
+    $restored = $null
+    $restoredChildId = $null
     try {
         $deadline = [DateTime]::UtcNow.AddSeconds(10)
         while (-not (Test-Path $readyFile) -and [DateTime]::UtcNow -lt $deadline) {
@@ -240,12 +335,33 @@ setInterval(() => { if (fs.existsSync($jsSignal)) process.exit(0); }, 20);
         }
         $ready = Get-Content $readyFile -Raw | ConvertFrom-Json
         $childId = $ready.child
-        Stop-PayloadProcesses $payload
+        $snapshot = Get-CimInstance Win32_Process -Filter "ProcessId=$($parent.Id)"
+        $identity = (Get-ProcessIdentity $snapshot) | ConvertTo-Json | ConvertFrom-Json
+        Assert (!!(Get-SameProcess $identity)) "real serialized process identity changed"
+        $Action = "Begin"
+        Invoke-Maintenance
+        $stateJson = Get-Content (Join-Path $TransactionDir "state.json") -Raw
+        Assert ($stateJson -notmatch "test-context=preserved") "launch environment was persisted in plaintext"
         Assert (Test-Path $signalFile) "graceful shutdown was not requested"
         Assert ($parent.HasExited) "parent is still running"
         Assert (-not (Get-Process -Id $childId -ErrorAction SilentlyContinue)) "orphaned child is still running"
         Assert (-not $unrelated.HasExited) "unrelated Node process was terminated"
+        Remove-Item -LiteralPath $readyFile, $signalFile
+        $Action = "Rollback"
+        Invoke-Maintenance
+        $deadline = [DateTime]::UtcNow.AddSeconds(10)
+        while (-not (Test-Path $readyFile) -and [DateTime]::UtcNow -lt $deadline) {
+            Start-Sleep -Milliseconds 100
+        }
+        $ready = Get-Content $readyFile -Raw | ConvertFrom-Json
+        $restored = Get-Process -Id $ready.parent
+        $restoredChildId = $ready.child
+        Assert ($ready.config -eq "test-context=preserved") "rollback lost original environment"
+        Assert ($ready.cwd -eq $testDir) "rollback lost original working directory"
+        Assert (-not $unrelated.HasExited) "rollback stopped an unrelated process"
     } finally {
+        if ($restored -and -not $restored.HasExited) { $restored.Kill(); $restored.WaitForExit() }
+        if ($restoredChildId) { Stop-Process -Id $restoredChildId -Force -ErrorAction SilentlyContinue }
         if (-not $parent.HasExited) { $parent.Kill(); $parent.WaitForExit() }
         if ($childId) { Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue }
         if (-not $unrelated.HasExited) { $unrelated.Kill(); $unrelated.WaitForExit() }

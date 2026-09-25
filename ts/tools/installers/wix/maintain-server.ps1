@@ -48,6 +48,20 @@ function Test-PayloadCommand([string]$command, [string]$payload) {
     )
 }
 
+function Test-ProcessOwner($process, [string]$sid) {
+    try {
+        $owner = Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid
+        if ($owner.ReturnValue -ne 0 -or $owner.Sid -ne $sid) {
+            throw "Cannot verify ownership of payload process $($process.ProcessId)."
+        }
+    } catch {
+        if (Get-SameProcess $process) { throw }
+        Write-MaintenanceLog "Payload PID $($process.ProcessId) exited during discovery."
+        return $false
+    }
+    return $true
+}
+
 function Get-PayloadProcesses([string]$payload) {
     $prefix = $payload.TrimEnd('\') + '\'
     $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -68,10 +82,7 @@ function Get-PayloadProcesses([string]$payload) {
             }
         }
         if ($matches) {
-            $owner = Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid
-            if ($owner.ReturnValue -ne 0 -or $owner.Sid -ne $sid) {
-                throw "Cannot stop payload process $($process.ProcessId): ownership could not be verified."
-            }
+            if (-not (Test-ProcessOwner $process $sid)) { continue }
             $owned[[int]$process.ProcessId] = $process
         }
     }
@@ -83,10 +94,7 @@ function Get-PayloadProcesses([string]$payload) {
                 $parent -and -not $owned.ContainsKey([int]$process.ProcessId) -and
                 $process.CreationDate -ge $parent.CreationDate
             ) {
-                $owner = Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid
-                if ($owner.ReturnValue -ne 0 -or $owner.Sid -ne $sid) {
-                    throw "Cannot verify ownership of child process $($process.ProcessId)."
-                }
+                if (-not (Test-ProcessOwner $process $sid)) { continue }
                 $owned[[int]$process.ProcessId] = $process
                 $added = $true
             }
@@ -95,12 +103,154 @@ function Get-PayloadProcesses([string]$payload) {
     return @($owned.Values)
 }
 
-function Get-SameProcess($snapshot) {
-    $current = Get-CimInstance Win32_Process -Filter "ProcessId=$($snapshot.ProcessId)"
-    if ($current -and $current.CreationDate -eq $snapshot.CreationDate) { return $current }
+function Get-CreationTime($process) {
+    if ($process.CreationTime) { return [string]$process.CreationTime }
+    return $process.CreationDate.ToUniversalTime().Ticks.ToString()
 }
 
-function Get-RestartCommands($processes, [string]$payload) {
+function Get-ProcessIdentity($process) {
+    return @{ ProcessId = $process.ProcessId; CreationTime = Get-CreationTime $process }
+}
+
+function Get-SameProcess($snapshot) {
+    $current = Get-CimInstance Win32_Process -Filter "ProcessId=$($snapshot.ProcessId)"
+    if ($current -and (Get-CreationTime $current) -eq (Get-CreationTime $snapshot)) { return $current }
+}
+
+function Initialize-ProcessContext {
+    if ("TypeAgentMaintenance.ProcessContext" -as [type]) { return }
+    # Older installed launchers have no persisted environment. Read their process
+    # parameters through a read-only handle, then protect the recovery data with DPAPI.
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+namespace TypeAgentMaintenance {
+    public sealed class ProcessContext {
+        public string Directory;
+        public string Environment;
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern SafeProcessHandle OpenProcess(uint access, bool inherit, int id);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern bool ReadProcessMemory(SafeProcessHandle handle, IntPtr address, byte[] buffer, IntPtr size, out IntPtr read);
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern bool GetProcessTimes(SafeProcessHandle handle, out long created, out long exited, out long kernel, out long user);
+        [DllImport("ntdll.dll")]
+        static extern int NtQueryInformationProcess(SafeProcessHandle handle, int info, IntPtr[] buffer, int size, out int returned);
+        static byte[] Bytes(SafeProcessHandle handle, long address, int size) {
+            var bytes = new byte[size];
+            IntPtr read;
+            if (!ReadProcessMemory(handle, new IntPtr(address), bytes, new IntPtr(size), out read) || read.ToInt64() != size)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot read TypeAgent launch context.");
+            return bytes;
+        }
+        static long Pointer(SafeProcessHandle handle, long address, bool x86) {
+            var bytes = Bytes(handle, address, x86 ? 4 : 8);
+            return x86 ? BitConverter.ToUInt32(bytes, 0) : BitConverter.ToInt64(bytes, 0);
+        }
+        public static ProcessContext Read(int id, long expectedTicks) {
+            if (IntPtr.Size != 8) throw new InvalidOperationException("MSI maintenance requires 64-bit PowerShell.");
+            using (var handle = OpenProcess(0x410, false, id)) {
+                if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+                long created, exited, kernel, user;
+                if (!GetProcessTimes(handle, out created, out exited, out kernel, out user))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                // CIM exposes microseconds, whereas FILETIME exposes 100ns ticks.
+                if (DateTime.FromFileTimeUtc(created).Ticks / 10 != expectedTicks / 10)
+                    throw new InvalidOperationException("TypeAgent process identity changed.");
+                var basic = new IntPtr[6];
+                int returned;
+                if (NtQueryInformationProcess(handle, 0, basic, 6 * IntPtr.Size, out returned) != 0)
+                    throw new InvalidOperationException("Cannot query TypeAgent process parameters.");
+                var wow = new IntPtr[1];
+                if (NtQueryInformationProcess(handle, 26, wow, IntPtr.Size, out returned) != 0)
+                    throw new InvalidOperationException("Cannot query TypeAgent process architecture.");
+                bool x86 = wow[0] != IntPtr.Zero;
+                long peb = (x86 ? wow[0] : basic[1]).ToInt64();
+                long parameters = Pointer(handle, peb + (x86 ? 0x10 : 0x20), x86);
+                long cwd = parameters + (x86 ? 0x24 : 0x38);
+                int cwdLength = BitConverter.ToUInt16(Bytes(handle, cwd, 2), 0);
+                long cwdBuffer = Pointer(handle, cwd + (x86 ? 4 : 8), x86);
+                string directory = Encoding.Unicode.GetString(Bytes(handle, cwdBuffer, cwdLength));
+                long environment = Pointer(handle, parameters + (x86 ? 0x48 : 0x80), x86);
+                if (environment == 0) throw new InvalidOperationException("TypeAgent environment is unavailable.");
+                var text = new StringBuilder();
+                // Read only to each page boundary so the final page need not have
+                // a readable successor. Stop at the environment's double NUL.
+                for (int total = 0; total < 32 * 1024 * 1024;) {
+                    int count = (int)Math.Min(4096 - (environment & 4095), 32 * 1024 * 1024 - total);
+                    var bytes = Bytes(handle, environment, count);
+                    for (int i = 0; i + 1 < count; i += 2) {
+                        char c = (char)(bytes[i] | (bytes[i + 1] << 8));
+                        if (c == '\0' && text.Length > 0 && text[text.Length - 1] == '\0')
+                            return new ProcessContext { Directory = directory, Environment = text.ToString() };
+                        text.Append(c);
+                    }
+                    environment += count;
+                    total += count;
+                }
+                throw new InvalidOperationException("TypeAgent environment exceeded the capture limit.");
+            }
+        }
+    }
+}
+'@
+}
+
+function Get-LaunchContext($server) {
+    Initialize-ProcessContext
+    $context = [TypeAgentMaintenance.ProcessContext]::Read($server.ProcessId, [long](Get-CreationTime $server))
+    Add-Type -AssemblyName System.Security
+    $json = @{ Directory = $context.Directory; Environment = $context.Environment } | ConvertTo-Json -Compress
+    $protected = [Security.Cryptography.ProtectedData]::Protect(
+        [Text.Encoding]::UTF8.GetBytes($json), $null, [Security.Cryptography.DataProtectionScope]::CurrentUser
+    )
+    return [Convert]::ToBase64String($protected)
+}
+
+function Start-RestoredServer($command) {
+    Add-Type -AssemblyName System.Security
+    $bytes = [Security.Cryptography.ProtectedData]::Unprotect(
+        [Convert]::FromBase64String($command.LaunchContext), $null, [Security.Cryptography.DataProtectionScope]::CurrentUser
+    )
+    $context = [Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json
+    $start = New-Object Diagnostics.ProcessStartInfo
+    $start.FileName = $command.Executable
+    $start.Arguments = $command.Arguments
+    $start.WorkingDirectory = $context.Directory
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.EnvironmentVariables.Clear()
+    foreach ($entry in $context.Environment.Split([char]0)) {
+        if (-not $entry) { continue }
+        $separator = $entry.IndexOf('=', 1)
+        if ($separator -lt 1) { throw "Invalid saved TypeAgent environment entry." }
+        $start.EnvironmentVariables[$entry.Substring(0, $separator)] = $entry.Substring($separator + 1)
+    }
+    $process = [Diagnostics.Process]::Start($start)
+    try {
+        if ($process.WaitForExit(1000)) {
+            throw "Restored TypeAgent server exited with code $($process.ExitCode)."
+        }
+    } finally { $process.Dispose() }
+}
+
+function Test-TaskServer($server, [string]$payload, $task) {
+    if (-not $task -or $task.State -ne "Running") { return $false }
+    $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($server.ParentProcessId)"
+    if (-not $parent -or $parent.Name -ne "wscript.exe" -or $parent.CreationDate -gt $server.CreationDate) {
+        return $false
+    }
+    $tokens = @([regex]::Matches($parent.CommandLine, '"[^"]*"|\S+') | ForEach-Object { $_.Value.Trim('"') })
+    return $tokens.Count -eq 2 -and $tokens[1] -ieq (Join-Path $payload "autostart-run.vbs") -and
+        (Test-ProcessOwner $parent ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value))
+}
+
+function Get-RestartCommands($processes, [string]$payload, $task) {
     $entry = Join-Path $payload "dist\server.js"
     $servers = @($processes | Where-Object {
         $_.Name -eq "node.exe" -and $_.ExecutablePath -and
@@ -109,11 +259,23 @@ function Get-RestartCommands($processes, [string]$payload) {
     foreach ($server in $servers) {
         if ($server.ParentProcessId -in $servers.ProcessId) { continue }
         if ($server.CommandLine -match '^(?:"[^"]+"|\S+)\s+(.+)$') {
+            $arguments = $Matches[1]
+            try {
+                $taskOwned = Test-TaskServer $server $payload $task
+                $context = if (-not $taskOwned) { Get-LaunchContext $server } else { $null }
+            } catch {
+                if (Get-SameProcess $server) { throw }
+                Write-MaintenanceLog "Server PID $($server.ProcessId) exited before launch context capture."
+                continue
+            }
+            if (-not (Get-SameProcess $server)) { continue }
             @{
                 Executable = $server.ExecutablePath
-                Arguments = $Matches[1]
+                Arguments = $arguments
                 ProcessId = $server.ProcessId
-                CreationDate = $server.CreationDate
+                CreationTime = Get-CreationTime $server
+                TaskOwned = $taskOwned
+                LaunchContext = $context
             }
         }
     }
@@ -135,8 +297,8 @@ function Get-GracefulShutdownPorts($processes, $listeners) {
 }
 
 function Stop-RemainingPayloadProcesses($processes) {
-    $unique = $processes | Sort-Object -Property ProcessId, CreationDate -Unique
-    foreach ($process in ($unique | Sort-Object CreationDate -Descending)) {
+    $unique = $processes | ForEach-Object { Get-ProcessIdentity $_ } | Sort-Object -Property ProcessId, CreationTime -Unique
+    foreach ($process in ($unique | Sort-Object CreationTime -Descending)) {
         if (-not (Get-SameProcess $process)) { continue }
         Write-MaintenanceLog "Terminating remaining TypeAgent PID $($process.ProcessId)."
         try {
@@ -149,8 +311,8 @@ function Stop-RemainingPayloadProcesses($processes) {
     }
 }
 
-function Stop-PayloadProcesses([string]$payload) {
-    $processes = @(Get-PayloadProcesses $payload)
+function Stop-PayloadProcesses([string]$payload, $captured = @()) {
+    $processes = @($captured) + @(Get-PayloadProcesses $payload)
     if (-not $processes.Count) { return }
     Write-MaintenanceLog "Stopping installed TypeAgent processes: $($processes.ProcessId -join ', ')."
 
@@ -247,7 +409,8 @@ function Invoke-Maintenance {
         $state = @{
             Root = $Root
             WasRunning = $processes.Count -gt 0
-            RestartCommands = @(Get-RestartCommands $processes $payload)
+            RestartCommands = @(Get-RestartCommands $processes $payload $task)
+            Processes = @($processes | ForEach-Object { Get-ProcessIdentity $_ })
             TaskXml = $(if ($task) { Export-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath } else { $null })
             TaskWasRunning = ($task -and $task.State -eq "Running")
             SavedPayloads = @("agent-server", "copilot-plugin" | Where-Object {
@@ -261,7 +424,7 @@ function Invoke-Maintenance {
         if ($task) {
             Disable-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath | Out-Null
         }
-        Stop-PayloadProcesses $payload
+        Stop-PayloadProcesses $payload $state.Processes
         if ($task) { Stop-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath }
         foreach ($name in @("agent-server", "copilot-plugin")) {
             Assert-PayloadUnlocked (Join-Path $Root $name)
@@ -294,8 +457,10 @@ function Invoke-Maintenance {
         $backups = @($state.SavedPayloads | Where-Object {
             Test-Path -LiteralPath (Join-Path $TransactionDir $_)
         })
+        # Even a failed Begin may have orphaned children. Never restart over
+        # surviving processes, or discard recovery state if shutdown still fails.
+        Stop-PayloadProcesses $payload $state.Processes
         if ($state.Prepared -or $backups.Count) {
-            Stop-PayloadProcesses $payload
             foreach ($name in @("agent-server", "copilot-plugin")) {
                 $target = Join-Path $Root $name
                 if ($name -in $backups -or ($state.Prepared -and $name -notin $state.SavedPayloads)) {
@@ -328,18 +493,22 @@ function Invoke-Maintenance {
         Remove-Item -LiteralPath $marker
     }
     if ($Action -eq "Rollback" -and $state.WasRunning) {
-        if ($state.TaskXml -and $state.TaskWasRunning) {
-            Start-ScheduledTask -TaskName "TypeAgent Agent Server" -TaskPath "\"
-            Write-MaintenanceLog "Restarted the restored TypeAgent scheduled task."
-        } else {
-            foreach ($command in $state.RestartCommands) {
+        try {
+            if ($state.TaskXml -and $state.TaskWasRunning) {
+                Start-ScheduledTask -TaskName "TypeAgent Agent Server" -TaskPath "\"
+                Write-MaintenanceLog "Restarted the restored TypeAgent scheduled task."
+            }
+            foreach ($command in @($state.RestartCommands | Where-Object { -not $_.TaskOwned })) {
                 if (Get-SameProcess $command) { continue }
-                Start-Process -FilePath $command.Executable -ArgumentList $command.Arguments -WindowStyle Hidden | Out-Null
-                Write-MaintenanceLog "Requested restart using the original Node executable and server arguments."
+                Start-RestoredServer $command
+                Write-MaintenanceLog "Requested restart using the original server launch context."
             }
             if (-not $state.RestartCommands.Count) {
                 Write-MaintenanceLog "WARNING: No verified server launch command was available to restore."
             }
+        } catch {
+            Set-Content -LiteralPath $marker -Value $TransactionDir
+            throw
         }
     }
     if ($Action -in @("Commit", "Rollback")) {
