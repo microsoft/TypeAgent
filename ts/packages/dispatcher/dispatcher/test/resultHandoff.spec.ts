@@ -353,6 +353,7 @@ describe("action result handoff", () => {
                 message: "Approve?",
             },
         });
+        const display = jest.spyOn(context.actionIO, "appendDisplay");
         await expect(
             executeActions(
                 [
@@ -364,9 +365,148 @@ describe("action result handoff", () => {
                 undefined,
                 context,
             ),
-        ).rejects.toThrow("Result value reference not found: ${result-choice}");
+        ).resolves.toMatchObject({
+            error: expect.stringContaining(
+                "Remaining steps were not executed and will not resume automatically.",
+            ),
+            failedAction: produce("choice"),
+            fallbackToReasoning: false,
+        });
+        expect(display).toHaveBeenCalledWith(
+            expect.objectContaining({
+                kind: "error",
+                content: expect.stringContaining(
+                    "will not resume automatically",
+                ),
+            }),
+            "block",
+        );
         expect(executed).toEqual(["produce"]);
         expect(consume).not.toHaveBeenCalled();
+        expect(system.pendingChoiceRoutes.has("choice")).toBe(true);
+    });
+
+    test.each([true, false])(
+        "stops an independent mutation after a pending choice (result label: %s)",
+        async (labeled) => {
+            results.set("before", {
+                entities: [],
+                historyText: "Already completed",
+            });
+            results.set("choice", {
+                entities: [],
+                pendingChoice: {
+                    choiceId: "choice",
+                    type: "yesNo",
+                    message: "Approve?",
+                },
+            });
+            const choice = createExecutableAction(
+                "handoff",
+                "produce",
+                { key: "choice" },
+                labeled ? "choice" : undefined,
+            );
+            await expect(
+                executeActions(
+                    [
+                        produce("before"),
+                        choice,
+                        createExecutableAction("handoff", "consume", {
+                            value: "bread",
+                        }),
+                    ],
+                    undefined,
+                    context,
+                ),
+            ).resolves.toMatchObject({
+                error: expect.stringContaining("awaiting a user choice"),
+                failedAction: choice,
+                fallbackToReasoning: false,
+            });
+            expect(executed).toEqual(["produce", "produce"]);
+            expect(consume).not.toHaveBeenCalled();
+            expect(translatePending).not.toHaveBeenCalled();
+            expect(system.pendingChoiceRoutes.has("choice")).toBe(true);
+        },
+    );
+
+    test("stops a deferred request while retaining the producer's choice", async () => {
+        results.set("choice", {
+            entities: [],
+            pendingChoice: {
+                choiceId: "choice",
+                type: "yesNo",
+                message: "Approve?",
+            },
+        });
+        await expect(
+            executeActions(
+                [
+                    produce("choice"),
+                    createPendingRequestAction({
+                        request: "Use the approved result",
+                        pendingResultEntityId: "choice",
+                    }),
+                ],
+                undefined,
+                context,
+            ),
+        ).resolves.toMatchObject({
+            error: expect.stringContaining("will not resume automatically"),
+            fallbackToReasoning: false,
+        });
+        expect(executed).toEqual(["produce"]);
+        expect(translatePending).not.toHaveBeenCalled();
+        expect(system.pendingChoiceRoutes.has("choice")).toBe(true);
+    });
+
+    test("does not schedule additional actions from a pending choice", async () => {
+        results.set("choice", {
+            entities: [],
+            pendingChoice: {
+                choiceId: "choice",
+                type: "yesNo",
+                message: "Approve?",
+            },
+            additionalActions: [
+                {
+                    schemaName: "handoff",
+                    actionName: "consume",
+                    parameters: { value: "bread" },
+                },
+            ],
+        });
+        await expect(
+            executeActions([produce("choice")], undefined, context),
+        ).resolves.toMatchObject({
+            error: expect.stringContaining("will not resume automatically"),
+            fallbackToReasoning: false,
+        });
+        expect(executed).toEqual(["produce"]);
+        expect(consume).not.toHaveBeenCalled();
+        expect(system.pendingChoiceRoutes.has("choice")).toBe(true);
+    });
+
+    test("preserves a standalone pending choice without reporting discarded steps", async () => {
+        results.set("choice", {
+            entities: [],
+            pendingChoice: {
+                choiceId: "choice",
+                type: "yesNo",
+                message: "Approve?",
+            },
+        });
+        const display = jest.spyOn(context.actionIO, "appendDisplay");
+        await expect(
+            executeActions([produce("choice")], undefined, context),
+        ).resolves.toBeUndefined();
+        expect(display).not.toHaveBeenCalledWith(
+            expect.objectContaining({ kind: "error" }),
+            "block",
+        );
+        expect(executed).toEqual(["produce"]);
+        expect(system.pendingChoiceRoutes.has("choice")).toBe(true);
     });
 
     test("does not invent an entity name from a successful display-only mutation", async () => {

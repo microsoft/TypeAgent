@@ -399,6 +399,15 @@ before their consumers execute. Deferred translation cannot use an action
 still awaiting confirmation. Continuations retain completed-action history
 while each newly translated plan has its own result-reference bindings.
 
+In legacy action execution, a pending user choice stops the remaining queue,
+including actions without result references and any returned additional
+actions. The choice remains available, but the dispatcher explicitly reports
+that the remaining steps were not executed and will not resume automatically.
+This interruption does not trigger reasoning fallback or replay completed
+actions. A standalone choice retains its existing behavior. Structured
+execution continues to resolve choices through its own awaited interaction
+path before returning to the action queue.
+
 Translated actions may also contain **entity placeholders** — explicit
 references the LLM emits as string values pointing back at entities
 provided in the prompt's history context. `resolveEntityPlaceholders()`

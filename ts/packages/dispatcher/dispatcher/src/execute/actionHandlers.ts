@@ -923,11 +923,24 @@ export async function executeActions(
             };
         }
 
+        if (result.pendingChoice !== undefined) {
+            if (actionQueue.length > 0 || result.additionalActions?.length) {
+                const error =
+                    `Action ${getFullActionName(executableAction)} is awaiting a user choice. ` +
+                    "Remaining steps were not executed and will not resume automatically. " +
+                    "Respond to the choice to continue only this action; do not replay earlier completed actions.";
+                displayError(error, context);
+                return {
+                    error,
+                    failedAction: executableAction,
+                    fallbackToReasoning: false,
+                };
+            }
+            return;
+        }
+
         const resultEntityId = executableAction.resultEntityId;
-        if (
-            resultEntityId !== undefined &&
-            result.pendingChoice === undefined
-        ) {
+        if (resultEntityId !== undefined) {
             if (resultEntityResolver === undefined) {
                 throw new Error(
                     `Internal error: resultEntityResolver is undefined`,
