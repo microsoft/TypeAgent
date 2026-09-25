@@ -114,17 +114,18 @@ describe("common-file evaluation scope", () => {
         expect(
             ghcpEvalFileActionAllowed("readFile", { path: file }, root, policy),
         ).toBe(false);
-        expect(
-            ghcpEvalNativeFilePermission(
-                {
-                    kind: "read",
-                    intention: "read",
-                    path: file,
-                },
-                root,
-                policy,
-            ),
-        ).toBe(false);
+        for (const readPath of [file, root])
+            expect(
+                ghcpEvalNativeFilePermission(
+                    {
+                        kind: "read",
+                        intention: "read or search",
+                        path: readPath,
+                    },
+                    root,
+                    policy,
+                ),
+            ).toBe(false);
         policy.readsEnabled = true;
         expect(
             ghcpEvalFileActionAllowed(

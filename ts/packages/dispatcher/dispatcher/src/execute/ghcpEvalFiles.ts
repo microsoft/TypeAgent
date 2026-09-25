@@ -151,9 +151,7 @@ export function ghcpEvalNativeFilePermission(
         );
     if (
         !policy.readsEnabled &&
-        (request.kind === "shell" ||
-            (request.kind === "read" &&
-                isGhcpEvalFixtureFile(request.path, root, policy.readFiles)))
+        (request.kind === "shell" || request.kind === "read")
     )
         return false;
     return undefined;
