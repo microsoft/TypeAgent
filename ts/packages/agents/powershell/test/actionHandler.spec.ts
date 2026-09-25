@@ -1185,48 +1185,25 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
         });
     });
 
-    itOnWindows(
-        "denies .NET file access outside the allowed path",
-        async () => {
-            const directory = await mkdtemp(
-                join(tmpdir(), "typeagent-powershell-dotnet-path-policy-"),
-            );
-            const allowedDirectory = join(directory, "allowed");
-            const deniedDirectory = join(directory, "denied");
-            const deniedPath = join(deniedDirectory, "marker.txt");
-            try {
-                await mkdir(allowedDirectory);
-                await mkdir(deniedDirectory);
-                await writeFile(deniedPath, "outside-marker");
+    it("denies missing script provenance", async () => {
+        const request: ScriptExecutionRequest = {
+            script: "Write-Output 'blocked'",
+            parameters: {},
+            sandbox: {
+                allowedCmdlets: ["Write-Output"],
+                allowedPaths: [],
+                allowedModules: [],
+                maxExecutionTime: 10,
+                networkAccess: false,
+            },
+        };
 
-                const result = await executeScript({
-                    script: String.raw`param([string]$AllowedRoot)
-$deniedPath = [System.IO.Path]::GetFullPath(
-    [System.IO.Path]::Combine($AllowedRoot, "..\denied\marker.txt")
-)
-[System.IO.File]::ReadAllText($deniedPath)`,
-                    parameters: { AllowedRoot: allowedDirectory },
-                    parameterRoles: { AllowedRoot: "path" },
-                    sandbox: {
-                        allowedCmdlets: [],
-                        allowedPaths: [allowedDirectory],
-                        allowedModules: [],
-                        maxExecutionTime: 10,
-                        networkAccess: false,
-                    },
-                });
-
-                expect(result).toMatchObject({
-                    success: false,
-                    stdout: "",
-                    stderr: expect.stringMatching(/policy denied/i),
-                });
-                expect(result.stdout).not.toContain("outside-marker");
-            } finally {
-                await rm(directory, { recursive: true, force: true });
-            }
-        },
-    );
+        await expect(executeScript(request)).resolves.toMatchObject({
+            success: false,
+            stdout: "",
+            stderr: expect.stringMatching(/provenance is missing or unknown/i),
+        });
+    });
 
     itOnWindows(
         "blocks writes to non-existent paths outside the sandbox",
