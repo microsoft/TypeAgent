@@ -32,6 +32,8 @@ import { fileURLToPath } from "url";
 import { PowerShellStore } from "./store/powerShellStore.mjs";
 import type { PowerShellFlowDefinition } from "./store/powerShellStore.mjs";
 import {
+    createEditedScriptSource,
+    getScriptExecutionProvenance,
     type ScriptRecipe,
     type ScriptParameter,
 } from "./types/scriptRecipe.js";
@@ -145,6 +147,7 @@ async function executeFlowScript(
     const request: ScriptExecutionRequest = {
         script,
         parameters: resolvedParams,
+        provenance: getScriptExecutionProvenance(flow.source),
         parameterRoles: getScriptParameterRoles(flow.parameters),
         sandbox: {
             allowedCmdlets: flow.sandbox.allowedCmdlets,
@@ -508,6 +511,7 @@ async function executeDraftRecipe(
     const result = await executeScript({
         script: recipe.script.body,
         parameters: executionParameters,
+        provenance: getScriptExecutionProvenance(recipe.source),
         parameterRoles: getScriptParameterRoles(recipe.parameters),
         sandbox: recipe.sandbox,
         workingDirectory: homedir(),
@@ -754,7 +758,7 @@ async function repairAndExecutePowerShellFlow(
                     (params.allowedModules as string[]) ??
                     existing.sandbox.allowedModules,
             },
-            ...(existing.source ? { source: existing.source } : {}),
+            source: createEditedScriptSource(existing.source),
         };
         const execution = await executeDraftRecipe(
             candidate,
@@ -779,6 +783,7 @@ async function repairAndExecutePowerShellFlow(
                 script,
                 candidate.sandbox.allowedCmdlets,
                 candidate.sandbox.allowedModules,
+                candidate.source,
             );
         } catch (error) {
             return createPostExecutionFailure(
@@ -801,6 +806,7 @@ async function repairAndExecutePowerShellFlow(
                         oldScript,
                         existing.sandbox.allowedCmdlets,
                         existing.sandbox.allowedModules,
+                        existing.source,
                     );
                     return activationCancellation;
                 } catch (restoreError) {
@@ -827,6 +833,7 @@ async function repairAndExecutePowerShellFlow(
                     oldScript,
                     existing.sandbox.allowedCmdlets,
                     existing.sandbox.allowedModules,
+                    existing.source,
                 );
             } catch (restoreError) {
                 restorationError = restoreError;
@@ -1085,6 +1092,7 @@ async function handlePowerShellFlowAction(
                     newScript,
                     newCmdlets,
                     newModules,
+                    createEditedScriptSource(existingFlow.source),
                 );
                 return createActionResultFromTextDisplay(
                     `Updated PowerShell flow '${editFlowName}'`,
@@ -1129,6 +1137,7 @@ async function handlePowerShellFlowAction(
             const request: ScriptExecutionRequest = {
                 script: scriptBody,
                 parameters: testParams,
+                provenance: "generated",
                 sandbox: {
                     allowedCmdlets,
                     allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
@@ -1323,7 +1332,7 @@ async function handlePowerShellFlowAction(
                 }
 
                 context.abortSignal?.throwIfAborted();
-                await flowStore.saveFlow(recipe, "manual");
+                await flowStore.saveFlow(recipe, "imported");
                 try {
                     context.abortSignal?.throwIfAborted();
                     await context.sessionContext.reloadAgentSchema();
@@ -1469,7 +1478,7 @@ class ImportScriptHandler implements CommandHandler {
             );
         }
 
-        await store.saveFlow(recipe, "manual");
+        await store.saveFlow(recipe, "imported");
         await context.sessionContext.reloadAgentSchema();
 
         const patternList = recipe.grammarPatterns
