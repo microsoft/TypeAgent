@@ -27,6 +27,26 @@ export function recoverableBackendReadFailure(events) {
     );
 }
 
+function recoverableTypeAgentReadFailure(
+    toolName,
+    result,
+    success,
+    backendEvents,
+) {
+    // Never infer safety from a missing payload or an uncertain transport.
+    return (
+        success === true &&
+        isGhcpEvalRecoverableReadError(
+            result?.structuredContent?.error?.message ?? result?.content,
+        ) &&
+        ((result?.structuredContent?.status === "failed" &&
+            result.structuredContent.error?.code === "execution_failed") ||
+            (toolName.includes("processCommand") &&
+                /^Error:(?:\s|$)/.test(result?.content ?? ""))) &&
+        recoverableBackendReadFailure(backendEvents)
+    );
+}
+
 export function terminalExecutionFailure(
     toolName,
     result,
@@ -49,17 +69,13 @@ export function terminalExecutionFailure(
         );
     if (!/processCommand|executeAction|continueAction/.test(toolName))
         return false;
-    // Never infer safety from a missing payload or an uncertain transport.
     if (
-        success === true &&
-        isGhcpEvalRecoverableReadError(
-            result?.structuredContent?.error?.message ?? result?.content,
-        ) &&
-        ((result?.structuredContent?.status === "failed" &&
-            result.structuredContent.error?.code === "execution_failed") ||
-            (toolName.includes("processCommand") &&
-                /^Error:(?:\s|$)/.test(result?.content ?? ""))) &&
-        recoverableBackendReadFailure(backendEvents)
+        recoverableTypeAgentReadFailure(
+            toolName,
+            result,
+            success,
+            backendEvents,
+        )
     )
         return false;
     return (
