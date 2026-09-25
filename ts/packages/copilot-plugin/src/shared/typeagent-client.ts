@@ -153,6 +153,7 @@ export async function submitCancellableCommand(
     dispatcher: Dispatcher,
     command: string,
     signal?: AbortSignal,
+    options?: Parameters<Dispatcher["submitCommand"]>[2],
 ): Promise<CommandResult | undefined> {
     if (signal?.aborted) return { cancelled: true };
     const clientRequestId = `copilot-plugin-${randomUUID()}`;
@@ -173,7 +174,7 @@ export async function submitCancellableCommand(
         const submitted = await dispatcher.submitCommand(
             command,
             undefined,
-            undefined,
+            options,
             clientRequestId,
         );
         if (!submitted.ok) {
