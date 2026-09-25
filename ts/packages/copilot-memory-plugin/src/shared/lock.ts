@@ -24,12 +24,16 @@ function isErrno(error: unknown, code: string): boolean {
  * heartbeat, and a dead holder's lock is broken only after it stays stale.
  * Release removes only the lock this process acquired, so a waiter can
  * never delete another owner's lock the way a manual unlink could.
+ *
+ * If the lock is compromised (another process took it), `signal` aborts so
+ * `fn` can stop persisting, and the call rejects instead of returning.
  */
 export async function withMemoryLock<T>(
     dirPath: string,
-    fn: () => Promise<T>,
+    fn: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
     await fs.mkdir(dirPath, { recursive: true });
+    const lost = new AbortController();
     let release: () => Promise<void>;
     try {
         release = await lockfile.lock(dirPath, {
@@ -44,6 +48,7 @@ export async function withMemoryLock<T>(
                 process.stderr.write(
                     `[typeagent-memory] Memory lock at ${dirPath}.lock compromised: ${error}\n`,
                 );
+                lost.abort(error);
             },
         });
     } catch (error) {
@@ -55,7 +60,10 @@ export async function withMemoryLock<T>(
         throw error;
     }
     try {
-        return await fn();
+        const result = await fn(lost.signal);
+        // Fail-stop: a result produced without the lock must not be reported as success.
+        lost.signal.throwIfAborted();
+        return result;
     } finally {
         await release().catch(() => undefined);
     }

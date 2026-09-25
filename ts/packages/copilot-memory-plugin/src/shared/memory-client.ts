@@ -247,8 +247,17 @@ export async function withWorkspaceMemory<T>(
     fn: (client: MemoryClient) => Promise<T>,
 ): Promise<T> {
     const paths = resolveMemoryPaths(cwd);
-    return withMemoryLock(paths.dirPath, async () => {
+    return withMemoryLock(paths.dirPath, async (signal) => {
         const store = await openStore(paths);
+        // Fence: once the lock is lost, stop autosave so this stale writer
+        // cannot overwrite what the new lock holder saves.
+        const fence = () => {
+            store.settings.fileSaveSettings = undefined;
+        };
+        if (signal.aborted) {
+            fence();
+        }
+        signal.addEventListener("abort", fence, { once: true });
         try {
             return await fn(createMemoryClient(store));
         } finally {
