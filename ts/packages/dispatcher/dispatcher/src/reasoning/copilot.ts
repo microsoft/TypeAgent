@@ -96,7 +96,14 @@ import {
 } from "./codingSessionLifecycle.js";
 import { getCodingAttachmentPaths } from "./codingContext.js";
 import { getCopilotCreditBudget } from "./copilotCreditBudget.js";
-import { ghcpEvalExecutionStopped } from "../execute/ghcpEvalPolicy.js";
+import {
+    ghcpEvalExecutionStopped,
+    markGhcpEvalExecutionFailure,
+} from "../execute/ghcpEvalPolicy.js";
+import {
+    readGhcpEvalFilePolicy,
+    ghcpEvalNativeFilePermission,
+} from "../execute/ghcpEvalFiles.js";
 import {
     REASONING_DENY,
     getReasoningPermissionChoices,
@@ -726,7 +733,6 @@ function createCopilotPermissionHandler(
                 kind: "denied-no-approval-rule-and-could-not-request-from-user",
             };
         }
-        const agentContext = context.sessionContext.agentContext;
         const scopeViolation = getCopilotPermissionScopeViolation(
             request,
             allowedRoot,
@@ -737,6 +743,25 @@ function createCopilotPermissionHandler(
                 feedback: scopeViolation,
             };
         }
+        const fixtureRoot = process.env.TYPEAGENT_GHCP_EVAL_FIXTURES;
+        const fixturePolicy = fixtureRoot && readGhcpEvalFilePolicy();
+        const filePermission =
+            fixtureRoot && fixturePolicy
+                ? ghcpEvalNativeFilePermission(
+                      request,
+                      fixtureRoot,
+                      fixturePolicy,
+                  )
+                : undefined;
+        if (filePermission !== undefined) {
+            if (!filePermission) markGhcpEvalExecutionFailure();
+            return {
+                kind: filePermission
+                    ? "approve-once"
+                    : "denied-no-approval-rule-and-could-not-request-from-user",
+            };
+        }
+        const agentContext = context.sessionContext.agentContext;
         const requestId = getRequestId(agentContext);
         const policyRequest = buildCopilotPolicyRequest(
             request,

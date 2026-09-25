@@ -3,48 +3,14 @@
 
 import path from "node:path";
 
-export const protocolVersion = 4;
-export const nativeListCases = [
-    "S1",
-    "S4",
-    "M3",
-    "M5",
-    "R1",
-    "R4",
-    "R5",
-    "A1",
-    "A4",
-];
-
-export function trialApplicability(caseId, candidate) {
-    return candidate === 7 && nativeListCases.includes(caseId)
-        ? { applicable: false, reason: "native_list_capability_unavailable" }
-        : { applicable: true };
-}
-
-// Keep N/A slots in the paired schedule, but never start a session for them.
-export async function runApplicableTrial(entry, run) {
-    if (typeof entry.applicable !== "boolean")
-        throw new Error("Trial must have frozen applicability");
-    return entry.applicable
-        ? run()
-        : {
-              ...entry,
-              status: "not_applicable",
-              reason: entry.reason,
-              e2eMs: null,
-              preliminaryGrade: {
-                  outcome: "not_applicable",
-                  reason: entry.reason,
-              },
-          };
-}
+export const protocolVersion = 5;
+export const corpusVersion = "common-files-v1";
 
 export function buildTrialSchedule(cases, candidateIds, repetitions) {
     const order = balancedOrder(cases, candidateIds, repetitions).map(
         (entry) => ({
             ...entry,
-            ...trialApplicability(entry.caseId, entry.candidate),
+            applicable: true,
         }),
     );
     return {
@@ -70,6 +36,23 @@ export function assertFrozenSpecification(previous, next) {
         );
 }
 
+export function assertCorpusReadiness(readiness) {
+    if (
+        readiness?.corpusVersion !== corpusVersion ||
+        readiness.status !== "passed" ||
+        !["listFiles", "readFile", "writeFile", "copyFile"].every((name) =>
+            readiness.externalEvidence?.some(
+                (entry) =>
+                    entry.actionName === name &&
+                    entry.outcome?.status === "completed",
+            ),
+        )
+    )
+        throw new Error(
+            "Fresh common-files-v1 preflight with verified file inventory/read/write/copy is required",
+        );
+}
+
 export const listFixture = {
     grocery: ["milk", "eggs", "rice"],
     pantry: ["rice", "beans"],
@@ -83,18 +66,25 @@ export const fileFixture = {
     "report-a.txt": "passport\ncharger\nsocks\n",
     "report-b.txt": "charger\nadapter\n",
     "trip.txt": "destination: mountain\njacket: required\n",
+    "grocery.txt": "milk\neggs\nrice\n",
+    "pantry.txt": "rice\nbeans\n",
+    "packing.txt": "passport\ncharger\nsocks\n",
+    "errands.txt": "pharmacy\npost office\n",
 };
 
 export function buildCorpus(files, repo, prA, prB, issueA) {
     const file = (name) => path.join(files, name);
     return [
-        { id: "S1", prompt: "Show my lists." },
+        { id: "S1", prompt: `Show the files in ${files}.` },
         { id: "S2", prompt: `Read ${file("report-a.txt")}.` },
         {
             id: "S3",
             prompt: `Show the files changed by pull request ${prA} in ${repo}.`,
         },
-        { id: "S4", prompt: "Add apples to my grocery list." },
+        {
+            id: "S4",
+            prompt: `Append apples as a new line to ${file("grocery.txt")}, preserving the existing lines.`,
+        },
         { id: "S5", prompt: "Show my full network configuration." },
         {
             id: "M1",
@@ -106,7 +96,7 @@ export function buildCorpus(files, repo, prA, prB, issueA) {
         },
         {
             id: "M3",
-            prompt: "Empty my grocery list, then add bread and oranges to it.",
+            prompt: `Copy ${file("grocery.txt")} to ${file("grocery-backup.txt")}, then replace the contents of ${file("grocery.txt")} with bread and oranges, one per line.`,
         },
         {
             id: "M4",
@@ -114,11 +104,11 @@ export function buildCorpus(files, repo, prA, prB, issueA) {
         },
         {
             id: "M5",
-            prompt: `Show issue ${issueA} in ${repo}, then add "review issue ${issueA}" to my errand list.`,
+            prompt: `Show issue ${issueA} in ${repo}, then append "review issue ${issueA}" as a new line to ${file("errands.txt")}, preserving the existing lines.`,
         },
         {
             id: "R1",
-            prompt: "Which items are on both my grocery list and my pantry list?",
+            prompt: `Which entries occur in both ${file("grocery.txt")} and ${file("pantry.txt")}?`,
         },
         {
             id: "R2",
@@ -130,16 +120,16 @@ export function buildCorpus(files, repo, prA, prB, issueA) {
         },
         {
             id: "R4",
-            prompt: `Read ${file("trip.txt")}. If it says a jacket is required, add jacket to my packing list; otherwise leave the list unchanged. Tell me what you did.`,
+            prompt: `Read ${file("trip.txt")}. If it says a jacket is required, append jacket as a new line to ${file("packing.txt")}; otherwise leave the file unchanged. Preserve existing entries and tell me what you did.`,
         },
         {
             id: "R5",
-            prompt: `Read issue ${issueA} in ${repo} and add its exact title to my errand list, but only if that title is not already there.`,
+            prompt: `Read issue ${issueA} in ${repo} and append its exact title as a new line to ${file("errands.txt")}, but only if that title is not already there. Preserve existing entries.`,
         },
         {
             id: "A1",
-            prompt: "Add apples to my list.",
-            clarification: "The grocery list.",
+            prompt: `Add apples as a new line to one of these shopping files: ${file("grocery.txt")} or ${file("pantry.txt")}. Preserve the existing lines.`,
+            clarification: "grocery.txt.",
         },
         {
             id: "A2",
@@ -153,8 +143,8 @@ export function buildCorpus(files, repo, prA, prB, issueA) {
         },
         {
             id: "A4",
-            prompt: "Remove the item from my grocery list.",
-            clarification: "Remove milk; keep everything else.",
+            prompt: `Remove an item from ${file("grocery.txt")}, preserving the other entries.`,
+            clarification: "Remove eggs.",
         },
         {
             id: "A5",
@@ -164,18 +154,70 @@ export function buildCorpus(files, repo, prA, prB, issueA) {
     ];
 }
 
-export function expectedLists(id, issueA, issueTitle) {
-    const state = structuredClone(listFixture);
-    if (id === "S4" || id === "A1") state.grocery.push("apples");
-    if (id === "M3") state.grocery = ["bread", "oranges"];
-    if (id === "M5") state.errand.push(`review issue ${issueA}`);
-    if (id === "R4") state.packing.push("jacket");
+export function expectedFiles(id, issueA, issueTitle, initial = fileFixture) {
+    const state = { ...initial };
+    const append = (name, line) => {
+        state[name] = `${state[name].replace(/\r?\n*$/, "")}\n${line}\n`;
+    };
+    if (id === "S4" || id === "A1") append("grocery.txt", "apples");
+    if (id === "M3") {
+        state["grocery-backup.txt"] = initial["grocery.txt"];
+        state["grocery.txt"] = "bread\noranges\n";
+    }
+    if (id === "M5") append("errands.txt", `review issue ${issueA}`);
+    if (id === "R4" && /^jacket:\s*required\s*$/m.test(initial["trip.txt"]))
+        append("packing.txt", "jacket");
     if (id === "R5") {
         if (!issueTitle) return undefined;
-        state.errand.push(issueTitle);
+        if (!initial["errands.txt"].split(/\r?\n/).includes(issueTitle))
+            append("errands.txt", issueTitle);
     }
-    if (id === "A4") state.grocery = ["eggs", "rice"];
+    if (id === "A4")
+        state["grocery.txt"] = initial["grocery.txt"]
+            .split(/\r?\n/)
+            .filter((line) => line !== "eggs")
+            .join("\n");
     return state;
+}
+
+export function writableFiles(id) {
+    return (
+        {
+            S4: ["grocery.txt"],
+            M3: ["grocery-backup.txt", "grocery.txt"],
+            M5: ["errands.txt"],
+            R4: ["packing.txt"],
+            R5: ["errands.txt"],
+            A1: ["grocery.txt"],
+            A4: ["grocery.txt"],
+        }[id] ?? []
+    );
+}
+
+export function filePolicy(id, clarified = false) {
+    return {
+        version: 1,
+        readFiles: [
+            ...Object.keys(fileFixture),
+            ...(id === "M3" ? ["grocery-backup.txt"] : []),
+        ],
+        writeFiles: writableFiles(id),
+        allowInventory: id === "S1",
+        allowCopy:
+            id === "M3"
+                ? { source: "grocery.txt", destination: "grocery-backup.txt" }
+                : undefined,
+        writesEnabled: !["A1", "A4"].includes(id) || clarified,
+        readsEnabled: !["A2", "A5"].includes(id) || clarified,
+        prerequisites:
+            id === "M3"
+                ? {
+                      "grocery.txt": {
+                          "grocery-backup.txt": fileFixture["grocery.txt"],
+                      },
+                  }
+                : {},
+    };
 }
 
 export function normalizeLists(lists) {
@@ -216,77 +258,80 @@ export function fixtureConfirmationAllowed(
     issueTitle,
     issueNumber = 2617,
 ) {
-    if (!action || typeof action.parameters !== "object") return false;
+    if (!action?.parameters || typeof action.parameters !== "object")
+        return false;
     const { schemaName, actionName, parameters } = action;
     const fileCases = {
         S2: ["report-a.txt"],
         M1: ["report-a.txt", "report-b.txt"],
+        R1: ["grocery.txt", "pantry.txt"],
         R2: ["report-a.txt", "report-b.txt"],
-        R4: ["trip.txt"],
+        R4: ["trip.txt", "packing.txt"],
+        R5: ["errands.txt"],
+        S4: ["grocery.txt"],
+        M3: ["grocery.txt", "grocery-backup.txt"],
+        M5: ["errands.txt"],
+        A1: ["grocery.txt"],
+        A4: ["grocery.txt"],
         A2: ["report-b.txt"],
         A5: ["trip.txt"],
     };
+    const samePath = (actual, name) =>
+        typeof actual === "string" &&
+        path.relative(
+            path.resolve(files, name),
+            path.resolve(files, actual),
+        ) === "";
+    if (schemaName !== "powershell.powershell-files") return false;
     if (
         schemaName === "powershell.powershell-files" &&
         actionName === "readFile"
     ) {
         return (
-            fileCases[id]?.some(
-                (name) =>
-                    path.resolve(files, name).toLowerCase() ===
-                    path.resolve(parameters.path ?? "").toLowerCase(),
-            ) ?? false
+            fileCases[id]?.some((name) => samePath(parameters.path, name)) ??
+            false
         );
     }
 
-    if (schemaName !== "list") return false;
-    if (actionName === "startEditList") {
-        const target = {
-            S4: "grocery",
-            M3: "grocery",
-            M5: "errand",
-            R4: "packing",
-            R5: "errand",
-            A1: "grocery",
-            A4: "grocery",
-        }[id];
-        return target !== undefined && parameters.listName === target;
-    }
-    if (actionName === "clearList") {
-        return id === "M3" && parameters.listName === "grocery";
-    }
-    if (actionName === "removeItems")
+    if (actionName === "listFiles")
         return (
-            id === "A4" &&
-            parameters.listName === "grocery" &&
-            JSON.stringify(parameters.items) === JSON.stringify(["milk"])
+            id === "S1" && samePath(parameters.path, ".") && !parameters.recurse
         );
-    if (actionName !== "addItems") return false;
-    const additions = {
-        S4: ["grocery", ["apples"]],
-        A1: ["grocery", ["apples"]],
-        M3: ["grocery", ["bread", "oranges"]],
-        M5: ["errand", [`review issue ${issueNumber}`]],
-        R4: ["packing", ["jacket"]],
-        R5: ["errand", issueTitle ? [issueTitle] : []],
-    };
-    const expected = additions[id];
-    return (
-        expected !== undefined &&
-        expected[1].length > 0 &&
-        parameters.listName === expected[0] &&
-        JSON.stringify(parameters.items?.slice().sort()) ===
-            JSON.stringify(expected[1].slice().sort())
+    if (actionName === "copyFile")
+        return (
+            id === "M3" &&
+            !parameters.recurse &&
+            samePath(parameters.source, "grocery.txt") &&
+            samePath(parameters.destination, "grocery-backup.txt")
+        );
+    if (actionName !== "writeFile" || typeof parameters.content !== "string")
+        return false;
+    const expected = expectedFiles(id, issueNumber, issueTitle);
+    const target = writableFiles(id).find((name) =>
+        samePath(parameters.path, name),
     );
+    if (!target || !expected) return false;
+    const append = parameters.append === true;
+    const content = append
+        ? `${fileFixture[target]}${parameters.content}`
+        : parameters.content;
+    return logicalFileContent(content) === logicalFileContent(expected[target]);
+}
+
+export function logicalFileContent(content) {
+    return content
+        .replace(/^\uFEFF/, "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\n+$/, "");
 }
 
 export function isClarificationQuestion(id, question) {
     if (/\b(confirm|approve|proceed|allow)\b/i.test(question)) return false;
     const subject = {
-        A1: /\blist\b/i,
+        A1: /\b(file|shopping)\b/i,
         A2: /\b(report|file)\b/i,
         A3: /\b(pull request|PR|number)\b/i,
-        A4: /\b(item|remove)\b/i,
+        A4: /\b(item|entry|line)\b/i,
         A5: /\bfile\b/i,
     }[id];
     return Boolean(

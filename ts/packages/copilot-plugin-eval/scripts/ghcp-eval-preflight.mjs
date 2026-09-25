@@ -6,7 +6,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-import { fileFixture } from "./ghcp-eval-corpus.mjs";
+import {
+    corpusVersion,
+    fileFixture,
+    filePolicy,
+    logicalFileContent,
+} from "./ghcp-eval-corpus.mjs";
 import { evalModel, validateEvalLedger } from "./ghcp-eval-config.mjs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -42,17 +47,31 @@ const { env, mcp } = makeConfiguration(
 );
 env.TYPEAGENT_COPILOT_CREDIT_LEDGER = path.resolve(ledgerPath);
 env.COPILOT_REASONING_MODEL = evalModel;
-const fixtures = path.join(outputDirectory, "fixtures");
+const fixtures = path.resolve(outputDirectory, "fixtures");
 fs.mkdirSync(fixtures);
 for (const [name, content] of Object.entries(fileFixture)) {
     fs.writeFileSync(path.join(fixtures, name), content);
 }
 env.TYPEAGENT_GHCP_EVAL_FIXTURES = fixtures;
+env.TYPEAGENT_GHCP_EVAL_FILE_POLICY = path.resolve(
+    outputDirectory,
+    "file-policy.json",
+);
+fs.writeFileSync(
+    env.TYPEAGENT_GHCP_EVAL_FILE_POLICY,
+    JSON.stringify({
+        ...filePolicy("M3"),
+        allowInventory: true,
+        allowListInventory: true,
+        prerequisites: {},
+    }),
+);
 fs.mkdirSync(env.TYPEAGENT_PLUGIN_DATA);
 stageCopilotPlugin(path.join(outputDirectory, "plugin"));
 const result = {
     kind: "catalog_preflight_not_eval",
     model: evalModel,
+    corpusVersion,
     status: "running",
     contracts: [],
     missing: [],
@@ -97,13 +116,13 @@ try {
     );
     const required = [
         ["list", "listLists"],
-        ["list", "getList"],
-        ["list", "addItems"],
-        ["list", "clearList"],
         ["github-cli", "prFiles"],
         ["github-cli", "prChecks"],
         ["github-cli", "issueView"],
         ["powershell.powershell-files", "readFile"],
+        ["powershell.powershell-files", "listFiles"],
+        ["powershell.powershell-files", "writeFile"],
+        ["powershell.powershell-files", "copyFile"],
         ["ipconfig", "displayFullConfigurationInformation"],
         ["ipconfig", "displayDNSResolverCacheContents"],
     ];
@@ -111,11 +130,6 @@ try {
     for (const [schemaName, actionName] of required) {
         let contract;
         const queries = [`${schemaName} ${actionName}`, actionName];
-        if (schemaName === "list" && actionName === "clearList") {
-            queries.push(
-                "remove all items from a list but keep the list itself",
-            );
-        }
         for (const query of queries) {
             const response = await client.callTool(
                 {
@@ -174,8 +188,30 @@ try {
             { schemaName: "list", actionName: "listLists", parameters: {} },
             {
                 schemaName: "powershell.powershell-files",
+                actionName: "listFiles",
+                parameters: { path: fixtures },
+            },
+            {
+                schemaName: "powershell.powershell-files",
                 actionName: "readFile",
                 parameters: { path: path.join(fixtures, "report-a.txt") },
+            },
+            {
+                schemaName: "powershell.powershell-files",
+                actionName: "copyFile",
+                parameters: {
+                    source: path.join(fixtures, "grocery.txt"),
+                    destination: path.join(fixtures, "grocery-backup.txt"),
+                },
+            },
+            {
+                schemaName: "powershell.powershell-files",
+                actionName: "writeFile",
+                parameters: {
+                    path: path.join(fixtures, "grocery.txt"),
+                    content: "apples",
+                    append: true,
+                },
             },
             ...[
                 "displayFullConfigurationInformation",
@@ -204,8 +240,10 @@ try {
                 action.schemaName === "powershell.powershell-files" &&
                 pending?.status === "requires_interaction" &&
                 pending.prompt?.type === "confirmation" &&
-                pending.prompt.action?.parameters?.path ===
-                    action.parameters.path
+                pending.prompt.action?.schemaName === action.schemaName &&
+                pending.prompt.action?.actionName === action.actionName &&
+                JSON.stringify(pending.prompt.action?.parameters) ===
+                    JSON.stringify(action.parameters)
             ) {
                 response = await client.callTool(
                     {
@@ -249,6 +287,25 @@ try {
                 result.status = "blocked";
                 break;
             }
+            if (
+                action.actionName === "copyFile" &&
+                fs.readFileSync(
+                    path.join(fixtures, "grocery-backup.txt"),
+                    "utf8",
+                ) !== fileFixture["grocery.txt"]
+            )
+                throw new Error(
+                    "Preflight copy did not preserve source contents",
+                );
+            if (
+                action.actionName === "writeFile" &&
+                logicalFileContent(
+                    fs.readFileSync(path.join(fixtures, "grocery.txt"), "utf8"),
+                ) !== "milk\neggs\nrice\napples"
+            )
+                throw new Error(
+                    "Preflight append did not preserve existing lines",
+                );
         }
     }
     if (result.status !== "passed") process.exitCode = 1;

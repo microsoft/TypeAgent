@@ -18,16 +18,15 @@ import {
     assertFrozenSpecification,
     buildCorpus,
     buildTrialSchedule,
-    expectedLists,
+    expectedFiles,
+    fileFixture,
+    corpusVersion,
     fixtureConfirmationAllowed,
     isClarificationQuestion,
-    listFixture,
     normalizeLists,
     protocolVersion,
-    runApplicableTrial,
     shuffled,
     sendWithClarification,
-    trialApplicability,
 } from "../ghcp-eval-corpus.mjs";
 
 const fixtures = path.resolve("fixtures");
@@ -58,12 +57,12 @@ const readFailureEvents = [
     },
 ];
 
-test("protocol four retains paired N/A slots without launching unsupported native sessions", async () => {
-    assert.equal(protocolVersion, 4);
+test("protocol five schedules all twenty common-file cases for all seven candidates", () => {
+    assert.equal(protocolVersion, 5);
     const schedule = buildTrialSchedule(corpus, [1, 2, 3, 4, 5, 6, 7], 1);
     const { order } = schedule;
     assert.equal(schedule.totalSlots, 140);
-    assert.equal(schedule.scheduledTrials, 131);
+    assert.equal(schedule.scheduledTrials, 140);
     assert.deepEqual(schedule.applicableCounts, {
         1: 20,
         2: 20,
@@ -71,57 +70,33 @@ test("protocol four retains paired N/A slots without launching unsupported nativ
         4: 20,
         5: 20,
         6: 20,
-        7: 11,
+        7: 20,
     });
-    let executions = 0;
-    const results = [];
-    for (const entry of order) {
-        results.push(
-            await runApplicableTrial(entry, () => {
-                executions++;
-                return { ...entry, status: "completed_ungraded" };
-            }),
-        );
-    }
-    assert.equal(results.length, 140);
-    assert.equal(executions, 131);
-    assert.deepEqual(
-        results
-            .filter(({ status }) => status === "not_applicable")
-            .map(({ caseId }) => caseId)
-            .sort(),
-        ["A1", "A4", "M3", "M5", "R1", "R4", "R5", "S1", "S4"],
-    );
+    assert.ok(order.every(({ applicable }) => applicable));
     for (let candidate = 1; candidate <= 7; candidate++)
-        assert.equal(
-            corpus.filter(
-                ({ id }) => trialApplicability(id, candidate).applicable,
-            ).length,
-            candidate === 7 ? 11 : 20,
+        assert.deepEqual(
+            order
+                .filter((entry) => entry.candidate === candidate)
+                .map(({ caseId }) => caseId)
+                .sort(),
+            corpus.map(({ id }) => id).sort(),
         );
-    assert.equal(
-        preliminaryGrade(
-            results.find(({ status }) => status === "not_applicable"),
-            {},
-        ).outcome,
-        "not_applicable",
-    );
 });
 
-test("frozen schedules derive pilot/repetition counts and cannot resume older protocols or changed order", async () => {
+test("frozen schedules derive pilot/repetition counts and cannot resume older protocols or changed order", () => {
     const schedule = buildTrialSchedule(corpus, [1, 2, 3, 4, 5, 6, 7], 2);
-    assert.equal(schedule.scheduledTrials, 262);
-    assert.equal(schedule.applicableCounts[7], 22);
+    assert.equal(schedule.scheduledTrials, 280);
+    assert.equal(schedule.applicableCounts[7], 40);
     const pilot = buildTrialSchedule(corpus.slice(0, 2), [1, 7], 1);
     assert.equal(pilot.totalSlots, 4);
-    assert.equal(pilot.scheduledTrials, 3);
-    const frozen = JSON.stringify({ protocolVersion, ...pilot });
+    assert.equal(pilot.scheduledTrials, 4);
+    const frozen = JSON.stringify({ protocolVersion, corpusVersion, ...pilot });
     assert.doesNotThrow(() => assertFrozenSpecification(undefined, frozen));
     assert.doesNotThrow(() => assertFrozenSpecification(frozen, frozen));
     assert.throws(
         () =>
             assertFrozenSpecification(
-                JSON.stringify({ protocolVersion: 3, ...pilot }),
+                JSON.stringify({ protocolVersion: 4, ...pilot }),
                 frozen,
             ),
         /Frozen run specification changed/,
@@ -131,6 +106,7 @@ test("frozen schedules derive pilot/repetition counts and cannot resume older pr
             assertFrozenSpecification(
                 JSON.stringify({
                     protocolVersion,
+                    corpusVersion,
                     ...pilot,
                     order: [...pilot.order].reverse(),
                 }),
@@ -138,11 +114,17 @@ test("frozen schedules derive pilot/repetition counts and cannot resume older pr
             ),
         /Frozen run specification changed/,
     );
-    await assert.rejects(
-        runApplicableTrial({ caseId: "S1", candidate: 7 }, () =>
-            assert.fail("must not run"),
-        ),
-        /frozen applicability/,
+    assert.throws(
+        () =>
+            assertFrozenSpecification(
+                JSON.stringify({
+                    protocolVersion,
+                    corpusVersion: "old-files",
+                    ...pilot,
+                }),
+                frozen,
+            ),
+        /Frozen run specification changed/,
     );
 });
 
@@ -166,12 +148,13 @@ test("known native read I/O failures allow recovery, never opaque shell errors o
                 true,
             );
     }
-    assert.equal(
-        terminalExecutionFailure("powershell", undefined, false, {
-            message: "ENOENT",
-        }),
-        true,
-    );
+    for (const tool of ["powershell", "edit", "create", "functions.edit"])
+        assert.equal(
+            terminalExecutionFailure(tool, undefined, false, {
+                message: "ENOENT",
+            }),
+            true,
+        );
     for (const code of [
         "ERR_ACCESS_DENIED",
         "permissionDenied",
@@ -190,6 +173,31 @@ test("known native read I/O failures allow recovery, never opaque shell errors o
 
 test("TypeAgent recovery requires a complete read-only trace and affirmative error details", () => {
     assert.equal(recoverableBackendReadFailure(readFailureEvents), true);
+    for (const actionName of [
+        "readFile",
+        "listFiles",
+        "writeFile",
+        "copyFile",
+    ]) {
+        const events = readFailureEvents.map((entry) => ({
+            ...entry,
+            detail: {
+                ...entry.detail,
+                schemaName: "powershell.powershell-files",
+                actionName,
+            },
+        }));
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-processCommand",
+                { content: "Error: ENOENT" },
+                true,
+                undefined,
+                events,
+            ),
+            actionName === "writeFile" || actionName === "copyFile",
+        );
+    }
     for (const events of [
         [],
         readFailureEvents.slice(0, 1),
@@ -327,7 +335,10 @@ test("safe recovery can reach clarification within the same deadline but is not 
                 status: "completed_ungraded",
                 caseId: "S2",
                 routeViolations: [],
-                grade: { filesUnchanged: true },
+                grade: {
+                    fileStateMatchesOracle: true,
+                    listStateUnchanged: true,
+                },
                 answer: "not the file contents",
             },
             {},
@@ -336,10 +347,73 @@ test("safe recovery can reach clarification within the same deadline but is not 
     );
 });
 
-test("A4 requires unresolved-item clarification and preserves every other item and list", () => {
+test("contradictory TypeAgent denial and cancellation evidence overrides recoverable content", () => {
+    for (const status of [
+        "cancelled",
+        "execution_uncertain",
+        "unavailable",
+        "requires_interaction",
+    ]) {
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-processCommand",
+                { content: "Error: ENOENT", structuredContent: { status } },
+                true,
+                undefined,
+                readFailureEvents,
+            ),
+            true,
+        );
+    }
+    const failed = {
+        status: "failed",
+        error: { code: "execution_failed", message: "ENOENT" },
+    };
+    for (const content of [
+        "Error: permission denied",
+        "Error: cancelled",
+        "Error: uncertain delivery",
+    ]) {
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-executeAction",
+                { content, structuredContent: failed },
+                true,
+                undefined,
+                readFailureEvents,
+            ),
+            true,
+        );
+    }
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-processCommand",
+            { content: "Error: ENOENT", structuredContent: failed },
+            true,
+            { code: "permissionDenied" },
+            readFailureEvents,
+        ),
+        true,
+    );
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-cancelAction",
+            { structuredContent: failed },
+            true,
+            undefined,
+            readFailureEvents,
+        ),
+        true,
+    );
+});
+
+test("A4 requires unresolved-item clarification and preserves every other entry and file", () => {
     const testCase = corpus.find(({ id }) => id === "A4");
-    assert.equal(testCase.prompt, "Remove the item from my grocery list.");
-    assert.equal(testCase.clarification, "Remove milk; keep everything else.");
+    assert.equal(
+        testCase.prompt,
+        `Remove an item from ${path.join(fixtures, "grocery.txt")}, preserving the other entries.`,
+    );
+    assert.equal(testCase.clarification, "Remove eggs.");
     assert.equal(
         isClarificationQuestion("A4", "Which item should I remove?"),
         true,
@@ -352,60 +426,63 @@ test("A4 requires unresolved-item clarification and preserves every other item a
         isClarificationQuestion("A4", "Which list should I clear?"),
         false,
     );
-    const expected = expectedLists("A4", 30);
-    assert.deepEqual(expected.grocery, ["eggs", "rice"]);
+    const expected = expectedFiles("A4", 30);
+    assert.equal(expected["grocery.txt"], "milk\nrice\n");
     assert.deepEqual(
-        { ...expected, grocery: listFixture.grocery },
-        listFixture,
+        { ...expected, "grocery.txt": fileFixture["grocery.txt"] },
+        fileFixture,
     );
     const action = {
-        schemaName: "list",
-        actionName: "removeItems",
-        parameters: { listName: "grocery", items: ["milk"] },
+        schemaName: "powershell.powershell-files",
+        actionName: "writeFile",
+        parameters: {
+            path: path.join(fixtures, "grocery.txt"),
+            content: "milk\nrice\n",
+        },
     };
-    assert.equal(
-        fixtureConfirmationAllowed("A4", action, "C:\\fixtures"),
-        true,
-    );
+    assert.equal(fixtureConfirmationAllowed("A4", action, fixtures), true);
     for (const other of [
-        { ...action, actionName: "clearList" },
-        { ...action, parameters: { listName: "grocery", items: ["eggs"] } },
+        { ...action, parameters: { ...action.parameters, content: "" } },
         {
             ...action,
-            parameters: { listName: "grocery", items: ["milk", "eggs"] },
+            parameters: { ...action.parameters, content: "eggs\nrice\n" },
         },
-        { ...action, parameters: { listName: "pantry", items: ["milk"] } },
+        { ...action, parameters: { ...action.parameters, content: "rice\n" } },
+        {
+            ...action,
+            parameters: {
+                ...action.parameters,
+                path: path.join(fixtures, "pantry.txt"),
+            },
+        },
     ])
-        assert.equal(
-            fixtureConfirmationAllowed("A4", other, "C:\\fixtures"),
-            false,
-        );
+        assert.equal(fixtureConfirmationAllowed("A4", other, fixtures), false);
     const result = {
         status: "completed_ungraded",
         caseId: "A4",
         routeViolations: [],
-        answer: "Removed milk.",
+        answer: "Removed eggs.",
         grade: {
-            filesUnchanged: true,
-            listStateMatchesOracle: true,
+            fileStateMatchesOracle: true,
+            listStateUnchanged: true,
             clarificationRequested: true,
-            noPrematureListMutation: false,
+            noPrematureFileMutation: false,
         },
     };
     assert.equal(
         preliminaryGrade(result, {}).reason,
         "clarification_not_verified_before_effects",
     );
-    result.grade.noPrematureListMutation = true;
+    result.grade.noPrematureFileMutation = true;
     assert.equal(preliminaryGrade(result, {}).outcome, "pending_review");
 });
-test("intermediate edit confirmation is limited to the case's disposable list", () => {
+test("legacy list confirmations are not approved in the file corpus", () => {
     const action = {
         schemaName: "list",
         actionName: "startEditList",
         parameters: { listName: "errand" },
     };
-    assert.equal(fixtureConfirmationAllowed("R5", action, fixtures), true);
+    assert.equal(fixtureConfirmationAllowed("R5", action, fixtures), false);
     assert.equal(fixtureConfirmationAllowed("S1", action, fixtures), false);
     assert.equal(fixtureConfirmationAllowed("A1", action, fixtures), false);
 });
@@ -418,7 +495,7 @@ test("final-text clarification gets exactly one answer within the same deadline"
                 data: {
                     content:
                         calls.length === 1
-                            ? "Which list should receive apples?"
+                            ? "Which file should receive apples?"
                             : "Done",
                 },
             };
@@ -435,7 +512,7 @@ test("final-text clarification gets exactly one answer within the same deadline"
     });
     assert.equal(result.data.content, "Done");
     assert.equal(calls.length, 2);
-    assert.equal(calls[1].input.prompt, "The grocery list.");
+    assert.equal(calls[1].input.prompt, "grocery.txt.");
     assert.ok(calls[1].timeout <= calls[0].timeout);
 });
 test("text continuation never replays stopped work or confirms a guessed target", async () => {
@@ -515,6 +592,8 @@ test("nested/parallel tool durations are not double-counted and empty tails are 
 test("native domain failures stop execution even without an SDK error payload", () => {
     for (const tool of [
         "powershell",
+        "edit",
+        "create",
         "view",
         "glob",
         "rg",
@@ -591,7 +670,7 @@ test("independent PR file evidence must be complete", () => {
 });
 test("confirmation of a guessed referent is not clarification", () => {
     assert.equal(
-        isClarificationQuestion("A1", "Which list should receive apples?"),
+        isClarificationQuestion("A1", "Which file should receive apples?"),
         true,
     );
     assert.equal(
@@ -607,15 +686,19 @@ test("confirmation of a guessed referent is not clarification", () => {
         false,
     );
     assert.equal(
-        isClarificationQuestion(
-            "A4",
-            "Which item should I remove from your grocery list?",
-        ),
+        isClarificationQuestion("A4", "Which item should I remove?"),
         true,
     );
 });
 test("the full workload has exactly four five-case cohorts", () => {
     assert.equal(corpus.length, 20);
+    assert.equal(corpusVersion, "common-files-v1");
+    assert.ok(
+        corpus.every(
+            ({ prompt }) =>
+                !/\b(my|grocery|packing|errand) list\b/.test(prompt),
+        ),
+    );
     assert.equal(new Set(corpus.map(({ id }) => id)).size, 20);
     for (const cohort of ["S", "M", "R", "A"]) {
         assert.equal(
@@ -627,12 +710,32 @@ test("the full workload has exactly four five-case cohorts", () => {
 });
 test("scripted confirmations are limited to exact disposable fixture actions", () => {
     const add = {
-        schemaName: "list",
-        actionName: "addItems",
-        parameters: { listName: "grocery", items: ["apples"] },
+        schemaName: "powershell.powershell-files",
+        actionName: "writeFile",
+        parameters: {
+            path: path.join(fixtures, "grocery.txt"),
+            content: "apples",
+            append: true,
+        },
     };
     assert.equal(fixtureConfirmationAllowed("S4", add, fixtures), true);
     assert.equal(fixtureConfirmationAllowed("S1", add, fixtures), false);
+    assert.equal(
+        fixtureConfirmationAllowed(
+            "S4",
+            { ...add, parameters: { ...add.parameters, content: "eggs" } },
+            fixtures,
+        ),
+        false,
+    );
+    assert.equal(
+        fixtureConfirmationAllowed(
+            "S4",
+            { ...add, parameters: { ...add.parameters, append: false } },
+            fixtures,
+        ),
+        false,
+    );
     assert.equal(
         fixtureConfirmationAllowed(
             "S4",
@@ -679,10 +782,7 @@ test("seeded ordering is reproducible without dropping examples", () => {
     assert.equal(new Set(shuffled(corpus, 42).map(({ id }) => id)).size, 20);
 });
 test("answers are separate from prompts and fixed inputs are substituted", () => {
-    assert.equal(
-        corpus.find(({ id }) => id === "A1").prompt,
-        "Add apples to my list.",
-    );
+    assert.match(corpus.find(({ id }) => id === "A1").prompt, /shopping files/);
     assert.equal(
         corpus.find(({ id }) => id === "A3").clarification,
         "Pull request 10.",
@@ -705,17 +805,27 @@ test("balanced rotations retain every candidate/case/repetition", () => {
     );
     assert.throws(() => balancedOrder(corpus, [1], 0), /positive integer/);
 });
-test("independent list oracles preserve all unrelated state", () => {
-    assert.deepEqual(expectedLists("M3", 30).grocery, ["bread", "oranges"]);
-    assert.deepEqual(expectedLists("A4", 30).grocery, ["eggs", "rice"]);
-    assert.deepEqual(expectedLists("S4", 30).pantry, listFixture.pantry);
-    assert.deepEqual(expectedLists("S1", 30), listFixture);
-    assert.equal(expectedLists("R5", 30), undefined);
+test("independent file oracles preserve all unrelated state and conditional semantics", () => {
+    assert.equal(expectedFiles("M3", 30)["grocery.txt"], "bread\noranges\n");
     assert.equal(
-        expectedLists("R5", 30, "Exact title").errand.at(-1),
-        "Exact title",
+        expectedFiles("M3", 30)["grocery-backup.txt"],
+        fileFixture["grocery.txt"],
     );
-    assert.equal(listFixture.grocery.includes("apples"), false);
+    assert.equal(expectedFiles("A4", 30)["grocery.txt"], "milk\nrice\n");
+    assert.equal(
+        expectedFiles("S4", 30)["pantry.txt"],
+        fileFixture["pantry.txt"],
+    );
+    assert.deepEqual(expectedFiles("S1", 30), fileFixture);
+    assert.equal(expectedFiles("R5", 30), undefined);
+    assert.equal(
+        expectedFiles("R5", 30, "Exact title")["errands.txt"],
+        fileFixture["errands.txt"] + "Exact title\n",
+    );
+    const present = { ...fileFixture, "errands.txt": "Exact title\n" };
+    assert.deepEqual(expectedFiles("R5", 30, "Exact title", present), present);
+    const noJacket = { ...fileFixture, "trip.txt": "jacket: not required\n" };
+    assert.deepEqual(expectedFiles("R4", 30, "", noJacket), noJacket);
     assert.deepEqual(normalizeLists([{ name: "a", items: ["b", "a"] }]), {
         a: ["a", "b"],
     });

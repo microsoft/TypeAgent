@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { fileFixture } from "./ghcp-eval-corpus.mjs";
 import {
     isGhcpEvalReadOnlyAction,
     isGhcpEvalRecoverableReadError,
@@ -31,16 +32,28 @@ function recoverableTypeAgentReadFailure(
     toolName,
     result,
     success,
+    error,
     backendEvents,
 ) {
+    const structured = result?.structuredContent;
+    const failedRead =
+        structured?.status === "failed" &&
+        structured.error?.code === "execution_failed";
     // Never infer safety from a missing payload or an uncertain transport.
     return (
         success === true &&
+        error === undefined &&
+        (structured?.status === undefined || failedRead) &&
         isGhcpEvalRecoverableReadError(
-            result?.structuredContent?.error?.message ?? result?.content,
+            [
+                structured?.error?.code,
+                structured?.error?.message,
+                result?.content,
+            ]
+                .filter((value) => typeof value === "string")
+                .join("\n"),
         ) &&
-        ((result?.structuredContent?.status === "failed" &&
-            result.structuredContent.error?.code === "execution_failed") ||
+        (failedRead ||
             (toolName.includes("processCommand") &&
                 /^Error:(?:\s|$)/.test(result?.content ?? ""))) &&
         recoverableBackendReadFailure(backendEvents)
@@ -54,9 +67,13 @@ export function terminalExecutionFailure(
     error,
     backendEvents = [],
 ) {
-    if (/^(?:functions[.-])?stop_powershell$/.test(toolName)) return true;
     if (
-        /^(?:functions[.-])?(?:powershell|read_powershell|view|glob|rg|web_fetch)$/.test(
+        /^(?:functions[.-])?stop_powershell$/.test(toolName) ||
+        toolName.includes("cancelAction")
+    )
+        return true;
+    if (
+        /^(?:functions[.-])?(?:powershell|read_powershell|view|edit|create|glob|rg|web_fetch)$/.test(
             toolName,
         )
     )
@@ -84,6 +101,7 @@ export function terminalExecutionFailure(
             toolName,
             result,
             success,
+            error,
             backendEvents,
         )
     )
@@ -155,8 +173,6 @@ export function externalOracle(readiness) {
 // These are conservative evidence checks, not a semantic grader. A human/AI
 // reviewer must resolve pending faithfulness grades before accuracy claims.
 export function preliminaryGrade(result, evidence) {
-    if (result.status === "not_applicable")
-        return { outcome: "not_applicable", reason: result.reason };
     if (result.status !== "completed_ungraded")
         return { outcome: "incomplete", reason: result.error ?? result.status };
     if (result.routeViolations.length)
@@ -167,8 +183,8 @@ export function preliminaryGrade(result, evidence) {
             reason: "execution_failed_or_uncertain_no_replay",
         };
     if (
-        !result.grade.filesUnchanged ||
-        result.grade.listStateMatchesOracle === false
+        !result.grade.fileStateMatchesOracle ||
+        !result.grade.listStateUnchanged
     )
         return {
             outcome: "failed",
@@ -177,7 +193,7 @@ export function preliminaryGrade(result, evidence) {
     if (
         result.caseId.startsWith("A") &&
         (!result.grade.clarificationRequested ||
-            !result.grade.noPrematureListMutation)
+            !result.grade.noPrematureFileMutation)
     )
         return {
             outcome: "failed",
@@ -186,15 +202,7 @@ export function preliminaryGrade(result, evidence) {
     const answer = result.answer ?? "";
     if (!answer.trim()) return { outcome: "failed", reason: "no_final_answer" };
     const required = {
-        S1: [
-            "grocery",
-            "pantry",
-            "packing",
-            "travel",
-            "office",
-            "errand",
-            "weekend",
-        ],
+        S1: Object.keys(fileFixture),
         S2: ["passport", "charger", "socks"],
         S4: ["apples"],
         M1: [

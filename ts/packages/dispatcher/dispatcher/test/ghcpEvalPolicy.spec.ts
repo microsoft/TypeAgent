@@ -36,6 +36,14 @@ describe("isolated GHCP evaluation action policy", () => {
         }
     });
     it("does not infer safe recovery from mutations, missing errors, denial or cancellation", () => {
+        for (const action of ["readFile", "listFiles"])
+            expect(
+                isGhcpEvalReadOnlyAction("powershell.powershell-files", action),
+            ).toBe(true);
+        for (const action of ["writeFile", "copyFile"])
+            expect(
+                isGhcpEvalReadOnlyAction("powershell.powershell-files", action),
+            ).toBe(false);
         expect(isGhcpEvalReadOnlyAction("list", "clearList")).toBe(false);
         expect(isGhcpEvalReadOnlyAction("ipconfig", "releaseAddress")).toBe(
             false,

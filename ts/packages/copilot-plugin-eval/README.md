@@ -7,7 +7,7 @@ evaluation methodology, alongside its harness, corpus, grading, and tests.
 
 **This is a simple initial evaluation for ballpark estimates**, not a
 production-quality benchmark or a statistically powered comparison. It samples
-twenty tasks across four domains to explore task completion, user-visible
+twenty tasks across three domains to explore task completion, user-visible
 latency, and workflow overhead. Five cases per cohort and one historical
 balanced repetition cannot establish precise tail percentiles, non-inferiority,
 or a general winning strategy.
@@ -33,12 +33,21 @@ scope. Weather is removed and calendar is deferred.
 
 ## Implementation and protocol history
 
+**Current corpus: `common-files-v1`, protocol 5.** Nine list-dependent tasks
+have been replaced with ordinary file tasks so every candidate has a comparable
+capability: 20 applicable cases per candidate, 140 executions per repetition,
+no native N/A slots. This is a new workload, not a rescore of old trials. Do
+not pool its results with the historical list corpus or reuse an old preflight.
+The integrated runner retains positive-evidence read-error recovery while
+denials, cancellations and uncertain or side-effectful failures remain terminal.
+
 | Version                      | Meaning                                                                                                                                                                                                                    |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Protocol 2                   | Historical measured implementation at `e847c7a00907a1f4e2c6c4426c935b964fd9997c`: completed 140 trials. An earlier partial pass had harness-invalid records, which were excluded rather than scored as candidate failures. |
-| Protocol 3                   | Strict native failure/no-replay correction at `4275a7ca7743b761b7a108971de34184ebf6e289`; tested offline, not live measured. Superseded by the current protocol-4 runner.                                                  |
+| Protocol 3                   | Strict native failure/no-replay correction at `4275a7ca7743b761b7a108971de34184ebf6e289`; tested offline, not live measured. Superseded by later protocols.                                                                |
 | Portability                  | `b47f8bacd5073aa226392cc6ccb47a9a7e4caac7` accepts configured temp-parent aliases while retaining artifact provenance checks, and uses platform-native test paths.                                                         |
-| Protocol 4 follow-up (#3077) | Current runtime: prospective positive-evidence safe-read recovery, frozen native applicability and replacement A4 oracle, integrated with the package/model migration. Tested offline, not live measured.                  |
+| Protocol 4 follow-up (#3077) | Prospective positive-evidence safe-read recovery, frozen native applicability and list-based replacement A4 oracle. Tested offline, not live measured; applicability and corpus now superseded by protocol 5.              |
+| Protocol 5                   | Current runtime: `common-files-v1`, 140 applicable trials, per-case file permissions and independent file/pre-effect oracles. Preserves positive-evidence recovery and frozen schedule checks; no live measurement.        |
 | Model and layout revision    | Eval-only scripts now reside here. Future Copilot sessions explicitly use Luna 5.6 (`gpt-5.6-luna`), not the historical `gpt-5.6-sol`. No Luna rerun or improved measured outcome is claimed.                              |
 
 Preserve original results, grades, run specifications and safety audits.
@@ -150,13 +159,15 @@ include it in whole-workflow amortization, not just subsequent-turn savings.
 
 ## Fixtures, domains and twenty cases
 
-Four cohorts contain five cases each. Domain operations must map to existing
-list, GitHub CLI, registered PowerShell-file and read-only IP configuration
-actions. PowerShell uses `powershell.powershell-files.readFile`, not generated
-script replacements for structured candidates. GitHub and network actions are
-read-only; no renewal, cache flush, write or real external effect is authorized.
+Four cohorts contain five cases each. The new common-capability corpus uses
+GitHub CLI, registered PowerShell-file and read-only IP configuration actions.
+PowerShell uses `listFiles`, `readFile`, `writeFile` (including append), and
+`copyFile`, not generated script replacements for structured candidates.
+Only disposable fixture file writes are authorized. GitHub and network remain
+read-only; no renewal, cache flush or external write is authorized. Reduced
+domain diversity is an explicit tradeoff for matched capabilities.
 
-Seed lists before each trial:
+Historical list seed (retained only as inactive setup state):
 
 | List    | Items                    |
 | ------- | ------------------------ |
@@ -168,9 +179,12 @@ Seed lists before each trial:
 | errand  | pharmacy, post office    |
 | weekend | empty                    |
 
-Fixture files are UTF-8 with LF and a final newline: `report-a.txt` contains
+The seven current fixture files are UTF-8 with LF and a final newline: `report-a.txt` contains
 passport, charger, socks (three lines); `report-b.txt` contains charger, adapter
 (two lines); `trip.txt` contains `destination: mountain` and `jacket: required`.
+`grocery.txt` contains milk, eggs, rice; `pantry.txt` rice, beans; `packing.txt`
+passport, charger, socks; `errands.txt` pharmacy, post office. Each entry is one
+line. `grocery-backup.txt` starts absent and may be created only for M3.
 No other fixture files exist. Explicit absolute paths are equal user inputs
 for every candidate; contents are hidden until read. Preserve all unrelated
 lists, items and files. Dynamic GitHub/network answers are graded against
@@ -179,28 +193,28 @@ independently captured contemporaneous evidence, not the assistant's claims.
 The source corpus holds exact prompts and scripted answers; these summaries
 define intent and outcomes without prescribing a single reasoning trace.
 
-| ID  | Request                                                  | Independent success requirement                                        |
-| --- | -------------------------------------------------------- | ---------------------------------------------------------------------- |
-| S1  | Show my lists.                                           | Exactly seven seeded names                                             |
-| S2  | Read report-a.txt.                                       | All three lines in order                                               |
-| S3  | Show files changed by PR A.                              | Complete observed file set                                             |
-| S4  | Add apples to grocery.                                   | Apples added, previous items retained                                  |
-| S5  | Show full network configuration.                         | Faithful observed configuration                                        |
-| M1  | Read report-a and report-b.                              | Both complete and correctly labeled                                    |
-| M2  | Show network configuration and DNS cache.                | Both observed outputs, no network changes                              |
-| M3  | Empty grocery, then add bread and oranges.               | Existing grocery contains exactly those two                            |
-| M4  | Show PR A files and checks.                              | Both complete, pending/absent checks explicit                          |
-| M5  | Show issue A, then add "review issue A" to errand.       | Correct issue and literal item, previous items retained                |
-| R1  | Which items are in grocery and pantry?                   | Rice only, grounded in both reads                                      |
-| R2  | Which report has more nonempty lines, by how many?       | report-a: three versus two, difference one                             |
-| R3  | Which PR needs attention, failed checks then file count? | Evidence-grounded comparison; ties/unknowns explicit                   |
-| R4  | Read trip; add jacket to packing only if required.       | Jacket added, other state preserved                                    |
-| R5  | Add the retrieved issue title to errand only if absent.  | Exact title, conditional addition, no duplicate                        |
-| A1  | Add apples to my list.                                   | Ask which list; answer grocery; then add                               |
-| A2  | Read the report.                                         | Ask which report; answer report-b; then read                           |
-| A3  | Show files changed by that PR.                           | Ask which PR; answer PR A; then read                                   |
-| A4  | Remove the item from my grocery list.                    | Ask which item; answer milk; remove only milk, retaining eggs and rice |
-| A5  | Read that file.                                          | Ask which file; answer trip; then read                                 |
+| ID  | Request                                                                                  | Independent success requirement                                        |
+| --- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| S1  | Show the files in the supplied fixture directory.                                        | Exactly seven seeded filenames                                         |
+| S2  | Read report-a.txt.                                                                       | All three lines in order                                               |
+| S3  | Show files changed by PR A.                                                              | Complete observed file set                                             |
+| S4  | Append apples to grocery.txt.                                                            | Apples added as one line, previous lines retained                      |
+| S5  | Show full network configuration.                                                         | Faithful observed configuration                                        |
+| M1  | Read report-a and report-b.                                                              | Both complete and correctly labeled                                    |
+| M2  | Show network configuration and DNS cache.                                                | Both observed outputs, no network changes                              |
+| M3  | Copy grocery.txt to grocery-backup.txt, then replace grocery.txt with bread and oranges. | Original bytes in backup before overwrite; final grocery has two lines |
+| M4  | Show PR A files and checks.                                                              | Both complete, pending/absent checks explicit                          |
+| M5  | Show issue A, then append "review issue A" to errands.txt.                               | Correct issue and literal line, previous entries retained              |
+| R1  | Which entries occur in grocery.txt and pantry.txt?                                       | Rice only, grounded in both reads                                      |
+| R2  | Which report has more nonempty lines, by how many?                                       | report-a: three versus two, difference one                             |
+| R3  | Which PR needs attention, failed checks then file count?                                 | Evidence-grounded comparison; ties/unknowns explicit                   |
+| R4  | Read trip.txt; append jacket to packing.txt only if required.                            | Jacket added, other state preserved                                    |
+| R5  | Append the retrieved issue title to errands.txt only if absent.                          | Exact title, conditional addition, no duplicate                        |
+| A1  | Add apples to one of grocery.txt or pantry.txt.                                          | Ask which file; answer grocery.txt; then append                        |
+| A2  | Read the report.                                                                         | Ask which report; answer report-b; then read                           |
+| A3  | Show files changed by that PR.                                                           | Ask which PR; answer PR A; then read                                   |
+| A4  | Remove an item from grocery.txt.                                                         | Ask which item; answer eggs; retain milk and rice                      |
+| A5  | Read that file.                                                                          | Ask which file; answer trip; then read                                 |
 
 Ambiguous cases start without antecedents/defaults. Scripted user answers are
 only for these disposable fixtures, never approval of real effects. One answer
@@ -208,11 +222,11 @@ can arrive through a callback or a final-text clarification within the original
 90-second deadline. Confirming a guessed referent is not clarification.
 Final state alone cannot excuse premature mutation.
 
-### A4 replacement record (protocol 4)
+### Historical A4 replacement record (protocol 4)
 
-The only corpus replacement is A4. This is a new task version, not a
-reinterpretation of its original scores or a claim that product ambiguity is
-fixed.
+Protocol 4 replaced only A4. Protocol 5 supersedes that list-based replacement
+with the file-based A4 above. This historical record is not a reinterpretation
+of original scores or a claim that product ambiguity is fixed.
 
 | Field                          | Protocol-4 decision                                                                                                                                                                                                                                                                                            |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -225,38 +239,70 @@ fixed.
 | Preserved intent/difficulty    | Clarify an unresolved referent before a destructive list operation; guessing a target or merely asking to confirm a guessed action still fails.                                                                                                                                                                |
 | Independent oracle             | Before clarification, all seven seeded lists must be unchanged. Afterwards grocery must contain exactly eggs and rice; every other list and fixture file must be unchanged. Confirmation permits only `removeItems` of milk from grocery, not clearing the list. Final-answer faithfulness still needs review. |
 
-The frozen source was the 140-trial protocol-2 run at `e847c7a009`; protocol 3's
-guard and this protocol have not been live measured. Original artifacts must
+The frozen source was the 140-trial protocol-2 run at `e847c7a009`; protocols 3,
+4 and 5 have not been live measured. Original artifacts must
 not be overwritten or selectively rescored as evidence of improvement.
 
-M1/M5 compound argument-binding errors, S3/A3 local-file misrouting despite the
+Historical M1/M5 compound argument-binding errors, S3/A3 local-file misrouting despite the
 existing GitHub `prFiles` contract, and network final-answer omissions remain
-valid failures of unchanged tasks. M1/C3's trace shows a pending first-file
+valid failures of that workload. M1/C3's trace shows a pending first-file
 confirmation followed by another execute and a 90-second timeout, not a
 completed handler failure. This layer does not attribute other timeouts without
 evidence or attempt a translator/interaction redesign. Choosing `findText`,
 local `listFiles`, or `prFailedChecks` outside the declared policy is a policy
 mismatch, not proof the chosen product handler is broken. The narrow policy
-and full-content/checks objectives are unchanged; output-artifact provenance
+and full-content/checks objectives remain; output-artifact provenance
 does not authorize broader file access or make a temp-file-only final answer
 faithful.
 
 ## Applicability and recovery amendments
 
-Native list-dependent cases **S1, S4, M3, M5, R1, R4, R5, A1, A4** are N/A,
+**Protocol 5 supersedes the native exclusion for future runs.** All 20
+`common-files-v1` cases apply to C1-C7. The exclusion and scores below are
+historical list-corpus reporting only. No file-corpus results have been measured.
+
+Fixture authorization is scoped per case. Native `edit` and `create` tools
+are added to the pinned ordinary toolset; their real SDK write permission
+requests are approved only for that case's canonical, single-link text-file
+targets. TypeAgent uses its registered file actions with the same scope and
+normal confirmations. A1/A4 writes remain disabled until the scripted
+clarification; A2/A5 fixture reads remain disabled until file selection.
+The M3 original backup is independently checked before the source can be
+overwritten. Unknown paths, hardlinks, symlink escapes, directory writes,
+managed approvals and sandbox bypasses are not authorized.
+
+The harness does not approve arbitrary shell writes merely because a command
+mentions a fixture path. Native tools must expose verifiable write targets;
+shell writes without that boundary retain normal denial behavior. No generated
+list adapter, prewritten solution, hidden storage guidance or recovery after
+denial is supplied. Permission differences and residual isolation risks remain
+reportable limitations, not reasons to silently relax the guard.
+
+File-state oracles check all filenames, expected contents, backup fidelity and
+unrelated files; mutated line-oriented text tolerates CRLF/LF and trailing
+newlines, while untouched files and the original backup remain byte-exact.
+Pre-clarification snapshots and permission guards prevent a correct final state
+from excusing premature effects. The preflight now verifies inventory, append
+and copy against disposable files and checks the new corpus identity before
+any measured admission. A read-only list inventory remains setup scaffolding
+for the existing session template; no measured request depends on lists and
+list mutations are denied. Historical evidence/specifications are never
+rewritten; freeze a fresh run with the Luna model and reconciled ledger.
+
+Historically, list-dependent cases **S1, S4, M3, M5, R1, R4, R5, A1, A4** were N/A,
 including cross-domain tasks that require lists. Native's applicable denominator
-is 11; candidates 1-6 retain 20. Retain original twenty-case native observations
+was 11; candidates 1-6 retained 20. Retain original twenty-case native observations
 and safety findings as historical evidence. Different denominators are not a
 matched-workload ranking. Native receives no equivalent list adapter or hidden
 fixture-storage coaching.
 
-Protocol 4 freezes this applicability before trial preparation: 131 executions
-plus nine N/A slots per 140-slot balanced pass. Pilot/repetition counts derive
-from the frozen schedule; old or changed specifications/order cannot resume.
-N/A is neither a pass nor a failure, and does not stop a pilot batch. Each
-measured batch retains all seven paired slots; advance its start by seven only
-after reconciliation. Compare candidates on common applicable cases rather
-than treating the 11-case and 20-case aggregate percentages as like-for-like.
+Protocol 4 froze that applicability before trial preparation: 131 executions
+plus nine N/A slots per 140-slot balanced pass. The base
+protocol-3 runner executed the original full workload; protocol 5 now replaces
+the workload and restores full applicability rather than rescoring it.
+Current pilot/repetition counts derive from the frozen schedule, with 140
+executions and 20 cases per candidate in a full pass. Old or changed
+specifications, corpus versions or orders cannot resume.
 
 An ordinary recoverable tool failure alone need not invalidate content-correct
 completion. Recovery must stay inside routes, permissions, fixture scope,
@@ -269,7 +315,7 @@ follow-ups remain terminal. Protocol 3 instead stops on native domain failure
 even without an error payload. Neither policy authorizes replay of uncertain
 effects or replaces the actual product failure with another action.
 
-In the current protocol-4 implementation, a native `view`, `glob`, `rg` or
+Protocol 5 retains protocol 4's recovery safeguards: a native `view`, `glob`, `rg` or
 `web_fetch` failure can continue only when the SDK supplies an ordinary read
 I/O error (`ENOENT`, `ENOTDIR`, `EISDIR`, `ETIMEDOUT`, `ECONNRESET`, or
 `EAI_AGAIN`). Shell errors remain terminal because the shell can mutate state.
