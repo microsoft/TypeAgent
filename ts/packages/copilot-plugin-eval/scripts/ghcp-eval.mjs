@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
+import { evalModel, validateEvalLedger } from "./ghcp-eval-config.mjs";
 import { CopilotCreditBudget } from "../../dispatcher/dispatcher/dist/reasoning/copilotCreditBudget.js";
-import { getCopilotPermissionDefault } from "../../dispatcher/dispatcher/dist/reasoning/copilot.js";
 import {
     registerGhcpEvalArtifact,
     isGhcpEvalArtifact,
@@ -44,7 +44,7 @@ import {
     startProcess,
     stopProcess,
     waitForServer,
-} from "./discovery-e2e.mjs";
+} from "../../copilot-plugin/scripts/discovery-e2e.mjs";
 
 const root = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -76,6 +76,11 @@ if (
     );
 }
 const fixtures = listFixture;
+const creditLedger = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
+validateEvalLedger(creditLedger);
+const { getCopilotPermissionDefault } = await import(
+    "../../dispatcher/dispatcher/dist/reasoning/copilot.js"
+);
 const seededLists = Object.entries(fixtures).map(([name, items]) => ({
     name,
     items,
@@ -291,7 +296,7 @@ function prepareTrial(candidate, directory, workspace) {
     env.TYPEAGENT_COPILOT_CREDIT_LEDGER = path.resolve(ledgerPath);
     env.TYPEAGENT_GHCP_EVAL_CLI = cliPath;
     env.COPILOT_HOME = path.join(directory, "nested-copilot");
-    env.COPILOT_REASONING_MODEL = "gpt-5.6-sol";
+    env.COPILOT_REASONING_MODEL = evalModel;
     env.COPILOT_REASONING_EFFORT = "high";
     env.TYPEAGENT_REASONING_TIMEOUT_MS = "90000";
     env.DEBUG = "typeagent:request";
@@ -526,7 +531,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         await client.start();
         session = await client.createSession({
             sessionId: result.sessionId,
-            model: "gpt-5.6-sol",
+            model: evalModel,
             reasoningEffort: "high",
             contextTier: "default",
             capi: { enableWebSocketResponses: false },
@@ -914,7 +919,7 @@ const specification =
                 nativeListCases,
                 policy: "Keep paired slots; record native list slots as N/A without starting sessions. Denominators derive from frozen order and exclude N/A.",
             },
-            model: "gpt-5.6-sol",
+            model: evalModel,
             reasoningEffort: "high",
             concurrency: 1,
             commit: execFileSync("git", ["rev-parse", "HEAD"], {
@@ -924,8 +929,9 @@ const specification =
             preparationTimeoutMs: 90_000,
             perSessionRequestLimit: 24,
             cumulativeRequestLimit: 2000,
-            requestCreditReservation: 2118,
-            cumulativeCreditCap: 50000,
+            requestCreditReservation:
+                creditLedger.requestMaximumNanoAiu / 1_000_000_000,
+            cumulativeCreditCap: creditLedger.capNanoAiu / 1_000_000_000,
             overflowPolicy:
                 "Trial-private temp artifacts registered from SDK completion notices; canonical direct child, regular unlinked file, SHA256 rechecked before registered reads.",
             clarificationPolicy:

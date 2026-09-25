@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
+import { evalModel, validateEvalLedger } from "../ghcp-eval-config.mjs";
 import {
     externalOracle,
     intervalUnionMs,
@@ -30,6 +31,16 @@ import {
 } from "../ghcp-eval-corpus.mjs";
 
 const fixtures = path.resolve("fixtures");
+test("evaluation pins Luna 5.6 and rejects another model before paid work", () => {
+    assert.equal(evalModel, "gpt-5.6-luna");
+    assert.doesNotThrow(() => validateEvalLedger({ model: evalModel }));
+    for (const model of ["gpt-5.6-sol", undefined, ""]) {
+        assert.throws(
+            () => validateEvalLedger({ model }),
+            /Evaluation requires a ledger for gpt-5.6-luna/,
+        );
+    }
+});
 const corpus = buildCorpus(fixtures, "owner/repo", 10, 20, 30);
 const readFailureEvents = [
     {

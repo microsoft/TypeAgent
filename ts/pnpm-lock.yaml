@@ -4795,6 +4795,27 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/copilot-plugin-eval:
+    devDependencies:
+      '@github/copilot-sdk':
+        specifier: 1.0.13
+        version: 1.0.13
+      '@modelcontextprotocol/sdk':
+        specifier: 1.26.0
+        version: 1.26.0(zod@4.4.3)
+      '@typeagent/copilot-plugin':
+        specifier: workspace:*
+        version: link:../copilot-plugin
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../dispatcher/dispatcher
+      agent-server:
+        specifier: workspace:*
+        version: link:../agentServer/server
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+
   packages/defaultAgentProvider:
     dependencies:
       '@modelcontextprotocol/client':
