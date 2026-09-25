@@ -588,7 +588,10 @@ describe("action result handoff", () => {
             JSON.stringify({
                 action: first.executableAction.action,
                 resultEntityId: "first",
-                result: first.result,
+                result: {
+                    resultValue: [],
+                    displayContent: first.result.displayContent,
+                },
             }),
         );
         expect(history.promptSections[2]?.content).toContain(
@@ -635,6 +638,40 @@ describe("action result handoff", () => {
         });
         expect(translatePending).not.toHaveBeenCalled();
         expect(executed).toEqual(["produce"]);
+    });
+
+    test("stops oversized deferred context without replaying the completed producer", async () => {
+        results.set("large", {
+            entities: [],
+            historyText: "x".repeat(64 * 1024),
+        });
+        const translateRemaining = jest.fn();
+        translatePending.mockImplementation(
+            async (action, _context, completed) => {
+                createPendingRequestHistory(action, completed);
+                translateRemaining();
+                throw new Error("Unexpected translation");
+            },
+        );
+        await expect(
+            executeActions(
+                [
+                    produce("large"),
+                    createPendingRequestAction({
+                        request: "Use the whole output",
+                        pendingResultEntityId: "large",
+                    }),
+                    createExecutableAction("handoff", "consume", {
+                        value: "later",
+                    }),
+                ],
+                undefined,
+                context,
+            ),
+        ).rejects.toThrow("do not replay completed actions");
+        expect(executed).toEqual(["produce"]);
+        expect(translateRemaining).not.toHaveBeenCalled();
+        expect(consume).not.toHaveBeenCalled();
     });
 
     test("retains completed continuations for the next deferred request without leaking bindings", async () => {

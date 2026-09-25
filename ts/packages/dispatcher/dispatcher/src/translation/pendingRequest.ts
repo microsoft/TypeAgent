@@ -6,6 +6,7 @@ import {
     ActionResultSuccess,
     ActionResultSuccessNoDisplay,
 } from "@typeagent/agent-sdk";
+import { isDeepStrictEqual } from "node:util";
 import { PendingRequestEntry } from "./multipleActionSchema.js";
 import {
     createExecutableAction,
@@ -26,6 +27,55 @@ export type CompletedAction = {
     executableAction: ExecutableAction;
     result: ActionResultSuccess | ActionResultSuccessNoDisplay;
 };
+
+// Bounds serialized deferred context, not the model's complete schema prompt.
+export const MAX_PENDING_REQUEST_CONTEXT_BYTES = 64 * 1024;
+
+function projectResultForTranslation(result: CompletedAction["result"]) {
+    let displayContent = result.displayContent;
+    if (
+        displayContent !== undefined &&
+        typeof displayContent === "object" &&
+        !Array.isArray(displayContent)
+    ) {
+        displayContent =
+            displayContent.type === "structured"
+                ? {
+                      type: "structured",
+                      blocks: displayContent.blocks,
+                      rawData: isDeepStrictEqual(
+                          displayContent.rawData,
+                          result.resultValue,
+                      )
+                          ? undefined
+                          : displayContent.rawData,
+                  }
+                : {
+                      type: displayContent.type,
+                      content: displayContent.content,
+                  };
+    }
+    const displayedValue =
+        displayContent !== undefined &&
+        typeof displayContent === "object" &&
+        !Array.isArray(displayContent) &&
+        displayContent.type !== "structured"
+            ? displayContent.content
+            : displayContent;
+    return {
+        resultEntity: result.resultEntity,
+        resultValue: result.resultValue,
+        historyText:
+            result.historyText === result.resultValue
+                ? undefined
+                : result.historyText,
+        displayContent:
+            isDeepStrictEqual(displayedValue, result.resultValue) ||
+            isDeepStrictEqual(displayedValue, result.historyText)
+                ? undefined
+                : displayContent,
+    };
+}
 
 export function createPendingRequestHistory(
     action: PendingRequestAction,
@@ -48,7 +98,7 @@ export function createPendingRequestHistory(
             "Pending request cannot use an action awaiting confirmation",
         );
     }
-    return {
+    const pendingHistory: HistoryContext = {
         ...history,
         promptSections: [
             ...(history?.promptSections ?? []),
@@ -64,7 +114,7 @@ export function createPendingRequestHistory(
                 content: JSON.stringify({
                     action: executableAction.action,
                     resultEntityId: executableAction.resultEntityId,
-                    result,
+                    result: projectResultForTranslation(result),
                 }),
             })),
         ],
@@ -88,6 +138,21 @@ export function createPendingRequestHistory(
             ),
         ],
     };
+    const contextBytes = Buffer.byteLength(
+        JSON.stringify({
+            pendingRequest: action.parameters.pendingRequest,
+            history: pendingHistory,
+        }),
+        "utf8",
+    );
+    if (contextBytes > MAX_PENDING_REQUEST_CONTEXT_BYTES) {
+        throw new Error(
+            `Deferred translation context exceeds the ${MAX_PENDING_REQUEST_CONTEXT_BYTES}-byte limit (${contextBytes} bytes). ` +
+                "The remaining request was not translated or executed. " +
+                "No output was truncated; do not replay completed actions.",
+        );
+    }
+    return pendingHistory;
 }
 export function isPendingRequestAction(
     action: AppAction,

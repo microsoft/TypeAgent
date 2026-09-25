@@ -393,11 +393,28 @@ entity. The three consumers have distinct contracts:
   context for translating the remaining request, not instructions to replay
   earlier actions or an automatic switch to reasoning.
 
-An unused result label does not turn a successful mutation into a failure.
-Errors stop the chain; missing references and invalid concrete values fail
-before their consumers execute. Deferred translation cannot use an action
-still awaiting confirmation. Continuations retain completed-action history
-while each newly translated plan has its own result-reference bindings.
+  Deferred context uses a projection of result values, entity bindings, history
+  text, and display data, rather than serializing execution metadata. Identical
+  value/text representations and duplicate structured `rawData` are omitted;
+  display alternates and presentation flags are not sent. Distinct display
+  content is preserved even when history text is only a summary. Entity metadata
+  continues to be available through the history's entity references.
+
+  The serialized UTF-8 envelope containing the remaining request and its full
+  history context is limited to 64 KiB. The limit includes all completed outputs,
+  action parameters, inherited prompt sections, entities, activity state, and
+  additional instructions. This is a deterministic deferred-context safeguard,
+  not a token limit for the complete model prompt (which also includes schemas
+  and other translation instructions). Oversized context stops before translating
+  or executing the continuation, with an explicit error: no output is silently
+  truncated or summarized and completed producers are not replayed. Concrete
+  `$result` substitution is unchanged and does not use this prompt-size limit.
+
+  An unused result label does not turn a successful mutation into a failure.
+  Errors stop the chain; missing references and invalid concrete values fail
+  before their consumers execute. Deferred translation cannot use an action
+  still awaiting confirmation. Continuations retain completed-action history
+  while each newly translated plan has its own result-reference bindings.
 
 In legacy action execution, a pending user choice stops the remaining queue,
 including actions without result references and any returned additional
