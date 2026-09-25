@@ -25,6 +25,36 @@ describe("isolated output artifact provenance", () => {
         fs.writeFileSync(artifact, "tool evidence");
     });
     afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+    it("accepts a trial beneath an aliased temp parent and verifies both path spellings", () => {
+        const parent = path.join(root, "actual");
+        const alias = path.join(root, "alias");
+        fs.mkdirSync(parent);
+        fs.symlinkSync(parent, alias, "junction");
+        const trial = path.join(alias, "trial");
+        fs.mkdirSync(trial);
+        const output = path.join(trial, path.basename(artifact));
+        fs.writeFileSync(output, "tool evidence");
+        fs.writeFileSync(
+            manifest,
+            JSON.stringify({ root: trial, artifacts: [] }),
+        );
+        expect(
+            registerGhcpEvalArtifact(notice(output), trial, manifest)?.path,
+        ).toBe(fs.realpathSync(output));
+        expect(isGhcpEvalArtifact(output, manifest)).toBe(true);
+        expect(isGhcpEvalArtifact(fs.realpathSync(output), manifest)).toBe(
+            true,
+        );
+        const outsideAlias = path.join(root, "other-alias");
+        fs.symlinkSync(fs.realpathSync(trial), outsideAlias, "junction");
+        const outsideOutput = path.join(outsideAlias, path.basename(output));
+        expect(isGhcpEvalArtifact(outsideOutput, manifest)).toBe(false);
+        expect(() =>
+            registerGhcpEvalArtifact(notice(outsideOutput), trial, manifest),
+        ).toThrow("Untrusted");
+        fs.writeFileSync(output, "changed");
+        expect(isGhcpEvalArtifact(output, manifest)).toBe(false);
+    });
     it("requires a trusted completion notice and exact content at read time", () => {
         expect(isGhcpEvalArtifact(artifact, manifest)).toBe(false);
         expect(

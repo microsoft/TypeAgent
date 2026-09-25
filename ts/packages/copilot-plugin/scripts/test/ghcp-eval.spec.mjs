@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import path from "node:path";
 import { test } from "node:test";
 import {
     externalOracle,
@@ -21,25 +22,17 @@ import {
     sendWithClarification,
 } from "../ghcp-eval-corpus.mjs";
 
-const corpus = buildCorpus("C:\\fixtures", "owner/repo", 10, 20, 30);
+const fixtures = path.resolve("fixtures");
+const corpus = buildCorpus(fixtures, "owner/repo", 10, 20, 30);
 test("intermediate edit confirmation is limited to the case's disposable list", () => {
     const action = {
         schemaName: "list",
         actionName: "startEditList",
         parameters: { listName: "errand" },
     };
-    assert.equal(
-        fixtureConfirmationAllowed("R5", action, "C:\\fixtures"),
-        true,
-    );
-    assert.equal(
-        fixtureConfirmationAllowed("S1", action, "C:\\fixtures"),
-        false,
-    );
-    assert.equal(
-        fixtureConfirmationAllowed("A1", action, "C:\\fixtures"),
-        false,
-    );
+    assert.equal(fixtureConfirmationAllowed("R5", action, fixtures), true);
+    assert.equal(fixtureConfirmationAllowed("S1", action, fixtures), false);
+    assert.equal(fixtureConfirmationAllowed("A1", action, fixtures), false);
 });
 test("final-text clarification gets exactly one answer within the same deadline", async () => {
     const calls = [];
@@ -240,13 +233,13 @@ test("scripted confirmations are limited to exact disposable fixture actions", (
         actionName: "addItems",
         parameters: { listName: "grocery", items: ["apples"] },
     };
-    assert.equal(fixtureConfirmationAllowed("S4", add, "C:\\fixtures"), true);
-    assert.equal(fixtureConfirmationAllowed("S1", add, "C:\\fixtures"), false);
+    assert.equal(fixtureConfirmationAllowed("S4", add, fixtures), true);
+    assert.equal(fixtureConfirmationAllowed("S1", add, fixtures), false);
     assert.equal(
         fixtureConfirmationAllowed(
             "S4",
             { ...add, schemaName: "github-cli" },
-            "C:\\fixtures",
+            fixtures,
         ),
         false,
     );
@@ -257,17 +250,30 @@ test("scripted confirmations are limited to exact disposable fixture actions", (
                 ...add,
                 parameters: { listName: "errand", items: ["guessed title"] },
             },
-            "C:\\fixtures",
+            fixtures,
         ),
         false,
     );
     const read = {
         schemaName: "powershell.powershell-files",
         actionName: "readFile",
-        parameters: { path: "C:\\fixtures\\report-a.txt" },
+        parameters: { path: path.join(fixtures, "report-a.txt") },
     };
-    assert.equal(fixtureConfirmationAllowed("S2", read, "C:\\fixtures"), true);
-    assert.equal(fixtureConfirmationAllowed("A2", read, "C:\\fixtures"), false);
+    assert.equal(fixtureConfirmationAllowed("S2", read, fixtures), true);
+    assert.equal(fixtureConfirmationAllowed("A2", read, fixtures), false);
+    assert.equal(
+        fixtureConfirmationAllowed(
+            "S2",
+            {
+                ...read,
+                parameters: {
+                    path: path.resolve(fixtures, "..", "report-a.txt"),
+                },
+            },
+            fixtures,
+        ),
+        false,
+    );
 });
 test("seeded ordering is reproducible without dropping examples", () => {
     assert.deepEqual(shuffled(corpus, 42), shuffled(corpus, 42));

@@ -53,8 +53,9 @@ function fingerprint(file: string, root: string): Artifact {
         stat.isSymbolicLink() ||
         stat.nlink !== 1 ||
         stat.size > 10 * 1024 * 1024 ||
-        path.dirname(canonical).toLowerCase() !== canonicalRoot.toLowerCase() ||
-        path.resolve(file).toLowerCase() !== canonical.toLowerCase() ||
+        path.relative(canonicalRoot, path.dirname(canonical)) !== "" ||
+        (path.relative(root, path.dirname(file)) !== "" &&
+            path.relative(canonicalRoot, path.dirname(file)) !== "") ||
         !/^(?:\d+-)?copilot-tool-output-[\w-]+\.txt$/.test(path.basename(file))
     ) {
         throw new Error("Untrusted GHCP evaluation output artifact");
@@ -108,7 +109,11 @@ export function isGhcpEvalArtifact(
     );
     const expected = manifest.artifacts.find(
         (entry) =>
-            entry.path.toLowerCase() === path.resolve(file).toLowerCase(),
+            path.relative(entry.path, file) === "" ||
+            path.relative(
+                path.join(manifest.root, path.basename(entry.path)),
+                file,
+            ) === "",
     );
     if (!expected) return false;
     const actual = fingerprint(file, manifest.root);
