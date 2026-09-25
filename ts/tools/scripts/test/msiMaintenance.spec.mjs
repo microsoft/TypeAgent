@@ -19,19 +19,12 @@ const wxs = fs.readFileSync(
 );
 
 test("MSI begins maintenance transactionally before removing older versions", () => {
-    assert.match(wxs, /<MajorUpgrade Schedule="afterInstallInitialize"/);
-    for (const [action, next] of [
-        ["PrepareMaintenance", "RollbackMaintenance"],
-        ["RollbackMaintenance", "BeginMaintenance"],
-        ["BeginMaintenance", "RemoveExistingProducts"],
-    ]) {
-        assert.match(
-            wxs,
-            new RegExp(
-                `<Custom Action="${action}" Before="${next}">NOT UPGRADINGPRODUCTCODE</Custom>`,
-            ),
-        );
-    }
+    assert.match(wxs, /<MajorUpgrade Schedule="afterInstallExecute"/);
+    assert.match(wxs, /Action="PrepareMaintenance" After="InstallInitialize"/);
+    assert.match(wxs, /Action="RollbackMaintenance" Before="BeginMaintenance"/);
+    assert.match(wxs, /Action="BeginMaintenance" After="PrepareMaintenance"/);
+    assert.match(wxs, /Id="BeginMaintenance"[^>]*Execute="deferred"/);
+    assert.match(wxs, /<InstallExecute After="CommitMaintenance"\s*\/>/);
     assert.match(wxs, /Id="RollbackMaintenance"[^>]*Execute="rollback"/);
     assert.match(wxs, /Id="CommitMaintenance"[^>]*Execute="commit"/);
     assert.match(

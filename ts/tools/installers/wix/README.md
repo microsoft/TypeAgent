@@ -502,6 +502,43 @@ az pipelines run --name "azure-build-publish-all" --branch main
 
 ## Troubleshooting
 
+### Windows transaction CI
+
+The `Windows MSI lifecycle` workflow runs real `msiexec` transactions on a
+disposable `windows-2022` hosted runner, under one account and within one job.
+It builds the current production WiX authoring plus a pinned pre-change baseline
+(`d7bbde6bf88b442cab7f412acf4fd74b00becb96`). Packages use a separate test product
+identity and installation directory. A deterministic Node server and a child
+holding a non-delete-sharing Windows file handle replace the application runtime.
+Authentication, Copilot registration, VS Code, provisioning, and downloads are
+explicitly disabled: this is an installer transaction gate, not a full-product
+or released-binary compatibility certification.
+
+The gate exercises initial install, rollback after shutdown/extraction/restart,
+upgrade with a running scheduled task, repair of a missing payload file, and
+repeated uninstall/reinstall. Assertions check MSI product registration,
+payload versions/hashes, server health, process cleanup, task state, retained user
+data, and maintenance markers. It fails if ICE validation cannot run or if a
+failure injection is not reached. Logs, transformed authoring, test MSIs,
+compiled action sequences, and results are retained even on failure.
+
+`ts/tools/scripts/test/msiLifecycle/build.ps1` can compile packages locally
+without installing them. If local machine policy prevents ICE validation, the
+manifest marks those packages unvalidated. `run.ps1` rejects unvalidated packages
+and refuses to install outside a clean disposable GitHub-hosted runner. Do not
+bypass these guards on a development machine.
+
+The production sequence first queues rollback, shutdown, and commit maintenance,
+then uses an early `InstallExecute` to run shutdown without ending the transaction.
+`RemoveExistingProducts` follows immediately, before `ProcessComponents` or
+installation of new files. `InstallFinalize` executes the remaining installation
+script. This avoids error 2613: rollback/commit actions may not be queued before
+an unflushed `RemoveExistingProducts` immediately after `InstallInitialize`.
+
+Reboot recovery, interactive UAC/logon, authenticated integrations, and recovery
+from an abandoned marker remain separate coverage gaps. Passing this job does
+not establish those behaviors.
+
 ### Copilot plugin registration fails with "spawn UNKNOWN"
 
 WinGet's `Microsoft\WinGet\Links\copilot.exe` can be a symbolic link that Node

@@ -53,16 +53,18 @@
     <Binary Id="ProgressVbs" SourceFile="$(var.InstallerSourceDir)\progress.vbs" />
 
     <!-- Upgrade: replaces older versions, blocks downgrades -->
-    <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer version of TypeAgent is already installed." />
+    <MajorUpgrade Schedule="afterInstallExecute" DowngradeErrorMessage="A newer version of TypeAgent is already installed." />
 
     <Binary Id="MaintainServerPs1" SourceFile="$(var.InstallerSourceDir)\maintain-server.ps1" />
     <Binary Id="MaintenanceVbs" SourceFile="$(var.InstallerSourceDir)\maintenance.vbs" />
     <CustomAction Id="PrepareMaintenance" BinaryKey="MaintenanceVbs"
                   VBScriptCall="PrepareMaintenance" Execute="immediate" Return="check" />
-    <!-- Immediate execution is required before an older MSI's removal script.
-         Rollback is registered first, after InstallInitialize opens the transaction. -->
-    <CustomAction Id="BeginMaintenance" BinaryKey="MaintenanceVbs"
-                  VBScriptCall="BeginMaintenance" Execute="immediate" Return="check" />
+    <!-- Flush only maintenance before removing the old product. InstallFinalize
+         executes the remaining installation script in the same transaction.
+         Scheduling rollback actions before an unflushed RemoveExistingProducts
+         after InstallInitialize is invalid (MSI error 2613). -->
+    <CustomAction Id="BeginMaintenance" BinaryKey="WixCA" DllEntry="WixQuietExec64"
+                 Execute="deferred" Return="check" Impersonate="yes" />
     <CustomAction Id="RollbackMaintenance" BinaryKey="WixCA" DllEntry="WixQuietExec64"
                   Execute="rollback" Return="ignore" Impersonate="yes" />
     <CustomAction Id="CompleteMaintenance" BinaryKey="WixCA" DllEntry="WixQuietExec64"
@@ -717,10 +719,11 @@
                   Impersonate="yes" />
 
     <InstallExecuteSequence>
-      <Custom Action="PrepareMaintenance" Before="RollbackMaintenance">NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="PrepareMaintenance" After="InstallInitialize">NOT UPGRADINGPRODUCTCODE</Custom>
       <Custom Action="RollbackMaintenance" Before="BeginMaintenance">NOT UPGRADINGPRODUCTCODE</Custom>
-      <Custom Action="BeginMaintenance" Before="RemoveExistingProducts">NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="BeginMaintenance" After="PrepareMaintenance">NOT UPGRADINGPRODUCTCODE</Custom>
       <Custom Action="CommitMaintenance" After="BeginMaintenance">NOT UPGRADINGPRODUCTCODE</Custom>
+      <InstallExecute After="CommitMaintenance" />
       <Custom Action="ResetMainProgress"        After="InstallFiles">NOT REMOVE~="ALL"</Custom>
       <Custom Action="MainProgress1"            After="ResetMainProgress">NOT REMOVE~="ALL"</Custom>
       <Custom Action="ExtractAgentServerPayload" After="MainProgress1">NOT REMOVE~="ALL"</Custom>

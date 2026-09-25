@@ -26,23 +26,9 @@ Function PrepareMaintenance()
     command = Quote(Session.Property("WindowsFolder") & "System32\WindowsPowerShell\v1.0\powershell.exe") & _
         " -NoProfile -NonInteractive -ExecutionPolicy Bypass -File " & Quote(script) & _
         " -Root " & Quote(root) & " -TransactionDir " & Quote(folder) & " -LogPath " & Quote(log)
-    Session.Property("BeginMaintenanceCommand") = command & " -Action Begin"
+    Session.Property("BeginMaintenance") = command & " -Action Begin"
     Session.Property("RollbackMaintenance") = command & " -Action Rollback"
     Session.Property("CompleteMaintenance") = command & " -Action Complete"
     Session.Property("CommitMaintenance") = command & " -Action Commit"
     PrepareMaintenance = 1
-End Function
-
-Function BeginMaintenance()
-    Dim shell, code, record
-    Set shell = CreateObject("WScript.Shell")
-    code = shell.Run(Session.Property("BeginMaintenanceCommand"), 0, True)
-    If code = 0 Then
-        BeginMaintenance = 1
-    Else
-        Set record = Session.Installer.CreateRecord(1)
-        record.StringData(0) = "TypeAgent could not stop its installed server. See %LOCALAPPDATA%\TypeAgent\logs\msi-maintenance.log. Setup has not deleted the existing payload."
-        Session.Message &H01000000, record
-        BeginMaintenance = 3
-    End If
 End Function
