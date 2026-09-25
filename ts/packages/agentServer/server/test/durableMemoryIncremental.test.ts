@@ -232,10 +232,7 @@ describe("durable memory incremental production path", () => {
                     },
                     pipeline: { mode: "full", maxCharsPerChunk: 8_000 },
                 });
-                const job = await waitForTerminalJob(
-                    service,
-                    accepted.jobId,
-                );
+                const job = await waitForTerminalJob(service, accepted.jobId);
                 expect(job.state).toBe("complete");
                 expect(job.trace).toEqual(
                     expect.arrayContaining([
