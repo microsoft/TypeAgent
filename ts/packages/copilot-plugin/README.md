@@ -166,7 +166,9 @@ local `listFiles`, or `prFailedChecks` outside the declared policy is a policy
 mismatch, not proof the chosen product handler is broken. The narrow policy
 and full-content/checks objectives are unchanged; output-artifact provenance
 does not authorize broader file access or make a temp-file-only final answer
-faithful. Result-entity/handoff changes belong to the separate lower PR.
+faithful. Result-entity/handoff changes belong to the independent product PR
+#3073, not this evaluation stack. This layer depends only on the evaluation
+harness in #3072.
 
 The user-authorized cumulative ceiling is now 50,000 Copilot AI credits. This
 raises the maximum accepted ledger cap, not the balance of any existing run:
