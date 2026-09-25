@@ -33,91 +33,10 @@ The hook output fields `handled`, `responseContent`, and `handledBy` are support
 
 ## Guarded GHCP evaluation harness
 
-The `scripts/ghcp-eval*.mjs` tools run actual Copilot SDK conversations for seven
-MCP/native routing candidates and twenty cases (four five-case cohorts). They
-are separate from the discovery smoke launcher below. Build the plugin and
-agent-server dependencies first; run script tests with `pnpm test:ghcp-eval`
-from this package.
-
-The harness requires an existing reconciled credit ledger, an authenticated
-Copilot executable, and an existing TypeAgent model-configuration directory.
-It never creates a fresh spending allowance or fetches credentials. The ledger
-includes opening parent/implementation usage, reporting headroom, and a
-catalog-verified conservative maximum reservation per model request. The
-request proxy admits before forwarding, settles explicit Copilot billing
-fields, retains unknown charges, rejects other models/WebSockets, and limits
-each scoped session to 24 requests and the cumulative ledger to 2,000 requests.
-The SDK's 60-credit session limit is only an additional **soft** limit.
-This is not a general-purpose pricing service: verify the model's current
-credit rates and maximum context/output bounds before constructing a ledger.
-
-From `ts`, invoke:
-
-```text
-node packages\copilot-plugin\scripts\ghcp-eval-preflight.mjs <new-preflight-dir> <model-config-dir> <ledger> --external-evidence
-node packages\copilot-plugin\scripts\ghcp-eval.mjs <copilot.exe> <preflight-dir> <run-dir> <model-config-dir> <ledger> <candidate-ids> pilot <oracle.json> <case-ids>
-node packages\copilot-plugin\scripts\ghcp-eval.mjs <copilot.exe> <preflight-dir> <run-dir> <model-config-dir> <ledger> 1,2,3,4,5,6,7 measured <oracle.json> S1 <batch-start> 7 1
-```
-
-Use a nonsynchronized local directory for live databases/locks. Preserve
-sanitized results, the frozen specification, and the cumulative ledger in
-durable storage. Measured batches contain one paired case across all seven
-candidates; advance the zero-based start by seven only after reconciliation.
-One complete balanced pass contains 140 trials; freeze additional repetitions
-only when the reconciled allowance permits them. A changed specification or a mismatched
-persisted trial count blocks resumption instead of replaying uncertain work.
-The oracle JSON pins public issue/PR evidence and a relative `readinessFile`
-pointing to the successful preflight result.
-
-The four domain agents are lists, GitHub CLI, registered PowerShell file
-actions, and IP configuration. Fixtures are restored per trial. Shipped MCP
-domain schemas outside that scope are disabled only in the disposable
-session. The production internal reasoning toolset is unchanged. The
-mixed candidates keep production routing guidance and the pinned native tools.
-Auxiliary outer workspace/macro/skill MCP servers are omitted to keep the
-declared entry interfaces in scope. After failed or uncertain execution,
-the eval policy blocks replay (including internal error-triggered retries);
-it does not repair the underlying product failure or substitute an action.
-These controls are identical across the relevant candidate pairs. The
-`translationReasoningFallback` request option controls only the existing
-unknown/clarification translation-to-reasoning transition, not ordinary
-orchestration. Optional `TYPEAGENT_GHCP_EVAL_TRACE` records its actual decision,
-entry, and outcome. No global configuration or shared service is modified.
-
-**`completed_ungraded` is not task success.** Final-answer faithfulness must
-be reviewed against the independent fixtures/external evidence after timing.
-Network answers and raw evidence remain in clearly named private local files;
-sanitized results contain hashes. Unobserved internal stage durations are
-null, not zero. Keep pilot/harness failures separate from measured outcomes,
-and do not pool fast refusals with successful-completion latency.
-
-**Protocol 2:** the original partial pass remains historical, with affected
-paired cases excluded rather than scored as candidate failures. Each new trial
-gets a private SDK temp directory. Overflow files are registered only from SDK
-completion notices, must be regular single-link direct children with the SDK
-filename pattern, and are SHA256-checked again before registered file reads.
-This does not authorize arbitrary temp files, native replacement actions, or
-retrying failed execution. Provenance failures stop the run as harness failures.
-
-Fixture confirmations also permit `list.startEditList` only for the specific
-case's disposable target list. A final-text clarification receives the same
-single scripted answer as a callback, within the original end-to-end deadline
-and never after a terminal execution failure. The internal fallback toolset
-and candidate entry interfaces are unchanged. Freeze a new run after validating
-these paths; do not overwrite or selectively replay the historical run.
-
-**Protocol 3:** native domain tool failures now enter the same terminal
-no-replay gate as failed TypeAgent execution, including SDK failures with no
-error payload. Failed `ask_user` interactions are not domain effects. This
-prospective guard correction does not relabel or rerun protocol-two evidence:
-audit earlier native/mixed traces for operations after failed native calls,
-and do not count those recoveries as policy-valid successes merely because
-their final answers are correct.
-
-The user-authorized cumulative ceiling is now 50,000 Copilot AI credits. This
-raises the maximum accepted ledger cap, not the balance of any existing run:
-reconcile all prior charges, preserve the original ledger and budget amendment,
-and retain reporting headroom before admitting new work.
+The harness, corpus, grading, credit probe, tests, and maintained methodology
+now live in [copilot-plugin-eval](../copilot-plugin-eval/README.md), not in the
+installed plugin. The discovery smoke launcher below remains plugin test
+infrastructure and is reused by the evaluation package.
 
 ## Structured actions in Direct and MCP modes
 

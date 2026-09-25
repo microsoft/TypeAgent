@@ -1,0 +1,23 @@
+{
+  "name": "@typeagent/copilot-plugin-eval",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Initial end-to-end Copilot plugin evaluation harness",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node --check scripts/ghcp-eval.mjs && node --check scripts/ghcp-eval-preflight.mjs && node --check scripts/ghcp-credit-probe.mjs",
+    "test": "npm run test:local",
+    "test:local": "node --test scripts/test/*.spec.mjs",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore"
+  },
+  "devDependencies": {
+    "@github/copilot-sdk": "1.0.13",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@typeagent/copilot-plugin": "workspace:*",
+    "agent-dispatcher": "workspace:*",
+    "agent-server": "workspace:*",
+    "prettier": "^3.5.3"
+  }
+}

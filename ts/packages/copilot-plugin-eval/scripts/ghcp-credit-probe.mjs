@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
+import { evalModel, validateEvalLedger } from "./ghcp-eval-config.mjs";
 import {
     CopilotCreditBudget,
     accountedNanoAiu,
@@ -19,6 +20,7 @@ if (!cliPath || !ledgerPath || !outputDirectory) {
 }
 const ledger = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
 accountedNanoAiu(ledger);
+validateEvalLedger(ledger);
 fs.mkdirSync(outputDirectory);
 const client = new CopilotClient({
     mode: "empty",
@@ -31,6 +33,7 @@ const client = new CopilotClient({
 });
 const result = {
     kind: "credit_control_calibration_not_eval",
+    model: evalModel,
     sessionId: randomUUID(),
     status: "not_started",
     usage: [],
@@ -40,7 +43,7 @@ try {
     await client.start();
     session = await client.createSession({
         sessionId: result.sessionId,
-        model: ledger.model,
+        model: evalModel,
         reasoningEffort: "low",
         contextTier: "default",
         sessionLimits: { maxAiCredits: 30 },

@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { fileFixture } from "./ghcp-eval-corpus.mjs";
+import { evalModel, validateEvalLedger } from "./ghcp-eval-config.mjs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { stageCopilotPlugin } from "../../../tools/scripts/stageCopilotPlugin.mjs";
@@ -16,7 +17,7 @@ import {
     startProcess,
     stopProcess,
     waitForServer,
-} from "./discovery-e2e.mjs";
+} from "../../copilot-plugin/scripts/discovery-e2e.mjs";
 
 const root = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -30,6 +31,7 @@ if (!outputDirectory || !configDirectory || !ledgerPath) {
     );
 }
 const port = 19024;
+validateEvalLedger(JSON.parse(fs.readFileSync(ledgerPath, "utf8")));
 await checkPort(port);
 fs.mkdirSync(outputDirectory);
 const { env, mcp } = makeConfiguration(
@@ -39,6 +41,7 @@ const { env, mcp } = makeConfiguration(
     configDirectory,
 );
 env.TYPEAGENT_COPILOT_CREDIT_LEDGER = path.resolve(ledgerPath);
+env.COPILOT_REASONING_MODEL = evalModel;
 const fixtures = path.join(outputDirectory, "fixtures");
 fs.mkdirSync(fixtures);
 for (const [name, content] of Object.entries(fileFixture)) {
@@ -49,6 +52,7 @@ fs.mkdirSync(env.TYPEAGENT_PLUGIN_DATA);
 stageCopilotPlugin(path.join(outputDirectory, "plugin"));
 const result = {
     kind: "catalog_preflight_not_eval",
+    model: evalModel,
     status: "running",
     contracts: [],
     missing: [],
