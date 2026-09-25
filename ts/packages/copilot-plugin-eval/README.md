@@ -55,7 +55,7 @@ pnpm exec fluid-build '^@typeagent/copilot-plugin-eval$' -t build --dep
 pnpm --filter @typeagent/copilot-plugin-eval test
 ```
 
-The package is private and JavaScript-only. Its build checks executable syntax;
+This dedicated package is JavaScript-only. Its build checks executable syntax;
 dependency-aware builds prepare the plugin, dispatcher and agent-server.
 Tests are offline. Plugin installation/bundling does not include this harness.
 `copilot-plugin/scripts/discovery-e2e.mjs` remains shared plugin test
