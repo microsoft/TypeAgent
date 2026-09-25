@@ -14,7 +14,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { instantiate } from "../src/actionHandler.mjs";
-import { executeScript } from "../src/execution/powershellRunner.mjs";
+import {
+    executeScript,
+    type ScriptExecutionRequest,
+} from "../src/execution/powershellRunner.mjs";
 import {
     getRegisteredNamespaceActions,
     hasNamespaceAction,
@@ -205,11 +208,67 @@ async function createAgentHarness(
     };
 }
 
+function expectPolicyDenied(result: unknown): void {
+    expect(result).toMatchObject({
+        errorCode: "powershell.policyDenied",
+        retryable: false,
+        fallbackToReasoning: false,
+    });
+}
+
+async function createStoredFlow(
+    agent: ReturnType<typeof instantiate>,
+    context: ActionContext<unknown>,
+    actionName: string,
+): Promise<void> {
+    const result = await agent.executeAction?.(
+        {
+            schemaName: "powershell",
+            actionName: "createPowerShellFlow",
+            parameters: {
+                actionName,
+                description: "A stored flow used by containment tests",
+                script: "Write-Output 'stored'",
+                allowedCmdlets: ["Write-Output"],
+            },
+        },
+        context,
+    );
+    expect(result).not.toHaveProperty("error");
+}
+
 describe("createAndExecutePowerShellFlow", () => {
     const originalNoSamples = process.env.TYPEAGENT_NO_SAMPLES;
+    const originalConfigDir = process.env.TYPEAGENT_CONFIG_DIR;
+    let configDirectory: string;
+    let localConfigPath: string;
 
-    beforeAll(() => {
+    async function setDynamicExecution(enabled: boolean): Promise<void> {
+        await writeFile(
+            localConfigPath,
+            `powershell:\n  dynamicExecution:\n    enabled: ${enabled}\n`,
+        );
+    }
+
+    async function withDynamicExecutionDisabled(
+        action: () => Promise<void>,
+    ): Promise<void> {
+        await setDynamicExecution(false);
+        try {
+            await action();
+        } finally {
+            await setDynamicExecution(true);
+        }
+    }
+
+    beforeAll(async () => {
         process.env.TYPEAGENT_NO_SAMPLES = "1";
+        configDirectory = await mkdtemp(
+            join(tmpdir(), "typeagent-powershell-config-"),
+        );
+        localConfigPath = join(configDirectory, "config.local.yaml");
+        process.env.TYPEAGENT_CONFIG_DIR = configDirectory;
+        await setDynamicExecution(true);
     });
 
     describe("static network actions", () => {
@@ -458,7 +517,7 @@ describe("createAndExecutePowerShellFlow", () => {
                     errorCode: "powershell.policyDenied",
                     retryable: false,
                 });
-                expect(result?.error).toMatch(/Path access denied/i);
+                expect(result?.error).toMatch(/Path access\s+denied/i);
             },
         );
     });
@@ -548,12 +607,223 @@ describe("createAndExecutePowerShellFlow", () => {
         );
     });
 
-    afterAll(() => {
+    afterAll(async () => {
         if (originalNoSamples === undefined) {
             delete process.env.TYPEAGENT_NO_SAMPLES;
         } else {
             process.env.TYPEAGENT_NO_SAMPLES = originalNoSamples;
         }
+        if (originalConfigDir === undefined) {
+            delete process.env.TYPEAGENT_CONFIG_DIR;
+        } else {
+            process.env.TYPEAGENT_CONFIG_DIR = originalConfigDir;
+        }
+        await rm(configDirectory, { recursive: true, force: true });
+    });
+
+    describe("dynamic execution containment", () => {
+        it("denies create-and-execute without leaving artifacts", async () => {
+            await withDynamicExecutionDisabled(async () => {
+                const directory = await mkdtemp(
+                    join(tmpdir(), "typeagent-powershell-containment-"),
+                );
+                const outputPath = join(directory, "output.txt");
+                try {
+                    const { agent, storage, context } =
+                        await createAgentHarness();
+                    const result = await agent.executeAction?.(
+                        {
+                            schemaName: "powershell",
+                            actionName: "createAndExecutePowerShellFlow",
+                            parameters: {
+                                actionName: "containedDraft",
+                                description: "Attempt a contained execution",
+                                script: "param([string]$Path)\nSet-Content -LiteralPath $Path -Value 'run'",
+                                scriptParameters: [
+                                    {
+                                        name: "Path",
+                                        type: "path",
+                                        required: true,
+                                        description: "Output file",
+                                    },
+                                ],
+                                allowedCmdlets: ["Set-Content"],
+                                executionParametersJson: JSON.stringify({
+                                    Path: outputPath,
+                                }),
+                            },
+                        },
+                        context,
+                    );
+
+                    expectPolicyDenied(result);
+                    expect(await storage.list("pending")).toEqual([]);
+                    expect(
+                        await storage.exists("flows/containedDraft.flow.json"),
+                    ).toBe(false);
+                    await expect(
+                        readFile(outputPath, "utf8"),
+                    ).rejects.toThrow();
+                } finally {
+                    await rm(directory, { recursive: true, force: true });
+                }
+            });
+        });
+
+        it("denies testing a generated script", async () => {
+            await withDynamicExecutionDisabled(async () => {
+                const { agent, context } = await createAgentHarness();
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "testPowerShellFlow",
+                        parameters: {
+                            script: "Write-Output 'blocked'",
+                            allowedCmdlets: ["Write-Output"],
+                        },
+                    },
+                    context,
+                );
+
+                expectPolicyDenied(result);
+            });
+        });
+
+        it("denies explicit and generated stored-flow execution", async () => {
+            await withDynamicExecutionDisabled(async () => {
+                const { agent, context } = await createAgentHarness();
+                await createStoredFlow(agent, context, "storedFlow");
+
+                const explicit = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "executePowerShellFlow",
+                        parameters: { flowName: "storedFlow" },
+                    },
+                    context,
+                );
+                const generated = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "storedFlow",
+                        parameters: {},
+                    },
+                    context,
+                );
+
+                expectPolicyDenied(explicit);
+                expectPolicyDenied(generated);
+            });
+        });
+
+        it("denies repair without changing the stored flow", async () => {
+            await withDynamicExecutionDisabled(async () => {
+                const directory = await mkdtemp(
+                    join(tmpdir(), "typeagent-powershell-repair-containment-"),
+                );
+                const outputPath = join(directory, "repair.txt");
+                try {
+                    const { agent, storage, context } =
+                        await createAgentHarness();
+                    await createStoredFlow(agent, context, "repairableFlow");
+
+                    const result = await agent.executeAction?.(
+                        {
+                            schemaName: "powershell",
+                            actionName: "repairAndExecutePowerShellFlow",
+                            parameters: {
+                                flowName: "repairableFlow",
+                                script: `param([string]$Path)
+Set-Content -LiteralPath $Path -Value "repaired"`,
+                                allowedCmdlets: ["Set-Content"],
+                                executionParametersJson: JSON.stringify({
+                                    Path: outputPath,
+                                }),
+                            },
+                        },
+                        context,
+                    );
+
+                    expectPolicyDenied(result);
+                    await expect(
+                        storage.read("scripts/repairableFlow.ps1", "utf8"),
+                    ).resolves.toBe("Write-Output 'stored'");
+                    await expect(
+                        readFile(outputPath, "utf8"),
+                    ).rejects.toThrow();
+                } finally {
+                    await rm(directory, { recursive: true, force: true });
+                }
+            });
+        });
+
+        it("denies @powershell run", async () => {
+            await withDynamicExecutionDisabled(async () => {
+                const { agent, context } = await createAgentHarness();
+                await createStoredFlow(agent, context, "commandFlow");
+
+                const result = await agent.executeCommand?.(
+                    ["run"],
+                    {
+                        args: { flowName: "commandFlow" },
+                        flags: {},
+                    },
+                    context,
+                );
+
+                expectPolicyDenied(result);
+            });
+        });
+    });
+
+    it("denies a stored flow with missing provenance", async () => {
+        const { agent, storage, context } = await createAgentHarness();
+        await createStoredFlow(agent, context, "unknownProvenanceFlow");
+        const flow = JSON.parse(
+            await storage.read("flows/unknownProvenanceFlow.flow.json", "utf8"),
+        ) as Record<string, unknown>;
+        delete flow.source;
+        await storage.write(
+            "flows/unknownProvenanceFlow.flow.json",
+            JSON.stringify(flow),
+        );
+
+        const result = await agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "executePowerShellFlow",
+                parameters: { flowName: "unknownProvenanceFlow" },
+            },
+            context,
+        );
+
+        expectPolicyDenied(result);
+    });
+
+    it("marks edited flows while retaining generated provenance", async () => {
+        const { agent, storage, context } = await createAgentHarness();
+        await createStoredFlow(agent, context, "editedFlow");
+
+        const result = await agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "editPowerShellFlow",
+                parameters: {
+                    flowName: "editedFlow",
+                    script: "Write-Output 'edited'",
+                    allowedCmdlets: ["Write-Output"],
+                },
+            },
+            context,
+        );
+
+        expect(result).not.toHaveProperty("error");
+        await expect(
+            storage.read("flows/editedFlow.flow.json", "utf8"),
+        ).resolves.toContain('"originalType": "reasoning"');
+        await expect(
+            storage.read("flows/editedFlow.flow.json", "utf8"),
+        ).resolves.toContain('"type": "edited"');
     });
 
     itOnWindows("removes the pending draft when execution fails", async () => {
@@ -763,7 +1033,7 @@ describe("createAndExecutePowerShellFlow", () => {
             );
             const outputPath = join(directory, "repair.txt");
             try {
-                const { agent, context } = await createAgentHarness();
+                const { agent, storage, context } = await createAgentHarness();
                 await agent.executeAction?.(
                     {
                         schemaName: "powershell",
@@ -824,6 +1094,12 @@ describe("createAndExecutePowerShellFlow", () => {
                 expect((await readFile(outputPath, "utf8")).trim()).toBe(
                     "repaired",
                 );
+                await expect(
+                    storage.read("flows/repairableFlow.flow.json", "utf8"),
+                ).resolves.toContain('"originalType": "reasoning"');
+                await expect(
+                    storage.read("flows/repairableFlow.flow.json", "utf8"),
+                ).resolves.toContain('"type": "edited"');
                 expect(secondRepair).toMatchObject({
                     errorCode: "powershell.policyDenied",
                     retryable: false,
@@ -872,6 +1148,7 @@ describe("createAndExecutePowerShellFlow", () => {
             const result = await executeScript({
                 script: "param([string]$Path)\nGet-Item -LiteralPath $Path",
                 parameters: { Path: "C:\\PROGRA~1" },
+                provenance: "reviewed-static",
                 parameterRoles: { Path: "path" },
                 sandbox: {
                     allowedCmdlets: ["Get-Item"],
@@ -886,6 +1163,47 @@ describe("createAndExecutePowerShellFlow", () => {
             expect(result.stderr).toBe("");
         },
     );
+
+    it("denies an unknown script provenance", async () => {
+        const request = {
+            script: "Write-Output 'blocked'",
+            parameters: {},
+            provenance: "unknown",
+            sandbox: {
+                allowedCmdlets: ["Write-Output"],
+                allowedPaths: [],
+                allowedModules: [],
+                maxExecutionTime: 10,
+                networkAccess: false,
+            },
+        } as unknown as ScriptExecutionRequest;
+
+        await expect(executeScript(request)).resolves.toMatchObject({
+            success: false,
+            stdout: "",
+            stderr: expect.stringMatching(/provenance is missing or unknown/i),
+        });
+    });
+
+    it("denies missing script provenance", async () => {
+        const request: ScriptExecutionRequest = {
+            script: "Write-Output 'blocked'",
+            parameters: {},
+            sandbox: {
+                allowedCmdlets: ["Write-Output"],
+                allowedPaths: [],
+                allowedModules: [],
+                maxExecutionTime: 10,
+                networkAccess: false,
+            },
+        };
+
+        await expect(executeScript(request)).resolves.toMatchObject({
+            success: false,
+            stdout: "",
+            stderr: expect.stringMatching(/provenance is missing or unknown/i),
+        });
+    });
 
     itOnWindows(
         "blocks writes to non-existent paths outside the sandbox",
@@ -906,6 +1224,7 @@ describe("createAndExecutePowerShellFlow", () => {
                     script: `param([string]$Path)
 Set-Content -LiteralPath $Path -Value "blocked"`,
                     parameters: { Path: blockedPath },
+                    provenance: "reviewed-static",
                     parameterRoles: { Path: "path" },
                     sandbox: {
                         allowedCmdlets: ["Set-Content"],
@@ -917,7 +1236,7 @@ Set-Content -LiteralPath $Path -Value "blocked"`,
                 });
 
                 expect(result.success).toBe(false);
-                expect(result.stderr).toMatch(/Path access denied/i);
+                expect(result.stderr).toMatch(/Path access\s+denied/i);
                 await expect(readFile(blockedPath, "utf8")).rejects.toThrow();
             } finally {
                 await rm(directory, { recursive: true, force: true });
@@ -959,8 +1278,8 @@ Start-Process -FilePath $Path`,
             expect(result).toMatchObject({
                 errorCode: "powershell.policyDenied",
                 retryable: false,
-                error: expect.stringContaining("Path access denied"),
             });
+            expect(result?.error).toMatch(/Path access\s+denied/i);
             expect(await storage.list("pending")).toEqual([]);
             expect(
                 await storage.exists("flows/startNamedExecutable.flow.json"),

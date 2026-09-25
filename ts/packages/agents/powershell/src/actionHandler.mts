@@ -7,6 +7,7 @@ import {
     type SessionContext,
     type ActionContext,
     type ActionResult,
+    type ActionResultError,
     type SchemaContent,
     type GrammarContent,
     AppAgentEvent,
@@ -31,6 +32,8 @@ import { fileURLToPath } from "url";
 import { PowerShellStore } from "./store/powerShellStore.mjs";
 import type { PowerShellFlowDefinition } from "./store/powerShellStore.mjs";
 import {
+    createEditedScriptSource,
+    getScriptExecutionProvenance,
     type ScriptRecipe,
     type ScriptParameter,
 } from "./types/scriptRecipe.js";
@@ -46,6 +49,7 @@ import {
 import type { PowerShellAgentContext } from "./types/powerShellAgentContext.mjs";
 import { executeNamespaceAction } from "./namespaces/actionHandlerRegistry.mjs";
 import type { PowerShellAction } from "./namespaces/namespaceActionHandler.mjs";
+import { isDynamicPowerShellExecutionEnabled } from "./config/executionGates.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:powershell:handler");
@@ -54,6 +58,21 @@ const SAMPLES_DIR = join(__dirname, "..", "samples");
 
 const flowMutationTails = new Map<string, Promise<void>>();
 const repairAttempts = new WeakSet<object>();
+
+function createDynamicExecutionDenied(): ActionResult {
+    return createPowerShellFailure(
+        "policyDenied",
+        "Dynamic PowerShell execution is disabled by policy.",
+        { retryable: false },
+    );
+}
+
+function addReasoningFallback(result: ActionResultError): ActionResultError {
+    if (result.errorCode === "powershell.policyDenied") {
+        return result;
+    }
+    return { ...result, fallbackToReasoning: true };
+}
 
 async function withFlowMutationLock<T>(
     flowName: string,
@@ -113,6 +132,10 @@ async function executeFlowScript(
     parameters: Record<string, unknown>,
     abortSignal?: AbortSignal,
 ): Promise<ActionResult> {
+    if (!isDynamicPowerShellExecutionEnabled()) {
+        return createDynamicExecutionDenied();
+    }
+
     const resolvedParams: Record<string, unknown> = {};
     for (const paramDef of flow.parameters) {
         const value = parameters[paramDef.name] ?? paramDef.default;
@@ -124,6 +147,7 @@ async function executeFlowScript(
     const request: ScriptExecutionRequest = {
         script,
         parameters: resolvedParams,
+        provenance: getScriptExecutionProvenance(flow.source),
         parameterRoles: getScriptParameterRoles(flow.parameters),
         sandbox: {
             allowedCmdlets: flow.sandbox.allowedCmdlets,
@@ -460,6 +484,10 @@ async function executeDraftRecipe(
     suppliedParameters: Record<string, unknown>,
     abortSignal?: AbortSignal,
 ): Promise<{ output: string } | { error: ActionResult }> {
+    if (!isDynamicPowerShellExecutionEnabled()) {
+        return { error: createDynamicExecutionDenied() };
+    }
+
     const executionParameters: Record<string, unknown> = {};
     mapParamsToFlowDefs(
         suppliedParameters,
@@ -483,6 +511,7 @@ async function executeDraftRecipe(
     const result = await executeScript({
         script: recipe.script.body,
         parameters: executionParameters,
+        provenance: getScriptExecutionProvenance(recipe.source),
         parameterRoles: getScriptParameterRoles(recipe.parameters),
         sandbox: recipe.sandbox,
         workingDirectory: homedir(),
@@ -729,7 +758,7 @@ async function repairAndExecutePowerShellFlow(
                     (params.allowedModules as string[]) ??
                     existing.sandbox.allowedModules,
             },
-            ...(existing.source ? { source: existing.source } : {}),
+            source: createEditedScriptSource(existing.source),
         };
         const execution = await executeDraftRecipe(
             candidate,
@@ -754,6 +783,7 @@ async function repairAndExecutePowerShellFlow(
                 script,
                 candidate.sandbox.allowedCmdlets,
                 candidate.sandbox.allowedModules,
+                candidate.source,
             );
         } catch (error) {
             return createPostExecutionFailure(
@@ -776,6 +806,7 @@ async function repairAndExecutePowerShellFlow(
                         oldScript,
                         existing.sandbox.allowedCmdlets,
                         existing.sandbox.allowedModules,
+                        existing.source,
                     );
                     return activationCancellation;
                 } catch (restoreError) {
@@ -802,6 +833,7 @@ async function repairAndExecutePowerShellFlow(
                     oldScript,
                     existing.sandbox.allowedCmdlets,
                     existing.sandbox.allowedModules,
+                    existing.source,
                 );
             } catch (restoreError) {
                 restorationError = restoreError;
@@ -1060,6 +1092,7 @@ async function handlePowerShellFlowAction(
                     newScript,
                     newCmdlets,
                     newModules,
+                    createEditedScriptSource(existingFlow.source),
                 );
                 return createActionResultFromTextDisplay(
                     `Updated PowerShell flow '${editFlowName}'`,
@@ -1068,6 +1101,10 @@ async function handlePowerShellFlowAction(
         }
 
         case "testPowerShellFlow": {
+            if (!isDynamicPowerShellExecutionEnabled()) {
+                return createDynamicExecutionDenied();
+            }
+
             // Execute a script without registering it (test-then-register pattern)
             const params = action.parameters as Record<string, unknown>;
             const scriptBody = params.script as string;
@@ -1100,6 +1137,7 @@ async function handlePowerShellFlowAction(
             const request: ScriptExecutionRequest = {
                 script: scriptBody,
                 parameters: testParams,
+                provenance: "generated",
                 sandbox: {
                     allowedCmdlets,
                     allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
@@ -1220,7 +1258,7 @@ async function handlePowerShellFlowAction(
                 context.abortSignal,
             );
             if (result.error !== undefined) {
-                return { ...result, fallbackToReasoning: true };
+                return addReasoningFallback(result);
             }
 
             await recordUsageAfterExecution(flowStore, flowName, context);
@@ -1294,7 +1332,7 @@ async function handlePowerShellFlowAction(
                 }
 
                 context.abortSignal?.throwIfAborted();
-                await flowStore.saveFlow(recipe, "manual");
+                await flowStore.saveFlow(recipe, "imported");
                 try {
                     context.abortSignal?.throwIfAborted();
                     await context.sessionContext.reloadAgentSchema();
@@ -1363,7 +1401,7 @@ async function handlePowerShellFlowAction(
                 context.abortSignal,
             );
             if (result.error !== undefined) {
-                return { ...result, fallbackToReasoning: true };
+                return addReasoningFallback(result);
             }
 
             await recordUsageAfterExecution(
@@ -1440,7 +1478,7 @@ class ImportScriptHandler implements CommandHandler {
             );
         }
 
-        await store.saveFlow(recipe, "manual");
+        await store.saveFlow(recipe, "imported");
         await context.sessionContext.reloadAgentSchema();
 
         const patternList = recipe.grammarPatterns
@@ -1494,6 +1532,10 @@ class RunHandler implements CommandHandler {
         context: ActionContext<PowerShellAgentContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
+        if (!isDynamicPowerShellExecutionEnabled()) {
+            return createDynamicExecutionDenied();
+        }
+
         const store = _agentStore;
         if (!store) {
             throw new Error("Script flow store not available");

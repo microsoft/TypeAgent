@@ -3,7 +3,10 @@
 
 import type { Storage, TokenCachePersistence } from "@typeagent/agent-sdk";
 import { PowerShellStore } from "../src/store/powerShellStore.mjs";
-import type { ScriptRecipe } from "../src/types/scriptRecipe.js";
+import {
+    createEditedScriptSource,
+    type ScriptRecipe,
+} from "../src/types/scriptRecipe.js";
 
 class MockStorage implements Storage {
     private data = new Map<string, string>();
@@ -209,6 +212,54 @@ describe("PowerShellStore capability lifecycle", () => {
             sandbox: {
                 allowedCmdlets: ["Get-NetTCPConnection"],
                 allowedModules: ["NetTCPIP"],
+            },
+        });
+    });
+
+    it("stores imported provenance in the index and flow definition", async () => {
+        const store = new PowerShellStore(new MockStorage());
+        await store.initialize();
+        const recipe = createRecipe();
+        recipe.source = {
+            type: "imported",
+            timestamp: "2026-09-25T00:00:00.000Z",
+        };
+
+        await store.saveFlow(recipe, "imported");
+
+        expect(store.listFlows()).toEqual([
+            expect.objectContaining({ source: "imported" }),
+        ]);
+        await expect(store.getFlow("showPorts")).resolves.toMatchObject({
+            source: {
+                type: "imported",
+                timestamp: "2026-09-25T00:00:00.000Z",
+            },
+        });
+    });
+
+    it("records edits while retaining the original provenance", async () => {
+        const store = new PowerShellStore(new MockStorage());
+        await store.initialize();
+        await store.saveFlow(createRecipe(), "reasoning");
+        const original = await store.getFlow("showPorts");
+        const editedSource = createEditedScriptSource(original?.source);
+
+        await store.updateFlowScript(
+            "showPorts",
+            "Write-Output 'edited'",
+            ["Write-Output"],
+            [],
+            editedSource,
+        );
+
+        expect(store.listFlows()).toEqual([
+            expect.objectContaining({ source: "edited" }),
+        ]);
+        await expect(store.getFlow("showPorts")).resolves.toMatchObject({
+            source: {
+                type: "edited",
+                originalType: "reasoning",
             },
         });
     });

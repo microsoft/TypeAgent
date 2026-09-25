@@ -12,7 +12,32 @@ const debug = registerDebug("typeagent:powershell:analyzer");
 const ANALYSIS_MODEL = "claude-sonnet-4-5-20250929";
 const MAX_SCRIPT_SIZE = 100 * 1024; // 100KB
 
+type ScriptAnalysisQuery = (prompt: string) => Promise<string>;
+
+async function runScriptAnalysisQuery(prompt: string): Promise<string> {
+    let result = "";
+    const queryInstance = query({
+        prompt,
+        options: {
+            model: ANALYSIS_MODEL,
+            maxTurns: 1,
+            ...claudeExecutableOption(),
+        },
+    });
+
+    for await (const message of queryInstance) {
+        if (message.type === "result" && message.subtype === "success") {
+            result = message.result;
+        }
+    }
+    return result;
+}
+
 export class ScriptAnalyzer {
+    constructor(
+        private readonly runAnalysisQuery: ScriptAnalysisQuery = runScriptAnalysisQuery,
+    ) {}
+
     async analyze(
         scriptContent: string,
         filePath: string,
@@ -31,21 +56,7 @@ export class ScriptAnalyzer {
             overrideActionName,
         );
 
-        let result = "";
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: ANALYSIS_MODEL,
-                maxTurns: 1,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        for await (const message of queryInstance) {
-            if (message.type === "result" && message.subtype === "success") {
-                result = message.result;
-            }
-        }
+        const result = await this.runAnalysisQuery(prompt);
 
         if (!result) {
             throw new Error("LLM returned no result during script analysis");
@@ -66,12 +77,17 @@ export class ScriptAnalyzer {
                 "Analysis produced invalid recipe: missing actionName or script.body",
             );
         }
+        if (recipe.script.body !== scriptContent) {
+            throw new Error(
+                "Analysis changed the imported PowerShell script content.",
+            );
+        }
 
         recipe.version = 1;
         recipe.source = {
-            type: "manual",
+            type: "imported",
             timestamp: new Date().toISOString(),
-            originalRequest: `Imported from ${filePath}`,
+            originalRequest: "Imported PowerShell script",
         };
 
         return recipe;

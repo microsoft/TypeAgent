@@ -6,6 +6,8 @@ import type {
     ScriptRecipe,
     GrammarPattern,
     SandboxPolicy,
+    ScriptSource,
+    StoredScriptSourceType,
 } from "../types/scriptRecipe.js";
 import {
     generateGrammarRuleText,
@@ -63,7 +65,7 @@ export interface PowerShellFlowIndexEntry {
     parameters: PowerShellFlowParameterMeta[];
     created: string;
     updated: string;
-    source: "reasoning" | "manual" | "seed";
+    source: StoredScriptSourceType;
     usageCount: number;
     lastUsed?: string | undefined;
     enabled: boolean;
@@ -124,7 +126,7 @@ export class PowerShellStore {
 
     async saveFlow(
         recipe: ScriptRecipe,
-        source: "reasoning" | "manual" | "seed" = "manual",
+        source: StoredScriptSourceType = "manual",
     ): Promise<string> {
         this.ensureInitialized();
 
@@ -135,6 +137,12 @@ export class PowerShellStore {
         const flowPath = `flows/${actionName}.flow.json`;
         const scriptPath = `scripts/${actionName}.ps1`;
         let addedEntry: PowerShellFlowIndexEntry | undefined;
+        const now = new Date().toISOString();
+        const storedSource: ScriptSource = {
+            ...(recipe.source ?? {}),
+            type: source,
+            timestamp: recipe.source?.timestamp ?? now,
+        };
 
         const flowDef: PowerShellFlowDefinition = {
             version: 1,
@@ -146,7 +154,7 @@ export class PowerShellStore {
             expectedOutputFormat: recipe.script.expectedOutputFormat,
             grammarPatterns: recipe.grammarPatterns,
             sandbox: recipe.sandbox,
-            source: recipe.source,
+            source: storedSource,
         };
 
         try {
@@ -169,7 +177,6 @@ export class PowerShellStore {
                     description: p.description,
                 }));
 
-            const now = new Date().toISOString();
             addedEntry = {
                 actionName,
                 displayName: recipe.displayName,
@@ -225,6 +232,7 @@ export class PowerShellStore {
         newScript: string,
         newCmdlets: string[],
         newModules?: string[],
+        newSource?: ScriptSource,
     ): Promise<void> {
         this.ensureInitialized();
         const entry = this.index.flows[actionName];
@@ -246,6 +254,9 @@ export class PowerShellStore {
         if (newModules !== undefined) {
             flow.sandbox.allowedModules = newModules;
         }
+        if (newSource !== undefined) {
+            flow.source = newSource;
+        }
 
         try {
             await this.storage.write(entry.scriptPath, newScript);
@@ -255,6 +266,9 @@ export class PowerShellStore {
             );
 
             entry.updated = new Date().toISOString();
+            if (newSource !== undefined) {
+                entry.source = newSource.type;
+            }
             this.index.lastModified = entry.updated;
             await this.saveIndex();
             debug(`Flow script updated: ${actionName}`);
