@@ -864,6 +864,17 @@ export async function executeActions(
             );
 
             const requestAction = translationResult.requestAction;
+            if (!(await canExecute(requestAction.actions, context))) {
+                const error =
+                    "Deferred actions were not executed because they are unknown or disabled. " +
+                    "Completed actions must not be replayed.";
+                displayError(error, context);
+                return {
+                    error,
+                    failedAction: executableAction,
+                    fallbackToReasoning: false,
+                };
+            }
             actionQueue.unshift(
                 ...(await toPendingActions(
                     context,

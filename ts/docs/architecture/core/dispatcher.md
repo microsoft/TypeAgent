@@ -410,6 +410,12 @@ entity. The three consumers have distinct contracts:
   truncated or summarized and completed producers are not replayed. Concrete
   `$result` substitution is unchanged and does not use this prompt-size limit.
 
+  Deferred translation retains the caller's active-schema and schema-family
+  restrictions. An unavailable or empty scope stops the continuation rather than
+  widening it to globally active schemas. Newly translated actions also pass the
+  execution-eligibility check before entering the queue; unknown or disabled
+  actions stop the continuation without reasoning fallback or producer replay.
+
   An unused result label does not turn a successful mutation into a failure.
   Errors stop the chain; missing references and invalid concrete values fail
   before their consumers execute. Deferred translation cannot use an action

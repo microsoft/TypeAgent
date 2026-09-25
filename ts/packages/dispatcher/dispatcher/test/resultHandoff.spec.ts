@@ -113,6 +113,7 @@ describe("action result handoff", () => {
     });
 
     afterEach(async () => {
+        jest.restoreAllMocks();
         await closeCommandHandlerContext(system);
     });
 
@@ -672,6 +673,48 @@ describe("action result handoff", () => {
         expect(executed).toEqual(["produce"]);
         expect(translateRemaining).not.toHaveBeenCalled();
         expect(consume).not.toHaveBeenCalled();
+    });
+
+    test("rechecks execution eligibility before running a translated continuation", async () => {
+        results.set("source", { entities: [], historyText: "Completed read" });
+        translatePending.mockImplementation(async () => {
+            const isActive = system.agents.isActionActive.bind(system.agents);
+            jest.spyOn(system.agents, "isActionActive").mockImplementation(
+                (schema) => schema !== "handoff" && isActive(schema),
+            );
+            return {
+                type: "translate",
+                requestAction: RequestAction.create(
+                    "continuation",
+                    createExecutableAction("handoff", "consume", {
+                        value: "mutation",
+                    }),
+                ),
+                elapsedMs: 0,
+                config: system.session.getConfig().translation,
+            };
+        });
+        await expect(
+            executeActions(
+                [
+                    produce("source"),
+                    createPendingRequestAction({
+                        request: "Use the completed read",
+                        pendingResultEntityId: "source",
+                    }),
+                ],
+                undefined,
+                context,
+            ),
+        ).resolves.toMatchObject({
+            error: expect.stringContaining(
+                "Deferred actions were not executed",
+            ),
+            fallbackToReasoning: false,
+        });
+        expect(executed).toEqual(["produce"]);
+        expect(consume).not.toHaveBeenCalled();
+        expect(translatePending).toHaveBeenCalledTimes(1);
     });
 
     test("retains completed continuations for the next deferred request without leaking bindings", async () => {
