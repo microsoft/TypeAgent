@@ -14,11 +14,67 @@ export interface ScriptRecipe {
     };
     grammarPatterns: GrammarPattern[];
     sandbox: SandboxPolicy;
-    source?: {
-        type: "reasoning" | "manual";
-        requestId?: string;
-        timestamp: string;
-        originalRequest?: string;
+    source?: ScriptSource;
+}
+
+export type StoredScriptSourceType =
+    | "reasoning"
+    | "manual"
+    | "seed"
+    | "imported"
+    | "edited";
+
+export interface ScriptSource {
+    type: StoredScriptSourceType;
+    requestId?: string;
+    timestamp: string;
+    originalRequest?: string;
+    originalType?:
+        | Exclude<StoredScriptSourceType, "edited">
+        | "unknown"
+        | undefined;
+}
+
+export type ScriptExecutionProvenance =
+    | "reviewed-static"
+    | "generated"
+    | "manual"
+    | "seed"
+    | "imported"
+    | "edited";
+
+export function getScriptExecutionProvenance(
+    source: ScriptSource | undefined,
+): ScriptExecutionProvenance | undefined {
+    switch (source?.type) {
+        case "reasoning":
+            return "generated";
+        case "manual":
+        case "seed":
+        case "imported":
+            return source.type;
+        case "edited":
+            return source.originalType === undefined ||
+                source.originalType === "unknown"
+                ? undefined
+                : "edited";
+        default:
+            return undefined;
+    }
+}
+
+export function createEditedScriptSource(
+    source: ScriptSource | undefined,
+): ScriptSource {
+    const originalType =
+        source?.type === "edited"
+            ? (source.originalType ?? "unknown")
+            : (source?.type ?? "unknown");
+    return {
+        ...(source ?? {}),
+        type: "edited",
+        timestamp: new Date().toISOString(),
+        originalType,
     };
 }
 

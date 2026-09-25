@@ -5,6 +5,7 @@ import { spawn } from "child_process";
 import fs from "node:fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import type { ScriptExecutionProvenance } from "../types/scriptRecipe.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -38,6 +39,7 @@ export type ScriptParameterRole = "path" | "executable";
 export interface ScriptExecutionRequest {
     script: string;
     parameters: Record<string, unknown>;
+    provenance?: ScriptExecutionProvenance | undefined;
     parameterRoles?: Partial<Record<string, ScriptParameterRole>>;
     sandbox: {
         allowedCmdlets: string[];
@@ -60,10 +62,34 @@ export interface ScriptExecutionResult {
     cancelled: boolean;
 }
 
+const knownProvenance = new Set<ScriptExecutionProvenance>([
+    "reviewed-static",
+    "generated",
+    "manual",
+    "seed",
+    "imported",
+    "edited",
+]);
+
 export async function executeScript(
     request: ScriptExecutionRequest,
 ): Promise<ScriptExecutionResult> {
     request.abortSignal?.throwIfAborted();
+    if (
+        request.provenance === undefined ||
+        !knownProvenance.has(request.provenance)
+    ) {
+        return {
+            success: false,
+            stdout: "",
+            stderr: "PowerShell policy denied execution because script provenance is missing or unknown.",
+            exitCode: -1,
+            duration: 0,
+            truncated: false,
+            cancelled: false,
+        };
+    }
+
     const scriptHostPath = join(packageRoot, "scripts", "scriptHost.ps1");
 
     const args = [

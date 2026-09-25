@@ -56,12 +56,17 @@ export class ScriptAnalyzer {
                 "Analysis produced invalid recipe: missing actionName or script.body",
             );
         }
+        if (recipe.script.body !== scriptContent) {
+            throw new Error(
+                "Analysis changed the imported PowerShell script content.",
+            );
+        }
 
         recipe.version = 1;
         recipe.source = {
-            type: "manual",
+            type: "imported",
             timestamp: new Date().toISOString(),
-            originalRequest: `Imported from ${filePath}`,
+            originalRequest: "Imported PowerShell script",
         };
 
         return recipe;

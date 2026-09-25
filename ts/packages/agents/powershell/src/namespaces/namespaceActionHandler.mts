@@ -109,6 +109,7 @@ export function createPowerShellNamespaceActionHandler<
             const result = await executeScript({
                 script: definition.script,
                 parameters: action.parameters ?? {},
+                provenance: "reviewed-static",
                 ...(definition.parameterRoles
                     ? { parameterRoles: definition.parameterRoles }
                     : {}),
