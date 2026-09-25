@@ -375,6 +375,30 @@ entity references. Named entities (e.g., "that song", "the meeting") are
 looked up in conversation memory. Ambiguous references trigger a user
 clarification prompt via the `ClientIO` layer.
 
+**Intermediate results** - A translated `resultEntityId` labels a completed
+action; it does not require that every successful action manufacture an
+entity. The three consumers have distinct contracts:
+
+- A legacy `${result-id}` parameter consumes `resultEntity.name` and retains
+  same-agent entity metadata. A missing entity remains an error.
+- A `{ "$result": "id" }` parameter consumes only the explicit `resultValue`,
+  not display text, structured display `rawData`, or an entity name. Before
+  invoking the consumer, the dispatcher validates the concrete value against
+  its parameter schema without the translation-time placeholder exemption.
+  Empty strings, empty arrays, zero, and false are values, not missing results.
+- A `pendingRequestAction` remains in the execution queue until its earlier
+  action completes. Translation receives request-local snapshots of completed
+  actions and their actual results, including display-only outputs, even when
+  conversation history or memory extraction is disabled. These outputs are
+  context for translating the remaining request, not instructions to replay
+  earlier actions or an automatic switch to reasoning.
+
+An unused result label does not turn a successful mutation into a failure.
+Errors stop the chain; missing references and invalid concrete values fail
+before their consumers execute. Deferred translation cannot use an action
+still awaiting confirmation. Continuations retain completed-action history
+while each newly translated plan has its own result-reference bindings.
+
 Translated actions may also contain **entity placeholders** — explicit
 references the LLM emits as string values pointing back at entities
 provided in the prompt's history context. `resolveEntityPlaceholders()`

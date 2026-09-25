@@ -859,6 +859,7 @@ export async function executeActions(
             const translationResult = await translatePendingRequestAction(
                 action,
                 context,
+                pending.completedActions,
                 actionIndex,
             );
 
@@ -868,6 +869,7 @@ export async function executeActions(
                     context,
                     requestAction.actions,
                     requestAction.history?.entities,
+                    pending.completedActions,
                 )),
             );
             continue;
@@ -922,14 +924,10 @@ export async function executeActions(
         }
 
         const resultEntityId = executableAction.resultEntityId;
-        if (resultEntityId !== undefined) {
-            if (result.resultEntity === undefined) {
-                throw new Error(
-                    `Action ${getFullActionName(
-                        executableAction,
-                    )} did not return a result entity.`,
-                );
-            }
+        if (
+            resultEntityId !== undefined &&
+            result.pendingChoice === undefined
+        ) {
             if (resultEntityResolver === undefined) {
                 throw new Error(
                     `Internal error: resultEntityResolver is undefined`,
@@ -937,13 +935,19 @@ export async function executeActions(
             }
             resultEntityResolver.setResultEntity(
                 `\${result-${resultEntityId}}`,
-                {
-                    ...result.resultEntity,
-                    sourceAppAgentName: appAgentName,
-                },
+                result.resultEntity === undefined
+                    ? undefined
+                    : {
+                          ...result.resultEntity,
+                          sourceAppAgentName: appAgentName,
+                      },
                 result.resultValue,
             );
         }
+        pending.completedActions.push({
+            executableAction: structuredClone(executableAction),
+            result: structuredClone(result),
+        });
 
         if (result.activityContext !== undefined) {
             if (actionQueue.length > 0) {
@@ -1014,7 +1018,12 @@ export async function executeActions(
                 );
                 // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
                 actionQueue.unshift(
-                    ...(await toPendingActions(context, actions, undefined)),
+                    ...(await toPendingActions(
+                        context,
+                        actions,
+                        undefined,
+                        pending.completedActions,
+                    )),
                 );
             } catch (e) {
                 if (structured !== undefined) throw e;

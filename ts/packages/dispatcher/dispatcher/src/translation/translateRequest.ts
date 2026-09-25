@@ -65,6 +65,8 @@ import {
 import { ProfileNames } from "../utils/profileNames.js";
 import {
     createPendingRequestAction,
+    createPendingRequestHistory,
+    CompletedAction,
     PendingRequestAction,
 } from "./pendingRequest.js";
 import registerDebug from "debug";
@@ -1346,15 +1348,20 @@ async function translateRequestCore(
     };
 }
 
-export function translatePendingRequestAction(
+export async function translatePendingRequestAction(
     action: PendingRequestAction,
     context: ActionContext<CommandHandlerContext>,
+    completedActions: readonly CompletedAction[],
     actionIndex?: number,
 ) {
     try {
         const systemContext = context.sessionContext.agentContext;
-        const history = getHistoryContext(systemContext);
-        return translateRequest(
+        const history = createPendingRequestHistory(
+            action,
+            completedActions,
+            getHistoryContext(systemContext),
+        );
+        return await translateRequest(
             context,
             action.parameters.pendingRequest,
             history,
