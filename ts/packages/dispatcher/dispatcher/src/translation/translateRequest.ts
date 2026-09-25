@@ -65,8 +65,11 @@ import {
 import { ProfileNames } from "../utils/profileNames.js";
 import {
     createPendingRequestAction,
+    createPendingRequestHistory,
+    CompletedAction,
     PendingRequestAction,
 } from "./pendingRequest.js";
+import { resolveActiveSchemaScope } from "./activeSchemaScope.js";
 import registerDebug from "debug";
 import { ActionConfig } from "./actionConfig.js";
 import type { UserContext } from "./userContext.js";
@@ -1346,20 +1349,37 @@ async function translateRequestCore(
     };
 }
 
-export function translatePendingRequestAction(
+export async function translatePendingRequestAction(
     action: PendingRequestAction,
     context: ActionContext<CommandHandlerContext>,
+    completedActions: readonly CompletedAction[],
     actionIndex?: number,
 ) {
     try {
         const systemContext = context.sessionContext.agentContext;
-        const history = getHistoryContext(systemContext);
-        return translateRequest(
+        const scope = resolveActiveSchemaScope(
+            systemContext.agents.getActiveSchemas(),
+            systemContext.currentOptions?.activeSchemas,
+            systemContext.currentOptions?.activeSchemaFamilies,
+        );
+        if (scope.unavailable.length > 0 || scope.schemaNames.length === 0) {
+            throw new Error(
+                "No active schema scope for deferred request. " +
+                    "The remaining request was not translated or executed; do not replay completed actions.",
+            );
+        }
+        const history = createPendingRequestHistory(
+            action,
+            completedActions,
+            getHistoryContext(systemContext),
+        );
+        return await translateRequest(
             context,
             action.parameters.pendingRequest,
             history,
             undefined,
             actionIndex,
+            scope.schemaNames,
         );
     } catch (e: any) {
         e.message = `Error translating pending request action: ${e.message}`;
