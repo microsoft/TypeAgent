@@ -113,7 +113,7 @@ export class TypeAgentMcpServer {
         this.server.registerTool(
             "typeagent-processCommand",
             {
-                title: "TypeAgent Command Processor",
+                title: "TypeAgent: Natural-language delegation",
                 description:
                     "Send a natural language command to TypeAgent for processing. " +
                     "Use this for action requests like scheduling meetings, sending emails, " +

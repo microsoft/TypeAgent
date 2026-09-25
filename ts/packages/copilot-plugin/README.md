@@ -11,7 +11,11 @@ User prompt
   |
   +-> direct: TypeAgent dispatcher -> handled response or fallthrough
   |
-  +-> mcp: Copilot calls typeagent-processCommand
+  +-> mcp delegate (default): Copilot calls typeagent-processCommand
+  |
+  +-> mcp mixed: Copilot chooses whole-request delegation or owns the task
+  |              and prefers structured TypeAgent tools for operations
+  |              (native tools only when no suitable capability is available)
   |
   +-> dev: registered PowerShell action/flow
   |           -> handled response
@@ -58,7 +62,7 @@ console. The launcher currently supports Windows only.
 This is a **controlled discovery session**: the normal initial-prompt routing
 hook uses bypass mode, while a separate `typeagent-e2e` MCP process uses MCP mode.
 Existing TypeAgent MCP registrations are disabled only for this CLI invocation.
-No global mode settings change. Normal MCP-mode user prompts still use
+No global mode settings change. Default MCP delegate-policy user prompts still use
 `processCommand`; this launcher is not a routing optimization or benchmark.
 
 **How discovery is triggered:** in interactive mode, the startup check only lists
@@ -140,18 +144,49 @@ Run launcher regression checks with
 
 ### Routing and tool contracts
 
+**In MCP mode, TypeAgent is the preferred action provider.** Copilot owning
+the reasoning does not mean using native tools for the operations underneath
+it. For example, Copilot can compare PRs and recommend smoke tests while using
+TypeAgent to read PR details and changed-file lists, rather than native GitHub
+tools, `gh`, or direct web/API requests.
+
+In mixed policy, reuse an existing suitable action contract or discover one
+before selecting a native tool. Refine unrelated discovery results before
+concluding that no suitable TypeAgent capability is available. Native tools
+are fallback only for an established capability gap; explain that gap and
+preserve the user's scope and permissions. Reasoning and explanation without
+an external operation do not require a TypeAgent call.
+
+Delegate policy still sends the user's intact request to `processCommand`
+first, without a structured-discovery stage. Native fallback requires an
+explicit unsupported-capability result before any action executes. Errors,
+partial results, connection failures, denials, cancellation, and uncertain
+delivery do not authorize repeating an action through native tools or another
+provider. Recording directives always stay with TypeAgent.
+
+These are routing instructions, not removal of native tools or a runtime
+permission gate. PowerShell reminders apply even to commands such as `gh`,
+`git`, and scripting runtimes in MCP mode; Direct mode's existing command
+exemptions and dev/bypass behavior are unchanged.
+
 There are two intentional entry paths:
 
 - **User-originated natural language:** ordinary Direct prompts still go through
-  the hook and TypeAgent intent resolution. In MCP mode the hook sends the user's
-  exact request to `typeagent-processCommand`. Preserve `learn:`, `dev:`,
+  the hook and TypeAgent intent resolution. In MCP delegate policy the hook sends
+  the user's exact request to `typeagent-processCommand`. Mixed policy preserves
+  this path for user requests delegated intact to TypeAgent, while allowing
+  Copilot to own broader tasks. Preserve `learn:`, `dev:`,
   `record:`, and `dev: learn:` exactly. Do not replace them with typed calls.
-- **Copilot-selected actions with concrete inputs:** fixed MCP tools call the
+- **Copilot-selected actions with concrete inputs (MCP mixed routing, or Direct's
+  structured bridge):** fixed MCP tools call the
   real shared Dispatcher structured-action interface. They do not build command
   strings, parse contracts, hash schemas, determine effect policy, or translate
   natural language locally.
 
-The normal sequence is **search complete action contracts -> execute**.
+The structured sequence is **search complete action contracts -> execute**,
+not the default MCP delegate routing policy. In MCP mode, only mixed policy
+steers Copilot-selected steps to this path. Structured tools remain available
+under delegate policy; tool availability is not a routing instruction.
 Search requires one free-text `query` and returns `protocolVersion`, `scopeId`
 and `actions`: complete contracts with exact identities, closed TypeScript input
 schemas including referenced types, policy, outputs and interactions. The shared
@@ -265,18 +300,43 @@ pending prompts/unsupported interaction rather than pretending completion.
 
 ### Explicit binding, reconnect, and trust
 
-Stdio provides no intrinsic Copilot session identity. Each structured MCP
-process finds/creates a dedicated named conversation with a random process-local
-name, then explicitly joins its **concrete conversation ID** with
-`structuredActions: {}`. All four operations share that one owner and concurrent
-connection attempts are singleflight. This does not implicitly share context
-with the ordinary Direct NL hook's conversation.
+NL and structured calls use the same conversation selection in every routing
+mode. With no explicit ID, the first caller resolves the server default and
+saves its **concrete conversation ID** under the plugin data directory's
+`conversation-bindings` folder, keyed by server URL. Later hooks, MCP processes,
+and reconnects reuse that ID even if the server default changes. Concurrent
+first callers atomically adopt the same saved ID. Routing mode does not change
+which conversation data is visible.
+
+This is shared plugin/server context, not one conversation per Copilot chat:
+stdio does not provide an intrinsic Copilot session identity. Sessions using the
+same plugin data directory and server share the saved default, as NL callers
+already shared the server default. Separate plugin data directories or explicit
+IDs select separate context.
+
+The two routes keep separate connections. Structured calls explicitly join the
+selected ID with `structuredActions: {}` to obtain an independent owner; the
+saved binding contains only the public conversation ID, never approval state
+or a resume capability. All four structured operations share that process's
+owner and connection attempts are singleflight.
 
 To intentionally use a known conversation, set `TYPEAGENT_CONVERSATION_ID`, or
 set public `conversationId` in the plugin `config.json`. Environment wins over
 config. The ID must exist: an explicit failed join does not silently fall back to
 another conversation. An explicit ID selects context, **not** a prior owner's
-authority. Two fresh processes using the same public ID get isolated owners.
+authority. The setting applies to NL and structured calls in every mode. A
+bound structured client refuses new calls if the selected ID changes instead
+of continuing against a different conversation from NL. Close active sessions
+before changing selection, then start fresh sessions; pending work is not
+automatically moved or replayed. Two fresh processes using the same public ID
+still get isolated structured owners.
+
+A missing/deleted conversation or an unreadable/corrupt saved binding is an
+error, not a reason to silently choose a new default. To select another existing
+conversation, configure its ID. To intentionally resolve the default again,
+close sessions, remove only the matching server's saved binding file, and start
+fresh sessions with no explicit ID. Configuration fields such as selected
+skills are not rewritten when the default ID is saved.
 
 The server's structured resume token is retained only in private volatile
 connector memory. It is never logged, printed, persisted, put in config, or sent
@@ -583,13 +643,23 @@ and registration stages only that self-contained runtime without
 
 ### Updating after a code change
 
-The global install is a **snapshot copy**, not a live reference. After editing
-the plugin, rebuild and refresh the global copy:
+The global install is a **snapshot copy**, not a live reference. Switching
+repository branches does not update it. After editing the plugin, rebuild with
+its dependencies and refresh the global copy from `ts`:
 
 ```powershell
-pnpm run build       # re-bundle
-pnpm run register    # stages and installs a fresh snapshot
+pnpm exec fluid-build '^@typeagent/copilot-plugin$' -t build --dep
+pnpm --filter @typeagent/copilot-plugin run register
+copilot plugin list
 ```
+
+Start a fresh Copilot session after installation to load the updated extension
+and MCP tools. Existing sessions are not guaranteed to reload those assets.
+If `@typeagent mode mcp mixed` prints "Processing command..." or reaches
+TypeAgent's natural-language dispatcher, check for an old installed snapshot:
+the current plugin consumes valid and invalid mode arguments locally, without
+an agent-server connection. A downstream translation error is not evidence
+that mode selection requires natural-language dispatch.
 
 > For rapid local development with live edits, prefer `pnpm copilot`
 > (`--plugin-dir`), which runs your working directory directly and skips the
@@ -616,10 +686,66 @@ above; this does not reinterpret or alter the user prompt hook.
 
 ### MCP Mode
 
-The hook injects a directive into the prompt context, instructing the LLM to call the `typeagent-processCommand` MCP tool. TypeAgent's MCP server streams progress notifications to the CLI timeline.
+MCP mode has two routing policies. **Delegate** is the backward-compatible
+default: the hook instructs Copilot to call `typeagent-processCommand` with the
+original request and present the complete result. TypeAgent's MCP server streams
+progress notifications to the CLI timeline. Delegate policy does not steer
+subsequent Copilot-selected steps to discovery/direct calls; that guidance
+belongs only to mixed policy. Both policies retain the same structured tools
+and permission checks.
 
-- **Pros:** Streaming output visible during processing, LLM-formatted responses
-- **Cons:** Slower (~3-5s), consumes LLM tokens
+**Mixed** lets Copilot judge whether to delegate the request intact or own the
+task. It does not classify prompts deterministically or force discovery first:
+
+- "Show my lists" or "Create a list and add these three items" delegates through
+  `processCommand`, even when TypeAgent performs several actions.
+- "Review this diff, identify missing tests, and track the resulting work in a
+  list" stays with Copilot for the review. TypeAgent steps Copilot selects use
+  `searchActions` and `executeAction` with concrete inputs.
+- Ordinary explanations and coding tasks need not invoke TypeAgent.
+
+```text
+@typeagent mode mcp mixed
+@typeagent mode mcp delegate
+@typeagent mode
+@typeagent status
+```
+
+Native extension commands `/typeagent-mode mcp mixed`,
+`/typeagent-mode mcp delegate`, and `/typeagent-status` expose the same settings.
+Plain `mode mcp` preserves the saved policy; absent policy defaults to delegate.
+Other modes ignore the policy but preserve it for the next switch to MCP.
+Commands take effect on subsequent prompts without restarting an up-to-date
+plugin; installing updated plugin assets requires a fresh Copilot session.
+Settings persist
+in the plugin config and are **shared by sessions using that config**, not
+session-local. `TYPEAGENT_MODE` still overrides the saved top-level mode; commands
+report when that prevents the selected mode from taking effect.
+
+Recording directives keep the exact natural-language path in both policies.
+`@typeagent run <request>` remains an explicit direct TypeAgent override.
+Mixed Windows PowerShell guidance follows the same ownership distinction rather
+than redirecting Copilot-selected steps back through `processCommand`.
+Confirmation, permission, and uncertain-execution handling are unchanged;
+switching policy never authorizes an action or retries it.
+
+MCP tool titles identify the **actual route** in Copilot's tool cards:
+
+```text
+TypeAgent: Natural-language delegation
+TypeAgent: Structured discovery
+TypeAgent: Structured execution
+```
+
+These are tool metadata, not model reasoning or a predicted route. They apply
+in both policies without adding tool calls, output text, or an extension
+dependency. Continuation/cancellation tools are labeled too. A card identifies
+the invoked tool, not whether an action succeeded: consult its actual result
+for `requires_interaction`, failure, or completion. Clients that display tool
+names instead of titles still show the exact method name. Direct-hook requests
+such as `@typeagent run` do not produce MCP tool cards. Tool response envelopes
+remain unchanged. Restart an existing client after updating the plugin to reload
+tool titles.
 
 ### Dev Mode
 
@@ -674,6 +800,7 @@ imported flows as securely sandboxed.
 ```
 > @typeagent mode direct    # fastest, skips LLM
 > @typeagent mode mcp       # streaming, uses LLM
+> @typeagent mode mcp mixed # Copilot chooses delegation or orchestration
 > @typeagent mode dev       # PowerShell flows first, Copilot on misses
 ```
 
@@ -693,6 +820,7 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 ```json
 {
   "mode": "direct",
+  "mcpRouting": "delegate",
   "powershell": {
     "enabled": true
   }

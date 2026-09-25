@@ -465,6 +465,72 @@ describe("createAndExecutePowerShellFlow", () => {
 
     describe("static network actions", () => {
         itOnWindows(
+            "tests ICMP connectivity without wrapper cmdlets",
+            async () => {
+                const { agent, context } = await createAgentHarness();
+
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell.powershell-network",
+                        actionName: "testConnection",
+                        parameters: { computerName: "127.0.0.1" },
+                    },
+                    context,
+                );
+
+                expect(result).not.toHaveProperty("error");
+                expect(result).toMatchObject({
+                    displayContent: expect.stringContaining("PingSucceeded"),
+                });
+            },
+        );
+
+        itOnWindows(
+            "tests TCP connectivity without wrapper cmdlets",
+            async () => {
+                const { agent, context } = await createAgentHarness();
+
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell.powershell-network",
+                        actionName: "testConnection",
+                        parameters: { computerName: "127.0.0.1", port: 1 },
+                    },
+                    context,
+                );
+
+                expect(result).not.toHaveProperty("error");
+                expect(result).toMatchObject({
+                    displayContent: expect.stringContaining("TcpTestSucceeded"),
+                });
+            },
+        );
+
+        itOnWindows(
+            "shows local IP configuration without wrapper cmdlets",
+            async () => {
+                const { agent, context } = await createAgentHarness();
+
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell.powershell-network",
+                        actionName: "ipConfig",
+                        parameters: {},
+                    },
+                    context,
+                );
+
+                expect(result).not.toHaveProperty("error");
+                expect(result).toMatchObject({
+                    displayContent: expect.stringContaining("InterfaceAlias"),
+                });
+                expect(result).toMatchObject({
+                    displayContent: expect.stringContaining("IPv4Address"),
+                });
+            },
+        );
+
+        itOnWindows(
             "executes portListeners without requiring a dynamic flow",
             async () => {
                 const { agent, context } = await createAgentHarness();

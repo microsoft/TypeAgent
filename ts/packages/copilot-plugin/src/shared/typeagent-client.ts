@@ -14,6 +14,10 @@ import {
     type IAgentMessage,
 } from "@typeagent/agent-server-client";
 import { randomUUID } from "node:crypto";
+import {
+    readSelectedConversationId,
+    selectConversationId,
+} from "./conversation-selection.js";
 import type { DisplayAppendMode } from "@typeagent/agent-sdk";
 import {
     QueueFullError,
@@ -120,9 +124,23 @@ export function createClientIO(callbacks: DisplayCallbacks): ClientIO {
 export async function connectToTypeAgent(
     clientIO: ClientIO,
 ): Promise<Dispatcher> {
+    let conversationId = await readSelectedConversationId(TYPEAGENT_URL);
+    if (conversationId === undefined) {
+        const connection = await connectToAgentServer();
+        try {
+            conversationId = await selectConversationId(
+                connection,
+                clientIO,
+                TYPEAGENT_URL,
+            );
+        } finally {
+            await connection.close();
+        }
+    }
     return connectDispatcher(clientIO, TYPEAGENT_URL, {
         filter: true,
         clientType: "shell",
+        conversationId,
     });
 }
 

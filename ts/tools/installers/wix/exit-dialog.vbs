@@ -10,6 +10,41 @@
 
 Option Explicit
 
+Function ResetTypeAgentPluginStatus()
+    Dim fso, statusPath
+    Session.Property("TYPEAGENTPLUGINSTATUSRESET") = ""
+    On Error Resume Next
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    statusPath = fso.BuildPath(Session.Property("LocalAppDataFolder"), _
+        "TypeAgent\logs\msi-register-plugin.log.status")
+    If fso.FileExists(statusPath) Then fso.DeleteFile statusPath, True
+    If Err.Number = 0 Then Session.Property("TYPEAGENTPLUGINSTATUSRESET") = "1"
+    Err.Clear
+    ResetTypeAgentPluginStatus = 1
+End Function
+
+Function CheckTypeAgentPlugin()
+    Dim fso, statusPath, statusFile, status
+    ' Missing or unreadable status is not proof of successful registration.
+    Session.Property("TYPEAGENTPLUGININCOMPLETE") = "1"
+    If Session.Property("TYPEAGENTPLUGINSTATUSRESET") <> "1" Then
+        CheckTypeAgentPlugin = 1
+        Exit Function
+    End If
+    On Error Resume Next
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    statusPath = fso.BuildPath(Session.Property("LocalAppDataFolder"), _
+        "TypeAgent\logs\msi-register-plugin.log.status")
+    Set statusFile = fso.OpenTextFile(statusPath, 1)
+    status = Trim(statusFile.ReadLine)
+    statusFile.Close
+    If Err.Number = 0 And status = "complete" Then
+        Session.Property("TYPEAGENTPLUGININCOMPLETE") = ""
+    End If
+    Err.Clear
+    CheckTypeAgentPlugin = 1
+End Function
+
 Function CheckTypeAgentConfig()
     Dim fso, localAppData, configPath
     Session.Property("TYPEAGENTCONFIGMISSING") = ""
