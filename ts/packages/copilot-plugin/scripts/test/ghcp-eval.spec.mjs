@@ -14,7 +14,9 @@ import {
 } from "../ghcp-eval-grade.mjs";
 import {
     balancedOrder,
+    assertFrozenSpecification,
     buildCorpus,
+    buildTrialSchedule,
     expectedLists,
     fixtureConfirmationAllowed,
     isClarificationQuestion,
@@ -47,7 +49,19 @@ const readFailureEvents = [
 
 test("protocol four retains paired N/A slots without launching unsupported native sessions", async () => {
     assert.equal(protocolVersion, 4);
-    const order = balancedOrder(corpus, [1, 2, 3, 4, 5, 6, 7], 1);
+    const schedule = buildTrialSchedule(corpus, [1, 2, 3, 4, 5, 6, 7], 1);
+    const { order } = schedule;
+    assert.equal(schedule.totalSlots, 140);
+    assert.equal(schedule.scheduledTrials, 131);
+    assert.deepEqual(schedule.applicableCounts, {
+        1: 20,
+        2: 20,
+        3: 20,
+        4: 20,
+        5: 20,
+        6: 20,
+        7: 11,
+    });
     let executions = 0;
     const results = [];
     for (const entry of order) {
@@ -83,6 +97,44 @@ test("protocol four retains paired N/A slots without launching unsupported nativ
     );
 });
 
+test("frozen schedules derive pilot/repetition counts and cannot resume older protocols or changed order", async () => {
+    const schedule = buildTrialSchedule(corpus, [1, 2, 3, 4, 5, 6, 7], 2);
+    assert.equal(schedule.scheduledTrials, 262);
+    assert.equal(schedule.applicableCounts[7], 22);
+    const pilot = buildTrialSchedule(corpus.slice(0, 2), [1, 7], 1);
+    assert.equal(pilot.totalSlots, 4);
+    assert.equal(pilot.scheduledTrials, 3);
+    const frozen = JSON.stringify({ protocolVersion, ...pilot });
+    assert.doesNotThrow(() => assertFrozenSpecification(undefined, frozen));
+    assert.doesNotThrow(() => assertFrozenSpecification(frozen, frozen));
+    assert.throws(
+        () =>
+            assertFrozenSpecification(
+                JSON.stringify({ protocolVersion: 3, ...pilot }),
+                frozen,
+            ),
+        /Frozen run specification changed/,
+    );
+    assert.throws(
+        () =>
+            assertFrozenSpecification(
+                JSON.stringify({
+                    protocolVersion,
+                    ...pilot,
+                    order: [...pilot.order].reverse(),
+                }),
+                frozen,
+            ),
+        /Frozen run specification changed/,
+    );
+    await assert.rejects(
+        runApplicableTrial({ caseId: "S1", candidate: 7 }, () =>
+            assert.fail("must not run"),
+        ),
+        /frozen applicability/,
+    );
+});
+
 test("known native read I/O failures allow recovery, never opaque shell errors or denied reads", () => {
     for (const tool of ["view", "glob", "rg", "web_fetch", "functions.view"]) {
         assert.equal(
@@ -109,6 +161,20 @@ test("known native read I/O failures allow recovery, never opaque shell errors o
         }),
         true,
     );
+    for (const code of [
+        "ERR_ACCESS_DENIED",
+        "permissionDenied",
+        "cancelled",
+        "execution_uncertain",
+    ]) {
+        assert.equal(
+            terminalExecutionFailure("view", undefined, false, {
+                code,
+                message: "ENOENT",
+            }),
+            true,
+        );
+    }
 });
 
 test("TypeAgent recovery requires a complete read-only trace and affirmative error details", () => {
@@ -472,6 +538,29 @@ test("failed native execution cannot trigger a scripted continuation", async () 
         clarify: () => assert.fail("cannot continue after native failure"),
     });
     assert.equal(calls, 1);
+});
+test("explicit cancellation and uncertain shell follow-ups remain terminal", () => {
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-cancelAction",
+            {
+                structuredContent: { status: "cancelled" },
+            },
+            true,
+        ),
+        true,
+    );
+    assert.equal(terminalExecutionFailure("stop_powershell", {}, true), true);
+    assert.equal(
+        terminalExecutionFailure("functions.stop_powershell", undefined, false),
+        true,
+    );
+    assert.equal(
+        terminalExecutionFailure("read_powershell", undefined, false, {
+            message: "ENOENT",
+        }),
+        true,
+    );
 });
 test("independent PR file evidence must be complete", () => {
     const snapshot = {

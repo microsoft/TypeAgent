@@ -63,7 +63,7 @@ export function isGhcpEvalReadOnlyAction(
 export function isGhcpEvalRecoverableReadError(error: unknown): boolean {
     return (
         typeof error === "string" &&
-        !/\b(denied|access_denied|permission_denied|unauthorized|forbidden|permission|policy|sandbox|rejected|EACCES|EPERM|401|403|cancel(?:led|ed|lation)?|execution_uncertain|uncertain|abort(?:ed)?)\b/i.test(
+        !/(deni(?:ed|al)|unauthoriz|forbidden|permission|policy|sandbox|reject|EACCES|EPERM|\b401\b|\b403\b|cancel|uncertain|abort)/i.test(
             error,
         ) &&
         /\b(ENOENT|ENOTDIR|EISDIR|ETIMEDOUT|ECONNRESET|EAI_AGAIN)\b/.test(error)

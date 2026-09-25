@@ -54,8 +54,9 @@ export function terminalExecutionFailure(
     error,
     backendEvents = [],
 ) {
+    if (/^(?:functions[.-])?stop_powershell$/.test(toolName)) return true;
     if (
-        /^(?:functions[.-])?(?:powershell|view|glob|rg|web_fetch)$/.test(
+        /^(?:functions[.-])?(?:powershell|read_powershell|view|glob|rg|web_fetch)$/.test(
             toolName,
         )
     )
@@ -64,10 +65,19 @@ export function terminalExecutionFailure(
             !(
                 /^(?:functions[.-])?(?:view|glob|rg|web_fetch)$/.test(
                     toolName,
-                ) && isGhcpEvalRecoverableReadError(error?.message)
+                ) &&
+                isGhcpEvalRecoverableReadError(
+                    typeof error?.message === "string"
+                        ? `${error.code ?? ""}\n${error.message}`
+                        : undefined,
+                )
             )
         );
-    if (!/processCommand|executeAction|continueAction/.test(toolName))
+    if (
+        !/processCommand|executeAction|continueAction|cancelAction/.test(
+            toolName,
+        )
+    )
         return false;
     if (
         recoverableTypeAgentReadFailure(

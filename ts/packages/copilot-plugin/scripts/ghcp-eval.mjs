@@ -16,8 +16,9 @@ import {
     isGhcpEvalArtifact,
 } from "../../dispatcher/dispatcher/dist/execute/ghcpEvalArtifacts.js";
 import {
-    balancedOrder,
+    assertFrozenSpecification,
     buildCorpus,
+    buildTrialSchedule,
     expectedLists,
     fileFixture,
     fixtureConfirmationAllowed,
@@ -29,7 +30,6 @@ import {
     runApplicableTrial,
     shuffled,
     sendWithClarification,
-    trialApplicability,
 } from "./ghcp-eval-corpus.mjs";
 import { stageCopilotPlugin } from "../../../tools/scripts/stageCopilotPlugin.mjs";
 import {
@@ -886,14 +886,11 @@ const cases =
         ? corpus.filter(({ id }) => pilotCases.split(",").includes(id))
         : shuffled(corpus, seed);
 if (cases.length === 0) throw new Error("No cases selected");
-const order = balancedOrder(
+const { order, ...applicability } = buildTrialSchedule(
     cases,
     phase === "pilot" ? selected : shuffled(selected, seed),
     repetitions,
-).map((entry) => ({
-    ...entry,
-    ...trialApplicability(entry.caseId, entry.candidate),
-}));
+);
 const specification =
     JSON.stringify(
         {
@@ -913,8 +910,9 @@ const specification =
             cases,
             candidates,
             applicability: {
+                ...applicability,
                 nativeListCases,
-                policy: "Keep all 140 paired slots; record nine native list slots as N/A without starting sessions. Denominators: C1-C6 20 each, C7 11 per repetition.",
+                policy: "Keep paired slots; record native list slots as N/A without starting sessions. Denominators derive from frozen order and exclude N/A.",
             },
             model: "gpt-5.6-sol",
             reasoningEffort: "high",
@@ -957,11 +955,12 @@ const specification =
         2,
     ) + "\n";
 const specificationPath = path.join(outputDirectory, "specification.json");
-if (
-    fs.existsSync(specificationPath) &&
-    fs.readFileSync(specificationPath, "utf8") !== specification
-)
-    throw new Error("Frozen run specification changed; start a distinct run");
+assertFrozenSpecification(
+    fs.existsSync(specificationPath)
+        ? fs.readFileSync(specificationPath, "utf8")
+        : undefined,
+    specification,
+);
 fs.writeFileSync(specificationPath, specification);
 for (const entry of order.slice(batchStart, batchStart + batchSize)) {
     const candidate = candidates.find(({ id }) => id === entry.candidate);

@@ -24,19 +24,50 @@ export function trialApplicability(caseId, candidate) {
 
 // Keep N/A slots in the paired schedule, but never start a session for them.
 export async function runApplicableTrial(entry, run) {
-    const applicability = trialApplicability(entry.caseId, entry.candidate);
-    return applicability.applicable
+    if (typeof entry.applicable !== "boolean")
+        throw new Error("Trial must have frozen applicability");
+    return entry.applicable
         ? run()
         : {
               ...entry,
               status: "not_applicable",
-              reason: applicability.reason,
+              reason: entry.reason,
               e2eMs: null,
               preliminaryGrade: {
                   outcome: "not_applicable",
-                  reason: applicability.reason,
+                  reason: entry.reason,
               },
           };
+}
+
+export function buildTrialSchedule(cases, candidateIds, repetitions) {
+    const order = balancedOrder(cases, candidateIds, repetitions).map(
+        (entry) => ({
+            ...entry,
+            ...trialApplicability(entry.caseId, entry.candidate),
+        }),
+    );
+    return {
+        order,
+        totalSlots: order.length,
+        scheduledTrials: order.filter(({ applicable }) => applicable).length,
+        applicableCounts: Object.fromEntries(
+            candidateIds.map((candidate) => [
+                candidate,
+                order.filter(
+                    (entry) =>
+                        entry.candidate === candidate && entry.applicable,
+                ).length,
+            ]),
+        ),
+    };
+}
+
+export function assertFrozenSpecification(previous, next) {
+    if (previous !== undefined && previous !== next)
+        throw new Error(
+            "Frozen run specification changed; start a distinct run",
+        );
 }
 
 export const listFixture = {
