@@ -7,6 +7,7 @@ import {
     type SessionContext,
     type ActionContext,
     type ActionResult,
+    type ActionResultError,
     type SchemaContent,
     type GrammarContent,
     AppAgentEvent,
@@ -46,6 +47,7 @@ import {
 import type { PowerShellAgentContext } from "./types/powerShellAgentContext.mjs";
 import { executeNamespaceAction } from "./namespaces/actionHandlerRegistry.mjs";
 import type { PowerShellAction } from "./namespaces/namespaceActionHandler.mjs";
+import { isDynamicPowerShellExecutionEnabled } from "./config/executionGates.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:powershell:handler");
@@ -54,6 +56,21 @@ const SAMPLES_DIR = join(__dirname, "..", "samples");
 
 const flowMutationTails = new Map<string, Promise<void>>();
 const repairAttempts = new WeakSet<object>();
+
+function createDynamicExecutionDenied(): ActionResult {
+    return createPowerShellFailure(
+        "policyDenied",
+        "Dynamic PowerShell execution is disabled by policy.",
+        { retryable: false },
+    );
+}
+
+function addReasoningFallback(result: ActionResultError): ActionResultError {
+    if (result.errorCode === "powershell.policyDenied") {
+        return result;
+    }
+    return { ...result, fallbackToReasoning: true };
+}
 
 async function withFlowMutationLock<T>(
     flowName: string,
@@ -113,6 +130,10 @@ async function executeFlowScript(
     parameters: Record<string, unknown>,
     abortSignal?: AbortSignal,
 ): Promise<ActionResult> {
+    if (!isDynamicPowerShellExecutionEnabled()) {
+        return createDynamicExecutionDenied();
+    }
+
     const resolvedParams: Record<string, unknown> = {};
     for (const paramDef of flow.parameters) {
         const value = parameters[paramDef.name] ?? paramDef.default;
@@ -460,6 +481,10 @@ async function executeDraftRecipe(
     suppliedParameters: Record<string, unknown>,
     abortSignal?: AbortSignal,
 ): Promise<{ output: string } | { error: ActionResult }> {
+    if (!isDynamicPowerShellExecutionEnabled()) {
+        return { error: createDynamicExecutionDenied() };
+    }
+
     const executionParameters: Record<string, unknown> = {};
     mapParamsToFlowDefs(
         suppliedParameters,
@@ -1068,6 +1093,10 @@ async function handlePowerShellFlowAction(
         }
 
         case "testPowerShellFlow": {
+            if (!isDynamicPowerShellExecutionEnabled()) {
+                return createDynamicExecutionDenied();
+            }
+
             // Execute a script without registering it (test-then-register pattern)
             const params = action.parameters as Record<string, unknown>;
             const scriptBody = params.script as string;
@@ -1220,7 +1249,7 @@ async function handlePowerShellFlowAction(
                 context.abortSignal,
             );
             if (result.error !== undefined) {
-                return { ...result, fallbackToReasoning: true };
+                return addReasoningFallback(result);
             }
 
             await recordUsageAfterExecution(flowStore, flowName, context);
@@ -1363,7 +1392,7 @@ async function handlePowerShellFlowAction(
                 context.abortSignal,
             );
             if (result.error !== undefined) {
-                return { ...result, fallbackToReasoning: true };
+                return addReasoningFallback(result);
             }
 
             await recordUsageAfterExecution(
@@ -1494,6 +1523,10 @@ class RunHandler implements CommandHandler {
         context: ActionContext<PowerShellAgentContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
+        if (!isDynamicPowerShellExecutionEnabled()) {
+            return createDynamicExecutionDenied();
+        }
+
         const store = _agentStore;
         if (!store) {
             throw new Error("Script flow store not available");
