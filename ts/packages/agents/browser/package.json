@@ -17,8 +17,7 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
-    "./agent/handlers": "./dist/agent/browserActionHandler.mjs",
-    "./agent/indexing": "./dist/agent/indexing/browserIndexingService.js"
+    "./agent/handlers": "./dist/agent/browserActionHandler.mjs"
   },
   "main": "index.js",
   "files": [
@@ -62,11 +61,12 @@
     "@typeagent/chat-ui": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "@typeagent/conversation-memory": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-client": "workspace:*",
+    "@typeagent/memory-service": "workspace:*",
     "@typeagent/taskflow-typeagent": "workspace:*",
     "@typeagent/textpro": "workspace:*",
     "@typeagent/website-memory": "workspace:*",
@@ -218,7 +218,6 @@
         "src/agent/indexing/schema",
         "src/agent/knowledge/actions/schema",
         "src/agent/knowledge/schema",
-        "src/agent/search/schema",
         "src/agent/webFlows/samples",
         "src/agent/webFlows/schema"
       ],

@@ -9,6 +9,12 @@ import type {
 } from "@typeagent/agent-sdk";
 import type {
     AgentSchemaInfo,
+    ActionSearchRequest,
+    ActionSearchResult,
+    ExecuteActionRequest,
+    ContinueActionRequest,
+    CancelActionRequest,
+    StructuredActionExecutionResult,
     CancelResult,
     CommandCompletionResult,
     CommandResult,
@@ -98,6 +104,18 @@ export type DispatcherInvokeFunctions = {
     getStatus(): Promise<DispatcherStatus>;
 
     getAgentSchemas(agentName?: string): Promise<AgentSchemaInfo[]>;
+
+    searchActions(request: ActionSearchRequest): Promise<ActionSearchResult>;
+
+    executeAction(
+        request: ExecuteActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
+    continueAction(
+        request: ContinueActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
+    cancelAction(
+        request: CancelActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
 
     respondToChoice(
         choiceId: string,

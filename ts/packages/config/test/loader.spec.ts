@@ -10,6 +10,7 @@ import {
     reloadConfigKeysSync,
     tryReloadConfigKeysSync,
     getConfigProblems,
+    inspectConfigFile,
 } from "../src/loader.js";
 
 function makeTempWorkspace(): string {
@@ -241,6 +242,114 @@ describe("loadConfigSync", () => {
                 strict: false,
             });
             expect(result.env.OPENAI_API_KEY).toBe("ok");
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+});
+
+describe("inspectConfigFile", () => {
+    test("reports a missing file with an absolute path", () => {
+        const root = makeTempWorkspace();
+        try {
+            const file = path.join(root, "missing.yaml");
+            expect(inspectConfigFile(file)).toEqual({
+                status: "missing",
+                path: path.resolve(file),
+            });
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test("treats an existing empty file as structurally valid", () => {
+        const root = makeTempWorkspace();
+        try {
+            const file = path.join(root, "config.local.yaml");
+            fs.writeFileSync(file, "");
+            expect(inspectConfigFile(file)).toEqual({
+                status: "valid",
+                path: path.resolve(file),
+            });
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test("accepts a valid Copilot configuration with fallback models", () => {
+        const root = makeTempWorkspace();
+        try {
+            const file = path.join(root, "config.local.yaml");
+            fs.writeFileSync(
+                file,
+                [
+                    "modelProvider: copilot",
+                    "copilot:",
+                    "  defaultModel: gpt-5.6-luna",
+                    "  fallbackModels:",
+                    "    - gpt-5.4-mini",
+                    "    - gpt-5-mini",
+                ].join("\n"),
+            );
+            expect(inspectConfigFile(file)).toEqual({
+                status: "valid",
+                path: path.resolve(file),
+            });
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test("uses the loader's recovery rules for invalid sections", () => {
+        const root = makeTempWorkspace();
+        try {
+            const file = path.join(root, "config.local.yaml");
+            fs.writeFileSync(
+                file,
+                [
+                    "openai:",
+                    "  api_key: good",
+                    "spotify:",
+                    "  port: <value>",
+                ].join("\n"),
+            );
+            expect(inspectConfigFile(file)).toEqual({
+                status: "valid",
+                path: path.resolve(file),
+            });
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test("reports filesystem inspection failures as unknown", () => {
+        const root = makeTempWorkspace();
+        try {
+            expect(inspectConfigFile(root)).toEqual({
+                status: "unknown",
+                path: path.resolve(root),
+                errorCode: "EISDIR",
+            });
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test.each([
+        ["invalid YAML", "openai:\n  api_key: [unclosed\n"],
+        ["a top-level scalar", "not-a-mapping\n"],
+        ["a top-level array", "- not\n- a\n- mapping\n"],
+    ])("reports %s as invalid", (_name, contents) => {
+        const root = makeTempWorkspace();
+        try {
+            const file = path.join(root, "config.local.yaml");
+            fs.writeFileSync(file, contents);
+            const inspection = inspectConfigFile(file);
+            expect(inspection.status).toBe("invalid");
+            expect(inspection.path).toBe(path.resolve(file));
+            if (inspection.status === "invalid") {
+                expect(inspection.error).toBeInstanceOf(Error);
+            }
         } finally {
             fs.rmSync(root, { recursive: true, force: true });
         }

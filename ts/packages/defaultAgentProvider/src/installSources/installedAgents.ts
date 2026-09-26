@@ -183,11 +183,17 @@ export function createInstalledAppAgentProvider(
     name: string,
     record: InstalledAgentRecord,
     installDir: string,
+    options?: {
+        defaultEnabled?: boolean;
+    },
 ): AppAgentProvider {
-    return createNpmAppAgentProvider(
+    const provider = createNpmAppAgentProvider(
         { [name]: recordToNpmInfo(record) },
         recordRequirePath(record, installDir),
     );
+    return options?.defaultEnabled === undefined
+        ? provider
+        : { ...provider, defaultEnabled: options.defaultEnabled };
 }
 
 /**

@@ -57,10 +57,12 @@ export function readCopilotRuntimeManifest(manifestPath) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     const required = [
         "sdkVersion",
-        "cliPackage",
-        "cliVersion",
+        "runtimeVersion",
+        "runtimePlatform",
         "platformPackage",
         "platformVersion",
+        "executablePath",
+        "runtimeLibraryPath",
         "registry",
         "azureDevOpsResource",
     ];
@@ -71,9 +73,14 @@ export function readCopilotRuntimeManifest(manifestPath) {
             );
         }
     }
-    if (manifest.cliVersion !== manifest.platformVersion) {
+    if (manifest.sdkVersion !== manifest.platformVersion) {
         throw new Error(
-            "Invalid Copilot runtime manifest: CLI and platform versions differ.",
+            "Invalid Copilot runtime manifest: SDK and platform package versions differ.",
+        );
+    }
+    if (manifest.schemaVersion !== 2) {
+        throw new Error(
+            "Invalid Copilot runtime manifest: unsupported schema version.",
         );
     }
     if (!manifest.registry.startsWith("https://")) {
@@ -85,6 +92,9 @@ export function readCopilotRuntimeManifest(manifestPath) {
 }
 
 export function defaultRuntimeRoot(env = process.env) {
+    if (env.TYPEAGENT_COPILOT_RUNTIME_ROOT) {
+        return path.resolve(env.TYPEAGENT_COPILOT_RUNTIME_ROOT);
+    }
     if (env.TYPEAGENT_RUNTIME_ROOT) {
         return path.resolve(env.TYPEAGENT_RUNTIME_ROOT);
     }
@@ -102,7 +112,7 @@ export function managedRuntimeDirectory(manifest, runtimeRoot) {
     return path.join(
         runtimeRoot ?? defaultRuntimeRoot(),
         "copilot",
-        manifest.cliVersion,
+        manifest.runtimeVersion,
     );
 }
 
@@ -124,20 +134,24 @@ export function resolveInstalledCopilotPath(runtimeDir, manifest) {
         const metadata = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
         if (
             metadata.name !== manifest.platformPackage ||
-            metadata.version !== manifest.platformVersion ||
-            typeof metadata.bin !== "object" ||
-            metadata.bin === null
+            metadata.version !== manifest.platformVersion
         ) {
             return undefined;
         }
-        const target = Object.values(metadata.bin).find(
-            (value) => typeof value === "string",
+        const executable = path.resolve(packageDir, manifest.executablePath);
+        const runtimeLibrary = path.resolve(
+            packageDir,
+            manifest.runtimeLibraryPath,
         );
-        if (typeof target !== "string") {
+        if (
+            !executable.startsWith(`${packageDir}${path.sep}`) ||
+            !runtimeLibrary.startsWith(`${packageDir}${path.sep}`)
+        ) {
             return undefined;
         }
-        const executable = path.resolve(packageDir, target);
-        return fs.existsSync(executable) ? executable : undefined;
+        return fs.existsSync(executable) && fs.existsSync(runtimeLibrary)
+            ? executable
+            : undefined;
     } catch {
         return undefined;
     }
@@ -242,7 +256,7 @@ export function npmInstallArgs(manifest, runtimeDir, userconfig) {
         manifest.registry,
         "--userconfig",
         userconfig,
-        `${manifest.cliPackage}@${manifest.cliVersion}`,
+        `${manifest.platformPackage}@${manifest.platformVersion}`,
     ];
 }
 
@@ -348,18 +362,12 @@ function verifyCopilotRuntimeFeed(manifest, interactive) {
     try {
         verifyFeedPackage(
             manifest,
-            manifest.cliPackage,
-            manifest.cliVersion,
-            userconfig,
-        );
-        verifyFeedPackage(
-            manifest,
             manifest.platformPackage,
             manifest.platformVersion,
             userconfig,
         );
         console.log(
-            `Verified ${manifest.cliPackage}@${manifest.cliVersion} and ${manifest.platformPackage}@${manifest.platformVersion} through the TypeAgent package feed.`,
+            `Verified ${manifest.platformPackage}@${manifest.platformVersion} through the TypeAgent package feed.`,
         );
     } finally {
         fs.rmSync(path.dirname(userconfig), { recursive: true, force: true });
@@ -393,12 +401,12 @@ export function installManagedCopilotRuntime(
     const parent = path.dirname(finalDirectory);
     fs.mkdirSync(parent, { recursive: true });
     const temporaryDirectory = fs.mkdtempSync(
-        path.join(parent, `.tmp-${manifest.cliVersion}-`),
+        path.join(parent, `.tmp-${manifest.runtimeVersion}-`),
     );
     const userconfig = writeTransientNpmrc(manifest.registry, token);
     try {
         console.log(
-            `Installing ${manifest.cliPackage}@${manifest.cliVersion} from the TypeAgent package feed...`,
+            `Installing ${manifest.platformPackage}@${manifest.platformVersion} from the TypeAgent package feed...`,
         );
         const result = runNpm(
             npmInstallArgs(manifest, temporaryDirectory, userconfig),
@@ -442,7 +450,7 @@ export function installManagedCopilotRuntime(
             }
             writeSetupState(runtimeRoot, {
                 status: "installed",
-                cliVersion: manifest.cliVersion,
+                runtimeVersion: manifest.runtimeVersion,
                 cliPath: installed,
             });
             return installed;
@@ -461,7 +469,7 @@ export function installManagedCopilotRuntime(
                 error instanceof Error && error.message.includes("authenticate")
                     ? "feed-auth-required"
                     : "feed-unavailable",
-            cliVersion: manifest.cliVersion,
+            runtimeVersion: manifest.runtimeVersion,
             message: error instanceof Error ? error.message : String(error),
         });
         throw error;
@@ -489,7 +497,7 @@ function resolveExactSystemCopilot(manifest) {
         return undefined;
     }
     return globalCopilotPackageVersion(npmRoot.stdout.trim()) ===
-        manifest.cliVersion
+        manifest.runtimeVersion
         ? system
         : undefined;
 }
@@ -578,7 +586,7 @@ async function setupCopilot(manifest, options) {
         if (!options.interactive) {
             writeSetupState(runtimeRoot, {
                 status: "auth-required",
-                cliVersion: manifest.cliVersion,
+                runtimeVersion: manifest.runtimeVersion,
                 cliPath: executable,
             });
             console.error(
@@ -590,7 +598,7 @@ async function setupCopilot(manifest, options) {
         if (!runLogin(executable, options)) {
             writeSetupState(runtimeRoot, {
                 status: "auth-cancelled",
-                cliVersion: manifest.cliVersion,
+                runtimeVersion: manifest.runtimeVersion,
                 cliPath: executable,
             });
             return 2;
@@ -601,7 +609,7 @@ async function setupCopilot(manifest, options) {
     if (!status.auth.isAuthenticated) {
         writeSetupState(runtimeRoot, {
             status: "auth-required",
-            cliVersion: manifest.cliVersion,
+            runtimeVersion: manifest.runtimeVersion,
             cliPath: executable,
         });
         console.error("GitHub Copilot still reports as not authenticated.");
@@ -610,7 +618,7 @@ async function setupCopilot(manifest, options) {
     if (status.models.length === 0) {
         writeSetupState(runtimeRoot, {
             status: "model-unavailable",
-            cliVersion: manifest.cliVersion,
+            runtimeVersion: manifest.runtimeVersion,
             cliPath: executable,
             login: status.auth.login,
         });
@@ -622,7 +630,7 @@ async function setupCopilot(manifest, options) {
 
     writeSetupState(runtimeRoot, {
         status: "ready",
-        cliVersion: manifest.cliVersion,
+        runtimeVersion: manifest.runtimeVersion,
         cliPath: executable,
         login: status.auth.login,
         authType: status.auth.authType,
@@ -693,7 +701,7 @@ async function main() {
                 JSON.stringify(
                     {
                         cliPath: executable,
-                        cliVersion: manifest.cliVersion,
+                        runtimeVersion: manifest.runtimeVersion,
                         runtime: status.runtime,
                         auth: status.auth,
                         models: status.models.map((model) => model.id),

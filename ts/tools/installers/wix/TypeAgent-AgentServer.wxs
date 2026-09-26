@@ -59,14 +59,14 @@
          Endpoint provider selection
          Public property (pass uppercase on the msiexec command line, e.g.
            msiexec /i TypeAgent.msi PROVIDER=COPILOT
-         AISYSTEMS (default) provisions through az login + getKeys. COPILOT
-         synthesizes config.local.yaml with the bundled local embedding model.
+         COPILOT (default) synthesizes config.local.yaml with Copilot chat and
+         embedding providers. AISYSTEMS provisions through az login + getKeys.
          ═══════════════════════════════════════════════ -->
-    <Property Id="PROVIDER" Value="AISYSTEMS" Secure="yes" />
+    <Property Id="PROVIDER" Value="COPILOT" Secure="yes" />
     <Condition Message="PROVIDER must be AISYSTEMS or COPILOT. Ollama is not supported by this MSI; use the TypeAgent provisioning tools for Ollama.">
       PROVIDER="AISYSTEMS" OR PROVIDER="COPILOT"
     </Condition>
-    <Condition Message="EMBEDDING and OLLAMAHOST are no longer supported MSI properties. GitHub Copilot uses local embeddings automatically.">
+    <Condition Message="EMBEDDING and OLLAMAHOST are no longer supported MSI properties. GitHub Copilot embeddings are configured automatically.">
       NOT EMBEDDING AND NOT OLLAMAHOST
     </Condition>
 
@@ -146,11 +146,45 @@
     <Property Id="SHELLPROJECT" Value="$(var.ShellProject)" Secure="yes" />
     <?endif?>
 
-    <!-- Post-install guidance shown on the final page (WixUI ExitDialog). Points
-         at the manual provisioning/sign-in steps the MSI can only attempt, so a
-         fresh machine knows what to finish if agents don't respond. -->
-    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Secure="yes"
-              Value="Finish setup: the claude and copilot CLIs need a one-time sign-in (run 'claude' then 'copilot'). If agents don't respond, provision config with: node &quot;%LOCALAPPDATA%\TypeAgent\agent-server\typeagent-serve.mjs&quot; provision  (sign in when prompted)." />
+    <!-- Post-install guidance shown on the final page (TypeAgentExitDlg).
+         Provisioning runs automatically during install. Copilot provisioning
+         is Return="check", so a failure rolls the install back; only AI Systems
+         (Azure sign-in, non-fatal) can reach this page without a config. In
+         that case CheckTypeAgentConfig finds no config.local.yaml and the retry
+         command is shown (selectable, with a Copy button). The install path is
+         resolved once CostFinalize has set INSTALLFOLDER. -->
+    <SetProperty Id="TYPEAGENTAISYSTEMSCMD"
+                 After="CostFinalize"
+                 Sequence="ui"
+                 Value="node &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; provision" />
+
+    <Binary Id="ExitDialogVbs" SourceFile="$(var.InstallerSourceDir)\exit-dialog.vbs" />
+    <CustomAction Id="CheckTypeAgentConfig"
+                  BinaryKey="ExitDialogVbs"
+                  VBScriptCall="CheckTypeAgentConfig"
+                  Execute="immediate"
+                  Return="ignore" />
+    <CustomAction Id="CopySetupCommand"
+                  BinaryKey="ExitDialogVbs"
+                  VBScriptCall="CopySetupCommand"
+                  Execute="immediate"
+                  Return="ignore" />
+    <CustomAction Id="CheckTypeAgentPlugin"
+                  BinaryKey="ExitDialogVbs"
+                  VBScriptCall="CheckTypeAgentPlugin"
+                  Execute="immediate"
+                  Return="ignore" />
+    <CustomAction Id="ResetTypeAgentPluginStatus"
+                  BinaryKey="ExitDialogVbs"
+                  VBScriptCall="ResetTypeAgentPluginStatus"
+                  Execute="immediate"
+                  Return="ignore" />
+
+    <InstallUISequence>
+      <Custom Action="ResetTypeAgentPluginStatus" Before="ExecuteAction">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="CheckTypeAgentConfig" After="ExecuteAction">NOT Installed AND PROVIDER="AISYSTEMS"</Custom>
+      <Custom Action="CheckTypeAgentPlugin" After="CheckTypeAgentConfig">NOT REMOVE~="ALL"</Custom>
+    </InstallUISequence>
 
     <!-- ═══════════════════════════════════════════════
          Directory layout
@@ -341,7 +375,8 @@
     <!-- ═══════════════════════════════════════════════
          Custom actions — Copilot CLI plugin registration
          Runs register-plugin.ps1 as the installing user.
-          Registration failures are fatal.
+         Registration failures are non-fatal and shown on the completion page.
+         Repair retries registration, including the prerequisite setup retry.
          ═══════════════════════════════════════════════ -->
 
     <!-- Pass the PowerShell command as CustomActionData to the deferred CA -->
@@ -435,8 +470,8 @@
 
     <!-- ═══════════════════════════════════════════════
          Custom action — Copilot config provisioning
-         For PROVIDER=COPILOT, synthesize config.local.yaml with the local
-         embedding provider via generate-selfhost-config (bundled under
+          For PROVIDER=COPILOT, synthesize config.local.yaml with the Copilot
+          embedding provider via generate-selfhost-config (bundled under
          agent-server\tools). Runs as the installing user so it writes to the
          user's ~/.typeagent config dir and 'node' resolves from the user PATH.
          AISYSTEMS mode is skipped here; it uses az login + getKeys below.
@@ -444,13 +479,13 @@
     <SetProperty Id="ProvisionCopilotConfig"
            Before="ProvisionCopilotConfig"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; provision --provider COPILOT --embedding LOCAL --force" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -FailOnError -ServeCommand provision --provider COPILOT --embedding COPILOT --embedding-model text-embedding-3-small --force" />
 
     <CustomAction Id="ProvisionCopilotConfig"
                   BinaryKey="WixCA"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
-                  Return="ignore"
+                  Return="check"
                   Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
@@ -463,7 +498,7 @@
     <SetProperty Id="InstallPrereqs"
            Before="InstallPrereqs"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-prereqs.ps1&quot; -Provider &quot;[PROVIDER]&quot; -AgentServerDir &quot;[INSTALLFOLDER].&quot; -PluginInstallDir &quot;[TYPEAGENTROOT].&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-prereqs.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-prereqs.ps1&quot; -Provider &quot;[PROVIDER]&quot; -AgentServerDir &quot;[INSTALLFOLDER].&quot; -PluginInstallDir &quot;[TYPEAGENTROOT].&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-prereqs.log&quot;" />
 
     <CustomAction Id="InstallPrereqs"
                   BinaryKey="WixCA"
@@ -477,7 +512,7 @@
          same setup command later. -->
     <CustomAction Id="LaunchCopilotSetup"
                   Directory="TYPEAGENTROOT"
-                  ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]launch-copilot-setup.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\copilot-setup-launch.log&quot;"
+                  ExeCommand="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]launch-copilot-setup.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\copilot-setup-launch.log&quot;"
                   Execute="immediate"
                   Return="ignore"
                   Impersonate="yes" />
@@ -487,12 +522,12 @@
          For PROVIDER=AISYSTEMS, download config.local.yaml from Key Vault via
          getKeys (interactive browser sign-in as the impersonated user). Non-fatal
          (Return="ignore"): if sign-in is unavailable during install, the
-         ExitDialog reminds the user to run 'provision' manually.
+         TypeAgentExitDlg shows the 'provision' command to run manually.
          ═══════════════════════════════════════════════ -->
     <SetProperty Id="ProvisionAiSystemsConfig"
            Before="ProvisionAiSystemsConfig"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; provision" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -ServeCommand provision" />
 
     <CustomAction Id="ProvisionAiSystemsConfig"
                   BinaryKey="WixCA"
@@ -511,7 +546,7 @@
     <SetProperty Id="StartAgentServer"
            Before="StartAgentServer"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; start" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -ServeCommand start" />
 
     <CustomAction Id="StartAgentServer"
                   BinaryKey="WixCA"
@@ -529,7 +564,7 @@
     <SetProperty Id="EnableAutostart"
            Before="EnableAutostart"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; autostart enable" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -ServeCommand autostart -ServeCommandArg enable" />
 
     <CustomAction Id="EnableAutostart"
                   BinaryKey="WixCA"
@@ -541,7 +576,7 @@
     <SetProperty Id="DisableAutostart"
            Before="DisableAutostart"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; autostart disable" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; -LocalAppDataDir &quot;[LocalAppDataFolder].&quot; -RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\runtimes&quot; -ServeCommand autostart -ServeCommandArg disable" />
 
     <CustomAction Id="DisableAutostart"
                   BinaryKey="WixCA"
@@ -819,7 +854,81 @@
         </Control>
       </Dialog>
 
-      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999">1</Publish>
+      <!-- ═══ Completion dialog ═══
+           Replaces the stock WixUI ExitDialog so the post-install setup command
+           is shown in a selectable, copyable Edit control with a Copy button. -->
+      <Dialog Id="TypeAgentExitDlg" Width="370" Height="320" Title="!(loc.ExitDialog_Title)">
+        <Control Id="Finish" Type="PushButton" X="236" Y="293" Width="56" Height="17"
+                 Default="yes" Cancel="yes" Text="!(loc.WixUIFinish)">
+          <Publish Event="EndDialog" Value="Return">1</Publish>
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="293" Width="56" Height="17"
+                 Disabled="yes" Text="!(loc.WixUICancel)" />
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="284"
+                 TabSkip="no" Text="!(loc.ExitDialogBitmap)" />
+        <Control Id="Back" Type="PushButton" X="180" Y="293" Width="56" Height="17"
+                 Disabled="yes" Text="!(loc.WixUIBack)" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="284" Width="370" Height="0" />
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="40"
+                 Transparent="yes" NoPrefix="yes" Text="!(loc.ExitDialogTitle)" />
+        
+        <!-- Retry block (AI Systems only, when no config was written) comes
+             first; the sign-in note is always the last step. Without the retry
+             block the note moves up so the page has no gap. -->
+        <Control Id="AiSystemsSetupText" Type="Text" X="135" Y="64" Width="220" Height="20"
+                 Transparent="yes" NoPrefix="yes" Hidden="yes"
+                 Text="The AI Systems configuration wasn't downloaded (Azure sign-in may be needed). To retry, run:">
+          <Condition Action="show">NOT Installed AND TYPEAGENTCONFIGMISSING="1" AND PROVIDER="AISYSTEMS"</Condition>
+        </Control>
+
+        <!-- Single-line Edit: MSI multiline edits scroll horizontally rather
+             than wrap, so a one-line box beside the button reads better. -->
+        <Control Id="AiSystemsSetupCommand" Type="Edit" X="135" Y="88" Width="160" Height="17"
+                 Hidden="yes" Property="TYPEAGENTAISYSTEMSCMD" Text="{1024}">
+          <Condition Action="show">NOT Installed AND TYPEAGENTCONFIGMISSING="1" AND PROVIDER="AISYSTEMS"</Condition>
+        </Control>
+        <Control Id="CopySetupCommandButton" Type="PushButton" X="299" Y="88" Width="56" Height="17"
+                 Hidden="yes" Text="&amp;Copy">
+          <Condition Action="show">NOT Installed AND TYPEAGENTCONFIGMISSING="1" AND PROVIDER="AISYSTEMS"</Condition>
+          <Publish Event="DoAction" Value="CopySetupCommand" Order="1">1</Publish>
+          <!-- Control conditions are only re-evaluated after a property-set
+               control event, not after DoAction, so re-publish the flag. -->
+          <Publish Property="TYPEAGENTCMDCOPIED" Value="[TYPEAGENTCMDCOPIED]" Order="2">1</Publish>
+        </Control>
+        <Control Id="CopiedText" Type="Text" X="135" Y="109" Width="220" Height="12"
+                 Transparent="yes" NoPrefix="yes" Hidden="yes"
+                 Text="Copied to clipboard. Paste it into a terminal to run it.">
+          <Condition Action="show">TYPEAGENTCMDCOPIED="1"</Condition>
+          <Condition Action="hide">NOT TYPEAGENTCMDCOPIED="1"</Condition>
+        </Control>
+
+        <Control Id="SignInText" Type="Text" X="135" Y="64" Width="220" Height="20"
+                 Transparent="yes" NoPrefix="yes" Hidden="yes"
+                 Text="Sign in to the claude and copilot CLIs the first time you use them.">
+          <Condition Action="show">NOT Installed AND TYPEAGENTCONFIGMISSING&lt;&gt;"1"</Condition>
+        </Control>
+        <Control Id="SignInAfterRetryText" Type="Text" X="135" Y="128" Width="220" Height="20"
+                 Transparent="yes" NoPrefix="yes" Hidden="yes"
+                 Text="Then sign in to the claude and copilot CLIs the first time you use them.">
+          <Condition Action="show">NOT Installed AND TYPEAGENTCONFIGMISSING="1"</Condition>
+        </Control>
+
+        <!-- Last line, directly under whichever block is visible. MSI dialogs
+             have no flow layout, so there's one positioned copy per layout. -->
+        <Control Id="Description" Type="Text" X="135" Y="92" Width="220" Height="20"
+                 Transparent="yes" NoPrefix="yes" Hidden="yes" Text="!(loc.ExitDialogDescription)">
+          <Condition Action="show">NOT (NOT Installed AND TYPEAGENTCONFIGMISSING="1")</Condition>
+        </Control>
+        <Control Id="DescriptionAfterRetry" Type="Text" X="135" Y="156" Width="220" Height="20"
+                 Transparent="yes" NoPrefix="yes" Hidden="yes" Text="!(loc.ExitDialogDescription)">
+          <Condition Action="show">NOT Installed AND TYPEAGENTCONFIGMISSING="1"</Condition>
+        </Control>
+        <Control Id="PluginRepairText" Type="Text" X="135" Y="185" Width="220" Height="70"
+                 Transparent="yes" NoPrefix="yes" Hidden="yes"
+                 Text="Copilot plugin setup did not complete. Reopen this TypeAgent installer and choose Repair to retry automatically. If Repair fails, check msi-register-plugin.log in %LOCALAPPDATA%\TypeAgent\logs. Restart Copilot after a successful repair.">
+          <Condition Action="show">NOT REMOVE~="ALL" AND TYPEAGENTPLUGININCOMPLETE="1"</Condition>
+        </Control>
+      </Dialog>
 
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="ProviderDlg">NOT Installed</Publish>
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">Installed AND PATCH</Publish>
@@ -839,7 +948,12 @@
 
       <InstallUISequence>
         <Show Dialog="WelcomeDlg" Before="ProgressDlg">NOT Installed</Show>
+        <Show Dialog="TypeAgentExitDlg" OnExit="success" />
       </InstallUISequence>
+
+      <AdminUISequence>
+        <Show Dialog="TypeAgentExitDlg" OnExit="success" />
+      </AdminUISequence>
 
       <Property Id="ARPNOMODIFY" Value="1" />
     </UI>

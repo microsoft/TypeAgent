@@ -5,14 +5,23 @@ import { TextEmbeddingModel } from "./models.js";
 import { createEmbeddingModel } from "./openai.js";
 import { EnvVars } from "./apiTypes.js";
 import { createLocalEmbeddingModel } from "./localEmbedding.js";
+import {
+    createCopilotEmbeddingModel,
+    DefaultCopilotEmbeddingModel,
+} from "./copilotEmbedding.js";
 
 /**
  * The configured source of text embeddings.
  * - "local": CPU-only transformers.js model bundled with the app.
- * - "openai" / "azure": hosted embedding endpoints.
+ * - "openai" / "azure" / "copilot": hosted embedding endpoints.
  * - "none": embeddings are disabled; consumers must degrade gracefully.
  */
-export type EmbeddingProvider = "local" | "openai" | "azure" | "none";
+export type EmbeddingProvider =
+    | "local"
+    | "openai"
+    | "azure"
+    | "copilot"
+    | "none";
 
 // Flattened form of the config `embedding:` section.
 enum EmbeddingEnvVars {
@@ -26,6 +35,7 @@ function isEmbeddingProvider(value: string): value is EmbeddingProvider {
         value === "local" ||
         value === "openai" ||
         value === "azure" ||
+        value === "copilot" ||
         value === "none"
     );
 }
@@ -55,8 +65,8 @@ export function getEmbeddingProvider(): EmbeddingProvider {
 }
 
 /**
- * True when an embedding model can be created without a hosted endpoint,
- * i.e. embeddings are available even in Copilot / offline modes.
+ * True when the configured embedding provider can construct a model.
+ * Hosted providers perform endpoint acquisition on first use.
  */
 export function isEmbeddingAvailable(): boolean {
     return getEmbeddingProvider() !== "none";
@@ -86,6 +96,11 @@ export function tryCreateEmbeddingModel(
                     process.env[EmbeddingEnvVars.CACHE_DIR]?.trim() ||
                     undefined,
             });
+        case "copilot":
+            return createCopilotEmbeddingModel(
+                process.env[EmbeddingEnvVars.MODEL]?.trim() ||
+                    DefaultCopilotEmbeddingModel,
+            );
         default:
             return endpoint !== undefined
                 ? createEmbeddingModel(endpoint, dimensions)

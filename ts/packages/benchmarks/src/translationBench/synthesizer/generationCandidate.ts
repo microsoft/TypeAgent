@@ -21,6 +21,7 @@ import {
 } from "./actionShape.js";
 import { stripEmptyGoldPlaceholders } from "./goldParameterHygiene.js";
 import { validateTranslationBenchGoldAction } from "./actionValidation.js";
+import { normalizeUtterance } from "./text.js";
 
 export interface TranslationBenchGeneratedCase {
     id: string;
@@ -148,10 +149,6 @@ function requirePositiveInteger(value: number, name: string): void {
     }
 }
 
-function normalizedUtterance(value: string): string {
-    return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
-}
-
 function sameTarget(
     action: TranslationBenchBenchmarkAction,
     target: TranslationBenchTargetAction,
@@ -239,7 +236,7 @@ export function parseTranslationBenchGeneratedCandidate(
     };
     validatePositive(candidate.seed, "seed", "seed");
     const ids = new Set<string>();
-    const seedUtterance = normalizedUtterance(candidate.seed.utterance);
+    const seedUtterance = normalizeUtterance(candidate.seed.utterance);
     if (context.forbiddenUtterances?.has(seedUtterance)) {
         throw new Error(
             "seed duplicates an utterance from another generated row",
@@ -252,7 +249,7 @@ export function parseTranslationBenchGeneratedCandidate(
         const path = `genCases[${index}]`;
         if (ids.has(probe.id)) throw new Error(`${path} has a duplicate id`);
         ids.add(probe.id);
-        const normalized = normalizedUtterance(probe.utterance);
+        const normalized = normalizeUtterance(probe.utterance);
         if (utterances.has(normalized)) {
             throw new Error(`${path} has a duplicate utterance`);
         }

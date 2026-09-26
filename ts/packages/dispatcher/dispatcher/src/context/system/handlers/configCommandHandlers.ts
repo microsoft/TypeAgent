@@ -13,6 +13,11 @@ import {
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
 import { getActionContext } from "../../../execute/actionContext.js";
 import { emitActionResult } from "../../../execute/actionHandlers.js";
+import { getStructuredExecution } from "../../../structuredAction/executionHooks.js";
+import {
+    ExecutionFailure,
+    nestedSetupUnavailable,
+} from "../../../structuredAction/executionFailure.js";
 
 import { simpleStarRegex } from "@typeagent/common-utils";
 import {
@@ -20,7 +25,6 @@ import {
     getChatModelNames,
     getCopilotClient,
     getActiveModelProvider,
-    setActiveModelProvider,
     setEgressSecretRedactionEnabled,
     getRuntimeConfig,
     PROVIDER_MODES,
@@ -53,6 +57,7 @@ import { getCacheFactory } from "../../../utils/cacheFactory.js";
 import { resolveCommand } from "../../../command/command.js";
 import { toggleActivityContext } from "../../../execute/activityContext.js";
 import registerDebug from "debug";
+import { applyModelProviderSelection } from "./modelProviderSelection.js";
 const debugReasoning = registerDebug("typeagent:dispatcher:reasoning:config");
 
 const enum AgentToggle {
@@ -674,6 +679,13 @@ class AgentSetupCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
+        if (getStructuredExecution(systemContext) !== undefined) {
+            throw new ExecutionFailure(
+                "unavailable",
+                nestedSetupUnavailable,
+                "unavailable",
+            );
+        }
         const agents = systemContext.agents;
         const name = params.args.agentName;
 
@@ -2303,10 +2315,10 @@ class ConfigModelProviderCommandHandler implements CommandHandler {
 
         // <name>: set active provider.
         const previous = getActiveModelProvider();
-        setActiveModelProvider(name);
-        // Clear cached translators so the next translation picks up the
-        // new provider mapping.
-        context.sessionContext.agentContext.translatorCache.clear();
+        await applyModelProviderSelection(
+            name,
+            context.sessionContext.agentContext,
+        );
 
         const previousLabel = previous ?? "azure (default)";
         displayResult(`Model provider: ${previousLabel} → ${name}`, context);

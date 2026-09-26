@@ -1,13 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { TextEmbeddingModel } from "@typeagent/aiclient";
+import { success } from "typechat";
+import { createTextEmbeddingIndexSettings } from "../src/fuzzyIndex.js";
 import { MessageOrdinal } from "../src/interfaces.js";
 import {
     getCharCountOfMessages,
     getCountOfMessagesInCharBudget,
     getMessageChunkBatch,
 } from "../src/message.js";
-import { createTestMessages } from "./testMessage.js";
+import { MessageTextIndex } from "../src/messageIndex.js";
+import { createTestMessages, TestMessage } from "./testMessage.js";
 
 describe("message", () => {
     test("messageBatch.singleChunk", () => {
@@ -110,5 +114,56 @@ describe("message", () => {
             charBudget,
         );
         expect(messageCount).toEqual(expectedCount);
+    });
+    test("messageIndex.ordinals", async () => {
+        const embeddingModel = {
+            maxBatchSize: 8,
+            generateEmbedding: async () => success([1, 0]),
+            generateEmbeddingBatch: async (inputs: string[]) =>
+                success(inputs.map(() => [1, 0])),
+        } satisfies TextEmbeddingModel;
+        const createIndex = () =>
+            new MessageTextIndex({
+                embeddingIndexSettings: createTextEmbeddingIndexSettings(
+                    embeddingModel,
+                    2,
+                    0,
+                ),
+            });
+        const index = createIndex();
+
+        const cancelled = await index.addMessages([new TestMessage("retry")], {
+            onEmbeddingsCreated: () => false,
+        });
+        expect(cancelled.numberCompleted).toEqual(0);
+        expect(index.size).toEqual(0);
+
+        const added = await index.addMessages([
+            new TestMessage(["m0-c0", "m0-c1", "m0-c2"]),
+            new TestMessage("m1"),
+            new TestMessage("m2"),
+        ]);
+        expect(added.numberCompleted).toEqual(5);
+        expect(index.size).toEqual(3);
+        expect(
+            index
+                .serialize()
+                .indexData?.textLocations.map((loc) => loc.messageOrdinal),
+        ).toEqual([0, 0, 0, 1, 2]);
+
+        const legacyIndex = createIndex();
+        legacyIndex.deserialize({
+            indexData: {
+                textLocations: [{ messageOrdinal: 1, chunkOrdinal: 0 }],
+                embeddings: [new Float32Array([1, 0])],
+            },
+        });
+        expect(legacyIndex.size).toEqual(2);
+        expect(
+            legacyIndex.serialize().indexData?.textLocations[0].messageOrdinal,
+        ).toEqual(1);
+        expect(legacyIndex.lookupByEmbedding(new Float32Array([1, 0]))).toEqual(
+            [{ messageOrdinal: 1, score: 1 }],
+        );
     });
 });

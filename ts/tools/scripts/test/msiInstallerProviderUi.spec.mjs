@@ -2,10 +2,19 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import {
+    mkdtempSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    writeFileSync,
+} from "node:fs";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { loadConfigSync } from "@typeagent/config";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const wxs = readFileSync(
@@ -17,6 +26,44 @@ const wxs = readFileSync(
         "wix",
         "TypeAgent-AgentServer.wxs",
     ),
+    "utf8",
+);
+const runServe = readFileSync(
+    path.resolve(scriptsDir, "..", "..", "installers", "wix", "run-serve.ps1"),
+    "utf8",
+);
+const installPrereqs = readFileSync(
+    path.resolve(
+        scriptsDir,
+        "..",
+        "..",
+        "installers",
+        "wix",
+        "install-prereqs.ps1",
+    ),
+    "utf8",
+);
+const launchCopilotSetup = readFileSync(
+    path.resolve(
+        scriptsDir,
+        "..",
+        "..",
+        "installers",
+        "wix",
+        "launch-copilot-setup.ps1",
+    ),
+    "utf8",
+);
+const installTypeAgent = readFileSync(
+    path.resolve(scriptsDir, "..", "install-typeagent.ps1"),
+    "utf8",
+);
+const installTypeAgentBash = readFileSync(
+    path.resolve(scriptsDir, "..", "install-typeagent.sh"),
+    "utf8",
+);
+const typeAgentServe = readFileSync(
+    path.resolve(scriptsDir, "..", "typeagent-serve.mjs"),
     "utf8",
 );
 
@@ -39,10 +86,10 @@ test("MSI provider selection is limited to AI Systems and GitHub Copilot", () =>
     assert.doesNotMatch(providerRadio, /<RadioButton Value="OLLAMA"/);
 });
 
-test("MSI defaults to AI Systems and rejects unsupported provider values", () => {
+test("MSI defaults to GitHub Copilot and rejects unsupported provider values", () => {
     assert.match(
         wxs,
-        /<Property Id="PROVIDER" Value="AISYSTEMS" Secure="yes" \/>/,
+        /<Property Id="PROVIDER" Value="COPILOT" Secure="yes" \/>/,
     );
     assert.match(wxs, /PROVIDER="AISYSTEMS" OR PROVIDER="COPILOT"/);
     assert.match(wxs, /Ollama is not supported by this MSI/);
@@ -58,17 +105,53 @@ test("MSI no longer exposes embedding or Ollama host properties and controls", (
     assert.match(wxs, /NOT EMBEDDING AND NOT OLLAMAHOST/);
 });
 
-test("Copilot provisioning always uses local embeddings", () => {
+test("PowerShell installer defaults Copilot chat to Copilot embeddings", () => {
+    assert.match(
+        installTypeAgent,
+        /\[ValidateSet\("copilot", "local", "ollama", "openai", "none"\)\]/,
+    );
+    assert.match(
+        installTypeAgent,
+        /\$Provider -eq "copilot"\s+-and\s+-not \$PSBoundParameters\.ContainsKey\("Embedding"\)/,
+    );
+    assert.match(installTypeAgent, /\$Embedding = "copilot"/);
+});
+
+test("Bash installer defaults Copilot chat to Copilot embeddings", () => {
+    assert.match(installTypeAgentBash, /EMBEDDING=""/);
+    assert.match(
+        installTypeAgentBash,
+        /if \[\[ "\$PROVIDER" == "copilot" \]\]; then\s+EMBEDDING="copilot"/,
+    );
+    assert.match(installTypeAgentBash, /copilot\|local\|ollama\|openai\|none/);
+});
+
+test("recovery guidance uses provider-sensitive Copilot defaults", () => {
+    assert.match(typeAgentServe, /provision --provider copilot --force/);
+    assert.doesNotMatch(
+        typeAgentServe,
+        /provision --provider copilot --embedding local/,
+    );
+});
+
+test("Copilot provisioning uses Copilot embeddings", () => {
     const command = wxs.match(
         /<SetProperty Id="ProvisionCopilotConfig"[\s\S]*?Value="([^"]*)"/,
     )?.[1];
     assert.ok(command, "ProvisionCopilotConfig command must exist");
     assert.ok(
         command.includes(
-            "provision --provider COPILOT --embedding LOCAL --force",
+            "-ServeCommand provision --provider COPILOT --embedding COPILOT",
         ),
     );
+    assert.ok(command.includes("--embedding-model text-embedding-3-small"));
+    assert.ok(command.includes("--force"));
+    assert.ok(command.includes("-FailOnError"));
     assert.ok(!command.includes("--ollama-host"));
+    assert.match(
+        wxs,
+        /<CustomAction Id="ProvisionCopilotConfig"[\s\S]*?Return="check"/,
+    );
 });
 
 test("provider-specific provisioning actions use exact provider gates", () => {
@@ -80,4 +163,249 @@ test("provider-specific provisioning actions use exact provider gates", () => {
         wxs,
         /<Custom Action="ProvisionAiSystemsConfig"[^>]*>\(NOT REMOVE~="ALL"\) AND \(PROVIDER="AISYSTEMS"\)<\/Custom>/,
     );
+});
+
+test("MSI lifecycle actions pin user config and runtime directories", () => {
+    const commands = [
+        "ProvisionCopilotConfig",
+        "ProvisionAiSystemsConfig",
+        "StartAgentServer",
+        "EnableAutostart",
+        "DisableAutostart",
+    ].map((id) => {
+        const command = wxs.match(
+            new RegExp(`<SetProperty Id="${id}"[\\s\\S]*?Value="([^"]*)"`),
+        )?.[1];
+        assert.ok(command, `${id} command must exist`);
+        return command;
+    });
+
+    for (const command of commands) {
+        assert.ok(
+            command.includes(
+                "-LocalAppDataDir &quot;[LocalAppDataFolder].&quot;",
+            ),
+        );
+        assert.ok(!command.includes("[UserProfileFolder]"));
+        assert.ok(
+            command.includes(
+                "-RuntimeRoot &quot;[LocalAppDataFolder]TypeAgent\\runtimes&quot;",
+            ),
+        );
+    }
+
+    const prereqs = wxs.match(
+        /<SetProperty Id="InstallPrereqs"[\s\S]*?Value="([^"]*)"/,
+    )?.[1];
+    assert.ok(prereqs, "InstallPrereqs command must exist");
+    assert.ok(
+        prereqs.includes("-LocalAppDataDir &quot;[LocalAppDataFolder].&quot;"),
+    );
+    assert.ok(!prereqs.includes("[UserProfileFolder]"));
+    assert.ok(prereqs.includes("-RuntimeRoot"));
+
+    assert.doesNotMatch(wxs, /\[UserProfileFolder\]/);
+    assert.match(wxs, /Id="StartAgentServer"[\s\S]*?-ServeCommand start/);
+    assert.match(
+        wxs,
+        /Id="EnableAutostart"[\s\S]*?-ServeCommand autostart -ServeCommandArg enable/,
+    );
+    assert.match(
+        wxs,
+        /Id="DisableAutostart"[\s\S]*?-ServeCommand autostart -ServeCommandArg disable/,
+    );
+    for (const script of [runServe, installPrereqs, launchCopilotSetup]) {
+        assert.match(script, /TYPEAGENT_COPILOT_RUNTIME_ROOT/);
+        assert.doesNotMatch(script, /\$env:TYPEAGENT_RUNTIME_ROOT\s*=/);
+    }
+});
+
+test(
+    "run-serve preserves the named provision command through powershell -File",
+    { skip: process.platform !== "win32" },
+    () => {
+        const tempDir = mkdtempSync(
+            path.join(os.tmpdir(), "typeagent run-serve-"),
+        );
+        try {
+            const argsPath = path.join(tempDir, "args.json");
+            const fakeServePath = path.join(tempDir, "fake-serve.mjs");
+            const localAppDataDir = path.join(
+                tempDir,
+                "profile",
+                "AppData",
+                "Local",
+                ".",
+            );
+            writeFileSync(
+                fakeServePath,
+                `import fs from "node:fs"; fs.writeFileSync(process.env.TYPEAGENT_TEST_ARGS_PATH, JSON.stringify({ args: process.argv.slice(2), userDataDir: process.env.TYPEAGENT_USER_DATA_DIR }));`,
+                "utf8",
+            );
+
+            const runServePath = path.resolve(
+                scriptsDir,
+                "..",
+                "..",
+                "installers",
+                "wix",
+                "run-serve.ps1",
+            );
+            const result = spawnSync(
+                "powershell.exe",
+                [
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-File",
+                    `"${runServePath}"`,
+                    "-ServePath",
+                    `"${fakeServePath}"`,
+                    "-LocalAppDataDir",
+                    `"${localAppDataDir}"`,
+                    "-FailOnError",
+                    "-ServeCommand",
+                    "provision",
+                    "--provider",
+                    "COPILOT",
+                    "--embedding",
+                    "COPILOT",
+                    "--embedding-model",
+                    "text-embedding-3-small",
+                    "--force",
+                ],
+                {
+                    encoding: "utf8",
+                    env: {
+                        ...process.env,
+                        TYPEAGENT_TEST_ARGS_PATH: argsPath,
+                    },
+                    windowsVerbatimArguments: true,
+                },
+            );
+
+            assert.equal(result.status, 0, result.stderr || result.stdout);
+            const invocation = JSON.parse(readFileSync(argsPath, "utf8"));
+            assert.deepEqual(invocation.args, [
+                "provision",
+                "--provider",
+                "COPILOT",
+                "--embedding",
+                "COPILOT",
+                "--embedding-model",
+                "text-embedding-3-small",
+                "--force",
+            ]);
+            assert.equal(
+                invocation.userDataDir,
+                path.join(
+                    realpathSync.native(tempDir),
+                    "profile",
+                    ".typeagent",
+                ),
+            );
+        } finally {
+            rmSync(tempDir, { recursive: true, force: true });
+        }
+    },
+);
+
+test("generated Copilot config defaults to Copilot embeddings", () => {
+    const tempDir = mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-copilot-config-"),
+    );
+    try {
+        const configPath = path.join(tempDir, "config.local.yaml");
+        const generatorPath = path.resolve(
+            scriptsDir,
+            "..",
+            "generate-selfhost-config.mjs",
+        );
+        const result = spawnSync(
+            process.execPath,
+            [
+                generatorPath,
+                "--provider",
+                "copilot",
+                "--out",
+                configPath,
+                "--force",
+            ],
+            { encoding: "utf8" },
+        );
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+
+        const loaded = loadConfigSync({
+            defaultsPath: path.join(tempDir, "missing-defaults.yaml"),
+            localPath: configPath,
+            dotEnvPath: path.join(tempDir, "missing.env"),
+            populateProcessEnv: false,
+            strict: true,
+        });
+        assert.equal(loaded.env.TYPEAGENT_MODEL_PROVIDER, "copilot");
+        assert.equal(loaded.env.TYPEAGENT_EMBEDDING_PROVIDER, "copilot");
+        assert.equal(
+            loaded.env.TYPEAGENT_EMBEDDING_MODEL,
+            "text-embedding-3-small",
+        );
+    } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
+test("generated Copilot config passes strict loading with local embeddings when explicitly selected", () => {
+    const tempDir = mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-copilot-config-"),
+    );
+    try {
+        const configPath = path.join(tempDir, "config.local.yaml");
+        const embeddingCacheDir = path.join(tempDir, "embedding-cache");
+        const generatorPath = path.resolve(
+            scriptsDir,
+            "..",
+            "generate-selfhost-config.mjs",
+        );
+        const result = spawnSync(
+            process.execPath,
+            [
+                generatorPath,
+                "--provider",
+                "copilot",
+                "--embedding",
+                "local",
+                "--local-embedding-cache-dir",
+                embeddingCacheDir,
+                "--out",
+                configPath,
+                "--force",
+            ],
+            { encoding: "utf8" },
+        );
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+
+        const loaded = loadConfigSync({
+            defaultsPath: path.join(tempDir, "missing-defaults.yaml"),
+            localPath: configPath,
+            dotEnvPath: path.join(tempDir, "missing.env"),
+            populateProcessEnv: false,
+            strict: true,
+        });
+        assert.equal(loaded.env.TYPEAGENT_MODEL_PROVIDER, "copilot");
+        assert.equal(
+            loaded.env.COPILOT_FALLBACK_MODELS,
+            '["gpt-5.4-mini","gpt-5-mini","gpt-5.4"]',
+        );
+        assert.equal(loaded.env.TYPEAGENT_EMBEDDING_PROVIDER, "local");
+        assert.equal(
+            loaded.env.TYPEAGENT_EMBEDDING_MODEL,
+            "Xenova/all-MiniLM-L6-v2",
+        );
+        assert.equal(
+            loaded.env.TYPEAGENT_EMBEDDING_CACHE_DIR,
+            embeddingCacheDir,
+        );
+    } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+    }
 });

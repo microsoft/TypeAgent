@@ -12,11 +12,12 @@
  * Slash commands (intercepted before routing):
  *   @typeagent mode direct   — switch to direct mode
  *   @typeagent mode mcp      — switch to MCP mode
+ *   @typeagent mode mcp mixed - let Copilot choose delegation or orchestration
  *   @typeagent mode          — show current mode
  *   @typeagent status        — show current configuration
  */
 
-import { handleDirect } from "./hook-direct.js";
+import { handleDirect, type DirectHandlingOptions } from "./hook-direct.js";
 import { handleMcpRedirect } from "./hook-mcp-redirect.js";
 import { handleDevActions } from "./hook-dev-actions.js";
 import { makeTurnId, writeDemoState } from "./demo-state.js";
@@ -29,17 +30,15 @@ import { getMacroFeatures } from "../shared/macro-features.js";
 import {
     getConfigPath,
     getMode,
+    getModeLabel,
     readConfig,
     writeConfig,
     type Mode,
 } from "../shared/plugin-config.js";
-
-const modeDescriptions: Record<Mode, string> = {
-    direct: "Hook handles requests directly, bypassing the LLM. Workspace macro tools remain available.",
-    mcp: "Hook redirects to the TypeAgent MCP tool. Workspace macro tools remain available.",
-    dev: "TypeAgent handles registered PowerShell flows and recording directives; other requests fall through to Copilot. Workspace macro tools remain available.",
-    bypass: "TypeAgent is disabled. All requests bypass TypeAgent routing and fall through to other handlers.",
-};
+import {
+    getModeDescription,
+    handleModeSetting,
+} from "../shared/mode-command.js";
 
 async function handleMacroCommand(
     input: HookInput,
@@ -91,45 +90,53 @@ async function handleMacroCommand(
     }
 }
 
-function directCommand(input: HookInput, command: string): Promise<HookOutput> {
-    return handleDirect({
-        prompt: command,
-        sessionId: input.sessionId,
-        timestamp: input.timestamp,
-        cwd: input.cwd,
-    });
+export type DirectHandler = (
+    input: HookInput,
+    options?: DirectHandlingOptions,
+) => Promise<HookOutput>;
+
+export interface SlashCommandDependencies {
+    direct: DirectHandler;
+}
+
+const slashCommandDefaults: SlashCommandDependencies = {
+    direct: handleDirect,
+};
+
+function directCommand(
+    input: HookInput,
+    command: string,
+    direct: DirectHandler,
+    options?: DirectHandlingOptions,
+): Promise<HookOutput> {
+    return direct(
+        {
+            prompt: command,
+            sessionId: input.sessionId,
+            timestamp: input.timestamp,
+            cwd: input.cwd,
+        },
+        options,
+    );
 }
 
 function handleRunCommand(
     input: HookInput,
     trimmed: string,
+    direct: DirectHandler,
 ): Promise<HookOutput> | undefined {
     const match = trimmed.match(/^@typeagent\s+run\s+(.+)$/i);
-    return match ? directCommand(input, match[1]) : undefined;
+    return match
+        ? directCommand(input, match[1], direct, { forceHandled: true })
+        : undefined;
 }
 
 function handleModeCommand(lower: string): HookOutput | undefined {
-    const match = lower.match(
-        /^@typeagent\s+mode(?:\s+(direct|mcp|dev|bypass))?\s*$/,
-    );
+    const match = lower.match(/^@typeagent\s+mode(?:\s+(.*))?$/s);
     if (!match) return undefined;
-
-    const newMode = match[1] as Mode | undefined;
-    if (!newMode) {
-        const current = getMode();
-        return {
-            handled: true,
-            responseContent: `TypeAgent mode: **${current}**\n\nUse \`@typeagent mode direct\`, \`@typeagent mode mcp\`, \`@typeagent mode dev\`, or \`@typeagent mode bypass\` to switch.`,
-            handledBy: "typeagent",
-        };
-    }
-
-    const config = readConfig() ?? { mode: "direct" };
-    config.mode = newMode;
-    writeConfig(config);
     return {
         handled: true,
-        responseContent: `TypeAgent mode switched to **${newMode}**.  \n${modeDescriptions[newMode]}`,
+        responseContent: handleModeSetting(match[1] ?? "", "@typeagent mode"),
         handledBy: "typeagent",
     };
 }
@@ -180,16 +187,20 @@ function handleStatusCommand(lower: string): HookOutput | undefined {
         responseContent: [
             "**TypeAgent Configuration**",
             "",
-            `- Mode: **${mode}**`,
+            `- Mode: **${getModeLabel()}**`,
+            `- Routing: ${getModeDescription()}`,
             `- TypeAgent PowerShell: **${powershellEnabled ? "on" : "off"}**`,
             `- Macro workspace tools: **${mode === "bypass" ? "disabled" : "available"}**`,
             `- Server: ws://${host}:${port}`,
             `- Config: ${configPath}`,
+            "- Mode settings are shared by sessions using this config.",
             "",
             "**Commands:**",
             "- `@typeagent run <command>` — send command directly to TypeAgent",
             "- `@typeagent mode direct` — switch to direct mode",
-            "- `@typeagent mode mcp` — switch to MCP mode",
+            "- `@typeagent mode mcp` — switch to MCP mode, preserving saved policy (default: delegate)",
+            "- `@typeagent mode mcp mixed` — delegate whole requests or prefer TypeAgent searchActions/executeAction for Copilot-selected operations; native tools only for capability gaps",
+            "- `@typeagent mode mcp delegate` — delegate user prompts to TypeAgent (default)",
             "- `@typeagent mode dev` — route registered PowerShell flows and recording directives",
             "- `@typeagent mode bypass` — disable TypeAgent routing",
             "- `@typeagent powershell on/off` — toggle TypeAgent PowerShell redirect",
@@ -202,9 +213,10 @@ function handleStatusCommand(lower: string): HookOutput | undefined {
 function handleCatchAllCommand(
     input: HookInput,
     trimmed: string,
+    direct: DirectHandler,
 ): Promise<HookOutput> | undefined {
     const match = trimmed.match(/^@typeagent\s+(.+)$/i);
-    return match ? directCommand(input, match[1]) : undefined;
+    return match ? directCommand(input, match[1], direct) : undefined;
 }
 
 /**
@@ -212,19 +224,20 @@ function handleCatchAllCommand(
  * was handled, or undefined if the prompt is not a slash command.
  * Returns a Promise for commands that need async work (e.g., @typeagent run).
  */
-async function handleSlashCommand(
+export async function handleSlashCommand(
     input: HookInput,
+    dependencies: SlashCommandDependencies = slashCommandDefaults,
 ): Promise<HookOutput | undefined> {
     const trimmed = input.prompt.trim();
     const lower = trimmed.toLowerCase();
 
     return (
         (await handleMacroCommand(input, lower)) ??
-        handleRunCommand(input, trimmed) ??
+        handleRunCommand(input, trimmed, dependencies.direct) ??
         handleModeCommand(lower) ??
         handlePowerShellCommand(lower) ??
         handleStatusCommand(lower) ??
-        handleCatchAllCommand(input, trimmed)
+        handleCatchAllCommand(input, trimmed, dependencies.direct)
     );
 }
 
@@ -271,7 +284,7 @@ async function main(): Promise<void> {
 
 export interface RoutePromptDependencies {
     claimRecording: (input: HookInput) => Promise<boolean>;
-    direct: (input: HookInput) => Promise<HookOutput>;
+    direct: DirectHandler;
     mcp: (input: HookInput) => HookOutput;
     dev: (input: HookInput, signal: AbortSignal) => Promise<HookOutput>;
 }

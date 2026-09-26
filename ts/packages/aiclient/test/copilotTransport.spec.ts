@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    createCopilotRuntimeConnection,
     createCopilotTransportModel,
     CopilotEndpoint,
     CopilotEndpointProvider,
@@ -14,12 +15,12 @@ import { CopilotApiSettings } from "../src/copilotSettings.js";
 import { ModelType } from "../src/openai.js";
 import { PromptSection } from "typechat";
 
-function makeSettings(): CopilotApiSettings {
+function makeSettings(modelName = "gpt-5-mini"): CopilotApiSettings {
     return {
         provider: "copilot",
         modelType: ModelType.Chat,
         endpoint: "copilot-cli",
-        modelName: "gpt-5.6-luna",
+        modelName,
         disableInfiniteSessions: true,
         fallbackModels: ["gpt-5.4-mini", "gpt-5-mini", "gpt-5.4"],
         maxRetryAttempts: 0,
@@ -28,10 +29,28 @@ function makeSettings(): CopilotApiSettings {
     };
 }
 
-function makeEndpoint(overrides?: Partial<CopilotEndpoint>): CopilotEndpoint {
+function makeChatCompletionsEndpoint(
+    overrides?: Partial<CopilotEndpoint>,
+): CopilotEndpoint {
     return {
         url: "https://api.example/chat/completions",
+        model: "gpt-5-mini",
+        wireApi: "chat_completions",
+        headers: {
+            Authorization: "******",
+            "Copilot-Integration-Id": "copilot-developer-cli",
+        },
+        ...overrides,
+    };
+}
+
+function makeLunaEndpoint(
+    overrides?: Partial<CopilotEndpoint>,
+): CopilotEndpoint {
+    return {
+        url: "https://api.example/responses",
         model: "gpt-5.6-luna",
+        wireApi: "responses",
         headers: {
             Authorization: "******",
             "Copilot-Integration-Id": "copilot-developer-cli",
@@ -138,6 +157,51 @@ const CAPI_OK = {
     choices: [{ message: { content: '{"action":"getTime"}' } }],
     usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
 };
+
+const RESPONSES_OK = {
+    output: [
+        {
+            type: "message",
+            content: [{ type: "output_text", text: '{"action":"getTime"}' }],
+        },
+    ],
+    usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+};
+
+describe("createCopilotRuntimeConnection", () => {
+    test("uses a configured runtime URI instead of an executable path", () => {
+        expect(
+            createCopilotRuntimeConnection(
+                "localhost:4321",
+                "C:\\tools\\copilot.exe",
+            ),
+        ).toEqual({
+            kind: "uri",
+            url: "localhost:4321",
+            connectionToken: undefined,
+        });
+    });
+
+    test("preserves a concrete external executable path", () => {
+        expect(
+            createCopilotRuntimeConnection(undefined, "C:\\tools\\copilot.exe"),
+        ).toEqual({
+            kind: "stdio",
+            path: "C:\\tools\\copilot.exe",
+            args: undefined,
+            env: undefined,
+        });
+    });
+
+    test("omits the path to select the SDK-managed runtime", () => {
+        expect(createCopilotRuntimeConnection(undefined, undefined)).toEqual({
+            kind: "stdio",
+            path: undefined,
+            args: undefined,
+            env: undefined,
+        });
+    });
+});
 
 describe("selectCopilotModel", () => {
     test("uses the requested model when it is available", () => {
@@ -271,7 +335,7 @@ describe("createCopilotTransportModel", () => {
             return jsonResponse(200, CAPI_OK);
         };
 
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},
@@ -292,7 +356,7 @@ describe("createCopilotTransportModel", () => {
         const headers = fetchArgs[0].init.headers as Record<string, string>;
         expect(headers.Authorization).toBe("******");
         const body = JSON.parse(fetchArgs[0].init.body as string);
-        expect(body.model).toBe("gpt-5.6-luna");
+        expect(body.model).toBe("gpt-5-mini");
         expect(body.temperature).toBe(0);
         expect(body.messages).toEqual([
             { role: "user", content: "what time is it" },
@@ -301,7 +365,7 @@ describe("createCopilotTransportModel", () => {
 
     test("reports token usage from the response", async () => {
         (globalThis as any).fetch = async () => jsonResponse(200, CAPI_OK);
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const usage: any[] = [];
         const model = createCopilotTransportModel(
             makeSettings(),
@@ -315,6 +379,38 @@ describe("createCopilotTransportModel", () => {
         expect(usage[0]).toEqual(CAPI_OK.usage);
     });
 
+    test("uses the responses wire API advertised by the endpoint", async () => {
+        const fetchArgs: Array<{ url: string; init: RequestInit }> = [];
+        (globalThis as any).fetch = async (url: string, init: RequestInit) => {
+            fetchArgs.push({ url, init });
+            return jsonResponse(200, RESPONSES_OK);
+        };
+        const { provider } = makeProvider([makeLunaEndpoint()]);
+        const model = createCopilotTransportModel(
+            makeSettings("gpt-5.6-luna"),
+            {},
+            undefined,
+            undefined,
+            provider,
+        );
+
+        const result = await model.complete("what time is it");
+        expect(result).toEqual({
+            success: true,
+            data: '{"action":"getTime"}',
+        });
+        expect(fetchArgs[0].url).toBe("https://api.example/responses");
+        const body = JSON.parse(fetchArgs[0].init.body as string);
+        expect(body.model).toBe("gpt-5.6-luna");
+        expect(body.temperature).toBeUndefined();
+        expect(body.input).toEqual([
+            {
+                role: "user",
+                content: [{ type: "input_text", text: "what time is it" }],
+            },
+        ]);
+    });
+
     test("refreshes the endpoint once on a non-2xx then succeeds", async () => {
         let call = 0;
         (globalThis as any).fetch = async () => {
@@ -324,8 +420,10 @@ describe("createCopilotTransportModel", () => {
                 : jsonResponse(200, CAPI_OK);
         };
         const { provider, forceCalls } = makeProvider([
-            makeEndpoint(),
-            makeEndpoint({ url: "https://api.example/v2/chat/completions" }),
+            makeChatCompletionsEndpoint(),
+            makeChatCompletionsEndpoint({
+                url: "https://api.example/v2/chat/completions",
+            }),
         ]);
         const model = createCopilotTransportModel(
             makeSettings(),
@@ -348,7 +446,9 @@ describe("createCopilotTransportModel", () => {
     test("returns an error when the refreshed call still fails", async () => {
         (globalThis as any).fetch = async () =>
             jsonResponse(401, { error: "expired" });
-        const { provider, forceCalls } = makeProvider([makeEndpoint()]);
+        const { provider, forceCalls } = makeProvider([
+            makeChatCompletionsEndpoint(),
+        ]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},
@@ -404,7 +504,7 @@ describe("createCopilotTransportModel", () => {
             controller.abort();
             throw new DOMException("The operation was aborted.", "AbortError");
         };
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},
@@ -433,7 +533,7 @@ describe("createCopilotTransportModel", () => {
             fetchArgs.push({ url, init });
             return jsonResponse(200, CAPI_OK);
         };
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},
@@ -464,10 +564,10 @@ describe("createCopilotTransportModel", () => {
                 "[DONE]",
             ]);
         };
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const usage: any[] = [];
         const model = createCopilotTransportModel(
-            makeSettings(),
+            makeSettings("gpt-5.6-luna"),
             {},
             undefined,
             undefined,
@@ -491,6 +591,45 @@ describe("createCopilotTransportModel", () => {
         expect(body.stream_options).toEqual({ include_usage: true });
     });
 
+    test("streams responses API deltas", async () => {
+        (globalThis as any).fetch = async () =>
+            sseResponse([
+                { type: "response.output_text.delta", delta: '{"action":' },
+                { type: "response.output_text.delta", delta: '"getTime"}' },
+                {
+                    type: "response.completed",
+                    response: {
+                        usage: { input_tokens: 10, output_tokens: 5 },
+                    },
+                },
+                "[DONE]",
+            ]);
+        const { provider } = makeProvider([makeLunaEndpoint()]);
+        const usage: any[] = [];
+        const model = createCopilotTransportModel(
+            makeSettings(),
+            {},
+            undefined,
+            undefined,
+            provider,
+        );
+
+        const result = await model.completeStream!("what time is it", (u) =>
+            usage.push(u),
+        );
+        expect(result.success).toBe(true);
+        if (!result.success) return;
+        const { text } = await drain(result.data);
+        expect(text).toBe('{"action":"getTime"}');
+        expect(usage).toEqual([
+            {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+            },
+        ]);
+    });
+
     test("refreshes the endpoint once when the stream fails to connect", async () => {
         let call = 0;
         (globalThis as any).fetch = async () => {
@@ -500,8 +639,8 @@ describe("createCopilotTransportModel", () => {
                 : sseResponse([deltaChunk("ok"), "[DONE]"]);
         };
         const { provider, forceCalls } = makeProvider([
-            makeEndpoint(),
-            makeEndpoint(),
+            makeChatCompletionsEndpoint(),
+            makeChatCompletionsEndpoint(),
         ]);
         const model = createCopilotTransportModel(
             makeSettings(),
@@ -523,7 +662,7 @@ describe("createCopilotTransportModel", () => {
     test("returns an error when the stream connection stays broken", async () => {
         (globalThis as any).fetch = async () =>
             jsonResponse(401, { error: "expired" });
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},
@@ -542,7 +681,7 @@ describe("createCopilotTransportModel", () => {
             fetchArgs.push({ url, init });
             return sseResponse([deltaChunk("x"), "[DONE]"]);
         };
-        const { provider } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeChatCompletionsEndpoint()]);
         const model = createCopilotTransportModel(
             makeSettings(),
             {},

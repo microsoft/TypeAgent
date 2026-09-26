@@ -30,15 +30,6 @@ const pluginRoot = resolve(__dirname, "..");
 // esbuild writes exactly the files referenced by hooks.json / .mcp.json.
 const entryPoints = {
     "hooks/hook-router": resolve(pluginRoot, "src/hooks/hook-router.ts"),
-    "hooks/hook-agent-stop": resolve(
-        pluginRoot,
-        "src/hooks/hook-agent-stop.ts",
-    ),
-    "hooks/hook-post-tool": resolve(pluginRoot, "src/hooks/hook-post-tool.ts"),
-    "hooks/hook-powershell": resolve(
-        pluginRoot,
-        "src/hooks/hook-powershell.ts",
-    ),
     "mcp/server": resolve(pluginRoot, "src/mcp/server.ts"),
 };
 
@@ -55,6 +46,29 @@ await build({
     // (they remain optional at runtime).
     external: ["bufferutil", "utf-8-validate"],
     // A few CJS deps call require() at runtime; provide one in the ESM output.
+    banner: {
+        js: "import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);",
+    },
+    logLevel: "warning",
+});
+
+await build({
+    entryPoints: {
+        extension: resolve(pluginRoot, "src/extension/extension.ts"),
+    },
+    outdir: resolve(pluginRoot, "dist/extensions/typeagent"),
+    outExtension: { ".js": ".mjs" },
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node22",
+    sourcemap: true,
+    external: [
+        "@github/copilot-sdk",
+        "@github/copilot-sdk/*",
+        "bufferutil",
+        "utf-8-validate",
+    ],
     banner: {
         js: "import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);",
     },

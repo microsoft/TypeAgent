@@ -23,12 +23,20 @@ function readPackage(packageJsonPath, expectedName) {
 }
 
 export function copilotPlatformPackage(platform, arch) {
-    const normalizedArch = arch === "ia32" ? "x64" : arch;
-    const suffix =
-        platform === "linux"
-            ? `linux-${normalizedArch}`
-            : `${platform}-${normalizedArch}`;
-    return `@github/copilot-${suffix}`;
+    if (arch !== "x64" && arch !== "arm64") {
+        throw new Error(`Unsupported Copilot runtime architecture: ${arch}.`);
+    }
+    if (
+        platform !== "win32" &&
+        platform !== "darwin" &&
+        platform !== "linux" &&
+        platform !== "linuxmusl"
+    ) {
+        throw new Error(
+            `Unsupported Copilot runtime platform: ${platform}-${arch}.`,
+        );
+    }
+    return `@github/copilot-sdk-${platform}-${arch}`;
 }
 
 export function createCopilotRuntimeManifest({
@@ -50,34 +58,26 @@ export function createCopilotRuntimeManifest({
         path.join(sdkDirectory, "package.json"),
         "@github/copilot-sdk",
     ).metadata;
-    const cliRequirement = sdk.dependencies?.["@github/copilot"];
-    if (typeof sdk.version !== "string" || typeof cliRequirement !== "string") {
-        throw new Error(
-            "@github/copilot-sdk must declare an @github/copilot dependency.",
-        );
-    }
-
-    const cli = readPackage(
-        path.join(path.dirname(sdkDirectory), "copilot", "package.json"),
-        "@github/copilot",
-    ).metadata;
-    const cliVersion = cli.version;
+    const runtimeVersion = sdk.copilotCliVersion;
     if (
-        typeof cliVersion !== "string" ||
-        !/^\d+\.\d+\.\d+(?:[-+].+)?$/.test(cliVersion)
+        typeof sdk.version !== "string" ||
+        typeof runtimeVersion !== "string" ||
+        !/^\d+\.\d+\.\d+(?:[-+].+)?$/.test(runtimeVersion)
     ) {
         throw new Error(
-            "The resolved @github/copilot version is not concrete.",
+            "@github/copilot-sdk must declare a concrete copilotCliVersion.",
         );
     }
 
     const platformPackage = copilotPlatformPackage(platform, arch);
-    const platformVersion = cli.optionalDependencies?.[platformPackage];
-    if (platformVersion !== cliVersion) {
+    const platformVersion = sdk.optionalDependencies?.[platformPackage];
+    if (platformVersion !== sdk.version) {
         throw new Error(
-            `${platformPackage} must resolve to ${cliVersion}; found ${platformVersion ?? "nothing"}.`,
+            `${platformPackage} must resolve to ${sdk.version}; found ${platformVersion ?? "nothing"}.`,
         );
     }
+    const runtimePlatform = `${platform}-${arch}`;
+    const prebuildDirectory = `prebuilds/${runtimePlatform}`;
 
     const feedConfig = JSON.parse(
         fs.readFileSync(
@@ -101,14 +101,15 @@ export function createCopilotRuntimeManifest({
     }
 
     return {
-        schemaVersion: 1,
+        schemaVersion: 2,
         sdkPackage: "@github/copilot-sdk",
         sdkVersion: sdk.version,
-        sdkCliRequirement: cliRequirement,
-        cliPackage: "@github/copilot",
-        cliVersion,
+        runtimeVersion,
+        runtimePlatform,
         platformPackage,
         platformVersion,
+        executablePath: `${prebuildDirectory}/${platform === "win32" ? "copilot-runtime.exe" : "copilot-runtime"}`,
+        runtimeLibraryPath: `${prebuildDirectory}/runtime.node`,
         registry: resolvedRegistry,
         azureDevOpsResource: feedConfig.azureDevOpsResource,
     };

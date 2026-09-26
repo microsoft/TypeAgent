@@ -311,15 +311,26 @@ export function createAgentRpcServer(
                 param.entityTypeName,
             );
         },
+        async cancelChoice(param) {
+            await agent.cancelChoice?.(
+                param.choiceId,
+                getSessionContextShim(param),
+            );
+        },
         async handleChoice(param) {
             if (agent.handleChoice === undefined) {
                 throw new Error("Invalid invocation of handleChoice");
             }
-            return agent.handleChoice(
-                param.choiceId,
-                param.response,
-                getActionContextShim(param),
-            );
+            try {
+                return await agent.handleChoice(
+                    param.choiceId,
+                    param.response,
+                    getActionContextShim(param),
+                );
+            } finally {
+                if (param.actionContextId !== undefined)
+                    actionAbortControllers.delete(param.actionContextId);
+            }
         },
         async getDynamicSchema(param) {
             if (agent.getDynamicSchema === undefined) {

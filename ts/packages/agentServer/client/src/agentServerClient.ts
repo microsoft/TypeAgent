@@ -57,6 +57,24 @@ import {
     SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
+    CatalogEntry,
+    CatalogSearchResult,
+    ListSkillsRequest,
+    SearchSkillsRequest,
+    SkillGrammarRoutingResult,
+    GetSkillRequest,
+    ReadSkillFileRequest,
+    ReadSkillFileResponse,
+    PublishSkillRequest,
+    ChangeSkillStateRequest,
+    SelectSkillRevisionRequest,
+    SkillAcquisitionPreview,
+    SkillAcquisitionRequest,
+    CheckSkillUpdateResponse,
+    SkillAcquisitionRevisionResponse,
+    ProcedureArtifactRequest,
+    ProcedureArtifactPreview,
+    ProcedureArtifactPromotion,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -149,6 +167,8 @@ export type ConversationDispatcher = {
     pendingInteractions?: NonNullable<
         JoinConversationResult["pendingInteractions"]
     >;
+    /** Retain only in trusted memory; pass back on an explicit resumed join. */
+    structuredActions?: JoinConversationResult["structuredActions"];
 };
 
 export type AgentServerConnection = {
@@ -187,6 +207,37 @@ export type AgentServerConnection = {
     ): Promise<MacroVersionRef>;
     cancelMacroRun(runId: string): Promise<void>;
     getMacroRun(runId: string): Promise<MacroRunRecord>;
+    listSkills?(request?: ListSkillsRequest): Promise<CatalogEntry[]>;
+    searchSkills?(
+        request: SearchSkillsRequest,
+    ): Promise<readonly CatalogSearchResult[]>;
+    matchSkillGrammar?(utterance: string): Promise<SkillGrammarRoutingResult>;
+    getSkill?(request: GetSkillRequest): Promise<CatalogEntry | undefined>;
+    readSkillFile?(
+        request: ReadSkillFileRequest,
+    ): Promise<ReadSkillFileResponse>;
+    publishSkill?(request: PublishSkillRequest): Promise<CatalogEntry>;
+    changeSkillState?(request: ChangeSkillStateRequest): Promise<CatalogEntry>;
+    activateSkill?(request: SelectSkillRevisionRequest): Promise<CatalogEntry>;
+    rollbackSkill?(request: SelectSkillRevisionRequest): Promise<CatalogEntry>;
+    previewSkillAcquisition?(
+        request: SkillAcquisitionRequest,
+    ): Promise<SkillAcquisitionPreview>;
+    checkSkillUpdate?(
+        request: SkillAcquisitionRequest,
+    ): Promise<CheckSkillUpdateResponse>;
+    acquireAndPublishSkill?(
+        request: SkillAcquisitionRequest,
+    ): Promise<SkillAcquisitionRevisionResponse>;
+    updateSkill?(
+        request: SkillAcquisitionRequest,
+    ): Promise<SkillAcquisitionRevisionResponse>;
+    previewProcedureArtifact?(
+        request: ProcedureArtifactRequest,
+    ): Promise<ProcedureArtifactPreview>;
+    promoteProcedureArtifact?(
+        request: ProcedureArtifactRequest,
+    ): Promise<ProcedureArtifactPromotion>;
 
     joinConversation(
         clientIO: ClientIO,
@@ -477,6 +528,94 @@ export function createAgentServerConnection(
             return rpc.invoke("getMacroRun", runId);
         },
 
+        async listSkills(request?: ListSkillsRequest): Promise<CatalogEntry[]> {
+            return rpc.invoke("listSkills", request);
+        },
+
+        async searchSkills(
+            request: SearchSkillsRequest,
+        ): Promise<readonly CatalogSearchResult[]> {
+            return rpc.invoke("searchSkills", request);
+        },
+
+        async matchSkillGrammar(
+            utterance: string,
+        ): Promise<SkillGrammarRoutingResult> {
+            return rpc.invoke("matchSkillGrammar", utterance);
+        },
+
+        async getSkill(
+            request: GetSkillRequest,
+        ): Promise<CatalogEntry | undefined> {
+            return rpc.invoke("getSkill", request);
+        },
+
+        async readSkillFile(
+            request: ReadSkillFileRequest,
+        ): Promise<ReadSkillFileResponse> {
+            return rpc.invoke("readSkillFile", request);
+        },
+
+        async publishSkill(
+            request: PublishSkillRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("publishSkill", request);
+        },
+
+        async changeSkillState(
+            request: ChangeSkillStateRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("changeSkillState", request);
+        },
+
+        async activateSkill(
+            request: SelectSkillRevisionRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("activateSkill", request);
+        },
+
+        async rollbackSkill(
+            request: SelectSkillRevisionRequest,
+        ): Promise<CatalogEntry> {
+            return rpc.invoke("rollbackSkill", request);
+        },
+
+        async previewSkillAcquisition(
+            request: SkillAcquisitionRequest,
+        ): Promise<SkillAcquisitionPreview> {
+            return rpc.invoke("previewSkillAcquisition", request);
+        },
+
+        async checkSkillUpdate(
+            request: SkillAcquisitionRequest,
+        ): Promise<CheckSkillUpdateResponse> {
+            return rpc.invoke("checkSkillUpdate", request);
+        },
+
+        async acquireAndPublishSkill(
+            request: SkillAcquisitionRequest,
+        ): Promise<SkillAcquisitionRevisionResponse> {
+            return rpc.invoke("acquireAndPublishSkill", request);
+        },
+
+        async updateSkill(
+            request: SkillAcquisitionRequest,
+        ): Promise<SkillAcquisitionRevisionResponse> {
+            return rpc.invoke("updateSkill", request);
+        },
+
+        async previewProcedureArtifact(
+            request: ProcedureArtifactRequest,
+        ): Promise<ProcedureArtifactPreview> {
+            return rpc.invoke("previewProcedureArtifact", request);
+        },
+
+        async promoteProcedureArtifact(
+            request: ProcedureArtifactRequest,
+        ): Promise<ProcedureArtifactPromotion> {
+            return rpc.invoke("promoteProcedureArtifact", request);
+        },
+
         async joinConversation(
             clientIO: ClientIO,
             options?: DispatcherConnectOptions,
@@ -542,6 +681,9 @@ export function createAgentServerConnection(
                 connectionId: result.connectionId,
                 queueSnapshot: result.queueSnapshot,
                 pendingInteractions: result.pendingInteractions ?? [],
+                ...(result.structuredActions === undefined
+                    ? {}
+                    : { structuredActions: result.structuredActions }),
             };
         },
 
@@ -832,7 +974,8 @@ export async function connectAgentServer(
                 createChannelProviderAdapter(
                     "agent-server:client",
                     (message: any) => {
-                        debug("Sending message to server:", message);
+                        // Join payloads can carry private resume capabilities.
+                        debug("Sending message to server");
                         ws.send(JSON.stringify(message));
                     },
                 );
@@ -843,7 +986,7 @@ export async function connectAgentServer(
                 settle(channel);
             };
             ws.onmessage = (event: WebSocket.MessageEvent) => {
-                debug("Received message from server:", event.data);
+                debug("Received message from server");
                 channel.notifyMessage(JSON.parse(event.data.toString()));
             };
             ws.onclose = (event: WebSocket.CloseEvent) => {
@@ -1325,10 +1468,18 @@ export async function connectDispatcher(
     onDisconnect?: () => void,
 ): Promise<Dispatcher> {
     const connection = await connectAgentServer(url, onDisconnect);
-    const { dispatcher } = await connection.joinConversation(clientIO, options);
-    // Override close to also close the WebSocket (old behavior)
-    dispatcher.close = async () => {
+    try {
+        const { dispatcher } = await connection.joinConversation(
+            clientIO,
+            options,
+        );
+        // Override close to also close the WebSocket (old behavior)
+        dispatcher.close = async () => {
+            await connection.close();
+        };
+        return dispatcher;
+    } catch (error) {
         await connection.close();
-    };
-    return dispatcher;
+        throw error;
+    }
 }

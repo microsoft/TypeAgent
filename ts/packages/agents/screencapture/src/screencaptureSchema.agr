@@ -25,6 +25,42 @@
     actionName: "takeScreenshot",
     parameters: {}
 }
+  | capture the whole screen to a file -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | capture the whole screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | screenshot my entire display -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | screenshot the entire display -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | capture the entire display -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | capture the entire screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | capture my whole screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | screenshot the whole screen -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
+  | take a screenshot of my entire display -> {
+    actionName: "takeScreenshot",
+    parameters: {}
+  }
   | screenshot the screen -> {
     actionName: "takeScreenshot",
     parameters: {}
@@ -35,7 +71,25 @@
 };
 
 // takeScreenshot - target a window by name
-<TakeScreenshotTarget> = take a screenshot of $(target:wildcard) -> {
+<TakeScreenshotTarget> = take a screenshot of the $(target:wildcard) window -> {
+    actionName: "takeScreenshot",
+    parameters: {
+        target
+    }
+}
+  | capture the $(target:wildcard) window -> {
+    actionName: "takeScreenshot",
+    parameters: {
+        target
+    }
+}
+  | screenshot the $(target:wildcard) window -> {
+    actionName: "takeScreenshot",
+    parameters: {
+        target
+    }
+}
+  | take a screenshot of $(target:wildcard) -> {
     actionName: "takeScreenshot",
     parameters: {
         target

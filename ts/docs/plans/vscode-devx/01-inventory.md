@@ -250,7 +250,6 @@ interface AppAgent {
 - `examples/spelunker`, `examples/docuProc` — domain-specific memory ingestion.
 - `examples/classify` — classification example.
 - `examples/chat` — KnowPro test harness.
-- `examples/mcpMemory` — MCP wrapper for memory.
 
 ---
 

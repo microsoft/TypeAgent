@@ -81,6 +81,25 @@ describe("mcpInfoToNormalized", () => {
         expect(normalized).toBeUndefined();
     });
 
+    it("converts ArgDefinitions when runtime arguments are resolved", () => {
+        const normalized = mcpInfoToNormalized(
+            "fs",
+            info({
+                serverScript: "server.js",
+                serverScriptArgs: {
+                    dirs: { type: "string", description: "dirs" },
+                } as any,
+            }),
+            (p) => `/abs/${p}`,
+            (name) => (name === "fs" ? ["/safe/root"] : undefined),
+        );
+        expect(normalized?.transport).toEqual({
+            kind: "stdio",
+            command: "node",
+            args: ["/abs/server.js", "/safe/root"],
+        });
+    });
+
     it("returns undefined for a server with no url or script", () => {
         expect(mcpInfoToNormalized("empty", info({}))).toBeUndefined();
     });

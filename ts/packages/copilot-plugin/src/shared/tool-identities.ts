@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 const TYPEAGENT_AGENT_SERVER_TOOLS = [
+    "typeagent-searchactions",
+    "typeagent-executeaction",
+    "typeagent-continueaction",
+    "typeagent-cancelaction",
     "typeagent-processcommand",
     "typeagent-listagents",
     "typeagent-getstatus",

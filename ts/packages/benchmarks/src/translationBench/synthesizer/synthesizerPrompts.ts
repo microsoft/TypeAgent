@@ -11,6 +11,7 @@ import yaml from "js-yaml";
 import { z } from "zod";
 
 import { TRANSLATION_BENCH_DEFAULT_APPROVE_SCORE_THRESHOLD } from "./benchmark.js";
+import { formatZodIssues } from "./zodJson.js";
 
 /** Directory containing *.prompt.yaml next to this module (src or dist). */
 export const TRANSLATION_BENCH_SYNTHESIZER_PROMPTS_DIR = path.dirname(
@@ -122,17 +123,26 @@ const qualityVerifierYamlSchema = z
                 model_configuration: translationBenchModelConfigurationSchema,
             })
             .strip(),
+        ambiguity_probe: z
+            .object({
+                template: nonEmptyString,
+                issue_codes: stringListSchema,
+                model_configuration: translationBenchModelConfigurationSchema,
+            })
+            .strip(),
         acceptance: z
             .object({
                 // Closed: LLM-derived rows always need format + semantic approve.
                 require_format_pass: z.literal(true).default(true),
                 require_semantic_approve: z.literal(true).default(true),
+                require_ambiguity_probe_pass: z.boolean().default(true),
                 max_attempts: finiteNumber.min(1).max(5).default(5),
             })
             .strip()
             .default({
                 require_format_pass: true,
                 require_semantic_approve: true,
+                require_ambiguity_probe_pass: true,
                 max_attempts: 5,
             }),
     })
@@ -204,9 +214,16 @@ export const translationBenchQualityVerifierPromptPackSchema =
             issueCodes: parsed.semantic_checker.issue_codes,
             modelConfiguration: parsed.semantic_checker.model_configuration,
         },
+        ambiguityProbe: {
+            template: parsed.ambiguity_probe.template,
+            issueCodes: parsed.ambiguity_probe.issue_codes,
+            modelConfiguration: parsed.ambiguity_probe.model_configuration,
+        },
         acceptance: {
             requireFormatPass: parsed.acceptance.require_format_pass,
             requireSemanticApprove: parsed.acceptance.require_semantic_approve,
+            requireAmbiguityProbePass:
+                parsed.acceptance.require_ambiguity_probe_pass,
             maxAttempts: parsed.acceptance.max_attempts,
         },
         raw: parsed as Record<string, unknown>,
@@ -254,13 +271,7 @@ export type TranslationBenchParameterGraderPromptPack = z.infer<
 >;
 
 function formatZodError(label: string, error: z.ZodError): string {
-    const detail = error.issues
-        .map((issue) => {
-            const path = issue.path.length === 0 ? "$" : issue.path.join(".");
-            return `${path}: ${issue.message}`;
-        })
-        .join("; ");
-    return `Translation-bench prompt '${label}' invalid: ${detail}`;
+    return `Translation-bench prompt '${label}' invalid: ${formatZodIssues(error)}`;
 }
 
 function parseWithZod<T>(

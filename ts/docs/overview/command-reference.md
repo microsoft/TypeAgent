@@ -620,17 +620,17 @@ Usage: `@history entities delete <entityId>`
 
 - &lt;entityId&gt; - The UniqueId of the entity (type: string)
 
-## @memory legacy on - Turn on legacy
+## @conversation-memory legacy on - Turn on legacy
 
-Usage: `@memory legacy on`
+Usage: `@conversation-memory legacy on`
 
-## @memory legacy off - Turn off legacy
+## @conversation-memory legacy off - Turn off legacy
 
-Usage: `@memory legacy off`
+Usage: `@conversation-memory legacy off`
 
-## @memory query - Search conversation memory
+## @conversation-memory query - Search conversation memory
 
-Usage: `@memory query [--distinct] [--count <number>] [--knowledge] [--message] [--asc] <terms>...`
+Usage: `@conversation-memory query [--distinct] [--count <number>] [--knowledge] [--message] [--asc] <terms>...`
 
 ### Arguments:
 
@@ -644,9 +644,9 @@ Usage: `@memory query [--distinct] [--count <number>] [--knowledge] [--message] 
 - --count &lt;number&gt; : Display count of results (default: 25)
 - --distinct : Display distinct results (default: false)
 
-## @memory search - Answer a question using conversation memory
+## @conversation-memory search - Answer a question using conversation memory
 
-Usage: `@memory search [--distinct] [--count <number>] [--knowledge] [--message] [--asc] <question>`
+Usage: `@conversation-memory search [--distinct] [--count <number>] [--knowledge] [--message] [--asc] <question>`
 
 ### Arguments:
 
@@ -660,9 +660,9 @@ Usage: `@memory search [--distinct] [--count <number>] [--knowledge] [--message]
 - --count &lt;number&gt; : Display count of results (default: 25)
 - --distinct : Display distinct results (default: false)
 
-## @memory answer - Answer a question using conversation memory
+## @conversation-memory answer - Answer a question using conversation memory
 
-Usage: `@memory answer [--distinct] [--count <number>] [--knowledge] [--message] [--asc] <question>`
+Usage: `@conversation-memory answer [--distinct] [--count <number>] [--knowledge] [--message] [--asc] <question>`
 
 ### Arguments:
 
@@ -2143,6 +2143,33 @@ Usage: `@package install [-r|--refresh] [-n|--dry-run] [-s|--source <string>] <t
 - --source -s &lt;string&gt; : Resolve only against this named source, bypassing the order.
 - --dry-run -n : Preview how the target would resolve without installing. (default: false)
 - --refresh -r : Refresh cache-backed source metadata before resolving. (default: false)
+
+## @package group list - List available agent groups
+
+Usage: `@package group list`
+
+## @package group show - Show details and members of an agent group
+
+Usage: `@package group show <group>`
+
+### Arguments:
+
+- &lt;group&gt; - Name of the group to show (type: string)
+
+## @package group install - Install all missing agents in an agent group
+
+Usage: `@package group install [-y|--yes] [-r|--refresh] [-n|--dry-run] [-s|--source <string>] <group>`
+
+### Arguments:
+
+- &lt;group&gt; - Name of the group to install (type: string)
+
+### Flags:
+
+- --source -s &lt;string&gt; : Resolve only against this named source
+- --dry-run -n : Preview how the group would resolve without installing (default: false)
+- --refresh -r : Refresh cache-backed source metadata before resolving (default: false)
+- --yes -y : Skip confirmation prompt (default: false)
 
 ## @package update - Update an installed agent
 

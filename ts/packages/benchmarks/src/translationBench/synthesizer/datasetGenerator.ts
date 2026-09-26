@@ -30,6 +30,7 @@ import {
     type TranslationBenchTargetAction,
 } from "./benchmark.js";
 import { parseVersionedWithZod } from "./zodJson.js";
+import { normalizeUtterance } from "./text.js";
 import type { ActionConfigProvider } from "agent-dispatcher/internal";
 import {
     assertTranslationBenchSourceManifest,
@@ -74,7 +75,7 @@ import {
     getPackagedActionParametersGraderCatalog,
     hasUsableParameterScoreSpecs,
     parameterScoreSpecsForExpectedActions,
-} from "./catalogGenerator/actionParametersGrader.js";
+} from "./catalogGenerator/index.js";
 
 export function getTranslationBenchLlmJudgeExcludedActions(): ReadonlySet<string> {
     return getPackagedLlmJudgeExcludedActions();
@@ -230,10 +231,6 @@ function hashText(value: string): string {
 
 function hashJson(value: unknown): string {
     return hashText(canonicalJson(value));
-}
-
-function normalizedUtterance(value: string): string {
-    return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function requirePositiveInteger(value: number, name: string): void {
@@ -1126,7 +1123,7 @@ export async function generateTranslationBenchBenchmark(
     const usedUtterances = new Set<string>();
     for (const evalCase of casesBySlot.values()) {
         for (const probe of [evalCase.seed, ...evalCase.generalizations]) {
-            const normalized = normalizedUtterance(probe.utterance);
+            const normalized = normalizeUtterance(probe.utterance);
             if (usedUtterances.has(normalized)) {
                 throw new Error(
                     "Translation bench generation checkpoint contains duplicate utterances",
@@ -1171,7 +1168,7 @@ export async function generateTranslationBenchBenchmark(
             const utterances = [
                 accepted.candidate.seed.utterance,
                 ...accepted.candidate.genCases.map((g) => g.utterance),
-            ].map(normalizedUtterance);
+            ].map(normalizeUtterance);
             if (utterances.some((u) => usedUtterances.has(u))) {
                 return "collision";
             }
