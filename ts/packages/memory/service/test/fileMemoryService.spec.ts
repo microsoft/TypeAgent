@@ -683,6 +683,7 @@ describe("FileMemoryService", () => {
                 title: "Runbook",
                 markdown: "Version one.",
             },
+            pipeline: { mode: "basic", maxCharsPerChunk: 4_000 },
         });
         await waitForTerminalJob(service, accepted.jobId);
 
@@ -702,6 +703,11 @@ describe("FileMemoryService", () => {
         expect(
             (await service.getSource(corpus.corpusId, "runbook"))?.revisions,
         ).toHaveLength(2);
+        expect(
+            (await service.getSource(corpus.corpusId, "runbook"))?.revisions.at(
+                -1,
+            )?.pipeline,
+        ).toEqual({ mode: "basic", maxCharsPerChunk: 4_000 });
         await expect(
             service.getSourceContent({
                 corpusId: corpus.corpusId,
