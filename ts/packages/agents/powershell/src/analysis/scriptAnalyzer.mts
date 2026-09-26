@@ -1,15 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
+import { openai } from "@typeagent/aiclient";
 import type { ScriptRecipe } from "../types/scriptRecipe.js";
 import { basename } from "path";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:powershell:analyzer");
 
-const ANALYSIS_MODEL = "claude-sonnet-4-5-20250929";
+const ANALYSIS_MODEL = "copilot:gpt-5.6-sol";
 const MAX_SCRIPT_SIZE = 100 * 1024; // 100KB
 
 export class ScriptAnalyzer {
@@ -31,23 +30,14 @@ export class ScriptAnalyzer {
             overrideActionName,
         );
 
-        let result = "";
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: ANALYSIS_MODEL,
-                maxTurns: 1,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        for await (const message of queryInstance) {
-            if (message.type === "result" && message.subtype === "success") {
-                result = message.result;
-            }
+        const completion = await openai
+            .createChatModel(ANALYSIS_MODEL)
+            .complete(prompt);
+        if (!completion.success) {
+            throw new Error(`Script analysis failed: ${completion.message}`);
         }
-
-        if (!result) {
+        const result = completion.data;
+        if (!result.trim()) {
             throw new Error("LLM returned no result during script analysis");
         }
 

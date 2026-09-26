@@ -30,6 +30,16 @@ export {
 } from "./copilotGrammarGenerator.js";
 
 export {
+    createGrammarModelQuery,
+    resolveGrammarModel,
+    defaultGrammarModel,
+    defaultClaudeGrammarModel,
+    GrammarModelOptions,
+    GrammarModelProvider,
+    GrammarModelQuery,
+} from "./grammarModel.js";
+
+export {
     SchemaToGrammarGenerator,
     SchemaGrammarConfig,
     SchemaGrammarResult,

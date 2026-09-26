@@ -31,6 +31,8 @@ let fakeBrowser = makeFakeBrowser();
 // Mutable reference updated each beforeEach so the mock factory always sees
 // the latest fake browser without needing to re-import puppeteer-extra.
 const launchMock = jest.fn(() => Promise.resolve(fakeBrowser));
+const completeMock = jest.fn();
+const createChatModelMock = jest.fn(() => ({ complete: completeMock }));
 
 // --- ESM mocks (must precede dynamic import) --------------------------------
 
@@ -53,8 +55,8 @@ jest.unstable_mockModule("html-to-text", () => ({
     convert: jest.fn(),
 }));
 
-jest.unstable_mockModule("@anthropic-ai/claude-agent-sdk", () => ({
-    query: jest.fn(),
+jest.unstable_mockModule("@typeagent/aiclient", () => ({
+    openai: { createChatModel: createChatModelMock },
 }));
 
 // --- Import module under test -----------------------------------------------
@@ -65,12 +67,63 @@ describe("browser lifecycle", () => {
     beforeEach(() => {
         fakeBrowser = makeFakeBrowser();
         launchMock.mockImplementation(() => Promise.resolve(fakeBrowser));
+        completeMock.mockReset();
+        createChatModelMock.mockClear();
     });
 
     test("instantiate() exports closeAgentContext", () => {
         const agent = instantiate();
         expect(agent.closeAgentContext).toBeDefined();
         expect(typeof agent.closeAgentContext).toBe("function");
+    });
+
+    test("llmTransform uses the explicit Copilot default", async () => {
+        completeMock.mockResolvedValue({
+            success: true,
+            data: "transformed",
+        } as never);
+        const agent = instantiate();
+        const result = await agent.executeAction!(
+            {
+                schemaName: "utility",
+                actionName: "llmTransform",
+                parameters: { input: "input", prompt: "transform" },
+            },
+            {
+                sessionContext: {
+                    agentContext: { browserPromise: null },
+                },
+            } as any,
+        );
+
+        expect(createChatModelMock).toHaveBeenCalledWith("copilot:gpt-5.6-sol");
+        expect(result).toMatchObject({
+            displayContent: "transformed",
+        });
+    });
+
+    test("llmTransform reports Copilot transport failures", async () => {
+        completeMock.mockResolvedValue({
+            success: false,
+            message: "Copilot is unavailable",
+        } as never);
+        const agent = instantiate();
+        const result = await agent.executeAction!(
+            {
+                schemaName: "utility",
+                actionName: "llmTransform",
+                parameters: { input: "input", prompt: "transform" },
+            },
+            {
+                sessionContext: {
+                    agentContext: { browserPromise: null },
+                },
+            } as any,
+        );
+
+        expect(result).toMatchObject({
+            error: "Utility action failed: Copilot is unavailable",
+        });
     });
 
     test("initializeAgentContext pre-warms browserPromise after a tick", async () => {

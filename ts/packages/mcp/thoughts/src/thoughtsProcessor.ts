@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { openai } from "@typeagent/aiclient";
 
 export interface ProcessThoughtsOptions {
     // Raw text input (stream of consciousness or notes)
@@ -57,7 +57,7 @@ Generate a well-formatted markdown document:`;
 export class ThoughtsProcessor {
     private model: string;
 
-    constructor(model: string = "claude-sonnet-4-20250514") {
+    constructor(model: string = "copilot:gpt-5.6-sol") {
         this.model = model;
     }
 
@@ -78,26 +78,17 @@ export class ThoughtsProcessor {
             prompt = prompt.replace("{instructions}", "");
         }
 
-        // Query Claude
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: model || this.model,
-            },
-        });
-
-        let markdown = "";
-        for await (const message of queryInstance) {
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    markdown = message.result || "";
-                    break;
-                } else {
-                    throw new Error(
-                        `Failed to process thoughts: ${message.subtype}`,
-                    );
-                }
-            }
+        const completion = await openai
+            .createChatModel(model || this.model)
+            .complete(prompt);
+        if (!completion.success) {
+            throw new Error(
+                `Failed to process thoughts: ${completion.message}`,
+            );
+        }
+        let markdown = completion.data;
+        if (!markdown.trim()) {
+            throw new Error("Failed to process thoughts: empty LLM response");
         }
 
         // Extract markdown from code blocks if present

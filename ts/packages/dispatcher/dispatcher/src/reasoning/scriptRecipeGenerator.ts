@@ -1,16 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import type { ReasoningTrace } from "./tracing/types.js";
+import {
+    DEFAULT_GENERATION_MODEL,
+    runQueryWithTimeout,
+} from "../validation/queryWithTimeout.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug(
     "typeagent:dispatcher:reasoning:scriptRecipeGenerator",
 );
 
-const RECIPE_MODEL = "claude-sonnet-4-5-20250929";
+const RECIPE_MODEL = DEFAULT_GENERATION_MODEL;
+
+export type ScriptRecipeTextGenerator = (prompt: string) => Promise<string>;
+
+const generateRecipeText: ScriptRecipeTextGenerator = (prompt) =>
+    runQueryWithTimeout(prompt, { model: RECIPE_MODEL });
 
 export interface ScriptCapture {
     stepNumber: number;
@@ -151,6 +158,10 @@ export function extractScriptsFromTrace(
  * Generates PowerShell recipes from PowerShell scripts found in reasoning traces.
  */
 export class ScriptRecipeGenerator {
+    constructor(
+        private readonly textGenerator: ScriptRecipeTextGenerator = generateRecipeText,
+    ) {}
+
     async generate(trace: ReasoningTrace): Promise<ScriptRecipe[]> {
         if (!trace.result.success) {
             debug(
@@ -192,21 +203,7 @@ export class ScriptRecipeGenerator {
     ): Promise<ScriptRecipe | null> {
         const prompt = this.buildPrompt(capture);
 
-        let result = "";
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: RECIPE_MODEL,
-                maxTurns: 1,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        for await (const message of queryInstance) {
-            if (message.type === "result" && message.subtype === "success") {
-                result = message.result;
-            }
-        }
+        const result = await this.textGenerator(prompt);
 
         if (!result) return null;
 

@@ -1,34 +1,76 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
+import {
+    copilotApiSettingsFromConfig,
+    openai,
+    type ChatModel,
+} from "@typeagent/aiclient";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:validation:timeout");
 
+export const DEFAULT_GENERATION_MODEL = "gpt-5.6-sol";
+
 /**
- * Default upper bound for a single grammar-validation LLM call.
+ * Default upper bound for a single generation LLM call.
  *
- * Grammar validation (adversary scoring, pattern refinement) runs while the
- * dispatcher command lock is held, so a hung query blocks the entire
- * dispatcher. This bounds how long any one call can stall.
+ * Generation runs while the dispatcher command lock is held, so a hung query
+ * blocks the entire dispatcher. This bounds how long any one call can stall.
  */
 export const DEFAULT_VALIDATION_QUERY_TIMEOUT_MS = 30_000;
 
+export interface QueryOptions {
+    model?: string;
+}
+
+export type QueryChatModelFactory = (
+    modelName: string,
+) => Pick<ChatModel, "complete">;
+
+const createCopilotModel: QueryChatModelFactory = (modelName) =>
+    openai.createChatModel(copilotApiSettingsFromConfig(modelName));
+
 /**
- * Run a single-shot Claude Agent SDK query and return the final success result
- * text, enforcing a hard timeout.
+ * Run a single-shot query through the Copilot transport and return its text,
+ * enforcing a hard timeout.
  *
- * On timeout the underlying query is aborted (freeing its subprocess) and this
- * rejects, so callers fall back to a safe default instead of hanging forever.
+ * The model factory is injectable so callers can test generation offline.
  *
  * @throws if the query times out or produces no terminal result.
  */
 export async function runQueryWithTimeout(
     prompt: string,
-    options: Options,
+    options: QueryOptions = {},
     timeoutMs: number = DEFAULT_VALIDATION_QUERY_TIMEOUT_MS,
+    modelFactory: QueryChatModelFactory = createCopilotModel,
+): Promise<string> {
+    const requestedModel = options.model;
+    // Existing validation callers pass their former Claude default. Keep those
+    // calls working while routing the provider-neutral API through Copilot.
+    const modelName =
+        requestedModel === undefined || requestedModel.startsWith("claude-")
+            ? DEFAULT_GENERATION_MODEL
+            : requestedModel;
+    const model = modelFactory(modelName);
+    return runWithTimeout(async (signal) => {
+        const result = await model.complete(
+            prompt,
+            undefined,
+            undefined,
+            undefined,
+            signal,
+        );
+        if (!result.success) {
+            throw new Error(result.message);
+        }
+        return result.data;
+    }, timeoutMs);
+}
+
+async function runWithTimeout(
+    execute: (signal: AbortSignal) => Promise<string>,
+    timeoutMs: number,
 ): Promise<string> {
     const abortController = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -37,36 +79,13 @@ export async function runQueryWithTimeout(
         timer = setTimeout(() => {
             abortController.abort();
             reject(
-                new Error(
-                    `Grammar validation query timed out after ${timeoutMs}ms`,
-                ),
+                new Error(`Generation query timed out after ${timeoutMs}ms`),
             );
         }, timeoutMs);
     });
 
-    const queryInstance = query({
-        prompt,
-        options: { ...options, abortController, ...claudeExecutableOption() },
-    });
+    const consume = execute(abortController.signal);
 
-    const consume = (async (): Promise<string> => {
-        let responseText = "";
-        for await (const message of queryInstance) {
-            // Break on the first terminal result regardless of subtype so an
-            // error/non-success result can't leave the stream open and hang.
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    responseText = message.result ?? "";
-                }
-                break;
-            }
-        }
-        return responseText;
-    })();
-
-    // If the timeout wins the race, the consume promise may reject later when
-    // the abort propagates — swallow it so it doesn't surface as an unhandled
-    // rejection.
     consume.catch((error) => {
         debug(`query consumption settled after race: ${error}`);
     });
