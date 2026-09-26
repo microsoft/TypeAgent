@@ -52,6 +52,58 @@ describe("MCP tool catalog safety", () => {
         expect(reverse.schemaContent).toBe(forward.schemaContent);
     });
 
+    it("fingerprints each accepted tool definition", () => {
+        const first = buildMcpToolCatalog(
+            "server",
+            [tool("search", { type: "object", properties: {} })],
+            "Actions",
+        );
+        const second = buildMcpToolCatalog(
+            "server",
+            [
+                tool("search", {
+                    type: "object",
+                    properties: { query: { type: "string" } },
+                }),
+            ],
+            "Actions",
+        );
+
+        expect(
+            first.entries.get(getMcpToolIdentity("server", "search"))
+                ?.fingerprint,
+        ).not.toBe(
+            second.entries.get(getMcpToolIdentity("server", "search"))
+                ?.fingerprint,
+        );
+    });
+
+    it("accepts common open and nullable input schema forms", () => {
+        const catalog = buildMcpToolCatalog(
+            "server",
+            [
+                tool("invoke", {
+                    type: "object",
+                    required: ["arguments"],
+                    properties: {
+                        arguments: {
+                            type: "object",
+                            additionalProperties: true,
+                        },
+                        query: { type: ["string", "null"] },
+                        values: { type: "array" },
+                    },
+                } as Tool["inputSchema"]),
+            ],
+            "Actions",
+        );
+
+        expect(
+            catalog.entries.has(getMcpToolIdentity("server", "invoke")),
+        ).toBe(true);
+        expect(catalog.skipped).toHaveLength(0);
+    });
+
     it("skips external refs and excessive complexity per tool", () => {
         const deep: Record<string, unknown> = { type: "object" };
         let cursor = deep;

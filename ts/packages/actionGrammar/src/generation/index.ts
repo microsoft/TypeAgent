@@ -11,6 +11,7 @@ import { Cardinal } from "../builtInEntities.js";
 export { resolveCliOnPath, claudeExecutableOption } from "./cliPath.js";
 
 export {
+    GrammarGenerator,
     ClaudeGrammarGenerator,
     GrammarAnalysis,
     ParameterMapping,
@@ -19,6 +20,14 @@ export {
     Sentence,
     Token,
 } from "./grammarGenerator.js";
+
+export {
+    CopilotGrammarGenerator,
+    CopilotGrammarClient,
+    CopilotGrammarClientFactory,
+    CopilotGrammarSession,
+    defaultCopilotGrammarModel,
+} from "./copilotGrammarGenerator.js";
 
 export {
     SchemaToGrammarGenerator,
@@ -68,10 +77,16 @@ export {
     IterationMetrics,
 } from "./grammarWarmer.js";
 
-import { ClaudeGrammarGenerator, GrammarAnalysis } from "./grammarGenerator.js";
+import {
+    ClaudeGrammarGenerator,
+    GrammarAnalysis,
+    GrammarGenerator,
+} from "./grammarGenerator.js";
+import { CopilotGrammarGenerator } from "./copilotGrammarGenerator.js";
 import {
     getSchemaInfoFromParsedSchema,
     loadSchemaInfo,
+    SchemaInfo,
 } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
 import { loadGrammarRulesNoThrow } from "../grammarLoader.js";
@@ -233,6 +248,54 @@ export interface CachePopulationResult {
     appliedPhrasesToAdd?: Array<{ matcherName: string; phrase: string }>;
 }
 
+function validateAndStripInferredParameters(
+    request: CachePopulationRequest,
+    schemaInfo: SchemaInfo,
+): string | undefined {
+    const normalizedRequest = request.request
+        .toLowerCase()
+        .replace(/[^\w\s]/g, " ");
+    const actionInfo = schemaInfo.actions.get(request.action.actionName);
+    const strippedParams: string[] = [];
+    for (const [paramName, paramValue] of Object.entries(
+        request.action.parameters,
+    )) {
+        if (isValueInRequest(paramValue, normalizedRequest)) {
+            continue;
+        }
+        if (actionInfo?.parameters.get(paramName)?.optional) {
+            strippedParams.push(paramName);
+            continue;
+        }
+        return `Required parameter '${paramName}' value "${paramValue}" not found in request (possible LLM correction - don't cache)`;
+    }
+    for (const paramName of strippedParams) {
+        delete request.action.parameters[paramName];
+    }
+    return undefined;
+}
+
+function getCheckedVariables(
+    testCase: GrammarTestCase,
+    schemaInfo: SchemaInfo,
+): Set<string> {
+    const checkedVariables = new Set<string>();
+    const actionInfo = schemaInfo.actions.get(testCase.action.actionName);
+    if (!actionInfo) {
+        return checkedVariables;
+    }
+    for (const [paramName, paramInfo] of actionInfo.parameters) {
+        if (paramInfo.paramSpec !== "checked_wildcard") {
+            continue;
+        }
+        const varName = Array.isArray(testCase.action.parameters[paramName])
+            ? getSingularVariableName(paramName)
+            : paramName;
+        checkedVariables.add(varName);
+    }
+    return checkedVariables;
+}
+
 /**
  * Retry an async operation on transient connection errors with exponential backoff.
  * Only retries on errors whose message contains "Connection error" or "ECONNRESET"
@@ -273,17 +336,21 @@ async function retryOnConnectionError<T>(
 
 /**
  * Generate and add a grammar rule to the cache from a request/action pair
- * This is called by agentServer when Claude confirms a user action should be cached
+ * This is called by agentServer when a user action should be cached.
  *
  * @param request The cache population request
- * @param model The Claude model to use for analysis (default: claude-sonnet-4-20250514)
+ * @param generatorOrModel A generator, or a Claude model name for compatibility
  * @returns Result indicating success or failure with details
  */
 export async function populateCache(
     request: CachePopulationRequest,
-    model: string = "claude-sonnet-4-20250514",
+    generatorOrModel: GrammarGenerator | string = new CopilotGrammarGenerator(),
 ): Promise<CachePopulationResult> {
     try {
+        const generator =
+            typeof generatorOrModel === "string"
+                ? new ClaudeGrammarGenerator(generatorOrModel)
+                : generatorOrModel;
         // Load schema information
         if (!request.parsedSchema && !request.schemaPath) {
             throw new Error(
@@ -297,35 +364,15 @@ export async function populateCache(
               )
             : loadSchemaInfo(request.schemaPath!);
 
-        // Validate that parameter values appear in the request.
-        // If a value was inferred by the LLM (not in the request), strip it
-        // from the action if it's optional in the schema; reject if required.
-        const normalizedRequest = request.request
-            .toLowerCase()
-            .replace(/[^\w\s]/g, " ");
-        const actionInfo = schemaInfo.actions.get(request.action.actionName);
-        const strippedParams: string[] = [];
-        for (const [paramName, paramValue] of Object.entries(
-            request.action.parameters,
-        )) {
-            const isInRequest = isValueInRequest(paramValue, normalizedRequest);
-            if (!isInRequest) {
-                const paramInfo = actionInfo?.parameters.get(paramName);
-                if (paramInfo?.optional) {
-                    // Optional parameter inferred by LLM — strip it
-                    strippedParams.push(paramName);
-                } else {
-                    // Required parameter not in request — reject
-                    return {
-                        success: false,
-                        rejectionReason: `Required parameter '${paramName}' value "${paramValue}" not found in request (possible LLM correction - don't cache)`,
-                    };
-                }
-            }
-        }
-        // Remove inferred optional parameters from the action
-        for (const paramName of strippedParams) {
-            delete request.action.parameters[paramName];
+        const parameterRejection = validateAndStripInferredParameters(
+            request,
+            schemaInfo,
+        );
+        if (parameterRejection) {
+            return {
+                success: false,
+                rejectionReason: parameterRejection,
+            };
         }
 
         // Create test case from request
@@ -335,8 +382,6 @@ export async function populateCache(
             action: request.action,
         };
 
-        // Generate grammar rule using Claude
-        const generator = new ClaudeGrammarGenerator(model);
         const analysis = await retryOnConnectionError(() =>
             generator.generateGrammar(testCase, schemaInfo),
         );
@@ -364,7 +409,7 @@ export async function populateCache(
         );
 
         // Round-trip verification: compile and test the rule against the original request.
-        // If it fails, give Claude feedback and retry up to MAX_REFINEMENT_ATTEMPTS times.
+        // If it fails, give the model feedback and retry up to MAX_REFINEMENT_ATTEMPTS times.
         const MAX_REFINEMENT_ATTEMPTS = 2;
         const requestTokens = tokenizeRequest(request.request);
         let refinedAnalysis = analysis;
@@ -416,21 +461,7 @@ export async function populateCache(
             );
         }
 
-        // Extract checked variables from the action parameters
-        const checkedVariables = new Set<string>();
-        if (actionInfo) {
-            for (const [paramName, paramInfo] of actionInfo.parameters) {
-                if (paramInfo.paramSpec === "checked_wildcard") {
-                    // Handle array parameters (convert plural to singular)
-                    const varName = Array.isArray(
-                        testCase.action.parameters[paramName],
-                    )
-                        ? getSingularVariableName(paramName)
-                        : paramName;
-                    checkedVariables.add(varName);
-                }
-            }
-        }
+        const checkedVariables = getCheckedVariables(testCase, schemaInfo);
 
         const result: CachePopulationResult = {
             success: true,

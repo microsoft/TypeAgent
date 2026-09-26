@@ -83,6 +83,13 @@ export type ActionPolicy = {
     confirmation?: "required";
 };
 
+export type ActionCacheBinding = {
+    // Stable identity of the system that supplied this dynamic schema.
+    sourceId: string;
+    // Fingerprints of the source definitions keyed by action name.
+    actionFingerprints: Record<string, string>;
+};
+
 export type SchemaManifest = {
     description: string;
     schemaType: string | SchemaTypeNames; // string if there are only action schemas
@@ -94,6 +101,9 @@ export type SchemaManifest = {
     streamingActions?: string[];
     // Exact action names. Applies to structured invocation, not NL routing.
     actionPolicies?: Record<string, ActionPolicy>;
+    // Optional provenance used to invalidate learned routes when a dynamic
+    // action's source definition changes.
+    cacheBinding?: ActionCacheBinding;
 };
 
 export type ActionManifest = {
