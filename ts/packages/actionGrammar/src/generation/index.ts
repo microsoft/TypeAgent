@@ -86,6 +86,7 @@ import { CopilotGrammarGenerator } from "./copilotGrammarGenerator.js";
 import {
     getSchemaInfoFromParsedSchema,
     loadSchemaInfo,
+    SchemaInfo,
 } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
 import { loadGrammarRulesNoThrow } from "../grammarLoader.js";
@@ -247,6 +248,54 @@ export interface CachePopulationResult {
     appliedPhrasesToAdd?: Array<{ matcherName: string; phrase: string }>;
 }
 
+function validateAndStripInferredParameters(
+    request: CachePopulationRequest,
+    schemaInfo: SchemaInfo,
+): string | undefined {
+    const normalizedRequest = request.request
+        .toLowerCase()
+        .replace(/[^\w\s]/g, " ");
+    const actionInfo = schemaInfo.actions.get(request.action.actionName);
+    const strippedParams: string[] = [];
+    for (const [paramName, paramValue] of Object.entries(
+        request.action.parameters,
+    )) {
+        if (isValueInRequest(paramValue, normalizedRequest)) {
+            continue;
+        }
+        if (actionInfo?.parameters.get(paramName)?.optional) {
+            strippedParams.push(paramName);
+            continue;
+        }
+        return `Required parameter '${paramName}' value "${paramValue}" not found in request (possible LLM correction - don't cache)`;
+    }
+    for (const paramName of strippedParams) {
+        delete request.action.parameters[paramName];
+    }
+    return undefined;
+}
+
+function getCheckedVariables(
+    testCase: GrammarTestCase,
+    schemaInfo: SchemaInfo,
+): Set<string> {
+    const checkedVariables = new Set<string>();
+    const actionInfo = schemaInfo.actions.get(testCase.action.actionName);
+    if (!actionInfo) {
+        return checkedVariables;
+    }
+    for (const [paramName, paramInfo] of actionInfo.parameters) {
+        if (paramInfo.paramSpec !== "checked_wildcard") {
+            continue;
+        }
+        const varName = Array.isArray(testCase.action.parameters[paramName])
+            ? getSingularVariableName(paramName)
+            : paramName;
+        checkedVariables.add(varName);
+    }
+    return checkedVariables;
+}
+
 /**
  * Retry an async operation on transient connection errors with exponential backoff.
  * Only retries on errors whose message contains "Connection error" or "ECONNRESET"
@@ -315,35 +364,15 @@ export async function populateCache(
               )
             : loadSchemaInfo(request.schemaPath!);
 
-        // Validate that parameter values appear in the request.
-        // If a value was inferred by the LLM (not in the request), strip it
-        // from the action if it's optional in the schema; reject if required.
-        const normalizedRequest = request.request
-            .toLowerCase()
-            .replace(/[^\w\s]/g, " ");
-        const actionInfo = schemaInfo.actions.get(request.action.actionName);
-        const strippedParams: string[] = [];
-        for (const [paramName, paramValue] of Object.entries(
-            request.action.parameters,
-        )) {
-            const isInRequest = isValueInRequest(paramValue, normalizedRequest);
-            if (!isInRequest) {
-                const paramInfo = actionInfo?.parameters.get(paramName);
-                if (paramInfo?.optional) {
-                    // Optional parameter inferred by LLM — strip it
-                    strippedParams.push(paramName);
-                } else {
-                    // Required parameter not in request — reject
-                    return {
-                        success: false,
-                        rejectionReason: `Required parameter '${paramName}' value "${paramValue}" not found in request (possible LLM correction - don't cache)`,
-                    };
-                }
-            }
-        }
-        // Remove inferred optional parameters from the action
-        for (const paramName of strippedParams) {
-            delete request.action.parameters[paramName];
+        const parameterRejection = validateAndStripInferredParameters(
+            request,
+            schemaInfo,
+        );
+        if (parameterRejection) {
+            return {
+                success: false,
+                rejectionReason: parameterRejection,
+            };
         }
 
         // Create test case from request
@@ -432,21 +461,7 @@ export async function populateCache(
             );
         }
 
-        // Extract checked variables from the action parameters
-        const checkedVariables = new Set<string>();
-        if (actionInfo) {
-            for (const [paramName, paramInfo] of actionInfo.parameters) {
-                if (paramInfo.paramSpec === "checked_wildcard") {
-                    // Handle array parameters (convert plural to singular)
-                    const varName = Array.isArray(
-                        testCase.action.parameters[paramName],
-                    )
-                        ? getSingularVariableName(paramName)
-                        : paramName;
-                    checkedVariables.add(varName);
-                }
-            }
-        }
+        const checkedVariables = getCheckedVariables(testCase, schemaInfo);
 
         const result: CachePopulationResult = {
             success: true,
