@@ -110,8 +110,11 @@ bounds and nested-request accounting; reconcile cumulative prior charges in a
 new run specification. An unavailable model is a blocker, not permission to
 substitute one. No live availability/pricing probe is part of this migration.
 
-The authorized ceiling is **50,000 cumulative Copilot AI credits**, superseding
-the original 20,000 and interim 40,000 limits, not a fresh allowance per run.
+The historical authorization was **50,000 cumulative Copilot AI credits**,
+superseding the original 20,000 and interim 40,000 limits. A new round requires
+explicit authorization rather than resetting that ledger. On 2026-09-25 the
+user separately authorized **40,000 additional Copilot AI credits** for the
+fresh common-file round; its ledger and reservations are separate.
 Include planning, implementation, preparation, pilots, failed/cancelled work,
 nested reasoning, grading and reporting. Reserve report headroom, retain
 unsettled maximum reservations and stop new admissions if accounting is unclear.
@@ -221,6 +224,14 @@ only for these disposable fixtures, never approval of real effects. One answer
 can arrive through a callback or a final-text clarification within the original
 90-second deadline. Confirming a guessed referent is not clarification.
 Final state alone cannot excuse premature mutation.
+
+File writes can require two distinct consents: dispatcher confirmation and
+the PowerShell handler's exact `Run`/`Cancel` question. Handler consent requires
+an unambiguous admitted file action satisfying the case's independent oracle.
+The active tool's trace must establish that context; text alone cannot.
+Structured approvals are bound to the scope, operation and interaction,
+consumed once, and invalidated by unrelated work or terminal failure.
+Handler consent never supplies A1/A4's missing referent or permits replay.
 
 ### Historical A4 replacement record (protocol 4)
 

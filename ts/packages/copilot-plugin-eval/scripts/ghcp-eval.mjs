@@ -29,6 +29,9 @@ import {
     corpusVersion,
     assertCorpusReadiness,
     filePolicy,
+    fileHandlerConfirmation,
+    pendingFileAction,
+    consumeFixtureContinuation,
     fileFixture,
     fixtureConfirmationAllowed,
     isClarificationQuestion,
@@ -479,7 +482,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
     const network = ["S5", "M2"].includes(testCase.id)
         ? { toolResults: [] }
         : undefined;
-    const approvedInteractions = new Set();
+    const approvedInteractions = new Map();
     const clarify = (question, source) => {
         if (executionStopped || clarificationGiven)
             throw new Error("Clarification cannot replay stopped work");
@@ -656,16 +659,47 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                         wasFreeform: true,
                     };
                 }
-                const pending = result.toolResults.findLast(
-                    (tool) =>
-                        tool.result?.structuredContent?.status ===
-                        "requires_interaction",
-                )?.result.structuredContent;
-                const action = pending?.prompt?.action;
+                const domainTools = result.tools.filter((tool) =>
+                    /processCommand|executeAction|continueAction/.test(
+                        tool.name,
+                    ),
+                );
+                const current = domainTools.at(-1);
+                const live = domainTools.filter(
+                    (tool) => tool.endMs === undefined,
+                );
+                const currentResult = result.toolResults.findLast(
+                    (tool) => tool.toolCallId === current?.toolCallId,
+                )?.result?.structuredContent;
+                const pending =
+                    currentResult?.status === "requires_interaction"
+                        ? currentResult
+                        : undefined;
+                const action =
+                    pending?.prompt?.action ??
+                    (current &&
+                    live.length <= 1 &&
+                    (live.length === 0 || live[0] === current) &&
+                    (pending || live.length === 1)
+                        ? pendingFileAction(
+                              readBackendEvents(
+                                  env.TYPEAGENT_GHCP_EVAL_TRACE,
+                              ).slice(current.backendEventOffset),
+                          )
+                        : undefined);
+                const handlerAnswer = fileHandlerConfirmation(
+                    pending?.prompt ?? {
+                        type: "question",
+                        message: request.question,
+                        choices: request.choices,
+                    },
+                    action,
+                );
                 if (
                     !executionStopped &&
                     confirmationCount < 8 &&
-                    pending?.prompt?.type === "confirmation" &&
+                    (pending?.prompt?.type === "confirmation" ||
+                        handlerAnswer) &&
                     (fixtureConfirmationAllowed(
                         testCase.id,
                         action,
@@ -680,11 +714,23 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                                 env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
                             )))
                 ) {
-                    const yes = request.choices?.find((choice) =>
-                        /^(yes|approve|confirm|proceed|allow)\b/i.test(choice),
-                    );
+                    const yes = handlerAnswer
+                        ? "Run"
+                        : request.choices?.find((choice) =>
+                              /^(yes|approve|confirm|proceed|allow)\b/i.test(
+                                  choice,
+                              ),
+                          );
                     confirmationCount++;
-                    approvedInteractions.add(pending.interactionId);
+                    if (pending)
+                        approvedInteractions.set(pending.interactionId, {
+                            operationId: pending.operationId,
+                            scopeId: pending.scopeId,
+                            response: handlerAnswer ?? {
+                                type: "confirmation",
+                                approved: true,
+                            },
+                        });
                     return {
                         answer: yes ?? "Yes",
                         wasFreeform: yes === undefined,
@@ -703,12 +749,18 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                         !fileStateMatches(snapshotFiles(workspace), fileFixture)
                     )
                         result.noPrematureFileMutation = false;
+                    const continuation =
+                        input.toolName.includes("continueAction");
                     const unauthorizedContinuation =
-                        input.toolName.includes("continueAction") &&
-                        input.toolArgs?.response?.approved === true &&
-                        !approvedInteractions.has(
-                            input.toolArgs?.interactionId,
+                        continuation &&
+                        input.toolArgs?.response?.approved !== false &&
+                        !consumeFixtureContinuation(
+                            approvedInteractions,
+                            input.toolArgs,
+                            executionStopped,
                         );
+                    if (!/ask_user|continueAction/.test(input.toolName))
+                        approvedInteractions.clear();
                     const forbidden =
                         unauthorizedContinuation ||
                         (executionStopped &&
@@ -811,6 +863,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                         ? "[network evidence withheld]"
                         : event.data.result,
             });
+            if (executionStopped) approvedInteractions.clear();
         });
         result.status = "running";
         if (preparation) {

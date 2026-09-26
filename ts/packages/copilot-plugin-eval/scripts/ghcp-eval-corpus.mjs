@@ -325,6 +325,56 @@ export function logicalFileContent(content) {
         .replace(/\n+$/, "");
 }
 
+export function fileHandlerConfirmation(prompt, action) {
+    if (
+        action?.schemaName !== "powershell.powershell-files" ||
+        prompt?.type !== "question" ||
+        JSON.stringify(prompt.choices) !== JSON.stringify(["Run", "Cancel"]) ||
+        (prompt.defaultId !== undefined && prompt.defaultId !== 1)
+    )
+        return undefined;
+    const message = {
+        copyFile: "Copy the requested file or directory?",
+        writeFile: "Write content to the requested file?",
+    }[action.actionName];
+    return message && prompt.message === message
+        ? { type: "question", selected: 0 }
+        : undefined;
+}
+
+export function pendingFileAction(events) {
+    const pending = [];
+    for (const { event, detail } of events) {
+        if (event === "action.admitted") pending.push(detail);
+        else if (event === "action.completed") {
+            if (
+                pending.length !== 1 ||
+                pending[0].schemaName !== detail?.schemaName ||
+                pending[0].actionName !== detail?.actionName
+            )
+                return undefined;
+            pending.pop();
+        } else if (event === "action.denied" || event === "action.failed")
+            return undefined;
+    }
+    return pending.length === 1 &&
+        pending[0]?.schemaName === "powershell.powershell-files"
+        ? pending[0]
+        : undefined;
+}
+
+export function consumeFixtureContinuation(approvals, args, stopped) {
+    const approval = approvals.get(args?.interactionId);
+    approvals.delete(args?.interactionId);
+    return (
+        !stopped &&
+        approval !== undefined &&
+        approval.operationId === args.operationId &&
+        approval.scopeId === args.scopeId &&
+        JSON.stringify(approval.response) === JSON.stringify(args.response)
+    );
+}
+
 export function isClarificationQuestion(id, question) {
     if (/\b(confirm|approve|proceed|allow)\b/i.test(question)) return false;
     const subject = {
