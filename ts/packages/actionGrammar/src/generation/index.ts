@@ -11,6 +11,7 @@ import { Cardinal } from "../builtInEntities.js";
 export { resolveCliOnPath, claudeExecutableOption } from "./cliPath.js";
 
 export {
+    GrammarGenerator,
     ClaudeGrammarGenerator,
     GrammarAnalysis,
     ParameterMapping,
@@ -19,6 +20,14 @@ export {
     Sentence,
     Token,
 } from "./grammarGenerator.js";
+
+export {
+    CopilotGrammarGenerator,
+    CopilotGrammarClient,
+    CopilotGrammarClientFactory,
+    CopilotGrammarSession,
+    defaultCopilotGrammarModel,
+} from "./copilotGrammarGenerator.js";
 
 export {
     SchemaToGrammarGenerator,
@@ -68,7 +77,12 @@ export {
     IterationMetrics,
 } from "./grammarWarmer.js";
 
-import { ClaudeGrammarGenerator, GrammarAnalysis } from "./grammarGenerator.js";
+import {
+    ClaudeGrammarGenerator,
+    GrammarAnalysis,
+    GrammarGenerator,
+} from "./grammarGenerator.js";
+import { CopilotGrammarGenerator } from "./copilotGrammarGenerator.js";
 import {
     getSchemaInfoFromParsedSchema,
     loadSchemaInfo,
@@ -273,17 +287,21 @@ async function retryOnConnectionError<T>(
 
 /**
  * Generate and add a grammar rule to the cache from a request/action pair
- * This is called by agentServer when Claude confirms a user action should be cached
+ * This is called by agentServer when a user action should be cached.
  *
  * @param request The cache population request
- * @param model The Claude model to use for analysis (default: claude-sonnet-4-20250514)
+ * @param generatorOrModel A generator, or a Claude model name for compatibility
  * @returns Result indicating success or failure with details
  */
 export async function populateCache(
     request: CachePopulationRequest,
-    model: string = "claude-sonnet-4-20250514",
+    generatorOrModel: GrammarGenerator | string = new CopilotGrammarGenerator(),
 ): Promise<CachePopulationResult> {
     try {
+        const generator =
+            typeof generatorOrModel === "string"
+                ? new ClaudeGrammarGenerator(generatorOrModel)
+                : generatorOrModel;
         // Load schema information
         if (!request.parsedSchema && !request.schemaPath) {
             throw new Error(
@@ -335,8 +353,6 @@ export async function populateCache(
             action: request.action,
         };
 
-        // Generate grammar rule using Claude
-        const generator = new ClaudeGrammarGenerator(model);
         const analysis = await retryOnConnectionError(() =>
             generator.generateGrammar(testCase, schemaInfo),
         );
@@ -364,7 +380,7 @@ export async function populateCache(
         );
 
         // Round-trip verification: compile and test the rule against the original request.
-        // If it fails, give Claude feedback and retry up to MAX_REFINEMENT_ATTEMPTS times.
+        // If it fails, give the model feedback and retry up to MAX_REFINEMENT_ATTEMPTS times.
         const MAX_REFINEMENT_ATTEMPTS = 2;
         const requestTokens = tokenizeRequest(request.request);
         let refinedAnalysis = analysis;
