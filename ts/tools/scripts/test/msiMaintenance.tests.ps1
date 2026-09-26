@@ -139,6 +139,65 @@ try {
     $Action = "Rollback"
     Invoke-Maintenance
 
+    # If restoring the task fails after payload moves, a later retry accepts
+    # only the same directories recorded before those moves.
+    $Action = "Begin"
+    Invoke-Maintenance
+    $previous = $TransactionDir
+    $TransactionDir = Join-Path $testDir "TypeAgent-msi-resume.tmp"
+    New-Item -ItemType Directory -Path $TransactionDir | Out-Null
+    $originalRegister = ${function:Register-ScheduledTask}
+    function Register-ScheduledTask { param($TaskName, $TaskPath, $Xml, [switch]$Force); throw "Task restore unavailable." }
+    $failed = $false
+    try { Invoke-Maintenance } catch {
+        $failed = $true
+        Assert ($_.Exception.Message -eq "Task restore unavailable.") "partial recovery failed unexpectedly"
+    }
+    Assert $failed "task restoration failure was swallowed"
+    Assert (Test-Path (Join-Path $payload "old.txt")) "partial recovery did not restore payload"
+    Assert (-not (Test-Path (Join-Path $previous "agent-server"))) "partial recovery did not consume backup"
+    $state = Get-Content (Join-Path $previous "state.json") -Raw | ConvertFrom-Json
+    Assert ($state.RestoreIdentities.Count -eq 2) "directory identities were not journaled"
+    # Replacing a restored directory with lookalike contents must not satisfy
+    # the receipt; preserve the actual directory so this test can resume safely.
+    [IO.Directory]::Move($payload, (Join-Path $testDir "actual-restored-server"))
+    New-Item -ItemType Directory -Path $payload | Out-Null
+    Set-Content (Join-Path $payload "old.txt") -Value "not the restored directory"
+    $failed = $false
+    try { Invoke-Maintenance } catch {
+        $failed = $true
+        Assert ($_.Exception.Message -match "complete previous 'agent-server'") "directory substitution error changed"
+    }
+    Assert $failed "lookalike directory satisfied recovery receipt"
+    Remove-Item -LiteralPath (Join-Path $payload "old.txt")
+    [IO.Directory]::Delete($payload)
+    [IO.Directory]::Move((Join-Path $testDir "actual-restored-server"), $payload)
+    Set-Item Function:Register-ScheduledTask -Value $originalRegister
+    Invoke-Maintenance
+    $Action = "Rollback"
+    Invoke-Maintenance
+
+    # A task may still be Ready after Start-ScheduledTask returns. Transfer its
+    # running intent instead of relying on the new process having appeared.
+    $Action = "Begin"
+    Invoke-Maintenance
+    $previous = $TransactionDir
+    $state = Get-Content (Join-Path $previous "state.json") -Raw | ConvertFrom-Json
+    $state.WasRunning = $true
+    $state.TaskWasRunning = $true
+    Save-MaintenanceState $state
+    $TransactionDir = Join-Path $testDir "TypeAgent-msi-task-race.tmp"
+    New-Item -ItemType Directory -Path $TransactionDir | Out-Null
+    $script:delayedTaskStarts = 0
+    function Start-ScheduledTask { param($TaskName, $TaskPath); $script:delayedTaskStarts++ }
+    Invoke-Maintenance
+    $state = Get-Content (Join-Path $TransactionDir "state.json") -Raw | ConvertFrom-Json
+    Assert ($state.WasRunning -and $state.TaskWasRunning) "new transaction lost recovered running-task intent"
+    $Action = "Rollback"
+    Invoke-Maintenance
+    Assert ($script:delayedTaskStarts -eq 2) "rollback did not restart the delayed recovered task"
+    Remove-Item Function:Start-ScheduledTask
+
     $script:tasks[0].Actions[0].Arguments = '"C:\another-install\autostart-run.vbs"'
     $Action = "Begin"
     $failed = $false

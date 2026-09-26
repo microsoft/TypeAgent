@@ -651,6 +651,11 @@ loss), the marker and backup are retained. The next installer automatically
 validates and restores a complete previous transaction using its current embedded
 recovery implementation, then continues installation with fresh rollback
 protection. It does not execute the previous transaction's staged script.
+Before restoring directories, rollback atomically records their Windows
+volume/file identities. A later retry can recognize those same directories if
+task restoration failed after the backups were moved, without accepting arbitrary
+replacement folders as valid backups. Recovery also carries forward a scheduled
+task's running intent while its asynchronous startup is still pending.
 
 Automatic recovery accepts only a matching installation root and a sibling
 `TypeAgent-msi-*.tmp` transaction with valid state and complete saved payloads.

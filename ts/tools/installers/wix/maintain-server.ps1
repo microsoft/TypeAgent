@@ -163,6 +163,24 @@ namespace TypeAgentMaintenance {
         struct ProcessInformation { public IntPtr Process, Thread; public int Id, ThreadId; }
         [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
         static extern SafeFileHandle CreateFileW(string name, uint access, uint share, ref SecurityAttributes security, uint disposition, uint flags, IntPtr template);
+        [StructLayout(LayoutKind.Sequential)]
+        struct FileInformation {
+            public uint Attributes;
+            public System.Runtime.InteropServices.ComTypes.FILETIME Created, Accessed, Written;
+            public uint VolumeSerial, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
+        }
+        [DllImport("kernel32.dll", SetLastError=true)]
+        static extern bool GetFileInformationByHandle(SafeFileHandle handle, out FileInformation information);
+        public static string DirectoryIdentity(string path) {
+            var security = new SecurityAttributes { Size = Marshal.SizeOf(typeof(SecurityAttributes)) };
+            using (var handle = CreateFileW(path, 0, 7, ref security, 3, 0x02000000, IntPtr.Zero)) {
+                FileInformation information;
+                if (handle.IsInvalid || !GetFileInformationByHandle(handle, out information))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot identify recovery directory.");
+                return information.VolumeSerial.ToString("X8") + ":" +
+                    information.IndexHigh.ToString("X8") + information.IndexLow.ToString("X8");
+            }
+        }
         [DllImport("kernel32.dll", SetLastError=true)]
         static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, int flags, ref IntPtr size);
         [DllImport("kernel32.dll", SetLastError=true)]
@@ -470,7 +488,19 @@ function Get-OwnedAutostart([string]$payload) {
 }
 
 function Save-MaintenanceState($state) {
-    $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $TransactionDir "state.json") -Encoding UTF8
+    $path = Join-Path $TransactionDir "state.json"
+    $pending = Join-Path $TransactionDir "state.json.pending"
+    $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $pending -Encoding UTF8
+    if (Test-Path -LiteralPath $path) {
+        [IO.File]::Replace($pending, $path, [NullString]::Value)
+    } else {
+        [IO.File]::Move($pending, $path)
+    }
+}
+
+function Get-DirectoryIdentity([string]$path) {
+    Initialize-ProcessContext
+    return [TypeAgentMaintenance.ProcessContext]::DirectoryIdentity($path)
 }
 
 function Assert-RecoveryPath([string]$path) {
@@ -512,8 +542,15 @@ function Restore-InterruptedMaintenance([string]$marker) {
         $backup = Join-Path $previous $name
         $installed = Join-Path $Root $name
         $hasBackup = Test-Path -LiteralPath $backup -PathType Container
+        $receipts = @($state.RestoreIdentities | Where-Object { $_.Name -eq $name })
+        $restored = $false
+        if (-not $hasBackup -and $receipts.Count -eq 1 -and
+            (Test-Path -LiteralPath $installed -PathType Container)) {
+            Assert-RecoveryPath $installed
+            $restored = (Get-DirectoryIdentity $installed) -ceq $receipts[0].Identity
+        }
         if (($hasBackup -and $name -notin $saved) -or
-            ($state.Prepared -and $name -in $saved -and -not $hasBackup) -or
+            ($state.Prepared -and $name -in $saved -and -not $hasBackup -and -not $restored) -or
             (-not $state.Prepared -and $name -in $saved -and -not $hasBackup -and
                 -not (Test-Path -LiteralPath $installed -PathType Container))) {
             throw "Cannot establish a complete previous '$name' payload. Recovery files have been retained."
@@ -559,6 +596,7 @@ function Restore-InterruptedMaintenance([string]$marker) {
         throw "Previous recovery did not clear its marker. Setup will not overwrite the recovery state."
     }
     Write-MaintenanceLog "Previous installation recovered; continuing the new maintenance transaction."
+    return @{ TaskWasRunning = [bool]($state.TaskXml -and $state.TaskWasRunning) }
 }
 
 function Invoke-Maintenance {
@@ -567,18 +605,19 @@ function Invoke-Maintenance {
     $marker = Join-Path $Root ".msi-maintenance"
     $statePath = Join-Path $TransactionDir "state.json"
     if ($Action -eq "Begin") {
+        $recovered = $null
         if (Test-Path -LiteralPath $marker) {
-            Restore-InterruptedMaintenance $marker
+            $recovered = Restore-InterruptedMaintenance $marker
         }
         $task = Get-OwnedAutostart $payload
         $processes = @(Get-PayloadProcesses $payload)
         $state = @{
             Root = $Root
-            WasRunning = $processes.Count -gt 0
+            WasRunning = $processes.Count -gt 0 -or $recovered.TaskWasRunning
             RestartCommands = @(Get-RestartCommands $processes $payload $task)
             Processes = @($processes | ForEach-Object { Get-ProcessIdentity $_ })
             TaskXml = $(if ($task) { Export-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath } else { $null })
-            TaskWasRunning = ($task -and $task.State -eq "Running")
+            TaskWasRunning = ($task -and $task.State -eq "Running") -or $recovered.TaskWasRunning
             SavedPayloads = @("agent-server", "copilot-plugin" | Where-Object {
                 Test-Path -LiteralPath (Join-Path $Root $_)
             })
@@ -627,6 +666,19 @@ function Invoke-Maintenance {
         # surviving processes, or discard recovery state if shutdown still fails.
         Stop-PayloadProcesses $payload $state.Processes
         if ($state.Prepared -or $backups.Count) {
+            # Record stable directory IDs before moving any backup. Same-volume
+            # renames retain IDs, including if power fails before the next write.
+            $receipts = @($state.RestoreIdentities | Where-Object { $null -ne $_ })
+            foreach ($name in $backups) {
+                $identity = Get-DirectoryIdentity (Join-Path $TransactionDir $name)
+                $existing = @($receipts | Where-Object { $_.Name -eq $name })
+                if ($existing.Count -and ($existing.Count -ne 1 -or $existing[0].Identity -cne $identity)) {
+                    throw "Recovery directory identity changed for '$name'. Backups have been retained."
+                }
+                if (-not $existing.Count) { $receipts += @{ Name = $name; Identity = $identity } }
+            }
+            $state | Add-Member -NotePropertyName RestoreIdentities -NotePropertyValue $receipts -Force
+            Save-MaintenanceState $state
             foreach ($name in @("agent-server", "copilot-plugin")) {
                 $target = Join-Path $Root $name
                 if ($name -in $backups -or ($state.Prepared -and $name -notin $state.SavedPayloads)) {
