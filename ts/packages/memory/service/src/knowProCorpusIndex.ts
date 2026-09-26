@@ -27,6 +27,7 @@ const structuralChunkCharacters = 8_000;
 const extractionChunkTokens = 7_500;
 const durableDocPartOptions = {
     collectLinkKnowledge: false,
+    collectStructuralKnowledge: false,
     maxTokensPerPart: extractionChunkTokens,
 };
 

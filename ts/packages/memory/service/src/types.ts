@@ -416,6 +416,19 @@ export interface MemoryKnowledgeGraph {
     relationships: MemoryGraphRelationship[];
 }
 
+export type SourceKnowledgeKind = "entity" | "topic";
+
+export interface SourceKnowledgeSuppression {
+    sourceId: string;
+    kind: SourceKnowledgeKind;
+    name: string;
+}
+
+export interface SourceKnowledgeSuppressionRequest
+    extends SourceKnowledgeSuppression {
+    corpusId: string;
+}
+
 export interface MemoryServiceCapabilities {
     chatProvider?: string;
     embeddingProvider?: string;
@@ -557,6 +570,16 @@ export interface MemoryService {
         corpusId: string,
         sourceId: string,
     ): Promise<MemoryKnowledgeGraph>;
+    listSourceKnowledgeSuppressions?(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<SourceKnowledgeSuppression[]>;
+    suppressSourceKnowledge?(
+        request: SourceKnowledgeSuppressionRequest,
+    ): Promise<SourceKnowledgeSuppression[]>;
+    restoreSourceKnowledge?(
+        request: SourceKnowledgeSuppressionRequest,
+    ): Promise<SourceKnowledgeSuppression[]>;
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,

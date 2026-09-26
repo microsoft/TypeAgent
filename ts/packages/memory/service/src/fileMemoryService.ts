@@ -68,6 +68,8 @@ import type {
     SourceForgetPreview,
     SourceForgetRequest,
     SourceForgetResult,
+    SourceKnowledgeSuppression,
+    SourceKnowledgeSuppressionRequest,
     SourceListRequest,
     SourceReplaceRequest,
     SourceRevision,
@@ -106,6 +108,7 @@ interface StoredSource extends SourceDocument {
 interface CorpusManifest {
     corpus: MemoryCorpus;
     sources: StoredSource[];
+    knowledgeSuppressions?: SourceKnowledgeSuppression[];
     indexGeneration?: string;
     pendingSourceForget?: {
         sourceId: string;
@@ -130,6 +133,70 @@ export interface FileMemoryServiceOptions {
 
 function now(): string {
     return new Date().toISOString();
+}
+
+function normalizedKnowledgeName(name: string): string {
+    return name.trim().toLocaleLowerCase();
+}
+
+function applyKnowledgeSuppressions(
+    graph: MemoryKnowledgeGraph,
+    suppressions: SourceKnowledgeSuppression[],
+    allowedSourceIds?: ReadonlySet<string>,
+): MemoryKnowledgeGraph {
+    const suppressed = new Set(
+        suppressions.map(
+            (item) =>
+                `${item.sourceId}\0${item.kind}\0${normalizedKnowledgeName(item.name)}`,
+        ),
+    );
+    const retainedSources = (
+        sourceIds: string[],
+        kind: SourceKnowledgeSuppression["kind"],
+        name: string,
+    ): string[] =>
+        sourceIds.filter(
+            (sourceId) =>
+                (allowedSourceIds === undefined ||
+                    allowedSourceIds.has(sourceId)) &&
+                !suppressed.has(
+                    `${sourceId}\0${kind}\0${normalizedKnowledgeName(name)}`,
+                ),
+        );
+    return {
+        entities: graph.entities.flatMap((entity) => {
+            const sourceIds = retainedSources(
+                entity.sourceIds,
+                "entity",
+                entity.name,
+            );
+            return sourceIds.length === 0 ? [] : [{ ...entity, sourceIds }];
+        }),
+        topics: graph.topics.flatMap((topic) => {
+            const sourceIds = retainedSources(
+                topic.sourceIds,
+                "topic",
+                topic.name,
+            );
+            return sourceIds.length === 0 ? [] : [{ ...topic, sourceIds }];
+        }),
+        relationships: graph.relationships.flatMap((relationship) => {
+            const sourceIds = relationship.sourceIds.filter(
+                (sourceId) =>
+                    (allowedSourceIds === undefined ||
+                        allowedSourceIds.has(sourceId)) &&
+                    !suppressed.has(
+                        `${sourceId}\0entity\0${normalizedKnowledgeName(relationship.fromEntity)}`,
+                    ) &&
+                    !suppressed.has(
+                        `${sourceId}\0entity\0${normalizedKnowledgeName(relationship.toEntity)}`,
+                    ),
+            );
+            return sourceIds.length === 0
+                ? []
+                : [{ ...relationship, sourceIds }];
+        }),
+    };
 }
 
 function raceWithAbort<T>(
@@ -736,7 +803,47 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         }
         const runtime = await this.getCorpusRuntime(corpusId);
         await runtime.index.initialize();
-        return runtime.index.getKnowledgeGraph(new Set([sourceId]));
+        const graph = await runtime.index.getKnowledgeGraph(
+            new Set([sourceId]),
+        );
+        return applyKnowledgeSuppressions(
+            graph,
+            runtime.manifest.knowledgeSuppressions ?? [],
+            new Set([sourceId]),
+        );
+    }
+
+    public async listSourceKnowledgeSuppressions(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<SourceKnowledgeSuppression[]> {
+        await this.initialize();
+        const source = await this.getSource(corpusId, sourceId);
+        if (source === undefined) {
+            throw new Error(`Unknown source '${sourceId}'`);
+        }
+        const runtime = await this.getCorpusRuntime(corpusId);
+        return structuredClone(
+            (runtime.manifest.knowledgeSuppressions ?? [])
+                .filter((item) => item.sourceId === sourceId)
+                .sort(
+                    (left, right) =>
+                        left.kind.localeCompare(right.kind) ||
+                        left.name.localeCompare(right.name),
+                ),
+        );
+    }
+
+    public async suppressSourceKnowledge(
+        request: SourceKnowledgeSuppressionRequest,
+    ): Promise<SourceKnowledgeSuppression[]> {
+        return this.updateSourceKnowledgeSuppression(request, true);
+    }
+
+    public async restoreSourceKnowledge(
+        request: SourceKnowledgeSuppressionRequest,
+    ): Promise<SourceKnowledgeSuppression[]> {
+        return this.updateSourceKnowledgeSuppression(request, false);
     }
 
     public async ingestDocument(
@@ -915,6 +1022,12 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             candidateManifest.sources = candidateManifest.sources.filter(
                 (item) => item.sourceId !== request.sourceId,
             );
+            if (candidateManifest.knowledgeSuppressions !== undefined) {
+                candidateManifest.knowledgeSuppressions =
+                    candidateManifest.knowledgeSuppressions.filter(
+                        (item) => item.sourceId !== request.sourceId,
+                    );
+            }
             delete candidateManifest.pendingSourceForget;
             await this.rebuildAndActivate(
                 request.corpusId,
@@ -1433,7 +1546,61 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         validateIdentifier("corpus ID", corpusId);
         const runtime = await this.getCorpusRuntime(corpusId);
         await runtime.index.initialize();
-        return runtime.index.getKnowledgeGraph();
+        return applyKnowledgeSuppressions(
+            await runtime.index.getKnowledgeGraph(),
+            runtime.manifest.knowledgeSuppressions ?? [],
+        );
+    }
+
+    private async updateSourceKnowledgeSuppression(
+        request: SourceKnowledgeSuppressionRequest,
+        suppress: boolean,
+    ): Promise<SourceKnowledgeSuppression[]> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        validateIdentifier("source ID", request.sourceId);
+        const name = request.name.trim();
+        if (name.length === 0) {
+            throw new Error("Knowledge name cannot be empty");
+        }
+        await this.enqueueWrite(request.corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(request.corpusId);
+            if (
+                !runtime.manifest.sources.some(
+                    (source) => source.sourceId === request.sourceId,
+                )
+            ) {
+                throw new Error(`Unknown source '${request.sourceId}'`);
+            }
+            const candidateManifest = structuredClone(runtime.manifest);
+            const suppressions = candidateManifest.knowledgeSuppressions ?? [];
+            const matches = (item: SourceKnowledgeSuppression): boolean =>
+                item.sourceId === request.sourceId &&
+                item.kind === request.kind &&
+                normalizedKnowledgeName(item.name) ===
+                    normalizedKnowledgeName(name);
+            candidateManifest.knowledgeSuppressions = suppress
+                ? suppressions.some(matches)
+                    ? suppressions
+                    : [
+                          ...suppressions,
+                          {
+                              sourceId: request.sourceId,
+                              kind: request.kind,
+                              name,
+                          },
+                      ]
+                : suppressions.filter((item) => !matches(item));
+            await writeJsonAtomic(
+                this.manifestPath(request.corpusId),
+                candidateManifest,
+            );
+            runtime.manifest = candidateManifest;
+        });
+        return this.listSourceKnowledgeSuppressions(
+            request.corpusId,
+            request.sourceId,
+        );
     }
 
     public async getPersonalHowToSettings(
