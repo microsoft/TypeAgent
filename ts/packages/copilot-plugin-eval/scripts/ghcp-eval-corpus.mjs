@@ -375,6 +375,39 @@ export function consumeFixtureContinuation(approvals, args, stopped) {
     );
 }
 
+export function fileConsentContext(tools, toolResults, events, request) {
+    const domainTools = tools.filter((tool) => !tool.name.includes("ask_user"));
+    const current = domainTools.at(-1);
+    const live = domainTools.filter((tool) => tool.endMs === undefined);
+    const currentResult = toolResults.findLast(
+        (tool) => tool.toolCallId === current?.toolCallId,
+    )?.result?.structuredContent;
+    const pending =
+        currentResult?.status === "requires_interaction"
+            ? currentResult
+            : undefined;
+    if (
+        !current ||
+        !/processCommand|executeAction|continueAction/.test(current.name) ||
+        live.length > 1 ||
+        (live.length === 1 && live[0] !== current) ||
+        (!pending && live.length === 0)
+    )
+        return {};
+    const action =
+        pending?.prompt?.action ??
+        pendingFileAction(events.slice(current.backendEventOffset));
+    const handlerAnswer = fileHandlerConfirmation(
+        pending?.prompt ?? {
+            type: "question",
+            message: request.question,
+            choices: request.choices,
+        },
+        action,
+    );
+    return { action, pending, handlerAnswer };
+}
+
 export function isClarificationQuestion(id, question) {
     if (/\b(confirm|approve|proceed|allow)\b/i.test(question)) return false;
     const subject = {

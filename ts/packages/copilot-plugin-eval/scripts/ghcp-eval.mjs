@@ -29,8 +29,7 @@ import {
     corpusVersion,
     assertCorpusReadiness,
     filePolicy,
-    fileHandlerConfirmation,
-    pendingFileAction,
+    fileConsentContext,
     consumeFixtureContinuation,
     fileFixture,
     fixtureConfirmationAllowed,
@@ -659,41 +658,11 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                         wasFreeform: true,
                     };
                 }
-                const domainTools = result.tools.filter((tool) =>
-                    /processCommand|executeAction|continueAction/.test(
-                        tool.name,
-                    ),
-                );
-                const current = domainTools.at(-1);
-                const live = domainTools.filter(
-                    (tool) => tool.endMs === undefined,
-                );
-                const currentResult = result.toolResults.findLast(
-                    (tool) => tool.toolCallId === current?.toolCallId,
-                )?.result?.structuredContent;
-                const pending =
-                    currentResult?.status === "requires_interaction"
-                        ? currentResult
-                        : undefined;
-                const action =
-                    pending?.prompt?.action ??
-                    (current &&
-                    live.length <= 1 &&
-                    (live.length === 0 || live[0] === current) &&
-                    (pending || live.length === 1)
-                        ? pendingFileAction(
-                              readBackendEvents(
-                                  env.TYPEAGENT_GHCP_EVAL_TRACE,
-                              ).slice(current.backendEventOffset),
-                          )
-                        : undefined);
-                const handlerAnswer = fileHandlerConfirmation(
-                    pending?.prompt ?? {
-                        type: "question",
-                        message: request.question,
-                        choices: request.choices,
-                    },
-                    action,
+                const { action, pending, handlerAnswer } = fileConsentContext(
+                    result.tools,
+                    result.toolResults,
+                    readBackendEvents(env.TYPEAGENT_GHCP_EVAL_TRACE),
+                    request,
                 );
                 if (
                     !executionStopped &&

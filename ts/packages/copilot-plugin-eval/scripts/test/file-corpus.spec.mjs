@@ -16,6 +16,7 @@ import {
     buildCorpus,
     balancedOrder,
     fileHandlerConfirmation,
+    fileConsentContext,
     pendingFileAction,
     consumeFixtureContinuation,
     isClarificationQuestion,
@@ -125,6 +126,73 @@ test("handler continuations are single-use and bound to operation, scope and res
         );
     assert.equal(consumeFixtureContinuation(approval(), args, true), false);
     assert.equal(consumeFixtureContinuation(new Map(), args, false), false);
+});
+
+test("file consent cannot reuse stale action traces or overlapping tool contexts", () => {
+    const tool = {
+        name: "typeagent-processCommand",
+        toolCallId: "t",
+        backendEventOffset: 0,
+    };
+    const action = {
+        schemaName: "powershell.powershell-files",
+        actionName: "copyFile",
+        parameters: {},
+    };
+    const events = [{ event: "action.admitted", detail: action }];
+    const request = {
+        question: "Copy the requested file or directory?",
+        choices: ["Run", "Cancel"],
+    };
+    assert.equal(
+        fileConsentContext([tool], [], events, request).action,
+        action,
+    );
+    for (const tools of [
+        [],
+        [{ ...tool, endMs: 1 }],
+        [{ ...tool, backendEventOffset: 1 }],
+        [tool, { ...tool, toolCallId: "other" }],
+        [
+            { ...tool, endMs: 1 },
+            { name: "typeagent-searchActions", toolCallId: "search", endMs: 2 },
+        ],
+    ])
+        assert.equal(
+            fileConsentContext(tools, [], events, request).handlerAnswer,
+            undefined,
+        );
+    const pending = {
+        status: "requires_interaction",
+        prompt: {
+            type: "question",
+            message: request.question,
+            choices: request.choices,
+        },
+        operationId: "o",
+        scopeId: "s",
+        interactionId: "i",
+    };
+    const results = [
+        { toolCallId: "t", result: { structuredContent: pending } },
+    ];
+    const context = fileConsentContext(
+        [{ ...tool, endMs: 1 }],
+        results,
+        events,
+        request,
+    );
+    assert.equal(context.pending, pending);
+    assert.deepEqual(context.handlerAnswer, { type: "question", selected: 0 });
+    assert.equal(
+        fileConsentContext(
+            [{ ...tool, endMs: 1 }],
+            [{ ...results[0], toolCallId: "old" }],
+            events,
+            request,
+        ).handlerAnswer,
+        undefined,
+    );
 });
 
 test("old or incomplete preflights cannot run the new corpus", () => {
