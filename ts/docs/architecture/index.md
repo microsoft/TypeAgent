@@ -25,6 +25,9 @@ The fastest way to understand how a request becomes an action:
    processed.
 5. **[Workflows](./workflows/workflows.md)** — multi-step workflow execution.
 
+For model selection and Copilot-only operation, see
+**[Model providers](./core/model-providers.md)**.
+
 ## Collision resolution
 
 When more than one agent or schema could match a request, the dispatcher must

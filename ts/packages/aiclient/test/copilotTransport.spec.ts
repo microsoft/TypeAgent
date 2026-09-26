@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    completeWithCopilotSession,
     createCopilotRuntimeConnection,
     createCopilotTransportModel,
     CopilotEndpoint,
@@ -200,6 +201,74 @@ describe("createCopilotRuntimeConnection", () => {
             args: undefined,
             env: undefined,
         });
+    });
+});
+
+describe("Copilot session fallback", () => {
+    test("completes text without the provider endpoint RPC", async () => {
+        let disconnected = false;
+        const result = await completeWithCopilotSession(
+            makeSettings("gpt-5.6-sol"),
+            {},
+            [
+                { role: "system", content: "Return plain text." },
+                { role: "user", content: "Hello" },
+            ],
+            undefined,
+            async () => ({
+                createSession: async () =>
+                    ({
+                        sendAndWait: async ({
+                            prompt,
+                        }: {
+                            prompt: string;
+                        }) => ({
+                            data: {
+                                content: prompt.includes("Hello")
+                                    ? "ready"
+                                    : "",
+                            },
+                        }),
+                        disconnect: async () => {
+                            disconnected = true;
+                        },
+                    }) as any,
+            }),
+        );
+
+        expect(result).toEqual({ success: true, data: "ready" });
+        expect(disconnected).toBe(true);
+    });
+
+    test("aborts and disconnects the fallback session", async () => {
+        const controller = new AbortController();
+        let aborted = false;
+        let disconnected = false;
+        const completion = completeWithCopilotSession(
+            makeSettings("gpt-5.6-sol"),
+            {},
+            [{ role: "user", content: "Wait" }],
+            controller.signal,
+            async () => ({
+                createSession: async () =>
+                    ({
+                        sendAndWait: async () => new Promise<never>(() => {}),
+                        abort: async () => {
+                            aborted = true;
+                        },
+                        disconnect: async () => {
+                            disconnected = true;
+                        },
+                    }) as any,
+            }),
+        );
+
+        controller.abort();
+        await expect(completion).resolves.toMatchObject({
+            success: false,
+        });
+        expect(aborted).toBe(true);
+        expect(disconnected).toBe(true);
     });
 });
 

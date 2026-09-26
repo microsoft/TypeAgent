@@ -14,13 +14,17 @@
  * generated patterns.
  */
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "./cliPath.js";
 import { SchemaInfo, ActionInfo, getWildcardType } from "./schemaReader.js";
 import { loadGrammarRulesNoThrow } from "../grammarLoader.js";
 import { compileGrammarToNFA } from "../nfaCompiler.js";
 import { matchGrammarWithNFA } from "../nfaMatcher.js";
 import { registerBuiltInEntities } from "../builtInEntities.js";
+import {
+    createGrammarModelQuery,
+    GrammarModelProvider,
+    GrammarModelQuery,
+    resolveGrammarModel,
+} from "./grammarModel.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,11 +33,15 @@ export interface GrammarWarmingConfig {
     schemaInfo: SchemaInfo;
     /** Pre-generated test set (skip test-set generation if provided) */
     testSet?: WarmingTestCase[];
-    /** Model for generator (default: sonnet) */
+    /** Provider for all model calls (default: Copilot) */
+    provider?: GrammarModelProvider;
+    /** Injected model query, primarily for offline use and tests */
+    query?: GrammarModelQuery;
+    /** Model for generator (default: GPT-5.6 Sol) */
     generatorModel?: string;
-    /** Model for adversary (default: sonnet) */
+    /** Model for adversary (default: GPT-5.6 Sol) */
     adversaryModel?: string;
-    /** Model for test creator (default: sonnet) */
+    /** Model for test creator (default: GPT-5.6 Sol) */
     testerModel?: string;
     /** Max wall-clock time in ms (default: 20 min) — counts only the debate loop, not test-set generation */
     timeLimitMs?: number;
@@ -133,7 +141,6 @@ interface AdversaryReview {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
 const DEFAULT_TIME_LIMIT_MS = 20 * 60 * 1000; // 20 minutes
 const DEFAULT_TARGET_HIT_RATE = 0.9;
 const DEFAULT_BATCH_SIZE = 10;
@@ -226,22 +233,17 @@ const SENTENCE_FORM_WEIGHTS = {
 
 // ── LLM Helper ───────────────────────────────────────────────────────────────
 
-async function queryLLM(prompt: string, model: string): Promise<string> {
-    const queryInstance = query({
-        prompt,
-        options: { model, ...claudeExecutableOption() },
-    });
-
-    let responseText = "";
-    for await (const message of queryInstance) {
-        if (message.type === "result") {
-            if (message.subtype === "success") {
-                responseText = message.result || "";
-                break;
-            }
-        }
-    }
-    return responseText;
+async function queryLLM(
+    prompt: string,
+    model: string,
+    provider?: GrammarModelProvider,
+    queryModel?: GrammarModelQuery,
+): Promise<string> {
+    return createGrammarModelQuery({
+        model,
+        ...(provider === undefined ? {} : { provider }),
+        ...(queryModel === undefined ? {} : { query: queryModel }),
+    })(prompt);
 }
 
 function parseJSONArray<T>(text: string): T[] {
@@ -909,12 +911,19 @@ export class GrammarWarmer {
     private readonly onProgress: (msg: string) => void;
     private readonly preloadedTestSet?: WarmingTestCase[];
     private readonly blindTestSet?: WarmingTestCase[];
+    private readonly provider: GrammarModelProvider | undefined;
+    private readonly queryModel: GrammarModelQuery | undefined;
 
     constructor(config: GrammarWarmingConfig) {
         this.schemaInfo = config.schemaInfo;
-        this.generatorModel = config.generatorModel || DEFAULT_MODEL;
-        this.adversaryModel = config.adversaryModel || DEFAULT_MODEL;
-        this.testerModel = config.testerModel || DEFAULT_MODEL;
+        this.provider = config.provider;
+        this.queryModel = config.query;
+        const providerDefault = resolveGrammarModel(
+            config.provider === undefined ? {} : { provider: config.provider },
+        ).model;
+        this.generatorModel = config.generatorModel || providerDefault;
+        this.adversaryModel = config.adversaryModel || providerDefault;
+        this.testerModel = config.testerModel || providerDefault;
         this.timeLimitMs = config.timeLimitMs ?? DEFAULT_TIME_LIMIT_MS;
         this.targetHitRate = config.targetHitRate ?? DEFAULT_TARGET_HIT_RATE;
         this.batchSize = config.batchSize ?? DEFAULT_BATCH_SIZE;
@@ -946,8 +955,13 @@ export class GrammarWarmer {
         concurrency?: number,
         onProgress?: (msg: string) => void,
         casesPerAction?: number,
+        provider?: GrammarModelProvider,
+        queryModel?: GrammarModelQuery,
     ): Promise<WarmingTestCase[]> {
-        const llmModel = model || DEFAULT_MODEL;
+        const llmModel =
+            model ||
+            resolveGrammarModel(provider === undefined ? {} : { provider })
+                .model;
         const maxConcurrent = concurrency || DEFAULT_CONCURRENCY;
         const log = onProgress || (() => {});
         const perAction = casesPerAction || TEST_CASES_PER_ACTION;
@@ -967,7 +981,12 @@ export class GrammarWarmer {
                     schemaInfo,
                     perAction,
                 );
-                const response = await queryLLM(prompt, llmModel);
+                const response = await queryLLM(
+                    prompt,
+                    llmModel,
+                    provider,
+                    queryModel,
+                );
                 const parsed = parseJSONArray<WarmingTestCase>(response);
                 let fixedCount = 0;
                 const valid = parsed
@@ -1038,6 +1057,9 @@ export class GrammarWarmer {
                 this.testerModel,
                 this.concurrency,
                 this.onProgress,
+                undefined,
+                this.provider,
+                this.queryModel,
             );
         }
 
@@ -1635,7 +1657,12 @@ export class GrammarWarmer {
             existingPatterns,
             missedCases,
         );
-        const response = await queryLLM(prompt, this.generatorModel);
+        const response = await queryLLM(
+            prompt,
+            this.generatorModel,
+            this.provider,
+            this.queryModel,
+        );
         const parsed = parseJSONArray<GeneratorCandidate>(response);
 
         // Validate: must have pattern with $() wildcards or be a bare command
@@ -1653,7 +1680,12 @@ export class GrammarWarmer {
         actionInfo: ActionInfo,
     ): Promise<AdversaryReview[]> {
         const prompt = buildAdversaryPrompt(candidates, actionInfo);
-        const response = await queryLLM(prompt, this.adversaryModel);
+        const response = await queryLLM(
+            prompt,
+            this.adversaryModel,
+            this.provider,
+            this.queryModel,
+        );
         return parseJSONArray<AdversaryReview>(response);
     }
 
@@ -1732,7 +1764,12 @@ export class GrammarWarmer {
             existingPatterns,
             this.batchSize,
         );
-        const response = await queryLLM(prompt, this.generatorModel);
+        const response = await queryLLM(
+            prompt,
+            this.generatorModel,
+            this.provider,
+            this.queryModel,
+        );
         const parsed = parseJSONArray<GeneratorCandidate>(response);
 
         // Filter valid candidates and exclude duplicates of existing patterns
@@ -1759,7 +1796,12 @@ export class GrammarWarmer {
             missedCases,
             this.batchSize,
         );
-        const response = await queryLLM(prompt, this.generatorModel);
+        const response = await queryLLM(
+            prompt,
+            this.generatorModel,
+            this.provider,
+            this.queryModel,
+        );
         const parsed = parseJSONArray<GeneratorCandidate>(response);
 
         const existingSet = new Set(existingPatterns);
