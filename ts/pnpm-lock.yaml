@@ -1299,6 +1299,9 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
+      '@github/copilot-sdk':
+        specifier: 1.0.13
+        version: 1.0.13
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema

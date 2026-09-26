@@ -119,4 +119,14 @@ export type SchemaInfoProvider = {
 
     // Throws if schemaName not found
     getActionSchemaFileHash: (schemaName: string) => string;
+
+    getActionCacheBinding?: (
+        schemaName: string,
+        actionName: string,
+    ) =>
+        | {
+              sourceId: string;
+              actionFingerprint: string;
+          }
+        | undefined;
 };

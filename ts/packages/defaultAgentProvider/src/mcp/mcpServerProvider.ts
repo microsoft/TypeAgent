@@ -138,6 +138,17 @@ function createSnapshot(
             description: config.description ?? name,
             schemaType: entryTypeName,
             schemaFile,
+            cacheBinding: Object.freeze({
+                sourceId: config.id,
+                actionFingerprints: Object.freeze(
+                    Object.fromEntries(
+                        [...catalog.entries.values()].map((entry) => [
+                            entry.name,
+                            entry.fingerprint,
+                        ]),
+                    ),
+                ),
+            }),
         }),
     });
     return Object.freeze({ catalog, manifest });

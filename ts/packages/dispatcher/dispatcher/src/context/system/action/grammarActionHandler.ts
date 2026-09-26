@@ -483,11 +483,16 @@ export function renderRulesTable(
             `<summary>#${rule.id}</summary>` +
             `<div class="grammar-inline">${highlightGrammarText(rule.grammarText)}</div>` +
             `</details>`;
+        const status =
+            rule.status === "suspended"
+                ? `<span title="${escapeHtml(rule.invalidationReason ?? "stale rule")}">Suspended</span>`
+                : "Active";
 
         rows += `<tr>
   <td>${risks}</td>
   <td class="id">${idCell}</td>
   ${badge}
+  <td>${status}</td>
   <td>${anchor}</td>
   <td class="date">${timeAgo(rule.timestamp)}</td>
 </tr>`;
@@ -499,7 +504,7 @@ export function renderRulesTable(
 <div class="table-scroll">
 <table>
   <thead><tr>
-    <th>Risks</th><th>#</th>${agentCol}<th>Anchor</th><th>Date</th>
+    <th>Risks</th><th>#</th>${agentCol}<th>Status</th><th>Anchor</th><th>Date</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
@@ -538,6 +543,10 @@ export function renderRuleDetail(rule: StoredGrammarRule): string {
     const sourceRow = rule.sourceRequest
         ? `<div class="source-req">Learned from: <em>"${escapeHtml(rule.sourceRequest)}"</em></div>`
         : "";
+    const statusRow =
+        rule.status === "suspended"
+            ? `<div class="risk-row"><b>Status:</b> Suspended — ${escapeHtml(rule.invalidationReason ?? "stale rule")}</div>`
+            : `<div class="risk-row"><b>Status:</b> Active</div>`;
 
     const ts = new Date(rule.timestamp).toLocaleString();
 
@@ -550,7 +559,7 @@ export function renderRuleDetail(rule: StoredGrammarRule): string {
     <span>${escapeHtml(rule.actionName ?? "")}</span>
     <span style="color:#999; font-size:12px">${ts}</span>
   </div>
-  ${munchRow}${compRow}${anchorInfo}
+  ${statusRow}${munchRow}${compRow}${anchorInfo}
   <div class="grammar-block">${highlighted}</div>
   ${sourceRow}
 </div>

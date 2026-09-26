@@ -283,11 +283,14 @@ describe("GrammarStore", () => {
                 version: "1.0",
                 schemas: store["data"].schemas,
             };
+            delete oldFormat.schemas.player[0].status;
             fs.mkdirSync(path.dirname(testFile), { recursive: true });
             fs.writeFileSync(testFile, JSON.stringify(oldFormat, null, 2));
 
             const store2 = new GrammarStore();
             await store2.load(testFile);
+            expect(store2.isModified()).toBe(true);
+            expect(store2.getRulesForSchema("player")[0].status).toBe("active");
 
             const grammar = store2.compileToGrammar();
             expect(grammar).toBeDefined();
@@ -295,6 +298,89 @@ describe("GrammarStore", () => {
             const matches = matchGrammar(grammar!, "resume");
             expect(matches.length).toBeGreaterThan(0);
             expect(matches[0].match).toMatchObject({ actionName: "resume" });
+        });
+    });
+
+    describe("Rule identity", () => {
+        it("suspends stale rules and reactivates them when identity matches", async () => {
+            const store = new GrammarStore();
+            await store.addRule({
+                grammarText: '<Start> = search -> { actionName: "search" };',
+                schemaName: "tools",
+                actionName: "search",
+                schemaHash: "schema-v1",
+                actionBinding: {
+                    sourceId: "provider-1",
+                    actionFingerprint: "tool-v1",
+                },
+            });
+
+            const suspended = await store.reconcileSchema("tools", {
+                schemaHash: "schema-v2",
+                sourceId: "provider-1",
+                actionFingerprints: { search: "tool-v2" },
+            });
+
+            expect(suspended.suspended).toBe(1);
+            expect(store.getActiveRulesForSchema("tools")).toHaveLength(0);
+            expect(store.getRulesForSchema("tools")[0]).toMatchObject({
+                status: "suspended",
+                invalidationReason: "action definition changed",
+            });
+            expect(store.compileToGrammar()).toBeUndefined();
+
+            const activated = await store.reconcileSchema("tools", {
+                schemaHash: "schema-v1",
+                sourceId: "provider-1",
+                actionFingerprints: { search: "tool-v1" },
+            });
+
+            expect(activated.activated).toBe(1);
+            expect(store.getActiveRulesForSchema("tools")).toHaveLength(1);
+            expect(
+                store.getRulesForSchema("tools")[0].invalidationReason,
+            ).toBeUndefined();
+        });
+
+        it("keeps a bound action active when only another action changes", async () => {
+            const store = new GrammarStore();
+            await store.addRule({
+                grammarText: '<Start> = search -> { actionName: "search" };',
+                schemaName: "tools",
+                actionName: "search",
+                schemaHash: "catalog-v1",
+                actionBinding: {
+                    sourceId: "provider-1",
+                    actionFingerprint: "search-v1",
+                },
+            });
+
+            const result = await store.reconcileSchema("tools", {
+                schemaHash: "catalog-v2",
+                sourceId: "provider-1",
+                actionFingerprints: {
+                    search: "search-v1",
+                    changedAction: "changed-v2",
+                },
+            });
+
+            expect(result.unchanged).toBe(1);
+            expect(store.getActiveRulesForSchema("tools")).toHaveLength(1);
+        });
+
+        it("keeps legacy rules active when identity metadata is absent", async () => {
+            const store = new GrammarStore();
+            await store.addRule({
+                grammarText: '<Start> = pause -> { actionName: "pause" };',
+                schemaName: "player",
+            });
+
+            const result = await store.reconcileSchema("player", {
+                schemaHash: "current",
+            });
+
+            expect(result.unchanged).toBe(1);
+            expect(store.getActiveRulesForSchema("player")).toHaveLength(1);
         });
     });
 

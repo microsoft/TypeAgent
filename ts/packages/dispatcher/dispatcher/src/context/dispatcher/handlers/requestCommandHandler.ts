@@ -473,7 +473,7 @@ function findMatchedGrammarRule(
     const store = context.persistedGrammarStore;
     const candidates =
         store
-            ?.getRulesForSchema(primary.schemaName)
+            ?.getActiveRulesForSchema(primary.schemaName)
             .filter((rule) => rule.actionName === primary.actionName) ?? [];
     if (candidates.length === 1) {
         return { rule: candidates[0].grammarText };

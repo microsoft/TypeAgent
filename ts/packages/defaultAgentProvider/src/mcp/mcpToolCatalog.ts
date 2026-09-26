@@ -4,6 +4,7 @@
 import type { Tool } from "@modelcontextprotocol/client";
 import type { JsonSchemaValidator } from "@modelcontextprotocol/client";
 import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
+import { createHash } from "node:crypto";
 import { convertToolsSchema, type SkippedTool } from "./mcpSchema.js";
 
 const maxSchemaBytes = 256 * 1024;
@@ -30,6 +31,7 @@ export interface McpToolCatalogEntry {
     readonly annotations?: Tool["annotations"];
     readonly inputSchema: Tool["inputSchema"];
     readonly outputSchema?: Tool["outputSchema"];
+    readonly fingerprint: string;
     readonly validateArguments: JsonSchemaValidator<Record<string, unknown>>;
     readonly validateOutput?: JsonSchemaValidator<unknown>;
 }
@@ -45,6 +47,7 @@ function canonicalize(value: unknown): unknown {
     if (Array.isArray(value)) {
         return value.map(canonicalize);
     }
+
     if (value !== null && typeof value === "object") {
         return Object.fromEntries(
             Object.entries(value as Record<string, unknown>)
@@ -53,6 +56,12 @@ function canonicalize(value: unknown): unknown {
         );
     }
     return value;
+}
+
+function fingerprint(value: unknown): string {
+    return createHash("sha256")
+        .update(JSON.stringify(canonicalize(value)))
+        .digest("hex");
 }
 
 function inspectSchema(schema: unknown, label: string): void {
@@ -218,6 +227,11 @@ export function buildMcpToolCatalog(
                 ...(tool.outputSchema === undefined
                     ? {}
                     : { outputSchema: tool.outputSchema }),
+                fingerprint: fingerprint({
+                    inputSchema: tool.inputSchema,
+                    outputSchema: tool.outputSchema,
+                    annotations: tool.annotations,
+                }),
                 validateArguments: compiled.input,
                 ...(compiled.output === undefined
                     ? {}
@@ -225,24 +239,22 @@ export function buildMcpToolCatalog(
             }),
         );
     }
-    const fingerprint = JSON.stringify(
-        canonicalize(
-            [...entries.values()].map((entry) => ({
-                id: entry.id,
-                name: entry.name,
-                description: entry.description,
-                title: entry.title,
-                icons: entry.icons,
-                annotations: entry.annotations,
-                inputSchema: entry.inputSchema,
-                outputSchema: entry.outputSchema,
-            })),
-        ),
+    const catalogFingerprint = fingerprint(
+        [...entries.values()].map((entry) => ({
+            id: entry.id,
+            name: entry.name,
+            description: entry.description,
+            title: entry.title,
+            icons: entry.icons,
+            annotations: entry.annotations,
+            inputSchema: entry.inputSchema,
+            outputSchema: entry.outputSchema,
+        })),
     );
     return Object.freeze({
         entries,
         schemaContent: converted.content,
         skipped: Object.freeze(skipped),
-        fingerprint,
+        fingerprint: catalogFingerprint,
     });
 }
