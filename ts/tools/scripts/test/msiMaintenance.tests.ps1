@@ -11,7 +11,7 @@ function Assert($condition, [string]$message) {
 
 $testDir = Join-Path ([IO.Path]::GetTempPath()) ("typeagent-maintenance-test-" + [guid]::NewGuid())
 $Root = Join-Path $testDir "installation with spaces"
-$TransactionDir = Join-Path $testDir "transaction"
+$TransactionDir = Join-Path $testDir "TypeAgent-msi-original.tmp"
 $LogPath = Join-Path $testDir "maintenance.log"
 $script:tasks = @()
 $script:taskEvents = @()
@@ -57,6 +57,23 @@ try {
     Assert (Test-Path (Join-Path $plugin "old.txt")) "rollback did not restore plugin"
     Assert ($script:taskEvents -contains "restored:<original-task />") "autostart definition not restored"
 
+    # A subsequent installer recovers a prepared transaction without executing
+    # its old staged script, then backs up the restored files for its own rollback.
+    $Action = "Begin"
+    Invoke-Maintenance
+    $previous = $TransactionDir
+    Set-Content -LiteralPath (Join-Path $previous "maintain-server.ps1") -Value 'throw "Do not run the old script"'
+    $TransactionDir = Join-Path $testDir "TypeAgent-msi-retry.tmp"
+    New-Item -ItemType Directory -Path $TransactionDir | Out-Null
+    Invoke-Maintenance
+    Assert (-not (Test-Path $previous)) "recovered transaction was not retired"
+    Assert (Test-Path (Join-Path $TransactionDir "agent-server\old.txt")) "new transaction did not preserve restored server"
+    Assert (Test-Path (Join-Path $TransactionDir "copilot-plugin\old.txt")) "new transaction did not preserve restored plugin"
+    Assert ((Get-Content (Join-Path $Root ".msi-maintenance") -Raw).Trim() -eq $TransactionDir) "new marker points to previous transaction"
+    $Action = "Rollback"
+    Invoke-Maintenance
+    Assert (Test-Path (Join-Path $payload "old.txt")) "rollback after recovery lost original server"
+
     $handle = [IO.File]::Open((Join-Path $payload "old.txt"), "Open", "Read", "None")
     try {
         $Action = "Begin"
@@ -69,9 +86,58 @@ try {
         Assert (Test-Path (Join-Path $payload "old.txt")) "preflight deleted a file"
         Assert (Test-Path (Join-Path $plugin "old.txt")) "preflight damaged second payload"
     } finally { $handle.Dispose() }
+    $previous = $TransactionDir
+    $TransactionDir = Join-Path $testDir "TypeAgent-msi-preflight-retry.tmp"
+    New-Item -ItemType Directory -Path $TransactionDir | Out-Null
+    $Action = "Begin"
+    Invoke-Maintenance
+    Assert (-not (Test-Path (Join-Path $previous "state.json"))) "unprepared transaction was not recovered"
     $Action = "Rollback"
     Invoke-Maintenance
     Assert (Test-Path (Join-Path $payload "old.txt")) "preflight rollback damaged original files"
+
+    # Incomplete backups, foreign roots, and redirected paths must remain intact.
+    $Action = "Begin"
+    Invoke-Maintenance
+    $previous = $TransactionDir
+    $TransactionDir = Join-Path $testDir "TypeAgent-msi-unsafe-retry.tmp"
+    New-Item -ItemType Directory -Path $TransactionDir | Out-Null
+    $statePath = Join-Path $previous "state.json"
+    $savedState = Get-Content $statePath -Raw
+    $state = $savedState | ConvertFrom-Json
+    $state.Root = "C:\another-installation"
+    $state | ConvertTo-Json -Depth 5 | Set-Content $statePath
+    $failed = $false
+    try { Invoke-Maintenance } catch {
+        $failed = $true
+        Assert ($_.Exception.Message -match "does not describe this installation") "foreign root recovery error changed"
+    }
+    Assert $failed "foreign root recovery was accepted"
+    Set-Content $statePath -Value $savedState
+    [IO.Directory]::Move((Join-Path $previous "copilot-plugin"), (Join-Path $testDir "hidden-backup"))
+    $failed = $false
+    try { Invoke-Maintenance } catch {
+        $failed = $true
+        Assert ($_.Exception.Message -match "complete previous 'copilot-plugin'") "missing backup recovery error changed"
+    }
+    Assert $failed "incomplete recovery was accepted"
+    Assert (Test-Path (Join-Path $previous "agent-server\old.txt")) "failed recovery deleted backup"
+    Assert ((Get-Content (Join-Path $Root ".msi-maintenance") -Raw).Trim() -eq $previous) "failed recovery cleared old marker"
+    Assert (-not (Test-Path (Join-Path $TransactionDir "state.json"))) "failed recovery started a new transaction"
+    [IO.Directory]::Move((Join-Path $testDir "hidden-backup"), (Join-Path $previous "copilot-plugin"))
+    $junction = Join-Path $previous "agent-server\redirect"
+    New-Item -ItemType Junction -Path $junction -Target $TransactionDir | Out-Null
+    try {
+        $failed = $false
+        try { Invoke-Maintenance } catch {
+            $failed = $true
+            Assert ($_.Exception.Message -match "redirected path") "junction recovery error changed"
+        }
+        Assert $failed "redirected backup was accepted"
+    } finally { [IO.Directory]::Delete($junction) }
+    Invoke-Maintenance
+    $Action = "Rollback"
+    Invoke-Maintenance
 
     $script:tasks[0].Actions[0].Arguments = '"C:\another-install\autostart-run.vbs"'
     $Action = "Begin"

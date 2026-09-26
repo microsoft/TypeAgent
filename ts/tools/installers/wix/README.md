@@ -515,8 +515,9 @@ explicitly disabled: this is an installer transaction gate, not a full-product
 or released-binary compatibility certification.
 
 The gate exercises initial install, rollback after shutdown/extraction/restart,
-upgrade with a running scheduled task, repair of a missing payload file, and
-repeated uninstall/reinstall. Assertions check MSI product registration,
+upgrade with a running scheduled task, automatic recovery by a subsequent MSI
+after an interrupted prepared transaction (with and without a running server),
+repair of a missing payload file, and repeated uninstall/reinstall. Assertions check MSI product registration,
 payload versions/hashes, server health, process cleanup, task state, retained user
 data, and maintenance markers. It fails if ICE validation cannot run or if a
 failure injection is not reached. Logs, transformed authoring, test MSIs,
@@ -535,9 +536,9 @@ installation of new files. `InstallFinalize` executes the remaining installation
 script. This avoids error 2613: rollback/commit actions may not be queued before
 an unflushed `RemoveExistingProducts` immediately after `InstallInitialize`.
 
-Reboot recovery, interactive UAC/logon, authenticated integrations, and recovery
-from an abandoned marker remain separate coverage gaps. Passing this job does
-not establish those behaviors.
+Actual reboot/power-loss injection, interactive UAC/logon, and authenticated
+integrations remain separate coverage gaps. Passing this job does not establish
+those behaviors.
 
 ### Copilot plugin registration fails with "spawn UNKNOWN"
 
@@ -645,9 +646,19 @@ server. The updated launcher and server reject startup while
 Shutdown errors abort setup before payload deletion and are logged in
 `%LOCALAPPDATA%\TypeAgent\logs\msi-maintenance.log`. External/protected processes
 can still prevent replacement; setup reports the locked file rather than
-partially deleting the payload. If maintenance is interrupted outside normal
-MSI rollback (for example by power loss), the marker and backup are retained
-instead of silently discarding the recovery state.
+partially deleting the payload. If maintenance is interrupted outside normal MSI rollback (for example by power
+loss), the marker and backup are retained. The next installer automatically
+validates and restores a complete previous transaction using its current embedded
+recovery implementation, then continues installation with fresh rollback
+protection. It does not execute the previous transaction's staged script.
+
+Automatic recovery accepts only a matching installation root and a sibling
+`TypeAgent-msi-*.tmp` transaction with valid state and complete saved payloads.
+It refuses redirected paths, missing backups, invalid state, and running-server
+state without supported launch context. Those failures preserve the marker and
+remaining backups and report why recovery could not proceed. Recovery is not a
+force-delete option and never discards the only previous payload to make setup
+continue.
 
 Detailed extraction diagnostics are written to
 `%LOCALAPPDATA%\TypeAgent\logs\msi-extract-payload.log` and to the verbose MSI

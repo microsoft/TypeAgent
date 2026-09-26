@@ -473,6 +473,94 @@ function Save-MaintenanceState($state) {
     $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $TransactionDir "state.json") -Encoding UTF8
 }
 
+function Assert-RecoveryPath([string]$path) {
+    $item = Get-Item -LiteralPath $path -Force
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "Automatic recovery refuses redirected path '$path'. Recovery files have been retained."
+    }
+}
+
+function Restore-InterruptedMaintenance([string]$marker) {
+    Assert-RecoveryPath $Root
+    Assert-RecoveryPath $marker
+    $previous = (Get-Content -LiteralPath $marker -Raw).Trim()
+    if (-not $previous -or -not [IO.Path]::IsPathRooted($previous)) {
+        throw "Maintenance marker has no absolute recovery path. Recovery files have been retained."
+    }
+    $previous = [IO.Path]::GetFullPath($previous).TrimEnd('\')
+    if ($previous -ieq [IO.Path]::GetFullPath($TransactionDir).TrimEnd('\') -or
+        (Split-Path $previous -Parent) -ine (Split-Path $Root -Parent) -or
+        (Split-Path $previous -Leaf) -notlike 'TypeAgent-msi-*.tmp') {
+        throw "Maintenance marker refers to an unexpected transaction '$previous'. Recovery files have been retained."
+    }
+    Assert-RecoveryPath $previous
+    $stateFile = Join-Path $previous 'state.json'
+    Assert-RecoveryPath $stateFile
+    $state = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
+    if (-not $state.Root -or [IO.Path]::GetFullPath($state.Root).TrimEnd('\') -ine $Root -or
+        $state.Prepared -isnot [bool] -or $state.WasRunning -isnot [bool]) {
+        throw "Previous maintenance state does not describe this installation. Recovery files have been retained."
+    }
+    $names = @('agent-server', 'copilot-plugin')
+    $saved = @($state.SavedPayloads)
+    if ($null -eq $state.SavedPayloads -or
+        @($saved | Where-Object { $_ -notin $names }).Count -or
+        @($saved | Sort-Object -Unique).Count -ne $saved.Count) {
+        throw "Previous maintenance payload list is invalid. Recovery files have been retained."
+    }
+    foreach ($name in $names) {
+        $backup = Join-Path $previous $name
+        $installed = Join-Path $Root $name
+        $hasBackup = Test-Path -LiteralPath $backup -PathType Container
+        if (($hasBackup -and $name -notin $saved) -or
+            ($state.Prepared -and $name -in $saved -and -not $hasBackup) -or
+            (-not $state.Prepared -and $name -in $saved -and -not $hasBackup -and
+                -not (Test-Path -LiteralPath $installed -PathType Container))) {
+            throw "Cannot establish a complete previous '$name' payload. Recovery files have been retained."
+        }
+        foreach ($path in @($backup, $installed)) {
+            if (Test-Path -LiteralPath $path) {
+                # Walk without following junctions before rollback can move or
+                # recursively remove anything referenced by old state.
+                $pending = New-Object 'System.Collections.Generic.Stack[string]'
+                $pending.Push($path)
+                while ($pending.Count) {
+                    $next = $pending.Pop()
+                    Assert-RecoveryPath $next
+                    if (Test-Path -LiteralPath $next -PathType Container) {
+                        foreach ($child in Get-ChildItem -LiteralPath $next -Force) {
+                            $pending.Push($child.FullName)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if ($state.WasRunning) {
+        foreach ($command in @($state.RestartCommands)) {
+            if ($command.TaskOwned -isnot [bool] -or
+                (-not $command.TaskOwned -and -not $command.LaunchContext)) {
+                throw "Previous server launch context cannot be safely restored by this installer. Recovery files have been retained."
+            }
+        }
+        if (-not @($state.RestartCommands).Count -and -not ($state.TaskXml -and $state.TaskWasRunning)) {
+            throw "Previous running server has no recovery command. Recovery files have been retained."
+        }
+    }
+    Write-MaintenanceLog "Recovering interrupted maintenance from '$previous' before continuing setup."
+    # Use the current embedded implementation, never execute an older script
+    # referenced by the marker. The child scope keeps the new transaction intact.
+    & {
+        param($Root, $TransactionDir, $LogPath)
+        $Action = 'Rollback'
+        Invoke-Maintenance
+    } $Root $previous $LogPath
+    if (Test-Path -LiteralPath $marker) {
+        throw "Previous recovery did not clear its marker. Setup will not overwrite the recovery state."
+    }
+    Write-MaintenanceLog "Previous installation recovered; continuing the new maintenance transaction."
+}
+
 function Invoke-Maintenance {
     $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
     $payload = Join-Path $Root "agent-server"
@@ -480,7 +568,7 @@ function Invoke-Maintenance {
     $statePath = Join-Path $TransactionDir "state.json"
     if ($Action -eq "Begin") {
         if (Test-Path -LiteralPath $marker) {
-            throw "A previous TypeAgent maintenance operation is incomplete. See '$LogPath'."
+            Restore-InterruptedMaintenance $marker
         }
         $task = Get-OwnedAutostart $payload
         $processes = @(Get-PayloadProcesses $payload)

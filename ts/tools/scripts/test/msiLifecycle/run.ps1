@@ -129,6 +129,34 @@ try {
     Assert-Gone $old
     $current = Assert-Installed $candidate
     Assert ($installer.ProductState($baseline.ProductCode) -eq -1) 'Old MSI registration survived upgrade'
+    # Leave the exact recoverable on-disk state from an interrupted Begin, then
+    # launch a NEW MSI transaction. No manual rollback/marker cleanup is allowed.
+    $interrupted = Join-Path $env:LOCALAPPDATA ('TypeAgent-msi-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    New-Item -ItemType Directory -Path $interrupted | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\..\..\installers\wix\maintain-server.ps1') -Destination $interrupted
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $interrupted 'maintain-server.ps1') `
+        -Action Begin -Root $root -TransactionDir $interrupted -LogPath (Join-Path $OutputDir 'interrupted-begin.log')
+    Assert ($LASTEXITCODE -eq 0) 'Could not create an interrupted prepared transaction'
+    Assert (-not (Test-Path (Join-Path $root 'agent-server'))) 'Interrupted Begin left installed payload'
+    Assert (Test-Path (Join-Path $interrupted 'agent-server')) 'Interrupted Begin did not preserve backup'
+    Assert-Gone $current
+    Invoke-Msi $candidate '/fa' 'recover-prepared-and-continue'
+    $current = Assert-Installed $candidate
+    Assert (-not (Test-Path $interrupted)) 'New MSI did not retire the interrupted transaction'
+    # Also reproduce the reported no-running-server state rather than relying
+    # solely on the running-server recovery exercised above.
+    Stop-PayloadProcesses (Join-Path $root 'agent-server')
+    $interrupted = Join-Path $env:LOCALAPPDATA ('TypeAgent-msi-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    New-Item -ItemType Directory -Path $interrupted | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\..\..\installers\wix\maintain-server.ps1') -Destination $interrupted
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $interrupted 'maintain-server.ps1') `
+        -Action Begin -Root $root -TransactionDir $interrupted -LogPath (Join-Path $OutputDir 'interrupted-stopped-begin.log')
+    Assert ($LASTEXITCODE -eq 0) 'Could not create stopped-server interrupted state'
+    $interruptedState = Get-Content (Join-Path $interrupted 'state.json') -Raw | ConvertFrom-Json
+    Assert (-not $interruptedState.WasRunning) 'Stopped-server fixture captured a running server'
+    Invoke-Msi $candidate '/fa' 'recover-stopped-and-continue'
+    $current = Assert-Installed $candidate
+    Assert (-not (Test-Path $interrupted)) 'Stopped-server transaction was not retired'
     Remove-Item -LiteralPath (Join-Path $root 'copilot-plugin\version.txt')
     Invoke-Msi $candidate '/fa' 'repair-missing-payload'
     Assert-Gone $current
