@@ -212,6 +212,12 @@ export type MemoryCenterReindexResult = {
     indexVersion: string;
 };
 
+export type MemoryCenterKnowledgeSuppression = {
+    sourceId: string;
+    kind: "entity" | "topic";
+    name: string;
+};
+
 export type MemoryCenterActivityType =
     | "visited"
     | "bookmarked"
@@ -271,6 +277,22 @@ export type MemoryCenterInvokeFunctions = {
         corpusId: string;
         sourceId: string;
     }): Promise<MemoryCenterKnowledge>;
+    memoryListSourceKnowledgeSuppressions(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterKnowledgeSuppression[]>;
+    memorySuppressSourceKnowledge(params: {
+        corpusId: string;
+        sourceId: string;
+        kind: MemoryCenterKnowledgeSuppression["kind"];
+        name: string;
+    }): Promise<MemoryCenterKnowledgeSuppression[]>;
+    memoryRestoreSourceKnowledge(params: {
+        corpusId: string;
+        sourceId: string;
+        kind: MemoryCenterKnowledgeSuppression["kind"];
+        name: string;
+    }): Promise<MemoryCenterKnowledgeSuppression[]>;
     memoryImportDocument(params: {
         corpusId: string;
         title: string;
