@@ -1666,11 +1666,18 @@ function messageMatchesFromKnowledgeMatches(
         const matchesByType = knowledgeMatches.get(knowledgeType);
         if (matchesByType && matchesByType.semanticRefMatches.length > 0) {
             knowledgeTypeHitCount++;
+            // Accumulate each type's refs separately so a message earns at most
+            // one cross-type hit per knowledge type; multiple same-type refs
+            // covering the same message must not inflate hitCount.
+            const typeMatches = new MessageAccumulator();
             for (const match of matchesByType.semanticRefMatches) {
-                messageMatches.addMessagesForSemanticRef(
+                typeMatches.addMessagesForSemanticRef(
                     semanticRefs.get(match.semanticRefOrdinal),
                     match.score,
                 );
+            }
+            for (const match of typeMatches.getMatches()) {
+                messageMatches.addExact(match.value, match.score);
             }
         }
     }
