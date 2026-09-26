@@ -15,6 +15,11 @@ import {
     fixtureConfirmationAllowed,
     buildCorpus,
     balancedOrder,
+    fileHandlerConfirmation,
+    fileConsentContext,
+    pendingFileAction,
+    consumeFixtureContinuation,
+    isClarificationQuestion,
 } from "../ghcp-eval-corpus.mjs";
 import {
     fileStateMatches,
@@ -41,6 +46,196 @@ test("all twenty file cases are applicable to all seven candidates", () => {
             );
     }
     assert.equal(balancedOrder(cases.slice(0, 2), [1, 7], 1).length, 4);
+});
+
+test("handler consent needs an exact question and unambiguous admitted file action", () => {
+    const action = {
+        schemaName: "powershell.powershell-files",
+        actionName: "copyFile",
+        parameters: {
+            source: "grocery.txt",
+            destination: "grocery-backup.txt",
+        },
+    };
+    const admitted = { event: "action.admitted", detail: action };
+    const prompt = {
+        type: "question",
+        message: "Copy the requested file or directory?",
+        choices: ["Run", "Cancel"],
+        defaultId: 1,
+    };
+    assert.equal(pendingFileAction([admitted]), action);
+    assert.deepEqual(fileHandlerConfirmation(prompt, action), {
+        type: "question",
+        selected: 0,
+    });
+    for (const events of [
+        [],
+        [admitted, admitted],
+        [admitted, { event: "action.completed", detail: action }],
+        [admitted, { event: "action.denied", detail: action }],
+        [admitted, { event: "action.failed", detail: action }],
+        [
+            admitted,
+            { event: "action.completed", detail: { actionName: "writeFile" } },
+        ],
+    ])
+        assert.equal(pendingFileAction(events), undefined);
+    for (const bad of [
+        { ...prompt, choices: ["Cancel", "Run"] },
+        { ...prompt, message: "Delete the requested file or directory?" },
+        { ...prompt, defaultId: 0 },
+        { ...prompt, type: "confirmation" },
+    ])
+        assert.equal(fileHandlerConfirmation(bad, action), undefined);
+    assert.equal(fileHandlerConfirmation(prompt, undefined), undefined);
+    assert.equal(
+        fileHandlerConfirmation(prompt, { ...action, actionName: "writeFile" }),
+        undefined,
+    );
+    for (const id of ["A1", "A4"]) {
+        assert.equal(isClarificationQuestion(id, prompt.message), false);
+        assert.equal(filePolicy(id).writesEnabled, false);
+    }
+});
+
+test("handler continuations are single-use and bound to operation, scope and response", () => {
+    const args = {
+        interactionId: "i",
+        operationId: "o",
+        scopeId: "s",
+        response: { type: "question", selected: 0 },
+    };
+    const approval = () =>
+        new Map([
+            ["i", { operationId: "o", scopeId: "s", response: args.response }],
+        ]);
+    const approvals = approval();
+    assert.equal(consumeFixtureContinuation(approvals, args, false), true);
+    assert.equal(consumeFixtureContinuation(approvals, args, false), false);
+    for (const other of [
+        { ...args, interactionId: "old" },
+        { ...args, operationId: "other" },
+        { ...args, scopeId: "other" },
+        { ...args, response: { type: "question", selected: 1 } },
+        { ...args, response: { type: "confirmation", approved: true } },
+    ])
+        assert.equal(
+            consumeFixtureContinuation(approval(), other, false),
+            false,
+        );
+    assert.equal(consumeFixtureContinuation(approval(), args, true), false);
+    assert.equal(consumeFixtureContinuation(new Map(), args, false), false);
+    assert.equal(
+        consumeFixtureContinuation(
+            approval(),
+            {
+                ...args,
+                response: { selected: 0, type: "question" },
+            },
+            false,
+        ),
+        true,
+    );
+    const confirmation = new Map([
+        [
+            "i",
+            {
+                operationId: "o",
+                scopeId: "s",
+                response: { type: "confirmation", approved: true },
+            },
+        ],
+    ]);
+    assert.equal(
+        consumeFixtureContinuation(
+            confirmation,
+            {
+                ...args,
+                response: { approved: true, type: "confirmation" },
+            },
+            false,
+        ),
+        true,
+    );
+    assert.equal(
+        consumeFixtureContinuation(
+            approval(),
+            {
+                ...args,
+                response: { ...args.response, extra: true },
+            },
+            false,
+        ),
+        false,
+    );
+});
+
+test("file consent cannot reuse stale action traces or overlapping tool contexts", () => {
+    const tool = {
+        name: "typeagent-processCommand",
+        toolCallId: "t",
+        backendEventOffset: 0,
+    };
+    const action = {
+        schemaName: "powershell.powershell-files",
+        actionName: "copyFile",
+        parameters: {},
+    };
+    const events = [{ event: "action.admitted", detail: action }];
+    const request = {
+        question: "Copy the requested file or directory?",
+        choices: ["Run", "Cancel"],
+    };
+    assert.equal(
+        fileConsentContext([tool], [], events, request).action,
+        action,
+    );
+    for (const tools of [
+        [],
+        [{ ...tool, endMs: 1 }],
+        [{ ...tool, backendEventOffset: 1 }],
+        [tool, { ...tool, toolCallId: "other" }],
+        [
+            { ...tool, endMs: 1 },
+            { name: "typeagent-searchActions", toolCallId: "search", endMs: 2 },
+        ],
+    ])
+        assert.equal(
+            fileConsentContext(tools, [], events, request).handlerAnswer,
+            undefined,
+        );
+    const pending = {
+        status: "requires_interaction",
+        prompt: {
+            type: "question",
+            message: request.question,
+            choices: request.choices,
+        },
+        operationId: "o",
+        scopeId: "s",
+        interactionId: "i",
+    };
+    const results = [
+        { toolCallId: "t", result: { structuredContent: pending } },
+    ];
+    const context = fileConsentContext(
+        [{ ...tool, endMs: 1 }],
+        results,
+        events,
+        request,
+    );
+    assert.equal(context.pending, pending);
+    assert.deepEqual(context.handlerAnswer, { type: "question", selected: 0 });
+    assert.equal(
+        fileConsentContext(
+            [{ ...tool, endMs: 1 }],
+            [{ ...results[0], toolCallId: "old" }],
+            events,
+            request,
+        ).handlerAnswer,
+        undefined,
+    );
 });
 
 test("old or incomplete preflights cannot run the new corpus", () => {

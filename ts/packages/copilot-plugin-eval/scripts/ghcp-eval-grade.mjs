@@ -2,20 +2,114 @@
 // Licensed under the MIT License.
 
 import { fileFixture } from "./ghcp-eval-corpus.mjs";
+import {
+    isGhcpEvalReadOnlyAction,
+    isGhcpEvalRecoverableReadError,
+} from "../../dispatcher/dispatcher/dist/execute/ghcpEvalPolicy.js";
 
-export function terminalExecutionFailure(toolName, result, success) {
+export function recoverableBackendReadFailure(events) {
+    const actions = events.filter(({ event }) => event.startsWith("action."));
+    const admitted = actions.filter(({ event }) => event === "action.admitted");
+    const completed = actions.filter(
+        ({ event }) => event === "action.completed",
+    );
+    return (
+        admitted.length > 0 &&
+        admitted.length === completed.length &&
+        actions.length === admitted.length + completed.length &&
+        actions.every(({ detail }) =>
+            isGhcpEvalReadOnlyAction(detail.schemaName, detail.actionName),
+        ) &&
+        completed.some(({ detail }) => detail.success === false) &&
+        completed.every(
+            ({ detail }) =>
+                detail.success === true || detail.recoverable === true,
+        )
+    );
+}
+
+function recoverableTypeAgentReadFailure(
+    toolName,
+    result,
+    success,
+    error,
+    backendEvents,
+) {
+    const structured = result?.structuredContent;
+    const failedRead =
+        structured?.status === "failed" &&
+        structured.error?.code === "execution_failed";
+    // Never infer safety from a missing payload or an uncertain transport.
+    return (
+        success === true &&
+        error === undefined &&
+        (structured?.status === undefined || failedRead) &&
+        isGhcpEvalRecoverableReadError(
+            [
+                structured?.error?.code,
+                structured?.error?.message,
+                result?.content,
+            ]
+                .filter((value) => typeof value === "string")
+                .join("\n"),
+        ) &&
+        (failedRead ||
+            (toolName.includes("processCommand") &&
+                /^Error:(?:\s|$)/.test(result?.content ?? ""))) &&
+        recoverableBackendReadFailure(backendEvents)
+    );
+}
+
+export function terminalExecutionFailure(
+    toolName,
+    result,
+    success,
+    error,
+    backendEvents = [],
+) {
     if (
-        /^(?:functions[.-])?(?:powershell|view|edit|create|glob|rg|web_fetch)$/.test(
+        /^(?:functions[.-])?stop_powershell$/.test(toolName) ||
+        toolName.includes("cancelAction")
+    )
+        return true;
+    if (
+        /^(?:functions[.-])?(?:powershell|read_powershell|view|edit|create|glob|rg|web_fetch)$/.test(
             toolName,
         )
     )
-        return success === false;
-    if (!/processCommand|executeAction|continueAction/.test(toolName))
+        return (
+            success === false &&
+            !(
+                /^(?:functions[.-])?(?:view|glob|rg|web_fetch)$/.test(
+                    toolName,
+                ) &&
+                isGhcpEvalRecoverableReadError(
+                    typeof error?.message === "string"
+                        ? `${error.code ?? ""}\n${error.message}`
+                        : undefined,
+                )
+            )
+        );
+    if (
+        !/processCommand|executeAction|continueAction|cancelAction/.test(
+            toolName,
+        )
+    )
+        return false;
+    if (
+        recoverableTypeAgentReadFailure(
+            toolName,
+            result,
+            success,
+            error,
+            backendEvents,
+        )
+    )
         return false;
     return (
         success === false ||
         (toolName.includes("processCommand") &&
-            /^Error:\s/.test(result?.content ?? "")) ||
+            /^Error:(?:\s|$)/.test(result?.content ?? "")) ||
         ["failed", "cancelled", "unavailable", "execution_uncertain"].includes(
             result?.structuredContent?.status,
         )

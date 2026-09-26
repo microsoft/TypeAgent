@@ -10,6 +10,7 @@ import {
     corpusVersion,
     fileFixture,
     filePolicy,
+    fileHandlerConfirmation,
     logicalFileContent,
 } from "./ghcp-eval-corpus.mjs";
 import { evalModel, validateEvalLedger } from "./ghcp-eval-config.mjs";
@@ -254,6 +255,32 @@ try {
                             operationId: pending.operationId,
                             interactionId: pending.interactionId,
                             response: { type: "confirmation", approved: true },
+                        },
+                    },
+                    undefined,
+                    { timeout: 60_000 },
+                );
+            }
+            const question = response.structuredContent;
+            const handlerAnswer = fileHandlerConfirmation(
+                question?.prompt,
+                action,
+            );
+            if (
+                question?.status === "requires_interaction" &&
+                question.scopeId === scopeId &&
+                question.operationId === pending?.operationId &&
+                handlerAnswer
+            ) {
+                response = await client.callTool(
+                    {
+                        name: "typeagent-continueAction",
+                        arguments: {
+                            protocolVersion: 1,
+                            scopeId,
+                            operationId: question.operationId,
+                            interactionId: question.interactionId,
+                            response: handlerAnswer,
                         },
                     },
                     undefined,

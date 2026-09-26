@@ -9,17 +9,22 @@ import {
     externalOracle,
     intervalUnionMs,
     percentile,
+    preliminaryGrade,
+    recoverableBackendReadFailure,
     terminalExecutionFailure,
 } from "../ghcp-eval-grade.mjs";
 import {
     balancedOrder,
+    assertFrozenSpecification,
     buildCorpus,
+    buildTrialSchedule,
     expectedFiles,
     fileFixture,
     corpusVersion,
     fixtureConfirmationAllowed,
     isClarificationQuestion,
     normalizeLists,
+    protocolVersion,
     shuffled,
     sendWithClarification,
 } from "../ghcp-eval-corpus.mjs";
@@ -36,6 +41,441 @@ test("evaluation pins Luna 5.6 and rejects another model before paid work", () =
     }
 });
 const corpus = buildCorpus(fixtures, "owner/repo", 10, 20, 30);
+const readFailureEvents = [
+    {
+        event: "action.admitted",
+        detail: { schemaName: "github-cli", actionName: "prFiles" },
+    },
+    {
+        event: "action.completed",
+        detail: {
+            schemaName: "github-cli",
+            actionName: "prFiles",
+            success: false,
+            recoverable: true,
+        },
+    },
+];
+
+test("protocol five schedules all twenty common-file cases for all seven candidates", () => {
+    assert.equal(protocolVersion, 5);
+    const schedule = buildTrialSchedule(corpus, [1, 2, 3, 4, 5, 6, 7], 1);
+    const { order } = schedule;
+    assert.equal(schedule.totalSlots, 140);
+    assert.equal(schedule.scheduledTrials, 140);
+    assert.deepEqual(schedule.applicableCounts, {
+        1: 20,
+        2: 20,
+        3: 20,
+        4: 20,
+        5: 20,
+        6: 20,
+        7: 20,
+    });
+    assert.ok(order.every(({ applicable }) => applicable));
+    for (let candidate = 1; candidate <= 7; candidate++)
+        assert.deepEqual(
+            order
+                .filter((entry) => entry.candidate === candidate)
+                .map(({ caseId }) => caseId)
+                .sort(),
+            corpus.map(({ id }) => id).sort(),
+        );
+});
+
+test("frozen schedules derive pilot/repetition counts and cannot resume older protocols or changed order", () => {
+    const schedule = buildTrialSchedule(corpus, [1, 2, 3, 4, 5, 6, 7], 2);
+    assert.equal(schedule.scheduledTrials, 280);
+    assert.equal(schedule.applicableCounts[7], 40);
+    const pilot = buildTrialSchedule(corpus.slice(0, 2), [1, 7], 1);
+    assert.equal(pilot.totalSlots, 4);
+    assert.equal(pilot.scheduledTrials, 4);
+    const frozen = JSON.stringify({ protocolVersion, corpusVersion, ...pilot });
+    assert.doesNotThrow(() => assertFrozenSpecification(undefined, frozen));
+    assert.doesNotThrow(() => assertFrozenSpecification(frozen, frozen));
+    assert.throws(
+        () =>
+            assertFrozenSpecification(
+                JSON.stringify({ protocolVersion: 4, ...pilot }),
+                frozen,
+            ),
+        /Frozen run specification changed/,
+    );
+    assert.throws(
+        () =>
+            assertFrozenSpecification(
+                JSON.stringify({
+                    protocolVersion,
+                    corpusVersion,
+                    ...pilot,
+                    order: [...pilot.order].reverse(),
+                }),
+                frozen,
+            ),
+        /Frozen run specification changed/,
+    );
+    assert.throws(
+        () =>
+            assertFrozenSpecification(
+                JSON.stringify({
+                    protocolVersion,
+                    corpusVersion: "old-files",
+                    ...pilot,
+                }),
+                frozen,
+            ),
+        /Frozen run specification changed/,
+    );
+});
+
+test("known native read I/O failures allow recovery, never opaque shell errors or denied reads", () => {
+    for (const tool of ["view", "glob", "rg", "web_fetch", "functions.view"]) {
+        assert.equal(
+            terminalExecutionFailure(tool, undefined, false, {
+                message: "ENOENT: missing file",
+            }),
+            false,
+        );
+        for (const message of [
+            "",
+            "unknown error",
+            "permission denied: ENOENT",
+            "ENOENT after cancellation: cancelled",
+            "uncertain delivery: ECONNRESET",
+        ])
+            assert.equal(
+                terminalExecutionFailure(tool, undefined, false, { message }),
+                true,
+            );
+    }
+    for (const tool of ["powershell", "edit", "create", "functions.edit"])
+        assert.equal(
+            terminalExecutionFailure(tool, undefined, false, {
+                message: "ENOENT",
+            }),
+            true,
+        );
+    for (const code of [
+        "ERR_ACCESS_DENIED",
+        "permissionDenied",
+        "cancelled",
+        "execution_uncertain",
+    ]) {
+        assert.equal(
+            terminalExecutionFailure("view", undefined, false, {
+                code,
+                message: "ENOENT",
+            }),
+            true,
+        );
+    }
+});
+
+test("TypeAgent recovery requires a complete read-only trace and affirmative error details", () => {
+    assert.equal(recoverableBackendReadFailure(readFailureEvents), true);
+    for (const actionName of [
+        "readFile",
+        "listFiles",
+        "writeFile",
+        "copyFile",
+    ]) {
+        const events = readFailureEvents.map((entry) => ({
+            ...entry,
+            detail: {
+                ...entry.detail,
+                schemaName: "powershell.powershell-files",
+                actionName,
+            },
+        }));
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-processCommand",
+                { content: "Error: ENOENT" },
+                true,
+                undefined,
+                events,
+            ),
+            actionName === "writeFile" || actionName === "copyFile",
+        );
+    }
+    for (const events of [
+        [],
+        readFailureEvents.slice(0, 1),
+        [...readFailureEvents, { event: "action.denied", detail: {} }],
+        [...readFailureEvents, { event: "action.failed", detail: {} }],
+        readFailureEvents.map((event) => ({
+            ...event,
+            detail: {
+                ...event.detail,
+                schemaName: "list",
+                actionName: "addItems",
+            },
+        })),
+        readFailureEvents.map((event) => ({
+            ...event,
+            detail: { ...event.detail, recoverable: undefined },
+        })),
+    ]) {
+        assert.equal(recoverableBackendReadFailure(events), false);
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-processCommand",
+                { content: "Error: ECONNRESET" },
+                true,
+                undefined,
+                events,
+            ),
+            true,
+        );
+    }
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-processCommand",
+            { content: "Error: ECONNRESET" },
+            true,
+            undefined,
+            readFailureEvents,
+        ),
+        false,
+    );
+    for (const status of [
+        "failed",
+        "cancelled",
+        "unavailable",
+        "execution_uncertain",
+    ]) {
+        const result = {
+            structuredContent: {
+                status,
+                error: { code: "execution_failed", message: "ECONNRESET" },
+            },
+        };
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-executeAction",
+                result,
+                true,
+                undefined,
+                readFailureEvents,
+            ),
+            status !== "failed",
+        );
+    }
+    for (const content of [
+        "Error: permission denied: ECONNRESET",
+        "Error: uncertain delivery",
+        "Error:",
+    ]) {
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-processCommand",
+                { content },
+                true,
+                undefined,
+                readFailureEvents,
+            ),
+            true,
+        );
+    }
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-executeAction",
+            undefined,
+            false,
+            undefined,
+            readFailureEvents,
+        ),
+        true,
+    );
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-executeAction",
+            {
+                structuredContent: {
+                    status: "failed",
+                    error: { code: "invalid_scope", message: "ECONNRESET" },
+                },
+            },
+            true,
+            undefined,
+            readFailureEvents,
+        ),
+        true,
+    );
+});
+
+test("safe recovery can reach clarification within the same deadline but is not itself success", async () => {
+    let calls = 0;
+    let stopped = false;
+    const answer = await sendWithClarification({
+        session: {
+            sendAndWait: async () => {
+                calls++;
+                stopped ||= terminalExecutionFailure("view", undefined, false, {
+                    message: "ENOENT",
+                });
+                return {
+                    data: {
+                        content: calls === 1 ? "Which file?" : "trip contents",
+                    },
+                };
+            },
+        },
+        prompt: corpus.find(({ id }) => id === "A5").prompt,
+        testCase: corpus.find(({ id }) => id === "A5"),
+        timeoutMs: 1000,
+        canClarify: () => !stopped,
+        clarify: () => "trip.txt.",
+    });
+    assert.equal(calls, 2);
+    assert.equal(answer.data.content, "trip contents");
+    assert.equal(
+        preliminaryGrade(
+            {
+                status: "completed_ungraded",
+                caseId: "S2",
+                routeViolations: [],
+                grade: {
+                    fileStateMatchesOracle: true,
+                    listStateUnchanged: true,
+                },
+                answer: "not the file contents",
+            },
+            {},
+        ).outcome,
+        "pending_review",
+    );
+});
+
+test("contradictory TypeAgent denial and cancellation evidence overrides recoverable content", () => {
+    for (const status of [
+        "cancelled",
+        "execution_uncertain",
+        "unavailable",
+        "requires_interaction",
+    ]) {
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-processCommand",
+                { content: "Error: ENOENT", structuredContent: { status } },
+                true,
+                undefined,
+                readFailureEvents,
+            ),
+            true,
+        );
+    }
+    const failed = {
+        status: "failed",
+        error: { code: "execution_failed", message: "ENOENT" },
+    };
+    for (const content of [
+        "Error: permission denied",
+        "Error: cancelled",
+        "Error: uncertain delivery",
+    ]) {
+        assert.equal(
+            terminalExecutionFailure(
+                "typeagent-executeAction",
+                { content, structuredContent: failed },
+                true,
+                undefined,
+                readFailureEvents,
+            ),
+            true,
+        );
+    }
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-processCommand",
+            { content: "Error: ENOENT", structuredContent: failed },
+            true,
+            { code: "permissionDenied" },
+            readFailureEvents,
+        ),
+        true,
+    );
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-cancelAction",
+            { structuredContent: failed },
+            true,
+            undefined,
+            readFailureEvents,
+        ),
+        true,
+    );
+});
+
+test("A4 requires unresolved-item clarification and preserves every other entry and file", () => {
+    const testCase = corpus.find(({ id }) => id === "A4");
+    assert.equal(
+        testCase.prompt,
+        `Remove an item from ${path.join(fixtures, "grocery.txt")}, preserving the other entries.`,
+    );
+    assert.equal(testCase.clarification, "Remove eggs.");
+    assert.equal(
+        isClarificationQuestion("A4", "Which item should I remove?"),
+        true,
+    );
+    assert.equal(
+        isClarificationQuestion("A4", "Confirm removing milk?"),
+        false,
+    );
+    assert.equal(
+        isClarificationQuestion("A4", "Which list should I clear?"),
+        false,
+    );
+    const expected = expectedFiles("A4", 30);
+    assert.equal(expected["grocery.txt"], "milk\nrice\n");
+    assert.deepEqual(
+        { ...expected, "grocery.txt": fileFixture["grocery.txt"] },
+        fileFixture,
+    );
+    const action = {
+        schemaName: "powershell.powershell-files",
+        actionName: "writeFile",
+        parameters: {
+            path: path.join(fixtures, "grocery.txt"),
+            content: "milk\nrice\n",
+        },
+    };
+    assert.equal(fixtureConfirmationAllowed("A4", action, fixtures), true);
+    for (const other of [
+        { ...action, parameters: { ...action.parameters, content: "" } },
+        {
+            ...action,
+            parameters: { ...action.parameters, content: "eggs\nrice\n" },
+        },
+        { ...action, parameters: { ...action.parameters, content: "rice\n" } },
+        {
+            ...action,
+            parameters: {
+                ...action.parameters,
+                path: path.join(fixtures, "pantry.txt"),
+            },
+        },
+    ])
+        assert.equal(fixtureConfirmationAllowed("A4", other, fixtures), false);
+    const result = {
+        status: "completed_ungraded",
+        caseId: "A4",
+        routeViolations: [],
+        answer: "Removed eggs.",
+        grade: {
+            fileStateMatchesOracle: true,
+            listStateUnchanged: true,
+            clarificationRequested: true,
+            noPrematureFileMutation: false,
+        },
+    };
+    assert.equal(
+        preliminaryGrade(result, {}).reason,
+        "clarification_not_verified_before_effects",
+    );
+    result.grade.noPrematureFileMutation = true;
+    assert.equal(preliminaryGrade(result, {}).outcome, "pending_review");
+});
 test("legacy list confirmations are not approved in the file corpus", () => {
     const action = {
         schemaName: "list",
@@ -188,6 +628,29 @@ test("failed native execution cannot trigger a scripted continuation", async () 
         clarify: () => assert.fail("cannot continue after native failure"),
     });
     assert.equal(calls, 1);
+});
+test("explicit cancellation and uncertain shell follow-ups remain terminal", () => {
+    assert.equal(
+        terminalExecutionFailure(
+            "typeagent-cancelAction",
+            {
+                structuredContent: { status: "cancelled" },
+            },
+            true,
+        ),
+        true,
+    );
+    assert.equal(terminalExecutionFailure("stop_powershell", {}, true), true);
+    assert.equal(
+        terminalExecutionFailure("functions.stop_powershell", undefined, false),
+        true,
+    );
+    assert.equal(
+        terminalExecutionFailure("read_powershell", undefined, false, {
+            message: "ENOENT",
+        }),
+        true,
+    );
 });
 test("independent PR file evidence must be complete", () => {
     const snapshot = {
