@@ -9,6 +9,7 @@ export {
     SchemaContent,
     SchemaFormat,
     SchemaManifest,
+    ActionCacheBinding,
     ActionEffect,
     ActionPolicy,
     AppAgent,

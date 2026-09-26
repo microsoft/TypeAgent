@@ -232,6 +232,10 @@ export type {
     StoredGrammarRule,
     GrammarStoreData,
     GrammarStoreInfo,
+    GrammarRuleStatus,
+    GrammarRuleActionBinding,
+    GrammarSchemaIdentity,
+    GrammarRuleReconciliation,
 } from "./grammarStore.js";
 export {
     GrammarStore,

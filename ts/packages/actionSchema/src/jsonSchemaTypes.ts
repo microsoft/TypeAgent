@@ -8,6 +8,7 @@ export type JsonSchema =
     | JsonSchemaString
     | JsonSchemaNumber
     | JsonSchemaBoolean
+    | JsonSchemaMultiType
     | JsonSchemaTrue
     | JsonSchemaFalse
     | JsonSchemaNull
@@ -17,19 +18,43 @@ export type JsonSchema =
 export type JsonSchemaAny = {
     type?: undefined;
     description?: string;
+    anyOf?: JsonSchema[];
+    oneOf?: JsonSchema[];
+    allOf?: JsonSchema[];
+    $ref?: string;
+    $defs?: Record<string, JsonSchema>;
+};
+
+export type JsonSchemaTypeName =
+    | "object"
+    | "array"
+    | "string"
+    | "number"
+    | "integer"
+    | "boolean"
+    | "null";
+
+export type JsonSchemaMultiType = {
+    type: JsonSchemaTypeName[];
+    description?: string;
+    properties?: Record<string, JsonSchema>;
+    required?: string[];
+    additionalProperties?: boolean | JsonSchema;
+    items?: JsonSchema;
+    enum?: string[];
 };
 
 export type JsonSchemaObject = {
     type: "object";
     description?: string;
-    properties: Record<string, JsonSchema>;
+    properties?: Record<string, JsonSchema>;
     required?: string[];
-    additionalProperties: false;
+    additionalProperties?: boolean | JsonSchema;
 };
 export type JsonSchemaArray = {
     type: "array";
     description?: string;
-    items: JsonSchema;
+    items?: JsonSchema;
 };
 
 export type JsonSchemaString = {
@@ -54,7 +79,9 @@ export type JsonSchemaNull = {
 };
 
 export type JsonSchemaUnion = {
-    anyOf: JsonSchema[];
+    anyOf?: JsonSchema[];
+    oneOf?: JsonSchema[];
+    allOf?: JsonSchema[];
     description?: string;
 };
 

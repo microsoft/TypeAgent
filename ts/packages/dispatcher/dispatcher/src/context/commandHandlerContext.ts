@@ -137,10 +137,6 @@ import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
 import { CosmosPartitionKeyBuilder } from "@typeagent/telemetry";
 import { DefaultAzureCredential } from "@azure/identity";
 import { DisplayLog } from "../displayLog.js";
-import {
-    fromJSONParsedActionSchema,
-    ParsedActionSchemaJSON,
-} from "@typeagent/action-schema";
 import { RequestQueue } from "../queue/requestQueue.js";
 import type { QueueExecutionContext } from "../queue/requestQueue.js";
 import { createSnapshotCoalescer } from "../queue/snapshotCoalescer.js";
@@ -1776,8 +1772,28 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
             await grammarStore.load(grammarStorePath);
             debug(`Loaded grammar store from ${grammarStorePath}`);
 
+            for (const schemaName of grammarStore.getSchemaNames()) {
+                const actionConfig =
+                    context.agents.tryGetActionConfig(schemaName);
+                if (actionConfig === undefined) continue;
+                const schemaHash =
+                    context.agents.getActionSchemaFileForConfig(
+                        actionConfig,
+                    ).sourceHash;
+                await grammarStore.reconcileSchema(schemaName, {
+                    schemaHash,
+                    ...(actionConfig.cacheBinding === undefined
+                        ? {}
+                        : {
+                              sourceId: actionConfig.cacheBinding.sourceId,
+                              actionFingerprints:
+                                  actionConfig.cacheBinding.actionFingerprints,
+                          }),
+                });
+            }
+
             // Merge persisted dynamic rules into agent grammars
-            const allRules = grammarStore.getAllRules();
+            const allRules = grammarStore.getAllActiveRules();
             const schemaRules = new Map<string, string[]>();
 
             // Group rules by schema
@@ -1836,63 +1852,20 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     // Enable auto-save
     await grammarStore.setAutoSave(config.cache.autoSave);
 
-    // Import getPackageFilePath for resolving schema paths
-    const { getPackageFilePath } = await import(
-        "../utils/getPackageFilePath.js"
-    );
-
     // Configure agent cache with grammar generation support
     context.agentCache.configureGrammarGeneration(
         context.agentGrammarRegistry,
         grammarStore,
         true,
         (schemaName: string) => {
-            // Get compiled schema file path (.pas.json) from action config for grammar generation
             const actionConfig = context.agents.tryGetActionConfig(schemaName);
             if (!actionConfig) {
                 throw new Error(
                     `Action config not found for schema: ${schemaName}`,
                 );
             }
-
-            let schemaPath: string | undefined;
-
-            // Use schemaFilePath directly if it's already a .pas.json file
-            if (
-                actionConfig.schemaFilePath &&
-                actionConfig.schemaFilePath.endsWith(".pas.json")
-            ) {
-                schemaPath = getPackageFilePath(actionConfig.schemaFilePath);
-            } else if (
-                actionConfig.schemaFilePath &&
-                actionConfig.schemaFilePath.endsWith(".ts")
-            ) {
-                // Fallback: try to derive .pas.json path from .ts schemaFilePath
-                // Try common pattern: ./src/schema.ts -> ../dist/schema.pas.json
-                const derivedPath = actionConfig.schemaFilePath
-                    .replace(/^\.\/src\//, "../dist/")
-                    .replace(/\.ts$/, ".pas.json");
-                debug(
-                    `Attempting fallback .pas.json path for ${schemaName}: ${derivedPath}`,
-                );
-                try {
-                    schemaPath = getPackageFilePath(derivedPath);
-                } catch {
-                    // Fallback path doesn't exist, continue to error
-                }
-            }
-
-            if (!schemaPath) {
-                throw new Error(
-                    `Compiled schema file path (.pas.json) not found for schema: ${schemaName}. ` +
-                        `Please ensure the schema is compiled to a .pas.json file.`,
-                );
-            }
-
-            const content = fs.readFileSync(schemaPath, "utf-8");
-            return fromJSONParsedActionSchema(
-                JSON.parse(content) as ParsedActionSchemaJSON,
-            );
+            return context.agents.getActionSchemaFileForConfig(actionConfig)
+                .parsedActionSchema;
         },
     );
 

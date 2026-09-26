@@ -287,6 +287,12 @@ describe("MCP server provider milestone 5", () => {
         const initialManifest = await provider.getAppAgentManifest("server");
         expect(Object.isFrozen(initialManifest)).toBe(true);
         expect(schemaContent(initialManifest)).toContain("first");
+        expect(initialManifest.schema?.cacheBinding).toMatchObject({
+            sourceId: "server-id",
+            actionFingerprints: {
+                first: expect.any(String),
+            },
+        });
 
         notify!(null, [tool("second")]);
         notify!(null, [tool("third")]);

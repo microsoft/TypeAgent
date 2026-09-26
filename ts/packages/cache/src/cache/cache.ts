@@ -401,13 +401,28 @@ export class AgentCache {
                                     `Grammar rule generated for ${schemaName}.${actionName}: ${genResult.generatedRule}`,
                                 );
 
-                                // Add rule to persisted grammar store
-                                await this._persistedGrammarStore.addRule({
-                                    schemaName,
-                                    grammarText: genResult.generatedRule,
-                                    actionName,
-                                    sourceRequest: requestAction.request,
-                                });
+                                const schemaHash =
+                                    this.schemaInfoProvider?.getActionSchemaFileHash(
+                                        schemaName,
+                                    );
+                                const actionBinding =
+                                    this.schemaInfoProvider?.getActionCacheBinding?.(
+                                        schemaName,
+                                        actionName,
+                                    );
+                                const storedRule =
+                                    await this._persistedGrammarStore.addRule({
+                                        schemaName,
+                                        grammarText: genResult.generatedRule,
+                                        actionName,
+                                        sourceRequest: requestAction.request,
+                                        ...(schemaHash === undefined
+                                            ? {}
+                                            : { schemaHash }),
+                                        ...(actionBinding === undefined
+                                            ? {}
+                                            : { actionBinding }),
+                                    });
 
                                 // Add rule to agent grammar registry (in-memory)
                                 const agentGrammar =
@@ -436,6 +451,9 @@ export class AgentCache {
                                                 genResult.generatedRule,
                                         };
                                     } else {
+                                        await this._persistedGrammarStore.deleteRuleById(
+                                            storedRule.id,
+                                        );
                                         debug(
                                             `Failed to add rule to registry: ${addResult.errors.join(", ")}`,
                                         );
@@ -449,6 +467,9 @@ export class AgentCache {
                                         };
                                     }
                                 } else {
+                                    await this._persistedGrammarStore.deleteRuleById(
+                                        storedRule.id,
+                                    );
                                     debug(
                                         `Agent grammar not found for ${schemaName}`,
                                     );
