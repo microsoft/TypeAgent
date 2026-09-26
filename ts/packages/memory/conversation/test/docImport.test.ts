@@ -71,6 +71,33 @@ describe("docImport.offline", () => {
             ]),
         );
     });
+    test("retains structure without promoting it to knowledge", () => {
+        const markdown = [
+            "# Reference",
+            "",
+            "## Helpful links",
+            "",
+            "- Read the [guide](https://example.test/guide).",
+            "- Review *important guidance*.",
+        ].join("\n");
+        const parts = docPartsFromMarkdown(markdown, 2048, "fixture", {
+            collectLinkKnowledge: false,
+            collectStructuralKnowledge: false,
+        });
+
+        expect(parts.flatMap((part) => part.textChunks).join("\n")).toContain(
+            "Helpful links",
+        );
+        expect(parts.flatMap((part) => part.tags)).toEqual(
+            expect.arrayContaining(["heading", "list"]),
+        );
+        for (const part of parts) {
+            expect(part.knowledge).toMatchObject({
+                entities: [],
+                topics: [],
+            });
+        }
+    });
 });
 
 describeIf(
