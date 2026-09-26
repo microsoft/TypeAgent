@@ -126,6 +126,49 @@ test("handler continuations are single-use and bound to operation, scope and res
         );
     assert.equal(consumeFixtureContinuation(approval(), args, true), false);
     assert.equal(consumeFixtureContinuation(new Map(), args, false), false);
+    assert.equal(
+        consumeFixtureContinuation(
+            approval(),
+            {
+                ...args,
+                response: { selected: 0, type: "question" },
+            },
+            false,
+        ),
+        true,
+    );
+    const confirmation = new Map([
+        [
+            "i",
+            {
+                operationId: "o",
+                scopeId: "s",
+                response: { type: "confirmation", approved: true },
+            },
+        ],
+    ]);
+    assert.equal(
+        consumeFixtureContinuation(
+            confirmation,
+            {
+                ...args,
+                response: { approved: true, type: "confirmation" },
+            },
+            false,
+        ),
+        true,
+    );
+    assert.equal(
+        consumeFixtureContinuation(
+            approval(),
+            {
+                ...args,
+                response: { ...args.response, extra: true },
+            },
+            false,
+        ),
+        false,
+    );
 });
 
 test("file consent cannot reuse stale action traces or overlapping tool contexts", () => {

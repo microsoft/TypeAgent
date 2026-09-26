@@ -371,7 +371,13 @@ export function consumeFixtureContinuation(approvals, args, stopped) {
         approval !== undefined &&
         approval.operationId === args.operationId &&
         approval.scopeId === args.scopeId &&
-        JSON.stringify(approval.response) === JSON.stringify(args.response)
+        args.response !== null &&
+        typeof args.response === "object" &&
+        Object.keys(approval.response).length ===
+            Object.keys(args.response).length &&
+        Object.entries(approval.response).every(
+            ([key, value]) => args.response[key] === value,
+        )
     );
 }
 
