@@ -62,6 +62,10 @@ export type ProcessRequestActionResult = {
     };
 };
 
+type GrammarGenerationResult = NonNullable<
+    ProcessRequestActionResult["grammarResult"]
+>;
+
 export type CacheConfig = {
     mergeMatchSets: boolean;
     cacheConflicts: boolean;
@@ -79,6 +83,18 @@ function getFailedResult(message: string): ProcessRequestActionResult {
             elapsedMs: 0,
         },
     };
+}
+
+function getCachingDisabledMessage(
+    actions: RequestAction["actions"],
+    schemaInfoProvider?: SchemaInfoProvider,
+): string | undefined {
+    for (const action of actions) {
+        if (!doCacheAction(action, schemaInfoProvider)) {
+            return `Caching disabled in schema config for action '${getFullActionName(action)}'`;
+        }
+    }
+    return undefined;
 }
 
 export class AgentCache {
@@ -205,6 +221,176 @@ export class AgentCache {
         return this._constructionStore.prune(this.namespaceKeyFilter);
     }
 
+    private async addGeneratedGrammarRule(
+        requestAction: RequestAction,
+        schemaName: string,
+        actionName: string,
+        generatedRule: string,
+        checkedVariables?: Set<string>,
+    ): Promise<GrammarGenerationResult> {
+        const schemaHash =
+            this.schemaInfoProvider?.getActionSchemaFileHash(schemaName);
+        const actionBinding = this.schemaInfoProvider?.getActionCacheBinding?.(
+            schemaName,
+            actionName,
+        );
+        const storedRule = await this._persistedGrammarStore.addRule({
+            schemaName,
+            grammarText: generatedRule,
+            actionName,
+            sourceRequest: requestAction.request,
+            ...(schemaHash === undefined ? {} : { schemaHash }),
+            ...(actionBinding === undefined ? {} : { actionBinding }),
+        });
+
+        const agentGrammar = this._agentGrammarRegistry.getAgent(schemaName);
+        if (!agentGrammar) {
+            await this._persistedGrammarStore.deleteRuleById(storedRule.id);
+            debug(`Agent grammar not found for ${schemaName}`);
+            return {
+                success: false,
+                message: `Agent grammar not found for ${schemaName}`,
+                generatedRule,
+            };
+        }
+
+        debug(`Adding rule to agent grammar registry...`);
+        const addResult = agentGrammar.addGeneratedRules(
+            generatedRule,
+            checkedVariables,
+        );
+        if (!addResult.success) {
+            await this._persistedGrammarStore.deleteRuleById(storedRule.id);
+            debug(
+                `Failed to add rule to registry: ${addResult.errors.join(", ")}`,
+            );
+            return {
+                success: false,
+                message: `Failed to add rule to agent registry: ${addResult.errors.join(", ")}`,
+                generatedRule,
+            };
+        }
+
+        this.syncAgentGrammar(schemaName);
+        debug(`Grammar rule added for ${schemaName}.${actionName}`);
+        return {
+            success: true,
+            message: `Grammar rule added for ${schemaName}.${actionName}`,
+            generatedRule,
+        };
+    }
+
+    private async generateGrammarForAction(
+        requestAction: RequestAction,
+        schemaName: string,
+        actionName: string,
+        parameters: object,
+    ): Promise<GrammarGenerationResult> {
+        try {
+            debug(`Calling getParsedActionSchema("${schemaName}")...`);
+            const parsedSchema = this._getParsedActionSchema!(schemaName);
+            debug(`Parsed schema loaded for ${schemaName}`);
+
+            debug(`Importing populateCache...`);
+            const { populateCache } = await import(
+                "@typeagent/action-grammar/generation"
+            );
+            debug(`populateCache imported successfully`);
+
+            debug(
+                `Calling populateCache for request: "${requestAction.request}"`,
+            );
+            const genResult = await populateCache({
+                request: requestAction.request,
+                schemaName,
+                action: { actionName, parameters },
+                parsedSchema,
+            });
+            const grammarResult =
+                genResult.success && genResult.generatedRule
+                    ? await this.addGeneratedGrammarRule(
+                          requestAction,
+                          schemaName,
+                          actionName,
+                          genResult.generatedRule,
+                          genResult.checkedVariables,
+                      )
+                    : {
+                          success: false,
+                          message:
+                              genResult.rejectionReason ||
+                              "Grammar generation failed",
+                          ...(genResult.generatedRule && {
+                              generatedRule: genResult.generatedRule,
+                          }),
+                      };
+
+            if (!grammarResult.success) {
+                debug(`Grammar generation rejected: ${grammarResult.message}`);
+            }
+            this.logger?.logEvent("grammarGeneration", {
+                request: requestAction.request,
+                schemaName,
+                actionName,
+                success: grammarResult.success,
+                message: grammarResult.message,
+            });
+            return grammarResult;
+        } catch (genError) {
+            debug(`Error during generation: %O`, genError);
+            return {
+                success: false,
+                message: `Generation error: ${genError instanceof Error ? genError.message : String(genError)}`,
+            };
+        }
+    }
+
+    private async generateGrammar(
+        requestAction: RequestAction,
+    ): Promise<GrammarGenerationResult> {
+        try {
+            const execAction = requestAction.actions[0];
+            const schemaName = execAction.action.schemaName;
+            const actionName = execAction.action.actionName;
+            const parameters = execAction.action.parameters ?? {};
+
+            debug(`Grammar gen starting for ${schemaName}.${actionName}`);
+            debug(
+                `_getParsedActionSchema is ${this._getParsedActionSchema ? "configured" : "NOT configured"}`,
+            );
+            if (!this._getParsedActionSchema) {
+                debug(`Parsed action schema getter not configured`);
+                return {
+                    success: false,
+                    message: "Parsed action schema getter not configured",
+                };
+            }
+            return await this.generateGrammarForAction(
+                requestAction,
+                schemaName,
+                actionName,
+                parameters,
+            );
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            debug(`Unexpected error: %O`, error);
+            this.logger?.logEvent(
+                "grammarGeneration",
+                {
+                    request: requestAction.request,
+                    success: false,
+                    error: message,
+                },
+                "error",
+            );
+            return {
+                success: false,
+                message: `Grammar generation error: ${message}`,
+            };
+        }
+    }
+
     public async processRequestAction(
         requestAction: RequestAction,
         cache: boolean = true,
@@ -217,19 +403,14 @@ export class AgentCache {
                 `processRequestAction: "${requestAction.request}" for actions: ${executableActions.map((a) => `${a.action.schemaName}.${a.action.actionName}`).join(", ")}`,
             );
 
-            if (cache) {
-                for (const action of executableActions) {
-                    const cacheAction = doCacheAction(
-                        action,
-                        this.schemaInfoProvider,
-                    );
-
-                    if (!cacheAction) {
-                        return getFailedResult(
-                            `Caching disabled in schema config for action '${getFullActionName(action)}'`,
-                        );
-                    }
-                }
+            const cachingDisabledMessage = cache
+                ? getCachingDisabledMessage(
+                      executableActions,
+                      this.schemaInfoProvider,
+                  )
+                : undefined;
+            if (cachingDisabledMessage) {
+                return getFailedResult(cachingDisabledMessage);
             }
 
             const namespaceKeys = this.getNamespaceKeys(
@@ -335,200 +516,14 @@ export class AgentCache {
                 constructionResult = { added, message };
             }
 
-            // Generate grammar rules if using NFA system and explanation succeeded
-            let grammarResult:
-                | { success: boolean; message: string; generatedRule?: string }
-                | undefined = undefined;
+            let grammarResult: GrammarGenerationResult | undefined;
             if (
                 cache &&
                 this._useNFAGrammar &&
                 explanation.success &&
                 executableActions.length === 1
             ) {
-                try {
-                    const execAction = executableActions[0];
-                    const schemaName = execAction.action.schemaName;
-                    const actionName = execAction.action.actionName;
-                    const parameters = execAction.action.parameters ?? {};
-
-                    debug(
-                        `Grammar gen starting for ${schemaName}.${actionName}`,
-                    );
-                    debug(
-                        `_getParsedActionSchema is ${this._getParsedActionSchema ? "configured" : "NOT configured"}`,
-                    );
-
-                    // Check if we have the required components
-                    if (!this._getParsedActionSchema) {
-                        debug(`Parsed action schema getter not configured`);
-                        grammarResult = {
-                            success: false,
-                            message:
-                                "Parsed action schema getter not configured",
-                        };
-                    } else {
-                        try {
-                            // Get parsed action schema
-                            debug(
-                                `Calling getParsedActionSchema("${schemaName}")...`,
-                            );
-                            const parsedSchema =
-                                this._getParsedActionSchema(schemaName);
-                            debug(`Parsed schema loaded for ${schemaName}`);
-
-                            // Import populateCache dynamically to avoid circular dependencies
-                            debug(`Importing populateCache...`);
-                            const { populateCache } = await import(
-                                "@typeagent/action-grammar/generation"
-                            );
-                            debug(`populateCache imported successfully`);
-
-                            debug(
-                                `Calling populateCache for request: "${requestAction.request}"`,
-                            );
-                            // Generate grammar rule
-                            const genResult = await populateCache({
-                                request: requestAction.request,
-                                schemaName,
-                                action: {
-                                    actionName,
-                                    parameters,
-                                },
-                                parsedSchema,
-                            });
-                            if (genResult.success && genResult.generatedRule) {
-                                debug(
-                                    `Grammar rule generated for ${schemaName}.${actionName}: ${genResult.generatedRule}`,
-                                );
-
-                                const schemaHash =
-                                    this.schemaInfoProvider?.getActionSchemaFileHash(
-                                        schemaName,
-                                    );
-                                const actionBinding =
-                                    this.schemaInfoProvider?.getActionCacheBinding?.(
-                                        schemaName,
-                                        actionName,
-                                    );
-                                const storedRule =
-                                    await this._persistedGrammarStore.addRule({
-                                        schemaName,
-                                        grammarText: genResult.generatedRule,
-                                        actionName,
-                                        sourceRequest: requestAction.request,
-                                        ...(schemaHash === undefined
-                                            ? {}
-                                            : { schemaHash }),
-                                        ...(actionBinding === undefined
-                                            ? {}
-                                            : { actionBinding }),
-                                    });
-
-                                // Add rule to agent grammar registry (in-memory)
-                                const agentGrammar =
-                                    this._agentGrammarRegistry.getAgent(
-                                        schemaName,
-                                    );
-                                if (agentGrammar) {
-                                    debug(
-                                        `Adding rule to agent grammar registry...`,
-                                    );
-                                    const addResult =
-                                        agentGrammar.addGeneratedRules(
-                                            genResult.generatedRule,
-                                            genResult.checkedVariables,
-                                        );
-                                    if (addResult.success) {
-                                        // Sync to the grammar store used for matching
-                                        this.syncAgentGrammar(schemaName);
-                                        debug(
-                                            `Grammar rule added for ${schemaName}.${actionName}`,
-                                        );
-                                        grammarResult = {
-                                            success: true,
-                                            message: `Grammar rule added for ${schemaName}.${actionName}`,
-                                            generatedRule:
-                                                genResult.generatedRule,
-                                        };
-                                    } else {
-                                        await this._persistedGrammarStore.deleteRuleById(
-                                            storedRule.id,
-                                        );
-                                        debug(
-                                            `Failed to add rule to registry: ${addResult.errors.join(", ")}`,
-                                        );
-                                        grammarResult = {
-                                            success: false,
-                                            message: `Failed to add rule to agent registry: ${addResult.errors.join(", ")}`,
-                                            ...(genResult.generatedRule && {
-                                                generatedRule:
-                                                    genResult.generatedRule,
-                                            }),
-                                        };
-                                    }
-                                } else {
-                                    await this._persistedGrammarStore.deleteRuleById(
-                                        storedRule.id,
-                                    );
-                                    debug(
-                                        `Agent grammar not found for ${schemaName}`,
-                                    );
-                                    grammarResult = {
-                                        success: false,
-                                        message: `Agent grammar not found for ${schemaName}`,
-                                        ...(genResult.generatedRule && {
-                                            generatedRule:
-                                                genResult.generatedRule,
-                                        }),
-                                    };
-                                }
-                            } else {
-                                debug(
-                                    `Grammar generation rejected: ${genResult.rejectionReason || "unknown reason"}`,
-                                );
-                                grammarResult = {
-                                    success: false,
-                                    message:
-                                        genResult.rejectionReason ||
-                                        "Grammar generation failed",
-                                    ...(genResult.generatedRule && {
-                                        generatedRule: genResult.generatedRule,
-                                    }),
-                                };
-                            }
-
-                            this.logger?.logEvent("grammarGeneration", {
-                                request: requestAction.request,
-                                schemaName,
-                                actionName,
-                                success: grammarResult?.success,
-                                message: grammarResult?.message,
-                            });
-                        } catch (genError) {
-                            debug(`Error during generation: %O`, genError);
-                            grammarResult = {
-                                success: false,
-                                message: `Generation error: ${genError instanceof Error ? genError.message : String(genError)}`,
-                            };
-                        }
-                    }
-                } catch (error: any) {
-                    debug(`Unexpected error: %O`, error);
-                    grammarResult = {
-                        success: false,
-                        message: `Grammar generation error: ${error.message}`,
-                    };
-
-                    this.logger?.logEvent(
-                        "grammarGeneration",
-                        {
-                            request: requestAction.request,
-                            success: false,
-                            error: error.message,
-                        },
-                        "error",
-                    );
-                }
+                grammarResult = await this.generateGrammar(requestAction);
             }
 
             if (grammarResult && !grammarResult.success) {
