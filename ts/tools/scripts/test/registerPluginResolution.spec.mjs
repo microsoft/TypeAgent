@@ -209,8 +209,8 @@ test(
         skip: process.platform !== "win32",
     },
     (t) => {
-        const root = fs.mkdtempSync(
-            path.join(os.tmpdir(), "typeagent-winget-"),
+        const root = fs.realpathSync.native(
+            fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-winget-")),
         );
         t.after(() => fs.rmSync(root, { recursive: true, force: true }));
         const localAppData = path.join(root, "Local");
