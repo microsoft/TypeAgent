@@ -501,10 +501,23 @@ try {
 
     # Remove cmdlets not in the allowed list (after module import so we can whitelist module cmdlets)
     $commandsToRemove = @()
+    $hostRequiredCommands = @(
+        'ConvertFrom-Json',
+        'ConvertTo-Json',
+        'Get-Content',
+        'New-Object',
+        'Out-String',
+        'Select-Object',
+        'Sort-Object',
+        'Where-Object',
+        'Write-Error',
+        'Write-Output'
+    )
     foreach ($cmd in $iss.Commands) {
         $removeCommand = if ($UntrustedMode) {
             $cmd.CommandType -in @('Alias', 'Cmdlet', 'Filter', 'Function') -and
-                $cmd.Name -notin $allowedCmdlets
+                $cmd.Name -notin $allowedCmdlets -and
+                $cmd.Name -notin $hostRequiredCommands
         } else {
             $cmd.CommandType -eq 'Cmdlet' -and
                 $cmd.Name -notin $allowedCmdlets -and
@@ -567,10 +580,12 @@ try {
     $ps.Dispose()
 
 } catch {
-    if ($RequestPath) {
-        [Console]::Error.WriteLine("PowerShell policy denied execution.")
-    } else {
-        Write-Error "ScriptHost error: $_"
-    }
+    [Console]::Error.WriteLine(
+        $(if ($RequestPath) {
+            "PowerShell policy denied execution."
+        } else {
+            "ScriptHost error: $($_.Exception.Message)"
+        })
+    )
     exit 1
 }
