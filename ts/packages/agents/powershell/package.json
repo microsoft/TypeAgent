@@ -53,7 +53,7 @@
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "pnpm run test:local",
-    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "test:local": "pnpm run jest-esm --runInBand --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {

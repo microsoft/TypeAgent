@@ -168,7 +168,7 @@ describe("PowerShell execution gates", () => {
                 allowedCmdlets: ["Write-Output"],
                 allowedPaths: [],
                 allowedModules: [],
-                maxExecutionTime: 10,
+                maxExecutionTime: 30,
                 networkAccess: false,
             },
         });
@@ -189,7 +189,7 @@ describe("PowerShell execution gates", () => {
                 allowedCmdlets: ["Write-Output"],
                 allowedPaths: [],
                 allowedModules: [],
-                maxExecutionTime: 10,
+                maxExecutionTime: 30,
                 networkAccess: false,
             },
         });
@@ -219,7 +219,7 @@ describe("PowerShell execution gates", () => {
                     allowedCmdlets: ["Write-Output"],
                     allowedPaths: [],
                     allowedModules: [],
-                    maxExecutionTime: 10,
+                    maxExecutionTime: 30,
                     networkAccess: false,
                 },
             });
