@@ -10,6 +10,7 @@ namespace TypeAgent.PowerShellSandboxBroker;
 
 internal sealed class AppContainerProcess : IDisposable
 {
+    private readonly string profileName;
     private readonly IntPtr packageSid;
     private readonly string profilePath;
     private readonly IntPtr job;
@@ -19,6 +20,7 @@ internal sealed class AppContainerProcess : IDisposable
     private bool disposed;
 
     private AppContainerProcess(
+        string profileName,
         IntPtr packageSid,
         string profilePath,
         IntPtr job,
@@ -26,6 +28,7 @@ internal sealed class AppContainerProcess : IDisposable
         SafeFileHandle stdoutRead,
         SafeFileHandle stderrRead)
     {
+        this.profileName = profileName;
         this.packageSid = packageSid;
         this.profilePath = profilePath;
         this.job = job;
@@ -38,7 +41,7 @@ internal sealed class AppContainerProcess : IDisposable
         string scriptHostPath,
         string requestJson)
     {
-        const string profileName = "TypeAgent.PowerShell.Dynamic";
+        var profileName = $"TypeAgent.PowerShell.{Guid.NewGuid():N}";
         var hr = NativeMethods.CreateAppContainerProfile(
             profileName,
             "TypeAgent PowerShell",
@@ -46,12 +49,6 @@ internal sealed class AppContainerProcess : IDisposable
             IntPtr.Zero,
             0,
             out var packageSid);
-        if (hr == unchecked((int)0x800700B7))
-        {
-            hr = NativeMethods.DeriveAppContainerSidFromAppContainerName(
-                profileName,
-                out packageSid);
-        }
         if (hr < 0)
         {
             Marshal.ThrowExceptionForHR(hr);
@@ -87,6 +84,7 @@ internal sealed class AppContainerProcess : IDisposable
 
             return (
                 StartProcess(
+                    profileName,
                     packageSid,
                     profilePath,
                     privateHostPath,
@@ -96,6 +94,7 @@ internal sealed class AppContainerProcess : IDisposable
         catch
         {
             NativeMethods.FreeSid(packageSid);
+            _ = NativeMethods.DeleteAppContainerProfile(profileName);
             throw;
         }
         finally
@@ -112,6 +111,7 @@ internal sealed class AppContainerProcess : IDisposable
     }
 
     private static AppContainerProcess StartProcess(
+        string profileName,
         IntPtr packageSid,
         string profilePath,
         string scriptHostPath,
@@ -292,6 +292,7 @@ internal sealed class AppContainerProcess : IDisposable
             standardInput.Dispose();
 
             return new AppContainerProcess(
+                profileName,
                 packageSid,
                 profilePath,
                 job,
@@ -353,7 +354,8 @@ internal sealed class AppContainerProcess : IDisposable
 
     internal async Task<BrokerResponse> WaitAsync(
         int timeoutSeconds,
-        int maxOutputBytes)
+        int maxOutputBytes,
+        Task cancellation)
     {
         var stopwatch = Stopwatch.StartNew();
         using var stdoutStream = new FileStream(
@@ -369,17 +371,21 @@ internal sealed class AppContainerProcess : IDisposable
         var stdoutTask = ReadLimitedAsync(stdoutStream, maxOutputBytes);
         var stderrTask = ReadLimitedAsync(stderrStream, maxOutputBytes);
 
-        var waitResult = await Task.Run(
+        var processWait = Task.Run(
             () => NativeMethods.WaitForSingleObject(
                 process,
-                checked((uint)TimeSpan.FromSeconds(timeoutSeconds + 2).TotalMilliseconds)));
-        var timedOut = waitResult == NativeMethods.WaitTimeout;
-        if (timedOut)
+                NativeMethods.Infinite));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(timeoutSeconds + 2));
+        var completed = await Task.WhenAny(processWait, timeout, cancellation);
+        var cancelled = completed == cancellation;
+        var timedOut = completed == timeout;
+        if (cancelled || timedOut)
         {
             NativeMethods.TerminateJobObject(job, 1);
             _ = NativeMethods.WaitForSingleObject(process, 5000);
         }
-        else if (waitResult != NativeMethods.WaitObject0)
+        var waitResult = await processWait;
+        if (waitResult != NativeMethods.WaitObject0)
         {
             throw NativeMethods.LastError("WaitForSingleObject failed.");
         }
@@ -397,16 +403,18 @@ internal sealed class AppContainerProcess : IDisposable
                 : null;
 
         return new BrokerResponse(
-            Success: !timedOut && exitCode == 0,
+            Success: !cancelled && !timedOut && exitCode == 0,
             Stdout: Text,
-            Stderr: timedOut
-                ? $"Script execution timed out after {timeoutSeconds} seconds."
-                : stderr.Text,
-            ExitCode: timedOut ? -1 : unchecked((int)exitCode),
+            Stderr: cancelled
+                ? "PowerShell execution was cancelled."
+                : timedOut
+                    ? $"Script execution timed out after {timeoutSeconds} seconds."
+                    : stderr.Text,
+            ExitCode: cancelled || timedOut ? -1 : unchecked((int)exitCode),
             Duration: stopwatch.ElapsedMilliseconds,
             Truncated: Truncated || stderr.Truncated,
-            Cancelled: false,
-            ErrorCode: errorCode);
+            Cancelled: cancelled,
+            ErrorCode: cancelled ? "broker.cancelled" : errorCode);
     }
 
     private static IntPtr CreateJob()
@@ -512,6 +520,7 @@ internal sealed class AppContainerProcess : IDisposable
         NativeMethods.CloseHandle(job);
         NativeMethods.FreeSid(packageSid);
         ClearProfile(profilePath);
+        _ = NativeMethods.DeleteAppContainerProfile(profileName);
     }
 
     private static void ClearProfile(string path)

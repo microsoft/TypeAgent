@@ -214,6 +214,32 @@ Write-Output $xml.DocumentElement.Name`,
         expect(result.stdout.trim()).toBe("héllo 世界");
     });
 
+    it("isolates concurrent dynamic executions", async () => {
+        const execute = (value: string) =>
+            executeScript({
+                script: "param([string]$Value)\nWrite-Output $Value",
+                parameters: { Value: value },
+                provenance: "generated",
+                sandbox: {
+                    allowedCmdlets: ["Write-Output"],
+                    allowedPaths: [],
+                    allowedModules: [],
+                    maxExecutionTime: 20,
+                    networkAccess: false,
+                },
+            });
+
+        const [first, second] = await Promise.all([
+            execute("first"),
+            execute("second"),
+        ]);
+
+        expect(first).toMatchObject({ success: true });
+        expect(first.stdout.trim()).toBe("first");
+        expect(second).toMatchObject({ success: true });
+        expect(second.stdout.trim()).toBe("second");
+    });
+
     it("terminates the sandbox job when execution times out", async () => {
         const started = Date.now();
         const result = await executeScript({

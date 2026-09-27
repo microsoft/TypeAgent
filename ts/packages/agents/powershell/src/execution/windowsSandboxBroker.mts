@@ -149,6 +149,7 @@ export async function executeBrokeredPowerShell(
         let stderr = "";
         let settled = false;
         let cancelled = false;
+        let cancellationFallback: NodeJS.Timeout | undefined;
 
         const finish = (result: ScriptExecutionResult) => {
             if (settled) {
@@ -156,6 +157,9 @@ export async function executeBrokeredPowerShell(
             }
             settled = true;
             clearTimeout(timeout);
+            if (cancellationFallback !== undefined) {
+                clearTimeout(cancellationFallback);
+            }
             request.abortSignal?.removeEventListener("abort", onAbort);
             resolveResult(result);
         };
@@ -204,7 +208,8 @@ export async function executeBrokeredPowerShell(
 
         const onAbort = () => {
             cancelled = true;
-            child.kill();
+            child.stdin.end("cancel\n");
+            cancellationFallback = setTimeout(() => child.kill(), 5000);
         };
         request.abortSignal?.addEventListener("abort", onAbort, {
             once: true,
@@ -265,7 +270,8 @@ export async function executeBrokeredPowerShell(
             }
         });
 
-        child.stdin.end(
+        child.stdin.on("error", () => {});
+        child.stdin.write(
             JSON.stringify({
                 protocolVersion: BROKER_PROTOCOL_VERSION,
                 script: request.script,
@@ -274,7 +280,7 @@ export async function executeBrokeredPowerShell(
                 timeoutSeconds: request.maxExecutionTime,
                 maxOutputBytes: 256 * 1024,
                 provenance: request.provenance,
-            }),
+            }) + "\n",
         );
     });
 }

@@ -128,9 +128,7 @@ internal static class NativeMethods
         out IntPtr appContainerSid);
 
     [DllImport("userenv.dll", CharSet = CharSet.Unicode)]
-    internal static extern int DeriveAppContainerSidFromAppContainerName(
-        string appContainerName,
-        out IntPtr appContainerSid);
+    internal static extern int DeleteAppContainerProfile(string appContainerName);
 
     [DllImport("userenv.dll", CharSet = CharSet.Unicode)]
     internal static extern int GetAppContainerFolderPath(
