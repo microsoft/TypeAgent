@@ -5,7 +5,7 @@ import type { ActionContext, ActionResult } from "@typeagent/agent-sdk";
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { homedir } from "os";
 import {
-    executeScript,
+    executeReviewedStaticScript,
     type ScriptParameterRole,
 } from "../execution/powershellRunner.mjs";
 import type { PowerShellAgentContext } from "../types/powerShellAgentContext.mjs";
@@ -106,10 +106,9 @@ export function createPowerShellNamespaceActionHandler<
                 }
             }
 
-            const result = await executeScript({
+            const result = await executeReviewedStaticScript({
                 script: definition.script,
                 parameters: action.parameters ?? {},
-                provenance: "reviewed-static",
                 ...(definition.parameterRoles
                     ? { parameterRoles: definition.parameterRoles }
                     : {}),
@@ -122,6 +121,7 @@ export function createPowerShellNamespaceActionHandler<
                 },
                 workingDirectory: homedir(),
                 abortSignal: context.abortSignal,
+                profiler: context.profiler,
             });
             if (result.cancelled) {
                 context.abortSignal?.throwIfAborted();

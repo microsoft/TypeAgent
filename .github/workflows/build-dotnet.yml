@@ -89,3 +89,6 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet
         run: msbuild.exe typeagent/TypeAgent.sln /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}"
+      - name: Build PowerShell sandbox broker
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
+        run: dotnet build dotnet/powerShellSandboxBroker/PowerShellSandboxBroker.csproj --configuration ${{ matrix.configuration }} --runtime win-x64

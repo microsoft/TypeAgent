@@ -6,7 +6,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getPowerShellExecutionGates } from "../src/config/executionGates.mjs";
-import { executeScript } from "../src/execution/powershellRunner.mjs";
+import {
+    executeReviewedStaticScript,
+    executeScript,
+} from "../src/execution/powershellRunner.mjs";
 
 const itOnWindows = process.platform === "win32" ? it : it.skip;
 
@@ -53,6 +56,7 @@ describe("PowerShell execution gates", () => {
 
     it("defaults dynamic execution to disabled", () => {
         expect(getPowerShellExecutionGates()).toEqual({
+            brokerExecution: { enabled: false },
             dynamicExecution: { enabled: false },
         });
     });
@@ -68,6 +72,7 @@ describe("PowerShell execution gates", () => {
         );
 
         expect(getPowerShellExecutionGates()).toEqual({
+            brokerExecution: { enabled: false },
             dynamicExecution: { enabled: false },
         });
     });
@@ -83,6 +88,7 @@ describe("PowerShell execution gates", () => {
         );
 
         expect(getPowerShellExecutionGates()).toEqual({
+            brokerExecution: { enabled: false },
             dynamicExecution: { enabled: false },
         });
     });
@@ -95,6 +101,7 @@ describe("PowerShell execution gates", () => {
         process.env.TYPEAGENT_CONFIG_LOCAL = configDirectory;
 
         expect(getPowerShellExecutionGates()).toEqual({
+            brokerExecution: { enabled: false },
             dynamicExecution: { enabled: false },
         });
     });
@@ -106,6 +113,7 @@ describe("PowerShell execution gates", () => {
         );
 
         expect(getPowerShellExecutionGates()).toEqual({
+            brokerExecution: { enabled: false },
             dynamicExecution: { enabled: false },
         });
     });
@@ -117,6 +125,7 @@ describe("PowerShell execution gates", () => {
         );
 
         expect(getPowerShellExecutionGates()).toEqual({
+            brokerExecution: { enabled: false },
             dynamicExecution: { enabled: true },
         });
     });
@@ -128,7 +137,46 @@ describe("PowerShell execution gates", () => {
         );
 
         expect(getPowerShellExecutionGates()).toEqual({
+            brokerExecution: { enabled: false },
             dynamicExecution: { enabled: true },
+        });
+    });
+
+    it("enables broker execution only for an explicit YAML true value", async () => {
+        await writeFile(
+            join(configDirectory, "config.local.yaml"),
+            "powershell:\n  brokerExecution:\n    enabled: true\n",
+        );
+
+        expect(getPowerShellExecutionGates()).toEqual({
+            brokerExecution: { enabled: true },
+            dynamicExecution: { enabled: false },
+        });
+    });
+
+    it("denies dynamic execution when the broker gate is disabled", async () => {
+        await writeFile(
+            join(configDirectory, "config.local.yaml"),
+            "powershell:\n  dynamicExecution:\n    enabled: true\n",
+        );
+
+        const result = await executeScript({
+            script: "Write-Output 'should not run'",
+            parameters: {},
+            provenance: "generated",
+            sandbox: {
+                allowedCmdlets: ["Write-Output"],
+                allowedPaths: [],
+                allowedModules: [],
+                maxExecutionTime: 10,
+                networkAccess: false,
+            },
+        });
+
+        expect(result).toMatchObject({
+            success: false,
+            stdout: "",
+            stderr: expect.stringMatching(/broker execution is disabled/i),
         });
     });
 
@@ -160,7 +208,7 @@ describe("PowerShell execution gates", () => {
         async () => {
             await writeFile(
                 join(configDirectory, "config.local.yaml"),
-                "powershell:\n  dynamicExecution:\n    enabled: true\n",
+                "powershell:\n  dynamicExecution:\n    enabled: true\n  brokerExecution:\n    enabled: true\n",
             );
 
             const result = await executeScript({
@@ -187,10 +235,9 @@ describe("PowerShell execution gates", () => {
     itOnWindows(
         "keeps reviewed static runner calls available while dynamic execution is disabled",
         async () => {
-            const result = await executeScript({
+            const result = await executeReviewedStaticScript({
                 script: "Write-Output 'reviewed'",
                 parameters: {},
-                provenance: "reviewed-static",
                 sandbox: {
                     allowedCmdlets: ["Write-Output"],
                     allowedPaths: [],

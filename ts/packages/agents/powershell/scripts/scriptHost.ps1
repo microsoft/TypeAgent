@@ -1,22 +1,18 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# scriptHost.ps1 — Sandboxed PowerShell execution host for PowerShell agent
+# scriptHost.ps1 - PowerShell execution host for PowerShell agent
 # Creates a runspace with cmdlet whitelisting, module loading, and timeout enforcement.
-# Security: Path restrictions, network controls, cmdlet whitelisting.
-# Language: FullLanguage mode (allows [PSCustomObject], [math]::Round, etc.)
+# Untrusted requests are additionally isolated by the Windows broker.
 
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$ScriptBody,
+    [string]$ScriptBody = '',
 
-    [Parameter(Mandatory=$true)]
-    [string]$ParametersJson,
+    [string]$ParametersJson = '{}',
 
     [string]$ParameterRolesJson = '{}',
 
-    [Parameter(Mandatory=$true)]
-    [string]$AllowedCmdletsJson,
+    [string]$AllowedCmdletsJson = '[]',
 
     [string]$AllowedPathsJson = '[]',
 
@@ -24,10 +20,16 @@ param(
 
     [string]$NetworkAccess = "false",
 
-    [int]$TimeoutSeconds = 30
+    [int]$TimeoutSeconds = 30,
+
+    [string]$RequestPath
 )
 
 $ErrorActionPreference = 'Stop'
+$UntrustedMode = $false
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = $utf8NoBom
+$OutputEncoding = $utf8NoBom
 
 function Remove-TrailingDirectorySeparator {
     param([string]$Path)
@@ -104,8 +106,185 @@ function Test-AllowedFileSystemPath {
     return $false
 }
 
+function Test-UntrustedScript {
+    param(
+        [string]$Source,
+        [string[]]$AllowedCommands
+    )
+
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput(
+        $Source,
+        [ref]$tokens,
+        [ref]$parseErrors
+    )
+    if ($parseErrors.Count -gt 0) {
+        throw "PowerShell policy denied execution (AST_PARSE_ERROR)."
+    }
+
+    $safeTypeNames = @(
+        'array',
+        'bool',
+        'boolean',
+        'byte',
+        'char',
+        'datetime',
+        'decimal',
+        'double',
+        'float',
+        'guid',
+        'hashtable',
+        'int',
+        'int16',
+        'int32',
+        'int64',
+        'long',
+        'object',
+        'pscustomobject',
+        'psobject',
+        'regex',
+        'sbyte',
+        'short',
+        'single',
+        'string',
+        'switch',
+        'timespan',
+        'uint',
+        'uint16',
+        'uint32',
+        'uint64',
+        'ulong',
+        'uri',
+        'ushort',
+        'version'
+    )
+    $allowedForEachParameters = @(
+        'Begin',
+        'Confirm',
+        'End',
+        'InputObject',
+        'Process',
+        'RemainingScripts',
+        'WhatIf'
+    )
+    $violations = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    [void]$ast.FindAll({
+        param($node)
+
+        if ($node -is [System.Management.Automation.Language.TypeExpressionAst]) {
+            [void]$violations.Add("AST_TYPE_EXPRESSION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.TypeConstraintAst]) {
+            $typeName = $node.TypeName.FullName
+            if ($typeName -notin $safeTypeNames) {
+                [void]$violations.Add("AST_TYPE_CONSTRAINT")
+                return $false
+            }
+        }
+        if ($node -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+            [void]$violations.Add("AST_MEMBER_INVOCATION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.RedirectionAst]) {
+            [void]$violations.Add("AST_REDIRECTION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.UsingExpressionAst]) {
+            [void]$violations.Add("AST_USING_EXPRESSION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.UsingStatementAst]) {
+            [void]$violations.Add("AST_USING_STATEMENT")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.ConfigurationDefinitionAst]) {
+            [void]$violations.Add("AST_CONFIGURATION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.CommandAst]) {
+            if (
+                $node.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Ampersand -or
+                $node.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Dot
+            ) {
+                [void]$violations.Add("AST_INVOCATION_OPERATOR")
+                return $false
+            }
+            $commandName = $node.GetCommandName()
+            if ([string]::IsNullOrWhiteSpace($commandName)) {
+                [void]$violations.Add("AST_DYNAMIC_COMMAND")
+                return $false
+            }
+            if ($commandName -notin $AllowedCommands) {
+                [void]$violations.Add("AST_COMMAND_NOT_ALLOWED")
+                return $false
+            }
+            if ($commandName -ieq 'ForEach-Object') {
+                $hasProcessScriptBlock = $false
+                foreach ($element in @($node.CommandElements | Select-Object -Skip 1)) {
+                    if ($element -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                        $hasProcessScriptBlock = $true
+                        continue
+                    }
+                    if (
+                        $element -is [System.Management.Automation.Language.CommandParameterAst] -and
+                        $element.ParameterName -notin $allowedForEachParameters
+                    ) {
+                        [void]$violations.Add("AST_FOREACH_PARAMETER")
+                        return $false
+                    }
+                }
+                if (-not $hasProcessScriptBlock) {
+                    [void]$violations.Add("AST_FOREACH_MEMBER_MODE")
+                    return $false
+                }
+            }
+        }
+        return $false
+    }, $true)
+
+    $requirements = $ast.ScriptRequirements
+    if ($null -ne $requirements) {
+        if (@($requirements.RequiredModules).Count -gt 0) {
+            [void]$violations.Add("AST_REQUIRED_MODULE")
+        }
+        if (@($requirements.RequiredPSSnapIns).Count -gt 0) {
+            [void]$violations.Add("AST_REQUIRED_SNAPIN")
+        }
+        if ($requirements.IsElevationRequired) {
+            [void]$violations.Add("AST_REQUIRES_ELEVATION")
+        }
+    }
+
+    if ($violations.Count -gt 0) {
+        $ruleIds = @($violations) | Sort-Object
+        throw "PowerShell policy denied execution ($($ruleIds -join ','))."
+    }
+}
+
 try {
+    if ($RequestPath) {
+        $request = Get-Content -LiteralPath $RequestPath -Raw | ConvertFrom-Json
+        if ($request.protocolVersion -ne 1) {
+            Write-Error "Unsupported PowerShell broker protocol."
+            exit 1
+        }
+        $ScriptBody = [string]$request.script
+        $ParametersJson = [string]$request.parametersJson
+        $AllowedCmdletsJson = ConvertTo-Json -InputObject @($request.allowedCommands) -Compress
+        $ParameterRolesJson = '{}'
+        $AllowedPathsJson = '[]'
+        $AllowedModulesJson = '[]'
+        $NetworkAccess = 'false'
+        $TimeoutSeconds = [int]$request.timeoutSeconds
+        $UntrustedMode = $true
+    }
+
     $allowedCmdlets = $AllowedCmdletsJson | ConvertFrom-Json
+    $allowedCmdlets = @($allowedCmdlets)
     $params = $ParametersJson | ConvertFrom-Json
     $parameterRoles = $ParameterRolesJson | ConvertFrom-Json
     if ($null -eq $parameterRoles -or $parameterRoles -isnot [pscustomobject]) {
@@ -124,6 +303,36 @@ try {
         $AllowedModules = $parsedModules
     } else {
         $AllowedModules = @($parsedModules)
+    }
+
+    if ($UntrustedMode) {
+        $safeUntrustedCommands = @(
+            'ConvertFrom-Csv',
+            'ConvertFrom-Json',
+            'ConvertTo-Csv',
+            'ConvertTo-Json',
+            'ForEach-Object',
+            'Format-List',
+            'Format-Table',
+            'Get-Date',
+            'Group-Object',
+            'Measure-Object',
+            'Out-String',
+            'Select-Object',
+            'Sort-Object',
+            'Start-Sleep',
+            'Where-Object',
+            'Write-Output'
+        )
+        $unsupportedCommands = @(
+            $allowedCmdlets |
+                Where-Object { $_ -notin $safeUntrustedCommands }
+        )
+        if ($unsupportedCommands.Count -gt 0) {
+            Write-Error "PowerShell policy denied unsupported commands."
+            exit 1
+        }
+        Test-UntrustedScript $ScriptBody $allowedCmdlets
     }
 
     # Expand environment variable references in allowed paths
@@ -281,7 +490,7 @@ try {
         }
     }
 
-    # Microsoft.PowerShell.Core cmdlets are never stripped. CDXML commands (the
+    # Microsoft.PowerShell.Core cmdlets are never stripped for reviewed scripts. CDXML commands (the
     # Net*/Storage*/Defender* families, e.g. Get-NetTCPConnection) invoke CIM
     # operations through Core cmdlets at runtime; removing Core makes them
     # silently return empty results instead of erroring.
@@ -293,9 +502,15 @@ try {
     # Remove cmdlets not in the allowed list (after module import so we can whitelist module cmdlets)
     $commandsToRemove = @()
     foreach ($cmd in $iss.Commands) {
-        if ($cmd.CommandType -eq 'Cmdlet' -and
-            $cmd.Name -notin $allowedCmdlets -and
-            $cmd.Name -notin $coreCmdletNames) {
+        $removeCommand = if ($UntrustedMode) {
+            $cmd.CommandType -in @('Alias', 'Cmdlet', 'Filter', 'Function') -and
+                $cmd.Name -notin $allowedCmdlets
+        } else {
+            $cmd.CommandType -eq 'Cmdlet' -and
+                $cmd.Name -notin $allowedCmdlets -and
+                $cmd.Name -notin $coreCmdletNames
+        }
+        if ($removeCommand) {
             $commandsToRemove += $cmd
         }
     }
@@ -303,10 +518,9 @@ try {
         $iss.Commands.Remove($cmd.Name, $cmd)
     }
 
-    # FullLanguage mode (default) - allows [PSCustomObject], [math]::Round(), etc.
-    # Security is provided by: cmdlet whitelisting, path restrictions, network controls
-    # Note: If stricter lockdown is needed, uncomment the line below:
-    # $iss.LanguageMode = [System.Management.Automation.PSLanguageMode]::ConstrainedLanguage
+    if ($UntrustedMode) {
+        $iss.LanguageMode = [System.Management.Automation.PSLanguageMode]::ConstrainedLanguage
+    }
 
     # Create runspace
     $runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($iss)

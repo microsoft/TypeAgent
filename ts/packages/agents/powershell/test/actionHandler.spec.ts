@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { instantiate } from "../src/actionHandler.mjs";
 import {
     executeScript,
+    executeReviewedStaticScript,
     type ScriptExecutionRequest,
 } from "../src/execution/powershellRunner.mjs";
 import {
@@ -246,7 +247,7 @@ describe("createAndExecutePowerShellFlow", () => {
     async function setDynamicExecution(enabled: boolean): Promise<void> {
         await writeFile(
             localConfigPath,
-            `powershell:\n  dynamicExecution:\n    enabled: ${enabled}\n`,
+            `powershell:\n  dynamicExecution:\n    enabled: ${enabled}\n  brokerExecution:\n    enabled: ${enabled}\n`,
         );
     }
 
@@ -855,49 +856,39 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
     itOnWindows(
         "executes once and promotes only after successful execution",
         async () => {
-            const directory = await mkdtemp(
-                join(tmpdir(), "typeagent-powershell-flow-"),
-            );
-            const outputPath = join(directory, "executions.txt");
-            try {
-                const { agent, storage, context } = await createAgentHarness();
+            const { agent, storage, context } = await createAgentHarness();
 
-                const result = await agent.executeAction?.(
-                    {
-                        schemaName: "powershell",
-                        actionName: "createAndExecutePowerShellFlow",
-                        parameters: {
-                            actionName: "successfulDraft",
-                            description: "Record one execution",
-                            script: "param([string]$Path)\nAdd-Content -LiteralPath $Path -Value 'run'",
-                            scriptParameters: [
-                                {
-                                    name: "Path",
-                                    type: "path",
-                                    required: true,
-                                    description: "Output file",
-                                },
-                            ],
-                            allowedCmdlets: ["Add-Content"],
-                            executionParametersJson: JSON.stringify({
-                                Path: outputPath,
-                            }),
-                        },
+            const result = await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "createAndExecutePowerShellFlow",
+                    parameters: {
+                        actionName: "successfulDraft",
+                        description: "Return one value",
+                        script: "param([string]$Value)\nWrite-Output $Value",
+                        scriptParameters: [
+                            {
+                                name: "Value",
+                                type: "string",
+                                required: true,
+                                description: "Value to return",
+                            },
+                        ],
+                        allowedCmdlets: ["Write-Output"],
+                        executionParametersJson: JSON.stringify({
+                            Value: "run",
+                        }),
                     },
-                    context,
-                );
+                },
+                context,
+            );
 
-                expect(result).not.toHaveProperty("error");
-                expect(await storage.list("pending")).toEqual([]);
-                expect(
-                    await storage.exists("flows/successfulDraft.flow.json"),
-                ).toBe(true);
-                expect(
-                    (await readFile(outputPath, "utf8")).trim().split(/\r?\n/),
-                ).toEqual(["run"]);
-            } finally {
-                await rm(directory, { recursive: true, force: true });
-            }
+            expect(result).not.toHaveProperty("error");
+            expect(JSON.stringify(result)).toContain("run");
+            expect(await storage.list("pending")).toEqual([]);
+            expect(
+                await storage.exists("flows/successfulDraft.flow.json"),
+            ).toBe(true);
         },
     );
 
@@ -973,140 +964,105 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
     itOnWindows(
         "deduplicates concurrent creation and reuses the winning flow",
         async () => {
-            const directory = await mkdtemp(
-                join(tmpdir(), "typeagent-powershell-concurrent-"),
-            );
-            const firstPath = join(directory, "first.txt");
-            const secondPath = join(directory, "second.txt");
-            try {
-                const { agent, storage, context } = await createAgentHarness();
-                const create = (outputPath: string) =>
-                    agent.executeAction?.(
-                        {
-                            schemaName: "powershell",
-                            actionName: "createAndExecutePowerShellFlow",
-                            parameters: {
-                                actionName: "concurrentFlow",
-                                description: "Record a concurrent execution",
-                                script: "param([string]$Path)\nSet-Content -LiteralPath $Path -Value 'run'",
-                                scriptParameters: [
-                                    {
-                                        name: "Path",
-                                        type: "path",
-                                        required: true,
-                                        description: "Output file",
-                                    },
-                                ],
-                                allowedCmdlets: ["Set-Content"],
-                                executionParametersJson: JSON.stringify({
-                                    Path: outputPath,
-                                }),
-                            },
+            const { agent, storage, context } = await createAgentHarness();
+            const create = (value: string) =>
+                agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "createAndExecutePowerShellFlow",
+                        parameters: {
+                            actionName: "concurrentFlow",
+                            description: "Return a concurrent value",
+                            script: "param([string]$Value)\nWrite-Output $Value",
+                            scriptParameters: [
+                                {
+                                    name: "Value",
+                                    type: "string",
+                                    required: true,
+                                    description: "Value to return",
+                                },
+                            ],
+                            allowedCmdlets: ["Write-Output"],
+                            executionParametersJson: JSON.stringify({
+                                Value: value,
+                            }),
                         },
-                        context,
-                    );
+                    },
+                    context,
+                );
 
-                const [first, second] = await Promise.all([
-                    create(firstPath),
-                    create(secondPath),
-                ]);
+            const [first, second] = await Promise.all([
+                create("first"),
+                create("second"),
+            ]);
 
-                expect(first).not.toHaveProperty("error");
-                expect(second).not.toHaveProperty("error");
-                expect(await storage.list("pending")).toEqual([]);
-                expect(
-                    await storage.exists("flows/concurrentFlow.flow.json"),
-                ).toBe(true);
-                expect(await readFile(firstPath, "utf8")).toContain("run");
-                expect(await readFile(secondPath, "utf8")).toContain("run");
-            } finally {
-                await rm(directory, { recursive: true, force: true });
-            }
+            expect(first).not.toHaveProperty("error");
+            expect(second).not.toHaveProperty("error");
+            expect(await storage.list("pending")).toEqual([]);
+            expect(await storage.exists("flows/concurrentFlow.flow.json")).toBe(
+                true,
+            );
         },
     );
 
     itOnWindows(
         "repairs a stale flow once and keeps the repaired script",
         async () => {
-            const directory = await mkdtemp(
-                join(tmpdir(), "typeagent-powershell-repair-"),
+            const { agent, storage, context } = await createAgentHarness();
+            await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "createAndExecutePowerShellFlow",
+                    parameters: {
+                        actionName: "repairableFlow",
+                        description: "A repairable flow",
+                        script: "Write-Output 'original'",
+                        allowedCmdlets: ["Write-Output"],
+                        executionParametersJson: "{}",
+                    },
+                },
+                context,
             );
-            const outputPath = join(directory, "repair.txt");
-            try {
-                const { agent, storage, context } = await createAgentHarness();
-                await agent.executeAction?.(
-                    {
-                        schemaName: "powershell",
-                        actionName: "createAndExecutePowerShellFlow",
-                        parameters: {
-                            actionName: "repairableFlow",
-                            description: "A repairable flow",
-                            script: "param([string]$Path)\nSet-Content -LiteralPath $Path -Value 'original'",
-                            scriptParameters: [
-                                {
-                                    name: "Path",
-                                    type: "path",
-                                    required: true,
-                                    description: "Output file",
-                                },
-                            ],
-                            allowedCmdlets: ["Set-Content"],
-                            executionParametersJson: JSON.stringify({
-                                Path: outputPath,
-                            }),
-                        },
-                    },
-                    context,
-                );
 
-                const repaired = await agent.executeAction?.(
-                    {
-                        schemaName: "powershell",
-                        actionName: "repairAndExecutePowerShellFlow",
-                        parameters: {
-                            flowName: "repairableFlow",
-                            script: "param([string]$Path)\nSet-Content -LiteralPath $Path -Value 'repaired'",
-                            allowedCmdlets: ["Set-Content"],
-                            executionParametersJson: JSON.stringify({
-                                Path: outputPath,
-                            }),
-                        },
+            const repaired = await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "repairAndExecutePowerShellFlow",
+                    parameters: {
+                        flowName: "repairableFlow",
+                        script: "Write-Output 'repaired'",
+                        allowedCmdlets: ["Write-Output"],
+                        executionParametersJson: "{}",
                     },
-                    context,
-                );
-                const secondRepair = await agent.executeAction?.(
-                    {
-                        schemaName: "powershell",
-                        actionName: "repairAndExecutePowerShellFlow",
-                        parameters: {
-                            flowName: "repairableFlow",
-                            script: "throw 'second repair'",
-                            allowedCmdlets: [],
-                            executionParametersJson: JSON.stringify({
-                                Path: outputPath,
-                            }),
-                        },
+                },
+                context,
+            );
+            const secondRepair = await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "repairAndExecutePowerShellFlow",
+                    parameters: {
+                        flowName: "repairableFlow",
+                        script: "throw 'second repair'",
+                        allowedCmdlets: [],
+                        executionParametersJson: "{}",
                     },
-                    context,
-                );
+                },
+                context,
+            );
 
-                expect(repaired).not.toHaveProperty("error");
-                expect((await readFile(outputPath, "utf8")).trim()).toBe(
-                    "repaired",
-                );
-                await expect(
-                    storage.read("flows/repairableFlow.flow.json", "utf8"),
-                ).resolves.toContain('"originalType": "reasoning"');
-                await expect(
-                    storage.read("flows/repairableFlow.flow.json", "utf8"),
-                ).resolves.toContain('"type": "edited"');
-                expect(secondRepair).toMatchObject({
-                    errorCode: "powershell.policyDenied",
-                    retryable: false,
-                });
-            } finally {
-                await rm(directory, { recursive: true, force: true });
-            }
+            expect(repaired).not.toHaveProperty("error");
+            expect(JSON.stringify(repaired)).toContain("repaired");
+            await expect(
+                storage.read("flows/repairableFlow.flow.json", "utf8"),
+            ).resolves.toContain('"originalType": "reasoning"');
+            await expect(
+                storage.read("flows/repairableFlow.flow.json", "utf8"),
+            ).resolves.toContain('"type": "edited"');
+            expect(secondRepair).toMatchObject({
+                errorCode: "powershell.policyDenied",
+                retryable: false,
+            });
         },
     );
 
@@ -1145,10 +1101,9 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
     itOnWindows(
         "accepts a short path alias for an allowed long path",
         async () => {
-            const result = await executeScript({
+            const result = await executeReviewedStaticScript({
                 script: "param([string]$Path)\nGet-Item -LiteralPath $Path",
                 parameters: { Path: "C:\\PROGRA~1" },
-                provenance: "reviewed-static",
                 parameterRoles: { Path: "path" },
                 sandbox: {
                     allowedCmdlets: ["Get-Item"],
@@ -1220,11 +1175,10 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
             try {
                 await mkdir(allowedDirectory);
 
-                const result = await executeScript({
+                const result = await executeReviewedStaticScript({
                     script: `param([string]$Path)
 Set-Content -LiteralPath $Path -Value "blocked"`,
                     parameters: { Path: blockedPath },
-                    provenance: "reviewed-static",
                     parameterRoles: { Path: "path" },
                     sandbox: {
                         allowedCmdlets: ["Set-Content"],
@@ -1279,7 +1233,7 @@ Start-Process -FilePath $Path`,
                 errorCode: "powershell.policyDenied",
                 retryable: false,
             });
-            expect(result?.error).toMatch(/Path access\s+denied/i);
+            expect(result?.error).toMatch(/unsupported dynamic command/i);
             expect(await storage.list("pending")).toEqual([]);
             expect(
                 await storage.exists("flows/startNamedExecutable.flow.json"),
@@ -1434,71 +1388,64 @@ Start-Process -FilePath $Path`,
     });
 
     itOnWindows("serializes edits and repairs for the same flow", async () => {
-        const directory = await mkdtemp(
-            join(tmpdir(), "typeagent-powershell-edit-lock-"),
+        const { agent, storage, context } = await createAgentHarness();
+        await agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "createAndExecutePowerShellFlow",
+                parameters: {
+                    actionName: "serializedFlow",
+                    description: "Test edit and repair serialization",
+                    script: "Write-Output 'original'",
+                    allowedCmdlets: ["Write-Output"],
+                    executionParametersJson: "{}",
+                },
+            },
+            context,
         );
-        const outputPath = join(directory, "repair.txt");
-        try {
-            const { agent, storage, context } = await createAgentHarness();
-            await agent.executeAction?.(
-                {
-                    schemaName: "powershell",
-                    actionName: "createAndExecutePowerShellFlow",
-                    parameters: {
-                        actionName: "serializedFlow",
-                        description: "Test edit and repair serialization",
-                        script: "Write-Output 'original'",
-                        allowedCmdlets: ["Write-Output"],
-                        executionParametersJson: "{}",
-                    },
-                },
-                context,
-            );
 
-            const blockedWrite = storage.blockNextWrite(
-                "scripts/serializedFlow.ps1",
-            );
-            const edit = agent.executeAction?.(
-                {
-                    schemaName: "powershell",
-                    actionName: "editPowerShellFlow",
-                    parameters: {
-                        flowName: "serializedFlow",
-                        script: "Write-Output 'edited'",
-                        allowedCmdlets: ["Write-Output"],
-                    },
+        const blockedWrite = storage.blockNextWrite(
+            "scripts/serializedFlow.ps1",
+        );
+        const edit = agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "editPowerShellFlow",
+                parameters: {
+                    flowName: "serializedFlow",
+                    script: "Write-Output 'edited'",
+                    allowedCmdlets: ["Write-Output"],
                 },
-                context,
-            );
-            await blockedWrite.started;
+            },
+            context,
+        );
+        await blockedWrite.started;
 
-            const repair = agent.executeAction?.(
-                {
-                    schemaName: "powershell",
-                    actionName: "repairAndExecutePowerShellFlow",
-                    parameters: {
-                        flowName: "serializedFlow",
-                        script: `param([string]$Path)
-Set-Content -LiteralPath $Path -Value "repaired"`,
-                        allowedCmdlets: ["Set-Content"],
-                        executionParametersJson: JSON.stringify({
-                            Path: outputPath,
-                        }),
-                    },
+        const repair = agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "repairAndExecutePowerShellFlow",
+                parameters: {
+                    flowName: "serializedFlow",
+                    script: "Write-Output 'repaired'",
+                    allowedCmdlets: ["Write-Output"],
+                    executionParametersJson: "{}",
                 },
-                context,
-            );
-            await new Promise((resolve) => setTimeout(resolve, 50));
-            await expect(readFile(outputPath, "utf8")).rejects.toThrow();
+            },
+            context,
+        );
+        let repairCompleted = false;
+        void repair?.then(() => {
+            repairCompleted = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(repairCompleted).toBe(false);
 
-            blockedWrite.release();
-            expect(await edit).not.toHaveProperty("error");
-            expect(await repair).not.toHaveProperty("error");
-            expect((await readFile(outputPath, "utf8")).trim()).toBe(
-                "repaired",
-            );
-        } finally {
-            await rm(directory, { recursive: true, force: true });
-        }
+        blockedWrite.release();
+        expect(await edit).not.toHaveProperty("error");
+        expect(await repair).not.toHaveProperty("error");
+        await expect(
+            storage.read("scripts/serializedFlow.ps1", "utf8"),
+        ).resolves.toContain("repaired");
     });
 });

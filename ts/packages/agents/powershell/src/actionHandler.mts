@@ -26,7 +26,6 @@ import {
 import type { ParsedCommandParams } from "@typeagent/agent-sdk";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, dirname, isAbsolute, resolve, extname } from "path";
-import { homedir } from "os";
 import { ScriptAnalyzer } from "./analysis/scriptAnalyzer.mjs";
 import { fileURLToPath } from "url";
 import { PowerShellStore } from "./store/powerShellStore.mjs";
@@ -131,6 +130,7 @@ async function executeFlowScript(
     script: string,
     parameters: Record<string, unknown>,
     abortSignal?: AbortSignal,
+    profiler?: ActionContext<PowerShellAgentContext>["profiler"],
 ): Promise<ActionResult> {
     if (!isDynamicPowerShellExecutionEnabled()) {
         return createDynamicExecutionDenied();
@@ -151,14 +151,13 @@ async function executeFlowScript(
         parameterRoles: getScriptParameterRoles(flow.parameters),
         sandbox: {
             allowedCmdlets: flow.sandbox.allowedCmdlets,
-            allowedPaths: flow.sandbox.allowedPaths,
-            allowedModules: flow.sandbox.allowedModules,
+            allowedPaths: [],
+            allowedModules: [],
             maxExecutionTime: flow.sandbox.maxExecutionTime,
-            networkAccess: flow.sandbox.networkAccess,
+            networkAccess: false,
         },
-        // Use user's home directory as working directory for consistent path resolution
-        workingDirectory: homedir(),
         abortSignal,
+        profiler,
     };
 
     const result = await executeScript(request);
@@ -386,12 +385,10 @@ function buildPowerShellRecipe(
         })),
         sandbox: {
             allowedCmdlets: (params.allowedCmdlets as string[]) ?? [],
-            allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-            allowedModules: (params.allowedModules as string[]) ?? [
-                "Microsoft.PowerShell.Management",
-            ],
+            allowedPaths: [],
+            allowedModules: [],
             maxExecutionTime: 30,
-            networkAccess: (params.networkAccess as boolean) ?? false,
+            networkAccess: false,
         },
         source: {
             type: "reasoning",
@@ -483,6 +480,7 @@ async function executeDraftRecipe(
     recipe: ScriptRecipe,
     suppliedParameters: Record<string, unknown>,
     abortSignal?: AbortSignal,
+    profiler?: ActionContext<PowerShellAgentContext>["profiler"],
 ): Promise<{ output: string } | { error: ActionResult }> {
     if (!isDynamicPowerShellExecutionEnabled()) {
         return { error: createDynamicExecutionDenied() };
@@ -513,9 +511,15 @@ async function executeDraftRecipe(
         parameters: executionParameters,
         provenance: getScriptExecutionProvenance(recipe.source),
         parameterRoles: getScriptParameterRoles(recipe.parameters),
-        sandbox: recipe.sandbox,
-        workingDirectory: homedir(),
+        sandbox: {
+            allowedCmdlets: recipe.sandbox.allowedCmdlets,
+            allowedPaths: [],
+            allowedModules: [],
+            maxExecutionTime: recipe.sandbox.maxExecutionTime,
+            networkAccess: false,
+        },
         abortSignal,
+        profiler,
     });
     if (result.cancelled) {
         abortSignal?.throwIfAborted();
@@ -587,6 +591,7 @@ async function createOrReusePowerShellFlow(
                 existingScript,
                 mappedParameters,
                 context.abortSignal,
+                context.profiler,
             );
             if (result.error === undefined) {
                 await recordUsageAfterExecution(flowStore, actionName, context);
@@ -616,6 +621,7 @@ async function createOrReusePowerShellFlow(
                 recipe,
                 executionParameters.parameters,
                 context.abortSignal,
+                context.profiler,
             );
         } catch (error) {
             await flowStore.deletePending(pendingFile);
@@ -754,9 +760,7 @@ async function repairAndExecutePowerShellFlow(
                 allowedCmdlets:
                     (params.allowedCmdlets as string[]) ??
                     existing.sandbox.allowedCmdlets,
-                allowedModules:
-                    (params.allowedModules as string[]) ??
-                    existing.sandbox.allowedModules,
+                allowedModules: [],
             },
             source: createEditedScriptSource(existing.source),
         };
@@ -764,6 +768,7 @@ async function repairAndExecutePowerShellFlow(
             candidate,
             executionParameters.parameters,
             context.abortSignal,
+            context.profiler,
         );
         if ("error" in execution) {
             return execution.error;
@@ -1083,15 +1088,11 @@ async function handlePowerShellFlowAction(
                 const newCmdlets =
                     (action.parameters?.allowedCmdlets as string[]) ??
                     existingFlow.sandbox.allowedCmdlets;
-                const newModules =
-                    (action.parameters?.allowedModules as string[]) ??
-                    existingFlow.sandbox.allowedModules;
-
                 await flowStore.updateFlowScript(
                     editFlowName,
                     newScript,
                     newCmdlets,
-                    newModules,
+                    [],
                     createEditedScriptSource(existingFlow.source),
                 );
                 return createActionResultFromTextDisplay(
@@ -1115,10 +1116,6 @@ async function handlePowerShellFlowAction(
             }
 
             const allowedCmdlets = (params.allowedCmdlets as string[]) ?? [];
-            const allowedModules = (params.allowedModules as string[]) ?? [
-                "Microsoft.PowerShell.Management",
-            ];
-            const networkAccess = (params.networkAccess as boolean) ?? false;
 
             // Parse test parameters if provided
             let testParams: Record<string, unknown> = {};
@@ -1140,13 +1137,13 @@ async function handlePowerShellFlowAction(
                 provenance: "generated",
                 sandbox: {
                     allowedCmdlets,
-                    allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-                    allowedModules,
+                    allowedPaths: [],
+                    allowedModules: [],
                     maxExecutionTime: 30,
-                    networkAccess,
+                    networkAccess: false,
                 },
-                workingDirectory: homedir(),
                 abortSignal: context.abortSignal,
+                profiler: context.profiler,
             };
 
             const result = await executeScript(request);
@@ -1161,11 +1158,7 @@ async function handlePowerShellFlowAction(
                 );
             }
 
-            const errorMsg =
-                result.stderr || `Script exited with code ${result.exitCode}`;
-            return createActionResultFromError(
-                `Script test FAILED: ${errorMsg}\n\nFix the script and try testPowerShellFlow again.`,
-            );
+            return createPowerShellExecutionFailure(result);
         }
 
         case "executePowerShellFlow": {
@@ -1256,6 +1249,7 @@ async function handlePowerShellFlowAction(
                 script,
                 flowParameters,
                 context.abortSignal,
+                context.profiler,
             );
             if (result.error !== undefined) {
                 return addReasoningFallback(result);
@@ -1399,6 +1393,7 @@ async function handlePowerShellFlowAction(
                 script,
                 directParams,
                 context.abortSignal,
+                context.profiler,
             );
             if (result.error !== undefined) {
                 return addReasoningFallback(result);
@@ -1585,7 +1580,13 @@ class RunHandler implements CommandHandler {
             throw new Error(validationError);
         }
 
-        const result = await executeFlowScript(flow, script, flowParameters);
+        const result = await executeFlowScript(
+            flow,
+            script,
+            flowParameters,
+            undefined,
+            context.profiler,
+        );
         if (result.error !== undefined) {
             throw new Error(String(result.error));
         }

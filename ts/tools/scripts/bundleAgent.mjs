@@ -136,9 +136,21 @@ function copyConfiguredRuntimeAssets(packageRoot, out, pkg, assets) {
     }
 }
 
-function copyMappedAssets(packageRoot, out, pkg, assets) {
+function copyMappedAssets(packageRoot, out, pkg, assets, options) {
     const packages = workspacePackages();
     for (const mapping of pkg.typeagent?.bundle?.assetMappings ?? []) {
+        if (
+            mapping.platforms !== undefined &&
+            !mapping.platforms.includes(options.platform)
+        ) {
+            continue;
+        }
+        if (
+            mapping.architectures !== undefined &&
+            !mapping.architectures.includes(options.arch)
+        ) {
+            continue;
+        }
         const sourcePackage = packages.get(mapping.package);
         if (!sourcePackage) {
             throw new Error(
@@ -175,7 +187,7 @@ function copyMappedAssets(packageRoot, out, pkg, assets) {
     }
 }
 
-function copyBundleAssets(packageRoot, out, pkg, manifestTarget) {
+function copyBundleAssets(packageRoot, out, pkg, manifestTarget, options) {
     const manifestSource = path.resolve(packageRoot, manifestTarget);
     const assets = new Set(copyRuntimeAssets(packageRoot, out));
     for (const asset of copyManifestReferences(
@@ -186,7 +198,7 @@ function copyBundleAssets(packageRoot, out, pkg, manifestTarget) {
         assets.add(asset);
     }
     copyConfiguredRuntimeAssets(packageRoot, out, pkg, assets);
-    copyMappedAssets(packageRoot, out, pkg, assets);
+    copyMappedAssets(packageRoot, out, pkg, assets, options);
     return assets;
 }
 
@@ -266,7 +278,11 @@ function writeBundleManifest(
     });
 }
 
-export async function bundleAgentPackage(packageRoot, out) {
+export async function bundleAgentPackage(
+    packageRoot,
+    out,
+    options = { platform: process.platform, arch: process.arch },
+) {
     const {
         sourcePackageJson,
         pkg,
@@ -286,7 +302,13 @@ export async function bundleAgentPackage(packageRoot, out) {
     );
     const additional = await bundleAdditionalEntries(packageRoot, out, pkg);
     const metafiles = [...declared.metafiles, ...additional.metafiles];
-    const assets = copyBundleAssets(packageRoot, out, pkg, manifestTarget);
+    const assets = copyBundleAssets(
+        packageRoot,
+        out,
+        pkg,
+        manifestTarget,
+        options,
+    );
     const externalPackages = collectExternalPackages(metafiles, pkg);
 
     writeGeneratedPackage(
