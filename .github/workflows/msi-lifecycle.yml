@@ -11,12 +11,14 @@ on:
       - "ts/tools/installers/**"
       - "ts/tools/scripts/test/msi*"
       - "ts/tools/scripts/test/msiLifecycle/**"
+      - "ts/tools/scripts/test/registerPluginResolution.spec.mjs"
       - ".github/workflows/msi-lifecycle.yml"
   push:
     paths:
       - "ts/tools/installers/**"
       - "ts/tools/scripts/test/msi*"
       - "ts/tools/scripts/test/msiLifecycle/**"
+      - "ts/tools/scripts/test/registerPluginResolution.spec.mjs"
       - ".github/workflows/msi-lifecycle.yml"
   merge_group:
     branches: ["main"]
@@ -44,6 +46,9 @@ jobs:
         shell: powershell
         run: |
           & ts\tools\scripts\test\msiLifecycle\build.ps1 -OutputDir (Join-Path $env:RUNNER_TEMP 'msi-lifecycle')
+      - name: Check Copilot launcher and WinGet package discovery
+        shell: powershell
+        run: node --test ts\tools\scripts\test\registerPluginResolution.spec.mjs
       - name: Install, upgrade, repair, rollback, and reinstall
         shell: powershell
         run: |

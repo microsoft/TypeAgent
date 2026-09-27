@@ -203,6 +203,190 @@ test("VS Code Copilot shim is rejected before a working fallback", () => {
     assert.match(result.lines.join("\n"), /Rejected VS Code Copilot shim/);
 });
 
+test(
+    "WinGet package fallback bypasses a broken non-symlink launcher",
+    {
+        skip: process.platform !== "win32",
+    },
+    (t) => {
+        const root = fs.mkdtempSync(
+            path.join(os.tmpdir(), "typeagent-winget-"),
+        );
+        t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+        const localAppData = path.join(root, "Local");
+        const packages = path.join(
+            localAppData,
+            "Microsoft",
+            "WinGet",
+            "Packages",
+        );
+        const packageDir = path.join(
+            packages,
+            "GitHub.Copilot_Microsoft.Winget.Source_test",
+        );
+        const link = path.join(
+            localAppData,
+            "Microsoft",
+            "WinGet",
+            "Links",
+            "copilot.exe",
+        );
+        fs.mkdirSync(packageDir, { recursive: true });
+        fs.mkdirSync(path.dirname(link), { recursive: true });
+        fs.writeFileSync(link, "not a Windows executable");
+        assert.equal(fs.lstatSync(link).isSymbolicLink(), false);
+        assert.equal(fs.realpathSync.native(link), link);
+
+        const executable = path.join(packageDir, "copilot.exe");
+        fs.copyFileSync(process.execPath, executable);
+        const lines = [];
+        const selected = resolveCopilotCli({
+            env: {
+                LOCALAPPDATA: localAppData,
+                APPDATA: path.join(root, "Roaming"),
+            },
+            copilotPath: link,
+            pathCopilot: [],
+            logger: { write: (line) => lines.push(line) },
+        });
+        assert.equal(selected, executable);
+        assert.match(lines.join("\n"), /validation failed for .*Links/);
+        assert.match(lines.join("\n"), /WinGet package fallback/);
+        assert.match(lines.join("\n"), /Selected Copilot CLI/);
+    },
+);
+
+test(
+    "WinGet discovery is lazy, scoped to Copilot, and tries machine packages",
+    {
+        skip: process.platform !== "win32",
+    },
+    (t) => {
+        const root = fs.mkdtempSync(
+            path.join(os.tmpdir(), "typeagent-winget-scope-"),
+        );
+        t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+        const localAppData = path.join(root, "Local");
+        const programFiles = path.join(root, "Program Files");
+        const userPackages = path.join(
+            localAppData,
+            "Microsoft",
+            "WinGet",
+            "Packages",
+        );
+        const machinePackages = path.join(programFiles, "WinGet", "Packages");
+        for (const name of [
+            "GitHub.Copilot_a-stale",
+            "GitHub.Copilot.Preview_source",
+            "Other.Tool_source",
+        ]) {
+            fs.mkdirSync(path.join(userPackages, name), { recursive: true });
+        }
+        fs.mkdirSync(path.join(machinePackages, "GitHub.Copilot_source"), {
+            recursive: true,
+        });
+        const stale = path.join(
+            userPackages,
+            "GitHub.Copilot_a-stale",
+            "copilot.exe",
+        );
+        const working = path.join(
+            machinePackages,
+            "GitHub.Copilot_source",
+            "copilot.exe",
+        );
+        const link = path.join(
+            localAppData,
+            "Microsoft",
+            "WinGet",
+            "Links",
+            "copilot.exe",
+        );
+        const env = {
+            LOCALAPPDATA: localAppData,
+            ProgramFiles: programFiles,
+            ProgramW6432: programFiles,
+        };
+        const result = resolve({
+            env,
+            pathCopilot: [],
+            outcomes: new Map([
+                [link, { status: 1 }],
+                [stale, { status: 1 }],
+            ]),
+        });
+        assert.equal(result.selected, working);
+        assert.deepEqual(result.probed, [link, stale, working]);
+
+        const read = t.mock.method(fs, "readdirSync", () => {
+            throw new Error(
+                "Package discovery should not run for a working override",
+            );
+        });
+        const override = resolve({
+            env: { ...env, COPILOT_CLI_PATH: working },
+            pathCopilot: [],
+        });
+        assert.equal(override.selected, working);
+        assert.equal(read.mock.callCount(), 0);
+    },
+);
+
+test("WinGet enumeration errors are logged without hiding the final discovery failure", (t) => {
+    t.mock.method(fs, "readdirSync", () => {
+        throw Object.assign(new Error("access denied"), { code: "EACCES" });
+    });
+    const lines = [];
+    assert.throws(
+        () =>
+            resolveCopilotCli({
+                env: { LOCALAPPDATA: String.raw`C:\Local` },
+                platform: "win32",
+                pathCopilot: [],
+                logger: { write: (line) => lines.push(line) },
+                probe: () => ({ status: 1 }),
+            }),
+        /No working GitHub Copilot CLI/,
+    );
+    assert.match(
+        lines.join("\n"),
+        /Cannot discover WinGet Copilot packages.*access denied/,
+    );
+});
+
+test(
+    "missing absolute Windows launchers fail before spawning a shell",
+    {
+        skip: process.platform !== "win32",
+    },
+    (t) => {
+        const root = fs.mkdtempSync(
+            path.join(os.tmpdir(), "typeagent-missing-cli-"),
+        );
+        t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+        const spawnMock = t.mock.method(childProcess, "spawnSync", () => {
+            throw new Error("Missing launchers must not be spawned");
+        });
+        syncBuiltinESMExports();
+        t.after(() => {
+            spawnMock.mock.restore();
+            syncBuiltinESMExports();
+        });
+        const lines = [];
+        assert.throws(
+            () =>
+                resolveCopilotCli({
+                    env: { APPDATA: root },
+                    pathCopilot: [],
+                    logger: { write: (line) => lines.push(line) },
+                }),
+            /No working GitHub Copilot CLI/,
+        );
+        assert.equal(spawnMock.mock.callCount(), 0);
+        assert.match(lines.join("\n"), /ENOENT/);
+    },
+);
+
 test("failed and timed out candidates are skipped for a working candidate", () => {
     const failed = String.raw`C:\failed\copilot.exe`;
     const timedOut = String.raw`C:\timed-out\copilot.cmd`;

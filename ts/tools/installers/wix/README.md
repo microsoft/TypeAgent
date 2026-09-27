@@ -542,23 +542,31 @@ those behaviors.
 
 ### Copilot plugin registration fails with "spawn UNKNOWN"
 
-WinGet's `Microsoft\WinGet\Links\copilot.exe` can be a symbolic link that Node
-cannot launch in the MSI context, even when Copilot works in a terminal.
-Registration resolves Windows launcher paths with `fs.realpathSync.native()`
-before spawning them. Failed version probes, including synchronous exceptions,
-are logged and discovery continues to the next CLI candidate.
+WinGet's `Microsoft\WinGet\Links\copilot.exe` can fail to launch even when the
+actual package executable works. The launcher is not necessarily a symbolic
+link: a broken ordinary file remains unchanged by `realpath`.
+Registration canonicalizes Windows paths and probes explicit overrides and PATH
+candidates first. If those and the usual launcher fallbacks fail, it probes
+`copilot.exe` directly inside `GitHub.Copilot_*` package directories under
+`%LOCALAPPDATA%\Microsoft\WinGet\Packages` and `%ProgramW6432%\WinGet\Packages`
+(also `%ProgramFiles%` when different). Discovery is non-recursive and does not
+search unrelated packages. Missing launchers fail before spawning a shell;
+other probe and package-enumeration errors are logged.
+
+The Windows workflow also runs discovery regressions using a real broken
+non-symlink launcher and a runnable substitute package executable. These tests
+do not exercise authenticated Copilot registration or the MSI service context.
 
 For an older installer without this fix, set `COPILOT_CLI_PATH` to the real
 WinGet package executable and rerun registration from PowerShell:
 
 ```powershell
-$link = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\copilot.exe"
-$env:COPILOT_CLI_PATH = (Get-Item -LiteralPath $link).ResolveLinkTarget($true).FullName
+$env:COPILOT_CLI_PATH = "C:\path\to\the\actual\WinGet\package\copilot.exe"
 & "$env:LOCALAPPDATA\TypeAgent\register-plugin.ps1"
 ```
 
-`ResolveLinkTarget` requires PowerShell 7. Alternatively, set `COPILOT_CLI_PATH`
-directly to the existing executable under the WinGet package directory.
+Use the actual existing executable path, not the `Links` launcher. This override
+also supports custom WinGet package locations outside the default directories.
 Repair with the same older MSI may repeat the failure. Registration diagnostics
 are in `%LOCALAPPDATA%\TypeAgent\logs\msi-register-plugin.log`.
 

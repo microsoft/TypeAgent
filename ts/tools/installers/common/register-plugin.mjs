@@ -137,33 +137,34 @@ function resolveWindowsLauncher(copilotPath) {
                 candidate;
         }
         // WinGet links can fail with spawn UNKNOWN in the MSI context.
-        return fs.existsSync(candidate)
-            ? fs.realpathSync.native(candidate)
-            : candidate;
+        return fs.realpathSync.native(candidate);
     };
 
-    const directCandidate = resolveCandidate(copilotPath);
-    if (directCandidate !== copilotPath || path.isAbsolute(copilotPath)) {
-        return directCandidate;
+    if (path.isAbsolute(copilotPath) || /[\\/]/.test(copilotPath)) {
+        return resolveCandidate(copilotPath);
     }
 
     const where = spawnSync("where.exe", [copilotPath], {
         encoding: "utf8",
         timeout: copilotVersionTimeoutMs,
     });
-    if (where.status !== 0) return copilotPath;
-    for (const line of where.stdout.split(/\r?\n/)) {
+    for (const line of (where.stdout ?? "").split(/\r?\n/)) {
         const candidate = line.trim();
         if (candidate) return resolveCandidate(candidate);
     }
-    return copilotPath;
+    return resolveCandidate(copilotPath);
 }
 
-function spawnCopilot(copilotPath, args, timeout) {
+function spawnCopilot(copilotPath, args, timeout, logger) {
     const launcherPath =
         process.platform === "win32"
             ? resolveWindowsLauncher(copilotPath)
             : copilotPath;
+    if (launcherPath !== copilotPath) {
+        logger?.write(
+            `Resolved Copilot launcher: ${copilotPath} -> ${launcherPath}`,
+        );
+    }
     if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(launcherPath)) {
         const commandLine = [
             "call",
@@ -319,12 +320,13 @@ export function resolveCopilotCli({
     platform = process.platform,
     pathCopilot,
     probe = (candidate) =>
-        spawnCopilot(candidate, ["--version"], copilotVersionTimeoutMs),
+        spawnCopilot(candidate, ["--version"], copilotVersionTimeoutMs, logger),
 } = {}) {
-    const candidates = copilotCandidates({
+    const candidates = discoverCopilotCliCandidates({
         copilotPath,
         env,
         platform,
+        logger,
         ...(pathCopilot === undefined ? {} : { pathCopilot }),
     });
 
@@ -369,9 +371,51 @@ export function resolveCopilotCli({
     throw new Error("No working GitHub Copilot CLI was found.");
 }
 
+function* discoverCopilotCliCandidates(options) {
+    yield* copilotCandidates(options);
+    if (options.platform !== "win32") return;
+
+    const { env, logger } = options;
+    const roots = [
+        env.LOCALAPPDATA && path.win32.join(env.LOCALAPPDATA, "Microsoft"),
+        env.ProgramW6432,
+        env.ProgramFiles,
+    ].filter(Boolean);
+    const seen = new Set();
+    for (const root of roots) {
+        const packages = path.win32.join(root, "WinGet", "Packages");
+        const key = packages.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        let entries;
+        try {
+            entries = fs.readdirSync(packages, { withFileTypes: true });
+        } catch (error) {
+            if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
+                logger.write(
+                    `Cannot discover WinGet Copilot packages in ${packages}: ${error.message}`,
+                );
+            }
+            continue;
+        }
+        // The official GitHub.Copilot portable package has copilot.exe at its root.
+        // A damaged Links launcher need not be a symlink, so realpath cannot fix it.
+        for (const entry of entries.sort((a, b) =>
+            a.name.localeCompare(b.name),
+        )) {
+            if (entry.isDirectory() && /^GitHub\.Copilot_/i.test(entry.name)) {
+                yield {
+                    source: "WinGet package fallback",
+                    path: path.win32.join(packages, entry.name, "copilot.exe"),
+                };
+            }
+        }
+    }
+}
+
 function runCopilot(copilotPath, args, logger, allowFailure = false) {
     logger.write(`Running: ${copilotPath} ${args.join(" ")}`);
-    const res = spawnCopilot(copilotPath, args);
+    const res = spawnCopilot(copilotPath, args, undefined, logger);
 
     if (res.error) {
         if (allowFailure) {
@@ -756,6 +800,9 @@ function main() {
     const logger = createLogger(opts.logPath);
 
     logger.write("TypeAgent register-plugin starting.");
+    logger.write(
+        `Node runtime: ${process.execPath} (${process.version}, ${process.arch})`,
+    );
     logger.write(`InstallDir: ${opts.installDir}`);
     logger.write(`PluginSourceDir: ${opts.pluginSourceDir}`);
     logger.write(`MarketplaceRoot: ${opts.marketplaceRoot}`);
