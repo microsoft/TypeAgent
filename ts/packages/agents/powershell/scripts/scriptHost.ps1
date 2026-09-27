@@ -269,7 +269,7 @@ try {
     if ($RequestPath) {
         $request = Get-Content -LiteralPath $RequestPath -Raw | ConvertFrom-Json
         if ($request.protocolVersion -ne 1) {
-            Write-Error "Unsupported PowerShell broker protocol."
+            [Console]::Error.WriteLine("Unsupported PowerShell broker protocol.")
             exit 1
         }
         $ScriptBody = [string]$request.script
@@ -567,7 +567,7 @@ try {
     $ps.Dispose()
 
 } catch {
-    if ($UntrustedMode) {
+    if ($RequestPath) {
         [Console]::Error.WriteLine("PowerShell policy denied execution.")
     } else {
         Write-Error "ScriptHost error: $_"
