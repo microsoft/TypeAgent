@@ -498,7 +498,7 @@ try {
 
     if ($UntrustedMode) {
         $iss.Variables.Add(
-            (New-Object System.Management.Automation.Runspaces.SessionStateVariableEntry(
+            ([System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
                 'PSModuleAutoLoadingPreference', 'None', 'Disable implicit module auto-loading in the sandbox'))
         )
     }
