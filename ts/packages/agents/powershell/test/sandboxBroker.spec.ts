@@ -152,6 +152,27 @@ Write-Output $xml.DocumentElement.Name`,
     });
 
     it.each([
+        "function Write-Output { Get-Content C:\\Windows\\win.ini }\nWrite-Output",
+        "class UnsafeType { [string] Read() { return [System.IO.File]::ReadAllText('C:\\Windows\\win.ini') } }",
+    ])("denies user-defined command and type shadowing", async (script) => {
+        const result = await executeScript({
+            script,
+            parameters: {},
+            provenance: "generated",
+            sandbox: {
+                allowedCmdlets: ["Write-Output"],
+                allowedPaths: [],
+                allowedModules: [],
+                maxExecutionTime: BROKER_TEST_TIMEOUT_SECONDS,
+                networkAccess: false,
+            },
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.stderr).toMatch(/policy denied/i);
+    });
+
+    it.each([
         "using module Microsoft.PowerShell.Management\nWrite-Output 'blocked'",
         "#requires -Modules Microsoft.PowerShell.Management\nWrite-Output 'blocked'",
     ])("denies module loading syntax", async (script) => {

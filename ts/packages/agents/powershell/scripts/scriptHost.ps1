@@ -205,6 +205,14 @@ function Test-UntrustedScript {
             [void]$violations.Add("AST_CONFIGURATION")
             return $false
         }
+        if ($node -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+            [void]$violations.Add("AST_FUNCTION_DEFINITION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.TypeDefinitionAst]) {
+            [void]$violations.Add("AST_TYPE_DEFINITION")
+            return $false
+        }
         if ($node -is [System.Management.Automation.Language.CommandAst]) {
             if (
                 $node.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Ampersand -or
@@ -499,36 +507,23 @@ try {
             Select-Object -ExpandProperty Name
     )
 
-    # Remove cmdlets not in the allowed list (after module import so we can whitelist module cmdlets)
-    $commandsToRemove = @()
-    $hostRequiredCommands = @(
-        'ConvertFrom-Json',
-        'ConvertTo-Json',
-        'Get-Content',
-        'New-Object',
-        'Out-String',
-        'Select-Object',
-        'Sort-Object',
-        'Where-Object',
-        'Write-Error',
-        'Write-Output'
-    )
-    foreach ($cmd in $iss.Commands) {
-        $removeCommand = if ($UntrustedMode) {
-            $cmd.CommandType -in @('Alias', 'Cmdlet', 'Filter', 'Function') -and
-                $cmd.Name -notin $allowedCmdlets -and
-                $cmd.Name -notin $hostRequiredCommands
-        } else {
-            $cmd.CommandType -eq 'Cmdlet' -and
+    if (-not $UntrustedMode) {
+        # Reviewed scripts retain the legacy compatibility filtering. Untrusted
+        # scripts use the positive AST allowlist above; mutating the command
+        # table is not a security boundary and varies across Windows images.
+        $commandsToRemove = @()
+        foreach ($cmd in $iss.Commands) {
+            if (
+                $cmd.CommandType -eq 'Cmdlet' -and
                 $cmd.Name -notin $allowedCmdlets -and
                 $cmd.Name -notin $coreCmdletNames
+            ) {
+                $commandsToRemove += $cmd
+            }
         }
-        if ($removeCommand) {
-            $commandsToRemove += $cmd
+        foreach ($cmd in $commandsToRemove) {
+            $iss.Commands.Remove($cmd.Name, $cmd)
         }
-    }
-    foreach ($cmd in $commandsToRemove) {
-        $iss.Commands.Remove($cmd.Name, $cmd)
     }
 
     if ($UntrustedMode) {
