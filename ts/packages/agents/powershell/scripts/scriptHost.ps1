@@ -235,7 +235,8 @@ function Test-UntrustedScript {
             }
             if ($commandName -ieq 'ForEach-Object') {
                 $hasProcessScriptBlock = $false
-                foreach ($element in @($node.CommandElements | Select-Object -Skip 1)) {
+                for ($index = 1; $index -lt $node.CommandElements.Count; $index++) {
+                    $element = $node.CommandElements[$index]
                     if ($element -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
                         $hasProcessScriptBlock = $true
                         continue
@@ -271,51 +272,58 @@ function Test-UntrustedScript {
     }
 
     if ($violations.Count -gt 0) {
-        $ruleIds = @($violations) | Sort-Object
-        throw "PowerShell policy denied execution ($($ruleIds -join ','))."
+        throw "PowerShell policy denied execution ($([string]::Join(',', $violations)))."
     }
 }
 
 try {
     if ($RequestPath) {
-        $request = Get-Content -LiteralPath $RequestPath -Raw | ConvertFrom-Json
-        if ($request.protocolVersion -ne 1) {
+        [void][System.Reflection.Assembly]::Load(
+            'System.Web.Extensions, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31BF3856AD364E35'
+        )
+        $jsonSerializer =
+            [System.Web.Script.Serialization.JavaScriptSerializer]::new()
+        $request = $jsonSerializer.DeserializeObject(
+            [System.IO.File]::ReadAllText($RequestPath)
+        )
+        if ([int]$request['protocolVersion'] -ne 1) {
             [Console]::Error.WriteLine("Unsupported PowerShell broker protocol.")
             exit 1
         }
-        $ScriptBody = [string]$request.script
-        $ParametersJson = [string]$request.parametersJson
-        $AllowedCmdletsJson = ConvertTo-Json -InputObject @($request.allowedCommands) -Compress
-        $ParameterRolesJson = '{}'
-        $AllowedPathsJson = '[]'
-        $AllowedModulesJson = '[]'
+        $ScriptBody = [string]$request['script']
+        $params = $jsonSerializer.DeserializeObject(
+            [string]$request['parametersJson']
+        )
+        $allowedCmdlets = @($request['allowedCommands'])
+        $parameterRoles = [pscustomobject]@{}
+        $AllowedPaths = @()
+        $AllowedModules = @()
         $NetworkAccess = 'false'
-        $TimeoutSeconds = [int]$request.timeoutSeconds
+        $TimeoutSeconds = [int]$request['timeoutSeconds']
         $BrokerDiagnostics =
-            $BrokerDiagnostics -or [bool]$request.diagnostics
+            $BrokerDiagnostics -or [bool]$request['diagnostics']
         $UntrustedMode = $true
-    }
-
-    $allowedCmdlets = $AllowedCmdletsJson | ConvertFrom-Json
-    $allowedCmdlets = @($allowedCmdlets)
-    $params = $ParametersJson | ConvertFrom-Json
-    $parameterRoles = $ParameterRolesJson | ConvertFrom-Json
-    if ($null -eq $parameterRoles -or $parameterRoles -isnot [pscustomobject]) {
-        Write-Error "Parameter roles must be a JSON object."
-        exit 1
-    }
-    # Parse allowed paths - must handle array properly to avoid PowerShell array unwrapping issues
-    $parsedPaths = $AllowedPathsJson | ConvertFrom-Json
-    if ($parsedPaths -is [array]) {
-        $AllowedPaths = $parsedPaths
     } else {
-        $AllowedPaths = @($parsedPaths)
-    }
-    $parsedModules = $AllowedModulesJson | ConvertFrom-Json
-    if ($parsedModules -is [array]) {
-        $AllowedModules = $parsedModules
-    } else {
-        $AllowedModules = @($parsedModules)
+        $allowedCmdlets = @($AllowedCmdletsJson | ConvertFrom-Json)
+        $params = $ParametersJson | ConvertFrom-Json
+        $parameterRoles = $ParameterRolesJson | ConvertFrom-Json
+        if ($null -eq $parameterRoles -or $parameterRoles -isnot [pscustomobject]) {
+            Write-Error "Parameter roles must be a JSON object."
+            exit 1
+        }
+        # Parse allowed paths - must handle array properly to avoid PowerShell array unwrapping issues
+        $parsedPaths = $AllowedPathsJson | ConvertFrom-Json
+        if ($parsedPaths -is [array]) {
+            $AllowedPaths = $parsedPaths
+        } else {
+            $AllowedPaths = @($parsedPaths)
+        }
+        $parsedModules = $AllowedModulesJson | ConvertFrom-Json
+        if ($parsedModules -is [array]) {
+            $AllowedModules = $parsedModules
+        } else {
+            $AllowedModules = @($parsedModules)
+        }
     }
 
     if ($UntrustedMode) {
@@ -337,10 +345,13 @@ try {
             'Where-Object',
             'Write-Output'
         )
-        $unsupportedCommands = @(
-            $allowedCmdlets |
-                Where-Object { $_ -notin $safeUntrustedCommands }
-        )
+        $unsupportedCommands =
+            [System.Collections.Generic.List[string]]::new()
+        foreach ($allowedCmdlet in $allowedCmdlets) {
+            if ($allowedCmdlet -notin $safeUntrustedCommands) {
+                $unsupportedCommands.Add([string]$allowedCmdlet)
+            }
+        }
         if ($unsupportedCommands.Count -gt 0) {
             Write-Error "PowerShell policy denied unsupported commands."
             exit 1
@@ -456,26 +467,28 @@ try {
 
     # Auto-resolve the source module for each allowed cmdlet and ensure it is imported.
     $resolvedModules = [System.Collections.Generic.List[string]]::new()
-    foreach ($m in $AllowedModules) {
-        if ($m -and -not $resolvedModules.Contains($m)) {
-            $resolvedModules.Add($m)
-        }
-    }
-    foreach ($cmdletName in $allowedCmdlets) {
-        try {
-            # Include Function so CDXML-backed commands resolve too — many
-            # built-in networking/storage "cmdlets" (Get-NetTCPConnection in
-            # NetTCPIP, Get-NetAdapter, etc.) are CDXML functions, not compiled
-            # cmdlets, and would otherwise resolve to nothing and skip their module.
-            $resolvedCmd = Get-Command $cmdletName -CommandType Cmdlet, Function -ErrorAction SilentlyContinue |
-                Select-Object -First 1
-            if ($resolvedCmd -and $resolvedCmd.ModuleName -and
-                -not $resolvedModules.Contains($resolvedCmd.ModuleName)) {
-                $resolvedModules.Add($resolvedCmd.ModuleName)
+    if (-not $UntrustedMode) {
+        foreach ($m in $AllowedModules) {
+            if ($m -and -not $resolvedModules.Contains($m)) {
+                $resolvedModules.Add($m)
             }
-        } catch {
-            # Cmdlet not resolvable in the host; the removal/whitelist step will
-            # surface it as unavailable at execution time.
+        }
+        foreach ($cmdletName in $allowedCmdlets) {
+            try {
+                # Include Function so CDXML-backed commands resolve too — many
+                # built-in networking/storage "cmdlets" (Get-NetTCPConnection in
+                # NetTCPIP, Get-NetAdapter, etc.) are CDXML functions, not compiled
+                # cmdlets, and would otherwise resolve to nothing and skip their module.
+                $resolvedCmd = Get-Command $cmdletName -CommandType Cmdlet, Function -ErrorAction SilentlyContinue |
+                    Select-Object -First 1
+                if ($resolvedCmd -and $resolvedCmd.ModuleName -and
+                    -not $resolvedModules.Contains($resolvedCmd.ModuleName)) {
+                    $resolvedModules.Add($resolvedCmd.ModuleName)
+                }
+            } catch {
+                # Cmdlet not resolvable in the host; the removal/whitelist step will
+                # surface it as unavailable at execution time.
+            }
         }
     }
     $AllowedModules = $resolvedModules.ToArray()
@@ -483,13 +496,12 @@ try {
     # Create session state with default cmdlets
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
 
-    # Disable module auto-loading. With auto-loading off, only explicitly imported modules
-    # (allowedModules + auto-resolved) are available, so the whitelist holds.
-    # Explicit ImportPSModule calls are unaffected, so CDXML flows still work.
-    $iss.Variables.Add(
-        (New-Object System.Management.Automation.Runspaces.SessionStateVariableEntry(
-            'PSModuleAutoLoadingPreference', 'None', 'Disable implicit module auto-loading in the sandbox'))
-    )
+    if ($UntrustedMode) {
+        $iss.Variables.Add(
+            (New-Object System.Management.Automation.Runspaces.SessionStateVariableEntry(
+                'PSModuleAutoLoadingPreference', 'None', 'Disable implicit module auto-loading in the sandbox'))
+        )
+    }
 
     # Import allowed modules into the session state
     # This makes module cmdlets (like Get-NetTCPConnection from NetTCPIP) available
@@ -500,34 +512,6 @@ try {
             } catch {
                 Write-Warning "Could not import module '$moduleName': $_"
             }
-        }
-    }
-
-    # Microsoft.PowerShell.Core cmdlets are never stripped for reviewed scripts. CDXML commands (the
-    # Net*/Storage*/Defender* families, e.g. Get-NetTCPConnection) invoke CIM
-    # operations through Core cmdlets at runtime; removing Core makes them
-    # silently return empty results instead of erroring.
-    $coreCmdletNames = @(
-        Get-Command -Module 'Microsoft.PowerShell.Core' -CommandType Cmdlet -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty Name
-    )
-
-    if (-not $UntrustedMode) {
-        # Reviewed scripts retain the legacy compatibility filtering. Untrusted
-        # scripts use the positive AST allowlist above; mutating the command
-        # table is not a security boundary and varies across Windows images.
-        $commandsToRemove = @()
-        foreach ($cmd in $iss.Commands) {
-            if (
-                $cmd.CommandType -eq 'Cmdlet' -and
-                $cmd.Name -notin $allowedCmdlets -and
-                $cmd.Name -notin $coreCmdletNames
-            ) {
-                $commandsToRemove += $cmd
-            }
-        }
-        foreach ($cmd in $commandsToRemove) {
-            $iss.Commands.Remove($cmd.Name, $cmd)
         }
     }
 
@@ -546,8 +530,14 @@ try {
     [void]$ps.AddScript($ScriptBody)
 
     # Pass parameters to the script's param() block
-    foreach ($prop in $params.PSObject.Properties) {
-        [void]$ps.AddParameter($prop.Name, $prop.Value)
+    if ($UntrustedMode) {
+        foreach ($entry in $params.GetEnumerator()) {
+            [void]$ps.AddParameter($entry.Key, $entry.Value)
+        }
+    } else {
+        foreach ($prop in $params.PSObject.Properties) {
+            [void]$ps.AddParameter($prop.Name, $prop.Value)
+        }
     }
 
     # Execute with timeout
@@ -564,7 +554,13 @@ try {
 
     # Render output — Out-String handles both plain objects and Format-* objects
     if ($output.Count -gt 0) {
-        $output | Out-String -Width 200 | Write-Output
+        if ($UntrustedMode) {
+            foreach ($item in $output) {
+                [Console]::Out.WriteLine([string]$item)
+            }
+        } else {
+            $output | Out-String -Width 200 | Write-Output
+        }
     }
 
     # Report errors
