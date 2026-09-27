@@ -1,9 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { loadConfigSync } from "@typeagent/config";
+import {
+    ConfigSource,
+    getConfigProblems,
+    loadConfigSync,
+} from "@typeagent/config";
 
 const DYNAMIC_EXECUTION_KEY = "POWERSHELL_DYNAMICEXECUTION_ENABLED";
+const ALLOWED_CONFIG_SOURCES = new Set<ConfigSource>([
+    ConfigSource.Defaults,
+    ConfigSource.Local,
+]);
 
 export interface PowerShellExecutionGates {
     dynamicExecution: {
@@ -13,13 +21,19 @@ export interface PowerShellExecutionGates {
 
 export function getPowerShellExecutionGates(): PowerShellExecutionGates {
     try {
-        const { env } = loadConfigSync({
+        const { env, sources } = loadConfigSync({
             populateProcessEnv: false,
-            strict: false,
+            strict: true,
+            trackSources: true,
         });
+        const source = sources?.[DYNAMIC_EXECUTION_KEY];
         return {
             dynamicExecution: {
-                enabled: env[DYNAMIC_EXECUTION_KEY] === "1",
+                enabled:
+                    getConfigProblems().length === 0 &&
+                    env[DYNAMIC_EXECUTION_KEY] === "1" &&
+                    source !== undefined &&
+                    ALLOWED_CONFIG_SOURCES.has(source),
             },
         };
     } catch {

@@ -189,6 +189,7 @@ function expandValueGroup(
 }
 
 const PRESERVED_FALSE_KEYS = new Set([
+    "POWERSHELL_DYNAMICEXECUTION_ENABLED",
     "TELEMETRY_DEBUGBRIDGE",
     "TELEMETRY_STRUCTUREDLOGS",
     "TELEMETRY_LOCAL_ENABLED",
@@ -208,9 +209,8 @@ function scalarToString(value: unknown, flatKey: string): string | undefined {
     }
     if (typeof value === "boolean") {
         // Match the codebase convention: truthy flags are stored as
-        // "1"; falsy flags are usually absent. Telemetry controls preserve
-        // "0" because local defaults must distinguish an explicit false
-        // from an omitted setting.
+        // "1"; falsy flags are usually absent. Selected controls preserve
+        // "0" when an explicit false must override a lower-precedence true.
         return value
             ? "1"
             : PRESERVED_FALSE_KEYS.has(flatKey)

@@ -5,6 +5,7 @@ import { spawn } from "child_process";
 import fs from "node:fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { isDynamicPowerShellExecutionEnabled } from "../config/executionGates.mjs";
 import type { ScriptExecutionProvenance } from "../types/scriptRecipe.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -71,6 +72,18 @@ const knownProvenance = new Set<ScriptExecutionProvenance>([
     "edited",
 ]);
 
+function createPolicyDeniedResult(message: string): ScriptExecutionResult {
+    return {
+        success: false,
+        stdout: "",
+        stderr: message,
+        exitCode: -1,
+        duration: 0,
+        truncated: false,
+        cancelled: false,
+    };
+}
+
 export async function executeScript(
     request: ScriptExecutionRequest,
 ): Promise<ScriptExecutionResult> {
@@ -79,15 +92,17 @@ export async function executeScript(
         request.provenance === undefined ||
         !knownProvenance.has(request.provenance)
     ) {
-        return {
-            success: false,
-            stdout: "",
-            stderr: "PowerShell policy denied execution because script provenance is missing or unknown.",
-            exitCode: -1,
-            duration: 0,
-            truncated: false,
-            cancelled: false,
-        };
+        return createPolicyDeniedResult(
+            "PowerShell policy denied execution because script provenance is missing or unknown.",
+        );
+    }
+    if (
+        request.provenance !== "reviewed-static" &&
+        !isDynamicPowerShellExecutionEnabled()
+    ) {
+        return createPolicyDeniedResult(
+            "PowerShell policy denied dynamic script execution because it is disabled.",
+        );
     }
 
     const scriptHostPath = join(packageRoot, "scripts", "scriptHost.ps1");
