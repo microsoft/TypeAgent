@@ -39,7 +39,8 @@ internal sealed class AppContainerProcess : IDisposable
 
     internal static (AppContainerProcess Process, string ProfilePath) Start(
         string scriptHostPath,
-        string requestJson)
+        string requestJson,
+        bool diagnostics)
     {
         var profileName = $"TypeAgent.PowerShell.{Guid.NewGuid():N}";
         var hr = NativeMethods.CreateAppContainerProfile(
@@ -88,7 +89,8 @@ internal sealed class AppContainerProcess : IDisposable
                     packageSid,
                     profilePath,
                     privateHostPath,
-                    privateRequestPath),
+                    privateRequestPath,
+                    diagnostics),
                 profilePath);
         }
         catch
@@ -115,7 +117,8 @@ internal sealed class AppContainerProcess : IDisposable
         IntPtr packageSid,
         string profilePath,
         string scriptHostPath,
-        string requestPath)
+        string requestPath,
+        bool diagnostics)
     {
         var pipeAttributes = new NativeMethods.SecurityAttributes
         {
@@ -241,7 +244,8 @@ internal sealed class AppContainerProcess : IDisposable
             var commandLine = new StringBuilder(
                 $"\"{powerShellPath}\" -NoLogo -NoProfile -NonInteractive " +
                 $"-ExecutionPolicy Bypass -File \"{scriptHostPath}\" " +
-                $"-RequestPath \"{requestPath}\"");
+                $"-RequestPath \"{requestPath}\"" +
+                (diagnostics ? " -Diagnostics" : ""));
             var startupInfo = new NativeMethods.StartupInfoEx
             {
                 StartupInfo = new NativeMethods.StartupInfo

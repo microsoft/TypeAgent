@@ -22,12 +22,14 @@ param(
 
     [int]$TimeoutSeconds = 30,
 
-    [string]$RequestPath
+    [string]$RequestPath,
+
+    [switch]$Diagnostics
 )
 
 $ErrorActionPreference = 'Stop'
 $UntrustedMode = $false
-$BrokerDiagnostics = $false
+$BrokerDiagnostics = $Diagnostics.IsPresent
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $utf8NoBom
 $OutputEncoding = $utf8NoBom
@@ -289,7 +291,8 @@ try {
         $AllowedModulesJson = '[]'
         $NetworkAccess = 'false'
         $TimeoutSeconds = [int]$request.timeoutSeconds
-        $BrokerDiagnostics = [bool]$request.diagnostics
+        $BrokerDiagnostics =
+            $BrokerDiagnostics -or [bool]$request.diagnostics
         $UntrustedMode = $true
     }
 

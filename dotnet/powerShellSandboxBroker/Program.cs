@@ -44,6 +44,9 @@ internal static class Program
                     "The PowerShell broker host is unavailable.");
             }
 
+            var diagnostics =
+                Environment.GetEnvironmentVariable(
+                    "TYPEAGENT_POWERSHELL_BROKER_DIAGNOSTICS") == "1";
             var hostRequestJson = JsonSerializer.Serialize(
                 new HostRequest(
                     BrokerProtocol.CurrentVersion,
@@ -51,13 +54,13 @@ internal static class Program
                     request.Parameters.GetRawText(),
                     request.AllowedCommands,
                     request.TimeoutSeconds,
-                    Environment.GetEnvironmentVariable(
-                        "TYPEAGENT_POWERSHELL_BROKER_DIAGNOSTICS") == "1"),
+                    diagnostics),
                 BrokerJsonContext.Default.HostRequest);
 
             var (process, _) = AppContainerProcess.Start(
                 scriptHostPath,
-                hostRequestJson);
+                hostRequestJson,
+                diagnostics);
             BrokerResponse response;
             using (process)
             {
