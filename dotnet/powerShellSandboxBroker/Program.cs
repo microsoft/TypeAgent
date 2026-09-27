@@ -50,7 +50,9 @@ internal static class Program
                     request.Script,
                     request.Parameters.GetRawText(),
                     request.AllowedCommands,
-                    request.TimeoutSeconds),
+                    request.TimeoutSeconds,
+                    Environment.GetEnvironmentVariable(
+                        "TYPEAGENT_POWERSHELL_BROKER_DIAGNOSTICS") == "1"),
                 BrokerJsonContext.Default.HostRequest);
 
             var (process, _) = AppContainerProcess.Start(

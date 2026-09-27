@@ -27,6 +27,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $UntrustedMode = $false
+$BrokerDiagnostics = $false
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $utf8NoBom
 $OutputEncoding = $utf8NoBom
@@ -288,6 +289,7 @@ try {
         $AllowedModulesJson = '[]'
         $NetworkAccess = 'false'
         $TimeoutSeconds = [int]$request.timeoutSeconds
+        $BrokerDiagnostics = [bool]$request.diagnostics
         $UntrustedMode = $true
     }
 
@@ -576,7 +578,9 @@ try {
 
 } catch {
     [Console]::Error.WriteLine(
-        $(if ($RequestPath) {
+        $(if ($RequestPath -and $BrokerDiagnostics) {
+            "PowerShell policy denied execution: $($_.Exception.ToString())"
+        } elseif ($RequestPath) {
             "PowerShell policy denied execution."
         } else {
             "ScriptHost error: $($_.Exception.Message)"

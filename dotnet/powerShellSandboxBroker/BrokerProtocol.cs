@@ -30,7 +30,8 @@ internal sealed record HostRequest(
     string Script,
     string ParametersJson,
     string[] AllowedCommands,
-    int TimeoutSeconds);
+    int TimeoutSeconds,
+    bool Diagnostics);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
