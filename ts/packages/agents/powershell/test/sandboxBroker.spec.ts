@@ -9,7 +9,10 @@ import { executeScript } from "../src/execution/powershellRunner.mjs";
 import { runDeniedFileReadCase } from "./sandboxCases.js";
 
 const describeOnWindows =
-    process.platform === "win32" ? describe : describe.skip;
+    process.platform === "win32" &&
+    process.env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS !== "1"
+        ? describe
+        : describe.skip;
 const BROKER_TEST_TIMEOUT_SECONDS = 30;
 
 describeOnWindows("PowerShell sandbox broker", () => {

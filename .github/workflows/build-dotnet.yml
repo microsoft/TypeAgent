@@ -41,6 +41,8 @@ jobs:
           filters: |
             dotnet:
               - "dotnet/**"
+              - "ts/packages/agents/powershell/**"
+              - "ts/packages/config/**"
               - "ts/packages/agents/desktop/src/**Schema.ts"
               - ".github/workflows/build-dotnet.yml"
       - name: Setup MSBuild
@@ -92,3 +94,9 @@ jobs:
       - name: Build PowerShell sandbox broker
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         run: dotnet build dotnet/powerShellSandboxBroker/PowerShellSandboxBroker.csproj --configuration ${{ matrix.configuration }} --runtime win-x64
+      - name: Test PowerShell sandbox broker
+        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false') && matrix.configuration == 'Release' }}
+        working-directory: ts
+        run: |
+          pnpm run build packages/agents/powershell
+          pnpm --filter @typeagent/powershell-typeagent test

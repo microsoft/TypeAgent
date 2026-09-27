@@ -24,7 +24,11 @@ import {
     hasNamespaceAction,
 } from "../src/namespaces/actionHandlerRegistry.mjs";
 
-const itOnWindows = process.platform === "win32" ? it : it.skip;
+const itOnWindows =
+    process.platform === "win32" &&
+    process.env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS !== "1"
+        ? it
+        : it.skip;
 
 class MemoryStorage implements Storage {
     private readonly files = new Map<string, string>();
@@ -845,7 +849,8 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
         );
 
         expect(result).toMatchObject({
-            error: expect.stringContaining("draft failed"),
+            errorCode: "powershell.policyDenied",
+            retryable: false,
         });
         expect(await storage.list("pending")).toEqual([]);
         expect(await storage.exists("flows/failingDraft.flow.json")).toBe(

@@ -11,7 +11,11 @@ import {
     executeScript,
 } from "../src/execution/powershellRunner.mjs";
 
-const itOnWindows = process.platform === "win32" ? it : it.skip;
+const itOnWindows =
+    process.platform === "win32" &&
+    process.env.TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS !== "1"
+        ? it
+        : it.skip;
 
 describe("PowerShell execution gates", () => {
     const originalConfigDir = process.env.TYPEAGENT_CONFIG_DIR;

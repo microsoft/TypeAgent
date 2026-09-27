@@ -543,7 +543,7 @@ try {
 
     if (-not $completed) {
         $ps.Stop()
-        Write-Error "Script execution timed out after $TimeoutSeconds seconds"
+        [Console]::Error.WriteLine("Script execution timed out after $TimeoutSeconds seconds.")
         exit 1
     }
 
@@ -557,7 +557,7 @@ try {
     # Report errors
     if ($ps.HadErrors) {
         foreach ($err in $ps.Streams.Error) {
-            Write-Error $err
+            [Console]::Error.WriteLine([string]$err)
         }
         exit 1
     }
@@ -567,6 +567,10 @@ try {
     $ps.Dispose()
 
 } catch {
-    Write-Error "ScriptHost error: $_"
+    if ($UntrustedMode) {
+        [Console]::Error.WriteLine("PowerShell policy denied execution.")
+    } else {
+        Write-Error "ScriptHost error: $_"
+    }
     exit 1
 }
