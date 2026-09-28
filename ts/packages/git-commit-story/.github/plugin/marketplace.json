@@ -1,0 +1,12 @@
+{
+  "name": "git-commit-story",
+  "owner": { "name": "Microsoft" },
+  "plugins": [
+    {
+      "name": "git-commit-story",
+      "description": "Record Copilot sessions for git commit stories",
+      "version": "0.0.1",
+      "source": "./plugin"
+    }
+  ]
+}

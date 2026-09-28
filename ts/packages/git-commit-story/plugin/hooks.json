@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "command": "node ${PLUGIN_ROOT}/../dist/plugin/hook.js",
+        "timeout": 10000
+      }
+    ]
+  }
+}
