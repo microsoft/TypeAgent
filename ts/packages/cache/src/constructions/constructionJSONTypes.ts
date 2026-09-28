@@ -90,7 +90,9 @@ export type ConstructionCacheJSON = {
 
     // The list of constructions in the cache, organized by namespace.
     constructionNamespaces: {
-        // '${schemaName},${schemaFileHash},${activityName}' or for multiple actions '${schemaName},${schemaFileHash},${activityName}|${schemaName},${schemaFileHash},${activityName}|...' where the schemaName is sorted.
+        // Legacy/static entries use '${schemaName},${schemaFileHash},${activityName}'.
+        // Dynamic action entries append encoded source, action, and fingerprint fields.
+        // Multiple actions join their sorted namespace keys with '|'.
         name: string;
         constructions: ConstructionJSON[];
     }[];

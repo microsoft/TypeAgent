@@ -64,6 +64,8 @@ export type SchemaContent = {
     // TODO: enable non-stringify pas content.
     content: string;
     config?: string | undefined; // for "ts" only
+    // Dynamic schemas can bind learned routes to individual action definitions.
+    cacheBinding?: ActionCacheBinding;
 };
 export type GrammarContent = {
     format: GrammarFormat;

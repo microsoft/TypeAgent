@@ -351,6 +351,8 @@ export function createSchemaInfoProvider(
                       actionFingerprint,
                   };
         },
+        getSchemaCacheBinding: (schemaName) =>
+            provider.getActionConfig(schemaName).cacheBinding,
         getActionNamespace: (schemaName) =>
             getActionSchemaFile(schemaName).parsedActionSchema.actionNamespace,
         getActionCacheEnabled: (schemaName, actionName) =>

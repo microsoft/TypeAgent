@@ -239,13 +239,50 @@ describe("PowerShellStore capability lifecycle", () => {
         );
     });
 
-    it("exposes transactional and outcome actions in the dynamic schema", async () => {
+    it("binds learned routes to the individual flow definition", async () => {
+        const store = new PowerShellStore(new MockStorage());
+        await store.initialize();
+        await store.saveFlow(createRecipe("showPorts"), "reasoning");
+        await store.saveFlow(createRecipe("showOtherPorts"), "reasoning");
+
+        const before = await store.getActionCacheBinding();
+        await store.addGrammarPatterns("showOtherPorts", [
+            {
+                pattern: "display other listeners",
+                isAlias: true,
+                examples: [],
+            },
+        ]);
+        const afterAlias = await store.getActionCacheBinding();
+        expect(afterAlias.actionFingerprints.showPorts).toBe(
+            before.actionFingerprints.showPorts,
+        );
+        expect(afterAlias.actionFingerprints.showOtherPorts).toBe(
+            before.actionFingerprints.showOtherPorts,
+        );
+
+        await store.updateFlowScript(
+            "showOtherPorts",
+            "Get-NetTCPConnection -State Established",
+            ["Get-NetTCPConnection"],
+        );
+        const afterScript = await store.getActionCacheBinding();
+        expect(afterScript.actionFingerprints.showPorts).toBe(
+            before.actionFingerprints.showPorts,
+        );
+        expect(afterScript.actionFingerprints.showOtherPorts).not.toBe(
+            before.actionFingerprints.showOtherPorts,
+        );
+    });
+
+    it("exposes flow lifecycle and outcome actions in the dynamic schema", async () => {
         const store = new PowerShellStore(new MockStorage());
         await store.initialize();
 
         const schema = store.generateDynamicSchemaText();
         expect(schema).toContain("createAndExecutePowerShellFlow");
         expect(schema).toContain("addPowerShellFlowPatterns");
+        expect(schema).not.toContain("addAndExecutePowerShellFlowPatterns");
         expect(schema).toContain("reportPowerShellCapabilityOutcome");
         expect(schema).toContain("repairAndExecutePowerShellFlow");
     });

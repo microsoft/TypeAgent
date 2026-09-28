@@ -129,4 +129,11 @@ export type SchemaInfoProvider = {
               actionFingerprint: string;
           }
         | undefined;
+
+    getSchemaCacheBinding?: (schemaName: string) =>
+        | {
+              sourceId: string;
+              actionFingerprints: Record<string, string>;
+          }
+        | undefined;
 };

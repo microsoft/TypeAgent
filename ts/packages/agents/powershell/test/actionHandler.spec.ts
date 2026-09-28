@@ -631,6 +631,121 @@ describe("createAndExecutePowerShellFlow", () => {
         },
     );
 
+    it("adds an alias without executing the existing flow again", async () => {
+        const { agent, context } = await createAgentHarness();
+        (
+            context.sessionContext
+                .validateGrammarPatterns as jest.MockedFunction<
+                NonNullable<SessionContext["validateGrammarPatterns"]>
+            >
+        ).mockResolvedValue({
+            approved: true,
+            patterns: ["display every listening port"],
+        });
+        await agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "createPowerShellFlow",
+                parameters: {
+                    actionName: "successfulAlias",
+                    description: "Must not execute while adding an alias",
+                    displayName: "Successful Alias",
+                    script: "throw 'alias recording executed the flow'",
+                    scriptParameters: [],
+                    grammarPatterns: [],
+                    allowedCmdlets: [],
+                },
+            },
+            context,
+        );
+
+        const result = await agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "addPowerShellFlowPatterns",
+                parameters: {
+                    flowName: "successfulAlias",
+                    grammarPatterns: [
+                        {
+                            pattern: "display every listening port",
+                            isAlias: true,
+                        },
+                    ],
+                },
+            },
+            context,
+        );
+
+        expect(result).not.toHaveProperty("error");
+        const schema = await agent.getDynamicGrammar?.(
+            context.sessionContext,
+            "powershell",
+        );
+        expect(schema?.content).toContain("display every listening port");
+    });
+
+    it("rolls back an alias when activation fails", async () => {
+        const reloadAgentSchema = jest
+            .fn<() => Promise<void>>()
+            .mockResolvedValueOnce()
+            .mockRejectedValueOnce(new Error("reload failed"))
+            .mockResolvedValueOnce();
+        const { agent, context } = await createAgentHarness(reloadAgentSchema);
+        (
+            context.sessionContext
+                .validateGrammarPatterns as jest.MockedFunction<
+                NonNullable<SessionContext["validateGrammarPatterns"]>
+            >
+        ).mockResolvedValue({
+            approved: true,
+            patterns: ["run the rollback flow"],
+        });
+        await agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "createPowerShellFlow",
+                parameters: {
+                    actionName: "rollbackAlias",
+                    description: "Show a value",
+                    displayName: "Rollback Alias",
+                    script: "Write-Output 'ok'",
+                    scriptParameters: [],
+                    grammarPatterns: [],
+                    allowedCmdlets: ["Write-Output"],
+                },
+            },
+            context,
+        );
+
+        const result = await agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "addPowerShellFlowPatterns",
+                parameters: {
+                    flowName: "rollbackAlias",
+                    grammarPatterns: [
+                        {
+                            pattern: "run the rollback flow",
+                            isAlias: true,
+                        },
+                    ],
+                },
+            },
+            context,
+        );
+
+        expect(result).toHaveProperty(
+            "error",
+            expect.stringContaining("No patterns were added"),
+        );
+        const grammar = await agent.getDynamicGrammar?.(
+            context.sessionContext,
+            "powershell",
+        );
+        expect(grammar?.content ?? "").not.toContain("run the rollback flow");
+        expect(reloadAgentSchema).toHaveBeenCalledTimes(3);
+    });
+
     itOnWindows(
         "removes the promoted flow when schema reload fails",
         async () => {

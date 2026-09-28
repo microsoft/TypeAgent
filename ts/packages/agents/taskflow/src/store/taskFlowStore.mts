@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Storage } from "@typeagent/agent-sdk";
+import type { ActionCacheBinding, Storage } from "@typeagent/agent-sdk";
+import { createHash } from "node:crypto";
 import type { ScriptRecipe } from "../types/recipe.js";
 import {
     generateGrammarRuleText,
@@ -13,6 +14,28 @@ import {
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:taskflow:store");
+
+function throwPersistenceError(
+    error: unknown,
+    rollbackErrors: unknown[],
+): never {
+    if (rollbackErrors.length === 0) {
+        throw error;
+    }
+    const originalMessage =
+        error instanceof Error ? error.message : String(error);
+    const rollbackMessage = rollbackErrors
+        .map((rollbackError) =>
+            rollbackError instanceof Error
+                ? rollbackError.message
+                : String(rollbackError),
+        )
+        .join("; ");
+    throw new AggregateError(
+        [error, ...rollbackErrors],
+        `${originalMessage}. Rollback failed: ${rollbackMessage}`,
+    );
+}
 
 // ── Index types ─────────────────────────────────────────────────────────────
 
@@ -58,6 +81,7 @@ export interface TaskFlowDefinition {
     name: string;
     description: string;
     parameters: Record<string, ParameterDefinition>;
+    grammarPatterns?: string[];
     script?: string;
 }
 
@@ -80,7 +104,21 @@ function recipeToFlowDef(recipe: ScriptRecipe): TaskFlowDefinition {
         name: recipe.name,
         description: recipe.description,
         parameters,
+        grammarPatterns: recipe.grammarPatterns,
     };
+}
+
+function extractGeneratedPatterns(grammarRuleText: string): string[] {
+    const patterns: string[] = [];
+    for (const line of grammarRuleText.split("\n")) {
+        const match = line.match(
+            /^<\w+>\s+\[spacing=optional\]\s+=\s+(.+)\s+->\s+\{\s+actionName:/,
+        );
+        if (match?.[1]) {
+            patterns.push(match[1]);
+        }
+    }
+    return patterns;
 }
 
 // ── Store ────────────────────────────────────────────────────────────────────
@@ -257,6 +295,14 @@ export class TaskFlowStore {
             flowDef.parameters = updates.parameters;
         }
 
+        if (updates.grammarPatterns !== undefined) {
+            flowDef.grammarPatterns = updates.grammarPatterns;
+            entry.grammarRuleText = generateGrammarRuleText(
+                actionName,
+                updates.grammarPatterns,
+            );
+        }
+
         // Write updated flow metadata
         await this.storage.write(
             entry.flowPath,
@@ -266,14 +312,6 @@ export class TaskFlowStore {
         // Update script if provided
         if (updates.script !== undefined) {
             await this.storage.write(entry.scriptPath, updates.script);
-        }
-
-        // Update grammar if provided
-        if (updates.grammarPatterns !== undefined) {
-            entry.grammarRuleText = generateGrammarRuleText(
-                actionName,
-                updates.grammarPatterns,
-            );
         }
 
         entry.updated = new Date().toISOString();
@@ -287,6 +325,88 @@ export class TaskFlowStore {
         }
         debug(`Flow updated: ${actionName}`);
         return true;
+    }
+
+    async getGrammarPatterns(actionName: string): Promise<string[]> {
+        this.ensureInitialized();
+        const entry = this.index.flows[actionName];
+        if (!entry) throw new Error(`Flow not found: ${actionName}`);
+        const flowJson = await this.storage.read(entry.flowPath, "utf8");
+        const flow = JSON.parse(flowJson) as TaskFlowDefinition;
+        return [
+            ...(flow.grammarPatterns ??
+                extractGeneratedPatterns(entry.grammarRuleText)),
+        ];
+    }
+
+    async replaceGrammarPatterns(
+        actionName: string,
+        patterns: string[],
+    ): Promise<void> {
+        this.ensureInitialized();
+        const entry = this.index.flows[actionName];
+        if (!entry) throw new Error(`Flow not found: ${actionName}`);
+
+        const previousFlowJson = await this.storage.read(
+            entry.flowPath,
+            "utf8",
+        );
+        const previousEntry = { ...entry };
+        const previousLastModified = this.index.lastModified;
+        const flow = JSON.parse(previousFlowJson) as TaskFlowDefinition;
+        flow.grammarPatterns = patterns;
+
+        try {
+            await this.storage.write(
+                entry.flowPath,
+                JSON.stringify(flow, null, 2),
+            );
+            entry.grammarRuleText = generateGrammarRuleText(
+                actionName,
+                patterns,
+            );
+            entry.updated = new Date().toISOString();
+            this.index.lastModified = entry.updated;
+            await this.saveIndex();
+            await this.writeDynamicGrammarFile();
+        } catch (error) {
+            this.index.flows[actionName] = previousEntry;
+            this.index.lastModified = previousLastModified;
+            const rollbackErrors: unknown[] = [];
+            try {
+                await this.storage.write(entry.flowPath, previousFlowJson);
+            } catch (rollbackError) {
+                rollbackErrors.push(rollbackError);
+            }
+            try {
+                await this.saveIndex();
+            } catch (rollbackError) {
+                rollbackErrors.push(rollbackError);
+            }
+            try {
+                await this.writeDynamicGrammarFile();
+            } catch (rollbackError) {
+                rollbackErrors.push(rollbackError);
+            }
+            throwPersistenceError(error, rollbackErrors);
+        }
+    }
+
+    async addGrammarPatterns(
+        actionName: string,
+        patterns: string[],
+    ): Promise<number> {
+        const existingPatterns = await this.getGrammarPatterns(actionName);
+        const existing = new Set(existingPatterns);
+        const additions = patterns.filter((pattern) => !existing.has(pattern));
+        if (additions.length === 0) {
+            return 0;
+        }
+        await this.replaceGrammarPatterns(actionName, [
+            ...existingPatterns,
+            ...additions,
+        ]);
+        return additions.length;
     }
 
     listFlows(): TaskFlowIndexEntry[] {
@@ -335,6 +455,31 @@ export class TaskFlowStore {
             builtInRuleNames,
             builtInRuleTexts,
         );
+    }
+
+    async getActionCacheBinding(): Promise<ActionCacheBinding> {
+        const actionFingerprints: Record<string, string> = {};
+        for (const entry of Object.values(this.index.flows)) {
+            if (!entry.enabled) continue;
+            const flowJson = await this.storage.read(entry.flowPath, "utf8");
+            const flow = JSON.parse(flowJson) as TaskFlowDefinition;
+            const script = await this.storage.read(entry.scriptPath, "utf8");
+            actionFingerprints[entry.actionName] = createHash("sha256")
+                .update(
+                    JSON.stringify({
+                        name: flow.name,
+                        description: flow.description,
+                        parameters: flow.parameters,
+                    }),
+                )
+                .update("\0")
+                .update(script)
+                .digest("base64");
+        }
+        return {
+            sourceId: "typeagent.taskflow",
+            actionFingerprints,
+        };
     }
 
     async writeDynamicGrammarFile(): Promise<void> {
@@ -397,6 +542,15 @@ export class TaskFlowStore {
             "        grammarPatterns?: string;",
             "    };",
             "};",
+            "",
+            "// Add validated phrases to an existing task flow",
+            "export type AddTaskFlowPatterns = {",
+            '    actionName: "addTaskFlowPatterns";',
+            "    parameters: {",
+            "        name: string;",
+            "        grammarPatterns: string[];",
+            "    };",
+            "};",
         ].join("\n");
 
         const { typeDefinitions, typeNames } =
@@ -407,6 +561,7 @@ export class TaskFlowStore {
             "DeleteTaskFlow",
             "CreateTaskFlow",
             "EditTaskFlow",
+            "AddTaskFlowPatterns",
             ...typeNames,
         ];
 
