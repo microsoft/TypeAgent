@@ -1,7 +1,0 @@
-{
-  "name": "git-commit-story",
-  "description": "Record Copilot sessions for git commit stories",
-  "version": "0.0.1",
-  "author": { "name": "Microsoft" },
-  "hooks": "hooks.json"
-}
