@@ -38,6 +38,8 @@ import {
 import registerDebug from "debug";
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
 import { otel } from "@typeagent/telemetry";
@@ -51,6 +53,22 @@ import { createLocalSkillServices } from "./skillCatalog.js";
 const RESTART_EXIT_CODE = 42;
 const SHUTDOWN_WORKER_MESSAGE = "shutdown";
 const WORKER_SHUTDOWN_TIMEOUT_MS = 15_000;
+
+if (
+    fs.existsSync(
+        path.resolve(
+            path.dirname(fileURLToPath(import.meta.url)),
+            "..",
+            "..",
+            ".msi-maintenance",
+        ),
+    )
+) {
+    console.error(
+        "TypeAgent setup is in progress. Server startup is temporarily disabled.",
+    );
+    process.exit(1);
+}
 
 // A dead stdout/stderr pipe (e.g. the launching wrapper exited) must never
 // crash or busy-loop the server: swallow write errors so an EPIPE can't become
