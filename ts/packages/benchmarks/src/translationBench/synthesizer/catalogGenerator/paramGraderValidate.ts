@@ -7,14 +7,24 @@ import { createRequire } from "node:module";
 import { isParamSpec } from "./paramTypes.js";
 import {
     CREATE_SET,
-    LEGACY_RULE_RE,
     VERIFY_SET,
+    hasDefaultRule,
+    isLegacyRule,
     type ActionParameterFieldGrader,
     type ActionParametersGraderCatalog,
     type ActionParametersGraderEntry,
 } from "./paramGraderTypes.js";
 function isPlainObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isHexFingerprint(value: string): boolean {
+    return (
+        value.length === 16 &&
+        [...value].every(
+            (ch) => (ch >= "0" && ch <= "9") || (ch >= "a" && ch <= "f"),
+        )
+    );
 }
 
 function validateItemGrader(
@@ -42,7 +52,7 @@ function validateItemGrader(
             `Invalid item grader for ${actionIdLabel}.${fieldName}: rule`,
         );
     }
-    if (LEGACY_RULE_RE.test(item.rule) || /default/i.test(item.rule)) {
+    if (isLegacyRule(item.rule) || hasDefaultRule(item.rule)) {
         throw new Error(
             `Invalid item grader for ${actionIdLabel}.${fieldName}: legacy/default rule '${item.rule}'`,
         );
@@ -101,7 +111,7 @@ function validateFieldGrader(
             `Invalid field grader for ${actionIdLabel}.${fieldName}: rule`,
         );
     }
-    if (LEGACY_RULE_RE.test(field.rule) || /default/i.test(field.rule)) {
+    if (isLegacyRule(field.rule) || hasDefaultRule(field.rule)) {
         throw new Error(
             `Invalid field grader for ${actionIdLabel}.${fieldName}: legacy/default rule '${field.rule}'`,
         );
@@ -138,7 +148,7 @@ function validateGraderEntry(
     }
     if (
         typeof entry.sourceFingerprint !== "string" ||
-        !/^[0-9a-f]{16}$/.test(entry.sourceFingerprint)
+        !isHexFingerprint(entry.sourceFingerprint)
     ) {
         throw new Error(`Invalid grader entry for ${id}: sourceFingerprint`);
     }
