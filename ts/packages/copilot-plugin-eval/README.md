@@ -1,6 +1,6 @@
 # TypeAgent Copilot end-to-end evaluation
 
-Updated: 2026-09-25. This is the maintained version of the original GHCP
+Updated: 2026-09-28. This is the maintained version of the original GHCP
 evaluation methodology, alongside its harness, corpus, grading, and tests.
 
 ## Purpose and limitations
@@ -33,7 +33,14 @@ scope. Weather is removed and calendar is deferred.
 
 ## Implementation and protocol history
 
-**Current corpus: `common-files-v1`, protocol 5.** Nine list-dependent tasks
+**Current protocol: 6, with independent `common-files-v1` and `lists-v1` categories.**
+The default common category retains its exact twenty prompts, seven candidates,
+and 140 executions per repetition. The new lists category has twenty namespaced
+cases and only C1/C2 (NL fallback off/on) versus C3/C4 (discovery/earned reuse):
+80 executions, not 140 slots with mixed/native N/A entries. Never pool scores,
+latency populations or preparation between categories.
+
+In protocol 5, nine list-dependent tasks
 have been replaced with ordinary file tasks so every candidate has a comparable
 capability: 20 applicable cases per candidate, 140 executions per repetition,
 no native N/A slots. This is a new workload, not a rescore of old trials. Do
@@ -47,8 +54,9 @@ denials, cancellations and uncertain or side-effectful failures remain terminal.
 | Protocol 3                   | Strict native failure/no-replay correction at `4275a7ca7743b761b7a108971de34184ebf6e289`; tested offline, not live measured. Superseded by later protocols.                                                                |
 | Portability                  | `b47f8bacd5073aa226392cc6ccb47a9a7e4caac7` accepts configured temp-parent aliases while retaining artifact provenance checks, and uses platform-native test paths.                                                         |
 | Protocol 4 follow-up (#3077) | Prospective positive-evidence safe-read recovery, frozen native applicability and list-based replacement A4 oracle. Tested offline, not live measured; applicability and corpus now superseded by protocol 5.              |
-| Protocol 5                   | Current runtime: `common-files-v1`, 140 applicable trials, per-case file permissions and independent file/pre-effect oracles. Preserves positive-evidence recovery and frozen schedule checks; no live measurement.        |
-| Model and layout revision    | Eval-only scripts now reside here. Future Copilot sessions explicitly use Luna 5.6 (`gpt-5.6-luna`), not the historical `gpt-5.6-sol`. No Luna rerun or improved measured outcome is claimed.                              |
+| Protocol 5                   | Historical `common-files-v1`, 140 Luna trials frozen at `96e904546acc389cf64284db9b6fbcbe57191344`. Raw evidence and independently reviewed reports remain unchanged; this revision does not rescore them.                 |
+| Protocol 6                   | Prospective category-specific readiness, permissions, list reset/oracles, discovery preparation, schedule and reporting. Common 20x7 remains unchanged; lists adds 20x4. Offline validated only; no new measured scores.   |
+| Model and layout revision    | Eval-only scripts reside here. Copilot sessions explicitly use Luna 5.6 (`gpt-5.6-luna`), not historical `gpt-5.6-sol`. Translation/embedding identities are recorded separately.                                          |
 
 Preserve original results, grades, run specifications and safety audits.
 Retrospective reporting amendments do not rewrite observations or prove what
@@ -85,6 +93,22 @@ node packages\copilot-plugin-eval\scripts\ghcp-eval.mjs <copilot.exe> <preflight
 node packages\copilot-plugin-eval\scripts\ghcp-eval.mjs <copilot.exe> <preflight-dir> <run-dir> <model-config-dir> <ledger> 1,2,3,4,5,6,7 measured <oracle.json> S1 <batch-start> 7 1
 node packages\copilot-plugin-eval\scripts\ghcp-credit-probe.mjs <copilot.exe> <ledger> <new-probe-dir>
 ```
+
+The optional final positional category defaults to `common-files`. For lists,
+use a **new category-specific preflight, output directory and oracle**:
+
+```text
+node packages\copilot-plugin-eval\scripts\ghcp-eval-preflight.mjs <new-list-preflight-dir> <model-config-dir> <ledger> --external-evidence lists
+node packages\copilot-plugin-eval\scripts\ghcp-eval.mjs <copilot.exe> <list-preflight-dir> <new-list-run-dir> <model-config-dir> <ledger> 1,2,3,4 pilot <list-oracle.json> list-S1 0 4 1 lists
+node packages\copilot-plugin-eval\scripts\ghcp-eval.mjs <copilot.exe> <list-preflight-dir> <list-run-dir> <model-config-dir> <ledger> 1,2,3,4 measured <list-oracle.json> list-S1 <batch-start> 4 1 lists
+```
+
+Measured batches are four paired trials for lists, seven for common. Specs and
+results include protocol, category and corpus version; readiness verifies the
+same category, and list readiness additionally verifies six list operations and
+an exact seed reset after server shutdown. Protocol-5 templates/specs/results
+cannot resume under this implementation. No command above is authorized merely
+by adding this category; no new allowance or live probe accompanies the change.
 
 Use nonsynchronized local directories for live databases and locks. Preserve
 sanitized results and specifications in durable storage afterwards. The oracle
@@ -170,7 +194,7 @@ Only disposable fixture file writes are authorized. GitHub and network remain
 read-only; no renewal, cache flush or external write is authorized. Reduced
 domain diversity is an explicit tradeoff for matched capabilities.
 
-Historical list seed (retained only as inactive setup state):
+List seed (inactive preserved state in common; active isolated state in lists):
 
 | List    | Items                    |
 | ------- | ------------------------ |
@@ -232,6 +256,90 @@ The active tool's trace must establish that context; text alone cannot.
 Structured approvals are bound to the scope, operation and interaction,
 consumed once, and invalidated by unrelated work or terminal failure.
 Handler consent never supplies A1/A4's missing referent or permits replay.
+
+### Separate lists category (`lists-v1`)
+
+The initial nine-anchor request was expanded to twenty list examples, five per
+cohort. Each trial restores the seven lists above and all seven ordinary files
+before starting a fresh isolated server. `book` and `picnic` start absent.
+Only list primitives can mutate list state; native editing of the backing store
+is never permitted. Only list-R4 may read trip.txt; no list case may mutate files.
+Only list-M5/list-R5 may read the pinned issue in the pinned repository. No PR,
+network, GitHub write or unrelated list action is admitted. Outer tools are
+restricted to the active NL or structured route (plus `ask_user`).
+
+State oracles compare the complete independent list snapshot and the unchanged
+file snapshot, including extra/missing lists. Sequence guards require M2's
+additions before removal, M3's clear before additions, and M4's creation before
+additions. Ambiguity disables list actions until the scripted referent answer;
+pre-effect snapshots and sticky premature-mutation evidence remain necessary
+even when final state is correct. Confirmation is not referent clarification.
+Consent remains bound to current backend action context and single-use
+scope/operation/interaction approval; no list-handler question is auto-approved.
+The corpus deliberately uses supported create/clear/remove primitives rather
+than adding a deletion-handler consent path.
+
+| ID      | Request / independent final-answer requirement              | Independent state requirement                            |
+| ------- | ----------------------------------------------------------- | -------------------------------------------------------- |
+| list-S1 | Show all seven named lists                                  | All state unchanged                                      |
+| list-S2 | Show grocery: milk, eggs, rice                              | Unchanged                                                |
+| list-S3 | Remove milk from grocery                                    | Retain eggs/rice and every unrelated item                |
+| list-S4 | Add apples to grocery                                       | Preserve original items                                  |
+| list-S5 | Create empty book list                                      | Book exists empty; all old lists preserved               |
+| list-M1 | Show grocery and pantry, accurately labeled                 | Unchanged                                                |
+| list-M2 | Add tea/coffee to office, then remove notebook              | Office: pen, charger, tea, coffee                        |
+| list-M3 | Empty grocery, then add bread/oranges                       | Grocery: bread, oranges                                  |
+| list-M4 | Create picnic, then add blanket/water                       | Picnic: blanket, water                                   |
+| list-M5 | Show pinned issue, then add literal review reminder         | Exact reminder in errand; prior entries retained         |
+| list-R1 | Intersection of grocery/pantry: rice only, grounded in both | Unchanged                                                |
+| list-R2 | Packing has three, pantry two: difference one               | Unchanged                                                |
+| list-R3 | Add missing travel items to packing; identify adapter       | Packing gains adapter only                               |
+| list-R4 | Read trip.txt, apply jacket-required condition and explain  | Packing gains jacket only                                |
+| list-R5 | Read pinned issue and conditionally add exact title         | Exact independent title in errand, no duplicate          |
+| list-A1 | Ask which list; answer grocery; add apples                  | Grocery gains apples, only after clarification           |
+| list-A2 | Ask which list; answer pantry; show rice/beans              | Unchanged; no guessed read before clarification          |
+| list-A3 | Ask which list; answer travel; remove charger               | Travel retains adapter, office/packing chargers retained |
+| list-A4 | Ask which item; answer milk; remove it from grocery         | Eggs/rice retained; no premature mutation                |
+| list-A5 | Ask which list; answer office; empty but retain it          | Office still exists empty                                |
+
+S1/S4/M3/M5/R1/R4/R5/A1 preserve the historical measured-02 prompts (R4
+substitutes the current private fixture path). Provenance: measured-02
+`specification.json`, SHA256
+`b2f9a7837268111bf1633049e6365a52df5cf00dc09563a38c26b876ec33187b`.
+A4 uses the approved protocol-4 unresolved-item replacement documented below,
+not the old "Clean up" prompt. The other eleven examples are new list-domain
+coverage, not replacements/rescores of common-file examples. Source code freezes
+exact prompts and scripted answers; this table specifies independent semantic
+oracles, not a prescribed answer string or hidden prompt hint.
+
+C4 discovers list and cross-domain read contracts in the same binding before
+each task, without executing, reading fixture contents or learning future
+referents. Report preparation separately and amortized over the actual category
+trials; do not assume this per-task preparation was shared across a campaign.
+
+### Category-safe reporting
+
+The offline exporter accepts one complete protocol-6 category at a time:
+
+```text
+node packages\copilot-plugin-eval\scripts\ghcp-eval-report.mjs <specification.json> <results.json> <reviews.json> <new-summary.json>
+```
+
+Reviews are an array of `{category, caseId, candidate, repetition, outcome,
+reason, evidence}` with `outcome` one of `success`, `failed`, `unknown`;
+`evidence` is an array of sanitized source references. Repetition is zero-based.
+Success requires independent final-answer review with reason/evidence and cannot
+override terminal failure, route violations or state/pre-effect guard failures.
+Missing reviews remain unknown, never success. Transport completion alone
+is not success. Preserve raw evidence and review uncertainties.
+
+Exports include source hashes, per-candidate/cohort denominators, nearest-rank
+E2E P50/P90/P95 with measured/missing population counts, success-conditional
+latency, category-wide and pairwise common-success populations, preparation and amortized cost in
+milliseconds, and E2E including preparation. No cross-category total or winner
+is emitted. Missing latency is not zero; absent common successes have null
+percentiles. The exporter refuses existing output paths and historical/mixed
+protocols. Keep protocol-2 and protocol-5 reports and original evidence unchanged.
 
 ### Historical A4 replacement record (protocol 4)
 

@@ -184,16 +184,20 @@ export function preliminaryGrade(result, evidence) {
         };
     if (
         !result.grade.fileStateMatchesOracle ||
-        !result.grade.listStateUnchanged
+        !(result.category === "lists"
+            ? result.grade.listStateMatchesOracle
+            : result.grade.listStateUnchanged)
     )
         return {
             outcome: "failed",
             reason: "independent_fixture_oracle_mismatch",
         };
     if (
-        result.caseId.startsWith("A") &&
+        (result.caseId.startsWith("A") || result.caseId.startsWith("list-A")) &&
         (!result.grade.clarificationRequested ||
-            !result.grade.noPrematureFileMutation)
+            !result.grade.noPrematureFileMutation ||
+            (result.category === "lists" &&
+                !result.grade.noPrematureListMutation))
     )
         return {
             outcome: "failed",

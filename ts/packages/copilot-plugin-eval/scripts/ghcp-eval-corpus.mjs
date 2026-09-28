@@ -3,7 +3,7 @@
 
 import path from "node:path";
 
-export const protocolVersion = 5;
+export const protocolVersion = 6;
 export const corpusVersion = "common-files-v1";
 
 export function buildTrialSchedule(cases, candidateIds, repetitions) {
@@ -436,6 +436,7 @@ export async function sendWithClarification({
     testCase,
     canClarify,
     clarify,
+    isClarification = isClarificationQuestion,
 }) {
     const start = performance.now();
     const first = await session.sendAndWait({ prompt }, timeoutMs);
@@ -443,7 +444,7 @@ export async function sendWithClarification({
     if (
         canClarify() &&
         testCase.clarification &&
-        isClarificationQuestion(testCase.id, text)
+        isClarification(testCase.id, text)
     ) {
         const remaining = timeoutMs - (performance.now() - start);
         if (remaining <= 0)

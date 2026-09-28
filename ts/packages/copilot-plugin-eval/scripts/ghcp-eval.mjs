@@ -17,6 +17,23 @@ import {
     restoreFiles,
 } from "./ghcp-eval-files.mjs";
 import { ghcpEvalNativeFilePermission } from "../../dispatcher/dispatcher/dist/execute/ghcpEvalFiles.js";
+import { ghcpEvalListActionAllowed } from "../../dispatcher/dispatcher/dist/execute/ghcpEvalLists.js";
+import {
+    evaluationCategory,
+    categoryCorpus,
+    categorySchedule,
+    assertCategoryReadiness,
+    assertCategoryResults,
+} from "./ghcp-eval-categories.mjs";
+import {
+    listPolicy,
+    listFilePolicy,
+    listClarificationQuestion,
+    readLists,
+    resetLists,
+    listsUnchanged,
+    gradeListTrial,
+} from "./ghcp-eval-lists.mjs";
 import { CopilotCreditBudget } from "../../dispatcher/dispatcher/dist/reasoning/copilotCreditBudget.js";
 import {
     registerGhcpEvalArtifact,
@@ -24,9 +41,6 @@ import {
 } from "../../dispatcher/dispatcher/dist/execute/ghcpEvalArtifacts.js";
 import {
     assertFrozenSpecification,
-    buildCorpus,
-    buildTrialSchedule,
-    corpusVersion,
     assertCorpusReadiness,
     filePolicy,
     fileConsentContext,
@@ -65,14 +79,20 @@ const [
     outputDirectory,
     configDirectory,
     ledgerPath,
-    selection = "1,2,3,4,5,6,7",
+    selectionText,
     phase = "pilot",
     evidencePath,
-    pilotCases = "S1",
+    pilotCasesText,
     batchStartText = "0",
-    batchSizeText = "7",
+    batchSizeText,
     repetitionsText = "1",
+    categoryName = "common-files",
 ] = process.argv.slice(2);
+const category = evaluationCategory(categoryName);
+const corpusVersion = category.corpusVersion;
+const listCategory = category.name === "lists";
+const selection = selectionText ?? category.candidates.join(",");
+const pilotCases = pilotCasesText ?? (listCategory ? "list-S1" : "S1");
 if (
     !cliPath ||
     !template ||
@@ -87,7 +107,11 @@ if (
 const fixtures = listFixture;
 const creditLedger = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
 validateEvalLedger(creditLedger);
-assertCorpusReadiness(
+function assertReadiness(readiness) {
+    assertCategoryReadiness(readiness, category);
+    if (!listCategory) assertCorpusReadiness(readiness);
+}
+assertReadiness(
     JSON.parse(fs.readFileSync(path.join(template, "result.json"), "utf8")),
 );
 const { getCopilotPermissionDefault } = await import(
@@ -97,6 +121,12 @@ const seededLists = Object.entries(fixtures).map(([name, items]) => ({
     name,
     items,
 }));
+const caseFilePolicy = (id, clarified = false) =>
+    listCategory ? listFilePolicy(id) : filePolicy(id, clarified);
+const clarificationQuestion = (id, question) =>
+    listCategory
+        ? listClarificationQuestion(id, question)
+        : isClarificationQuestion(id, question);
 const port = 19024;
 const excludedSchemas = Object.keys(
     JSON.parse(
@@ -151,6 +181,46 @@ const candidates = [
     },
     { id: 7, policy: "Native only" },
 ];
+
+function caseConsentAllowed(
+    action,
+    testCase,
+    store,
+    workspace,
+    clarified,
+    evidence,
+    env,
+) {
+    if (
+        action?.schemaName === "powershell.powershell-files" &&
+        action.actionName === "readFile" &&
+        typeof action.parameters?.path === "string" &&
+        isGhcpEvalArtifact(
+            action.parameters.path,
+            env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
+        )
+    )
+        return true;
+    if (!listCategory)
+        return fixtureConfirmationAllowed(
+            testCase.id,
+            action,
+            workspace,
+            evidence?.issueTitle,
+        );
+    if (action?.schemaName === "list")
+        return ghcpEvalListActionAllowed(
+            action.actionName,
+            action.parameters,
+            listPolicy(testCase.id, store, clarified, evidence?.issueTitle),
+        );
+    return (
+        testCase.id === "list-R4" &&
+        action?.schemaName === "powershell.powershell-files" &&
+        action.actionName === "readFile" &&
+        action.parameters?.path === path.join(workspace, "trip.txt")
+    );
+}
 
 function findListStores(directory) {
     return fs
@@ -259,20 +329,24 @@ function gradeCompletedTrial({
 }) {
     const after = JSON.parse(fs.readFileSync(store, "utf8"));
     const finalFiles = snapshotFiles(workspace);
-    const correctNames = Object.keys(fileFixture).every((name) =>
-        result.answer.includes(name),
-    );
+    const correctNames = Object.keys(
+        listCategory ? listFixture : fileFixture,
+    ).every((name) => result.answer.includes(name));
     result.grade = {
-        fileStateMatchesOracle: gradeFileState(
-            testCase.id,
-            finalFiles,
-            2617,
-            evidence?.issueTitle,
-        ),
+        fileStateMatchesOracle: listCategory
+            ? fileStateMatches(finalFiles, fileFixture)
+            : gradeFileState(
+                  testCase.id,
+                  finalFiles,
+                  2617,
+                  evidence?.issueTitle,
+              ),
         listStateUnchanged:
             JSON.stringify(normalizeLists(after)) ===
             JSON.stringify(normalizeLists(seededLists)),
-        containsAllNames: testCase.id === "S1" ? correctNames : null,
+        containsAllNames: ["S1", "list-S1"].includes(testCase.id)
+            ? correctNames
+            : null,
         clarificationRequested: testCase.clarification
             ? clarificationGiven
             : null,
@@ -282,6 +356,9 @@ function gradeCompletedTrial({
               fileStateMatches(result.stateAtClarification, fileFixture)
             : null,
         requiresManualFaithfulnessCheck: true,
+        ...(listCategory
+            ? gradeListTrial(result, store, finalFiles, evidence?.issueTitle)
+            : {}),
     };
     result.finalLists = normalizeLists(after);
     result.finalFiles = finalFiles;
@@ -289,14 +366,16 @@ function gradeCompletedTrial({
     if (
         phase === "pilot" &&
         result.candidate !== 7 &&
-        ((testCase.id === "S1" && !correctNames) ||
+        ((["S1", "list-S1"].includes(testCase.id) && !correctNames) ||
             !result.grade.fileStateMatchesOracle ||
-            !result.grade.listStateUnchanged)
+            !(listCategory
+                ? result.grade.listStateMatchesOracle
+                : result.grade.listStateUnchanged))
     )
         result.status = "pilot_needs_review";
 }
 
-function prepareTrial(candidate, directory, workspace, testCase) {
+function prepareTrial(candidate, directory, workspace, testCase, evidence) {
     fs.mkdirSync(directory);
     const { env, mcp } = makeConfiguration(
         directory,
@@ -313,13 +392,15 @@ function prepareTrial(candidate, directory, workspace, testCase) {
     env.TYPEAGENT_REASONING_TIMEOUT_MS = "90000";
     env.DEBUG = "typeagent:request";
     env.TYPEAGENT_GHCP_EVAL_FIXTURES = workspace;
+    env.TYPEAGENT_GHCP_EVAL_CATEGORY = category.name;
+    delete env.TYPEAGENT_GHCP_EVAL_LIST_POLICY;
     env.TYPEAGENT_GHCP_EVAL_FILE_POLICY = path.resolve(
         directory,
         "file-policy.json",
     );
     fs.writeFileSync(
         env.TYPEAGENT_GHCP_EVAL_FILE_POLICY,
-        JSON.stringify(filePolicy(testCase.id)),
+        JSON.stringify(caseFilePolicy(testCase.id)),
     );
     const sessionId = randomUUID();
     env.TYPEAGENT_COPILOT_CREDIT_SESSION_SCOPE = sessionId;
@@ -358,7 +439,19 @@ function prepareTrial(candidate, directory, workspace, testCase) {
     const stores = findListStores(env.TYPEAGENT_USER_DATA_DIR);
     if (stores.length !== 1)
         throw new Error("Expected exactly one disposable list store");
-    fs.writeFileSync(stores[0], JSON.stringify(seededLists));
+    resetLists(stores[0]);
+    if (listCategory) {
+        env.TYPEAGENT_GHCP_EVAL_LIST_POLICY = path.resolve(
+            directory,
+            "list-policy.json",
+        );
+        fs.writeFileSync(
+            env.TYPEAGENT_GHCP_EVAL_LIST_POLICY,
+            JSON.stringify(
+                listPolicy(testCase.id, stores[0], false, evidence?.issueTitle),
+            ),
+        );
+    }
     const sessionDataPath = path.join(
         path.dirname(path.dirname(stores[0])),
         "data.json",
@@ -422,6 +515,10 @@ function persistTrial({
     result.totalIncludingSetupMs = performance.now() - started;
     try {
         result.finalFiles = snapshotFiles(workspace);
+        const stores = findListStores(env.TYPEAGENT_USER_DATA_DIR);
+        if (stores.length !== 1)
+            throw new Error("Expected one final list store");
+        result.finalLists = readLists(stores[0]);
     } catch (error) {
         result.status = "harness_failed";
         result.error = `Final fixture snapshot failed: ${String(error)}`;
@@ -449,11 +546,13 @@ function persistTrial({
 
 async function trial(candidate, directory, testCase, workspace, evidence) {
     const { env, config, stores, sessionDataPath, sessionData, sessionId } =
-        prepareTrial(candidate, directory, workspace, testCase);
+        prepareTrial(candidate, directory, workspace, testCase, evidence);
     const result = {
         phase,
         candidate: candidate.id,
         caseId: testCase.id,
+        category: category.name,
+        protocolVersion,
         corpusVersion,
         prompt: testCase.prompt,
         sessionId,
@@ -469,6 +568,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         toolResults: [],
         recoverableToolFailures: [],
         noPrematureFileMutation: true,
+        noPrematureListMutation: true,
     };
     let server;
     let client;
@@ -486,13 +586,27 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         if (executionStopped || clarificationGiven)
             throw new Error("Clarification cannot replay stopped work");
         result.stateAtClarification = snapshotFiles(workspace);
+        result.listsAtClarification = readLists(stores[0]);
+        if (!listsUnchanged(stores[0])) result.noPrematureListMutation = false;
         if (!fileStateMatches(result.stateAtClarification, fileFixture))
             result.noPrematureFileMutation = false;
         clarificationGiven = true;
         fs.writeFileSync(
             env.TYPEAGENT_GHCP_EVAL_FILE_POLICY,
-            JSON.stringify(filePolicy(testCase.id, true)),
+            JSON.stringify(caseFilePolicy(testCase.id, true)),
         );
+        if (listCategory)
+            fs.writeFileSync(
+                env.TYPEAGENT_GHCP_EVAL_LIST_POLICY,
+                JSON.stringify(
+                    listPolicy(
+                        testCase.id,
+                        stores[0],
+                        true,
+                        evidence?.issueTitle,
+                    ),
+                ),
+            );
         result.clarificationSource = source;
         result.clarificationQuestion = question;
         return testCase.clarification;
@@ -594,7 +708,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                     kind: request.kind,
                     readOnly: request.readOnly,
                 });
-                const policy = filePolicy(testCase.id, clarificationGiven);
+                const policy = caseFilePolicy(testCase.id, clarificationGiven);
                 if (
                     executionStopped ||
                     (preparation && request.kind === "write")
@@ -642,9 +756,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             onUserInputRequest: (request) => {
                 result.interactions.push(request.question);
                 if (testCase.clarification && !clarificationGiven) {
-                    if (
-                        !isClarificationQuestion(testCase.id, request.question)
-                    ) {
+                    if (!clarificationQuestion(testCase.id, request.question)) {
                         result.routeViolations.push(
                             "confirmation-or-unrelated-question-before-clarification",
                         );
@@ -669,19 +781,15 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                     confirmationCount < 8 &&
                     (pending?.prompt?.type === "confirmation" ||
                         handlerAnswer) &&
-                    (fixtureConfirmationAllowed(
-                        testCase.id,
+                    caseConsentAllowed(
                         action,
+                        testCase,
+                        stores[0],
                         workspace,
-                        evidence?.issueTitle,
-                    ) ||
-                        (action?.schemaName === "powershell.powershell-files" &&
-                            action.actionName === "readFile" &&
-                            typeof action.parameters?.path === "string" &&
-                            isGhcpEvalArtifact(
-                                action.parameters.path,
-                                env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
-                            )))
+                        clarificationGiven,
+                        evidence,
+                        env,
+                    )
                 ) {
                     const yes = handlerAnswer
                         ? "Run"
@@ -713,6 +821,13 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             hooks: {
                 onPreToolUse: (input) => {
                     if (
+                        listCategory &&
+                        testCase.clarification &&
+                        !clarificationGiven &&
+                        !listsUnchanged(stores[0])
+                    )
+                        result.noPrematureListMutation = false;
+                    if (
                         testCase.clarification &&
                         !clarificationGiven &&
                         !fileStateMatches(snapshotFiles(workspace), fileFixture)
@@ -730,7 +845,16 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                         );
                     if (!/ask_user|continueAction/.test(input.toolName))
                         approvedInteractions.clear();
+                    const forbiddenListRoute =
+                        listCategory &&
+                        !(
+                            /ask_user/.test(input.toolName) ||
+                            candidate.tools.some((name) =>
+                                input.toolName.endsWith(name),
+                            )
+                        );
                     const forbidden =
+                        forbiddenListRoute ||
                         unauthorizedContinuation ||
                         (executionStopped &&
                             !/ask_user|cancelAction/.test(input.toolName)) ||
@@ -839,7 +963,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             const preparationStart = performance.now();
             await session.sendAndWait(
                 {
-                    prompt: "Discover available contracts for file inventory, reading, writing/appending and copying files, GitHub pull-request files/checks and issue details, and read-only IP configuration. Do not execute actions, inspect contents, establish preferred targets, or guess future requests.",
+                    prompt: category.preparation,
                 },
                 90_000,
             );
@@ -858,6 +982,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             testCase,
             canClarify: () => !clarificationGiven && !executionStopped,
             clarify,
+            isClarification: clarificationQuestion,
         });
         result.e2eMs = performance.now() - measuredStart;
         result.finalResponseAt = new Date().toISOString();
@@ -912,18 +1037,19 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
 
 const repetitions = phase === "pilot" ? 1 : Number(repetitionsText);
 const batchStart = Number(batchStartText);
-const batchSize = phase === "pilot" ? 7 : Number(batchSizeText);
+const width = category.candidates.length;
+const batchSize = phase === "pilot" ? width : Number(batchSizeText ?? width);
 if (
     !Number.isInteger(batchStart) ||
     batchStart < 0 ||
     !Number.isInteger(batchSize) ||
     batchSize < 1 ||
-    batchSize > 7
+    batchSize > width
 )
-    throw new Error("Each batch must contain between one and seven trials");
-if (phase === "measured" && (batchStart % 7 !== 0 || batchSize !== 7))
+    throw new Error("Batch size exceeds the active category candidate count");
+if (phase === "measured" && (batchStart % width !== 0 || batchSize !== width))
     throw new Error(
-        "Measured batches must preserve all seven candidates for one paired case",
+        "Measured batches must preserve all category candidates for one paired case",
     );
 fs.mkdirSync(outputDirectory, { recursive: true });
 const resultsPath = path.join(outputDirectory, "results.json");
@@ -936,7 +1062,8 @@ if (results.length !== batchStart)
     );
 const selected = selection.split(",").map(Number);
 if (
-    selected.some((id) => !candidates.some((candidate) => candidate.id === id))
+    selected.some((id) => !category.candidates.includes(id)) ||
+    new Set(selected).size !== selected.length
 ) {
     throw new Error("Unknown pilot candidate");
 }
@@ -944,12 +1071,19 @@ if (!["pilot", "measured"].includes(phase))
     throw new Error("Unknown run phase");
 const workspace = path.resolve(outputDirectory, "workspace");
 fs.mkdirSync(workspace, { recursive: true });
-const corpus = buildCorpus(workspace, "microsoft/TypeAgent", 3058, 3067, 2617);
+const corpus = categoryCorpus(
+    category,
+    workspace,
+    "microsoft/TypeAgent",
+    3058,
+    3067,
+    2617,
+);
 const evidence = evidencePath
     ? JSON.parse(fs.readFileSync(evidencePath, "utf8"))
     : undefined;
 if (evidence?.readinessFile)
-    assertCorpusReadiness(
+    assertReadiness(
         JSON.parse(
             fs.readFileSync(
                 path.resolve(
@@ -963,15 +1097,15 @@ if (evidence?.readinessFile)
 if (
     phase === "measured" &&
     (!evidence?.issueTitle ||
-        selected.length !== 7 ||
-        new Set(selected).size !== 7 ||
+        selected.length !== width ||
+        new Set(selected).size !== width ||
         !evidence.readinessFile)
 ) {
     throw new Error(
-        "Measured runs require independent issue evidence and all seven candidates",
+        "Measured runs require independent issue evidence and all category candidates",
     );
 }
-if (evidence?.readinessFile)
+if (evidence?.readinessFile && !listCategory)
     evidence.prOracles = externalOracle(
         JSON.parse(
             fs.readFileSync(
@@ -989,17 +1123,22 @@ const cases =
         ? corpus.filter(({ id }) => pilotCases.split(",").includes(id))
         : shuffled(corpus, seed);
 if (cases.length === 0) throw new Error("No cases selected");
-const { order, ...applicability } = buildTrialSchedule(
+const { order, ...applicability } = categorySchedule(
+    category,
     cases,
     phase === "pilot" ? selected : shuffled(selected, seed),
     repetitions,
 );
+assertCategoryResults(results, order, category);
 const specification =
     JSON.stringify(
         {
             protocolVersion,
+            category: category.name,
             corpusVersion,
             fixtures: fileFixture,
+            listFixtures: listFixture,
+            preparationPrompt: category.preparation,
             runnerSha256: createHash("sha256")
                 .update(fs.readFileSync(fileURLToPath(import.meta.url)))
                 .digest("hex"),
@@ -1013,10 +1152,12 @@ const specification =
             seed,
             order,
             cases,
-            candidates,
+            candidates: candidates.filter(({ id }) =>
+                category.candidates.includes(id),
+            ),
             applicability: {
                 ...applicability,
-                policy: "All twenty common-file cases apply to all seven candidates. Counts and denominators derive from frozen order.",
+                policy: `Only ${category.candidates.join(",")} are eligible in ${category.name}; derive separate denominators from this category schedule.`,
             },
             model: evalModel,
             reasoningEffort: "high",
@@ -1039,7 +1180,7 @@ const specification =
             ledgerPath,
             templateDirectory: path.resolve(template),
             fixtureReset:
-                "Copy catalog-only state, exclude stale locks; keep inactive lists unchanged, restore seven ordinary text files and remove the previous trial backup.",
+                "Copy category preflight state, exclude stale locks; restore exact seven-list seed and seven ordinary files, remove previous backup; validate both domains independently.",
             gradingStatus:
                 "independent fixture oracles; explicit final-answer review required",
             nativeTools,
