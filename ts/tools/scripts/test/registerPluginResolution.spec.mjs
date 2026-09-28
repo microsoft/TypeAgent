@@ -14,7 +14,7 @@ import {
     resolveCopilotCli,
 } from "../../installers/common/register-plugin.mjs";
 
-function resolve({
+async function resolve({
     env = {},
     pathCopilot = "",
     copilotPath = "",
@@ -29,7 +29,7 @@ function resolve({
         if (outcome instanceof Error) throw outcome;
         return outcome;
     };
-    const selected = resolveCopilotCli({
+    const selected = await resolveCopilotCli({
         copilotPath,
         env,
         platform: "win32",
@@ -40,7 +40,7 @@ function resolve({
     return { selected, probed, lines };
 }
 
-test("working PATH npm shim wins over a stale WinGet fallback", () => {
+test("working PATH npm shim wins over a stale WinGet fallback", async () => {
     const pathShim = String.raw`C:\.tools\.npm-global\copilot.cmd`;
     const localAppData = String.raw`C:\Users\test\AppData\Local`;
     const staleWinGet = path.win32.join(
@@ -50,7 +50,7 @@ test("working PATH npm shim wins over a stale WinGet fallback", () => {
         "Links",
         "copilot.exe",
     );
-    const result = resolve({
+    const result = await resolve({
         env: { LOCALAPPDATA: localAppData },
         pathCopilot: pathShim,
         outcomes: new Map([
@@ -64,10 +64,10 @@ test("working PATH npm shim wins over a stale WinGet fallback", () => {
     assert.match(result.lines.join("\n"), /Selected Copilot CLI/);
 });
 
-test("later PATH candidate is tried when the first candidate fails", () => {
+test("later PATH candidate is tried when the first candidate fails", async () => {
     const stale = String.raw`C:\stale\copilot.exe`;
     const working = String.raw`C:\.tools\.npm-global\copilot.cmd`;
-    const result = resolve({
+    const result = await resolve({
         pathCopilot: [stale, working],
         outcomes: new Map([
             [stale, { status: 1 }],
@@ -79,7 +79,7 @@ test("later PATH candidate is tried when the first candidate fails", () => {
     assert.deepEqual(result.probed, [stale, working]);
 });
 
-test("PATH discovery probes a later working executable", (t) => {
+test("PATH discovery probes a later working executable", async (t) => {
     const root = fs.mkdtempSync(
         path.join(os.tmpdir(), "typeagent-copilot-resolution-"),
     );
@@ -105,7 +105,7 @@ test("PATH discovery probes a later working executable", (t) => {
     }
 
     const lines = [];
-    const selected = resolveCopilotCli({
+    const selected = await resolveCopilotCli({
         env: {
             ...process.env,
             PATH: [staleDir, workingDir, process.env.PATH]
@@ -122,10 +122,10 @@ test("PATH discovery probes a later working executable", (t) => {
     assert.match(lines.join("\n"), /validation failed/);
 });
 
-test("extensionless COPILOT_CLI_PATH remains the highest-priority override", () => {
+test("extensionless COPILOT_CLI_PATH remains the highest-priority override", async () => {
     const override = String.raw`C:\custom\copilot`;
     const pathCandidate = String.raw`C:\path\copilot.cmd`;
-    const result = resolve({
+    const result = await resolve({
         env: { COPILOT_CLI_PATH: override },
         pathCopilot: pathCandidate,
     });
@@ -134,7 +134,7 @@ test("extensionless COPILOT_CLI_PATH remains the highest-priority override", () 
     assert.deepEqual(result.probed, [override]);
 });
 
-test("linked Windows executables are canonicalized before spawning", (t) => {
+test("linked Windows executables are canonicalized before spawning", async (t) => {
     const root = fs.mkdtempSync(
         path.join(os.tmpdir(), "typeagent-copilot-link-"),
     );
@@ -147,10 +147,10 @@ test("linked Windows executables are canonicalized before spawning", (t) => {
     );
     const linkedExecutable = path.join(link, path.basename(process.execPath));
     const spawned = [];
-    const spawnSync = childProcess.spawnSync;
-    const spawnMock = t.mock.method(childProcess, "spawnSync", (...args) => {
+    const spawn = childProcess.spawn;
+    const spawnMock = t.mock.method(childProcess, "spawn", (...args) => {
         spawned.push(args[0]);
-        return spawnSync(...args);
+        return spawn(...args);
     });
     syncBuiltinESMExports();
     t.after(() => {
@@ -163,7 +163,7 @@ test("linked Windows executables are canonicalized before spawning", (t) => {
         candidates.push(linkedExecutable.replace(/\.exe$/i, ""));
     }
     for (const candidate of candidates) {
-        const selected = resolveCopilotCli({
+        const selected = await resolveCopilotCli({
             env: { COPILOT_CLI_PATH: candidate },
             pathCopilot: [],
             logger: { write() {} },
@@ -180,7 +180,7 @@ test("linked Windows executables are canonicalized before spawning", (t) => {
     );
 });
 
-test("VS Code Copilot shim is rejected before a working fallback", () => {
+test("VS Code Copilot shim is rejected before a working fallback", async () => {
     const appData = String.raw`C:\Users\test\AppData\Roaming`;
     const shim = path.win32.join(
         appData,
@@ -192,7 +192,7 @@ test("VS Code Copilot shim is rejected before a working fallback", () => {
         "copilot.exe",
     );
     const fallback = String.raw`C:\tools\copilot.cmd`;
-    const result = resolve({
+    const result = await resolve({
         env: { APPDATA: appData },
         copilotPath: shim,
         pathCopilot: fallback,
@@ -208,7 +208,7 @@ test(
     {
         skip: process.platform !== "win32",
     },
-    (t) => {
+    async (t) => {
         const root = fs.realpathSync.native(
             fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-winget-")),
         );
@@ -240,7 +240,7 @@ test(
         const executable = path.join(packageDir, "copilot.exe");
         fs.copyFileSync(process.execPath, executable);
         const lines = [];
-        const selected = resolveCopilotCli({
+        const selected = await resolveCopilotCli({
             env: {
                 LOCALAPPDATA: localAppData,
                 APPDATA: path.join(root, "Roaming"),
@@ -261,7 +261,7 @@ test(
     {
         skip: process.platform !== "win32",
     },
-    (t) => {
+    async (t) => {
         const root = fs.mkdtempSync(
             path.join(os.tmpdir(), "typeagent-winget-scope-"),
         );
@@ -307,7 +307,7 @@ test(
             ProgramFiles: programFiles,
             ProgramW6432: programFiles,
         };
-        const result = resolve({
+        const result = await resolve({
             env,
             pathCopilot: [],
             outcomes: new Map([
@@ -323,7 +323,7 @@ test(
                 "Package discovery should not run for a working override",
             );
         });
-        const override = resolve({
+        const override = await resolve({
             env: { ...env, COPILOT_CLI_PATH: working },
             pathCopilot: [],
         });
@@ -332,12 +332,12 @@ test(
     },
 );
 
-test("WinGet enumeration errors are logged without hiding the final discovery failure", (t) => {
+test("WinGet enumeration errors are logged without hiding the final discovery failure", async (t) => {
     t.mock.method(fs, "readdirSync", () => {
         throw Object.assign(new Error("access denied"), { code: "EACCES" });
     });
     const lines = [];
-    assert.throws(
+    await assert.rejects(
         () =>
             resolveCopilotCli({
                 env: { LOCALAPPDATA: String.raw`C:\Local` },
@@ -359,12 +359,12 @@ test(
     {
         skip: process.platform !== "win32",
     },
-    (t) => {
+    async (t) => {
         const root = fs.mkdtempSync(
             path.join(os.tmpdir(), "typeagent-missing-cli-"),
         );
         t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-        const spawnMock = t.mock.method(childProcess, "spawnSync", () => {
+        const spawnMock = t.mock.method(childProcess, "spawn", () => {
             throw new Error("Missing launchers must not be spawned");
         });
         syncBuiltinESMExports();
@@ -373,7 +373,7 @@ test(
             syncBuiltinESMExports();
         });
         const lines = [];
-        assert.throws(
+        await assert.rejects(
             () =>
                 resolveCopilotCli({
                     env: { APPDATA: root },
@@ -387,11 +387,11 @@ test(
     },
 );
 
-test("failed and timed out candidates are skipped for a working candidate", () => {
+test("failed and timed out candidates are skipped for a working candidate", async () => {
     const failed = String.raw`C:\failed\copilot.exe`;
     const timedOut = String.raw`C:\timed-out\copilot.cmd`;
     const working = String.raw`C:\working\copilot.cmd`;
-    const result = resolve({
+    const result = await resolve({
         env: { COPILOT_CLI_PATH: failed },
         copilotPath: timedOut,
         pathCopilot: working,
@@ -411,9 +411,9 @@ test("failed and timed out candidates are skipped for a working candidate", () =
     );
 });
 
-test("no usable candidate produces an explicit error", () => {
+test("no usable candidate produces an explicit error", async () => {
     const candidate = String.raw`C:\broken\copilot.exe`;
-    assert.throws(
+    await assert.rejects(
         () =>
             resolve({
                 pathCopilot: candidate,
@@ -423,11 +423,11 @@ test("no usable candidate produces an explicit error", () => {
     );
 });
 
-test("synchronous probe failures are logged before trying fallbacks", () => {
+test("synchronous probe failures are logged before trying fallbacks", async () => {
     const broken = String.raw`C:\WinGet\Links\copilot.exe`;
     const timedOut = String.raw`C:\hung\copilot.cmd`;
     const working = String.raw`C:\npm\copilot.cmd`;
-    const result = resolve({
+    const result = await resolve({
         env: { COPILOT_CLI_PATH: broken },
         copilotPath: timedOut,
         pathCopilot: working,
@@ -456,9 +456,9 @@ test("synchronous probe failures are logged before trying fallbacks", () => {
     );
 });
 
-test("a thrown probe failure does not replace the no-working-CLI error", () => {
+test("a thrown probe failure does not replace the no-working-CLI error", async () => {
     const candidate = String.raw`C:\broken\copilot.exe`;
-    assert.throws(
+    await assert.rejects(
         () =>
             resolve({
                 pathCopilot: candidate,

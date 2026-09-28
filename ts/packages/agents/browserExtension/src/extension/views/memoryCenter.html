@@ -24,7 +24,15 @@
           Corpus
           <select id="corpusSelect"></select>
         </label>
-        <button id="refreshButton" type="button">Refresh</button>
+        <button
+          id="refreshButton"
+          class="icon-button"
+          type="button"
+          aria-label="Refresh corpus"
+          title="Refresh corpus"
+        >
+          ↻
+        </button>
         <button id="createCorpusButton" class="primary" type="button">
           Create corpus
         </button>
@@ -76,14 +84,37 @@
               </button>
             </div>
           </div>
-          <dl id="sourceMetadata" class="metadata"></dl>
-          <h3>Revisions</h3>
-          <div id="revisionList" class="revision-list empty">
-            No source selected.
-          </div>
+          <details class="source-details">
+            <summary>Source details and revisions</summary>
+            <dl id="sourceMetadata" class="metadata"></dl>
+            <h3>Revisions</h3>
+            <div id="revisionList" class="revision-list empty">
+              No source selected.
+            </div>
+          </details>
           <div class="content-heading">
             <h3>Content</h3>
             <span id="contentRange"></span>
+          </div>
+          <div class="editor-tabs" role="tablist" aria-label="Content view">
+            <button
+              id="writeTab"
+              class="editor-tab active"
+              type="button"
+              role="tab"
+              aria-selected="true"
+            >
+              Write
+            </button>
+            <button
+              id="previewTab"
+              class="editor-tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+            >
+              Preview
+            </button>
           </div>
           <textarea
             id="contentEditor"
@@ -91,6 +122,11 @@
             spellcheck="false"
             disabled
           ></textarea>
+          <div
+            id="contentPreview"
+            class="markdown-preview hidden"
+            role="tabpanel"
+          ></div>
           <div class="content-actions">
             <button id="contentPrevious" type="button" disabled>
               Previous content
@@ -120,12 +156,26 @@
             <div id="relationshipList" class="knowledge-list empty">
               No source selected.
             </div>
+            <details class="hidden-knowledge">
+              <summary>
+                Hidden knowledge <span id="suppressionCount"></span>
+              </summary>
+              <div id="suppressionList" class="knowledge-list empty">None</div>
+            </details>
           </section>
 
           <section class="card jobs-panel">
             <div class="section-heading">
               <h2>Jobs</h2>
-              <button id="refreshJobsButton" type="button">Refresh</button>
+              <button
+                id="refreshJobsButton"
+                class="icon-button"
+                type="button"
+                aria-label="Refresh jobs"
+                title="Refresh jobs"
+              >
+                ↻
+              </button>
             </div>
             <div id="jobList" class="list"></div>
             <div class="pager">

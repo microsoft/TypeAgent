@@ -1,9 +1,9 @@
 # Conversation Search — Design & Plan
 
-Status: **in progress** — slice 1 complete (fuzzy name find, all clients); slice
-2 landed (unified tagged index scaffolding + wiring + unit tests); slice 3
-landed (population: live tee + Copilot batch-append). Next: slice 4 (content
-search surface). Last updated: 2026-07-30.
+Status: **implemented; follow-up work remains** — fuzzy name lookup, the unified
+tagged index, live and Copilot population, content search, summarization, and
+historical backfill are available in connected mode. Compaction and reliable
+live end-to-end coverage remain open. Last verified: 2026-09-22.
 
 ## Goal
 
@@ -193,8 +193,10 @@ false`, so the per-conversation memory tee is off there but the unified index
     circular-init TDZ (`systemAgent` calls `getMemoryCommandHandlers()` at module
     top level). The tee call sites are one-liners; coverage rests on the Copilot
     test (seam), the full build (type threading), and the slice-2 rank tests.
-- **Slice 4 — content search surface.** `@conversation search` command +
-  `searchConversation` action + `.agr`; CLI; group/rank by conversation.
+- **Slice 4 — content search surface: DONE.** `@conversation search` command,
+  `searchConversation` action and grammar, RPC, CLI, grouped conversation
+  ranking, snippets, `@conversation summarize`, and `@conversation index`
+  historical backfill are implemented.
 - **Later** — unify the two commands if desired; standalone Shell support.
 
 ## Open items / risks
@@ -207,3 +209,6 @@ false`, so the per-conversation memory tee is off there but the unified index
 - Privacy: tombstoned (deleted) content physically remains in the unified index
   until compaction — ensure it is filtered from both search results and answer
   generation immediately on delete.
+- Historical backfill reads user turns from `displayLog.json`; live population
+  includes user and assistant turns, so old and new conversations can have
+  different recall coverage.

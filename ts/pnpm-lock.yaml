@@ -1299,9 +1299,15 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
+      '@github/copilot-sdk':
+        specifier: 1.0.13
+        version: 1.0.13
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -1926,6 +1932,9 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
+      '@github/copilot-sdk':
+        specifier: 1.0.13
+        version: 1.0.13
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@4.3.6)
@@ -2582,9 +2591,6 @@ importers:
 
   packages/agents/email:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../../typeagent
@@ -3319,15 +3325,15 @@ importers:
 
   packages/agents/powershell:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
       '@typeagent/agent-flows':
         specifier: workspace:*
         version: link:../../agent-flows
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       debug:
         specifier: ^4.3.4
         version: 4.4.3(supports-color@8.1.1)
@@ -3552,9 +3558,6 @@ importers:
 
   packages/agents/taskflow:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
       '@typeagent/agent-flows':
         specifier: workspace:*
         version: link:../../agent-flows
@@ -3670,12 +3673,12 @@ importers:
 
   packages/agents/utility:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/browser-control-rpc':
         specifier: workspace:*
         version: link:../browserControlRpc
@@ -5584,9 +5587,6 @@ importers:
 
   packages/kp:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
@@ -5621,12 +5621,6 @@ importers:
 
   packages/mcp/thoughts:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
-      '@anthropic-ai/sdk':
-        specifier: ^0.93.0
-        version: 0.93.0(zod@4.4.3)
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient

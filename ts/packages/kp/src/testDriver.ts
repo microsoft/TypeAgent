@@ -13,7 +13,7 @@ import { TextChunk, ChunkGroup, QueryPlan } from "./types.js";
 import { buildIndex } from "./indexBuilder.js";
 import { QueryEngine } from "./queryEngine.js";
 import { generateAnswer, ChunkContent } from "./answerGenerator.js";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { openai } from "@typeagent/aiclient";
 import * as readline from "readline";
 
 /** Convert a TextChunk to ChunkContent, handling exactOptionalPropertyTypes. */
@@ -257,20 +257,11 @@ async function generateQueryPlan(
 ): Promise<QueryPlan> {
     const prompt = `${QUERY_PLAN_PROMPT}\n\nUser question: "${userQuery}"`;
 
-    const queryInstance = query({
-        prompt,
-        options: { model },
-    });
-
-    let responseText = "";
-    for await (const message of queryInstance) {
-        if (message.type === "result") {
-            if (message.subtype === "success") {
-                responseText = message.result || "";
-                break;
-            }
-        }
+    const result = await openai.createChatModel(model).complete(prompt);
+    if (!result.success) {
+        throw new Error(`Query planning failed: ${result.message}`);
     }
+    const responseText = result.data;
 
     // Extract JSON
     const jsonStart = responseText.indexOf("{");
@@ -294,7 +285,7 @@ async function generateQueryPlan(
 // =========================================================================
 
 async function main() {
-    const model = process.env.KP_MODEL ?? "claude-sonnet-4-20250514";
+    const model = process.env.KP_MODEL ?? "copilot:gpt-5.6-sol";
 
     console.log("=== kp Test Driver ===\n");
 

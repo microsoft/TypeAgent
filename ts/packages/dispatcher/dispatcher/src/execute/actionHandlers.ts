@@ -859,15 +859,28 @@ export async function executeActions(
             const translationResult = await translatePendingRequestAction(
                 action,
                 context,
+                pending.completedActions,
                 actionIndex,
             );
 
             const requestAction = translationResult.requestAction;
+            if (!(await canExecute(requestAction.actions, context))) {
+                const error =
+                    "Deferred actions were not executed because they are unknown or disabled. " +
+                    "Completed actions must not be replayed.";
+                displayError(error, context);
+                return {
+                    error,
+                    failedAction: executableAction,
+                    fallbackToReasoning: false,
+                };
+            }
             actionQueue.unshift(
                 ...(await toPendingActions(
                     context,
                     requestAction.actions,
                     requestAction.history?.entities,
+                    pending.completedActions,
                 )),
             );
             continue;
@@ -921,15 +934,24 @@ export async function executeActions(
             };
         }
 
+        if (result.pendingChoice !== undefined) {
+            if (actionQueue.length > 0 || result.additionalActions?.length) {
+                const error =
+                    `Action ${getFullActionName(executableAction)} is awaiting a user choice. ` +
+                    "Remaining steps were not executed and will not resume automatically. " +
+                    "Respond to the choice to continue only this action; do not replay earlier completed actions.";
+                displayError(error, context);
+                return {
+                    error,
+                    failedAction: executableAction,
+                    fallbackToReasoning: false,
+                };
+            }
+            return;
+        }
+
         const resultEntityId = executableAction.resultEntityId;
         if (resultEntityId !== undefined) {
-            if (result.resultEntity === undefined) {
-                throw new Error(
-                    `Action ${getFullActionName(
-                        executableAction,
-                    )} did not return a result entity.`,
-                );
-            }
             if (resultEntityResolver === undefined) {
                 throw new Error(
                     `Internal error: resultEntityResolver is undefined`,
@@ -937,13 +959,19 @@ export async function executeActions(
             }
             resultEntityResolver.setResultEntity(
                 `\${result-${resultEntityId}}`,
-                {
-                    ...result.resultEntity,
-                    sourceAppAgentName: appAgentName,
-                },
+                result.resultEntity === undefined
+                    ? undefined
+                    : {
+                          ...result.resultEntity,
+                          sourceAppAgentName: appAgentName,
+                      },
                 result.resultValue,
             );
         }
+        pending.completedActions.push({
+            executableAction: structuredClone(executableAction),
+            result: structuredClone(result),
+        });
 
         if (result.activityContext !== undefined) {
             if (actionQueue.length > 0) {
@@ -1014,7 +1042,12 @@ export async function executeActions(
                 );
                 // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
                 actionQueue.unshift(
-                    ...(await toPendingActions(context, actions, undefined)),
+                    ...(await toPendingActions(
+                        context,
+                        actions,
+                        undefined,
+                        pending.completedActions,
+                    )),
                 );
             } catch (e) {
                 if (structured !== undefined) throw e;

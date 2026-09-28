@@ -345,6 +345,30 @@ On uninstall the MSI removes the extension only when the installed version
 still matches the version originally installed by TypeAgent, so it does not
 delete an independently upgraded extension.
 
+## Copilot plugin registration and repair
+
+The MSI registers `typeagent@typeagent-local` with Copilot CLI and verifies
+that it is enabled. CLI discovery skips broken or unresponsive candidates
+(10 seconds per version probe); each registration command has a two-minute
+deadline. On Windows, a timed-out launcher and its child processes are stopped.
+Registration is attempted again after prerequisite setup.
+
+If registration fails, TypeAgent remains installed, but the completion page
+shows **Copilot plugin setup did not complete** instead of silently losing the
+integration. No terminal command is required to retry: reopen the same MSI,
+choose **Repair**, and complete the wizard. Repair reruns payload extraction,
+CLI discovery, registration, and verification. A failed repair shows the same
+notice; a successful repair clears it. Restart Copilot to load the plugin.
+Repair also restores a plugin that was removed after installation.
+
+Diagnostics are written to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-register-plugin.log`.
+The adjacent `.status` file records the latest attempt: `incomplete` until
+verification succeeds, then `complete`. The interactive installer clears old
+status before starting so a previous success cannot hide a failed launch.
+Silent installations have no completion dialog; check the log and status
+file for registration results. MSI success alone does not certify registration.
+
 ## Endpoint provider selection
 
 TypeAgent needs an LLM endpoint configuration (`config.local.yaml`) at runtime.

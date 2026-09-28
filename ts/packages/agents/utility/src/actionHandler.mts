@@ -17,9 +17,7 @@ import {
     readFile as fsReadFile,
     writeFile as fsWriteFile,
 } from "node:fs/promises";
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
-import { fileURLToPath } from "node:url";
+import { openai } from "@typeagent/aiclient";
 import path from "node:path";
 import type { Browser } from "puppeteer";
 import puppeteer from "puppeteer-extra";
@@ -29,6 +27,8 @@ import { convert } from "html-to-text";
 import type { UtilityAction } from "./utilitySchema.mjs";
 
 (puppeteer as any).use(StealthPlugin());
+
+const DEFAULT_LLM_MODEL = "copilot:gpt-5.6-sol";
 
 export type UtilityAgentContext = {
     // Lazily-launched browser instance. Held here so closeAgentContext() can
@@ -241,31 +241,11 @@ async function handleLlmTransform(
     prompt: string,
     parseJson?: boolean,
     htmlOutput?: boolean,
-    model: string = "claude-haiku-4-5-20251001",
+    model: string = DEFAULT_LLM_MODEL,
     signal?: AbortSignal,
 ) {
-    const abortController = new AbortController();
     const fullPrompt = `${prompt}\n\n${input}`;
-    const queryInstance = query({
-        prompt: fullPrompt,
-        options: { model, abortController, ...claudeExecutableOption() },
-    });
-    const onAbort = () => {
-        abortController.abort(signal?.reason);
-        queryInstance.return();
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-    let responseText = "";
-    try {
-        for await (const message of queryInstance) {
-            if (message.type === "result" && message.subtype === "success") {
-                responseText = (message as any).result || "";
-                break;
-            }
-        }
-    } finally {
-        signal?.removeEventListener("abort", onAbort);
-    }
+    const responseText = await completePrompt(fullPrompt, model, signal);
 
     if (parseJson) {
         const match = responseText.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
@@ -295,56 +275,14 @@ async function handleLlmTransform(
     return createActionResultFromTextDisplay(responseText, responseText);
 }
 
-// Compute the monorepo ts/ root from this module's compiled location.
-// Compiled path: packages/agents/utility/dist/actionHandler.mjs → up 4 levels = ts/
-function getRepoRoot(): string {
-    const thisFile = fileURLToPath(import.meta.url);
-    return path.resolve(path.dirname(thisFile), "../../../..");
-}
-
 async function handleClaudeTask(
     goal: string,
     parseJson?: boolean,
-    model: string = "claude-haiku-4-5-20251001",
-    maxTurns: number = 10,
+    model: string = DEFAULT_LLM_MODEL,
+    _maxTurns: number = 10,
     signal?: AbortSignal,
 ) {
-    const abortController = new AbortController();
-    const queryInstance = query({
-        prompt: goal,
-        options: {
-            model,
-            maxTurns,
-            abortController,
-            permissionMode: "acceptEdits",
-            ...claudeExecutableOption(),
-            canUseTool: async () => ({ behavior: "allow" as const }),
-            allowedTools: ["WebSearch", "WebFetch"],
-            cwd: getRepoRoot(),
-            settingSources: [],
-            maxThinkingTokens: 10000,
-            systemPrompt: {
-                type: "preset",
-                preset: "claude_code",
-            },
-        },
-    });
-    const onAbort = () => {
-        abortController.abort(signal?.reason);
-        queryInstance.return();
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-    let responseText = "";
-    try {
-        for await (const message of queryInstance) {
-            if (message.type === "result" && message.subtype === "success") {
-                responseText = (message as any).result || "";
-                break;
-            }
-        }
-    } finally {
-        signal?.removeEventListener("abort", onAbort);
-    }
+    const responseText = await completePrompt(goal, model, signal);
 
     if (parseJson) {
         const match = responseText.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
@@ -366,6 +304,23 @@ async function handleClaudeTask(
     }
 
     return createActionResultFromTextDisplay(responseText, responseText);
+}
+
+async function completePrompt(
+    prompt: string,
+    model: string,
+    signal?: AbortSignal,
+): Promise<string> {
+    const result = await openai
+        .createChatModel(model)
+        .complete(prompt, undefined, undefined, undefined, signal);
+    if (!result.success) {
+        throw new Error(result.message);
+    }
+    if (!result.data.trim()) {
+        throw new Error("LLM returned an empty response");
+    }
+    return result.data;
 }
 
 export function instantiate(): AppAgent {

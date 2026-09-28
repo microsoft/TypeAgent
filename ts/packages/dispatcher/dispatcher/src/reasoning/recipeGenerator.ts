@@ -1,14 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import type { ReasoningTrace } from "./tracing/types.js";
+import {
+    DEFAULT_GENERATION_MODEL,
+    runQueryWithTimeout,
+} from "../validation/queryWithTimeout.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:recipeGenerator");
 
-const RECIPE_MODEL = "claude-sonnet-4-5-20250929";
+const RECIPE_MODEL = DEFAULT_GENERATION_MODEL;
+
+export type RecipeTextGenerator = (prompt: string) => Promise<string>;
+
+const generateRecipeText: RecipeTextGenerator = (prompt) =>
+    runQueryWithTimeout(prompt, { model: RECIPE_MODEL });
 
 export interface ScriptRecipe {
     name: string;
@@ -78,6 +85,10 @@ const BLOCKED_IDENTIFIERS = [
  * reusable async function execute(api, params) script.
  */
 export class ReasoningRecipeGenerator {
+    constructor(
+        private readonly textGenerator: RecipeTextGenerator = generateRecipeText,
+    ) {}
+
     async generate(trace: ReasoningTrace): Promise<ScriptRecipe | null> {
         if (!trace.result.success) {
             debug("Trace was not successful, skipping recipe generation");
@@ -184,7 +195,7 @@ SCRIPT GENERATION RULES:
 7. Return { success: true, message: "..." } on success
 8. Parameterize values that change between invocations via params.paramName
 9. Use template literals for string interpolation: \`Top \${params.quantity} songs\`
-10. Default LLM model: "claude-haiku-4-5-20251001" for extraction/formatting
+10. Default LLM model: "gpt-5.6-sol" for extraction/formatting
 11. BLOCKED identifiers — do NOT use: ${BLOCKED_IDENTIFIERS}
 
 GRAMMAR PATTERN RULES:
@@ -280,22 +291,7 @@ Generate a corrected version. Return ONLY the JSON object, no markdown or explan
     private async generateWithLLM(
         prompt: string,
     ): Promise<ScriptRecipe | null> {
-        let result = "";
-
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: RECIPE_MODEL,
-                maxTurns: 1,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        for await (const message of queryInstance) {
-            if (message.type === "result" && message.subtype === "success") {
-                result = message.result;
-            }
-        }
+        const result = await this.textGenerator(prompt);
 
         if (!result) return null;
 

@@ -2035,6 +2035,46 @@ export class AppAgentManager
             }
         }
 
+        const persistedGrammarStore = context.persistedGrammarStore;
+        if (persistedGrammarStore !== undefined) {
+            for (const schemaName of record.schemas) {
+                const config = this.actionConfigs.get(schemaName);
+                if (config === undefined) continue;
+                const schemaHash =
+                    this.actionSchemaFileCache.getActionSchemaFile(
+                        config,
+                    ).sourceHash;
+                await persistedGrammarStore.reconcileSchema(schemaName, {
+                    schemaHash,
+                    ...(config.cacheBinding === undefined
+                        ? {}
+                        : {
+                              sourceId: config.cacheBinding.sourceId,
+                              actionFingerprints:
+                                  config.cacheBinding.actionFingerprints,
+                          }),
+                });
+
+                const agentGrammar =
+                    context.agentGrammarRegistry.getAgent(schemaName);
+                if (agentGrammar === undefined) continue;
+                agentGrammar.resetToBase();
+                for (const rule of persistedGrammarStore.getActiveRulesForSchema(
+                    schemaName,
+                )) {
+                    const result = agentGrammar.addGeneratedRules(
+                        rule.grammarText,
+                    );
+                    if (!result.success) {
+                        debugError(
+                            `Failed to reload learned rule ${rule.id} for ${schemaName}: ${result.errors.join("; ")}`,
+                        );
+                    }
+                }
+                context.agentCache.syncAgentGrammar(schemaName);
+            }
+        }
+
         // Clear translator cache to force re-translation with new schema
         context.translatorCache.clear();
         // Drop cached derived keyword vectors for this agent's schemas so the

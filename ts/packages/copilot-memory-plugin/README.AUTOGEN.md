@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d819fdca8f7d378a095ae130929801ae0b5501b88fe8543cb81a878e788d8963 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=16206da41d7fb9120a0340f35b053cb0bd664f2017074e41242800035994d747 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-memory-plugin — AI-generated documentation
@@ -33,17 +33,18 @@ External: `@modelcontextprotocol/sdk`, `proper-lockfile`, `zod`
 
 ### Files of interest
 
-`./src/hooks/stdio.ts`, `./src/hooks/types.ts`, `./src/shared/context.ts`, …and 5 more under `./src/`.
+`./src/hooks/hook-router.ts`, `./src/hooks/parse-input.ts`, `./src/hooks/stdio.ts`, …and 9 more under `./src/`.
 
 ### Environment variables
 
-_2 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `COPILOT_PLUGIN_ROOT`
 - `PLUGIN_ROOT`
+- `TYPEAGENT_MEMORY_CWD`
 
 ---
 
-_Auto-generated against commit `dfb41795661d0bd3e856b6719b0178671b8e041d` on `2026-09-23T23:23:23.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-memory-plugin docs:verify-links` to spot-check._
+_Auto-generated against commit `e6466ea5a66a5b1e3dc1ee6ee99b7068ab8b547c` on `2026-09-24T04:21:03.480Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-memory-plugin docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

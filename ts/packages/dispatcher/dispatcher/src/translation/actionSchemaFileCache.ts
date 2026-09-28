@@ -341,6 +341,16 @@ export function createSchemaInfoProvider(
     const result: SchemaInfoProvider = {
         getActionSchemaFileHash: (schemaName) =>
             getActionSchemaFile(schemaName).sourceHash,
+        getActionCacheBinding: (schemaName, actionName) => {
+            const binding = provider.getActionConfig(schemaName).cacheBinding;
+            const actionFingerprint = binding?.actionFingerprints[actionName];
+            return binding === undefined || actionFingerprint === undefined
+                ? undefined
+                : {
+                      sourceId: binding.sourceId,
+                      actionFingerprint,
+                  };
+        },
         getActionNamespace: (schemaName) =>
             getActionSchemaFile(schemaName).parsedActionSchema.actionNamespace,
         getActionCacheEnabled: (schemaName, actionName) =>

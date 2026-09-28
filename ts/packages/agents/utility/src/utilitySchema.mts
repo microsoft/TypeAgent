@@ -48,7 +48,7 @@ export type LlmTransformAction = {
         parseJson?: boolean;
         // When true, LLM is asked to return HTML; result is stored in historyText as HTML (default: false)
         htmlOutput?: boolean;
-        // Claude model ID (default: claude-haiku-4-5-20251001)
+        // Aiclient model endpoint (default: copilot:gpt-5.6-sol)
         model?: string;
     };
 };
@@ -56,13 +56,13 @@ export type LlmTransformAction = {
 export type ClaudeTaskAction = {
     actionName: "claudeTask";
     parameters: {
-        // Goal or question for Claude to accomplish using its tools (web search, fetch, etc.)
+        // Goal or question for the LLM. The action name is retained for compatibility.
         goal: string;
         // Parse the result as JSON and store in historyText (default: false)
         parseJson?: boolean;
-        // Claude model ID (default: claude-haiku-4-5-20251001)
+        // Aiclient model endpoint (default: copilot:gpt-5.6-sol)
         model?: string;
-        // Maximum agentic turns (default: 10)
+        // Retained for compatibility; one-shot models ignore this value.
         maxTurns?: number;
     };
 };
