@@ -563,40 +563,13 @@ async function createOrReusePowerShellFlow(
         context.abortSignal?.throwIfAborted();
         const existing = await flowStore.getFlow(actionName);
         if (existing) {
-            const existingScript = await flowStore.getScript(actionName);
-            if (!existingScript) {
-                return createPowerShellFailure(
-                    "scriptFailure",
-                    `Script not found for flow: ${actionName}`,
-                );
-            }
-            const mappedParameters: Record<string, unknown> = {};
-            mapParamsToFlowDefs(
-                executionParameters.parameters,
-                existing.parameters,
-                mappedParameters,
-            );
-            expandEnvVarsInParams(mappedParameters, existing.parameters);
-            const validationError =
-                validatePathParameters(mappedParameters, existing.parameters) ??
-                validateParameterRules(mappedParameters, existing.parameters);
-            if (validationError) {
-                return createPowerShellFailure(
-                    "invalidParameters",
-                    validationError,
-                );
-            }
-            const result = await executeFlowScript(
+            return executeExistingPowerShellFlow(
+                actionName,
                 existing,
-                existingScript,
-                mappedParameters,
-                context.abortSignal,
-                context.profiler,
+                executionParameters.parameters,
+                flowStore,
+                context,
             );
-            if (result.error === undefined) {
-                await recordUsageAfterExecution(flowStore, actionName, context);
-            }
-            return result;
         }
 
         const grammarValidation = await validateFlowGrammarPatterns(
@@ -701,6 +674,42 @@ async function createOrReusePowerShellFlow(
             `${execution.output}\n\nCreated reusable PowerShell flow '${promoted}'.`,
         );
     });
+}
+
+async function executeExistingPowerShellFlow(
+    flowName: string,
+    flow: PowerShellFlowDefinition,
+    suppliedParameters: Record<string, unknown>,
+    flowStore: PowerShellStore,
+    context: ActionContext<PowerShellAgentContext>,
+): Promise<ActionResult> {
+    const script = await flowStore.getScript(flowName);
+    if (!script) {
+        return createPowerShellFailure(
+            "scriptFailure",
+            `Script not found for flow: ${flowName}`,
+        );
+    }
+    const mappedParameters: Record<string, unknown> = {};
+    mapParamsToFlowDefs(suppliedParameters, flow.parameters, mappedParameters);
+    expandEnvVarsInParams(mappedParameters, flow.parameters);
+    const validationError =
+        validatePathParameters(mappedParameters, flow.parameters) ??
+        validateParameterRules(mappedParameters, flow.parameters);
+    if (validationError) {
+        return createPowerShellFailure("invalidParameters", validationError);
+    }
+    const result = await executeFlowScript(
+        flow,
+        script,
+        mappedParameters,
+        context.abortSignal,
+        context.profiler,
+    );
+    if (result.error === undefined) {
+        await recordUsageAfterExecution(flowStore, flowName, context);
+    }
+    return result;
 }
 
 async function repairAndExecutePowerShellFlow(
@@ -1021,16 +1030,34 @@ async function handlePowerShellFlowAction(
                 if ("error" in validation) {
                     return validation.error;
                 }
+                const previousPatterns = [...flow.grammarPatterns];
                 const added = await flowStore.addGrammarPatterns(
                     flowName,
                     validation.patterns.map((pattern) => ({
                         pattern: pattern.pattern,
-                        isAlias: pattern.isAlias ?? true,
+                        isAlias: true,
                         examples: [],
                     })),
                 );
                 if (added > 0) {
-                    await context.sessionContext.reloadAgentSchema();
+                    try {
+                        await context.sessionContext.reloadAgentSchema();
+                    } catch (error) {
+                        try {
+                            await flowStore.replaceGrammarPatterns(
+                                flowName,
+                                previousPatterns,
+                            );
+                            await context.sessionContext.reloadAgentSchema();
+                        } catch (rollbackError) {
+                            return createActionResultFromError(
+                                `The grammar update failed and rollback also failed: ${errorMessage(rollbackError)}`,
+                            );
+                        }
+                        return createActionResultFromError(
+                            `No patterns were added because the updated PowerShell grammar could not be activated: ${errorMessage(error)}`,
+                        );
+                    }
                 }
                 return createActionResultFromTextDisplay(
                     added > 0
@@ -1812,6 +1839,7 @@ export function instantiate(): AppAgent {
             return {
                 format: "ts",
                 content: agentContext.store.generateDynamicSchemaText(),
+                cacheBinding: await agentContext.store.getActionCacheBinding(),
             };
         },
 
