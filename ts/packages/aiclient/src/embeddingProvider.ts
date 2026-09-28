@@ -128,11 +128,26 @@ export function tryCreateEmbeddingModel(
             return createCopilotEmbeddingModel(
                 process.env[EmbeddingEnvVars.MODEL]?.trim() ||
                     DefaultCopilotEmbeddingModel,
+                undefined,
+                undefined,
+                {
+                    dimensions:
+                        dimensions ?? readPositiveInt(EmbeddingEnvVars.SIZE),
+                    maxBatchSize: readPositiveInt(
+                        EmbeddingEnvVars.MAX_BATCH_SIZE,
+                    ),
+                },
             );
-        default:
+        default: {
             dimensions ??= readPositiveInt(EmbeddingEnvVars.SIZE);
+            const options = {
+                modelName:
+                    process.env[EmbeddingEnvVars.MODEL]?.trim() || undefined,
+                maxBatchSize: readPositiveInt(EmbeddingEnvVars.MAX_BATCH_SIZE),
+            };
             return endpoint !== undefined
-                ? createEmbeddingModel(endpoint, dimensions)
-                : createEmbeddingModel(undefined, dimensions);
+                ? createEmbeddingModel(endpoint, dimensions, options)
+                : createEmbeddingModel(undefined, dimensions, options);
+        }
     }
 }
