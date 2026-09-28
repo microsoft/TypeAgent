@@ -13,6 +13,8 @@ const program = new Command("git-commit-story")
 program
     .command("hello")
     .description("Print a greeting")
-    .action(() => console.log("Hello from git-commit-story"));
+    .action(() => {
+        process.stdout.write("Hello from git-commit-story\n");
+    });
 
 program.parse();
