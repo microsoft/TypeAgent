@@ -55,11 +55,6 @@ export type CreatePowerShellFlow = {
         }[];
         // PowerShell cmdlets the script uses
         allowedCmdlets: string[];
-        // PowerShell modules to import for the script's cmdlets (e.g.
-        // ["NetTCPIP"] for Get-NetTCPConnection). Include every module required
-        // by allowedCmdlets — use the same list that made testPowerShellFlow
-        // pass, or the flow will fail at invocation with "not recognized".
-        allowedModules?: string[];
     };
 };
 
@@ -90,12 +85,8 @@ export type CreateAndExecutePowerShellFlow = {
         }[];
         // PowerShell cmdlets the script uses
         allowedCmdlets: string[];
-        // PowerShell modules required by the allowed cmdlets
-        allowedModules?: string[];
         // JSON string of named parameters for this one execution
         executionParametersJson?: string;
-        // Whether the script needs network access
-        networkAccess?: boolean;
     };
 };
 
@@ -132,8 +123,6 @@ export type TestPowerShellFlow = {
     parameters: {
         script: string;
         allowedCmdlets: string[];
-        allowedModules?: string[];
-        networkAccess?: boolean;
         testParameters?: string;
     };
 };
@@ -148,8 +137,6 @@ export type EditPowerShellFlow = {
         script: string;
         // Updated list of PowerShell cmdlets the script uses
         allowedCmdlets: string[];
-        // Updated list of PowerShell modules to import (optional; preserved if omitted)
-        allowedModules?: string[];
     };
 };
 
@@ -163,8 +150,6 @@ export type RepairAndExecutePowerShellFlow = {
         script: string;
         // Updated cmdlet whitelist
         allowedCmdlets: string[];
-        // Updated module whitelist
-        allowedModules?: string[];
         // JSON string of named parameters for the retry
         executionParametersJson?: string;
     };

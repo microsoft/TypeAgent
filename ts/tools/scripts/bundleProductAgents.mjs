@@ -15,11 +15,17 @@ import {
 } from "./bundleUtils.mjs";
 
 function parseArgs(argv) {
-    const args = { profile: "inbox" };
+    const args = {
+        profile: "inbox",
+        platform: process.platform,
+        arch: process.arch,
+    };
     for (let i = 2; i < argv.length; i++) {
         const arg = argv[i];
         if (arg === "--out") args.out = argv[++i];
         else if (arg === "--profile") args.profile = argv[++i];
+        else if (arg === "--platform") args.platform = argv[++i];
+        else if (arg === "--arch") args.arch = argv[++i];
         else throw new Error(`Unknown argument: ${arg}`);
     }
     if (!args.out) {
@@ -29,7 +35,11 @@ function parseArgs(argv) {
     return args;
 }
 
-export async function bundleProfileAgents(profile, nodeModulesRoot) {
+export async function bundleProfileAgents(
+    profile,
+    nodeModulesRoot,
+    options = { platform: process.platform, arch: process.arch },
+) {
     const configPath = path.join(
         tsRoot,
         "packages",
@@ -50,7 +60,11 @@ export async function bundleProfileAgents(profile, nodeModulesRoot) {
         }
         const destination = packageInstallPath(nodeModulesRoot, entry.name);
         console.log(`[${agentName}] Bundling ${entry.name}...`);
-        const result = await bundleAgentPackage(source.directory, destination);
+        const result = await bundleAgentPackage(
+            source.directory,
+            destination,
+            options,
+        );
         results.push({
             agentName,
             packageName: entry.name,
@@ -67,7 +81,10 @@ export async function bundleProfileAgents(profile, nodeModulesRoot) {
 
 async function main() {
     const args = parseArgs(process.argv);
-    const results = await bundleProfileAgents(args.profile, args.out);
+    const results = await bundleProfileAgents(args.profile, args.out, {
+        platform: args.platform,
+        arch: args.arch,
+    });
     console.log(
         `Bundled ${results.length} agents for profile '${args.profile}'.`,
     );

@@ -126,8 +126,16 @@ describe("flatten", () => {
         expect(out).toEqual({ AZURE_OPENAI_RESPONSE_FORMAT: "1" });
     });
 
-    test("preserves explicit false values for telemetry controls", () => {
+    test("preserves explicit false values for security and telemetry controls", () => {
         const out = flatten({
+            powershell: {
+                brokerExecution: {
+                    enabled: false,
+                },
+                dynamicExecution: {
+                    enabled: false,
+                },
+            },
             telemetry: {
                 debugBridge: false,
                 structuredLogs: false,
@@ -139,6 +147,8 @@ describe("flatten", () => {
             },
         });
         expect(out).toEqual({
+            POWERSHELL_BROKEREXECUTION_ENABLED: "0",
+            POWERSHELL_DYNAMICEXECUTION_ENABLED: "0",
             TELEMETRY_DEBUGBRIDGE: "0",
             TELEMETRY_STRUCTUREDLOGS: "0",
             TELEMETRY_LOCAL_ENABLED: "0",

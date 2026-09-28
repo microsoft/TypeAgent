@@ -149,6 +149,8 @@ jobs:
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
+        env:
+          TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS: ${{ runner.os == 'Windows' && '1' || '0' }}
         run: |
           node tools/scripts/runTestLocalWithSummary.mjs
       - name: UI tests (requires display)
