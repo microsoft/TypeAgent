@@ -25,7 +25,9 @@ import {
 import {
     CREATE_SET,
     HARDCODE_RULE_SET,
-    LEGACY_RULE_RE,
+    hasDefaultRule,
+    isLegacyRule,
+    isSnakeCaseId,
     nestedParamSpecEqual,
     parameterGraderLlmDecisionSchema,
     parameterGraderLlmVerifierSchema,
@@ -265,17 +267,20 @@ export function tryClassifyActionParameterFieldHardcode(
 }
 
 function stripReusedPrefix(rule: string): string {
-    return rule.replace(/^(?:reused:)+/, "");
+    while (rule.startsWith("reused:")) {
+        rule = rule.slice("reused:".length);
+    }
+    return rule;
 }
 
 function isLiveReusableRule(rule: string): boolean {
     const bare = stripReusedPrefix(rule);
-    if (!bare || LEGACY_RULE_RE.test(bare) || /default/i.test(bare)) {
+    if (!bare || isLegacyRule(bare) || hasDefaultRule(bare)) {
         return false;
     }
     // Live hardcode rule ids or llm:snake_case
     if (bare.startsWith("llm:")) {
-        return /^llm:[a-z][a-z0-9_]*$/.test(bare);
+        return isSnakeCaseId(bare.slice("llm:".length));
     }
     if (bare.startsWith("array-items:")) {
         return isLiveReusableRule(bare.slice("array-items:".length));
@@ -596,7 +601,7 @@ export async function classifyActionParameterFieldWithLlm(
             continue;
         }
 
-        if (/default/i.test(decision.rule)) {
+        if (hasDefaultRule(decision.rule)) {
             lastError = `LLM rule id '${decision.rule}' looks like a default; rejected`;
             verifierFeedback = lastError;
             continue;

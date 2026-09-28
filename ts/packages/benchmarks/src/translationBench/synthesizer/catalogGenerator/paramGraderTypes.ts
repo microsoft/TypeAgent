@@ -318,9 +318,48 @@ export const CREATE_SET = new Set<string>(CREATE_POLICIES);
 export const VERIFY_SET = new Set<string>(VERIFY_MODES);
 export const HARDCODE_RULE_SET = new Set<string>(HARDCODE_RULE_IDS);
 
+function isWordCharOrDash(ch: string): boolean {
+    return (
+        (ch >= "a" && ch <= "z") ||
+        (ch >= "0" && ch <= "9") ||
+        ch === "_" ||
+        ch === "-"
+    );
+}
+
 /** Retired / invented rule ids that must never be reused. */
-export const LEGACY_RULE_RE =
-    /(?:^|:)(?:string-default[\w-]*|type-array-exact|default[\w-]*)(?:$|:)/i;
+export function isLegacyRule(rule: string): boolean {
+    for (const segment of rule.toLowerCase().split(":")) {
+        if (segment === "type-array-exact") {
+            return true;
+        }
+        // \w- remainder: "defaultfoo" and "string-default-x" both count.
+        for (const prefix of ["string-default", "default"]) {
+            if (!segment.startsWith(prefix)) {
+                continue;
+            }
+            const rest = segment.slice(prefix.length);
+            if ([...rest].every(isWordCharOrDash)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+export function hasDefaultRule(rule: string): boolean {
+    return rule.toLowerCase().includes("default");
+}
+
+export function isSnakeCaseId(value: string): boolean {
+    if (value.length === 0 || value[0]! < "a" || value[0]! > "z") {
+        return false;
+    }
+    return [...value].every(
+        (ch) =>
+            (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") || ch === "_",
+    );
+}
 
 export const parameterGraderLlmDecisionSchema = z
     .object({
@@ -330,8 +369,8 @@ export const parameterGraderLlmDecisionSchema = z
             .string()
             .trim()
             .min(1)
-            .regex(
-                /^[a-z][a-z0-9_]*$/,
+            .refine(
+                isSnakeCaseId,
                 "rule must be snake_case (llm-authored reason id)",
             ),
     })
