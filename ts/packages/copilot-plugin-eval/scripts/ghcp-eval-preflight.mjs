@@ -74,6 +74,7 @@ for (const [name, content] of Object.entries(fileFixture)) {
 env.TYPEAGENT_GHCP_EVAL_FIXTURES = fixtures;
 env.TYPEAGENT_GHCP_EVAL_CATEGORY = category.name;
 delete env.TYPEAGENT_GHCP_EVAL_LIST_POLICY;
+delete env.TYPEAGENT_GHCP_EVAL_CORRELATION;
 if (listCategory) {
     env.TYPEAGENT_GHCP_EVAL_LIST_POLICY = path.resolve(
         outputDirectory,

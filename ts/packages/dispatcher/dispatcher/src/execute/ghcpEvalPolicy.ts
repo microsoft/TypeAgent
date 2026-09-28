@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isGhcpEvalArtifact } from "./ghcpEvalArtifacts.js";
+import { ghcpEvalDenialDiagnostic } from "./ghcpEvalDiagnostics.js";
 import {
     ghcpEvalFileActionAllowed,
     readGhcpEvalFilePolicy,
@@ -160,7 +161,16 @@ export function assertGhcpEvalAction(
             }
         }
     }
-    recordGhcpEvalEvent("action.denied", { schemaName, actionName });
+    if (process.env.TYPEAGENT_GHCP_EVAL_TRACE)
+        recordGhcpEvalEvent(
+            "action.denied",
+            ghcpEvalDenialDiagnostic(
+                schemaName,
+                actionName,
+                parameters,
+                fixtureRoot,
+            ),
+        );
     markGhcpEvalExecutionFailure();
     throw new Error(
         `GHCP eval policy denied ${schemaName}.${actionName} before execution`,

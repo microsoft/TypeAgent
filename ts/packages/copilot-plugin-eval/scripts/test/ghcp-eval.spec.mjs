@@ -57,8 +57,8 @@ const readFailureEvents = [
     },
 ];
 
-test("protocol six preserves all twenty common-file cases for all seven candidates", () => {
-    assert.equal(protocolVersion, 6);
+test("protocol seven preserves all twenty common-file cases for all seven candidates", () => {
+    assert.equal(protocolVersion, 7);
     const schedule = buildTrialSchedule(corpus, [1, 2, 3, 4, 5, 6, 7], 1);
     const { order } = schedule;
     assert.equal(schedule.totalSlots, 140);

@@ -574,6 +574,60 @@ test("category reports preserve denominators, unknowns, latency and preparation 
     );
 });
 
+test("common category report independently retains 140 rows and missing external answer evidence remains pending", () => {
+    const common = evaluationCategory();
+    const cases = categoryCorpus(
+        common,
+        "fixture",
+        "microsoft/TypeAgent",
+        3058,
+        3067,
+        2617,
+    );
+    const order = categorySchedule(common, cases, common.candidates, 1).order;
+    const metadata = {
+        protocolVersion,
+        category: common.name,
+        corpusVersion: common.corpusVersion,
+    };
+    const rows = order.map((row) => ({
+        ...metadata,
+        ...row,
+        status: "completed_ungraded",
+        routeViolations: [],
+        answer: "Reviewed answer",
+        e2eMs: 10,
+        grade: {
+            fileStateMatchesOracle: true,
+            listStateUnchanged: true,
+            clarificationRequested: true,
+            noPrematureFileMutation: true,
+        },
+        preparationMs: row.candidate === 4 ? 2 : null,
+    }));
+    const reviews = rows.map((row) => ({
+        ...row,
+        outcome: "success",
+        reason: "Synthetic review",
+        evidence: ["synthetic"],
+    }));
+    const report = summarizeCategory(
+        { ...metadata, order, repetitions: 1 },
+        rows,
+        reviews,
+    );
+    assert.equal(report.denominator, 140);
+    assert.equal(report.candidates.length, 7);
+    assert.equal(report.pairwiseCommonSuccess.length, 21);
+    assert.equal(
+        preliminaryGrade(
+            rows.find((row) => row.caseId === "R5"),
+            {},
+        ).reason,
+        "independent_answer_evidence_unavailable",
+    );
+});
+
 test("offline list preflight validates six actual operation outcomes and denies unexpected confirmation context", async (t) => {
     const { directory } = fixture(t);
     const data = path.join(directory, "data");

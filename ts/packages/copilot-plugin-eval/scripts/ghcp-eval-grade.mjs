@@ -227,6 +227,11 @@ export function preliminaryGrade(result, evidence) {
         A2: ["charger", "adapter"],
         A5: ["destination", "mountain", "jacket", "required"],
     }[result.caseId];
+    if (required?.some((term) => typeof term !== "string"))
+        return {
+            outcome: "pending_review",
+            reason: "independent_answer_evidence_unavailable",
+        };
     const missing =
         required?.filter(
             (term) => !answer.toLowerCase().includes(term.toLowerCase()),

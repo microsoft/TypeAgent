@@ -3,7 +3,7 @@
 
 import path from "node:path";
 
-export const protocolVersion = 6;
+export const protocolVersion = 7;
 export const corpusVersion = "common-files-v1";
 
 export function buildTrialSchedule(cases, candidateIds, repetitions) {
@@ -421,7 +421,7 @@ export function isClarificationQuestion(id, question) {
         A2: /\b(report|file)\b/i,
         A3: /\b(pull request|PR|number)\b/i,
         A4: /\b(item|entry|line)\b/i,
-        A5: /\bfile\b/i,
+        A5: /\b(file|filename|file name)\b/i,
     }[id];
     return Boolean(
         subject?.test(question) &&

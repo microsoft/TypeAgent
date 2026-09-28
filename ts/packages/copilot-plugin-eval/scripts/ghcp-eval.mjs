@@ -11,6 +11,13 @@ import { execFileSync } from "node:child_process";
 import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
 import { evalModel, validateEvalLedger } from "./ghcp-eval-config.mjs";
 import {
+    candidateToolBoundary,
+    pendingInteractionGate,
+    callCorrelation,
+    toolEvidenceViews,
+    executionRouteViolation,
+} from "./ghcp-eval-boundary.mjs";
+import {
     snapshotFiles,
     fileStateMatches,
     gradeFileState,
@@ -405,6 +412,11 @@ function prepareTrial(candidate, directory, workspace, testCase, evidence) {
     const sessionId = randomUUID();
     env.TYPEAGENT_COPILOT_CREDIT_SESSION_SCOPE = sessionId;
     env.TYPEAGENT_GHCP_EVAL_TRACE = path.join(directory, "events.jsonl");
+    env.TYPEAGENT_GHCP_EVAL_CORRELATION = path.join(
+        directory,
+        "call-correlation.json",
+    );
+    fs.writeFileSync(env.TYPEAGENT_GHCP_EVAL_CORRELATION, "{}");
     const temporaryRoot = path.resolve(directory, "sdk-temp");
     fs.mkdirSync(temporaryRoot);
     env.TEMP = env.TMP = env.TMPDIR = temporaryRoot;
@@ -582,6 +594,9 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         ? { toolResults: [] }
         : undefined;
     const approvedInteractions = new Map();
+    const boundary = candidateToolBoundary(candidate, nativeTools);
+    const interactionGate = pendingInteractionGate();
+    const consentResults = [];
     const clarify = (question, source) => {
         if (executionStopped || clarificationGiven)
             throw new Error("Clarification cannot replay stopped work");
@@ -683,15 +698,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             sessionLimits: { maxAiCredits: 60 },
             workingDirectory: workspace,
             skipCustomInstructions: true,
-            availableTools:
-                candidate.id === 7
-                    ? nativeTools
-                    : [
-                          "mcp:*",
-                          ...(candidate.id >= 5
-                              ? nativeTools
-                              : ["builtin:ask_user"]),
-                      ],
+            availableTools: boundary.availableTools,
             ...(candidate.id === 7
                 ? {}
                 : { mcpServers: { "typeagent-e2e": config } }),
@@ -772,7 +779,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 }
                 const { action, pending, handlerAnswer } = fileConsentContext(
                     result.tools,
-                    result.toolResults,
+                    consentResults,
                     readBackendEvents(env.TYPEAGENT_GHCP_EVAL_TRACE),
                     request,
                 );
@@ -819,7 +826,19 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 );
             },
             hooks: {
+                onPreMcpToolCall: (input) => {
+                    fs.writeFileSync(
+                        env.TYPEAGENT_GHCP_EVAL_CORRELATION,
+                        JSON.stringify(
+                            callCorrelation(result, input, result.tools.length),
+                        ),
+                    );
+                },
                 onPreToolUse: (input) => {
+                    input = {
+                        ...input,
+                        toolName: boundary.canonical(input.toolName),
+                    };
                     if (
                         listCategory &&
                         testCase.clarification &&
@@ -845,30 +864,43 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                         );
                     if (!/ask_user|continueAction/.test(input.toolName))
                         approvedInteractions.clear();
-                    const forbiddenListRoute =
-                        listCategory &&
-                        !(
-                            /ask_user/.test(input.toolName) ||
-                            candidate.tools.some((name) =>
-                                input.toolName.endsWith(name),
-                            )
-                        );
+                    const wrongRoute = !boundary.check(input.toolName);
+                    const pendingReason = interactionGate.reason(
+                        input.toolName,
+                        input.toolArgs,
+                    );
                     const forbidden =
-                        forbiddenListRoute ||
+                        wrongRoute ||
+                        pendingReason ||
+                        (input.toolName !== "ask_user" &&
+                            boundary.hasActiveDomainCall()) ||
                         unauthorizedContinuation ||
-                        (executionStopped &&
-                            !/ask_user|cancelAction/.test(input.toolName)) ||
-                        (candidate.id === 4 &&
-                            ((!preparation &&
-                                input.toolName.includes("searchActions")) ||
-                                (preparation &&
-                                    input.toolName.includes("executeAction"))));
+                        executionRouteViolation(
+                            input.toolName,
+                            candidate,
+                            preparation,
+                            executionStopped,
+                        );
+                    boundary.recordDecision(
+                        input.toolName,
+                        input.toolArgs,
+                        !forbidden,
+                    );
                     if (forbidden) {
                         executionStopped = true;
                         result.routeViolations.push(input.toolName);
+                        result.boundaryDenials ??= [];
+                        result.boundaryDenials.push({
+                            tool: input.toolName,
+                            reason: wrongRoute
+                                ? "outside_candidate_allowlist"
+                                : (pendingReason ??
+                                  "execution_or_consent_guard"),
+                        });
                         return {
                             permissionDecision: "deny",
                             permissionDecisionReason:
+                                pendingReason ??
                                 "Evaluation route/interaction policy denied this call; do not replay it.",
                         };
                     }
@@ -876,6 +908,16 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 },
             },
         });
+        try {
+            result.toolBoundary = {
+                admitted: await boundary.initialize(session),
+                verifiedBeforePrompt: true,
+                auditedCalls: 0,
+            };
+        } catch (error) {
+            result.harnessError = `Tool boundary preflight failed: ${String(error)}`;
+            throw error;
+        }
         session.on("assistant.usage", (event) =>
             result.usage.push({
                 model: event.data.model,
@@ -922,6 +964,15 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             );
             if (tool) tool.endMs = performance.now() - started;
             try {
+                if (!tool)
+                    throw new Error("Tool completion has no start record");
+                const admitted = boundary.audit(tool.name, tool.arguments);
+                result.toolBoundary.auditedCalls++;
+                if (!admitted && event.data.success === true)
+                    throw new Error(
+                        "Denied outer tool reported success; enforcement unavailable",
+                    );
+                interactionGate.observe(event.data.result);
                 if (
                     terminalExecutionFailure(
                         tool?.name ?? "",
@@ -948,15 +999,13 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 result.harnessError = `Backend trace failed: ${String(error)}`;
                 executionStopped = true;
             }
-            result.toolResults.push({
-                toolCallId: event.data.toolCallId,
-                success: event.data.success,
-                result:
-                    testCase.id === "S5" || testCase.id === "M2"
-                        ? "[network evidence withheld]"
-                        : event.data.result,
-            });
-            if (executionStopped) approvedInteractions.clear();
+            const views = toolEvidenceViews(event.data, Boolean(network));
+            result.toolResults.push(views.persisted);
+            consentResults.push(views.consent);
+            if (executionStopped) {
+                approvedInteractions.clear();
+                interactionGate.clear();
+            }
         });
         result.status = "running";
         if (preparation) {
@@ -987,6 +1036,12 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         result.e2eMs = performance.now() - measuredStart;
         result.finalResponseAt = new Date().toISOString();
         result.answer = answer?.data.content ?? "";
+        interactionGate.assertSettled();
+        if (result.toolBoundary.auditedCalls !== result.tools.length) {
+            result.harnessError =
+                "Incomplete tool boundary audit at final response";
+            throw new Error(result.harnessError);
+        }
         gradeCompletedTrial({
             result,
             testCase,
@@ -1139,6 +1194,8 @@ const specification =
             fixtures: fileFixture,
             listFixtures: listFixture,
             preparationPrompt: category.preparation,
+            outerToolBoundary:
+                "Exact source-qualified allowlist, initialized runtime metadata before prompt, deny hook, per-call enforcement audit. Missing evidence fails closed.",
             runnerSha256: createHash("sha256")
                 .update(fs.readFileSync(fileURLToPath(import.meta.url)))
                 .digest("hex"),

@@ -33,7 +33,7 @@ scope. Weather is removed and calendar is deferred.
 
 ## Implementation and protocol history
 
-**Current protocol: 6, with independent `common-files-v1` and `lists-v1` categories.**
+**Current protocol: 7, with independent `common-files-v1` and `lists-v1` categories.**
 The default common category retains its exact twenty prompts, seven candidates,
 and 140 executions per repetition. The new lists category has twenty namespaced
 cases and only C1/C2 (NL fallback off/on) versus C3/C4 (discovery/earned reuse):
@@ -48,15 +48,16 @@ not pool its results with the historical list corpus or reuse an old preflight.
 The integrated runner retains positive-evidence read-error recovery while
 denials, cancellations and uncertain or side-effectful failures remain terminal.
 
-| Version                      | Meaning                                                                                                                                                                                                                    |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Protocol 2                   | Historical measured implementation at `e847c7a00907a1f4e2c6c4426c935b964fd9997c`: completed 140 trials. An earlier partial pass had harness-invalid records, which were excluded rather than scored as candidate failures. |
-| Protocol 3                   | Strict native failure/no-replay correction at `4275a7ca7743b761b7a108971de34184ebf6e289`; tested offline, not live measured. Superseded by later protocols.                                                                |
-| Portability                  | `b47f8bacd5073aa226392cc6ccb47a9a7e4caac7` accepts configured temp-parent aliases while retaining artifact provenance checks, and uses platform-native test paths.                                                         |
-| Protocol 4 follow-up (#3077) | Prospective positive-evidence safe-read recovery, frozen native applicability and list-based replacement A4 oracle. Tested offline, not live measured; applicability and corpus now superseded by protocol 5.              |
-| Protocol 5                   | Historical `common-files-v1`, 140 Luna trials frozen at `96e904546acc389cf64284db9b6fbcbe57191344`. Raw evidence and independently reviewed reports remain unchanged; this revision does not rescore them.                 |
-| Protocol 6                   | Prospective category-specific readiness, permissions, list reset/oracles, discovery preparation, schedule and reporting. Common 20x7 remains unchanged; lists adds 20x4. Offline validated only; no new measured scores.   |
-| Model and layout revision    | Eval-only scripts reside here. Copilot sessions explicitly use Luna 5.6 (`gpt-5.6-luna`), not historical `gpt-5.6-sol`. Translation/embedding identities are recorded separately.                                          |
+| Version                      | Meaning                                                                                                                                                                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Protocol 2                   | Historical measured implementation at `e847c7a00907a1f4e2c6c4426c935b964fd9997c`: completed 140 trials. An earlier partial pass had harness-invalid records, which were excluded rather than scored as candidate failures.    |
+| Protocol 3                   | Strict native failure/no-replay correction at `4275a7ca7743b761b7a108971de34184ebf6e289`; tested offline, not live measured. Superseded by later protocols.                                                                   |
+| Portability                  | `b47f8bacd5073aa226392cc6ccb47a9a7e4caac7` accepts configured temp-parent aliases while retaining artifact provenance checks, and uses platform-native test paths.                                                            |
+| Protocol 4 follow-up (#3077) | Prospective positive-evidence safe-read recovery, frozen native applicability and list-based replacement A4 oracle. Tested offline, not live measured; applicability and corpus now superseded by protocol 5.                 |
+| Protocol 5                   | Historical `common-files-v1`, 140 Luna trials frozen at `96e904546acc389cf64284db9b6fbcbe57191344`. Raw evidence and independently reviewed reports remain unchanged; this revision does not rescore them.                    |
+| Protocol 6                   | Prospective category-specific readiness, permissions, list reset/oracles, discovery preparation, schedule and reporting. Common 20x7 remains unchanged; lists adds 20x4. Offline validated only; no new measured scores.      |
+| Protocol 7                   | Prospective measured-03 remediation: A5 filename clarification, closed outer tool boundary, pending-interaction guard, private consent evidence separation and sanitized denial diagnostics. No measured rescore or live run. |
+| Model and layout revision    | Eval-only scripts reside here. Copilot sessions explicitly use Luna 5.6 (`gpt-5.6-luna`), not historical `gpt-5.6-sol`. Translation/embedding identities are recorded separately.                                             |
 
 Preserve original results, grades, run specifications and safety audits.
 Retrospective reporting amendments do not rewrite observations or prove what
@@ -319,7 +320,7 @@ trials; do not assume this per-task preparation was shared across a campaign.
 
 ### Category-safe reporting
 
-The offline exporter accepts one complete protocol-6 category at a time:
+The offline exporter accepts one complete protocol-7 category at a time:
 
 ```text
 node packages\copilot-plugin-eval\scripts\ghcp-eval-report.mjs <specification.json> <results.json> <reviews.json> <new-summary.json>
@@ -340,6 +341,37 @@ milliseconds, and E2E including preparation. No cross-category total or winner
 is emitted. Missing latency is not zero; absent common successes have null
 percentiles. The exporter refuses existing output paths and historical/mixed
 protocols. Keep protocol-2 and protocol-5 reports and original evidence unchanged.
+
+### Bounded measured-03 remediation (protocol 7)
+
+This pass distinguishes confirmed harness defects from observed model/product
+failures. Original protocol-5 observations and judgments remain frozen.
+
+| Evidence                                                                                               | Prospective correction / limitation                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A5/C2,C4 asked legitimate questions containing "filename", rejected by standalone `file` regex         | Accept `file`, `filename`, and `file name` in A5 referent questions. Positive measured-pattern and negative approval/unrelated-question regressions; confirmations still cannot resolve ambiguity.                                                                                                                                                                                                                      |
+| Off-route web/GitHub calls appeared despite candidate declarations                                     | Previous `mcp:*` admitted any MCP origin, and the common-files pre-tool hook lacked a complete route check. Replace wildcard exposure with exact source-qualified candidate names and enforce the same closed list in the pre-tool hook for all seven candidates.                                                                                                                                                       |
+| Runtime tool names differ from raw MCP contract names                                                  | Before any prompt, initialize SDK tools and read `session.rpc.tools.getCurrentMetadata()`. Validate every source/name, required tool and alias; unknown/ambiguous/missing metadata or unavailable RPC is a harness failure, not a fallback route. Audit each completed call against its preceding hook decision; missing evidence or denied execution reporting success stops the batch.                                |
+| M1/C3 and similar traces started a second execute with unresolved confirmation; M3/C3 used wrong scope | Track actual `requires_interaction` handles. Deny new tools/actions while pending, except asking the user or exact continuation/cancellation. Reject mismatched scope/operation/interaction with explicit errors, reject overlapping domain calls, and reject final completion with an unsettled interaction. Never repair model arguments, auto-plan, auto-approve, or replay. Existing one-use consent still applies. |
+| Private network trials replaced every tool result with a redaction marker before consent lookup        | Keep transient consent evidence separate from sanitized persisted results. A deterministic regression shows the old marker erased structured pending-action context. Private output remains redacted in exports; no artifact filesystem permissions are widened.                                                                                                                                                        |
+| Typed-file denials omitted requested parameters                                                        | Persist category/case/candidate and hashed session/call/contract handles, path shape/hash/known fixture basename, canonical root hash, argument flags and concrete policy reason. No external path prose, contents, credentials or network values are recorded by this diagnostic. Correlation is written immediately before MCP calls; unknown handles stay null.                                                      |
+| Backend success but incomplete/empty final presentation                                                | Installed SDK offline event tests preserve the actual final assistant message; backend-only output and empty final text stay empty. No evidence establishes a general final-message delivery bug. Do not synthesize a successful answer from backend output or count temporary-only links as durable delivery.                                                                                                          |
+
+The installed SDK 1.0.13 exposes source-qualified `availableTools`, a blocking
+`onPreToolUse` decision, and initialized tool metadata. Its pre-MCP hook supports
+metadata injection, **not** a permission decision; it is used only for sanitized
+correlation. Offline tests invoke the installed SDK hook dispatcher with mocked
+effects and exercise all seven allowlists and presentation events. This is not
+a live CLI enforcement certification: a future separately authorized run must
+pass runtime metadata readiness and call audits. No live tools, model sessions or
+provider calls were executed for this remediation.
+
+Wrong action selection, malformed bound arguments, native denied shell writes,
+uncertain effects and timeouts remain failures, not "fixed" scores. Exact causes
+of historical typed-path denials without parameters remain unresolved; new
+diagnostics make future evidence actionable. Result-entity work remains in #3073.
+Fresh protocol-7 readiness/specifications are required; neither protocol-5
+measured runs nor prospective protocol-6 artifacts can resume or pool here.
 
 ### Historical A4 replacement record (protocol 4)
 

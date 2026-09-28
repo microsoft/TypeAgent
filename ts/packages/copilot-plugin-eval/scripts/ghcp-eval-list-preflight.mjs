@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
+import { isDeepStrictEqual } from "node:util";
 import { readLists } from "./ghcp-eval-lists.mjs";
 
 export const listRequiredContracts = [
@@ -66,8 +67,7 @@ export async function verifyListPreflight(client, scopeId, env, result) {
             pending.prompt?.type === "confirmation" &&
             pending.prompt.action?.schemaName === "list" &&
             pending.prompt.action.actionName === actionName &&
-            JSON.stringify(pending.prompt.action.parameters) ===
-                JSON.stringify(parameters)
+            isDeepStrictEqual(pending.prompt.action.parameters, parameters)
         ) {
             response = await client.callTool(
                 {
