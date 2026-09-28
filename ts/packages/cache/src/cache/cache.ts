@@ -17,7 +17,6 @@ import {
 import {
     SchemaInfoProvider,
     doCacheAction,
-    isValidActionSchemaFileHash,
 } from "../explanation/schemaInfoProvider.js";
 import {
     ConstructionStore,
@@ -39,8 +38,9 @@ import {
 import { GrammarStoreImpl } from "./grammarStore.js";
 import { GrammarStore, MatchResult } from "./types.js";
 import {
+    getActionNamespaceKeys,
     getSchemaNamespaceKeys,
-    splitSchemaNamespaceKey,
+    isSchemaNamespaceKeyValid,
 } from "./schemaNamespace.js";
 
 export {
@@ -127,15 +127,8 @@ export class AgentCache {
             : undefined;
 
         if (schemaInfoProvider) {
-            this.namespaceKeyFilter = (namespaceKey) => {
-                const { schemaName, hash } =
-                    splitSchemaNamespaceKey(namespaceKey);
-                return isValidActionSchemaFileHash(
-                    schemaInfoProvider,
-                    schemaName,
-                    hash,
-                );
-            };
+            this.namespaceKeyFilter = (namespaceKey) =>
+                isSchemaNamespaceKeyValid(namespaceKey, schemaInfoProvider);
         }
     }
 
@@ -413,7 +406,12 @@ export class AgentCache {
                 return getFailedResult(cachingDisabledMessage);
             }
 
-            const namespaceKeys = this.getNamespaceKeys(
+            const namespaceKeys = getActionNamespaceKeys(
+                executableActions,
+                options?.namespaceSuffix,
+                this.schemaInfoProvider,
+            );
+            const matchNamespaceKeys = this.getNamespaceKeys(
                 getTranslationNamesForActions(executableActions),
                 options?.namespaceSuffix,
             );
@@ -425,7 +423,7 @@ export class AgentCache {
             const matchResult = this.match(requestAction.request, {
                 rejectReferences: false,
                 history: requestAction.history,
-                namespaceKeys,
+                namespaceKeys: matchNamespaceKeys,
             });
 
             debug(

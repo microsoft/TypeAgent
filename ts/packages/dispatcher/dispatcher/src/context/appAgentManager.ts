@@ -1685,6 +1685,9 @@ export class AppAgentManager
 
         // Replace the schema content with the dynamic version
         config.schemaFile = schemaContent;
+        if (schemaContent.cacheBinding !== undefined) {
+            config.cacheBinding = schemaContent.cacheBinding;
+        }
 
         // Invalidate cached parsed schema so it gets re-parsed from new content
         this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
