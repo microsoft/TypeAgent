@@ -510,6 +510,9 @@ export function configToTree(config: Config): ConfigTree {
             e.model = config.embedding.model;
         if (config.embedding.cacheDir !== undefined)
             e.cacheDir = config.embedding.cacheDir;
+        if (config.embedding.size !== undefined) e.size = config.embedding.size;
+        if (config.embedding.maxBatchSize !== undefined)
+            e.maxBatchSize = config.embedding.maxBatchSize;
         if (Object.keys(e).length > 0) tree.embedding = e;
     }
 
@@ -1037,6 +1040,14 @@ function emitEmbedding(node: unknown, out: FlatEnv): void {
         out.TYPEAGENT_EMBEDDING_CACHE_DIR = asString(
             e.cacheDir,
             "embedding.cacheDir",
+        );
+    if (e.size !== undefined)
+        out.TYPEAGENT_EMBEDDING_SIZE = String(
+            asNumber(e.size, "embedding.size"),
+        );
+    if (e.maxBatchSize !== undefined)
+        out.TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE = String(
+            asNumber(e.maxBatchSize, "embedding.maxBatchSize"),
         );
 }
 

@@ -76,6 +76,7 @@ export {
 } from "./copilotEmbedding.js";
 export {
     getEmbeddingProvider,
+    getEmbeddingSize,
     isEmbeddingAvailable,
     tryCreateEmbeddingModel,
     type EmbeddingProvider,
