@@ -160,8 +160,8 @@ openAI:
 # --- Copilot (Copilot SDK chat + Copilot embeddings) -----------------------
 # modelProvider: copilot
 # copilot:
-#   defaultModel: gpt-5.6-luna       # requires an authenticated `copilot` CLI
-#   fallbackModels:                 # first available concrete model is used
+#   defaultModel: gpt-6-luna         # requires an authenticated `copilot` CLI
+#   fallbackModels:                 # after the matching GPT-5.6 tier, use the first available model
 #     - gpt-5.4-mini
 #     - gpt-5-mini
 #     - gpt-5.4

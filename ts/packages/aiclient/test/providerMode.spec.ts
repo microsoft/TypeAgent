@@ -39,15 +39,15 @@ describe("Copilot provider mode", () => {
     });
 
     test.each([
-        ["DEFAULT", "gpt-5.6-luna"],
-        ["GPT_35_TURBO", "gpt-5.6-luna"],
-        ["GPT_4_O", "gpt-5.6-sol"],
-        ["GPT_5", "gpt-5.6-sol"],
-        ["GPT_5_MINI", "gpt-5.6-terra"],
-        ["GPT_5_NANO", "gpt-5.6-luna"],
-        ["GPT_5_6_LUNA", "gpt-5.6-luna"],
-        ["gpt_5_6_luna", "gpt-5.6-luna"],
-        ["GPT_V", "gpt-5.6-sol"],
+        ["DEFAULT", "gpt-6-luna"],
+        ["GPT_35_TURBO", "gpt-6-luna"],
+        ["GPT_4_O", "gpt-6-sol"],
+        ["GPT_5", "gpt-6-sol"],
+        ["GPT_5_MINI", "gpt-6-luna"],
+        ["GPT_5_NANO", "gpt-6-luna"],
+        ["GPT_5_6_LUNA", "gpt-6-luna"],
+        ["gpt_5_6_luna", "gpt-6-luna"],
+        ["GPT_V", "gpt-6-sol"],
     ])("maps %s to %s", (canonical, expected) => {
         expect(resolveTarget("copilot", canonical)).toBe(expected);
     });
