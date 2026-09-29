@@ -7,6 +7,8 @@ export interface RecordedToolCall {
     mcpServerName?: string;
     arguments?: unknown;
     result?: unknown;
+    // Parsed model-facing tool text, distinct from the raw event/UI result.
+    modelResult?: unknown;
     status: "completed" | "failed" | "denied";
     permission?: unknown;
 }

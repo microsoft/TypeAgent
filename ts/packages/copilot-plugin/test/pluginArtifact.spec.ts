@@ -43,6 +43,33 @@ describe("staged plugin artifact", () => {
         expect(runner).toContain("If a required tool is unavailable, stop");
     });
 
+    it("resolves the captured web-search callable without treating provenance as a namespace", async () => {
+        const pluginRoot = path.resolve(
+            path.dirname(fileURLToPath(import.meta.url)),
+            "..",
+            "..",
+        );
+        const runner = await readFile(
+            path.join(pluginRoot, "agents", "typeagent-macro-runner.agent.md"),
+            "utf8",
+        );
+
+        expect(runner).toContain("Check the already exposed tools");
+        expect(runner).toContain("exact recorded callable first");
+        expect(runner).toContain("functions.web_search");
+        expect(runner).toContain("github-mcp-server/web_search");
+        expect(runner).toContain("its input is `{ query: string }`");
+        expect(runner).toContain("load its definition");
+        expect(runner).toContain("Do not generalize this bridge");
+        expect(runner).toContain(
+            "cannot establish the required tool's identity",
+        );
+        expect(runner).toContain("Existing approved versions remain unchanged");
+        expect(runner).toContain("Check every declared postcondition");
+        expect(runner).toContain("Do not invent Copilot");
+        expect(runner).toContain("Never change the old version");
+    });
+
     it("contains the extension bundle at the declared discovery path", async () => {
         const testDir = path.dirname(fileURLToPath(import.meta.url));
         const pluginRoot = path.resolve(testDir, "..", "..");
