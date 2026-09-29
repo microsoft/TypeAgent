@@ -12,13 +12,13 @@ const COPILOT_SETTINGS = ".github/copilot/settings.local.json";
 const PROMPT_HOOK = "git story hooks copilot user-prompt-submitted";
 
 // Git hooks to register. Each gets a shell script that forwards git's args
-// and stdin to `git story hooks git <hook>`. `exec` hands the script's stdin
+// and stdin to `git-story hooks git <hook>`. `exec` hands the script's stdin
 // to the command, so hooks that receive input (e.g. pre-push) keep it.
 const GIT_HOOKS = ["pre-commit"];
 // Marks scripts written by init, so init never overwrites a user's own hook.
 const GIT_HOOK_MARKER = "# git-story hook";
 const gitHookScript = (hook: string) =>
-    `#!/bin/sh\n${GIT_HOOK_MARKER}\nexec git story hooks git ${hook} "$@"\n`;
+    `#!/bin/sh\n${GIT_HOOK_MARKER}\nexec git-story hooks git ${hook} "$@"\n`;
 
 // Recursively sorts object keys so the settings file has a stable order.
 // Array order is kept. Example: {b:1,a:{d:2,c:3}} -> {a:{c:3,d:2},b:1}.

@@ -21,7 +21,7 @@ git-story pre-commit: args=["a","b"] stdin="input\n"
 file to `.git/info/exclude`, so it stays local to the clone.
 
 `init` also writes a `pre-commit` script to the git hooks directory (honors
-`core.hooksPath`). The script runs `exec git story hooks git pre-commit "$@"`,
+`core.hooksPath`). The script runs `exec git-story hooks git pre-commit "$@"`,
 so git's hook arguments and stdin reach the command unchanged. `init` does not
 overwrite a hook that it did not write.
 
