@@ -108,6 +108,38 @@ async function openChatAndStartMacroAuthoring(tabId: number): Promise<void> {
     }, 500);
 }
 
+async function savePage(tab: chrome.tabs.Tab): Promise<void> {
+    if (tab.id === undefined || !tab.url || !/^https?:\/\//i.test(tab.url)) {
+        console.error("Cannot save a tab without an HTTP(S) URL");
+        return;
+    }
+    const result = await indexPageContent(tab, true, {
+        activityType: "captured",
+        mode: "content",
+        reportHowToStatus: true,
+    });
+    if (
+        result.indexed &&
+        (result.warnings?.length || result.howTo === undefined)
+    ) {
+        await chrome.action.setBadgeText({ tabId: tab.id, text: "!" });
+        await chrome.action.setBadgeBackgroundColor({
+            tabId: tab.id,
+            color: "#d97706",
+        });
+    }
+    const status = !result.indexed
+        ? `Could not save page: ${result.error ?? "Unknown error"}`
+        : result.warnings?.length
+          ? `Page saved, but extraction needs attention: ${result.warnings.join("; ")}. See jobs in Memory Center.`
+          : result.howTo === undefined
+            ? "Page saved, but how-to status is unavailable. See jobs in Memory Center."
+            : !result.howTo.enabled
+              ? "Page saved. How-to detection is disabled for the browser corpus."
+              : `Page saved. ${result.howTo.candidateCount} how-to candidate(s). Open Memory Center and select TypeAgent Browser Memory to review.`;
+    await chrome.action.setTitle({ tabId: tab.id, title: status });
+}
+
 /**
  * Initializes the context menu items
  */
@@ -246,39 +278,7 @@ export async function handleContextMenuClick(
         }
 
         case "saveThisPage": {
-            if (
-                tab.id === undefined ||
-                !tab.url ||
-                !/^https?:\/\//i.test(tab.url)
-            ) {
-                console.error("Cannot save a tab without an HTTP(S) URL");
-                break;
-            }
-            const result = await indexPageContent(tab, true, {
-                activityType: "captured",
-                mode: "content",
-                reportHowToStatus: true,
-            });
-            if (
-                result.indexed &&
-                (result.warnings?.length || result.howTo === undefined)
-            ) {
-                await chrome.action.setBadgeText({ tabId: tab.id, text: "!" });
-                await chrome.action.setBadgeBackgroundColor({
-                    tabId: tab.id,
-                    color: "#d97706",
-                });
-            }
-            const status = !result.indexed
-                ? `Could not save page: ${result.error ?? "Unknown error"}`
-                : result.warnings?.length
-                  ? `Page saved, but extraction needs attention: ${result.warnings.join("; ")}. See jobs in Memory Center.`
-                  : result.howTo === undefined
-                    ? "Page saved, but how-to status is unavailable. See jobs in Memory Center."
-                    : !result.howTo.enabled
-                      ? "Page saved. How-to detection is disabled for the browser corpus."
-                      : `Page saved. ${result.howTo.candidateCount} how-to candidate(s). Open Memory Center and select TypeAgent Browser Memory to review.`;
-            await chrome.action.setTitle({ tabId: tab.id, title: status });
+            await savePage(tab);
             break;
         }
 
