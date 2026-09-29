@@ -14,7 +14,12 @@ import {
 } from "./copilotSettings.js";
 
 export const DefaultCopilotEmbeddingModel = "text-embedding-3-small";
-const MaxBatchSize = 64;
+const DefaultMaxBatchSize = 64;
+
+export type CopilotEmbeddingOptions = {
+    dimensions?: number | undefined;
+    maxBatchSize?: number | undefined;
+};
 
 type EmbeddingEntry = {
     index: number;
@@ -32,7 +37,10 @@ export function createCopilotEmbeddingModel(
         settings,
         modelName,
     ),
+    options?: CopilotEmbeddingOptions,
 ): TextEmbeddingModel {
+    const MaxBatchSize = options?.maxBatchSize ?? DefaultMaxBatchSize;
+    const dimensions = options?.dimensions;
     return {
         generateEmbedding,
         generateEmbeddingBatch,
@@ -90,6 +98,7 @@ export function createCopilotEmbeddingModel(
                 input,
                 model: modelName,
                 encoding_format: "float",
+                ...(dimensions ? { dimensions } : {}),
             }),
             signal: AbortSignal.timeout(settings.timeout ?? 30_000),
         });
