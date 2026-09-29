@@ -1452,6 +1452,96 @@ describe("FileMemoryService", () => {
         });
     });
 
+    test("detects a procedural web page in the corpus without saving it as an approved procedure", async () => {
+        const corpus = await service.createCorpus("Browser page");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "web:guide",
+                sourceType: "web",
+                canonicalUri: "https://example.test/guide",
+                title: "Guide",
+                markdown: [
+                    "## Guide (Frame 0)",
+                    "## How to install the tool",
+                    "1. Download the package",
+                    "2. Run the installer",
+                ].join("\n"),
+            },
+        });
+        expect((await waitForTerminalJob(service, accepted.jobId)).state).toBe(
+            "complete",
+        );
+        expect(await service.listProcedureCandidates(corpus.corpusId)).toEqual([
+            expect.objectContaining({
+                title: "How to install the tool",
+                state: "detected",
+                citations: [
+                    expect.objectContaining({
+                        sourceId: accepted.sourceId,
+                        revisionId: accepted.revisionId,
+                    }),
+                ],
+            }),
+        ]);
+        expect(
+            await service.listProcedures({ corpusId: corpus.corpusId }),
+        ).toEqual([]);
+    });
+
+    test("saves a detected browser how-to with its auto-generated candidate ID", async () => {
+        const corpus = await service.createCorpus("Detected browser how-to");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "web:how-to",
+                sourceType: "web",
+                title: "How to install",
+                markdown: [
+                    "# How to install",
+                    "1. Download the package",
+                    "2. Run the installer",
+                ].join("\n"),
+            },
+        });
+        expect((await waitForTerminalJob(service, accepted.jobId)).state).toBe(
+            "complete",
+        );
+        const [candidate] = await service.listProcedureCandidates(
+            corpus.corpusId,
+            ["detected"],
+        );
+        expect(candidate.candidateId).toMatch(/^auto:/);
+
+        const saved = await service.saveProcedure({
+            corpusId: corpus.corpusId,
+            candidateId: candidate.candidateId,
+        });
+        expect(saved.state).toBe("saved");
+        expect(saved.procedureId).toBe(candidate.candidateId);
+        expect(saved.document.citations).toEqual(candidate.citations);
+        expect(
+            await service.listProcedureCandidates(corpus.corpusId, [
+                "detected",
+            ]),
+        ).toEqual([]);
+        expect(
+            await service.listProcedures({ corpusId: corpus.corpusId }),
+        ).toEqual([
+            expect.objectContaining({
+                procedureId: saved.procedureId,
+                state: "saved",
+            }),
+        ]);
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => new FakeCorpusIndex(),
+        });
+        expect(
+            await service.getProcedure(corpus.corpusId, saved.procedureId),
+        ).toMatchObject({ document: saved.document });
+    });
+
     test.each([
         { enabled: false, detectCandidates: true },
         { enabled: true, detectCandidates: false },

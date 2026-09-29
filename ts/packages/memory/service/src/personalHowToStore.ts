@@ -3,6 +3,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import {
+    access,
     mkdir,
     readFile,
     readdir,
@@ -879,7 +880,24 @@ export class PersonalHowToStore {
         procedureId: string,
         version: number,
     ): Promise<ProcedureVersion> {
-        const directory = this.versionDirectory(corpusId, procedureId, version);
+        let directory = this.versionDirectory(corpusId, procedureId, version);
+        try {
+            await access(directory);
+        } catch (error) {
+            if (
+                (error as NodeJS.ErrnoException).code !== "ENOENT" ||
+                !procedureId.includes(":")
+            ) {
+                throw error;
+            }
+            directory = path.join(
+                this.howToDirectory(corpusId),
+                "procedures",
+                procedureId,
+                "versions",
+                version.toString().padStart(8, "0"),
+            );
+        }
         const [json, markdown, metadata] = await Promise.all([
             readFile(path.join(directory, "procedure.json"), "utf8"),
             readFile(path.join(directory, "procedure.md"), "utf8"),
@@ -966,7 +984,7 @@ export class PersonalHowToStore {
         return path.join(
             this.howToDirectory(corpusId),
             "procedures",
-            procedureId,
+            encodeURIComponent(procedureId),
             "versions",
             String(version).padStart(8, "0"),
         );

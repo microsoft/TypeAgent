@@ -559,7 +559,16 @@ export type BrowserAgentInvokeFunctions = {
         textOnly?: boolean;
         mode?: string;
         extractedKnowledge?: any;
-    }): Promise<any>;
+        activityType?: "visited" | "captured";
+        reportHowToStatus?: boolean;
+    }): Promise<{
+        indexed: boolean;
+        knowledgeExtracted: boolean;
+        entityCount: number;
+        warnings?: string[];
+        howTo?: { enabled: boolean; candidateCount: number };
+        error?: string;
+    }>;
 
     checkPageIndexStatus(params: { url: string }): Promise<any>;
     getPageIndexedKnowledge(params: { url: string }): Promise<any>;
