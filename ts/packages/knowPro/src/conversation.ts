@@ -5,6 +5,7 @@ import { PromptSection } from "typechat";
 import { IConversation, DateRange } from "./interfaces.js";
 import {
     tryCreateEmbeddingModel,
+    getEmbeddingSize,
     TextEmbeddingModel,
 } from "@typeagent/aiclient";
 import {
@@ -31,7 +32,10 @@ export function createConversationSettings(
     // May be undefined when no embedding provider is configured (e.g. Copilot
     // self-host without a local embedder). Embedding-backed indexes then no-op
     // and search degrades to exact/alias/edit-distance matching.
-    embeddingModel ??= tryCreateEmbeddingModel();
+    if (embeddingModel === undefined) {
+        embeddingModel = tryCreateEmbeddingModel();
+        embeddingSize ??= getEmbeddingSize();
+    }
     embeddingSize ??= 1536;
     if (embeddingModel === undefined && !embeddingUnavailableAnnounced) {
         embeddingUnavailableAnnounced = true;
