@@ -11,6 +11,15 @@ import path from "node:path";
 const COPILOT_SETTINGS = ".github/copilot/settings.local.json";
 const PROMPT_HOOK = "git story hooks copilot user-prompt-submitted";
 
+// Git hooks to register. Each gets a shell script that forwards git's args
+// and stdin to `git story hooks git <hook>`. `exec` hands the script's stdin
+// to the command, so hooks that receive input (e.g. pre-push) keep it.
+const GIT_HOOKS = ["pre-commit"];
+// Marks scripts written by init, so init never overwrites a user's own hook.
+const GIT_HOOK_MARKER = "# git-story hook";
+const gitHookScript = (hook: string) =>
+    `#!/bin/sh\n${GIT_HOOK_MARKER}\nexec git story hooks git ${hook} "$@"\n`;
+
 // Recursively sorts object keys so the settings file has a stable order.
 // Array order is kept. Example: {b:1,a:{d:2,c:3}} -> {a:{c:3,d:2},b:1}.
 function sortKeys(value: unknown): unknown {
@@ -78,4 +87,26 @@ export const initCommand = new Command("init")
             fs.appendFileSync(exclude, `${COPILOT_SETTINGS}\n`);
         }
         process.stdout.write(`Registered Copilot hooks in ${settingsPath}\n`);
+
+        // `--git-path hooks/<hook>` honors `core.hooksPath` and worktrees.
+        for (const hook of GIT_HOOKS) {
+            const hookPath = path.resolve(
+                git("rev-parse", "--git-path", `hooks/${hook}`),
+            );
+            if (
+                fs.existsSync(hookPath) &&
+                !fs.readFileSync(hookPath, "utf8").includes(GIT_HOOK_MARKER)
+            ) {
+                process.stderr.write(
+                    `Skipped ${hookPath}: existing hook not owned by git-story\n`,
+                );
+                process.exitCode = 1;
+                continue;
+            }
+            fs.mkdirSync(path.dirname(hookPath), { recursive: true });
+            fs.writeFileSync(hookPath, gitHookScript(hook), { mode: 0o755 });
+            process.stdout.write(
+                `Registered git ${hook} hook in ${hookPath}\n`,
+            );
+        }
     });
