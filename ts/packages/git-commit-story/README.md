@@ -10,8 +10,6 @@ Git runs any `git-<name>` binary on `PATH` as `git <name>`, so the
 $ cd ts/packages/git-commit-story
 $ pnpm build
 $ npm link            # puts git-commit-story on PATH
-$ git commit-story hello
-Hello from git-commit-story
 $ git commit-story init   # registers Copilot CLI hooks for this repo
 $ git commit-story hooks copilot user-prompt-submitted
 Hello World

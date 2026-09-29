@@ -31,9 +31,18 @@ export const initCommand = new Command("init")
             execFileSync("git", args, { encoding: "utf8" }).trim();
         const root = git("rev-parse", "--show-toplevel");
         const settingsPath = path.join(root, COPILOT_SETTINGS);
-        const settings = fs.existsSync(settingsPath)
-            ? JSON.parse(fs.readFileSync(settingsPath, "utf8"))
-            : {};
+        let settings: any = {};
+        if (fs.existsSync(settingsPath)) {
+            try {
+                settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+            } catch (e) {
+                process.stderr.write(
+                    `Failed to parse ${settingsPath}: ${(e as Error).message}\n`,
+                );
+                process.exitCode = 1;
+                return;
+            }
+        }
         // Update only our hook entry; keep other keys and hooks as they are.
         const hook = {
             type: "command",
@@ -53,8 +62,9 @@ export const initCommand = new Command("init")
             JSON.stringify(sortKeys(settings), null, 4) + "\n",
         );
 
+        // `--git-path` is relative to the cwd (not the repo root), so resolve
+        // it against the cwd to work from subdirectories.
         const exclude = path.resolve(
-            root,
             git("rev-parse", "--git-path", "info/exclude"),
         );
         const lines = fs.existsSync(exclude)
