@@ -9,7 +9,7 @@ import path from "node:path";
 // Copilot CLI reads repo-level hooks from this file. The `.local` variant is
 // per-clone, so init also adds it to `.git/info/exclude`.
 const COPILOT_SETTINGS = ".github/copilot/settings.local.json";
-const PROMPT_HOOK = "git commit-story hooks copilot user-prompt-submitted";
+const PROMPT_HOOK = "git story hooks copilot user-prompt-submitted";
 
 // Recursively sorts object keys so the settings file has a stable order.
 // Array order is kept. Example: {b:1,a:{d:2,c:3}} -> {a:{c:3,d:2},b:1}.

@@ -1,5 +1,5 @@
 {
-  "name": "git-commit-story",
+  "name": "git-story",
   "version": "0.0.1",
   "private": true,
   "description": "Attach agent session stories to git commits",
@@ -7,13 +7,13 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/git-commit-story"
+    "directory": "ts/packages/git-story"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "bin": {
-    "git-commit-story": "./dist/cli.js"
+    "git-story": "./dist/cli.js"
   },
   "scripts": {
     "build": "npm run tsc",
