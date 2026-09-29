@@ -14,6 +14,18 @@ import path from "node:path";
 const COPILOT_SETTINGS = ".github/copilot/settings.local.json";
 const PROMPT_HOOK = "git commit-story hooks copilot user-prompt-submitted";
 
+// Recursively sorts object keys so the settings file has a stable order.
+// Array order is kept. Example: {b:1,a:{d:2,c:3}} -> {a:{c:3,d:2},b:1}.
+function sortKeys(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(sortKeys);
+    if (value === null || typeof value !== "object") return value;
+    return Object.fromEntries(
+        Object.keys(value)
+            .sort()
+            .map((k) => [k, sortKeys((value as Record<string, unknown>)[k])]),
+    );
+}
+
 const program = new Command("git-commit-story")
     .description("Attach agent session stories to git commits")
     .version("0.0.1");
@@ -30,16 +42,23 @@ program
         const settings = fs.existsSync(settingsPath)
             ? JSON.parse(fs.readFileSync(settingsPath, "utf8"))
             : {};
-        settings.hooks = {
-            ...settings.hooks,
-            userPromptSubmitted: [
-                { type: "command", bash: PROMPT_HOOK, powershell: PROMPT_HOOK },
-            ],
+        // Update only our hook entry; keep other keys and hooks as they are.
+        const hook = {
+            type: "command",
+            bash: PROMPT_HOOK,
+            powershell: PROMPT_HOOK,
         };
+        settings.hooks ??= {};
+        settings.hooks.userPromptSubmitted = [
+            ...(settings.hooks.userPromptSubmitted ?? []).filter(
+                (h: { bash?: string }) => h.bash !== PROMPT_HOOK,
+            ),
+            hook,
+        ];
         fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
         fs.writeFileSync(
             settingsPath,
-            JSON.stringify(settings, null, 4) + "\n",
+            JSON.stringify(sortKeys(settings), null, 4) + "\n",
         );
 
         const exclude = path.resolve(
