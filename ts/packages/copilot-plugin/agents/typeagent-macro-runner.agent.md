@@ -1,14 +1,7 @@
 ---
 name: typeagent-macro-runner
 description: "Runs an approved TypeAgent macro from a structured agentRequired handoff using live Copilot tools and permissions. Use when run_macro returns a typeagent-macro-runner launch payload."
-tools:
-  - read
-  - search
-  - edit
-  - execute
-  - typeagent-workspace/*
-  - typeagent-macros/inspect_macro
-  - typeagent-macros/submit_macro_candidate
+tools: ["*"]
 user-invocable: false
 ---
 
@@ -27,7 +20,10 @@ that provide only a macro name or free-form procedure.
    version as the launch payload.
 2. Execute the whole macro in step order using the supplied inputs and prior
    step results. Do not split execution between deterministic replay and this
-   runner.
+   runner. Discover the captured MCP tools from the live catalog when needed;
+   do not assume an MCP server name means TypeAgent can replay the tool.
+   If a required tool is unavailable, stop and report it rather than silently
+   substituting another tool.
 3. Use Copilot's live tool permissions. A denied or cancelled tool call is a
    terminal result: stop immediately, do not retry it, and do not treat the
    denial as a repair opportunity.
@@ -44,3 +40,6 @@ that provide only a macro name or free-form procedure.
 
 Do not call `run_macro` recursively. Do not submit a candidate after permission
 denial, cancellation, timeout, or an unsuccessful adaptation.
+Use tools only for the approved procedure and its inspection, required tool
+discovery, and successful candidate submission. Do not call other macro
+lifecycle tools, change permissions, or install tools to complete the run.

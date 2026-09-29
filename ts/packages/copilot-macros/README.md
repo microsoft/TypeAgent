@@ -85,6 +85,8 @@ An MCP server name alone does not establish replayability. For example,
 TypeAgent. Such a call produces an agent-required draft with a review warning,
 not an unapprovable replayable draft. Connection, authentication, and tool-list
 errors still fail draft creation; they are not treated as absent capabilities.
+Unreadable configuration files and invalid entries for the requested server
+also fail discovery rather than silently selecting the agent runner.
 Inspection does not invoke the recorded tools.
 
 ## Validation and approval
@@ -104,6 +106,8 @@ existing approved replayable macros retain their preflight checks. To correct
 an older draft that misclassified a Copilot-only MCP tool, create a new draft
 from its original trace, review it, and explicitly approve it. Existing
 versions are not rewritten.
+Tool inspection refreshes the connected server's advertised catalog, so draft
+creation cannot leave approval or replay checking a stale tool schema.
 
 ## Deterministic replay
 
@@ -129,6 +133,11 @@ If a macro is `agentRequired`, or the caller selects the `agent` preference,
 `MacroManager.runMacro()` returns an `AgentRunnerLaunchPayload`. The payload
 contains the approved macro, supplied inputs, handoff reason, execution
 budgets, and candidate provenance. The package does not launch the runner.
+The runner inherits available Copilot tools, including MCP tools outside
+TypeAgent's replay host, subject to live permissions. Its instructions restrict
+tool use to the approved procedure, inspection, required discovery, and
+successful candidate submission. An unavailable or denied tool stops the run;
+the runner does not install tools or change permissions.
 
 After a successful agent-guided run, `submitMacroCandidate()` can save an
 adapted procedure. It verifies handoff identity, source version, execution

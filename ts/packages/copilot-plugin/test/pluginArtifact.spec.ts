@@ -6,6 +6,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 
 interface PluginMcpManifest {
     mcpServers: Record<
@@ -19,6 +20,29 @@ interface PluginManifest {
 }
 
 describe("staged plugin artifact", () => {
+    it("lets the macro runner discover captured Copilot MCP tools under live permissions", async () => {
+        const pluginRoot = path.resolve(
+            path.dirname(fileURLToPath(import.meta.url)),
+            "..",
+            "..",
+        );
+        const runner = await readFile(
+            path.join(pluginRoot, "agents", "typeagent-macro-runner.agent.md"),
+            "utf8",
+        );
+        const frontmatter = runner.split("---")[1];
+        const profile = parse(frontmatter);
+        expect(profile).toMatchObject({
+            name: "typeagent-macro-runner",
+            tools: ["*"],
+            "user-invocable": false,
+        });
+        expect(runner).toContain("Use Copilot's live tool permissions");
+        expect(runner).toContain("Do not call `run_macro` recursively");
+        expect(runner).toContain("Do not call other macro");
+        expect(runner).toContain("If a required tool is unavailable, stop");
+    });
+
     it("contains the extension bundle at the declared discovery path", async () => {
         const testDir = path.dirname(fileURLToPath(import.meta.url));
         const pluginRoot = path.resolve(testDir, "..", "..");
