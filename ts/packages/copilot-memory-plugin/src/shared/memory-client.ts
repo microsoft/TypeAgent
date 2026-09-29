@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import { loadConfigSync } from "@typeagent/config";
 import {
     ConversationMemory,
@@ -229,6 +230,8 @@ function ensureModelConfig(): void {
             delete process.env[key];
         }
     }
+    // Rebuild the cached runtime config so the removed providers take effect.
+    initRuntimeConfigFromProcessEnv();
 }
 
 async function openStore(paths: MemoryPaths): Promise<ConversationMemory> {

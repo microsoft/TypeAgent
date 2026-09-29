@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
     "proper-lockfile": "^4.1.2",
