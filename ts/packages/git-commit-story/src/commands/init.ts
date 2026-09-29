@@ -31,7 +31,10 @@ export const initCommand = new Command("init")
             execFileSync("git", args, { encoding: "utf8" }).trim();
         const root = git("rev-parse", "--show-toplevel");
         const settingsPath = path.join(root, COPILOT_SETTINGS);
-        let settings: any = {};
+        let settings: {
+            hooks?: { userPromptSubmitted?: { bash?: string }[] };
+            [key: string]: unknown;
+        } = {};
         if (fs.existsSync(settingsPath)) {
             try {
                 settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
@@ -52,7 +55,7 @@ export const initCommand = new Command("init")
         settings.hooks ??= {};
         settings.hooks.userPromptSubmitted = [
             ...(settings.hooks.userPromptSubmitted ?? []).filter(
-                (h: { bash?: string }) => h.bash !== PROMPT_HOOK,
+                (h) => h.bash !== PROMPT_HOOK,
             ),
             hook,
         ];
