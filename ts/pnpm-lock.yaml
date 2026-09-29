@@ -5289,7 +5289,7 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/git-commit-story:
+  packages/git-story:
     dependencies:
       commander:
         specifier: ^12.1.0
