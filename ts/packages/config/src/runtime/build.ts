@@ -1006,7 +1006,8 @@ function buildEmbedding(
     };
 }
 
-// Pop a positive integer; malformed values are left in extra untouched.
+// Pop a positive integer; malformed values are left in extra untouched
+// and reported, so a typo (e.g. `size: -1`) does not silently fall back.
 function popPositiveInt(
     flat: Map<string, string>,
     key: string,
@@ -1015,6 +1016,9 @@ function popPositiveInt(
     if (raw === undefined) return undefined;
     const n = Number(raw);
     if (Number.isInteger(n) && n > 0) return n;
+    console.warn(
+        `${key}: expected a positive integer, got "${raw}"; ignoring.`,
+    );
     flat.set(key, raw);
     return undefined;
 }
