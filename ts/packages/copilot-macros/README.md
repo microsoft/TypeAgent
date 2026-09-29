@@ -56,7 +56,8 @@ The public contracts in `src/contracts.ts` include:
 
 Each macro and step has an execution class:
 
-- `replayable`: TypeAgent can inspect and call the named MCP tool.
+- `replayable`: TypeAgent's replay host inspected and found the named MCP tool
+  when the draft was created.
 - `agentRequired`: the step needs Copilot's live tool and permission surface.
 
 Execution class is selected for the whole macro. A run never replays a prefix
@@ -72,8 +73,19 @@ before handing later steps to the agent.
 - infer the result type and up to 50 result paths as postconditions.
 
 It does not infer arbitrary semantic parameters, loops, branches, or a
-generalized program from one example. Calls with an MCP server name are
-classified as replayable. Calls without one are classified as agent-required.
+generalized program from one example. Induction is asynchronous: calls with an
+MCP server name are inspected through the supplied replay host using the
+recorded working directory. Only tools available to that host are classified
+as replayable. Native calls, missing servers or tools, and calls without a
+configured replay host are classified as agent-required. The captured server
+and tool names are preserved for the agent runner.
+
+An MCP server name alone does not establish replayability. For example,
+`github-mcp-server/web_search` may be available in Copilot but not in
+TypeAgent. Such a call produces an agent-required draft with a review warning,
+not an unapprovable replayable draft. Connection, authentication, and tool-list
+errors still fail draft creation; they are not treated as absent capabilities.
+Inspection does not invoke the recorded tools.
 
 ## Validation and approval
 
@@ -85,6 +97,13 @@ When a replay host is configured, approval inspects every replayable tool and
 records its schema fingerprint. Approval then writes the next version with
 state `approved`. Disabling an approved macro also writes a new version.
 Agent-guided adaptations are saved as separate drafts.
+
+Classification does not silently change during approval or execution. A
+replayable tool disappearing after draft creation still blocks approval, and
+existing approved replayable macros retain their preflight checks. To correct
+an older draft that misclassified a Copilot-only MCP tool, create a new draft
+from its original trace, review it, and explicitly approve it. Existing
+versions are not rewritten.
 
 ## Deterministic replay
 

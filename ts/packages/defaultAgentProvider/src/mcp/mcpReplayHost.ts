@@ -91,6 +91,7 @@ export class McpReplayHost implements ReplayToolHost {
         context: ReplayToolContext = {},
     ): Promise<ReplayToolDescriptor | undefined> {
         const server = await this.getServer(mcpServerName, context);
+        if (!server) return undefined;
         const tool = this.getTool(server, toolName);
         if (!tool) return undefined;
         return {
@@ -116,8 +117,8 @@ export class McpReplayHost implements ReplayToolHost {
         context: ReplayToolContext = {},
     ): Promise<unknown> {
         const server = await this.getServer(mcpServerName, context);
-        const tool = this.getTool(server, toolName);
-        if (!tool) {
+        const tool = server && this.getTool(server, toolName);
+        if (!server || !tool) {
             throw new Error(
                 `MCP replay tool is unavailable: ${mcpServerName}/${toolName}`,
             );
@@ -187,11 +188,9 @@ export class McpReplayHost implements ReplayToolHost {
     private async getServer(
         serverName: string | undefined,
         context: ReplayToolContext,
-    ): Promise<ActiveServer> {
+    ): Promise<ActiveServer | undefined> {
         if (!serverName || serverName === "typeagent-macros") {
-            throw new Error(
-                `MCP server is not replayable: ${serverName ?? "native"}`,
-            );
+            return undefined;
         }
         const configs = await this.getConfigs(context.cwd);
         const config = configs.find(
@@ -199,9 +198,7 @@ export class McpReplayHost implements ReplayToolHost {
                 candidate.name === serverName || candidate.id === serverName,
         );
         if (!config) {
-            throw new Error(
-                `MCP server '${serverName}' is Copilot-only or not configured in TypeAgent.`,
-            );
+            return undefined;
         }
         let active = this.active.get(config.id);
         if (!active) {

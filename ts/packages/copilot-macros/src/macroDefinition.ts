@@ -11,14 +11,21 @@ import type {
     MacroValidationIssue,
     MacroValidationReport,
     RecordedInteractionTrace,
+    ReplayToolHost,
     ValueExpression,
 } from "./contracts.js";
 
-function classifyTool(
-    _toolName: string,
+async function classifyTool(
+    toolName: string,
     mcpServerName: string | undefined,
-): MacroExecutionClass {
-    return mcpServerName ? "replayable" : "agentRequired";
+    cwd: string,
+    replayHost: ReplayToolHost | undefined,
+): Promise<MacroExecutionClass> {
+    if (!mcpServerName || !replayHost) return "agentRequired";
+    const descriptor = await replayHost.inspectTool(mcpServerName, toolName, {
+        cwd,
+    });
+    return descriptor ? "replayable" : "agentRequired";
 }
 
 function getValueType(value: unknown): MacroValueType {
@@ -151,20 +158,26 @@ function convertArguments(
         : { kind: "template", value, bindings };
 }
 
-export function induceMacroFromTrace(
+export async function induceMacroFromTrace(
     traceId: string,
     trace: RecordedInteractionTrace,
     macroId: string,
     name: string,
     description: string,
     createdAt: string,
-): CopilotToolMacro {
+    replayHost?: ReplayToolHost,
+): Promise<CopilotToolMacro> {
     const warnings: string[] = [];
     const inputs: MacroInput[] = [];
     const steps: MacroStep[] = [];
-    trace.toolCalls.forEach((call, index) => {
+    for (const [index, call] of trace.toolCalls.entries()) {
         const id = `step-${index + 1}`;
-        const executionClass = classifyTool(call.name, call.mcpServerName);
+        const executionClass = await classifyTool(
+            call.name,
+            call.mcpServerName,
+            trace.cwd,
+            replayHost,
+        );
         if (executionClass === "agentRequired") {
             warnings.push(
                 `${id} uses ${call.mcpServerName ? `${call.mcpServerName}/` : ""}${call.name} and requires agent-guided execution.`,
@@ -196,7 +209,7 @@ export function induceMacroFromTrace(
                 ? {}
                 : { postconditions: inferPostconditions(call.result) }),
         });
-    });
+    }
 
     return {
         schemaVersion: 1,

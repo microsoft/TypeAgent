@@ -8,6 +8,85 @@ import { McpReplayHost } from "../src/mcp/mcpReplayHost.js";
 import type { NormalizedMcpServerConfig } from "../src/mcp/mcpServerConfig.js";
 
 describe("MCP replay host", () => {
+    it.each([
+        undefined,
+        "typeagent-macros",
+        "github-mcp-server",
+        "unconfigured-server",
+    ])(
+        "reports %s as unavailable for replay without connecting",
+        async (serverName) => {
+            const instanceDir = await mkdtemp(
+                path.join(os.tmpdir(), "mcp-replay-"),
+            );
+            const host = new McpReplayHost(instanceDir, {
+                configs: [],
+                audit: { write: async () => {} },
+                connectionFactory: async () => {
+                    throw new Error(
+                        "Must not connect to an unavailable server",
+                    );
+                },
+            });
+            await expect(
+                host.inspectTool(serverName, "web_search"),
+            ).resolves.toBeUndefined();
+            await expect(
+                host.callTool(
+                    serverName,
+                    "web_search",
+                    {},
+                    new AbortController().signal,
+                ),
+            ).rejects.toThrow("MCP replay tool is unavailable");
+            await host.close();
+        },
+    );
+
+    it.each(["connect", "listTools"])(
+        "propagates %s failures instead of reporting unavailable tools",
+        async (failure) => {
+            const instanceDir = await mkdtemp(
+                path.join(os.tmpdir(), "mcp-replay-"),
+            );
+            let closed = false;
+            const host = new McpReplayHost(instanceDir, {
+                configs: [
+                    {
+                        id: "example",
+                        name: "example",
+                        transport: { kind: "stdio", command: "unused" },
+                        enabled: true,
+                        trust: "trusted",
+                        scope: "workspace",
+                        provenance: { source: "captured-test" },
+                    },
+                ],
+                audit: { write: async () => {} },
+                connectionFactory: async () => {
+                    if (failure === "connect")
+                        throw new Error("Connection failed");
+                    return {
+                        listTools: async () => {
+                            throw new Error("Listing failed");
+                        },
+                        callTool: async () => {
+                            throw new Error("Must not execute");
+                        },
+                        close: async () => {
+                            closed = true;
+                        },
+                    };
+                },
+            });
+            await expect(host.inspectTool("example", "read")).rejects.toThrow(
+                failure === "connect" ? "Connection failed" : "Listing failed",
+            );
+            expect(closed).toBe(failure === "listTools");
+            await host.close();
+        },
+    );
+
     it("replays the captured tool without applying a second permission model", async () => {
         const instanceDir = await mkdtemp(
             path.join(os.tmpdir(), "mcp-replay-"),
@@ -69,6 +148,10 @@ describe("MCP replay host", () => {
         await expect(
             host.inspectTool("example", "create_item"),
         ).resolves.toMatchObject({ toolName: "create_item" });
+        await expect(
+            host.inspectTool("example", "missing_tool"),
+        ).resolves.toBeUndefined();
+        expect(calls).toEqual([]);
         await expect(
             host.callTool(
                 "example",

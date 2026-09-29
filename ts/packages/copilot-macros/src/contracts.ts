@@ -328,6 +328,7 @@ export interface ReplayToolContext {
 }
 
 export interface ReplayToolHost {
+    // Missing servers/tools return undefined; connection and inspection failures throw.
     inspectTool(
         mcpServerName: string | undefined,
         toolName: string,
