@@ -46,6 +46,20 @@ cited source creates a new `stale` procedure version while leaving every older
 version unchanged. The transport-independent personal how-to API is also
 available through the RPC facade.
 
+`searchProcedures` searches the latest version of each procedure independently
+of the source-revision index, using a separate KnowPro index within the same
+corpus. Procedure Markdown is indexed in content mode, so natural-language
+queries use the same structured-knowledge search and message reranking as
+indexed documents. Saved, stale, and archived states are indexed as message
+tags; requested states constrain KnowPro search before ranking and limiting.
+Each commit publishes a new index generation containing only the latest
+version of every procedure. Older versions remain available through
+`getProcedure`, and a missing index generation is rebuilt from the committed
+versions on search. Searches remain corpus-scoped and honor the requested
+states and result limit; omitted states include all three states as before.
+Procedure indexing requires the configured KnowPro extraction and search
+models; it no longer has a separate embedding or lexical fallback.
+
 When both personal how-to settings are enabled, successful Markdown and text
 ingestion detects procedural sections containing ordered or checklist steps.
 Detected candidates use deterministic source-revision identities and citations,

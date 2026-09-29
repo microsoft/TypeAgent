@@ -31,8 +31,10 @@ import { fileURLToPath } from "node:url";
 import { TypeAgentJsonValidator } from "@typeagent/typechat-utils";
 import { z } from "zod/v4";
 import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
-import { searchDurableConversationMemory } from "../context/conversationDurableMemory.js";
-import { searchPersonalMemory } from "../context/personalMemorySearch.js";
+import {
+    searchPersonalMemory,
+    searchReasoningConversationMemory,
+} from "../context/personalMemorySearch.js";
 import {
     CommandHandlerContext,
     getCommandResult,
@@ -694,32 +696,11 @@ function getClaudeOptions(
             debugMcp(`search_memory question=${args.question}`);
             const text = await searchPersonalMemory(
                 args.question,
-                async () => {
-                    const durableResult = await searchDurableConversationMemory(
+                () =>
+                    searchReasoningConversationMemory(
                         systemContext,
                         args.question,
-                    );
-                    if (durableResult !== undefined) {
-                        return durableResult;
-                    }
-                    const memory = systemContext.conversationMemory;
-                    if (memory === undefined) {
-                        return undefined;
-                    }
-                    const result = await memory.getAnswerFromLanguage(
-                        args.question,
-                    );
-                    if (!result.success) {
-                        throw new Error(result.message);
-                    }
-                    return result.data
-                        .map(([, answer]) =>
-                            answer.type === "Answered"
-                                ? answer.answer
-                                : `No answer: ${answer.whyNoAnswer}`,
-                        )
-                        .join("\n\n");
-                },
+                    ),
                 systemContext.durableMemoryService,
             );
             return {

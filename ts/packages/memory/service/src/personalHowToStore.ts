@@ -20,8 +20,6 @@ import type {
     ProcedureDocument,
     ProcedureListRequest,
     ProcedureSaveRequest,
-    ProcedureSearchMatch,
-    ProcedureSearchRequest,
     ProcedureSourceCitation,
     ProcedureSummary,
     ProcedureVersion,
@@ -30,7 +28,13 @@ import type {
 interface ProcedureIndex {
     candidates: ProcedureCandidate[];
     procedures: ProcedureSummary[];
+    indexGeneration?: string;
 }
+
+export type ProcedureIndexPublisher = (
+    corpusId: string,
+    procedures: ProcedureSummary[],
+) => Promise<string>;
 
 interface StoredVersionMetadata {
     corpusId: string;
@@ -380,7 +384,40 @@ export function detectProcedureCandidates(
 }
 
 export class PersonalHowToStore {
-    public constructor(private readonly rootDirectory: string) {}
+    public constructor(
+        private readonly rootDirectory: string,
+        private readonly publishIndex: ProcedureIndexPublisher,
+    ) {}
+
+    public async getIndexGeneration(
+        corpusId: string,
+    ): Promise<string | undefined> {
+        return (await this.readIndex(corpusId)).indexGeneration;
+    }
+
+    public readIndexedVersion(
+        corpusId: string,
+        procedureId: string,
+        version: number,
+    ): Promise<ProcedureVersion> {
+        return this.readVersion(corpusId, procedureId, version);
+    }
+
+    public async rebuildIndex(corpusId: string): Promise<void> {
+        const index = await this.readIndex(corpusId);
+        await this.writePublishedIndex(corpusId, index);
+    }
+
+    private async writePublishedIndex(
+        corpusId: string,
+        index: ProcedureIndex,
+    ): Promise<void> {
+        index.indexGeneration = await this.publishIndex(
+            corpusId,
+            index.procedures,
+        );
+        await this.writeIndex(corpusId, index);
+    }
 
     public async getSettings(corpusId: string): Promise<PersonalHowToSettings> {
         const stored = await readJson<PersonalHowToSettings>(
@@ -640,7 +677,7 @@ export class PersonalHowToStore {
             candidate.state = "saved";
             candidate.updatedAt = timestamp();
         }
-        await this.writeIndex(request.corpusId, index);
+        await this.writePublishedIndex(request.corpusId, index);
         return version;
     }
 
@@ -665,7 +702,10 @@ export class PersonalHowToStore {
         const summary = (await this.readIndex(corpusId)).procedures.find(
             (item) => item.procedureId === procedureId,
         );
-        if (summary === undefined) {
+        if (
+            summary === undefined ||
+            (version !== undefined && version > summary.latestVersion)
+        ) {
             return undefined;
         }
         return this.readVersion(
@@ -673,49 +713,6 @@ export class PersonalHowToStore {
             procedureId,
             version ?? summary.latestVersion,
         );
-    }
-
-    public async search(
-        request: ProcedureSearchRequest,
-    ): Promise<ProcedureSearchMatch[]> {
-        const query = request.query.trim().toLowerCase();
-        if (query.length === 0) {
-            throw new Error("Procedure search query cannot be empty");
-        }
-        const summaries = await this.list(request);
-        const matches: ProcedureSearchMatch[] = [];
-        for (const procedure of summaries) {
-            const version = await this.readVersion(
-                request.corpusId,
-                procedure.procedureId,
-                procedure.latestVersion,
-            );
-            const haystack = [
-                version.document.title,
-                version.document.summary ?? "",
-                ...version.document.steps,
-                ...(version.document.additionalSections ?? []).flatMap(
-                    (section) => [section.heading, section.content],
-                ),
-            ]
-                .join("\n")
-                .toLowerCase();
-            const occurrences = haystack.split(query).length - 1;
-            if (occurrences > 0) {
-                matches.push({
-                    procedure,
-                    version,
-                    score: occurrences,
-                });
-            }
-        }
-        return matches
-            .sort(
-                (left, right) =>
-                    right.score - left.score ||
-                    left.procedure.title.localeCompare(right.procedure.title),
-            )
-            .slice(0, Math.max(1, Math.min(request.limit ?? 20, 100)));
     }
 
     public async archive(
@@ -768,7 +765,7 @@ export class PersonalHowToStore {
             changed = true;
         }
         if (changed) {
-            await this.writeIndex(corpusId, index);
+            await this.writePublishedIndex(corpusId, index);
         }
     }
 
@@ -808,7 +805,7 @@ export class PersonalHowToStore {
             current.version,
         );
         this.setSummary(index, next);
-        await this.writeIndex(corpusId, index);
+        await this.writePublishedIndex(corpusId, index);
         return next;
     }
 

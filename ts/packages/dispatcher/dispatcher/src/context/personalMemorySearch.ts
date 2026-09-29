@@ -4,16 +4,70 @@
 import type {
     MemoryEvidence,
     MemoryService,
+    PersonalHowToService,
+    ProcedureSearchMatch,
 } from "@typeagent/memory-service";
 import registerDebug from "debug";
-import { conversationCorpusName } from "./conversationDurableMemory.js";
+import type { CommandHandlerContext } from "./commandHandlerContext.js";
+import {
+    conversationCorpusName,
+    searchDurableConversationMemory,
+} from "./conversationDurableMemory.js";
 
 const debug = registerDebug("typeagent:dispatcher:memory");
+type SearchService = Pick<MemoryService, "listCorpora" | "search"> &
+    Partial<Pick<PersonalHowToService, "searchProcedures">>;
+function distinctEvidence(
+    matches: { name: string; evidence: MemoryEvidence }[],
+): { name: string; evidence: MemoryEvidence }[] {
+    const seen = new Set<string>();
+    return matches.filter(({ evidence }) => {
+        const key =
+            evidence.canonicalUri?.toLowerCase().replace(/\/$/, "") ??
+            `${evidence.corpusId}:${evidence.sourceId}`;
+        if (seen.has(key)) {
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
+}
+
+export async function searchReasoningConversationMemory(
+    context: Pick<
+        CommandHandlerContext,
+        "conversationDurableMemory" | "conversationMemory"
+    >,
+    question: string,
+): Promise<string | undefined> {
+    const durableResult = await searchDurableConversationMemory(
+        context,
+        question,
+    );
+    if (durableResult !== undefined) {
+        return durableResult;
+    }
+    const memory = context.conversationMemory;
+    if (memory === undefined) {
+        return undefined;
+    }
+    const result = await memory.getAnswerFromLanguage(question);
+    if (!result.success) {
+        throw new Error(result.message);
+    }
+    return result.data
+        .map(([, answer]) =>
+            answer.type === "Answered"
+                ? answer.answer
+                : `No answer: ${answer.whyNoAnswer}`,
+        )
+        .join("\n\n");
+}
 
 export async function searchPersonalMemory(
     question: string,
     searchConversation: () => Promise<string | undefined>,
-    service?: Pick<MemoryService, "listCorpora" | "search">,
+    service?: SearchService,
 ): Promise<string> {
     const [conversation, documents] = await Promise.allSettled([
         searchConversation(),
@@ -25,60 +79,120 @@ export async function searchPersonalMemory(
     if (conversation.status === "fulfilled" && conversation.value) {
         sections.push(`## Conversation memory\n${conversation.value}`);
     } else if (conversation.status === "rejected") {
-        debug(`Conversation memory search failed: ${String(conversation.reason)}`);
-        sections.push(`Conversation memory search failed: ${String(conversation.reason)}`);
+        debug(
+            `Conversation memory search failed: ${String(conversation.reason)}`,
+        );
+        sections.push(
+            `Conversation memory search failed: ${String(conversation.reason)}`,
+        );
     }
     if (documents.status === "fulfilled" && documents.value) {
-        sections.push(`## Saved pages and documents\n${documents.value}`);
+        sections.push(
+            `## Saved pages, documents and procedures\n${documents.value}`,
+        );
     } else if (documents.status === "rejected") {
         debug(`Saved document search failed: ${String(documents.reason)}`);
-        sections.push(`Saved document search failed: ${String(documents.reason)}`);
+        sections.push(
+            `Saved document search failed: ${String(documents.reason)}`,
+        );
+    } else if (service === undefined) {
+        sections.push("Saved document search is unavailable in this host.");
     }
-    return sections.join("\n\n") || "No matching conversation or saved documents found.";
+    return (
+        sections.join("\n\n") ||
+        "No matching conversation or saved documents found."
+    );
 }
 
 async function searchDocuments(
-    service: Pick<MemoryService, "listCorpora" | "search">,
+    service: SearchService,
     question: string,
 ): Promise<string | undefined> {
     const corpora = (await service.listCorpora()).filter(
         (corpus) => corpus.name !== conversationCorpusName,
     );
-    const results = await Promise.allSettled(
-        corpora.map(async (corpus) => ({
-            name: corpus.name,
-            matches: (
-                await service.search({
-                    corpusId: corpus.corpusId,
-                    query: question,
-                    limit: 5,
-                    maxResponseChars: 8_000,
-                })
-            ).matches,
-        })),
-    );
+    const searchProcedures = service.searchProcedures?.bind(service);
+    const requests = corpora.flatMap((corpus) => [
+        service
+            .search({
+                corpusId: corpus.corpusId,
+                query: question,
+                limit: 5,
+                maxResponseChars: 8_000,
+            })
+            .then((result) => ({
+                kind: "document" as const,
+                name: corpus.name,
+                matches: result.matches,
+            })),
+        ...(searchProcedures === undefined
+            ? []
+            : [
+                  searchProcedures({
+                      corpusId: corpus.corpusId,
+                      query: question,
+                      states: ["saved"],
+                      limit: 5,
+                  }).then((matches) => ({
+                      kind: "procedure" as const,
+                      name: corpus.name,
+                      matches,
+                  })),
+              ]),
+    ]);
+    const results = await Promise.allSettled(requests);
     const matches: { name: string; evidence: MemoryEvidence }[] = [];
+    const procedures: { name: string; match: ProcedureSearchMatch }[] = [];
     const errors: string[] = [];
     results.forEach((result, index) => {
         if (result.status === "rejected") {
-            const message = `Search failed in ${corpora[index].name}: ${String(result.reason)}`;
+            const perCorpus = searchProcedures === undefined ? 1 : 2;
+            const message = `${index % perCorpus === 0 ? "Document" : "Procedure"} search failed in ${corpora[Math.floor(index / perCorpus)].name}: ${String(result.reason)}`;
             debug(message);
             errors.push(message);
+        } else if (result.value.kind === "document") {
+            matches.push(
+                ...result.value.matches.map((evidence) => ({
+                    name: result.value.name,
+                    evidence,
+                })),
+            );
         } else {
-            for (const evidence of result.value.matches) {
-                matches.push({ name: result.value.name, evidence });
-            }
+            procedures.push(
+                ...result.value.matches.map((match) => ({
+                    name: result.value.name,
+                    match,
+                })),
+            );
         }
     });
-    matches.sort((a, b) => b.evidence.score - a.evidence.score);
-    const lines = matches.slice(0, 8).map(({ name, evidence }) =>
-        [
-            `- **${evidence.title}** (corpus: ${name}; source: ${evidence.sourceId}; revision: ${evidence.revisionId}${evidence.locator === undefined ? "" : `; location: ${evidence.locator}`})`,
-            ...(evidence.canonicalUri === undefined
-                ? []
-                : [`  URL: ${evidence.canonicalUri}`]),
-            `  Excerpt: ${evidence.snippet}`,
-        ].join("\n"),
-    );
-    return [...lines, ...errors].join("\n") || undefined;
+    const lines = distinctEvidence(matches)
+        .slice(0, 8)
+        .map(({ name, evidence }) =>
+            [
+                `- **${evidence.title}** (corpus: ${name}; source: ${evidence.sourceId}; revision: ${evidence.revisionId}${evidence.locator === undefined ? "" : `; location: ${evidence.locator}`})`,
+                ...(evidence.canonicalUri === undefined
+                    ? []
+                    : [`  URL: ${evidence.canonicalUri}`]),
+                `  Excerpt: ${evidence.snippet}`,
+            ].join("\n"),
+        );
+    const procedureLines = procedures
+        .slice(0, 5)
+        .map(({ name, match }) =>
+            [
+                `- **Saved procedure: ${match.version.document.title}** (corpus: ${name}; procedure: ${match.procedure.procedureId}; version: ${match.procedure.latestVersion})`,
+                ...(match.version.document.summary === undefined
+                    ? []
+                    : [`  Summary: ${match.version.document.summary}`]),
+                ...match.version.document.steps
+                    .slice(0, 5)
+                    .map((step, index) => `  ${index + 1}. ${step}`),
+                `  Sources: ${match.version.document.citations.map((citation) => `${citation.sourceId}@${citation.revisionId}`).join(", ") || "manually created"}`,
+            ].join("\n"),
+        );
+    if (searchProcedures === undefined) {
+        errors.push("Saved procedure search is unavailable in this host.");
+    }
+    return [...lines, ...procedureLines, ...errors].join("\n") || undefined;
 }
