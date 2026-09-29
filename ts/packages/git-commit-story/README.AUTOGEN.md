@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=38ca35936c91b1a757a04be397408598c991864f63cf56c2d351be3a932305f5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=9a632d8aab739dcf42534ec63a8c6bb12b8b61777f38bba74c23d061a6ead9f6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # git-commit-story — AI-generated documentation
@@ -30,10 +30,10 @@ External: `commander`
 
 ### Files of interest
 
-`./src/cli.ts`, `./src/tsconfig.json`.
+`./src/cli.ts`, `./src/commands/hooks.ts`, `./src/commands/init.ts`, …and 1 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `464df9d8299adf53a6c3e3afd53688fbcde439f2` on `2026-09-28T20:24:26.282Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter git-commit-story docs:verify-links` to spot-check._
+_Auto-generated against commit `031e5113b09df01a0f6392d858d93badc14699c7` on `2026-09-29T06:06:07.744Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter git-commit-story docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
