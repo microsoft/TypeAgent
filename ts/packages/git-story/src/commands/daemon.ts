@@ -6,6 +6,7 @@ import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DAEMON_ROUTE } from "../server/router.js";
 import { startServer } from "../server/server.js";
 
 // One daemon per repository. Its state lives in the git dir, so worktrees of
@@ -23,6 +24,7 @@ const LOG_FILE = "daemon.log";
 const START_TIMEOUT_MS = 5000;
 const STOP_TIMEOUT_MS = 5000;
 const POLL_MS = 50;
+const IDENTITY_TIMEOUT_MS = 1000;
 
 type DaemonState = { pid: number; port: number };
 
@@ -53,9 +55,23 @@ function isAlive(pid: number): boolean {
     }
 }
 
+// True when the server on `state.port` reports `state.pid`. A live pid alone
+// is not enough: after a crash or reboot the OS can reuse it.
+async function answersAsDaemon(state: DaemonState): Promise<boolean> {
+    try {
+        const res = await fetch(`${url(state)}${DAEMON_ROUTE}`, {
+            signal: AbortSignal.timeout(IDENTITY_TIMEOUT_MS),
+        });
+        const body = (await res.json()) as { pid?: number };
+        return body.pid === state.pid;
+    } catch {
+        return false;
+    }
+}
+
 // Running daemon's state, or undefined. Removes a state file left by a
-// daemon that died without cleanup.
-function readState(): DaemonState | undefined {
+// daemon that died without cleanup or whose pid was reused.
+async function readState(): Promise<DaemonState | undefined> {
     const file = path.join(stateDir(), STATE_FILE);
     let state: DaemonState;
     try {
@@ -63,9 +79,28 @@ function readState(): DaemonState | undefined {
     } catch {
         return undefined;
     }
-    if (isAlive(state.pid)) return state;
+    if (isAlive(state.pid) && (await answersAsDaemon(state))) return state;
     fs.rmSync(file, { force: true });
     return undefined;
+}
+
+// Writes the state file only if none exists, so of two concurrent `run`s
+// exactly one owns the repository. Retries once after clearing stale state.
+async function claimState(state: DaemonState): Promise<boolean> {
+    const file = path.join(stateDir(), STATE_FILE);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            fs.writeFileSync(file, JSON.stringify(state) + "\n", {
+                flag: "wx",
+            });
+            return true;
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+            if (await readState()) return false;
+        }
+    }
+    return false;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -73,7 +108,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const url = (s: DaemonState) => `http://127.0.0.1:${s.port}`;
 
 async function start(): Promise<void> {
-    const running = readState();
+    const running = await readState();
     if (running) {
         process.stdout.write(
             `Already running (pid ${running.pid}) at ${url(running)}\n`,
@@ -94,7 +129,7 @@ async function start(): Promise<void> {
     let exited = false;
     child.once("exit", () => (exited = true));
     for (let t = 0; t < START_TIMEOUT_MS && !exited; t += POLL_MS) {
-        const state = readState();
+        const state = await readState();
         if (state && state.pid === child.pid) {
             process.stdout.write(
                 `Started (pid ${state.pid}) at ${url(state)}\n`,
@@ -102,6 +137,14 @@ async function start(): Promise<void> {
             return;
         }
         await sleep(POLL_MS);
+    }
+    // The child exits when a concurrent start claimed the repository first.
+    const winner = await readState();
+    if (winner) {
+        process.stdout.write(
+            `Already running (pid ${winner.pid}) at ${url(winner)}\n`,
+        );
+        return;
     }
     if (!exited) child.kill();
     process.stderr.write(
@@ -111,7 +154,7 @@ async function start(): Promise<void> {
 }
 
 async function stop(): Promise<void> {
-    const state = readState();
+    const state = await readState();
     if (!state) {
         process.stdout.write("Not running\n");
         return;
@@ -134,8 +177,12 @@ async function run(): Promise<void> {
     const file = path.join(stateDir(), STATE_FILE);
     const { server, port } = await startServer();
     const state: DaemonState = { pid: process.pid, port };
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(state) + "\n");
+    if (!(await claimState(state))) {
+        process.stderr.write("Another daemon owns this repository\n");
+        server.close();
+        process.exitCode = 1;
+        return;
+    }
     process.stdout.write(`Listening at ${url(state)}\n`);
     const shutdown = () => {
         fs.rmSync(file, { force: true });
@@ -167,8 +214,8 @@ daemonCommand
 daemonCommand
     .command("status")
     .description("Show whether the daemon is running")
-    .action(() => {
-        const state = readState();
+    .action(async () => {
+        const state = await readState();
         process.stdout.write(
             state
                 ? `Running (pid ${state.pid}) at ${url(state)}\n`

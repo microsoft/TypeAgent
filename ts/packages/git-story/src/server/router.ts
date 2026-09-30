@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { daemonApiHandler } from "./routes/daemonApiHandler.js";
 import { storyCommitsApiHandler } from "./routes/storyCommitsApiHandler.js";
 
 export type JsonResponse = ServerResponse & {
@@ -22,7 +23,11 @@ const HTTP_INTERNAL_ERROR = 500;
 
 // All API routes. Named groups become handler params.
 // Example: GET /api/story/commits/abc123 -> storyCommitsApiHandler({hash:"abc123"})
+// Identity route: `daemon status` checks the pid it returns.
+export const DAEMON_ROUTE = "/api/daemon";
+
 const ROUTES: Route[] = [
+    { method: "GET", pattern: /^\/api\/daemon$/, handler: daemonApiHandler },
     {
         method: "GET",
         pattern: /^\/api\/story\/commits\/(?<hash>[^/]+)$/,
