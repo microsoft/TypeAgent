@@ -26,22 +26,21 @@ const HTTP_INTERNAL_ERROR = 500;
 // Identity route: `daemon status` checks the pid it returns.
 export const DAEMON_ROUTE = "/api/daemon";
 
-// All API routes, as "<METHOD> <path>". A `:name` segment matches one path
-// segment and becomes params.name.
-// Example: GET /api/story/commits/abc123 -> storyCommitsApiHandler({hash:"abc123"})
-const ROUTES: Record<string, RouteHandler> = {
-    [`GET ${DAEMON_ROUTE}`]: daemonApiHandler,
-    "GET /api/story/commits/:hash": storyCommitsApiHandler,
-};
-
 type Route = { method: string; segments: string[]; handler: RouteHandler };
 
 const splitPath = (p: string) => p.split("/").filter((s) => s !== "");
 
-const TABLE: Route[] = Object.entries(ROUTES).map(([key, handler]) => {
-    const [method, path] = key.split(" ");
-    return { method, segments: splitPath(path), handler };
-});
+const routes: Route[] = [];
+
+// Express-style registration. A `:name` segment matches one path segment and
+// becomes params.name.
+// Example: GET /api/story/commits/abc123 -> storyCommitsApiHandler({hash:"abc123"})
+const get = (path: string, handler: RouteHandler) =>
+    routes.push({ method: "GET", segments: splitPath(path), handler });
+
+// All API routes.
+get(DAEMON_ROUTE, daemonApiHandler);
+get("/api/story/commits/:hash", storyCommitsApiHandler);
 
 // Params when `segments` (still percent-encoded) match the route, else
 // undefined. Throws URIError on a malformed escape such as "%E0".
@@ -67,7 +66,7 @@ async function dispatch(req: IncomingMessage): Promise<ApiResponse> {
     const { pathname } = new URL(req.url ?? "/", "http://localhost");
     const segments = splitPath(pathname);
     const allowed: string[] = [];
-    for (const route of TABLE) {
+    for (const route of routes) {
         let params: Record<string, string> | undefined;
         try {
             params = matchSegments(route, segments);
