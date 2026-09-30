@@ -3,7 +3,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { RouteHandler } from "../router.js";
+import type { Context } from "hono";
 
 const execFileAsync = promisify(execFile);
 
@@ -18,9 +18,10 @@ export type StoryCommit = {
 // GET /api/story/commits/{hash}: the commit's story. No story capture exists
 // yet, so this returns the resolved commit.
 // Example: /api/story/commits/739e112 -> {"hash":"739e112dd...","subject":"..."}
-export const storyCommitsApiHandler: RouteHandler = async ({ hash }) => {
+export const storyCommitsApiHandler = async (c: Context) => {
+    const hash = c.req.param("hash") ?? "";
     if (!HASH_PATTERN.test(hash)) {
-        return { status: 400, body: { error: `Invalid commit hash: ${hash}` } };
+        return c.json({ error: `Invalid commit hash: ${hash}` }, 400);
     }
     let stdout: string;
     try {
@@ -31,9 +32,9 @@ export const storyCommitsApiHandler: RouteHandler = async ({ hash }) => {
             `${hash}^{commit}`,
         ]));
     } catch {
-        return { status: 404, body: { error: `Commit not found: ${hash}` } };
+        return c.json({ error: `Commit not found: ${hash}` }, 404);
     }
     const [full, subject] = stdout.trimEnd().split("\n");
     const body: StoryCommit = { hash: full, subject };
-    return { status: 200, body };
+    return c.json(body);
 };

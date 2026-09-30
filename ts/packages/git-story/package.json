@@ -23,7 +23,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "commander": "^12.1.0"
+    "@hono/node-server": "^1.19.17",
+    "commander": "^12.1.0",
+    "hono": "^4.13.5"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
