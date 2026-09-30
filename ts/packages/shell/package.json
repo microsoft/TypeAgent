@@ -84,7 +84,7 @@
     "electron-updater": "^6.6.2",
     "jose": "^5.9.6",
     "js-yaml": "^4.3.2",
-    "markdown-it": "^14.2.0",
+    "markdown-it": "^14.3.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
     "typechat": "^0.1.1",
     "ws": "^8.21.3"
