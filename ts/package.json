@@ -38,6 +38,7 @@
     "code-lint": "npx tsx tools/scripts/code/lintReport.ts",
     "copilot": "node packages/copilot-plugin/scripts/launch.mjs",
     "copilot:dev": "node packages/copilot-plugin/scripts/launch-dev.mjs",
+    "copilot:discovery": "node packages/copilot-plugin/scripts/discovery-e2e.mjs",
     "devtunnel:setup": "node tools/scripts/setup-devtunnel.mjs",
     "devtunnel:status": "node tools/scripts/list-tunnels.mjs",
     "docs:action-browser": "node tools/actionBrowser/dist/cli.js",

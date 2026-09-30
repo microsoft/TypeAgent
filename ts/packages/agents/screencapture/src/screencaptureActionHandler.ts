@@ -85,6 +85,11 @@ export function instantiate(): AppAgent {
         // the registered ChoiceManager callback — same shape as
         // osNotifications. The AppAgent signature types context as
         // ActionContext<unknown>; cast to access our agent context.
+        cancelChoice: async (choiceId, context) => {
+            (
+                context.agentContext as ScreencaptureActionContext
+            ).choiceManager.cancelChoice(choiceId);
+        },
         handleChoice: async (choiceId, response, context) => {
             const ctx = (context as ActionContext<ScreencaptureActionContext>)
                 .sessionContext.agentContext;

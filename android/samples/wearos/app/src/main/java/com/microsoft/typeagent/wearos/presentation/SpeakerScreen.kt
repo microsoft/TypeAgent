@@ -64,12 +64,7 @@ fun SpeakerScreen(
             }
 
         // Speech to text
-        val isSTTVisible =
-            when (playbackState) {
-                PlaybackState.PlayingVoice,
-                is PlaybackState.PlayingVoice -> true
-                else -> false
-            }
+        val isSTTVisible = stt.isNotBlank()
 
         // We are using ConstraintLayout here to center the ControlDashboard, and align the progress
         // indicator to it.

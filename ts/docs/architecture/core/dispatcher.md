@@ -375,6 +375,62 @@ entity references. Named entities (e.g., "that song", "the meeting") are
 looked up in conversation memory. Ambiguous references trigger a user
 clarification prompt via the `ClientIO` layer.
 
+**Intermediate results** - A translated `resultEntityId` labels a completed
+action; it does not require that every successful action manufacture an
+entity. The three consumers have distinct contracts:
+
+- A legacy `${result-id}` parameter consumes `resultEntity.name` and retains
+  same-agent entity metadata. A missing entity remains an error.
+- A `{ "$result": "id" }` parameter consumes only the explicit `resultValue`,
+  not display text, structured display `rawData`, or an entity name. Before
+  invoking the consumer, the dispatcher validates the concrete value against
+  its parameter schema without the translation-time placeholder exemption.
+  Empty strings, empty arrays, zero, and false are values, not missing results.
+- A `pendingRequestAction` remains in the execution queue until its earlier
+  action completes. Translation receives request-local snapshots of completed
+  actions and their actual results, including display-only outputs, even when
+  conversation history or memory extraction is disabled. These outputs are
+  context for translating the remaining request, not instructions to replay
+  earlier actions or an automatic switch to reasoning.
+
+  Deferred context uses a projection of result values, entity bindings, history
+  text, and display data, rather than serializing execution metadata. Identical
+  value/text representations and duplicate structured `rawData` are omitted;
+  display alternates and presentation flags are not sent. Distinct display
+  content is preserved even when history text is only a summary. Entity metadata
+  continues to be available through the history's entity references.
+
+  The serialized UTF-8 envelope containing the remaining request and its full
+  history context is limited to 64 KiB. The limit includes all completed outputs,
+  action parameters, inherited prompt sections, entities, activity state, and
+  additional instructions. This is a deterministic deferred-context safeguard,
+  not a token limit for the complete model prompt (which also includes schemas
+  and other translation instructions). Oversized context stops before translating
+  or executing the continuation, with an explicit error: no output is silently
+  truncated or summarized and completed producers are not replayed. Concrete
+  `$result` substitution is unchanged and does not use this prompt-size limit.
+
+  Deferred translation retains the caller's active-schema and schema-family
+  restrictions. An unavailable or empty scope stops the continuation rather than
+  widening it to globally active schemas. Newly translated actions also pass the
+  execution-eligibility check before entering the queue; unknown or disabled
+  actions stop the continuation without reasoning fallback or producer replay.
+
+  An unused result label does not turn a successful mutation into a failure.
+  Errors stop the chain; missing references and invalid concrete values fail
+  before their consumers execute. Deferred translation cannot use an action
+  still awaiting confirmation. Continuations retain completed-action history
+  while each newly translated plan has its own result-reference bindings.
+
+In legacy action execution, a pending user choice stops the remaining queue,
+including actions without result references and any returned additional
+actions. The choice remains available, but the dispatcher explicitly reports
+that the remaining steps were not executed and will not resume automatically.
+This interruption does not trigger reasoning fallback or replay completed
+actions. A standalone choice retains its existing behavior. Structured
+execution continues to resolve choices through its own awaited interaction
+path before returning to the action queue.
+
 Translated actions may also contain **entity placeholders** — explicit
 references the LLM emits as string values pointing back at entities
 provided in the prompt's history context. `resolveEntityPlaceholders()`
@@ -693,37 +749,60 @@ The dispatcher registers two built-in agents via `inlineAgentProvider`:
 Handles `@`-prefixed system commands. The full set is registered in
 `systemHandlers` ([systemAgent.ts](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/system/systemAgent.ts)):
 
-| Command                  | Purpose                                                                                                                                                                                                       |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@action`                | Direct invocation of a typed action (bypasses NL translation).                                                                                                                                                |
-| `@clear`                 | Clear the display.                                                                                                                                                                                            |
-| `@config`                | Session configuration — models, caching, agents, schema toggles, collision detection.                                                                                                                         |
-| `@const`                 | Construction store management (load/save, list, merge, delete, auto-save toggle).                                                                                                                             |
-| `@conversation`          | Manage local dispatcher conversations (named, persisted under `~/.typeagent/profiles/<profile>/sessions`).                                                                                                    |
-| `@debug`                 | Wait-for-debugger and other developer hooks.                                                                                                                                                                  |
-| `@describe`              | Capability discovery: describe what an agent or action does (works for installed-but-disabled agents too). See `describeCore.ts`.                                                                             |
-| `@display`               | Tweak how output is rendered.                                                                                                                                                                                 |
-| `@env`                   | Inspect environment variables and config-relevant runtime values.                                                                                                                                             |
-| `@exit`                  | Exit the program.                                                                                                                                                                                             |
-| `@explain`               | Explanation of cached translations                                                                                                                                                                            |
-| `@feedback`              | Inspect and export user-feedback entries                                                                                                                                                                      |
-| `@grammar`               | Manage runtime-learned grammar rules (list/show/delete/clear) and scan loaded grammars for cross-agent collisions (`@grammar collisions [--json <path>]`, NFA product-construction with concrete witnesses).  |
-| `@help`                  | Inline help for any command.                                                                                                                                                                                  |
-| `@history`               | Chat history management — list/clear/delete/save/insert + entity inspection.                                                                                                                                  |
-| `@index`                 | Image / memory indexing controls.                                                                                                                                                                             |
-| `@memory`                | Conversation-memory operations (RAG store maintenance).                                                                                                                                                       |
-| `@notify`                | Notification stream control.                                                                                                                                                                                  |
-| `@open`                  | Open a file or folder via the host.                                                                                                                                                                           |
-| `@package`               | Manage installed external app agents and their install sources: `list`, `install`, `update`, `uninstall`, and the `source` group (list/order/where/add/remove). Available only when an installer is injected. |
-| `@ports`                 | List all registered TCP ports (per `(agent, role, port)` group) with the agent-server's own listen port and the current # of clients connected.                                                               |
-| `@random`                | Issue a random sample request from a pre-generated dataset (or LLM-generated).                                                                                                                                |
-| `@reason` / `@reasoning` | Invoke the reasoning engine (Claude or Copilot) with an optional `--model` override.                                                                                                                          |
-| `@run`                   | Execute a script of dispatcher commands in sequence.                                                                                                                                                          |
-| `@session`               | Local dispatcher session management — create/open/list/info/reset/clear/delete (lower-level than `@conversation`).                                                                                            |
-| `@settings`              | User-level settings (theme, etc.).                                                                                                                                                                            |
-| `@shutdown`              | Shut down the agent server and exit.                                                                                                                                                                          |
-| `@token`                 | Token-counter inspection.                                                                                                                                                                                     |
-| `@trace`                 | Add a `debug` trace pattern.                                                                                                                                                                                  |
+| Command                  | Purpose                                                                                                                                                                                                                     |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@action`                | Direct invocation of a typed action (bypasses NL translation).                                                                                                                                                              |
+| `@clear`                 | Clear the display.                                                                                                                                                                                                          |
+| `@config`                | Session configuration — models, caching, agents, schema toggles, collision detection.                                                                                                                                       |
+| `@const`                 | Construction store management (load/save, list, merge, delete, auto-save toggle).                                                                                                                                           |
+| `@conversation`          | Manage local dispatcher conversations (named, persisted under `~/.typeagent/profiles/<profile>/sessions`).                                                                                                                  |
+| `@debug`                 | Wait-for-debugger and other developer hooks.                                                                                                                                                                                |
+| `@describe`              | Capability discovery: describe what an agent or action does (works for installed-but-disabled agents too). See `describeCore.ts`.                                                                                           |
+| `@display`               | Tweak how output is rendered.                                                                                                                                                                                               |
+| `@env`                   | Inspect environment variables and config-relevant runtime values.                                                                                                                                                           |
+| `@exit`                  | Exit the program.                                                                                                                                                                                                           |
+| `@explain`               | Explanation of cached translations                                                                                                                                                                                          |
+| `@feedback`              | Inspect and export user-feedback entries                                                                                                                                                                                    |
+| `@grammar`               | Manage runtime-learned grammar rules (list/show/delete/clear) and scan loaded grammars for cross-agent collisions (`@grammar collisions [--json <path>]`, NFA product-construction with concrete witnesses).                |
+| `@help`                  | Inline help for any command.                                                                                                                                                                                                |
+| `@history`               | Chat history management — list/clear/delete/save/insert + entity inspection.                                                                                                                                                |
+| `@index`                 | Image / memory indexing controls.                                                                                                                                                                                           |
+| `@conversation-memory`   | Legacy per-conversation memory operations (RAG store maintenance).                                                                                                                                                          |
+| `@memory`                | Durable corpus, source, import, search, correction, forgetting, and reindex operations.                                                                                                                                     |
+| `@notify`                | Notification stream control.                                                                                                                                                                                                |
+| `@open`                  | Open a file or folder via the host.                                                                                                                                                                                         |
+| `@package`               | Manage installed external app agents and their install sources: `list`, `install`, `update`, `uninstall`, `group`, and the `source` group (`list`, `order`, `add`, `remove`). Available only when an installer is injected. |
+| `@ports`                 | List all registered TCP ports (per `(agent, role, port)` group) with the agent-server's own listen port and the current # of clients connected.                                                                             |
+| `@random`                | Issue a random sample request from a pre-generated dataset (or LLM-generated).                                                                                                                                              |
+| `@reason` / `@reasoning` | Invoke the reasoning engine (Claude or Copilot) with an optional `--model` override.                                                                                                                                        |
+| `@run`                   | Execute a script of dispatcher commands in sequence.                                                                                                                                                                        |
+| `@session`               | Local dispatcher session management — create/open/list/info/reset/clear/delete (lower-level than `@conversation`).                                                                                                          |
+| `@settings`              | User-level settings (theme, etc.).                                                                                                                                                                                          |
+| `@shutdown`              | Shut down the agent server and exit.                                                                                                                                                                                        |
+| `@token`                 | Token-counter inspection.                                                                                                                                                                                                   |
+| `@trace`                 | Add a `debug` trace pattern.                                                                                                                                                                                                |
+
+### Package groups and reasoning recommendations
+
+`@package group list` and `@package group show <name>` expose the shipped
+product catalog. `@package group install <name>` previews every missing member
+before mutation, supports `--source`, `--refresh`, and `--dry-run`, and asks once
+for confirmation unless `--yes` is supplied. Bundled and healthy installed
+members are skipped. Installed records that cannot currently load are reported
+as repair-required, while an in-flight install, update, or removal blocks the
+group preflight until package state is stable.
+
+Group members install sequentially in catalog order. Successful earlier
+installs remain when a later member fails; there is no rollback. Cancellation
+stops starting new installs, and rerunning the command safely skips members that
+are now present. Package installation never changes per-session agent
+enablement.
+
+Claude and Copilot reasoning expose an advisory `find_installable_agent` tool
+when no executable action schema matches a request. The result lists
+present-but-disabled agents before missing installable agents, includes exact
+enable or install commands, and treats candidate descriptions as untrusted
+metadata. Recommendations never execute package or configuration commands.
 
 Each command has a `CommandDescriptor` that defines expected parameters,
 subcommands, and help text.

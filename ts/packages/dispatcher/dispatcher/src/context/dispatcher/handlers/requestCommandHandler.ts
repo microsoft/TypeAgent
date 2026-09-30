@@ -9,6 +9,7 @@ import {
     ProcessRequestActionResult,
     ExplanationOptions,
     equalNormalizedObject,
+    toExecutableActions,
     toFullActions,
 } from "@typeagent/agent-cache";
 import type {
@@ -38,6 +39,7 @@ import {
     isPendingRequest,
 } from "../../../translation/multipleActionSchema.js";
 import registerDebug from "debug";
+import { recordGhcpEvalEvent } from "../../../execute/ghcpEvalPolicy.js";
 import ExifReader from "exifreader";
 import { ProfileNames } from "../../../utils/profileNames.js";
 import {
@@ -46,6 +48,7 @@ import {
     SessionContext,
     CompletionDirection,
     CompletionGroups,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
@@ -130,6 +133,31 @@ function applyPowerShellCapabilityOutcome(
     }
     setDisposition(context, getPowerShellCapabilityDisposition(outcome));
     return true;
+}
+
+function getSuccessfulPowerShellReasoningAction(
+    context: CommandHandlerContext,
+): TypeAgentAction | undefined {
+    if (
+        context.currentOptions?.reasoningProfile !==
+        "powershellCapabilityFallback"
+    ) {
+        return undefined;
+    }
+    const actions = ensureCommandResult(context).actions;
+    const outcome = getPowerShellCapabilityOutcome(actions);
+    if (outcome?.status !== "handledExisting") {
+        return undefined;
+    }
+    return actions
+        ? [...actions]
+              .reverse()
+              .find(
+                  (action) =>
+                      action.schemaName === outcome.schema &&
+                      action.actionName === outcome.actionName,
+              )
+        : undefined;
 }
 
 async function runConfiguredReasoning(
@@ -473,7 +501,7 @@ function findMatchedGrammarRule(
     const store = context.persistedGrammarStore;
     const candidates =
         store
-            ?.getRulesForSchema(primary.schemaName)
+            ?.getActiveRulesForSchema(primary.schemaName)
             .filter((rule) => rule.actionName === primary.actionName) ?? [];
     if (candidates.length === 1) {
         return { rule: candidates[0].grammarText };
@@ -574,6 +602,7 @@ async function requestExplain(
     context: CommandHandlerContext,
     attachments: CachedImageWithDetails[] | undefined,
     translationResult: InterpretResult,
+    allowLearning: boolean,
 ) {
     // Make sure the current requestId is captured
     const requestId = getRequestId(context);
@@ -675,6 +704,9 @@ async function requestExplain(
             undefined,
             buildExplainedDetail(fromCache, requestAction, rule, segments),
         );
+        return;
+    }
+    if (!allowLearning) {
         return;
     }
 
@@ -1040,9 +1072,33 @@ export class RequestCommandHandler implements CommandHandler {
                 return;
             }
             let reasoningHandled = false;
-            if (needsReasoning && !systemContext.noReasoning) {
+            let allowLearning = false;
+            let explanationResult = interpretResult;
+            if (needsReasoning) {
+                recordGhcpEvalEvent("translation.reasoning.decision", {
+                    hasUnknownAction,
+                    hasClarificationAction,
+                    enabled:
+                        !systemContext.noReasoning &&
+                        systemContext.currentOptions
+                            ?.translationReasoningFallback !== false,
+                });
+            }
+            if (
+                needsReasoning &&
+                !systemContext.noReasoning &&
+                systemContext.currentOptions?.translationReasoningFallback !==
+                    false
+            ) {
                 try {
+                    debugRequest("translation.reasoning.enter", {
+                        hasUnknownAction,
+                        hasClarificationAction,
+                    });
+                    recordGhcpEvalEvent("translation.reasoning.enter");
                     await runConfiguredReasoning(request, context);
+                    debugRequest("translation.reasoning.completed");
+                    recordGhcpEvalEvent("translation.reasoning.completed");
                     reasoningHandled = true;
                     if (!applyPowerShellCapabilityOutcome(systemContext)) {
                         setDisposition(systemContext, {
@@ -1050,18 +1106,54 @@ export class RequestCommandHandler implements CommandHandler {
                             path: "reasoning",
                         });
                     }
+                    const reasoningAction =
+                        getSuccessfulPowerShellReasoningAction(systemContext);
+                    if (reasoningAction !== undefined) {
+                        explanationResult = {
+                            ...interpretResult,
+                            fromCache: false,
+                            fromUser: false,
+                            requestAction: new RequestAction(
+                                request,
+                                toExecutableActions([
+                                    reasoningAction as FullAction,
+                                ]),
+                                requestAction.history,
+                            ),
+                        };
+                        allowLearning = true;
+                    }
                 } catch (e: any) {
+                    debugRequest("translation.reasoning.failed");
+                    recordGhcpEvalEvent("translation.reasoning.failed");
                     debugRequest(
                         `Reasoning fallback failed, using default handler: ${e.message}`,
                     );
                 }
             }
             if (!reasoningHandled) {
+                let observedAction = false;
+                let observedIncompleteAction = false;
                 const execResult = await executeActions(
                     requestAction.actions,
                     requestAction.history?.entities,
                     context,
+                    (_action, result) => {
+                        observedAction = true;
+                        if (
+                            result.error !== undefined ||
+                            result.pendingChoice !== undefined
+                        ) {
+                            observedIncompleteAction = true;
+                        }
+                    },
                 );
+                allowLearning =
+                    execResult === undefined &&
+                    observedAction &&
+                    !observedIncompleteAction &&
+                    !hasUnknownAction &&
+                    !hasClarificationAction;
                 const actionSchemas = getActionSchemas(requestAction.actions);
 
                 // Error-triggered reasoning: if an action failed and at least one
@@ -1070,7 +1162,8 @@ export class RequestCommandHandler implements CommandHandler {
                 if (
                     !systemContext.noReasoning &&
                     execResult !== undefined &&
-                    execResult.fallbackToReasoning
+                    execResult.fallbackToReasoning &&
+                    process.env.TYPEAGENT_GHCP_EVAL_FIXTURES === undefined
                 ) {
                     const needsErrorReasoning = requestAction.actions.some(
                         ({ action }) => {
@@ -1168,7 +1261,8 @@ export class RequestCommandHandler implements CommandHandler {
             await requestExplain(
                 systemContext,
                 cachedAttachments,
-                interpretResult,
+                explanationResult,
+                allowLearning,
             );
         } finally {
             profiler?.stop();

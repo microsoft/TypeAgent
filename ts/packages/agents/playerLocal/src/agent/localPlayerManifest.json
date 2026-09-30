@@ -6,6 +6,11 @@
     "originalSchemaFile": "./localPlayerSchema.ts",
     "schemaFile": "../../dist/agent/localPlayerSchema.pas.json",
     "grammarFile": "../../dist/agent/localPlayerSchema.ag.json",
+    "actionPolicies": {
+      "status": { "effects": "read-only" },
+      "showQueue": { "effects": "read-only" },
+      "showMusicFolder": { "effects": "read-only" }
+    },
     "schemaType": {
       "action": "LocalPlayerActions",
       "entity": "LocalPlayerEntities"

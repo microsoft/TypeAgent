@@ -14,6 +14,11 @@
       "command": "node",
       "args": ["${PLUGIN_ROOT}/dist/mcp/server.js", "--macros"],
       "tools": ["*"]
+    },
+    "typeagent-skills": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/dist/mcp/server.js", "--skills"],
+      "tools": ["*"]
     }
   }
 }

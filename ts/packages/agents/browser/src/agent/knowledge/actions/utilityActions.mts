@@ -3,8 +3,6 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
-import { AIModelRequiredError } from "@typeagent/website-memory";
-import { BrowserKnowledgeExtractor } from "../browserKnowledgeExtractor.mjs";
 
 export async function checkAIModelStatus(
     parameters: {},
@@ -15,41 +13,21 @@ export async function checkAIModelStatus(
     endpoint?: string;
     error?: string;
 }> {
-    try {
-        const extractor = new BrowserKnowledgeExtractor(context);
-
-        // Test AI availability with a simple extraction
-        await extractor.extractKnowledge(
-            {
-                url: "test://ai-check",
-                title: "AI Availability Test",
-                textContent: "test content for AI availability check",
-                source: "direct",
-            },
-            "content",
-        );
-
-        return {
-            available: true,
-            version: "available",
-            endpoint: "configured",
-        };
-    } catch (error) {
-        if (error instanceof AIModelRequiredError) {
-            return {
-                available: false,
-                error: error.message,
-            };
-        }
-
-        return {
-            available: false,
-            error:
-                error instanceof Error
-                    ? error.message
-                    : "Unknown AI model error",
-        };
+    const memoryService = context.agentContext.browserMemoryService;
+    if (memoryService === undefined) {
+        throw new Error("Durable browser memory is not available");
     }
+    const capabilities = await memoryService.getCapabilities();
+    return {
+        available: capabilities.features.knowledgeExtraction,
+        ...(capabilities.chatProvider === undefined
+            ? {}
+            : { version: capabilities.chatProvider }),
+        endpoint: "durable-memory-service",
+        ...(capabilities.warnings.length === 0
+            ? {}
+            : { error: capabilities.warnings.join("; ") }),
+    };
 }
 
 export async function checkActionDetectionStatus(
@@ -60,23 +38,19 @@ export async function checkActionDetectionStatus(
     capabilities?: any;
     error?: string;
 }> {
-    try {
-        const extractor = new BrowserKnowledgeExtractor(context);
-
-        const capabilities = extractor.getActionDetectionCapabilities();
-        const isAvailable = extractor.isActionDetectionAvailable();
-
-        return {
-            available: isAvailable,
-            capabilities: capabilities,
-        };
-    } catch (error) {
-        return {
-            available: false,
-            error:
-                error instanceof Error
-                    ? error.message
-                    : "Unknown action detection error",
-        };
+    const memoryService = context.agentContext.browserMemoryService;
+    if (memoryService === undefined) {
+        throw new Error("Durable browser memory is not available");
     }
+    const capabilities = await memoryService.getCapabilities();
+    return {
+        available: false,
+        capabilities: {
+            supportedActions: [],
+            extractionModes: capabilities.features.knowledgeExtraction
+                ? ["content", "full"]
+                : [],
+        },
+        error: "Action detection is not part of durable memory knowledge extraction",
+    };
 }

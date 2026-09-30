@@ -248,6 +248,7 @@ export function loadAgentJsonTranslator<
     promptLogger?: PromptLogger,
     entityPromptShape: EntityPromptShape = "facets",
     entityPathNavigationEnabled: boolean = false,
+    reasoningEffort?: JsonTranslatorOptions<T>["reasoningEffort"],
 ): TypeAgentTranslator<T> {
     const validator = createTypeAgentValidator<T>(
         actionConfigs,
@@ -263,6 +264,7 @@ export function loadAgentJsonTranslator<
         schemaNameMap,
         {
             model,
+            reasoningEffort,
             promptLogger,
         },
         entityPromptShape,

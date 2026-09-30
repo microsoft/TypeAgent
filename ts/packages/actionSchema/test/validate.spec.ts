@@ -3,7 +3,7 @@
 
 import * as sc from "../src/creator.js";
 import { SchemaType } from "../src/type.js";
-import { validateSchema } from "../src/validate.js";
+import { validateSchema, validateType } from "../src/validate.js";
 
 const fields: sc.FieldSpec = { a: sc.string(), b: sc.optional(sc.number()) };
 const obj = sc.obj(fields);
@@ -190,6 +190,38 @@ describe("result reference placeholder", () => {
     ];
     it.each(schemas)("accepted against %s", (_name, schema) => {
         validateSchema("param", schema, ref);
+    });
+
+    it.each(schemas)(
+        "rejected as a concrete result against %s",
+        (_name, schema) => {
+            expect(() => validateType(schema, ref, false)).toThrow();
+        },
+    );
+
+    it.each([
+        [sc.array(sc.string()), [ref]],
+        [sc.obj({ value: sc.string() }), { value: ref }],
+        [sc.union(sc.string(), sc.number()), ref],
+        [sc.ref(sc.type("StringValue", sc.string())), ref],
+    ] as [SchemaType, unknown][])(
+        "validates nested concrete results without the translation placeholder exemption",
+        (schema, value) => {
+            expect(() => validateType(schema, value)).not.toThrow();
+            expect(() => validateType(schema, value, false)).toThrow();
+        },
+    );
+
+    it("preserves empty and false concrete values without coercion", () => {
+        for (const [schema, value] of [
+            [sc.string(), ""],
+            [sc.number(), 0],
+            [sc.boolean(), false],
+            [sc.array(sc.string()), []],
+        ] as [SchemaType, unknown][]) {
+            expect(() => validateType(schema, value, false)).not.toThrow();
+        }
+        expect(() => validateType(sc.number(), "0", false)).toThrow();
     });
 
     it("only the exact { $result: string } shape bypasses validation", () => {

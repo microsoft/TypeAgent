@@ -64,10 +64,13 @@ import { BrowserActions } from "./browserActionSchema.mts";
              | read (the)? page (out loud)? -> { actionName: "readPageContent" }
              | stop reading -> { actionName: "stopReadPageContent" };
 
-// ===== Screenshot =====
-<Screenshot> = take (a)? screenshot -> { actionName: "captureScreenshot" }
-               | capture (the)? screen -> { actionName: "captureScreenshot" }
-               | screenshot -> { actionName: "captureScreenshot" };
+// ===== Browser-page screenshot =====
+<Screenshot> = take a screenshot of this browser page -> { actionName: "captureScreenshot" }
+               | take a screenshot of the browser page -> { actionName: "captureScreenshot" }
+               | take a screenshot of this page -> { actionName: "captureScreenshot" }
+               | capture the current web page -> { actionName: "captureScreenshot" }
+               | capture this browser page -> { actionName: "captureScreenshot" }
+               | screenshot this browser page -> { actionName: "captureScreenshot" };
 
 // ===== Create WebFlow from Inferred Actions =====
 // After running @browser actions infer, user can select which flows to create

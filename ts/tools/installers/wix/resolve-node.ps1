@@ -22,6 +22,37 @@
   when no Node can be found, letting callers warn-and-continue rather than fail.
 #>
 
+function Resolve-TypeAgentUserDataDir(
+    [string]$UserDataDir,
+    [string]$LocalAppDataDir
+) {
+    if ($UserDataDir) {
+        return [System.IO.Path]::GetFullPath($UserDataDir)
+    }
+
+    if ($LocalAppDataDir) {
+        $localAppDataPath = [System.IO.Path]::GetFullPath($LocalAppDataDir)
+        $appDataDirectory = [System.IO.Directory]::GetParent($localAppDataPath.TrimEnd('\'))
+        if ($appDataDirectory -and $appDataDirectory.Parent) {
+            return Join-Path $appDataDirectory.Parent.FullName ".typeagent"
+        }
+    }
+
+    try {
+        $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $profileKey = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$sid"
+        $profilePath = (Get-ItemProperty -LiteralPath $profileKey -Name ProfileImagePath -ErrorAction Stop).ProfileImagePath
+        if ($profilePath) {
+            $expandedProfilePath = [System.Environment]::ExpandEnvironmentVariables($profilePath)
+            return Join-Path ([System.IO.Path]::GetFullPath($expandedProfilePath)) ".typeagent"
+        }
+    } catch {
+        # No usable profile registry entry.
+    }
+
+    throw "Could not resolve the installing user's TypeAgent data directory."
+}
+
 function Update-PathFromRegistry {
     # Rebuild $env:PATH from the persisted Machine + User values so nodes
     # installed to Program Files\nodejs (official installer / winget) are seen

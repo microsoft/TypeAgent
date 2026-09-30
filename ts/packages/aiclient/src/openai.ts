@@ -367,6 +367,35 @@ export function getChatModelSettings(endpoint?: string): ApiSettings {
     return pool.members[0].settings;
 }
 
+/**
+ * True if the given chat model has an explicitly configured endpoint.
+ */
+export function hasChatModelEndpoint(endpoint?: string): boolean {
+    const { provider, name } = parseEndPointName(endpoint);
+
+    if (provider === "copilot" || provider === "ollama") {
+        return true;
+    }
+
+    if (name === undefined || name === "") {
+        try {
+            getChatModelPool(endpoint);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    if (provider === "openai") {
+        return getRuntimeConfig().openAI?.endpoint !== undefined;
+    }
+
+    const dep = getRuntimeConfig().azureOpenAI.deployments.get(
+        name.toLowerCase(),
+    );
+    return dep !== undefined && dep.endpoints.length > 0;
+}
+
 export function supportsStreaming(
     model: TypeChatLanguageModel,
 ): model is ChatModelWithStreaming {
@@ -792,8 +821,12 @@ export type AzureChatModelName =
     | "GPT_5"
     | "GPT_5_MINI"
     | "GPT_5_NANO"
-    | "GPT_5_CHAT";
+    | "GPT_5_CHAT"
+    | "GPT_4_1"
+    | "GPT_5_6_LUNA";
 
+export const GPT_5_6_LUNA: AzureChatModelName = "GPT_5_6_LUNA";
+export const GPT_4_1: AzureChatModelName = "GPT_4_1";
 export const GPT_5: AzureChatModelName = "GPT_5";
 export const GPT_5_NANO: AzureChatModelName = "GPT_5_NANO";
 export const GPT_5_MINI: AzureChatModelName = "GPT_5_MINI";
@@ -804,17 +837,25 @@ export const GPT_5_CHAT: AzureChatModelName = "GPT_5_CHAT";
  * @param apiSettings: settings to use to create the client
  * @param dimensions (optional) text-embedding-03 and later models allow variable length embeddings
  */
+export type EmbeddingModelOptions = {
+    modelName?: string | undefined;
+    maxBatchSize?: number | undefined;
+};
+
 export function createEmbeddingModel(
     endpoint: string,
     dimensions?: number | undefined,
+    options?: EmbeddingModelOptions,
 ): TextEmbeddingModel;
 export function createEmbeddingModel(
     apiSettings?: ApiSettings | undefined,
     dimensions?: number | undefined,
+    options?: EmbeddingModelOptions,
 ): TextEmbeddingModel;
 export function createEmbeddingModel(
     apiSettingsOrEndpoint?: ApiSettings | string | undefined,
     dimensions?: number | undefined,
+    options?: EmbeddingModelOptions,
 ): TextEmbeddingModel {
     let pool: EndpointPool;
     if (typeof apiSettingsOrEndpoint === "object") {
@@ -835,12 +876,21 @@ export function createEmbeddingModel(
     const settings = pool.members[0].settings;
 
     // https://platform.openai.com/docs/api-reference/embeddings/create#embeddings-create-input
-    const maxBatchSize = 2048;
+    const maxBatchSize = Math.min(options?.maxBatchSize ?? 2048, 2048);
+    // Trace config overrides of the pool's settings for troubleshooting.
+    if (
+        options?.modelName !== undefined ||
+        options?.maxBatchSize !== undefined
+    ) {
+        debugOpenAI(
+            `Embedding overrides for ${pool.modelKey}: model=${options.modelName ?? settings.modelName}, maxBatchSize=${maxBatchSize}`,
+        );
+    }
     const defaultParams: any =
         settings.provider === "azure"
             ? {}
             : {
-                  model: settings.modelName,
+                  model: options?.modelName ?? settings.modelName,
               };
     if (dimensions && dimensions > 0) {
         defaultParams.dimensions = dimensions;

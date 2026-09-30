@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    resolveCopilotReasoningModel,
     resolveReasoningTimeoutMs,
     sendAndWaitWithCancellation,
 } from "../src/reasoning/copilot.js";
@@ -10,6 +11,26 @@ import type { CopilotSession } from "@github/copilot-sdk";
 const ENV_KEY = "TYPEAGENT_REASONING_TIMEOUT_MS";
 const DEFAULT_MS = 20 * 60 * 1000;
 const MAX_SETTIMEOUT_MS = 2_147_483_647;
+
+describe("resolveCopilotReasoningModel", () => {
+    it("uses the configured model before the environment", () => {
+        expect(resolveCopilotReasoningModel("gpt-6-astra", "gpt-5.5")).toBe(
+            "gpt-6-astra",
+        );
+    });
+
+    it("uses the environment model when no live override is configured", () => {
+        expect(resolveCopilotReasoningModel(undefined, "gpt-5.5")).toBe(
+            "gpt-5.5",
+        );
+    });
+
+    it("defaults to GPT-5.6 Sol", () => {
+        expect(resolveCopilotReasoningModel(undefined, undefined)).toBe(
+            "gpt-5.6-sol",
+        );
+    });
+});
 
 describe("resolveReasoningTimeoutMs", () => {
     let saved: string | undefined;

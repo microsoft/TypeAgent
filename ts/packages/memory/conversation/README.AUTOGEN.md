@@ -106,7 +106,6 @@ External: `async`, `debug`, `mailparser`, `typechat`, `webvtt-parser`
 - [chat-example](../../../examples/chat/README.md)
 - [document-processor](../../../examples/docuProc/README.md)
 - [knowpro-test](../../../packages/knowProTest/README.md)
-- [memory-mcp](../../../examples/mcpMemory/README.md)
 - [telemetry-query-example](../../../examples/commandHistogram/README.md)
 - [website-memory](../../../packages/memory/website/README.md)
 

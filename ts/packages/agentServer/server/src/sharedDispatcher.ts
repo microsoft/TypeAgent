@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import {
     DispatcherConnectOptions,
+    JoinConversationResult,
     registerClientType,
     unregisterClient,
 } from "@typeagent/agent-server-protocol";
@@ -28,6 +29,7 @@ import {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
     createDispatcherFromContext,
+    getAppAgentName,
     prewarmReasoning as prewarmDispatcherReasoning,
 } from "agent-dispatcher/internal";
 import { PendingInteractionManager } from "agent-dispatcher/internal";
@@ -37,6 +39,11 @@ import {
     selectWorkingDirectoryProposal,
     resolveWorkingDirectory,
 } from "./workingDirectoryPolicy.js";
+import {
+    StructuredActionBindings,
+    type StructuredActionLease,
+    validateStructuredActionJoin,
+} from "./structuredActionBindings.js";
 
 import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
@@ -46,6 +53,29 @@ const debugCommand = registerDebug("agent-server:command");
 
 function errMessage(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
+}
+
+function throwAgentStateFailures(
+    name: string,
+    result: {
+        failed: {
+            schemas: [string, boolean, Error][];
+            actions: [string, boolean, Error][];
+            commands: [string, boolean, Error][];
+        };
+    },
+): void {
+    const failures = [
+        ...result.failed.schemas,
+        ...result.failed.actions,
+        ...result.failed.commands,
+    ].filter(([failedName]) => getAppAgentName(failedName) === name);
+    if (failures.length !== 0) {
+        throw new AggregateError(
+            failures.map(([, , error]) => error),
+            `Failed to enable dynamic agent '${name}'`,
+        );
+    }
 }
 
 type ClientRecord = {
@@ -455,6 +485,10 @@ export async function createSharedDispatcher(
         ...options,
         clientIO,
     });
+    const structuredBindings = new StructuredActionBindings(
+        () => context.session,
+    );
+    const structuredLeases = new Map<string, StructuredActionLease>();
 
     // Intercept display methods on the shared clientIO to mirror display
     // traffic into the DisplayLog for later replay. Patches context.clientIO
@@ -600,6 +634,19 @@ export async function createSharedDispatcher(
             // so interactions created before disconnect are unroutable after
             // reconnect. See docs/async-clientio-design.md §Open Questions.
             const connectionId = (nextConnectionId++).toString();
+            const anonymousScope = {};
+            validateStructuredActionJoin(options);
+            const structuredLease =
+                options?.structuredActions === undefined
+                    ? undefined
+                    : structuredBindings.acquire(
+                          options.conversationId!,
+                          connectionId,
+                          options.structuredActions.resumeToken,
+                      );
+            if (structuredLease !== undefined) {
+                structuredLeases.set(connectionId, structuredLease);
+            }
             let selectedWorkingDirectory: string | undefined;
             const wasEmpty = clients.size === 0;
             clients.set(connectionId, {
@@ -618,6 +665,8 @@ export async function createSharedDispatcher(
                 context,
                 connectionId,
                 async () => {
+                    structuredLease?.release();
+                    structuredLeases.delete(connectionId);
                     clients.delete(connectionId);
                     dispatchers.delete(connectionId);
                     unregisterClient(connectionId);
@@ -653,6 +702,12 @@ export async function createSharedDispatcher(
                         `Client disconnected: ${connectionId} (total clients: ${clients.size})`,
                     );
                 },
+                structuredLease?.access ??
+                    (() => ({
+                        scope: anonymousScope,
+                        canDiscoverSchema: () => clients.has(connectionId),
+                        canExecute: false,
+                    })),
             );
             dispatchers.set(connectionId, dispatcher);
             debugConnect(
@@ -796,6 +851,12 @@ export async function createSharedDispatcher(
 
             return dispatcher;
         },
+        getStructuredActionBinding(connectionId) {
+            const lease = structuredLeases.get(connectionId);
+            return lease === undefined
+                ? undefined
+                : { resumeToken: lease.resumeToken };
+        },
         respondToInteraction(response: PendingInteractionResponse): void {
             debugInteractionInfo("respondToInteraction", {
                 interactionId: response.interactionId,
@@ -914,6 +975,7 @@ export async function createSharedDispatcher(
         },
         async close() {
             cancelNoClientsGraceTimer();
+            structuredBindings.close();
             pendingInteractions.cancelAll(
                 new Error("SharedDispatcher closing"),
             );
@@ -944,6 +1006,55 @@ export async function createSharedDispatcher(
                     context,
                     context.session.getConfig(),
                 );
+            });
+        },
+        async replaceDynamicAgent(
+            name: string,
+            currentManifest: AppAgentManifest,
+            currentAppAgent: AppAgent,
+            nextManifest: AppAgentManifest,
+            nextAppAgent: AppAgent,
+        ): Promise<void> {
+            await context.commandLock(async () => {
+                await context.agents.removeAgent(
+                    name,
+                    context.agentCache.grammarStore,
+                );
+                try {
+                    await context.agents.addDynamicAgent(
+                        name,
+                        nextManifest,
+                        nextAppAgent,
+                    );
+                    const result = await context.agents.setState(
+                        context,
+                        context.session.getConfig(),
+                    );
+                    throwAgentStateFailures(name, result);
+                } catch (e) {
+                    try {
+                        await context.agents.removeAgent(
+                            name,
+                            context.agentCache.grammarStore,
+                        );
+                        await context.agents.addDynamicAgent(
+                            name,
+                            currentManifest,
+                            currentAppAgent,
+                        );
+                        const rollbackResult = await context.agents.setState(
+                            context,
+                            context.session.getConfig(),
+                        );
+                        throwAgentStateFailures(name, rollbackResult);
+                    } catch (rollbackError) {
+                        throw new AggregateError(
+                            [e, rollbackError],
+                            `Failed to replace dynamic agent '${name}' and restore the previous registration`,
+                        );
+                    }
+                    throw e;
+                }
             });
         },
         async removeDynamicAgent(name: string): Promise<void> {
@@ -985,6 +1096,9 @@ export type SharedDispatcher = {
         closeFn: () => void,
         options?: DispatcherConnectOptions,
     ): Dispatcher;
+    getStructuredActionBinding(
+        connectionId: string,
+    ): JoinConversationResult["structuredActions"];
     respondToInteraction(response: PendingInteractionResponse): void;
     cancelInteraction(interactionId: string): void;
     getPendingInteractions(
@@ -1010,6 +1124,14 @@ export type SharedDispatcher = {
         name: string,
         manifest: AppAgentManifest,
         appAgent: AppAgent,
+    ): Promise<void>;
+    /** Replace a dynamic agent and restore the previous one if setup fails. */
+    replaceDynamicAgent(
+        name: string,
+        currentManifest: AppAgentManifest,
+        currentAppAgent: AppAgent,
+        nextManifest: AppAgentManifest,
+        nextAppAgent: AppAgent,
     ): Promise<void>;
     /** Remove a previously added dynamic agent. No-op if it doesn't exist. */
     removeDynamicAgent(name: string): Promise<void>;

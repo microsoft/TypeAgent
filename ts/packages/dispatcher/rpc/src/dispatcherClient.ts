@@ -211,6 +211,18 @@ export function createDispatcherRpcClient(
         async getAgentSchemas(...args) {
             return rpc.invoke("getAgentSchemas", ...args);
         },
+        async searchActions(...args) {
+            return rpc.invoke("searchActions", ...args);
+        },
+        async executeAction(...args) {
+            return rpc.invoke("executeAction", ...args);
+        },
+        async continueAction(...args) {
+            return rpc.invoke("continueAction", ...args);
+        },
+        async cancelAction(...args) {
+            return rpc.invoke("cancelAction", ...args);
+        },
         async respondToChoice(...args) {
             return rpc.invoke("respondToChoice", ...args);
         },

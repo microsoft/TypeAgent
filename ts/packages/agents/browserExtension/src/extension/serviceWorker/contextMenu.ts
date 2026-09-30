@@ -7,6 +7,7 @@ import {
     awaitConversationOps,
 } from "./dispatcherConnection";
 import { awaitCommand } from "@typeagent/dispatcher-types";
+import { indexPageContent } from "./messageHandlers";
 
 // RPC send function — set after RPC server is created in index.ts
 let rpcSendFn: ((name: string, ...args: any[]) => void) | undefined;
@@ -107,6 +108,38 @@ async function openChatAndStartMacroAuthoring(tabId: number): Promise<void> {
     }, 500);
 }
 
+async function savePage(tab: chrome.tabs.Tab): Promise<void> {
+    if (tab.id === undefined || !tab.url || !/^https?:\/\//i.test(tab.url)) {
+        console.error("Cannot save a tab without an HTTP(S) URL");
+        return;
+    }
+    const result = await indexPageContent(tab, true, {
+        activityType: "captured",
+        mode: "content",
+        reportHowToStatus: true,
+    });
+    if (
+        result.indexed &&
+        (result.warnings?.length || result.howTo === undefined)
+    ) {
+        await chrome.action.setBadgeText({ tabId: tab.id, text: "!" });
+        await chrome.action.setBadgeBackgroundColor({
+            tabId: tab.id,
+            color: "#d97706",
+        });
+    }
+    const status = !result.indexed
+        ? `Could not save page: ${result.error ?? "Unknown error"}`
+        : result.warnings?.length
+          ? `Page saved, but extraction needs attention: ${result.warnings.join("; ")}. See jobs in Memory Center.`
+          : result.howTo === undefined
+            ? "Page saved, but how-to status is unavailable. See jobs in Memory Center."
+            : !result.howTo.enabled
+              ? "Page saved. How-to detection is disabled for the browser corpus."
+              : `Page saved. ${result.howTo.candidateCount} how-to candidate(s). Open Memory Center and select TypeAgent Browser Memory to review.`;
+    await chrome.action.setTitle({ tabId: tab.id, title: status });
+}
+
 /**
  * Initializes the context menu items
  */
@@ -125,6 +158,12 @@ export function initializeContextMenu(): void {
     chrome.contextMenus.create({
         title: "Ask about this page",
         id: "askAboutPage",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        title: "Save this page",
+        id: "saveThisPage",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
@@ -165,6 +204,12 @@ export function initializeContextMenu(): void {
     chrome.contextMenus.create({
         title: "Knowledge Library",
         id: "showWebsiteLibrary",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        title: "Memory Center",
+        id: "showMemoryCenter",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 }
@@ -232,6 +277,11 @@ export async function handleContextMenuClick(
             break;
         }
 
+        case "saveThisPage": {
+            await savePage(tab);
+            break;
+        }
+
         case "showWebsiteLibrary": {
             const knowledgeLibraryUrl = chrome.runtime.getURL(
                 "views/knowledgeLibrary.html",
@@ -259,6 +309,29 @@ export async function handleContextMenuClick(
                 });
             }
 
+            break;
+        }
+
+        case "showMemoryCenter": {
+            const memoryCenterUrl = chrome.runtime.getURL(
+                "views/memoryCenter.html",
+            );
+            const existingTabs = await chrome.tabs.query({
+                url: memoryCenterUrl,
+            });
+            if (existingTabs.length > 0) {
+                await chrome.tabs.update(existingTabs[0].id!, { active: true });
+                if (existingTabs[0].windowId) {
+                    await chrome.windows.update(existingTabs[0].windowId, {
+                        focused: true,
+                    });
+                }
+            } else {
+                await chrome.tabs.create({
+                    url: memoryCenterUrl,
+                    active: true,
+                });
+            }
             break;
         }
 

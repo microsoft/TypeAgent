@@ -45,6 +45,19 @@ function makeSource(overrides: Partial<InstalledAgentSourceApi> = {}): {
 } {
     const calls: SourceCall[] = [];
     const api: InstalledAgentSourceApi = {
+        getAgentPackageState: () => undefined,
+        installExpected: async (nameOrTarget, expected) => {
+            calls.push({
+                op: "installExpected",
+                nameOrTarget,
+                expected,
+            } as any);
+            return {
+                name: nameOrTarget,
+                source: expected.source,
+                matchedByName: expected.matchKind === "defaultAgentName",
+            };
+        },
         install: async (nameOrTarget, ref, sourceName) => {
             calls.push({ op: "install", nameOrTarget, ref, sourceName });
             return {
@@ -277,6 +290,14 @@ function tightlyCapturingActionContext(agentContext: PackageAgentContext) {
         },
     } as any;
     return { context, output: () => captured.join(""), modes };
+}
+
+function getGroupHandler(
+    source: InstalledAgentSourceApi,
+    name: "list" | "show" | "install",
+): CommandHandler {
+    const table = buildPackageCommandTable(source.sourceCommands());
+    return (table.commands.group as any).commands[name] as CommandHandler;
 }
 
 function getHandler(
@@ -549,6 +570,7 @@ describe("@package command table", () => {
         const table = buildPackageCommandTable(sourceTable as any);
         expect(Object.keys(table.commands).sort()).toEqual([
             "available",
+            "group",
             "install",
             "list",
             "mcp",
@@ -1508,5 +1530,428 @@ describe("@package MCP management", () => {
             ["name"],
         );
         expect(trust.groups[0].completions).toEqual(["echo"]);
+    });
+});
+
+describe("@package group", () => {
+    const fakeGroups = {
+        groups: {
+            developer: {
+                displayName: "Developer Tools",
+                description: "Coding tools",
+                agents: ["code", "powershell"],
+            },
+            media: {
+                displayName: "Media Tools",
+                description: "Media creation tools",
+                agents: ["photo", "image"],
+            },
+        },
+    };
+
+    it("group list renders table of configured groups", async () => {
+        const { api } = makeSource();
+        const handler = getGroupHandler(api, "list");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, { args: {}, flags: {} } as any);
+        const text = output();
+        expect(text).toContain("developer");
+        expect(text).toContain("Developer Tools");
+        expect(text).toContain("media");
+        expect(text).toContain("Media Tools");
+    });
+
+    it("group commands surface the preserved catalog load error", async () => {
+        const { api } = makeSource();
+        const handler = getGroupHandler(api, "list");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroupsError:
+                "Could not read agent group catalog from 'agentGroups.json'",
+        });
+
+        await expect(
+            handler.run(context, { args: {}, flags: {} } as any),
+        ).rejects.toThrow(/Could not read agent group catalog/);
+    });
+
+    it("group show displays member status", async () => {
+        const { api } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "code" ? "bundled" : undefined,
+        });
+        const handler = getGroupHandler(api, "show");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "developer" },
+            flags: {},
+        } as any);
+        const text = output();
+        expect(text).toContain("Developer Tools");
+        expect(text).toContain("code");
+        expect(text).toContain("bundled (built-in)");
+        expect(text).toContain("powershell");
+        expect(text).toContain("not installed");
+    });
+
+    it("group show distinguishes unavailable and transitioning records", async () => {
+        const { api } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "code" ? "installed-unavailable" : "transitioning",
+        });
+        const handler = getGroupHandler(api, "show");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "developer" },
+            flags: {},
+        } as any);
+
+        expect(output()).toContain("installed but unavailable");
+        expect(output()).toContain("operation in progress");
+    });
+
+    it("group show throws on unknown group with available groups list", async () => {
+        const { api } = makeSource();
+        const handler = getGroupHandler(api, "show");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await expect(
+            handler.run(context, {
+                args: { group: "unknownGroup" },
+                flags: {},
+            } as any),
+        ).rejects.toThrow(
+            /Unknown agent group 'unknownGroup'. Available groups: developer, media/,
+        );
+    });
+
+    it("group install --dry-run previews without installing", async () => {
+        const calls: string[] = [];
+        const { api } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "photo" ? "bundled" : undefined,
+            preview: async (target) => {
+                calls.push(`preview:${target}`);
+                return {
+                    winner: {
+                        source: "feed",
+                        matchKind: "defaultAgentName",
+                        name: target,
+                        packageName: `@typeagent/${target}-agent`,
+                    },
+                    matches: [],
+                };
+            },
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "media" },
+            flags: { "dry-run": true },
+        } as any);
+
+        expect(calls).toEqual(["preview:image"]);
+        const text = output();
+        expect(text).toContain("Dry run complete. No agents were installed.");
+        expect(text).toContain("bundled");
+        expect(text).toContain("to install");
+    });
+
+    it("group install --yes installs missing members sequentially using installExpected", async () => {
+        const { api, calls } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "code" ? "bundled" : undefined,
+            preview: async (target) => ({
+                winner: {
+                    source: "feed",
+                    matchKind: "defaultAgentName",
+                    name: target,
+                    packageName: `@typeagent/${target}-agent`,
+                },
+                matches: [],
+            }),
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "developer" },
+            flags: { yes: true },
+        } as any);
+
+        expect(calls).toEqual([
+            expect.objectContaining({
+                op: "installExpected",
+                nameOrTarget: "powershell",
+            }),
+        ]);
+        const text = output();
+        expect(text).toContain(
+            "Group 'developer' installation complete (1 agent(s) newly installed)",
+        );
+        expect(text).toContain("remain disabled");
+        expect(text).toContain("powershell");
+        expect(text).toContain("installed");
+    });
+
+    it("rejects a group member that resolves to a different agent name", async () => {
+        const { api, calls } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "photo" ? "bundled" : undefined,
+            preview: async () => ({
+                winner: {
+                    source: "feed",
+                    matchKind: "packageName",
+                    name: "differentImage",
+                    packageName: "@typeagent/image-agent",
+                },
+                matches: [],
+            }),
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await expect(
+            handler.run(context, {
+                args: { group: "media" },
+                flags: { yes: true },
+            } as any),
+        ).rejects.toThrow(/image -> differentImage/);
+        expect(calls).toEqual([]);
+    });
+
+    it("group install reports the actual path identity", async () => {
+        const { api } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "photo" ? "bundled" : undefined,
+            preview: async (target) => ({
+                winner: {
+                    source: "local",
+                    sourceKind: "path",
+                    matchKind: "path",
+                    name: target,
+                    path: `C:\\agents\\${target}`,
+                },
+                matches: [],
+            }),
+            installExpected: async (target, expected) => ({
+                name: target,
+                source: expected.source,
+                sourceKind: "path",
+                ...(expected.path !== undefined ? { path: expected.path } : {}),
+                matchedByName: false,
+            }),
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "media" },
+            flags: { yes: true },
+        } as any);
+
+        expect(output()).toContain("C:\\agents\\image");
+    });
+
+    it("group install cancels when confirmation is declined", async () => {
+        const { api } = makeSource({
+            preview: async (target) => ({
+                winner: {
+                    source: "feed",
+                    matchKind: "defaultAgentName",
+                    name: target,
+                },
+                matches: [],
+            }),
+        });
+        const handler = getGroupHandler(api, "install");
+        const capture = mcpActionContext(
+            {
+                appAgentProviderSetController: noopHost,
+                source: api,
+                agentGroups: fakeGroups,
+            },
+            1, // choice 1 = Cancel
+        );
+
+        await handler.run(capture.context, {
+            args: { group: "media" },
+            flags: { yes: false },
+        } as any);
+
+        expect(capture.questions).toHaveLength(1);
+        expect(capture.output()).toContain("Group installation cancelled.");
+    });
+
+    it("group install reports already present when no members are missing", async () => {
+        const { api } = makeSource({
+            getAgentPackageState: () => "bundled",
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await handler.run(context, {
+            args: { group: "developer" },
+            flags: {},
+        } as any);
+
+        expect(output()).toContain(
+            "All agents in group 'developer' are already present.",
+        );
+    });
+
+    it("group install fails preflight if any member is unavailable", async () => {
+        const { api } = makeSource({
+            preview: async () => undefined,
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await expect(
+            handler.run(context, {
+                args: { group: "media" },
+                flags: {},
+            } as any),
+        ).rejects.toThrow(
+            /could not be resolved from configured sources: photo, image/,
+        );
+    });
+
+    it("group install preflights all members then rejects transitioning state without mutation", async () => {
+        const previews: string[] = [];
+        const { api, calls } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "photo" ? "transitioning" : undefined,
+            preview: async (target) => {
+                previews.push(target);
+                return {
+                    winner: {
+                        source: "feed",
+                        matchKind: "defaultAgentName",
+                        name: target,
+                    },
+                    matches: [],
+                };
+            },
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await expect(
+            handler.run(context, {
+                args: { group: "media" },
+                flags: { yes: true },
+            } as any),
+        ).rejects.toThrow(/operation in progress: photo/);
+        expect(previews).toEqual(["image"]);
+        expect(calls).toEqual([]);
+    });
+
+    it("group install reports an interrupted current member and leaves later members not attempted", async () => {
+        const controller = new AbortController();
+        const installs: string[] = [];
+        const { api } = makeSource({
+            preview: async (target) => ({
+                winner: {
+                    source: "feed",
+                    matchKind: "defaultAgentName",
+                    name: target,
+                },
+                matches: [],
+            }),
+            installExpected: async (target) => {
+                installs.push(target);
+                controller.abort();
+                throw new Error("aborted");
+            },
+        });
+        const handler = getGroupHandler(api, "install");
+        const capture = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+        capture.context.abortSignal = controller.signal;
+
+        await handler.run(capture.context, {
+            args: { group: "media" },
+            flags: { yes: true },
+        } as any);
+
+        expect(installs).toEqual(["photo"]);
+        expect(capture.output()).toContain(
+            "cancelled after installation started",
+        );
+        expect(capture.output()).toContain("not attempted");
+    });
+
+    it("group completion completes group names and source names", async () => {
+        const { api } = makeSource({
+            listSources: () => ["path", "typeagent"],
+        });
+        const handler = getGroupHandler(api, "install");
+        const result = await handler.getCompletion!(
+            fakeSessionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+                agentGroups: fakeGroups,
+            }),
+            {} as any,
+            ["group", "--source"],
+        );
+        const byName = new Map(
+            result.groups.map((g) => [g.name, g.completions]),
+        );
+        expect(byName.get("group")).toEqual(["developer", "media"]);
+        expect(byName.get("--source")).toEqual(["path", "typeagent"]);
     });
 });

@@ -249,6 +249,12 @@ export function configToEnv(config: Config): EnvOutput {
             out.TYPEAGENT_EMBEDDING_MODEL = config.embedding.model;
         if (config.embedding.cacheDir !== undefined)
             out.TYPEAGENT_EMBEDDING_CACHE_DIR = config.embedding.cacheDir;
+        if (config.embedding.size !== undefined)
+            out.TYPEAGENT_EMBEDDING_SIZE = String(config.embedding.size);
+        if (config.embedding.maxBatchSize !== undefined)
+            out.TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE = String(
+                config.embedding.maxBatchSize,
+            );
     }
 
     // Extra: untyped passthrough. Last so it can override typed values

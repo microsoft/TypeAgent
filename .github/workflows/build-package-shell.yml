@@ -49,6 +49,7 @@ jobs:
           filters: |
             ts:
               - "ts/**"
+              - "dotnet/powerShellSandboxBroker/**"
               - ".github/workflows/build-package-shell.yml"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
@@ -91,7 +92,19 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         shell: bash
-        run: pnpm run shell:package
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm run shell:package; then
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              echo "Shell packaging failed; retrying in 30 seconds (attempt $((attempt + 1)) of 3)."
+              sleep 30
+            fi
+          done
+
+          exit 1
 
       # - uses: actions/upload-artifact@v5
       #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}

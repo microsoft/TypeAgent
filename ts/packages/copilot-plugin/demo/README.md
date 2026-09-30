@@ -159,7 +159,7 @@ See `setup/montage-setup.ps1` for a complete example covering: TypeAgent server 
 
 ## How the turn-completion signal works
 
-The plugin hooks (`hook-router.ts`, `hook-agent-stop.ts`) write a JSON file at `%TEMP%\copilot-demo-state.json` every time a Copilot CLI turn completes:
+The prompt router and TypeAgent extension write a JSON file at `%TEMP%\copilot-demo-state.json` every time a Copilot CLI turn completes:
 
 ```json
 {
@@ -175,7 +175,7 @@ The plugin hooks (`hook-router.ts`, `hook-agent-stop.ts`) write a JSON file at `
 
 The driver polls this file every 50 ms. A `turnId` change indicates a new turn completed; the `lastResponse` is matched against `@expect` text.
 
-Note: `lastResponse` is populated when the request is **handled by the plugin in direct mode** (router knows the response). In MCP/LLM mode, the LLM produces the response after the router returns; `agentStop` fires when the model finishes, but the driver only sees `lastResponse: ""` in that case. **Practical implication:** `@expect "text"` works reliably in direct mode; in MCP/LLM mode, prefer `@wait-completion` and verify the response visually.
+`lastResponse` is populated by the router for direct-mode responses and by the extension for Copilot-produced responses. The demo driver can therefore use `@expect "text"` in either path.
 
 ---
 

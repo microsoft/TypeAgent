@@ -8,7 +8,10 @@
     "originalSchemaFile": "./schema/scriptActions.mts",
     "schemaFile": "../dist/powershellSchema.pas.json",
     "grammarFile": "../dist/powershellSchema.ag.json",
-    "schemaType": "PowerShellActions"
+    "schemaType": "PowerShellActions",
+    "actionPolicies": {
+      "listPowerShellFlows": { "effects": "read-only" }
+    }
   },
   "subActionManifests": {
     "powershell-files": {

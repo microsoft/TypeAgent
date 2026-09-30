@@ -64,6 +64,8 @@ export type SchemaContent = {
     // TODO: enable non-stringify pas content.
     content: string;
     config?: string | undefined; // for "ts" only
+    // Dynamic schemas can bind learned routes to individual action definitions.
+    cacheBinding?: ActionCacheBinding;
 };
 export type GrammarContent = {
     format: GrammarFormat;
@@ -72,6 +74,22 @@ export type GrammarContent = {
     // when present next to an "ag" grammar file. Lets a host recover matched-rule
     // source text.
     sourceMap?: string | undefined;
+};
+
+export type ActionEffect = "read-only" | "state-changing" | "unknown";
+
+export type ActionPolicy = {
+    // Omission is unknown, never an exemption from effect confirmation.
+    effects?: ActionEffect;
+    // Even a read-only action can explicitly require confirmation.
+    confirmation?: "required";
+};
+
+export type ActionCacheBinding = {
+    // Stable identity of the system that supplied this dynamic schema.
+    sourceId: string;
+    // Fingerprints of the source definitions keyed by action name.
+    actionFingerprints: Record<string, string>;
 };
 
 export type SchemaManifest = {
@@ -83,6 +101,11 @@ export type SchemaManifest = {
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
     streamingActions?: string[];
+    // Exact action names. Applies to structured invocation, not NL routing.
+    actionPolicies?: Record<string, ActionPolicy>;
+    // Optional provenance used to invalidate learned routes when a dynamic
+    // action's source definition changes.
+    cacheBinding?: ActionCacheBinding;
 };
 
 export type ActionManifest = {
@@ -186,6 +209,7 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     ): Promise<ActionResult | undefined>;
 
     // Choice (yes/no confirmation, multi-select, or multi-question form)
+    cancelChoice?(choiceId: string, context: SessionContext): Promise<void>;
     handleChoice?(
         choiceId: string,
         response:
@@ -467,6 +491,9 @@ export interface ActionContext<T = void> {
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
     readonly abortSignal?: AbortSignal | undefined;
+    // Hosts retaining shared execution state require transports to await the
+    // actual handler after forwarding abort, rather than racing its response.
+    readonly waitForCompletionOnAbort?: boolean;
 
     // true when this action was dispatched from within the reasoning loop (via MCP execute_action),
     // false when dispatched directly from the translator. Agents can use this to decide whether

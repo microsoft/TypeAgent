@@ -43,7 +43,10 @@ export function createExternalBrowserClient(
             getActiveRpc().invoke("followLinkByText", ...args),
         followLinkByPosition: (...args) =>
             getActiveRpc().invoke("followLinkByPosition", ...args),
-        closeWindow: async () => getActiveRpc().invoke("closeWindow"),
+        closeWindow: async (title) =>
+            title === undefined
+                ? getActiveRpc().invoke("closeWindow")
+                : getActiveRpc().invoke("closeWindow", title),
         search: async (...args) => getActiveRpc().invoke("search", ...args),
         readPageContent: async () => getActiveRpc().invoke("readPageContent"),
         stopReadPageContent: async () =>

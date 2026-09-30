@@ -167,6 +167,30 @@ export function makeStubConnection(
         async getMacroRun() {
             throw new Error("Not implemented by conversation test stub");
         },
+        async listSkills() {
+            return [];
+        },
+        async searchSkills() {
+            return [];
+        },
+        async getSkill() {
+            return undefined;
+        },
+        async readSkillFile() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async publishSkill() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async changeSkillState() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async activateSkill() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async rollbackSkill() {
+            throw new Error("Not implemented by conversation test stub");
+        },
 
         async listConversations(name?: string) {
             const idx = nextCount("listConversations");

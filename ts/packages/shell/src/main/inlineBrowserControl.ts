@@ -233,7 +233,7 @@ export function createInlineBrowserControl(
             }
             return url;
         },
-        async closeWindow() {
+        async closeWindow(_title?: string) {
             throw new Error(
                 "Closing the inline browser window is not supported.",
             );
@@ -588,7 +588,7 @@ export function createInlineBrowserControlRpcHandlers(
             control.followLinkByText(keywords, openInNewTab),
         followLinkByPosition: (position, openInNewTab) =>
             control.followLinkByPosition(position, openInNewTab),
-        closeWindow: () => control.closeWindow(),
+        closeWindow: (title) => control.closeWindow(title),
         search: (query, sites, searchProvider, options) =>
             control.search(query, sites, searchProvider, options),
         switchTabs: (tabDescription, tabIndex) =>

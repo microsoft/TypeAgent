@@ -2,6 +2,12 @@
 // Licensed under the MIT License.
 
 import {
+    assertGhcpEvalAction,
+    markGhcpEvalExecutionFailure,
+    recordGhcpEvalEvent,
+} from "./ghcpEvalPolicy.js";
+
+import {
     ExecutableAction,
     FullAction,
     getFullActionName,
@@ -63,6 +69,9 @@ import {
 } from "../otel/actionSpan.js";
 import { otel } from "@typeagent/telemetry";
 import { getActionContext } from "./actionContext.js";
+import { getStructuredExecution } from "../structuredAction/executionHooks.js";
+import { ExecutionFailure } from "../structuredAction/executionFailure.js";
+import { RpcDisconnectedError } from "@typeagent/agent-rpc/rpc";
 import {
     AgentNotReadyError,
     getErrorDisplayContent,
@@ -217,6 +226,12 @@ function rethrowIfActionCancelled(
     systemContext: CommandHandlerContext,
 ): void {
     if (
+        (error instanceof RpcDisconnectedError ||
+            error instanceof ExecutionFailure) &&
+        getStructuredExecution(systemContext) !== undefined
+    )
+        throw error;
+    if (
         (error as { name?: unknown })?.name === "AbortError" ||
         systemContext.currentAbortSignal?.aborted
     ) {
@@ -243,9 +258,13 @@ async function executeFlowForActionSpan(
         string,
         unknown
     >;
+    const structured = getStructuredExecution(systemContext);
+    await structured?.guard(executableAction.action, "enter");
+    // Entering the interpreter itself has no effects; each step marks its own entry.
+    structured?.effect(executableAction.action, false);
     try {
         const result = await processFlow(
-            flowDef,
+            structured === undefined ? flowDef : structuredClone(flowDef),
             flowParams,
             context,
             actionIndex,
@@ -291,11 +310,13 @@ async function executeHandlerForActionSpan(
 
     let setupResult: ActionResult | undefined;
     try {
-        setupResult = await checkAgentReady(
-            appAgentName,
-            systemContext,
-            actionContext,
-        );
+        if (getStructuredExecution(systemContext) === undefined) {
+            setupResult = await checkAgentReady(
+                appAgentName,
+                systemContext,
+                actionContext,
+            );
+        }
     } catch (error) {
         rethrowIfActionCancelled(error, systemContext);
         recordActionSetupFailure(span, "agent_not_ready");
@@ -314,6 +335,9 @@ async function executeHandlerForActionSpan(
     }
 
     const displayCountBefore = systemContext.displayCount;
+    const structured = getStructuredExecution(systemContext);
+    await structured?.guard(executableAction.action, "enter");
+    structured?.effect(executableAction.action);
     try {
         const handlerResult = await appAgent.executeAction(
             executableAction.action,
@@ -361,6 +385,12 @@ export async function executeAction(
 ): Promise<ActionResult> {
     const action = executableAction.action;
     const schemaName = action.schemaName;
+    assertGhcpEvalAction(schemaName, action.actionName, action.parameters);
+    recordGhcpEvalEvent("action.admitted", {
+        schemaName,
+        actionName: action.actionName,
+        parameters: action.parameters,
+    });
     // For nested action calls (e.g., from TaskFlow scripts), agentContext may be
     // the agent's own context rather than CommandHandlerContext. In that case,
     // use _systemContext which exposes the CommandHandlerContext.
@@ -369,6 +399,7 @@ export async function executeAction(
         sessionCtx._systemContext ?? sessionCtx.agentContext;
 
     const appAgentName = getAppAgentName(schemaName);
+    await getStructuredExecution(systemContext)?.guard(action, "prepare");
     const requestId = getRequestId(systemContext);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
 
@@ -406,12 +437,14 @@ export async function executeAction(
     // Reuse the same streaming action context if one is available.
 
     const { actionContext, closeActionContext } =
-        getStreamingActionContext(
-            appAgentName,
-            actionIndex,
-            systemContext,
-            action,
-        ) ??
+        (getStructuredExecution(systemContext) === undefined
+            ? getStreamingActionContext(
+                  appAgentName,
+                  actionIndex,
+                  systemContext,
+                  action,
+              )
+            : undefined) ??
         getActionContext(
             appAgentName,
             systemContext,
@@ -474,6 +507,21 @@ export async function executeAction(
                     appAgent,
                     actionContext,
                 });
+                const structured = getStructuredExecution(systemContext);
+                if (structured !== undefined)
+                    outcome.result = structuredClone(outcome.result);
+                structured?.result(action, outcome.result);
+                if (
+                    structured !== undefined &&
+                    outcome.result.error === undefined &&
+                    outcome.result.pendingChoice !== undefined
+                ) {
+                    outcome.result = await structured.choice(
+                        action,
+                        outcome.result,
+                        actionContext,
+                    );
+                }
                 // If the agent ran to completion but a cancel arrived while it was executing,
                 // discard the result and treat this as a cancellation.
                 systemContext.currentAbortSignal?.throwIfAborted();
@@ -497,14 +545,25 @@ export async function executeAction(
                     schemaName,
                 );
 
+                if (outcome.result.error !== undefined)
+                    markGhcpEvalExecutionFailure();
+                recordGhcpEvalEvent("action.completed", {
+                    ...eventData,
+                    success: outcome.result.error === undefined,
+                    elapsedMs: Date.now() - actionStartedAt,
+                });
                 logActionCompleted(systemContext.logger, {
                     ...eventData,
                     success: outcome.result.error === undefined,
                     elapsedMs: Date.now() - actionStartedAt,
                 });
-                closeActionContext();
                 return outcome.result;
             } catch (error) {
+                markGhcpEvalExecutionFailure();
+                recordGhcpEvalEvent("action.failed", {
+                    ...eventData,
+                    elapsedMs: Date.now() - actionStartedAt,
+                });
                 logActionCompleted(systemContext.logger, {
                     ...eventData,
                     success: false,
@@ -516,6 +575,8 @@ export async function executeAction(
                     error,
                 });
                 throw error;
+            } finally {
+                closeActionContext();
             }
         },
         // The same signal the completion event above uses, so the span and
@@ -655,7 +716,10 @@ export function emitActionResult(
             result.dynamicDisplayNextRefreshMs!,
         );
     }
-    if (result.pendingChoice !== undefined) {
+    if (
+        result.pendingChoice !== undefined &&
+        getStructuredExecution(systemContext, requestId.requestId) === undefined
+    ) {
         const pc = result.pendingChoice;
         systemContext.pendingChoiceRoutes.set(pc.choiceId, {
             agentName: appAgentName,
@@ -778,11 +842,16 @@ export async function executeActions(
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
     context: ActionContext<CommandHandlerContext>,
+    observeResult?: (action: ExecutableAction, result: ActionResult) => void,
+    startActionIndex = 0,
 ): Promise<ActionExecutionError | undefined> {
     const sessionCtx = context.sessionContext as any;
     const systemContext: CommandHandlerContext =
         sessionCtx._systemContext ?? sessionCtx.agentContext;
     const commandResult = getCommandResult(systemContext);
+    const structured = getStructuredExecution(systemContext);
+    for (const { action } of actions)
+        await structured?.guard(action, "prepare");
     if (commandResult !== undefined) {
         commandResult.actions = actions.map(({ action }) => action);
     }
@@ -798,7 +867,7 @@ export async function executeActions(
         return;
     }
 
-    let actionIndex = 0;
+    let actionIndex = startActionIndex;
     while (actionQueue.length !== 0) {
         systemContext.currentAbortSignal?.throwIfAborted();
         const pending = actionQueue.shift()!;
@@ -807,18 +876,35 @@ export async function executeActions(
         const action = executableAction.action;
 
         if (isPendingRequestAction(action)) {
+            if (structured !== undefined)
+                throw new Error(
+                    "Structured execution cannot translate pending requests",
+                );
             const translationResult = await translatePendingRequestAction(
                 action,
                 context,
+                pending.completedActions,
                 actionIndex,
             );
 
             const requestAction = translationResult.requestAction;
+            if (!(await canExecute(requestAction.actions, context))) {
+                const error =
+                    "Deferred actions were not executed because they are unknown or disabled. " +
+                    "Completed actions must not be replayed.";
+                displayError(error, context);
+                return {
+                    error,
+                    failedAction: executableAction,
+                    fallbackToReasoning: false,
+                };
+            }
             actionQueue.unshift(
                 ...(await toPendingActions(
                     context,
                     requestAction.actions,
                     requestAction.history?.entities,
+                    pending.completedActions,
                 )),
             );
             continue;
@@ -845,6 +931,7 @@ export async function executeActions(
             context,
             actionIndex,
         );
+        observeResult?.(executableAction, result);
 
         // add the action result to memory whether it has error or not.
         if (
@@ -862,18 +949,33 @@ export async function executeActions(
 
         if (result.error !== undefined) {
             // Stop executing further action on error.
-            return { error: result.error, failedAction: executableAction };
+            return {
+                error: result.error,
+                failedAction: executableAction,
+                ...(result.fallbackToReasoning === undefined
+                    ? {}
+                    : { fallbackToReasoning: result.fallbackToReasoning }),
+            };
+        }
+
+        if (result.pendingChoice !== undefined) {
+            if (actionQueue.length > 0 || result.additionalActions?.length) {
+                const error =
+                    `Action ${getFullActionName(executableAction)} is awaiting a user choice. ` +
+                    "Remaining steps were not executed and will not resume automatically. " +
+                    "Respond to the choice to continue only this action; do not replay earlier completed actions.";
+                displayError(error, context);
+                return {
+                    error,
+                    failedAction: executableAction,
+                    fallbackToReasoning: false,
+                };
+            }
+            return;
         }
 
         const resultEntityId = executableAction.resultEntityId;
         if (resultEntityId !== undefined) {
-            if (result.resultEntity === undefined) {
-                throw new Error(
-                    `Action ${getFullActionName(
-                        executableAction,
-                    )} did not return a result entity.`,
-                );
-            }
             if (resultEntityResolver === undefined) {
                 throw new Error(
                     `Internal error: resultEntityResolver is undefined`,
@@ -881,13 +983,19 @@ export async function executeActions(
             }
             resultEntityResolver.setResultEntity(
                 `\${result-${resultEntityId}}`,
-                {
-                    ...result.resultEntity,
-                    sourceAppAgentName: appAgentName,
-                },
+                result.resultEntity === undefined
+                    ? undefined
+                    : {
+                          ...result.resultEntity,
+                          sourceAppAgentName: appAgentName,
+                      },
                 result.resultValue,
             );
         }
+        pending.completedActions.push({
+            executableAction: structuredClone(executableAction),
+            result: structuredClone(result),
+        });
 
         if (result.activityContext !== undefined) {
             if (actionQueue.length > 0) {
@@ -950,15 +1058,23 @@ export async function executeActions(
         if (result.additionalActions !== undefined) {
             try {
                 const actions = getAdditionalExecutableActions(
-                    result.additionalActions,
+                    structured === undefined
+                        ? result.additionalActions
+                        : structuredClone(result.additionalActions),
                     action.schemaName,
                     systemContext,
                 );
                 // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
                 actionQueue.unshift(
-                    ...(await toPendingActions(context, actions, undefined)),
+                    ...(await toPendingActions(
+                        context,
+                        actions,
+                        undefined,
+                        pending.completedActions,
+                    )),
                 );
             } catch (e) {
+                if (structured !== undefined) throw e;
                 throw new Error(
                     `${action.schemaName}.${action.actionName} returned an invalid action: ${e}`,
                 );

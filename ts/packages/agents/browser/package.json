@@ -17,8 +17,7 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
-    "./agent/handlers": "./dist/agent/browserActionHandler.mjs",
-    "./agent/indexing": "./dist/agent/indexing/browserIndexingService.js"
+    "./agent/handlers": "./dist/agent/browserActionHandler.mjs"
   },
   "main": "index.js",
   "files": [
@@ -48,6 +47,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.150",
+    "@github/copilot-sdk": "1.0.13",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-flows": "workspace:*",
@@ -62,11 +62,12 @@
     "@typeagent/chat-ui": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "@typeagent/conversation-memory": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-client": "workspace:*",
+    "@typeagent/memory-service": "workspace:*",
     "@typeagent/taskflow-typeagent": "workspace:*",
     "@typeagent/textpro": "workspace:*",
     "@typeagent/website-memory": "workspace:*",
@@ -218,7 +219,6 @@
         "src/agent/indexing/schema",
         "src/agent/knowledge/actions/schema",
         "src/agent/knowledge/schema",
-        "src/agent/search/schema",
         "src/agent/webFlows/samples",
         "src/agent/webFlows/schema"
       ],

@@ -3,6 +3,8 @@
 
 import { z } from "zod";
 
+import { formatZodIssues } from "./zodJson.js";
+
 /** First `{`/`[` … last matching `}`/`]`; caller retries if JSON.parse fails. */
 export function extractLlmJsonText(response: string): string {
     let text = response.trim();
@@ -57,14 +59,9 @@ export function parseLlmJsonWithZod<T>(
     const value = parseLlmJsonValue(response, label);
     const parsed = schema.safeParse(value);
     if (!parsed.success) {
-        const detail = parsed.error.issues
-            .map((issue) => {
-                const path =
-                    issue.path.length === 0 ? "$" : issue.path.join(".");
-                return `${path}: ${issue.message}`;
-            })
-            .join("; ");
-        throw new Error(`${label} JSON failed schema validation: ${detail}`);
+        throw new Error(
+            `${label} JSON failed schema validation: ${formatZodIssues(parsed.error)}`,
+        );
     }
     return parsed.data;
 }

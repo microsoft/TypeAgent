@@ -43,6 +43,7 @@ export {
     type McpReplayHostOptions,
 } from "./mcp/mcpReplayHost.js";
 export type { McpHostServices } from "./mcp/mcpServerProvider.js";
+export type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
 export {
     createOnboardingOnlyDispatcher,
     type OnboardingDispatcherHandle,

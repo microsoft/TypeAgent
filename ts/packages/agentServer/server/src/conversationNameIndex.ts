@@ -9,8 +9,7 @@ import {
 } from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
-    openai,
-    isEmbeddingAvailable,
+    tryCreateEmbeddingModel,
 } from "@typeagent/aiclient";
 import registerDebug from "debug";
 
@@ -78,12 +77,7 @@ export function createConversationNameIndex(
     // Undefined when no embedding provider is configured; the index then does
     // lexical-only matching instead of failing.
     const embeddingModel: TextEmbeddingModel | undefined =
-        modelOverride ??
-        (isEmbeddingAvailable()
-            ? openai.createEmbeddingModel(
-                  openai.apiSettingsFromEnv(openai.ModelType.Embedding),
-              )
-            : undefined);
+        modelOverride ?? tryCreateEmbeddingModel();
 
     if (embeddingModel === undefined) {
         debug(

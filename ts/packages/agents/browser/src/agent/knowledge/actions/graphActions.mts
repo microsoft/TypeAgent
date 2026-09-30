@@ -3,7 +3,12 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
-import { GraphCache, TopicGraphCache } from "../types/knowledgeTypes.mjs";
+import { GraphCache } from "../types/knowledgeTypes.mjs";
+import type {
+    MemoryKnowledgeGraph,
+    MemorySource,
+} from "@typeagent/memory-service";
+import type { BrowserMemoryService } from "../../browserMemoryService.mjs";
 import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
 import {
     buildGraphologyGraph,
@@ -18,31 +23,7 @@ import {
     createGraphologyCache,
     invalidateAllGraphologyCaches,
 } from "../utils/graphologyCache.mjs";
-import { createGraphologyPersistenceManager } from "../utils/graphologyPersistence.mjs";
 import registerDebug from "debug";
-import { openai as ai } from "@typeagent/aiclient";
-import { createJsonTranslator } from "typechat";
-import { createTypeScriptJsonValidator } from "typechat/ts";
-import { TopicRelationshipAnalysis } from "./schema/topicRelationship.mjs";
-import fs from "fs";
-import path from "path";
-import { getBrowserPackageFilePath } from "../../utils/packageFilePath.mjs";
-
-function getSchemaFileContents(fileName: string): string {
-    return fs.readFileSync(
-        getBrowserPackageFilePath(
-            path.join(
-                "src",
-                "agent",
-                "knowledge",
-                "actions",
-                "schema",
-                fileName,
-            ),
-        ),
-        "utf8",
-    );
-}
 
 // ============================================================================
 // Topic Timeline Types
@@ -96,7 +77,6 @@ const debug = registerDebug("typeagent:browser:knowledge:graph");
 
 // Graphology Integration Helper Functions
 async function cacheGraphologyGraphs(
-    websiteCollection: any,
     entityGraph: any,
     topicGraph: any,
     metadata: any,
@@ -139,106 +119,15 @@ async function cacheGraphologyGraphs(
     );
 }
 
-function extractEntitiesFromGraphology(entityGraph: any): any[] {
-    const entities: any[] = [];
-
-    // Extract entity nodes from Graphology graph
-    entityGraph.forEachNode((nodeId: string, attributes: any) => {
-        if (attributes.type === "entity") {
-            entities.push({
-                name: attributes.name || nodeId,
-                entityType: attributes.entityType || "unknown",
-                frequency: attributes.frequency || 0,
-                websites: attributes.websites || [],
-                confidence: attributes.confidence || 1.0,
-            });
-        }
-    });
-
-    return entities;
+function getGraphCache(agentContext: BrowserActionContext): GraphCache | null {
+    return agentContext.graphCache ?? null;
 }
 
-function extractRelationshipsFromGraphology(entityGraph: any): any[] {
-    const relationships: any[] = [];
-
-    // Extract relationship edges from Graphology graph
-    entityGraph.forEachEdge(
-        (edgeId: string, attributes: any, source: string, target: string) => {
-            relationships.push({
-                id: edgeId,
-                rowId: edgeId,
-                fromEntity: source,
-                toEntity: target,
-                source: source,
-                target: target,
-                relationshipType:
-                    attributes.relationshipType ||
-                    attributes.type ||
-                    "co_occurs",
-                type:
-                    attributes.relationshipType ||
-                    attributes.type ||
-                    "co_occurs",
-                strength: attributes.weight || attributes.strength || 1.0,
-                confidence: attributes.confidence || 1.0,
-                count: attributes.cooccurrenceCount || attributes.count || 1,
-                cooccurrenceCount:
-                    attributes.cooccurrenceCount || attributes.count || 1,
-            });
-        },
-    );
-
-    return relationships;
-}
-
-function extractCommunitiesFromGraphology(entityGraph: any): any[] {
-    const communities: any[] = [];
-
-    // Extract community nodes from Graphology graph
-    entityGraph.forEachNode((nodeId: string, attributes: any) => {
-        if (attributes.type === "community") {
-            communities.push({
-                id: nodeId,
-                name: attributes.name || `Community ${nodeId}`,
-                entities: attributes.entities || [],
-                size: attributes.size || 0,
-                coherence: attributes.coherence || 0.0,
-                importance: attributes.importance || 0.0,
-            });
-        }
-    });
-
-    return communities;
-}
-
-// Entity graph cache storage attached to websiteCollection
-function getGraphCache(websiteCollection: any): GraphCache | null {
-    return (websiteCollection as any).__graphCache || null;
-}
-
-function setGraphCache(websiteCollection: any, cache: GraphCache): void {
-    (websiteCollection as any).__graphCache = cache;
-}
-
-// Topic graph cache storage attached to websiteCollection
-function setTopicGraphCache(
-    websiteCollection: any,
-    cache: TopicGraphCache,
+function setGraphCache(
+    agentContext: BrowserActionContext,
+    cache: GraphCache,
 ): void {
-    (websiteCollection as any).__topicGraphCache = cache;
-}
-
-// Invalidate topic cache (called on graph rebuild or knowledge import)
-function invalidateTopicCache(websiteCollection: any): void {
-    setTopicGraphCache(websiteCollection, {
-        topics: [],
-        relationships: [],
-        topicMetrics: [],
-        lastUpdated: 0,
-        isValid: false,
-    });
-    // Also clear the graphology layout cache
-    invalidateAllGraphologyCaches();
+    agentContext.graphCache = cache;
 }
 
 function calculateEntityMetrics(
@@ -371,15 +260,15 @@ function calculateEntityMetrics(
 async function ensureGraphCache(
     context: SessionContext<BrowserActionContext>,
 ): Promise<void> {
-    const websiteCollection = context.agentContext.websiteCollection;
-    if (!websiteCollection) {
-        throw new Error("Website collection not available");
+    const memoryService = context.agentContext.browserMemoryService;
+    if (memoryService === undefined) {
+        throw new Error("Durable browser memory is not available");
     }
 
-    const cache = getGraphCache(websiteCollection);
+    const cache = getGraphCache(context.agentContext);
+    const sourceVersion = memoryService.getGraphVersion();
 
-    // Check if cache is valid (no TTL - only invalidated on rebuild)
-    if (cache && cache.isValid) {
+    if (cache?.isValid && cache.sourceVersion === sourceVersion) {
         debug("[Knowledge Graph] Using valid cached graph data");
         return;
     }
@@ -390,92 +279,41 @@ async function ensureGraphCache(
     tracker.startOperation("ensureGraphCache");
 
     try {
-        // Build the graph using websiteCollection - returns Graphology graphs directly
-        tracker.startOperation("ensureGraphCache.buildGraphologyGraphs");
-        const buildResult = await websiteCollection.buildGraph();
+        tracker.startOperation("ensureGraphCache.loadDurableGraph");
+        const durableGraph = await memoryService.getKnowledgeGraph();
         tracker.endOperation(
-            "ensureGraphCache.buildGraphologyGraphs",
+            "ensureGraphCache.loadDurableGraph",
             1,
-            buildResult ? 1 : 0,
+            durableGraph.entities.length,
         );
 
-        if (!buildResult?.entityGraph || !buildResult?.topicGraph) {
-            throw new Error(
-                "Failed to build Graphology graphs from websiteCollection",
-            );
-        }
-
-        // Extract entities, relationships, and communities from Graphology graphs
-        tracker.startOperation("ensureGraphCache.extractFromGraphology");
-
-        const entityGraph = buildResult.entityGraph;
-        const rawEntities: any[] = [];
-        const relationships: any[] = [];
+        const rawEntities: any[] = durableGraph.entities.map((entity) => ({
+            name: entity.name,
+            id: entity.name,
+            type: entity.types[0] ?? "entity",
+            entityType: entity.types,
+            confidence: 1,
+            count: entity.mentionCount,
+            websites: entity.sourceIds,
+        }));
+        const relationships: any[] = durableGraph.relationships.map(
+            (relationship) => ({
+                fromEntity: relationship.fromEntity,
+                toEntity: relationship.toEntity,
+                source: relationship.fromEntity,
+                target: relationship.toEntity,
+                relationshipType: relationship.relationshipType,
+                type: relationship.relationshipType,
+                confidence: 1,
+                count: relationship.count,
+                sourceIds: relationship.sourceIds,
+            }),
+        );
         const communities: any[] = [];
 
-        // Extract entities from Graphology graph
-        entityGraph.forEachNode((nodeId: string, attributes: any) => {
-            if (!attributes.type || attributes.type === "entity") {
-                rawEntities.push({
-                    name: nodeId,
-                    id: nodeId,
-                    type: attributes.type || "entity",
-                    confidence: attributes.confidence || 0.5,
-                    count: attributes.count || 1,
-                    importance: attributes.importance || 0,
-                    communityId: attributes.community || 0,
-                });
-            }
-        });
-
-        // Extract relationships from Graphology graph
-        entityGraph.forEachEdge(
-            (
-                edgeId: string,
-                attributes: any,
-                source: string,
-                target: string,
-            ) => {
-                relationships.push({
-                    fromEntity: source,
-                    toEntity: target,
-                    source: source,
-                    target: target,
-                    relationshipType: attributes.type || "related",
-                    type: attributes.type || "related",
-                    confidence: attributes.confidence || 0.5,
-                    count: attributes.count || 1,
-                });
-            },
-        );
-
-        // Extract communities (simplified approach)
-        const communityMap = new Map<
-            number,
-            { id: number; entities: string[] }
-        >();
-        rawEntities.forEach((entity) => {
-            const communityId = entity.communityId || 0;
-            if (!communityMap.has(communityId)) {
-                communityMap.set(communityId, {
-                    id: communityId,
-                    entities: [],
-                });
-            }
-            communityMap.get(communityId)!.entities.push(entity.name);
-        });
-        communities.push(...Array.from(communityMap.values()));
-
-        tracker.endOperation(
-            "ensureGraphCache.extractFromGraphology",
-            rawEntities.length,
-            relationships.length,
-        );
-
-        console.log("[ensureGraphCache] Extracted from Graphology:", {
+        debug("[ensureGraphCache] Loaded from durable memory:", {
             entities: rawEntities.length,
             relationships: relationships.length,
-            communities: communities.length,
         });
 
         // Calculate metrics with instrumentation
@@ -579,9 +417,10 @@ async function ensureGraphCache(
             presetLayout: presetLayout,
             lastUpdated: Date.now(),
             isValid: true,
+            sourceVersion,
         };
 
-        setGraphCache(websiteCollection, newCache);
+        setGraphCache(context.agentContext, newCache);
 
         debug(
             `[Knowledge Graph] Cached ${rawEntities.length} entities, ${relationships.length} relationships, ${communities.length} communities`,
@@ -598,7 +437,7 @@ async function ensureGraphCache(
         tracker.endOperation("ensureGraphCache", 0, 0);
 
         // Mark cache as invalid but keep existing data if available
-        const existingCache = getGraphCache(websiteCollection);
+        const existingCache = getGraphCache(context.agentContext);
         if (existingCache) {
             existingCache.isValid = false;
         }
@@ -609,9 +448,7 @@ async function ensureGraphCache(
 // Storage Abstraction Layer
 // ============================================================================
 
-/**
- * Get Graphology graphs from cache or persistence (new primary method)
- */
+/** Get Graphology graphs derived from the durable memory corpus. */
 async function getGraphologyGraphs(
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -619,119 +456,45 @@ async function getGraphologyGraphs(
     topicGraph?: any;
     useGraphology: boolean;
 }> {
-    const websiteCollection = context.agentContext.websiteCollection;
-    if (!websiteCollection) {
-        throw new Error("Website collection not available");
+    const memoryService = context.agentContext.browserMemoryService;
+    if (memoryService === undefined) {
+        throw new Error("Durable browser memory is not available");
     }
 
     try {
-        // Try to get from memory cache first (fastest)
-        const entityCache = getGraphologyCache("entity_default");
-        const topicCache = getGraphologyCache("topic_default");
-
-        if (entityCache?.graph && topicCache?.graph) {
-            debug("[Graphology] Using memory-cached Graphology graphs");
-            return {
-                entityGraph: entityCache.graph,
-                topicGraph: topicCache.graph,
-                useGraphology: true,
-            };
-        }
-
-        // Try to load from disk persistence (fast)
-        debug("[Graphology] Memory cache miss, trying disk persistence...");
-        const jsonStorage = context.agentContext.graphJsonStorage;
-        if (jsonStorage?.manager) {
-            const storagePath = jsonStorage.manager.getStoragePath();
-            const persistenceManager =
-                createGraphologyPersistenceManager(storagePath);
-
-            const entityResult = await persistenceManager.loadEntityGraph();
-            const topicResult = await persistenceManager.loadTopicGraph();
-
-            if (entityResult?.graph && topicResult?.graph) {
-                debug("[Graphology] Loaded graphs from disk persistence");
-
-                // Cache in memory for next time
-                await cacheGraphologyGraphs(
-                    websiteCollection,
-                    entityResult.graph,
-                    topicResult.graph,
-                    {
-                        buildTime: entityResult.metadata?.buildTime || 0,
-                        loadedFromDisk: true,
-                    },
-                );
-
-                return {
-                    entityGraph: entityResult.graph,
-                    topicGraph: topicResult.graph,
-                    useGraphology: true,
-                };
-            }
-        }
-
-        // If no cache or persistence, rebuild graphs (slowest)
-        debug("[Graphology] No cached graphs found, rebuilding from source...");
-        const buildResult = await websiteCollection.buildGraph();
-
-        if (buildResult?.entityGraph && buildResult?.topicGraph) {
-            // Cache in memory
-            await cacheGraphologyGraphs(
-                websiteCollection,
-                buildResult.entityGraph,
-                buildResult.topicGraph,
-                buildResult.metadata,
-            );
-
-            // Persist to disk for next time
-            if (jsonStorage?.manager) {
-                const storagePath = jsonStorage.manager.getStoragePath();
-                const persistenceManager =
-                    createGraphologyPersistenceManager(storagePath);
-
-                try {
-                    debug(
-                        `[Graphology] Persisting entity graph with ${buildResult.entityGraph.order} nodes and ${buildResult.entityGraph.size} edges to ${storagePath}`,
-                    );
-                    await persistenceManager.saveEntityGraph(
-                        buildResult.entityGraph,
-                        buildResult.metadata,
-                    );
-                    debug(`[Graphology] ✓ Entity graph saved to disk`);
-
-                    debug(
-                        `[Graphology] Persisting topic graph with ${buildResult.topicGraph.order} nodes and ${buildResult.topicGraph.size} edges to ${storagePath}`,
-                    );
-                    await persistenceManager.saveTopicGraph(
-                        buildResult.topicGraph,
-                        buildResult.metadata,
-                    );
-                    debug(`[Graphology] ✓ Topic graph saved to disk`);
-
-                    debug(
-                        "[Graphology] ✓ All graphs saved to disk persistence successfully",
-                    );
-                } catch (persistError) {
-                    debug(
-                        `[Graphology] ❌ Failed to persist graphs: ${persistError}`,
-                    );
-                    console.error(
-                        `[Graphology] Persistence error details:`,
-                        persistError,
-                    );
-                    // Continue anyway since we have the graphs in memory
-                }
-            }
-
-            return {
-                entityGraph: buildResult.entityGraph,
-                topicGraph: buildResult.topicGraph,
-                useGraphology: true,
-            };
-        }
-
-        throw new Error("Failed to build Graphology graphs");
+        const startedAt = Date.now();
+        const durableGraph = await memoryService.getKnowledgeGraph();
+        const entityGraph = buildGraphologyGraph(
+            durableGraph.entities.map((entity) => ({
+                id: entity.name,
+                name: entity.name,
+                type: entity.types[0] ?? "entity",
+                count: entity.mentionCount,
+                confidence: 1,
+            })),
+            durableGraph.relationships.map((relationship) => ({
+                from: relationship.fromEntity,
+                to: relationship.toEntity,
+                type: relationship.relationshipType,
+                strength: relationship.count,
+                confidence: 1,
+            })),
+        );
+        const topicGraph = buildGraphologyGraph(
+            durableGraph.topics.map((topic) => ({
+                id: topic.name,
+                name: topic.name,
+                type: "topic",
+                count: topic.mentionCount,
+                confidence: 1,
+            })),
+            [],
+        );
+        await cacheGraphologyGraphs(entityGraph, topicGraph, {
+            buildTime: Date.now() - startedAt,
+            source: "durable-memory",
+        });
+        return { entityGraph, topicGraph, useGraphology: true };
     } catch (error) {
         debug(`Error getting Graphology graphs: ${error}`);
         throw new Error(
@@ -751,14 +514,8 @@ async function getEntityStatistics(
     communityCount: number;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-        if (!websiteCollection) {
-            console.log("[getEntityStatistics] No websiteCollection available");
-            return { entityCount: 0, relationshipCount: 0, communityCount: 0 };
-        }
-
         await ensureGraphCache(context);
-        const cache = getGraphCache(websiteCollection);
+        const cache = getGraphCache(context.agentContext);
 
         console.log("[getEntityStatistics] Cache state:", {
             cacheExists: !!cache,
@@ -884,65 +641,11 @@ export async function buildKnowledgeGraph(
 
         const startTime = Date.now();
 
-        // Get website collection for building Graphology graphs
-        const websiteCollection = context.agentContext.websiteCollection;
-        if (!websiteCollection) {
-            return {
-                success: false,
-                error: "Website collection not available",
-            };
+        const { entityGraph, topicGraph } = await getGraphologyGraphs(context);
+        if (!entityGraph || !topicGraph) {
+            throw new Error("Failed to build graphs from durable memory");
         }
-
-        // Build the graph using websiteCollection - returns Graphology graphs directly
-        debug(
-            "[Knowledge Graph] Building Graphology graphs from website collection...",
-        );
-        const buildResult = await websiteCollection.buildGraph();
-        debug("[Knowledge Graph] Graphology graph build completed");
-
-        // Check if we got Graphology graphs
-        if (!buildResult?.entityGraph || !buildResult?.topicGraph) {
-            throw new Error(
-                "Failed to build Graphology graphs from website collection",
-            );
-        }
-
-        const { entityGraph, topicGraph, metadata } = buildResult;
-
-        // Cache the Graphology graphs directly
-        debug("[Knowledge Graph] Caching Graphology graphs...");
-        await cacheGraphologyGraphs(
-            websiteCollection,
-            entityGraph,
-            topicGraph,
-            metadata,
-        );
-
-        // Persist Graphology graphs to disk
-        const jsonStorage = context.agentContext.graphJsonStorage;
-        if (jsonStorage?.manager) {
-            const storagePath = jsonStorage.manager.getStoragePath();
-            debug(`[Graphology Persistence] Storage path: ${storagePath}`);
-            const persistenceManager =
-                createGraphologyPersistenceManager(storagePath);
-
-            try {
-                debug("[Graphology Persistence] Saving entity graph...");
-                await persistenceManager.saveEntityGraph(entityGraph, metadata);
-
-                debug("[Graphology Persistence] Saving topic graph...");
-                await persistenceManager.saveTopicGraph(topicGraph, metadata);
-
-                debug("[Graphology Persistence] ✓ All graphs saved to disk");
-            } catch (persistError) {
-                debug(
-                    `[Graphology Persistence] ❌ Failed to persist graphs: ${persistError}`,
-                );
-                // Continue since we have graphs in memory
-            }
-        } else {
-            debug("[Graphology Persistence] ❌ No storage manager available");
-        }
+        await ensureGraphCache(context);
 
         const timeElapsed = Date.now() - startTime;
 
@@ -950,7 +653,11 @@ export async function buildKnowledgeGraph(
         const stats = {
             entitiesFound: entityGraph.order,
             relationshipsCreated: entityGraph.size,
-            communitiesDetected: metadata?.communityCount || 0,
+            communitiesDetected: new Set(
+                entityGraph.mapNodes((_node: string, attributes: any) =>
+                    String(attributes.community ?? "default"),
+                ),
+            ).size,
             timeElapsed: timeElapsed,
         };
 
@@ -983,93 +690,16 @@ export async function rebuildKnowledgeGraph(
             "[Knowledge Graph] Starting Graphology-only knowledge graph rebuild",
         );
 
-        // Get website collection to rebuild from cache
-        const websiteCollection = context.agentContext.websiteCollection;
-        if (!websiteCollection) {
-            return {
-                success: false,
-                error: "Website collection not available",
-            };
+        invalidateAllGraphologyCaches();
+        const cache = getGraphCache(context.agentContext);
+        if (cache) {
+            cache.isValid = false;
         }
-
-        // Rebuild the knowledge graph using websiteCollection - returns Graphology graphs directly
-        debug(
-            "[Knowledge Graph] Building Graphology graphs directly from cache...",
-        );
-        const buildResult = await websiteCollection.buildGraph();
-        debug("[Knowledge Graph] Direct Graphology graph build completed");
-
-        // Check if we got Graphology graphs
-        if (!buildResult?.entityGraph || !buildResult?.topicGraph) {
-            throw new Error(
-                "Failed to build Graphology graphs from website collection",
-            );
+        const { entityGraph, topicGraph } = await getGraphologyGraphs(context);
+        if (!entityGraph || !topicGraph) {
+            throw new Error("Failed to rebuild graphs from durable memory");
         }
-
-        const { entityGraph, topicGraph, metadata } = buildResult;
-
-        // Cache the Graphology graphs directly in memory
-        debug("[Knowledge Graph] Caching Graphology graphs directly...");
-        await cacheGraphologyGraphs(
-            websiteCollection,
-            entityGraph,
-            topicGraph,
-            metadata,
-        );
-
-        // Persist Graphology graphs to disk in native format
-        const storagePath = `.scratch/storage`; // Use direct path instead of JSON storage manager
-        debug(`[Graphology Persistence] Using storage path: ${storagePath}`);
-        const persistenceManager =
-            createGraphologyPersistenceManager(storagePath);
-
-        try {
-            debug(
-                "[Graphology Persistence] Attempting to save entity graph to disk...",
-            );
-            await persistenceManager.saveEntityGraph(entityGraph, metadata);
-            debug("[Graphology Persistence] ✓ Entity graph saved to disk");
-
-            debug(
-                "[Graphology Persistence] Attempting to save topic graph to disk...",
-            );
-            await persistenceManager.saveTopicGraph(topicGraph, metadata);
-            debug("[Graphology Persistence] ✓ Topic graph saved to disk");
-
-            debug(
-                "[Graphology Persistence] ✓ All Graphology graphs saved to disk successfully",
-            );
-        } catch (persistError) {
-            debug(
-                `[Graphology Persistence] ❌ Failed to persist graphs: ${persistError}`,
-            );
-            // Continue anyway since we have the graphs in memory
-        }
-
-        // Update traditional caches to maintain compatibility
-        const entities = extractEntitiesFromGraphology(entityGraph);
-        const relationships = extractRelationshipsFromGraphology(entityGraph);
-        const communities = extractCommunitiesFromGraphology(entityGraph);
-
-        // Calculate entity metrics properly to avoid 0 entity count issue
-        const entityMetrics = calculateEntityMetrics(
-            entities,
-            relationships,
-            communities,
-        );
-
-        setGraphCache(websiteCollection, {
-            entities,
-            relationships,
-            communities,
-            entityMetrics,
-            lastUpdated: Date.now(),
-            isValid: true,
-        });
-
-        debug(
-            `[Knowledge Graph] Traditional cache updated with ${entityMetrics.length} entity metrics`,
-        );
+        await ensureGraphCache(context);
 
         debug(
             "[Knowledge Graph] Graphology-only knowledge graph rebuild completed successfully",
@@ -1077,7 +707,7 @@ export async function rebuildKnowledgeGraph(
 
         return {
             success: true,
-            message: `Knowledge graph rebuilt successfully using Graphology-only architecture. Entity graph: ${entityGraph.order} nodes, ${entityGraph.size} edges. Topic graph: ${topicGraph.order} nodes, ${topicGraph.size} edges. Build time: ${metadata?.buildTime || 0}ms`,
+            message: `Knowledge graph rebuilt successfully from durable memory. Entity graph: ${entityGraph.order} nodes, ${entityGraph.size} edges. Topic graph: ${topicGraph.order} nodes, ${topicGraph.size} edges.`,
         };
     } catch (error) {
         console.error("Error rebuilding knowledge graph:", error);
@@ -1088,183 +718,6 @@ export async function rebuildKnowledgeGraph(
     }
 }
 
-async function analyzeTopicRelationshipsWithLLM(topicNames: string[]): Promise<
-    Map<
-        string,
-        {
-            action: "keep_root" | "make_child" | "merge";
-            targetTopic?: string;
-            confidence: number;
-            reasoning: string;
-        }
-    >
-> {
-    const relationshipMap = new Map();
-
-    if (topicNames.length === 0) {
-        return relationshipMap;
-    }
-
-    const BATCH_SIZE = 50;
-    const totalTopics = topicNames.length;
-    const needsBatching = totalTopics > BATCH_SIZE;
-
-    console.log(`[LLM Topic Analysis] Analyzing ${totalTopics} topics...`);
-    console.log(`[LLM Topic Analysis] Sample topics:`, topicNames.slice(0, 10));
-
-    if (needsBatching) {
-        const numBatches = Math.ceil(totalTopics / BATCH_SIZE);
-        console.log(
-            `[LLM Topic Analysis] Processing in ${numBatches} batches of up to ${BATCH_SIZE} topics each`,
-        );
-
-        for (let i = 0; i < numBatches; i++) {
-            const start = i * BATCH_SIZE;
-            const end = Math.min(start + BATCH_SIZE, totalTopics);
-            const batch = topicNames.slice(start, end);
-
-            console.log(
-                `[LLM Topic Analysis] Processing batch ${i + 1}/${numBatches} (topics ${start + 1}-${end})...`,
-            );
-
-            const batchResults = await analyzeBatchOfTopics(batch, topicNames);
-
-            for (const [topic, relationship] of batchResults) {
-                relationshipMap.set(topic, relationship);
-            }
-        }
-
-        let makeChildCount = 0;
-        let mergeCount = 0;
-        let keepRootCount = 0;
-        const sampleRelationships: string[] = [];
-
-        for (const [topic, relationship] of relationshipMap) {
-            if (relationship.action === "make_child") {
-                makeChildCount++;
-                if (sampleRelationships.length < 5) {
-                    sampleRelationships.push(
-                        `  "${topic}" → child of "${relationship.targetTopic}" (${relationship.confidence.toFixed(2)})`,
-                    );
-                }
-            } else if (relationship.action === "merge") {
-                mergeCount++;
-                if (sampleRelationships.length < 5) {
-                    sampleRelationships.push(
-                        `  "${topic}" → merge into "${relationship.targetTopic}" (${relationship.confidence.toFixed(2)})`,
-                    );
-                }
-            } else {
-                keepRootCount++;
-            }
-        }
-
-        console.log(`[LLM Topic Analysis] Final Summary:`);
-        console.log(`  - Keep as root: ${keepRootCount}`);
-        console.log(`  - Make child: ${makeChildCount}`);
-        console.log(`  - Merge: ${mergeCount}`);
-
-        if (sampleRelationships.length > 0) {
-            console.log(`[LLM Topic Analysis] Sample relationships:`);
-            sampleRelationships.forEach((rel) => console.log(rel));
-        }
-
-        return relationshipMap;
-    } else {
-        return await analyzeBatchOfTopics(topicNames, topicNames);
-    }
-}
-
-async function analyzeBatchOfTopics(
-    batchTopics: string[],
-    allTopics: string[],
-): Promise<
-    Map<
-        string,
-        {
-            action: "keep_root" | "make_child" | "merge";
-            targetTopic?: string;
-            confidence: number;
-            reasoning: string;
-        }
-    >
-> {
-    const relationshipMap = new Map();
-
-    try {
-        const schemaText = getSchemaFileContents("topicRelationship.mts");
-
-        const apiSettings = ai.azureApiSettingsFromEnv(
-            ai.ModelType.Chat,
-            undefined,
-            "GPT_4_O",
-        );
-        const model = ai.createChatModel(apiSettings);
-
-        const validator =
-            createTypeScriptJsonValidator<TopicRelationshipAnalysis>(
-                schemaText,
-                "TopicRelationshipAnalysis",
-            );
-        const translator = createJsonTranslator(model, validator);
-
-        const topicList = batchTopics
-            .map((t, i) => `${i + 1}. ${t}`)
-            .join("\n");
-
-        const allTopicsList =
-            batchTopics.length < allTopics.length
-                ? `\n\nFor context, here are all topics in the system (consider these as potential parent topics):\n${allTopics.join(", ")}`
-                : "";
-        // all-topics list is getting truncated - not useful!
-        const prompt = `Analyze these topic names and identify semantic relationships between them.
-
-Topics to analyze:
-${topicList}${allTopicsList}
-
-For each topic, determine the appropriate action based on the TopicRelationshipAnalysis schema.`;
-
-        const estimatedPromptSize = prompt.length + schemaText.length;
-        const estimatedTokens = Math.ceil(estimatedPromptSize / 4);
-
-        console.log(`[LLM Topic Analysis] Batch request details:`);
-        console.log(`  - Batch size: ${batchTopics.length} topics`);
-        console.log(`  - Prompt size: ${prompt.length} chars`);
-        console.log(`  - Schema size: ${schemaText.length} chars`);
-        console.log(
-            `  - Estimated total: ${estimatedPromptSize} chars (~${estimatedTokens} tokens)`,
-        );
-
-        const response = await translator.translate(prompt);
-
-        if (!response.success) {
-            console.warn("LLM batch analysis failed:", response.message);
-            return relationshipMap;
-        }
-
-        const analysisResult = response.data;
-
-        console.log(
-            `[LLM Topic Analysis] Batch received ${analysisResult.relationships.length} relationship recommendations`,
-        );
-
-        for (const relationship of analysisResult.relationships) {
-            if (relationship.topic && relationship.action) {
-                relationshipMap.set(relationship.topic, {
-                    action: relationship.action,
-                    targetTopic: relationship.targetTopic,
-                    confidence: relationship.confidence || 0.5,
-                    reasoning: relationship.reasoning || "LLM analysis",
-                });
-            }
-        }
-
-        return relationshipMap;
-    } catch (error) {
-        console.error("[LLM Topic Analysis] Batch error:", error);
-        return relationshipMap;
-    }
-}
 export async function mergeTopicHierarchies(
     parameters: {},
     context: SessionContext<BrowserActionContext>,
@@ -1274,45 +727,13 @@ export async function mergeTopicHierarchies(
     message?: string;
     error?: string;
 }> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                success: false,
-                mergeCount: 0,
-                error: "Website collection not available",
-            };
-        }
-
-        console.log(
-            "[Merge Action] Starting topic hierarchy merge with LLM analysis...",
-        );
-
-        const result = await websiteCollection.mergeTopicHierarchiesWithLLM(
-            analyzeTopicRelationshipsWithLLM,
-        );
-
-        invalidateTopicCache(websiteCollection);
-
-        const message = `✓ Topic merge completed! ${result.mergeCount} topics reorganized. Reload the page to see updated hierarchy.`;
-        console.log(`[Merge Action] ${message}`);
-
-        return {
-            success: true,
-            mergeCount: result.mergeCount,
-            message,
-        };
-    } catch (error) {
-        console.error("Error merging topic hierarchies:", error);
-        const errorMsg =
-            error instanceof Error ? error.message : "Unknown error";
-        return {
-            success: false,
-            mergeCount: 0,
-            error: `Failed to merge topics: ${errorMsg}`,
-        };
-    }
+    void parameters;
+    void context;
+    return {
+        success: false,
+        mergeCount: 0,
+        error: "Topic hierarchy merging is unsupported for durable browser memory because MemoryService does not provide a hierarchy mutation API.",
+    };
 }
 
 // ============================================================================
@@ -1733,6 +1154,114 @@ export async function getEntityNeighborhoodLayoutData(
  * Discover related entities and topics from the knowledge graph
  * Performs multi-hop graph traversal to find connected knowledge
  */
+async function loadDurableGraphSnapshot(memory: BrowserMemoryService): Promise<{
+    graph: MemoryKnowledgeGraph;
+    sources: MemorySource[];
+    sourcesById: Map<string, MemorySource>;
+}> {
+    const [graph, sources] = await Promise.all([
+        memory.getKnowledgeGraph(),
+        memory.listSources(),
+    ]);
+    return {
+        graph,
+        sources,
+        sourcesById: new Map(
+            sources.map((source) => [source.sourceId, source]),
+        ),
+    };
+}
+
+function countSourceOverlap(left: string[], right: string[]): number {
+    const rightIds = new Set(right);
+    return left.reduce(
+        (count, sourceId) => count + (rightIds.has(sourceId) ? 1 : 0),
+        0,
+    );
+}
+
+function getActiveRevisionTimestamp(source: MemorySource): string | undefined {
+    const revision = source.revisions.find(
+        (candidate) => candidate.revisionId === source.activeRevisionId,
+    );
+    return revision?.capturedAt ?? revision?.indexedAt;
+}
+
+async function getSourcesById(
+    memory: BrowserMemoryService,
+    sourceIds: string[],
+): Promise<MemorySource[]> {
+    const sources = await Promise.all(
+        [...new Set(sourceIds)].map((sourceId) =>
+            memory.getSourceById(sourceId),
+        ),
+    );
+    return sources.filter(
+        (source): source is MemorySource => source !== undefined,
+    );
+}
+
+function getRelatedTopicsBySourceOverlap(
+    seedTopics: string[],
+    depth: number,
+    graph: MemoryKnowledgeGraph,
+): Map<string, { name: string; cooccurrenceCount: number; distance: number }> {
+    const topicsByName = new Map(
+        graph.topics.map((topic) => [topic.name.toLowerCase(), topic]),
+    );
+    const seedNames = new Set(seedTopics.map((topic) => topic.toLowerCase()));
+    const related = new Map<
+        string,
+        { name: string; cooccurrenceCount: number; distance: number }
+    >();
+    let frontier = [...seedNames];
+
+    for (let distance = 1; distance <= Math.max(1, depth); distance++) {
+        const nextFrontier = new Set<string>();
+        for (const currentName of frontier) {
+            const current = topicsByName.get(currentName);
+            if (current === undefined) {
+                continue;
+            }
+            for (const candidate of graph.topics) {
+                const candidateName = candidate.name.toLowerCase();
+                if (
+                    candidateName === currentName ||
+                    seedNames.has(candidateName)
+                ) {
+                    continue;
+                }
+                const overlap = countSourceOverlap(
+                    current.sourceIds,
+                    candidate.sourceIds,
+                );
+                if (overlap === 0) {
+                    continue;
+                }
+                const existing = related.get(candidateName);
+                if (
+                    existing === undefined ||
+                    distance < existing.distance ||
+                    (distance === existing.distance &&
+                        overlap > existing.cooccurrenceCount)
+                ) {
+                    related.set(candidateName, {
+                        name: candidate.name,
+                        cooccurrenceCount: overlap,
+                        distance,
+                    });
+                }
+                nextFrontier.add(candidateName);
+            }
+        }
+        frontier = [...nextFrontier];
+        if (frontier.length === 0) {
+            break;
+        }
+    }
+    return related;
+}
+
 export async function discoverRelatedKnowledge(
     parameters: {
         entities: Array<{ name: string; type: string }>;
@@ -1759,9 +1288,8 @@ export async function discoverRelatedKnowledge(
     success: boolean;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-        if (!websiteCollection) {
-            debug("[discoverRelatedKnowledge] No website collection available");
+        const memory = context.agentContext.browserMemoryService;
+        if (memory === undefined) {
             return {
                 relatedEntities: [],
                 relatedTopics: [],
@@ -1772,12 +1300,39 @@ export async function discoverRelatedKnowledge(
         const depth = parameters.depth || 2;
         const maxEntities = parameters.maxEntities || 10;
         const maxTopics = parameters.maxTopics || 10;
+        const { graph } = await loadDurableGraphSnapshot(memory);
 
         debug(
             `[discoverRelatedKnowledge] Starting discovery with ${parameters.entities.length} entities, ${parameters.topics.length} topics, depth=${depth}`,
         );
 
-        // Discover related entities via graph traversal
+        const entitiesByName = new Map(
+            graph.entities.map((entity) => [entity.name.toLowerCase(), entity]),
+        );
+        const seedEntityNames = new Set(
+            parameters.entities.map((entity) => entity.name.toLowerCase()),
+        );
+        const adjacency = new Map<
+            string,
+            Array<{ name: string; relationshipType: string }>
+        >();
+        for (const relationship of graph.relationships) {
+            const from = relationship.fromEntity.toLowerCase();
+            const to = relationship.toEntity.toLowerCase();
+            const fromEdges = adjacency.get(from) ?? [];
+            fromEdges.push({
+                name: relationship.toEntity,
+                relationshipType: relationship.relationshipType,
+            });
+            adjacency.set(from, fromEdges);
+            const toEdges = adjacency.get(to) ?? [];
+            toEdges.push({
+                name: relationship.fromEntity,
+                relationshipType: relationship.relationshipType,
+            });
+            adjacency.set(to, toEdges);
+        }
+
         const relatedEntitiesMap = new Map<
             string,
             {
@@ -1789,157 +1344,62 @@ export async function discoverRelatedKnowledge(
                 cooccurrenceCount: number;
             }
         >();
-
-        // Traverse from each seed entity
         for (const seedEntity of parameters.entities) {
-            try {
-                const neighborhoodResult = await getEntityNeighborhood(
-                    { entityId: seedEntity.name, depth, maxNodes: 50 },
-                    context,
-                );
-
-                if (neighborhoodResult.neighbors) {
-                    for (const neighbor of neighborhoodResult.neighbors) {
-                        // Skip if this is one of the seed entities
-                        if (
-                            parameters.entities.some(
-                                (e) =>
-                                    e.name.toLowerCase() ===
-                                    neighbor.name.toLowerCase(),
-                            )
-                        ) {
+            let frontier = [
+                {
+                    name: seedEntity.name,
+                    relationshipPath: [] as string[],
+                },
+            ];
+            const visited = new Set([seedEntity.name.toLowerCase()]);
+            for (let distance = 1; distance <= depth; distance++) {
+                const nextFrontier: typeof frontier = [];
+                for (const current of frontier) {
+                    for (const edge of adjacency.get(
+                        current.name.toLowerCase(),
+                    ) ?? []) {
+                        const normalizedName = edge.name.toLowerCase();
+                        if (visited.has(normalizedName)) {
                             continue;
                         }
-
-                        const existingEntry = relatedEntitiesMap.get(
-                            neighbor.name.toLowerCase(),
-                        );
-
-                        // Calculate distance from relationships
-                        const relationships =
-                            neighborhoodResult.relationships?.filter(
-                                (r: any) =>
-                                    r.toEntity === neighbor.name ||
-                                    r.fromEntity === neighbor.name,
-                            ) || [];
-
-                        const distance = relationships.length > 0 ? 1 : depth;
-
-                        // Calculate co-occurrence count (how many pages this entity appears on)
-                        const cooccurrenceCount =
-                            neighbor.occurrences?.length || 1;
-
-                        if (
-                            !existingEntry ||
-                            distance < existingEntry.distance
-                        ) {
-                            // Get relationship path
-                            const relationshipPath: string[] = [];
-                            if (relationships.length > 0) {
-                                relationshipPath.push(
-                                    relationships[0].relationshipType ||
-                                        "related_to",
-                                );
-                            }
-
-                            relatedEntitiesMap.set(
-                                neighbor.name.toLowerCase(),
-                                {
-                                    name: neighbor.name,
-                                    type: neighbor.type || "unknown",
-                                    relationshipPath,
-                                    distance,
-                                    confidence: neighbor.confidence || 0.5,
-                                    cooccurrenceCount,
-                                },
-                            );
+                        visited.add(normalizedName);
+                        const relationshipPath = [
+                            ...current.relationshipPath,
+                            edge.relationshipType,
+                        ];
+                        nextFrontier.push({
+                            name: edge.name,
+                            relationshipPath,
+                        });
+                        if (seedEntityNames.has(normalizedName)) {
+                            continue;
+                        }
+                        const entity = entitiesByName.get(normalizedName);
+                        const existing = relatedEntitiesMap.get(normalizedName);
+                        if (entity !== undefined && existing === undefined) {
+                            relatedEntitiesMap.set(normalizedName, {
+                                name: entity.name,
+                                type: entity.types[0] ?? "unknown",
+                                relationshipPath,
+                                distance,
+                                confidence: 1,
+                                cooccurrenceCount: entity.sourceIds.length,
+                            });
                         }
                     }
                 }
-            } catch (error) {
-                debug(
-                    `[discoverRelatedKnowledge] Error processing entity ${seedEntity.name}: ${error}`,
-                );
-            }
-        }
-
-        // Discover related topics via co-occurrence
-        const relatedTopicsMap = new Map<
-            string,
-            {
-                name: string;
-                cooccurrenceCount: number;
-                distance: number;
-            }
-        >();
-
-        if (parameters.topics.length > 0) {
-            try {
-                const expandedTopics = await expandTopicNeighborhood(
-                    parameters.topics,
-                    depth,
-                    websiteCollection,
-                );
-
-                for (const topic of expandedTopics) {
-                    // Skip if this is one of the seed topics
-                    if (
-                        parameters.topics.some(
-                            (t) => t.toLowerCase() === topic.toLowerCase(),
-                        )
-                    ) {
-                        continue;
-                    }
-
-                    // Get co-occurrence count
-                    let cooccurrenceCount = 0;
-                    if (
-                        websiteCollection.knowledgeTopics &&
-                        (websiteCollection.knowledgeTopics as any)
-                            .getRelatedTopics
-                    ) {
-                        const relatedEntries = (
-                            websiteCollection.knowledgeTopics as any
-                        ).getRelatedTopics(topic, 100);
-                        cooccurrenceCount = relatedEntries?.length || 1;
-                    }
-
-                    // Calculate distance (1 for direct co-occurrence, 2+ for multi-hop)
-                    const isDirectlyRelated = parameters.topics.some(
-                        (seedTopic) => {
-                            if (
-                                websiteCollection.knowledgeTopics &&
-                                (websiteCollection.knowledgeTopics as any)
-                                    .getRelatedTopics
-                            ) {
-                                const related =
-                                    (
-                                        websiteCollection.knowledgeTopics as any
-                                    ).getRelatedTopics(seedTopic, 50) || [];
-                                return related.some(
-                                    (r: any) =>
-                                        r.topic?.toLowerCase() ===
-                                        topic.toLowerCase(),
-                                );
-                            }
-                            return false;
-                        },
-                    );
-
-                    const distance = isDirectlyRelated ? 1 : 2;
-
-                    relatedTopicsMap.set(topic.toLowerCase(), {
-                        name: topic,
-                        cooccurrenceCount,
-                        distance,
-                    });
+                frontier = nextFrontier;
+                if (frontier.length === 0) {
+                    break;
                 }
-            } catch (error) {
-                debug(
-                    `[discoverRelatedKnowledge] Error expanding topics: ${error}`,
-                );
             }
         }
+
+        const relatedTopicsMap = getRelatedTopicsBySourceOverlap(
+            parameters.topics,
+            depth,
+            graph,
+        );
 
         // Rank and filter entities
         const rankedEntities = Array.from(relatedEntitiesMap.values())
@@ -2007,30 +1467,9 @@ export async function getGlobalImportanceLayer(
     };
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            console.log(`[ServerPerf] No website collection available`);
-            return {
-                graphologyLayout: {
-                    elements: [],
-                    layoutDuration: 0,
-                    avgSpacing: 0,
-                    communityCount: 0,
-                },
-                metadata: {
-                    totalEntitiesInSystem: 0,
-                    selectedEntityCount: 0,
-                    coveragePercentage: 0,
-                    importanceThreshold: 0,
-                    layer: "global_importance",
-                },
-            };
-        }
-
         // Ensure cache is populated (this loads from Graphology and creates the cache)
         await ensureGraphCache(context);
-        const cache = getGraphCache(websiteCollection);
+        const cache = getGraphCache(context.agentContext);
 
         if (!cache || !cache.isValid) {
             console.log(
@@ -2367,28 +1806,8 @@ export async function getGlobalGraphLayoutData(
     };
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                graphologyLayout: {
-                    elements: [],
-                    layoutDuration: 0,
-                    avgSpacing: 0,
-                    communityCount: 0,
-                },
-                metadata: {
-                    totalEntitiesInSystem: 0,
-                    selectedEntityCount: 0,
-                    coveragePercentage: 0,
-                    importanceThreshold: 0,
-                    layer: "global_graph_layout",
-                },
-            };
-        }
-
         await ensureGraphCache(context);
-        const cache = getGraphCache(websiteCollection);
+        const cache = getGraphCache(context.agentContext);
 
         if (!cache || !cache.isValid) {
             return {
@@ -2776,17 +2195,11 @@ export async function getImportanceStatistics(
     levelPreview: Array<{ level: number; nodeCount: number; coverage: number }>;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return { distribution: [], recommendedLevel: 1, levelPreview: [] };
-        }
-
         // Ensure cache is populated
         await ensureGraphCache(context);
 
         // Get cached data
-        const cache = getGraphCache(websiteCollection);
+        const cache = getGraphCache(context.agentContext);
         if (!cache || !cache.isValid) {
             return { distribution: [], recommendedLevel: 1, levelPreview: [] };
         }
@@ -3075,129 +2488,47 @@ export async function getTopicDetails(
     error?: string;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        const memory = context.agentContext.browserMemoryService;
+        if (memory === undefined) {
             return {
                 success: false,
-                error: "Website collection not available",
+                error: "Durable browser memory is not available",
             };
         }
-
-        const allTopics = websiteCollection.getTopicHierarchy() || [];
-
-        if (allTopics.length === 0) {
-            return {
-                success: false,
-                error: "Hierarchical topics not available",
-            };
-        }
-
-        const topic = allTopics.find(
-            (t: any) => t.topicId === parameters.topicId,
+        const graph = await memory.getKnowledgeGraph();
+        const topic = graph.topics.find(
+            (candidate) =>
+                candidate.name.toLowerCase() ===
+                parameters.topicId.toLowerCase(),
         );
-
-        if (!topic) {
+        if (topic === undefined) {
             return {
                 success: false,
                 error: "Topic not found",
             };
         }
-
-        const topicData: any = topic;
-
-        const entityReferences: Set<string> = new Set();
-        const keywords: Set<string> = new Set();
-        let firstSeen: string | undefined;
-        let lastSeen: string | undefined;
-
-        const sourceRefOrdinals: Set<number> = new Set();
-
-        if (
-            topicData.sourceRefOrdinals &&
-            Array.isArray(topicData.sourceRefOrdinals)
-        ) {
-            topicData.sourceRefOrdinals.forEach((ordinal: number) =>
-                sourceRefOrdinals.add(ordinal),
-            );
-        }
-
-        if (topicData.childIds && Array.isArray(topicData.childIds)) {
-            topicData.childIds.forEach((childId: string) => {
-                const childTopic: any = allTopics.find(
-                    (t: any) => t.topicId === childId,
-                );
-                if (
-                    childTopic &&
-                    childTopic.sourceRefOrdinals &&
-                    Array.isArray(childTopic.sourceRefOrdinals)
-                ) {
-                    childTopic.sourceRefOrdinals.forEach((ordinal: number) =>
-                        sourceRefOrdinals.add(ordinal),
-                    );
-                }
-            });
-        }
-
-        const timestamps: string[] = [];
-        const processedMessages = new Set<number>();
-
-        if (websiteCollection.semanticRefs && sourceRefOrdinals.size > 0) {
-            for (const ordinal of sourceRefOrdinals) {
-                const semanticRef = websiteCollection.semanticRefs.get(ordinal);
-                if (semanticRef) {
-                    const messageOrdinal =
-                        semanticRef.range.start.messageOrdinal;
-
-                    if (!processedMessages.has(messageOrdinal)) {
-                        processedMessages.add(messageOrdinal);
-
-                        const message =
-                            websiteCollection.messages.get(messageOrdinal);
-                        if (message) {
-                            if (message.timestamp) {
-                                timestamps.push(message.timestamp);
-                            }
-
-                            const knowledge = message.knowledge;
-                            if (knowledge) {
-                                if (
-                                    knowledge.entities &&
-                                    Array.isArray(knowledge.entities)
-                                ) {
-                                    knowledge.entities.forEach(
-                                        (entity: any) => {
-                                            if (entity.name) {
-                                                entityReferences.add(
-                                                    entity.name,
-                                                );
-                                            }
-                                        },
-                                    );
-                                }
-
-                                if (
-                                    knowledge.topics &&
-                                    Array.isArray(knowledge.topics)
-                                ) {
-                                    knowledge.topics.forEach((topic: any) => {
-                                        if (typeof topic === "string") {
-                                            keywords.add(topic);
-                                        }
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (timestamps.length > 0) {
-            timestamps.sort();
-            firstSeen = timestamps[0];
-            lastSeen = timestamps[timestamps.length - 1];
-        }
+        const topicSourceIds = new Set(topic.sourceIds);
+        const entityReferences = graph.entities
+            .filter((entity) =>
+                entity.sourceIds.some((sourceId) =>
+                    topicSourceIds.has(sourceId),
+                ),
+            )
+            .map((entity) => entity.name);
+        const keywords = graph.topics
+            .filter(
+                (candidate) =>
+                    candidate.name !== topic.name &&
+                    candidate.sourceIds.some((sourceId) =>
+                        topicSourceIds.has(sourceId),
+                    ),
+            )
+            .map((candidate) => candidate.name);
+        const sources = await getSourcesById(memory, topic.sourceIds);
+        const timestamps = sources
+            .map(getActiveRevisionTimestamp)
+            .filter((timestamp): timestamp is string => timestamp !== undefined)
+            .sort();
 
         const details: {
             topicId: string;
@@ -3211,19 +2542,18 @@ export async function getTopicDetails(
             parentTopicId?: string;
             childCount?: number;
         } = {
-            topicId: topic.topicId,
-            topicName: topic.topicName,
-            level: topic.level || 0,
-            confidence: topic.confidence || 0,
-            entityReferences: Array.from(entityReferences),
-            keywords: Array.from(keywords),
+            topicId: topic.name,
+            topicName: topic.name,
+            level: 0,
+            confidence: 1,
+            entityReferences,
+            keywords,
+            childCount: 0,
         };
-
-        if (firstSeen) details.firstSeen = firstSeen;
-        if (lastSeen) details.lastSeen = lastSeen;
-        if (topic.parentTopicId) details.parentTopicId = topic.parentTopicId;
-        if (topicData.childCount !== undefined)
-            details.childCount = topicData.childCount as number;
+        if (timestamps.length > 0) {
+            details.firstSeen = timestamps[0];
+            details.lastSeen = timestamps[timestamps.length - 1];
+        }
 
         return {
             success: true,
@@ -3266,165 +2596,85 @@ export async function getEntityDetails(
     error?: string;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        const memory = context.agentContext.browserMemoryService;
+        if (memory === undefined) {
             return {
                 success: false,
-                error: "Website collection not available",
+                error: "Durable browser memory is not available",
             };
         }
-
-        // Use cache for performance - loads from JSON storage if needed
-        await ensureGraphCache(context);
-        const cache = getGraphCache(websiteCollection);
-
-        if (!cache || !cache.isValid || !cache.entityMetrics) {
-            return {
-                success: false,
-                error: "Entity cache not available",
-            };
-        }
-
-        const entity = cache.entityMetrics.find(
-            (e: any) => e.name === parameters.entityName,
+        const graph = await memory.getKnowledgeGraph();
+        const entity = graph.entities.find(
+            (candidate) =>
+                candidate.name.toLowerCase() ===
+                parameters.entityName.toLowerCase(),
         );
-
-        if (!entity) {
+        if (entity === undefined) {
             return {
                 success: false,
                 error: "Entity not found",
             };
         }
-
-        const entityReferences: Set<string> = new Set();
-        const topics: Set<string> = new Set();
-        const websites: Set<string> = new Set();
-        const timestamps: string[] = [];
-        const processedMessages = new Set<number>();
-
-        const kp = await import("@typeagent/knowpro");
-        const searchTermGroup = kp.createEntitySearchTermGroup(
-            parameters.entityName,
-            undefined,
-            undefined,
-            undefined,
-            false,
-        );
-
-        const whenFilter = { knowledgeType: "entity" as const };
-        const searchResult = await kp.searchConversationKnowledge(
-            websiteCollection,
-            searchTermGroup,
-            whenFilter,
-            { maxKnowledgeMatches: 100 },
-        );
-
-        if (searchResult) {
-            for (const [, result] of searchResult) {
-                if (result.semanticRefMatches) {
-                    for (const scoredRef of result.semanticRefMatches) {
-                        const semanticRef = websiteCollection.semanticRefs.get(
-                            scoredRef.semanticRefOrdinal,
-                        );
-                        if (semanticRef) {
-                            const messageOrdinal =
-                                semanticRef.range.start.messageOrdinal;
-
-                            if (!processedMessages.has(messageOrdinal)) {
-                                processedMessages.add(messageOrdinal);
-
-                                const message =
-                                    websiteCollection.messages.get(
-                                        messageOrdinal,
-                                    );
-                                if (message) {
-                                    if (message.timestamp) {
-                                        timestamps.push(message.timestamp);
-                                    }
-
-                                    if ((message as any).url) {
-                                        websites.add((message as any).url);
-                                    }
-
-                                    const knowledge = message.knowledge;
-                                    if (knowledge) {
-                                        if (
-                                            knowledge.entities &&
-                                            Array.isArray(knowledge.entities)
-                                        ) {
-                                            knowledge.entities.forEach(
-                                                (e: any) => {
-                                                    if (
-                                                        e.name &&
-                                                        e.name !==
-                                                            parameters.entityName
-                                                    ) {
-                                                        entityReferences.add(
-                                                            e.name,
-                                                        );
-                                                    }
-                                                },
-                                            );
-                                        }
-
-                                        if (
-                                            knowledge.topics &&
-                                            Array.isArray(knowledge.topics)
-                                        ) {
-                                            knowledge.topics.forEach(
-                                                (topic: any) => {
-                                                    if (
-                                                        typeof topic ===
-                                                        "string"
-                                                    ) {
-                                                        topics.add(topic);
-                                                    }
-                                                },
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+        const entitySourceIds = new Set(entity.sourceIds);
+        const relatedEntities = new Set<string>();
+        let degree = 0;
+        for (const relationship of graph.relationships) {
+            if (relationship.fromEntity === entity.name) {
+                relatedEntities.add(relationship.toEntity);
+                degree++;
+            } else if (relationship.toEntity === entity.name) {
+                relatedEntities.add(relationship.fromEntity);
+                degree++;
             }
         }
+        const topics = graph.topics
+            .filter((topic) =>
+                topic.sourceIds.some((sourceId) =>
+                    entitySourceIds.has(sourceId),
+                ),
+            )
+            .map((topic) => topic.name);
+        const sources = await getSourcesById(memory, entity.sourceIds);
+        const websites = sources.flatMap((source) =>
+            source.canonicalUri === undefined ? [] : [source.canonicalUri],
+        );
+        const timestamps = sources
+            .map(getActiveRevisionTimestamp)
+            .filter((timestamp): timestamp is string => timestamp !== undefined)
+            .sort();
 
-        let firstSeen: string | undefined;
-        let lastSeen: string | undefined;
-        if (timestamps.length > 0) {
-            timestamps.sort();
-            firstSeen = timestamps[0];
-            lastSeen = timestamps[timestamps.length - 1];
-        }
-
-        const details: any = {
+        const details: {
+            name: string;
+            type: string;
+            confidence: number;
+            count: number;
+            degree?: number;
+            importance?: number;
+            topicAffinity?: string[];
+            relatedEntities?: string[];
+            websites?: string[];
+            firstSeen?: string;
+            lastSeen?: string;
+        } = {
             name: entity.name,
-            type: entity.type || "entity",
-            confidence: entity.confidence || 0.5,
-            count: entity.count || 1,
+            type: entity.types[0] ?? "entity",
+            confidence: 1,
+            count: entity.mentionCount,
+            degree,
         };
-
-        if (entity.degree !== undefined) details.degree = entity.degree;
-        if (entity.importance !== undefined)
-            details.importance = entity.importance;
-
-        if (topics.size > 0) {
-            details.topicAffinity = Array.from(topics).slice(0, 15);
+        if (topics.length > 0) {
+            details.topicAffinity = topics.slice(0, 15);
         }
-
-        if (entityReferences.size > 0) {
-            details.relatedEntities = Array.from(entityReferences).slice(0, 15);
+        if (relatedEntities.size > 0) {
+            details.relatedEntities = Array.from(relatedEntities).slice(0, 15);
         }
-
-        if (websites.size > 0) {
-            details.websites = Array.from(websites).slice(0, 15);
+        if (websites.length > 0) {
+            details.websites = websites.slice(0, 15);
         }
-
-        if (firstSeen) details.firstSeen = firstSeen;
-        if (lastSeen) details.lastSeen = lastSeen;
+        if (timestamps.length > 0) {
+            details.firstSeen = timestamps[0];
+            details.lastSeen = timestamps[timestamps.length - 1];
+        }
 
         return {
             success: true,
@@ -3470,17 +2720,18 @@ export async function getUrlContentBreakdown(
     error?: string;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        const memory = context.agentContext.browserMemoryService;
+        if (memory === undefined) {
             return {
                 success: false,
-                error: "Website collection not available",
+                error: "Durable browser memory is not available",
             };
         }
 
         const tracker = getPerformanceTracker();
         tracker.startOperation("getUrlContentBreakdown");
+        const { graph, sources, sourcesById } =
+            await loadDurableGraphSnapshot(memory);
 
         const urlStats = new Map<
             string,
@@ -3491,89 +2742,42 @@ export async function getUrlContentBreakdown(
                 relationshipCount: number;
             }
         >();
-
-        // Count topics per URL
-        tracker.startOperation("getUrlContentBreakdown.countTopics");
-        try {
-            const topics = websiteCollection.getTopicHierarchy() || [];
-            for (const topic of topics) {
-                const url = topic.url;
-                if (!urlStats.has(url)) {
-                    urlStats.set(url, {
-                        topicCount: 0,
-                        entityCount: 0,
-                        semanticRefCount: 0,
-                        relationshipCount: 0,
-                    });
-                }
-                urlStats.get(url)!.topicCount++;
-            }
-            tracker.endOperation(
-                "getUrlContentBreakdown.countTopics",
-                topics.length,
-                urlStats.size,
-            );
-        } catch (error) {
-            console.warn("Failed to count topics per URL:", error);
-            tracker.endOperation("getUrlContentBreakdown.countTopics", 0, 0);
+        for (const source of sources) {
+            urlStats.set(source.canonicalUri ?? source.sourceId, {
+                topicCount: 0,
+                entityCount: 0,
+                semanticRefCount: 0,
+                relationshipCount: 0,
+            });
         }
 
-        // Count entities per URL
-        tracker.startOperation("getUrlContentBreakdown.countEntities");
-        if (websiteCollection.knowledgeEntities) {
-            try {
-                const entities =
-                    (websiteCollection.knowledgeEntities as any).getTopEntities(
-                        10000,
-                    ) || [];
-                for (const entity of entities) {
-                    const sources = entity.sources || [];
-                    const sourceUrls =
-                        typeof sources === "string"
-                            ? JSON.parse(sources)
-                            : sources;
-                    for (const url of sourceUrls) {
-                        if (!urlStats.has(url)) {
-                            urlStats.set(url, {
-                                topicCount: 0,
-                                entityCount: 0,
-                                semanticRefCount: 0,
-                                relationshipCount: 0,
-                            });
-                        }
-                        urlStats.get(url)!.entityCount++;
-                    }
+        const increment = (
+            sourceIds: string[],
+            field: "topicCount" | "entityCount" | "relationshipCount",
+        ) => {
+            for (const sourceId of new Set(sourceIds)) {
+                const source = sourcesById.get(sourceId);
+                if (source === undefined) {
+                    continue;
                 }
-                tracker.endOperation(
-                    "getUrlContentBreakdown.countEntities",
-                    entities.length,
-                    urlStats.size,
+                const stats = urlStats.get(
+                    source.canonicalUri ?? source.sourceId,
                 );
-            } catch (error) {
-                console.warn("Failed to count entities per URL:", error);
-                tracker.endOperation(
-                    "getUrlContentBreakdown.countEntities",
-                    0,
-                    0,
-                );
+                if (stats !== undefined) {
+                    stats[field]++;
+                }
             }
-        }
+        };
 
-        // Count semantic refs per URL - TODO: implement when URL association is available
-        tracker.startOperation("getUrlContentBreakdown.countSemanticRefs");
-        // SemanticRef interface doesn't directly contain URL info - skip for now
-        const semanticRefCount = websiteCollection.semanticRefs
-            ? websiteCollection.semanticRefs.getAll().length
-            : 0;
-        tracker.endOperation(
-            "getUrlContentBreakdown.countSemanticRefs",
-            semanticRefCount,
-            0,
+        graph.topics.forEach((topic) =>
+            increment(topic.sourceIds, "topicCount"),
         );
-
-        // Note: Relationship counting removed - relationships now computed from Graphology graphs
-        tracker.startOperation("getUrlContentBreakdown.countRelationships");
-        tracker.endOperation("getUrlContentBreakdown.countRelationships", 0, 0);
+        graph.entities.forEach((entity) =>
+            increment(entity.sourceIds, "entityCount"),
+        );
+        graph.relationships.forEach((relationship) =>
+            increment(relationship.sourceIds, "relationshipCount"),
+        );
 
         // Build breakdown array
         const breakdown = Array.from(urlStats.entries())
@@ -3632,7 +2836,9 @@ export async function getUrlContentBreakdown(
 
         tracker.endOperation(
             "getUrlContentBreakdown",
-            urlStats.size,
+            graph.entities.length +
+                graph.topics.length +
+                graph.relationships.length,
             breakdown.length,
         );
         tracker.printReport("getUrlContentBreakdown");
@@ -3674,9 +2880,8 @@ export async function getTopicTimelines(
     context: SessionContext<BrowserActionContext>,
 ): Promise<TopicTimelineResponse> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        const memory = context.agentContext.browserMemoryService;
+        if (memory === undefined) {
             return {
                 success: false,
                 timelines: [],
@@ -3685,9 +2890,10 @@ export async function getTopicTimelines(
                     timeRange: { earliest: "", latest: "" },
                     topicsWithActivity: 0,
                 },
-                error: "Website collection not available",
+                error: "Durable browser memory is not available",
             };
         }
+        const { graph, sourcesById } = await loadDurableGraphSnapshot(memory);
 
         debug(
             `[Topic Timelines] Processing ${parameters.topicNames.length} topics`,
@@ -3697,10 +2903,10 @@ export async function getTopicTimelines(
         let allTopics = [...parameters.topicNames];
 
         if (parameters.includeRelatedTopics) {
-            allTopics = await expandTopicNeighborhood(
+            allTopics = expandTopicNeighborhood(
                 parameters.topicNames,
                 parameters.neighborhoodDepth || 1,
-                websiteCollection,
+                graph,
             );
             debug(
                 `[Topic Timelines] Expanded to ${allTopics.length} topics including neighbors`,
@@ -3711,9 +2917,10 @@ export async function getTopicTimelines(
         const timelines: TopicTimeline[] = [];
 
         for (const topicName of allTopics) {
-            const timeline = await buildTopicTimeline(
+            const timeline = buildTopicTimeline(
                 topicName,
-                websiteCollection,
+                graph,
+                sourcesById,
                 parameters,
             );
             if (timeline.activities.length > 0) {
@@ -3796,234 +3003,31 @@ export async function getTopicTimelines(
     }
 }
 
-async function expandTopicNeighborhood(
+function expandTopicNeighborhood(
     seedTopics: string[],
     depth: number,
-    websiteCollection: any,
-): Promise<string[]> {
-    const allTopics = new Set(seedTopics);
-
-    try {
-        // Use existing topic relationship functionality to find connected topics
-        for (const seedTopic of seedTopics) {
-            // Get related topics from knowledge topics table
-            if (
-                websiteCollection.knowledgeTopics &&
-                websiteCollection.knowledgeTopics.getRelatedTopics
-            ) {
-                const relatedTopics =
-                    websiteCollection.knowledgeTopics.getRelatedTopics(
-                        seedTopic,
-                        10,
-                    ) || [];
-
-                relatedTopics.forEach((topicEntry: any) => {
-                    if (topicEntry.topic && topicEntry.topic !== seedTopic) {
-                        allTopics.add(topicEntry.topic);
-                    }
-                });
-            }
-        }
-
-        debug(
-            `[Topic Neighborhood] Expanded ${seedTopics.length} seed topics to ${allTopics.size} total topics`,
-        );
-    } catch (error) {
-        debug(`[Topic Neighborhood] Error expanding topics: ${error}`);
-        // Return original topics if expansion fails
-        return seedTopics;
-    }
-
-    return Array.from(allTopics);
+    graph: MemoryKnowledgeGraph,
+): string[] {
+    const related = getRelatedTopicsBySourceOverlap(seedTopics, depth, graph);
+    return [
+        ...seedTopics,
+        ...Array.from(related.values(), (topic) => topic.name),
+    ];
 }
 
-async function buildTopicTimeline(
+function buildTopicTimeline(
     topicName: string,
-    websiteCollection: any,
-    parameters: any,
-): Promise<TopicTimeline> {
-    const activities: TopicActivity[] = [];
-
-    try {
-        // 1. Get all URLs associated with this topic from knowledgeTopics table
-        let topicEntries: any[] = [];
-
-        if (websiteCollection.knowledgeTopics) {
-            // Query the database directly for topics matching the name
-            const stmt = websiteCollection.knowledgeTopics.db.prepare(`
-                SELECT * FROM knowledgeTopics 
-                WHERE topic LIKE ? 
-                ORDER BY relevance DESC
-            `);
-            topicEntries = stmt.all(`%${topicName}%`) || [];
-        }
-
-        debug(
-            `[Topic Timeline] Found ${topicEntries.length} topic entries for "${topicName}"`,
-        );
-
-        // 2. For each URL, get temporal engagement data from website collection
-        const websites = websiteCollection.getWebsiteDocParts() || [];
-        const urlToWebsiteMap = new Map();
-
-        websites.forEach((website: any) => {
-            if (website.url) {
-                urlToWebsiteMap.set(website.url, website);
-            }
-        });
-
-        for (const topicEntry of topicEntries) {
-            const websiteData = urlToWebsiteMap.get(topicEntry.url);
-
-            if (websiteData && websiteData.metadata) {
-                const metadata = websiteData.metadata;
-                const title =
-                    metadata.title || websiteData.title || "Unknown Title";
-                const snippet =
-                    metadata.description ||
-                    metadata.contentSummary ||
-                    websiteData.snippet;
-
-                // Add bookmark activity
-                if (metadata.bookmarkDate) {
-                    activities.push({
-                        timestamp: metadata.bookmarkDate,
-                        activityType: "bookmark",
-                        url: topicEntry.url,
-                        title: title,
-                        domain:
-                            topicEntry.domain ||
-                            metadata.domain ||
-                            extractDomainFromUrl(topicEntry.url),
-                        relevance: topicEntry.relevance || 0,
-                        snippet: snippet,
-                        metadata: {
-                            extractionDate: topicEntry.extractionDate,
-                        },
-                    });
-                }
-
-                // Add visit activity
-                if (metadata.visitDate) {
-                    activities.push({
-                        timestamp: metadata.visitDate,
-                        activityType: "visit",
-                        url: topicEntry.url,
-                        title: title,
-                        domain:
-                            topicEntry.domain ||
-                            metadata.domain ||
-                            extractDomainFromUrl(topicEntry.url),
-                        relevance: topicEntry.relevance || 0,
-                        snippet: snippet,
-                        metadata: {
-                            visitCount: metadata.visitCount,
-                            extractionDate: topicEntry.extractionDate,
-                        },
-                    });
-                }
-
-                // Add knowledge extraction activity
-                if (topicEntry.extractionDate) {
-                    const knowledgeChunk = await getKnowledgeChunkForTopic(
-                        websiteData,
-                        topicName,
-                    );
-
-                    activities.push({
-                        timestamp: topicEntry.extractionDate,
-                        activityType: "extraction",
-                        url: topicEntry.url,
-                        title: title,
-                        domain:
-                            topicEntry.domain ||
-                            metadata.domain ||
-                            extractDomainFromUrl(topicEntry.url),
-                        relevance: topicEntry.relevance || 0,
-                        knowledgeChunk: knowledgeChunk,
-                        metadata: {
-                            confidence: topicEntry.relevance,
-                        },
-                    });
-                }
-            }
-        }
-
-        // Deduplicate activities with same URL and timestamp
-        // Priority: bookmark > visit > extraction
-        const activityPriority: Record<string, number> = {
-            bookmark: 3,
-            visit: 2,
-            extraction: 1,
-        };
-
-        const dedupeMap = new Map<string, TopicActivity>();
-
-        for (const activity of activities) {
-            const key = `${activity.url}|${activity.timestamp}`;
-            const existing = dedupeMap.get(key);
-
-            if (!existing) {
-                dedupeMap.set(key, activity);
-            } else {
-                // Keep the activity with higher priority
-                const existingPriority =
-                    activityPriority[existing.activityType] || 0;
-                const newPriority =
-                    activityPriority[activity.activityType] || 0;
-
-                if (newPriority > existingPriority) {
-                    dedupeMap.set(key, activity);
-                }
-            }
-        }
-
-        // Convert deduplicated map back to array
-        const deduplicatedActivities = Array.from(dedupeMap.values());
-
-        debug(
-            `[Topic Timeline] Deduplicated ${activities.length} activities to ${deduplicatedActivities.length} unique entries`,
-        );
-
-        // Sort activities by timestamp (most recent first)
-        deduplicatedActivities.sort(
-            (a, b) =>
-                new Date(b.timestamp).getTime() -
-                new Date(a.timestamp).getTime(),
-        );
-
-        // Limit activities if specified
-        const maxEntries = parameters.maxTimelineEntries || 50;
-        const limitedActivities = deduplicatedActivities.slice(0, maxEntries);
-
-        // Calculate activity distribution based on deduplicated activities
-        const activityDistribution = {
-            bookmarks: deduplicatedActivities.filter(
-                (a) => a.activityType === "bookmark",
-            ).length,
-            visits: deduplicatedActivities.filter(
-                (a) => a.activityType === "visit",
-            ).length,
-            extractions: deduplicatedActivities.filter(
-                (a) => a.activityType === "extraction",
-            ).length,
-        };
-
-        debug(
-            `[Topic Timeline] Built timeline for "${topicName}" with ${deduplicatedActivities.length} activities (${limitedActivities.length} limited)`,
-        );
-
-        return {
-            topicName,
-            totalActivity: deduplicatedActivities.length,
-            activities: limitedActivities,
-            relatedTopics: [], // Could be populated from topic relationships
-            activityDistribution,
-        };
-    } catch (error) {
-        debug(
-            `[Topic Timeline] Error building timeline for "${topicName}": ${error}`,
-        );
+    graph: MemoryKnowledgeGraph,
+    sourcesById: Map<string, MemorySource>,
+    parameters: {
+        maxTimelineEntries?: number;
+        timeRange?: { startDate?: string; endDate?: string };
+    },
+): TopicTimeline {
+    const topic = graph.topics.find(
+        (candidate) => candidate.name.toLowerCase() === topicName.toLowerCase(),
+    );
+    if (topic === undefined) {
         return {
             topicName,
             totalActivity: 0,
@@ -4032,51 +3036,68 @@ async function buildTopicTimeline(
             activityDistribution: { bookmarks: 0, visits: 0, extractions: 0 },
         };
     }
-}
 
-async function getKnowledgeChunkForTopic(
-    websiteData: any,
-    topicName: string,
-): Promise<string | undefined> {
-    try {
-        // Try to find text chunks that mention this topic
-        if (websiteData.text && typeof websiteData.text === "string") {
-            const text = websiteData.text.toLowerCase();
-            const topicLower = topicName.toLowerCase();
-
-            if (text.includes(topicLower)) {
-                // Find the sentence or paragraph containing the topic
-                const sentences = websiteData.text.split(/[.!?]+/);
-                for (const sentence of sentences) {
-                    if (sentence.toLowerCase().includes(topicLower)) {
-                        return (
-                            sentence.trim().substring(0, 200) +
-                            (sentence.length > 200 ? "..." : "")
-                        );
-                    }
-                }
-            }
+    const startTime = parameters.timeRange?.startDate
+        ? Date.parse(parameters.timeRange.startDate)
+        : undefined;
+    const endTime = parameters.timeRange?.endDate
+        ? Date.parse(parameters.timeRange.endDate)
+        : undefined;
+    const activities = topic.sourceIds.flatMap((sourceId): TopicActivity[] => {
+        const source = sourcesById.get(sourceId);
+        if (source === undefined) {
+            return [];
         }
-
-        // Fallback to content summary or description
-        if (websiteData.metadata) {
-            return (
-                websiteData.metadata.contentSummary?.substring(0, 200) +
-                    (websiteData.metadata.contentSummary?.length > 200
-                        ? "..."
-                        : "") ||
-                websiteData.metadata.description?.substring(0, 200) +
-                    (websiteData.metadata.description?.length > 200
-                        ? "..."
-                        : "")
-            );
+        const timestamp = getActiveRevisionTimestamp(source);
+        if (timestamp === undefined) {
+            return [];
         }
-
-        return undefined;
-    } catch (error) {
-        debug(`[Knowledge Chunk] Error extracting chunk: ${error}`);
-        return undefined;
-    }
+        const activityTime = Date.parse(timestamp);
+        if (
+            (startTime !== undefined && activityTime < startTime) ||
+            (endTime !== undefined && activityTime > endTime)
+        ) {
+            return [];
+        }
+        const url = source.canonicalUri ?? source.sourceId;
+        const metadataDomain = source.metadata?.domain;
+        return [
+            {
+                timestamp,
+                activityType: "extraction",
+                url,
+                title: source.title,
+                domain:
+                    typeof metadataDomain === "string"
+                        ? metadataDomain
+                        : extractDomainFromUrl(url),
+                relevance: 1,
+                metadata: { confidence: 1, extractionDate: timestamp },
+            },
+        ];
+    });
+    activities.sort(
+        (left, right) =>
+            Date.parse(right.timestamp) - Date.parse(left.timestamp),
+    );
+    const maxEntries = Math.max(0, parameters.maxTimelineEntries ?? 50);
+    const limitedActivities = activities.slice(0, maxEntries);
+    const relatedTopics = Array.from(
+        getRelatedTopicsBySourceOverlap([topic.name], 1, graph).values(),
+        (related) => related.name,
+    );
+    return {
+        topicName: topic.name,
+        topicId: topic.name,
+        totalActivity: activities.length,
+        activities: limitedActivities,
+        relatedTopics,
+        activityDistribution: {
+            bookmarks: 0,
+            visits: 0,
+            extractions: activities.length,
+        },
+    };
 }
 
 function extractDomainFromUrl(url: string): string {

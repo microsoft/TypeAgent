@@ -342,6 +342,7 @@ async function addBatchToSemanticRefIndex(
     conversation: IConversation,
     batch: TextLocation[],
     knowledgeExtractor: kpLib.KnowledgeExtractor,
+    knowledgeValidator?: KnowledgeValidator,
     eventHandler?: IndexingEventHandlers,
     termsAdded?: Set<string>,
 ): Promise<TextIndexingResult> {
@@ -368,7 +369,10 @@ async function addBatchToSemanticRefIndex(
             return indexingResult;
         }
         const textLocation = batch[i];
-        const knowledge = knowledgeResult.data;
+        const knowledge = filterKnowledge(
+            knowledgeResult.data,
+            knowledgeValidator,
+        );
         addKnowledgeToSemanticRefIndex(
             conversation,
             textLocation.messageOrdinal,
@@ -590,6 +594,7 @@ export type SemanticRefIndexSettings = {
     batchSize: number;
     autoExtractKnowledge: boolean;
     knowledgeExtractor?: kpLib.KnowledgeExtractor;
+    knowledgeValidator?: KnowledgeValidator;
 };
 
 /**
@@ -636,6 +641,7 @@ export async function addToSemanticRefIndex(
             conversation,
             textLocationBatch,
             knowledgeExtractor,
+            settings.knowledgeValidator,
             eventHandler,
             termsAdded,
         );

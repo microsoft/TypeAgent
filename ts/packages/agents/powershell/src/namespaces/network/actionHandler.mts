@@ -10,12 +10,62 @@ import {
 const definitions = {
     testConnection: {
         script: `param([string]$ComputerName, [int]$Port)
+$timeoutMilliseconds = 5000
 if ($Port -gt 0) {
-    Test-NetConnection -ComputerName $ComputerName -Port $Port
+    $client = [System.Net.Sockets.TcpClient]::new()
+    $remoteAddress = $null
+    $tcpTestSucceeded = $false
+    $errorMessage = $null
+    try {
+        $connectTask = $client.ConnectAsync($ComputerName, $Port)
+        if ($connectTask.Wait($timeoutMilliseconds)) {
+            $tcpTestSucceeded = $client.Connected
+            if ($client.Client.RemoteEndPoint) {
+                $remoteEndPoint = [System.Net.IPEndPoint]$client.Client.RemoteEndPoint
+                $remoteAddress = $remoteEndPoint.Address.IPAddressToString
+            }
+        } else {
+            $errorMessage = "Connection timed out after $timeoutMilliseconds ms."
+        }
+    } catch {
+        $errorMessage = $_.Exception.GetBaseException().Message
+    } finally {
+        $client.Dispose()
+    }
+    [PSCustomObject]@{
+        ComputerName = $ComputerName
+        RemoteAddress = $remoteAddress
+        RemotePort = $Port
+        TcpTestSucceeded = $tcpTestSucceeded
+        Error = $errorMessage
+    }
 } else {
-    Test-NetConnection -ComputerName $ComputerName
+    $ping = [System.Net.NetworkInformation.Ping]::new()
+    try {
+        $reply = $ping.Send($ComputerName, $timeoutMilliseconds)
+        [PSCustomObject]@{
+            ComputerName = $ComputerName
+            RemoteAddress = if ($reply.Address) { $reply.Address.IPAddressToString } else { $null }
+            PingSucceeded = $reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success
+            PingReplyDetails = [PSCustomObject]@{
+                RoundtripTime = $reply.RoundtripTime
+            }
+            Status = [string]$reply.Status
+        }
+    } catch {
+        [PSCustomObject]@{
+            ComputerName = $ComputerName
+            RemoteAddress = $null
+            PingSucceeded = $false
+            PingReplyDetails = $null
+            Status = "Error"
+            Error = $_.Exception.GetBaseException().Message
+        }
+    } finally {
+        $ping.Dispose()
+    }
 }`,
-        allowedCmdlets: ["Test-NetConnection"],
+        allowedCmdlets: [],
         networkAccess: true,
     },
     portListeners: {
@@ -56,13 +106,46 @@ if ($Name) {
     },
     ipConfig: {
         script: `param([string]$InterfaceAlias)
-if ($InterfaceAlias) {
-    Get-NetIPConfiguration -InterfaceAlias $InterfaceAlias
-} else {
-    Get-NetIPConfiguration
+foreach ($interface in [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+    if ($InterfaceAlias -and $interface.Name -ine $InterfaceAlias) {
+        continue
+    }
+    $properties = $interface.GetIPProperties()
+    $ipv4Addresses = @()
+    $ipv6Addresses = @()
+    $ipv4Gateways = @()
+    $ipv6Gateways = @()
+    $dnsAddresses = @()
+    foreach ($address in $properties.UnicastAddresses) {
+        if ($address.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
+            $ipv4Addresses += $address.Address.IPAddressToString
+        } elseif ($address.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+            $ipv6Addresses += $address.Address.IPAddressToString
+        }
+    }
+    foreach ($gateway in $properties.GatewayAddresses) {
+        if ($gateway.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
+            $ipv4Gateways += $gateway.Address.IPAddressToString
+        } elseif ($gateway.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+            $ipv6Gateways += $gateway.Address.IPAddressToString
+        }
+    }
+    foreach ($dnsAddress in $properties.DnsAddresses) {
+        $dnsAddresses += $dnsAddress.IPAddressToString
+    }
+    [PSCustomObject]@{
+        InterfaceAlias = $interface.Name
+        InterfaceDescription = $interface.Description
+        Status = [string]$interface.OperationalStatus
+        IPv4Address = $ipv4Addresses -join ", "
+        IPv6Address = $ipv6Addresses -join ", "
+        IPv4DefaultGateway = $ipv4Gateways -join ", "
+        IPv6DefaultGateway = $ipv6Gateways -join ", "
+        DNSServer = $dnsAddresses -join ", "
+    }
 }`,
-        allowedCmdlets: ["Get-NetIPConfiguration"],
-        networkAccess: true,
+        allowedCmdlets: [],
+        networkAccess: false,
     },
     dnsLookup: {
         script: `param([string]$Name, [string]$Type)

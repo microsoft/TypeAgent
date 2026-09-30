@@ -15,6 +15,7 @@ import type { ProgressCallback } from "../interfaces/websiteImport.types";
 import type { KnowledgeProgressCallback } from "../interfaces/knowledgeExtraction.types";
 import { createChromeRpcClient } from "./chromeRpcClient";
 import { createElectronRpcClient } from "./electronRpcClient";
+import { onExtensionEvent } from "../serviceWorker/extensionEventHelpers";
 
 // Chrome RPC singleton for view→service-worker communication
 let chromeRpcSingleton: ReturnType<typeof createChromeRpcClient> | undefined;
@@ -471,18 +472,20 @@ export class ChromeExtensionService extends ExtensionServiceBase {
     ): void {
         this.importProgressCallbacks.set(importId, callback);
 
-        const messageListener = (message: any) => {
-            if (
-                message.type === "importProgress" &&
-                message.importId === importId
-            ) {
-                callback(message.progress);
+        const removeListener = onExtensionEvent("importProgress", (event) => {
+            if (event.importId === importId) {
+                callback(event.progress);
+                if (
+                    event.progress.phase === "complete" ||
+                    event.progress.phase === "error"
+                ) {
+                    this.importProgressCallbacks.delete(importId);
+                    removeListener();
+                }
             }
-        };
+        });
 
-        chrome.runtime.onMessage.addListener(messageListener);
-
-        (callback as any)._messageListener = messageListener;
+        (callback as any)._removeImportProgressListener = removeListener;
     }
 
     protected onExtractionProgressImpl(

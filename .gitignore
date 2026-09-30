@@ -13,6 +13,7 @@
 # temp directories
 build/
 dist/
+/ts/packages/agents/powershell/broker/
 out/
 node_modules/
 dist-pub/
@@ -452,6 +453,7 @@ FodyWeavers.xsd
 
 /ts/packages/cli/.collection-backups
 /ts/packages/cli/.import-states
+/ts/packages/agentServer/server/.import-states
 
 # agent files
 .claude/
@@ -466,3 +468,5 @@ ts/packages/agentSdkWrapper/plans/
 /ts/msi-out
 ts/config.local.yaml.bak
 /ts/tmp/bundled-agent-server
+/ts/msi-test-stage
+/ts/msi-test-output

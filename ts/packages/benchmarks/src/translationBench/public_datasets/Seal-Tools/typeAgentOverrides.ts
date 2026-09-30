@@ -2,16 +2,29 @@
 // Licensed under the MIT License.
 
 import type { TranslationBenchBenchmarkAction } from "../../synthesizer/benchmark.js";
-import type { TranslationBenchParameterScoreSpec } from "../../runner/runner.js";
+
+export type SealToolsParamFieldMode =
+    | "exact"
+    | "normalized"
+    | "optionalNormalized"
+    | "exists"
+    | "nonempty"
+    | "ignore";
+
+export interface SealToolsParameterScoreSpec {
+    defaultMode?: SealToolsParamFieldMode;
+    fields?: Record<string, SealToolsParamFieldMode>;
+    acceptedValues?: Record<string, unknown[]>;
+}
 
 export interface SealToolsTypeAgentOverride {
     reason: string;
     expectedActions?: TranslationBenchBenchmarkAction[];
     excludeFromScoring?: boolean;
-    parameterScore?: Array<TranslationBenchParameterScoreSpec | undefined>;
+    parameterScore?: Array<SealToolsParameterScoreSpec | undefined>;
     parameterScoreByAction?: Record<
         string,
-        Omit<TranslationBenchParameterScoreSpec, "defaultMode">
+        Omit<SealToolsParameterScoreSpec, "defaultMode">
     >;
 }
 

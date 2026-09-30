@@ -15,7 +15,7 @@ UPGRADE=0
 NO_START=0
 NO_AUTOSTART=0
 PROVIDER="aisystems"
-EMBEDDING="local"
+EMBEDDING=""
 OLLAMA_HOST="http://localhost:11434"
 CHAT_MODEL=""
 COPILOT_MODEL=""
@@ -51,10 +51,11 @@ Options:
   --provider <name>                  Endpoint provider: aisystems (default), ollama, or copilot.
                                      aisystems downloads config from Key Vault (needs az access);
                                      ollama/copilot synthesize config.local.yaml locally.
-  --embedding <mode>                 Embedding source for ollama/copilot: local (default), ollama, openai, none
+  --embedding <mode>                 Embedding source: copilot, local, ollama, openai, none
+                                     Defaults to copilot for Copilot chat, local otherwise.
   --ollama-host <url>                Ollama base URL (default: http://localhost:11434)
   --chat-model <name>                Ollama chat model (default: llama3.2)
-  --copilot-model <name>             Copilot chat model (default: claude-haiku-4.5)
+  --copilot-model <name>             Copilot chat model (default: gpt-5.6-luna)
   --embedding-endpoint <url>         Embedding endpoint (openai embedding mode; full path)
   --embedding-model <name>           Embedding model name
   --openai-key <key>                 API key for openai embedding mode
@@ -180,9 +181,16 @@ case "$PROVIDER" in
   aisystems|ollama|copilot) ;;
   *) fail "Unknown --provider '$PROVIDER' (expected aisystems, ollama, or copilot)" ;;
 esac
+if [[ -z "$EMBEDDING" ]]; then
+  if [[ "$PROVIDER" == "copilot" ]]; then
+    EMBEDDING="copilot"
+  else
+    EMBEDDING="local"
+  fi
+fi
 case "$EMBEDDING" in
-  local|ollama|openai|none) ;;
-  *) fail "Unknown --embedding '$EMBEDDING' (expected local, ollama, openai, or none)" ;;
+  copilot|local|ollama|openai|none) ;;
+  *) fail "Unknown --embedding '$EMBEDDING' (expected copilot, local, ollama, openai, or none)" ;;
 esac
 
 if [[ -z "${INSTALL_DIR:-}" ]]; then

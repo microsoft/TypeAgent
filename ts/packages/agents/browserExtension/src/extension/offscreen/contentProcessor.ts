@@ -24,6 +24,8 @@ import {
 export class OffscreenContentProcessor {
     private readonly maxLoadTime: number = 45000;
     private currentlyProcessing: boolean = false;
+    private activeMessageId: string | undefined;
+    private activeController: AbortController | undefined;
     private processedCount: number = 0;
     private readonly logElement: HTMLElement;
     private readonly statusElement: HTMLElement;
@@ -101,6 +103,22 @@ export class OffscreenContentProcessor {
                         });
                         break;
 
+                    case "cancel": {
+                        const cancelled =
+                            message.targetMessageId === this.activeMessageId;
+                        if (cancelled) {
+                            this.activeController?.abort(
+                                new Error("Offscreen operation cancelled"),
+                            );
+                        }
+                        sendResponse({
+                            success: true,
+                            data: { cancelled },
+                            messageId: message.messageId || "",
+                        });
+                        break;
+                    }
+
                     default:
                         this.log(
                             "warn",
@@ -130,6 +148,8 @@ export class OffscreenContentProcessor {
         }
 
         this.currentlyProcessing = true;
+        this.activeMessageId = message.messageId;
+        this.activeController = new AbortController();
         this.updateUI("processing", `Downloading: ${message.url}`);
         const startTime = Date.now();
 
@@ -137,6 +157,7 @@ export class OffscreenContentProcessor {
             const result = await this.processUrl(
                 message.url!,
                 (message.options as DownloadOptions) || {},
+                this.activeController,
             );
 
             this.processedCount++;
@@ -153,6 +174,8 @@ export class OffscreenContentProcessor {
             };
         } finally {
             this.currentlyProcessing = false;
+            this.activeMessageId = undefined;
+            this.activeController = undefined;
         }
     }
 
@@ -196,16 +219,20 @@ export class OffscreenContentProcessor {
     /**
      * Process URL by using fetch + DOM parsing (cross-origin compatible)
      */
-    async processUrl(url: string, options: DownloadOptions): Promise<any> {
+    async processUrl(
+        url: string,
+        options: DownloadOptions,
+        controller: AbortController = new AbortController(),
+    ): Promise<any> {
         const loadStartTime = Date.now();
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         this.log("info", `Starting URL processing: ${url}`);
 
         try {
             this.currentUrlElement.textContent = url;
 
             this.log("info", `Fetching content from ${url}...`);
-            const controller = new AbortController();
-            const timeoutId = setTimeout(
+            timeoutId = setTimeout(
                 () => controller.abort(),
                 options.timeout || this.maxLoadTime,
             );
@@ -217,8 +244,6 @@ export class OffscreenContentProcessor {
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 },
             });
-
-            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 throw new Error(
@@ -264,6 +289,11 @@ export class OffscreenContentProcessor {
             throw new Error(
                 `URL processing failed: ${error?.message || "Unknown error"}`,
             );
+        } finally {
+            if (timeoutId !== undefined) {
+                clearTimeout(timeoutId);
+            }
+            this.currentUrlElement.textContent = "";
         }
     }
 

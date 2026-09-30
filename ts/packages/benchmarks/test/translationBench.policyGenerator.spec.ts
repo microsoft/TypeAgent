@@ -28,13 +28,12 @@ import {
     tryClassifyActionParameterFieldHardcode,
     tryReusePriorFieldGraderDecision,
     type ParamSpec,
-} from "../src/translationBench/policy/index.js";
+} from "../src/translationBench/synthesizer/index.js";
 import {
     clearPackagedActionEligibilityPolicyCacheForTests,
     countEligibleTranslationBenchActions,
     getPackagedScheduleExcludedActionIds,
 } from "../src/translationBench/synthesizer/eligibleActions.js";
-
 function objectSpec(
     fields: Record<string, { optional: boolean; spec: ParamSpec }>,
 ): ParamSpec {

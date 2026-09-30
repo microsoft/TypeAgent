@@ -6,6 +6,10 @@
     "originalSchemaFile": "./listSchema.ts",
     "schemaFile": "../dist/listSchema.pas.json",
     "grammarFile": "../dist/listSchema.ag.json",
+    "actionPolicies": {
+      "listLists": { "effects": "read-only" },
+      "getList": { "effects": "read-only" }
+    },
     "schemaType": {
       "action": "ListAction",
       "activity": "ListActivity"

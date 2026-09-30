@@ -72,6 +72,9 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
         if (cs.max_completion_tokens !== undefined) {
             body.max_output_tokens = cs.max_completion_tokens;
         }
+        if (cs.reasoning_effort !== undefined) {
+            body.reasoning = { effort: cs.reasoning_effort };
+        }
         if (request.stream) {
             body.stream = true;
         }

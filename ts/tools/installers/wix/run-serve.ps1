@@ -23,12 +23,19 @@
   Optional log file; output is also written to stdout (captured by the MSI log).
 
 .PARAMETER Rest
-  The serve subcommand and its arguments, e.g. `start`, `provision`,
-  `autostart enable`.
+  Additional options passed after the named serve command.
 #>
 param(
     [Parameter(Mandatory = $true)][string]$ServePath,
     [string]$LogPath,
+    [string]$UserDataDir,
+    [string]$LocalAppDataDir,
+    [string]$RuntimeRoot,
+    [switch]$FailOnError,
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("provision", "start", "autostart")]
+    [string]$ServeCommand,
+    [string]$ServeCommandArg,
     [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
 
@@ -58,21 +65,40 @@ function Write-Log([string]$message) {
 
 . (Join-Path $PSScriptRoot "resolve-node.ps1")
 
-$serveArgs = @($Rest)
+$UserDataDir = Resolve-TypeAgentUserDataDir $UserDataDir $LocalAppDataDir
+$env:TYPEAGENT_USER_DATA_DIR = $UserDataDir
+$env:TYPEAGENT_CONFIG_DIR = $UserDataDir
+if ($RuntimeRoot) {
+    $env:TYPEAGENT_COPILOT_RUNTIME_ROOT = [System.IO.Path]::GetFullPath($RuntimeRoot)
+}
+
+$serveArgs = @($ServeCommand)
+if ($ServeCommandArg) {
+    $serveArgs += $ServeCommandArg
+}
+$serveArgs += @($Rest)
 $label = ($serveArgs -join ' ')
 
 if (-not (Test-Path $ServePath)) {
     Write-Log "WARNING: agent-server launcher not found: $ServePath. Skipping 'typeagent-serve $label'."
+    if ($FailOnError) { exit 1 }
     exit 0
 }
 
 $node = Resolve-NodeExe
 if (-not $node) {
     Write-Log "WARNING: Node.js was not found; cannot run 'typeagent-serve $label'. Install Node.js >= 22 and run it manually from '$ServePath'."
+    if ($FailOnError) { exit 1 }
     exit 0
 }
 
 Write-Log "Using node: $node"
+if ($UserDataDir) {
+    Write-Log "Using TypeAgent user data: $UserDataDir"
+}
+if ($RuntimeRoot) {
+    Write-Log "Using TypeAgent Copilot runtime root: $RuntimeRoot"
+}
 Write-Log "Running: typeagent-serve $label"
 
 # The 'start' subcommand launches a DETACHED daemon that must outlive this
@@ -125,11 +151,17 @@ if ($isStart) {
         Write-Log "WARNING: 'typeagent-serve $label' launch failed: $($_.Exception.Message)."
     }
 } else {
+    $serveExitCode = 0
     try {
         & $node $ServePath @serveArgs 2>&1 | ForEach-Object { Write-Log "  $_" }
-        Write-Log "typeagent-serve $label exited with code $LASTEXITCODE."
+        $serveExitCode = $LASTEXITCODE
+        Write-Log "typeagent-serve $label exited with code $serveExitCode."
     } catch {
+        $serveExitCode = 1
         Write-Log "WARNING: 'typeagent-serve $label' failed: $($_.Exception.Message)."
+    }
+    if ($FailOnError -and $serveExitCode -ne 0) {
+        exit $serveExitCode
     }
 }
 

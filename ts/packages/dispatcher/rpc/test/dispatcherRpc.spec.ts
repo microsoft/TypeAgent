@@ -6,10 +6,12 @@ import type { RpcStructuredLogger } from "@typeagent/agent-rpc/rpc";
 import { createDispatcherRpcClient } from "../src/dispatcherClient.js";
 import { createDispatcherRpcServer } from "../src/dispatcherServer.js";
 import type {
+    ActionSearchResult,
     CommandResult,
     Dispatcher,
     QueuedRequest,
     SubmitResult,
+    StructuredActionExecutionResult,
 } from "@typeagent/dispatcher-types";
 import { ServerStoppingError } from "@typeagent/dispatcher-types";
 import type { PendingInteractionResponse } from "@typeagent/dispatcher-types";
@@ -72,6 +74,10 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         close: notImplemented("close") as any,
         getStatus: notImplemented("getStatus") as any,
         getAgentSchemas: notImplemented("getAgentSchemas") as any,
+        searchActions: notImplemented("searchActions"),
+        executeAction: notImplemented("executeAction"),
+        continueAction: notImplemented("continueAction"),
+        cancelAction: notImplemented("cancelAction"),
         respondToChoice: notImplemented("respondToChoice") as any,
         getDisplayHistory: notImplemented("getDisplayHistory") as any,
         async cancelCommand(...args) {
@@ -149,6 +155,161 @@ describe("dispatcher RPC lifecycle options", () => {
     });
 });
 
+describe("dispatcher RPC structured discovery", () => {
+    it("forwards queries and complete contracts", async () => {
+        const identity = { schemaName: "test.sub", actionName: "select" };
+        const searchResult: ActionSearchResult = {
+            protocolVersion: 1,
+            scopeId: "server-scope",
+            actions: [
+                {
+                    ...identity,
+                    description: "Select",
+                    input: {
+                        format: "typescript",
+                        typeName: "Select",
+                        schemaText:
+                            'type Select = { actionName: "select"; parameters: { id?: string } };',
+                    },
+                    policy: { effects: "unknown", confirmation: "required" },
+                    output: {
+                        envelope: "ActionResult",
+                        optional: true,
+                        resultValue: { type: "unknown", optional: true },
+                        resultEntity: { type: "Entity", optional: true },
+                        entities: { type: "Entity[]", optional: true },
+                    },
+                    interactions: {
+                        mode: "may-require-interaction",
+                        kinds: [
+                            "question",
+                            "choice",
+                            "form",
+                            "action-proposal",
+                        ],
+                    },
+                },
+            ],
+        };
+        const calls: { method: string; input: unknown }[] = [];
+        const searchActions: Dispatcher["searchActions"] = async (input) => {
+            calls.push({ method: "search", input });
+            return searchResult;
+        };
+        const channels = createChannelPair();
+        createDispatcherRpcServer(
+            makeStubDispatcher({ searchActions }),
+            channels.serverChannel,
+        );
+        const { dispatcher } = createDispatcherRpcClient(
+            channels.clientChannel,
+        );
+        const request = { query: "select" };
+        await expect(dispatcher.searchActions(request)).resolves.toEqual(
+            searchResult,
+        );
+        expect(calls).toEqual([{ method: "search", input: request }]);
+    });
+
+    describe("dispatcher RPC structured execution", () => {
+        it("roundtrips execution, continuation and cancellation with result data", async () => {
+            const channels = createChannelPair();
+            const seen: unknown[] = [];
+            const result: StructuredActionExecutionResult = {
+                protocolVersion: 1,
+                scopeId: "scope",
+                operationId: "operation",
+                status: "completed",
+                output: ["Saved"],
+                results: [
+                    {
+                        action: {
+                            schemaName: "test",
+                            actionName: "save",
+                            parameters: { name: "item" },
+                        },
+                        result: {
+                            resultValue: { id: "stable" },
+                            entities: [],
+                            resultEntity: {
+                                name: "item",
+                                type: ["Item"],
+                                uniqueId: "stable",
+                            },
+                        },
+                    },
+                ],
+            };
+            createDispatcherRpcServer(
+                makeStubDispatcher({
+                    executeAction: async (request) => {
+                        seen.push(request);
+                        return result;
+                    },
+                    continueAction: async (request) => {
+                        seen.push(request);
+                        return result;
+                    },
+                    cancelAction: async (request) => {
+                        seen.push(request);
+                        return result;
+                    },
+                }),
+                channels.serverChannel,
+            );
+            const { dispatcher } = createDispatcherRpcClient(
+                channels.clientChannel,
+            );
+            const request = {
+                protocolVersion: 1 as const,
+                scopeId: "scope",
+                schemaName: "test",
+                actionName: "save",
+                parameters: { name: "item" },
+            };
+            const continuation = {
+                protocolVersion: 1 as const,
+                scopeId: "scope",
+                operationId: "operation",
+                interactionId: "opaque",
+                response: { type: "confirmation" as const, approved: true },
+            };
+            const cancellation = {
+                protocolVersion: 1 as const,
+                scopeId: "scope",
+                operationId: "operation",
+            };
+            await expect(dispatcher.executeAction(request)).resolves.toEqual(
+                result,
+            );
+            await expect(
+                dispatcher.continueAction(continuation),
+            ).resolves.toEqual(result);
+            await expect(
+                dispatcher.cancelAction(cancellation),
+            ).resolves.toEqual(result);
+            expect(seen).toEqual([request, continuation, cancellation]);
+        });
+    });
+
+    it("propagates discovery errors without a command fallback", async () => {
+        const channels = createChannelPair();
+        createDispatcherRpcServer(
+            makeStubDispatcher({
+                async searchActions() {
+                    throw new Error("Invalid action filter");
+                },
+            }),
+            channels.serverChannel,
+        );
+        const { dispatcher } = createDispatcherRpcClient(
+            channels.clientChannel,
+        );
+        await expect(dispatcher.searchActions({ query: "" })).rejects.toThrow(
+            "Invalid action filter",
+        );
+    });
+});
 describe("dispatcher RPC — cancelInteraction (fire-and-forget)", () => {
     it("sends a call message and does not wait for a reply", () => {
         const { serverChannel, clientChannel } = createChannelPair();

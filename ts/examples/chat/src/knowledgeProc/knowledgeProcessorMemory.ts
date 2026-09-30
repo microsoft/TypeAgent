@@ -893,9 +893,11 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
             concurrency,
         )) {
             printer.writeBatchProgress(slice, "Indexing messages", msgCount);
-            await asyncArray.mapAsync(slice.value, concurrency, (m) =>
-                messageIndex.put(m.value, m.blockId),
-            );
+            if (messageIndex) {
+                await asyncArray.mapAsync(slice.value, concurrency, (m) =>
+                    messageIndex.put(m.value, m.blockId),
+                );
+            }
             printer.writeBatchProgress(slice, "Extracting knowledge", msgCount);
             const knowledgeResults = await conversation.extractKnowledge(
                 cm.knowledgeExtractor,

@@ -498,7 +498,9 @@ export async function addMessageToConversation(
     );
 
     const messageIndex = await conversation.getMessageIndex();
-    await messageIndex.put(messageBlock.value, messageBlock.blockId);
+    if (messageIndex) {
+        await messageIndex.put(messageBlock.value, messageBlock.blockId);
+    }
 
     const extractedKnowledge = await extractKnowledgeFromMessage(
         knowledgeExtractor,
@@ -531,11 +533,13 @@ export async function addMessageBatchToConversation(
     assert.ok(messages.length === messageBlocks.length);
 
     const messageIndex = await conversation.getMessageIndex();
-    await messageIndex.putMultiple(
-        messageBlocks.map((m) => {
-            return [m.value, m.blockId];
-        }),
-    );
+    if (messageIndex) {
+        await messageIndex.putMultiple(
+            messageBlocks.map((m) => {
+                return [m.value, m.blockId];
+            }),
+        );
+    }
     //
     // Knowledge extraction can be done in parallel
     // But we update the knowledge index sequentially

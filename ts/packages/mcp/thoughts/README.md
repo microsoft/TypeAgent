@@ -1,6 +1,6 @@
 # Thoughts MCP Server
 
-Convert raw text, stream-of-consciousness, and unstructured notes into well-formatted markdown documents using Claude. Also supports audio transcription from WAV files.
+Convert raw text, stream-of-consciousness, and unstructured notes into well-formatted markdown documents using an LLM. The default endpoint uses GitHub Copilot. Also supports audio transcription from WAV files.
 
 ## Features
 
@@ -68,13 +68,13 @@ cat stream_of_consciousness.txt | thoughts > organized.md
 -o, --output <file>        Output file (or "-" for stdout, default: stdout)
 --instructions <text>      Additional formatting instructions
 -t, --tags <tags>          Comma-separated tags/keywords (e.g., "meeting,q1-2026,planning")
--m, --model <model>        Claude model to use (default: claude-sonnet-4-20250514)
+-m, --model <model>        LLM endpoint to use (default: copilot:gpt-5.6-sol)
 -h, --help                 Show help message
 ```
 
 **Notes**:
 
-- WAV files are automatically detected by the `.wav` extension and transcribed using Azure Cognitive Services before being processed by Claude
+- WAV files are automatically detected by the `.wav` extension and transcribed using Azure Cognitive Services before being processed by the LLM
 - Tags are added as a markdown heading section at the end of the document for easy searching and filtering
 
 ### Inline Tags
@@ -85,7 +85,7 @@ While recording audio or writing text, you can mark specific sections with inlin
 - "tag design ideas"
 - "tag this as action item"
 
-Claude will automatically:
+The LLM will automatically:
 
 1. Remove the tag phrase from the content
 2. Insert a tag marker at that location: **🏷️ tag-name**
@@ -142,7 +142,7 @@ Convert raw text into markdown:
 {
   "rawText": "your raw notes here...",
   "instructions": "Format as meeting notes", // optional
-  "model": "claude-sonnet-4-20250514" // optional
+  "model": "copilot:gpt-5.6-sol" // optional
 }
 ```
 

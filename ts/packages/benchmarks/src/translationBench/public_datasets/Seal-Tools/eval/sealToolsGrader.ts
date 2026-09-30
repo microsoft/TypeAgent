@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { TranslationBenchRow } from "../../../runner/runner.js";
-import type { SealToolsGoldAction } from "../toTypeAgentSchema.js";
+import type { SealToolsGoldCall } from "../toTypeAgentSchema.js";
 import { isPythonNumber, toPythonNumberString } from "../pythonLiteral.js";
 
 export interface SealToolsMetric {
@@ -252,7 +252,7 @@ export function restoreSealToolsRawActions(
 
 export function scoreSealToolsOfficial(
     rows: readonly SealToolsScoredRow[],
-    goldByCaseId: ReadonlyMap<string, readonly SealToolsGoldAction[]>,
+    goldByCaseId: ReadonlyMap<string, readonly SealToolsGoldCall[]>,
     options: SealToolsScoreOptions = {},
 ): SealToolsOfficialScore {
     const ignoreStringCase = options.ignoreStringCase ?? false;

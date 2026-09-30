@@ -144,6 +144,7 @@ describe("dev action routing", () => {
         });
         expect(guidance).toContain("reportPowerShellCapabilityOutcome");
         expect(guidance).toContain("addPowerShellFlowPatterns");
+        expect(guidance).toContain("without executing the flow again");
         expect(guidance).toContain("executes the draft once");
     });
 

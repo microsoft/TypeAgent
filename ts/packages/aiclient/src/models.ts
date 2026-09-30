@@ -24,7 +24,14 @@ export type CompletionSettings = {
     top_p?: number;
 
     max_completion_tokens?: number;
-    reasoning_effort?: "minimal" | "low" | "medium" | "high";
+    reasoning_effort?:
+        | "none"
+        | "minimal"
+        | "low"
+        | "medium"
+        | "high"
+        | "xhigh"
+        | "max";
     verbosity?: "low" | "medium" | "high";
 };
 

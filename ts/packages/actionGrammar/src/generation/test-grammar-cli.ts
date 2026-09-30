@@ -11,6 +11,14 @@ import { loadConfigSync } from "@typeagent/config";
 loadConfigSync();
 
 import { ClaudeGrammarGenerator } from "./grammarGenerator.js";
+import {
+    CopilotGrammarGenerator,
+    defaultCopilotGrammarModel,
+} from "./copilotGrammarGenerator.js";
+import {
+    defaultClaudeGrammarModel,
+    type GrammarModelProvider,
+} from "./grammarModel.js";
 import { loadSchemaInfo } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
 
@@ -20,6 +28,7 @@ interface TestGrammarOptions {
     action: string;
     parameters: string;
     model?: string;
+    provider: GrammarModelProvider;
     verbose?: boolean;
     help?: boolean;
 }
@@ -31,7 +40,7 @@ function parseArgs(): TestGrammarOptions {
         request: "",
         action: "",
         parameters: "{}",
-        model: "claude-sonnet-4-20250514",
+        provider: "copilot",
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -57,6 +66,16 @@ function parseArgs(): TestGrammarOptions {
             case "-m":
                 options.model = args[++i];
                 break;
+            case "--provider": {
+                const provider = args[++i];
+                if (provider !== "copilot" && provider !== "claude") {
+                    throw new Error(
+                        `Unsupported provider "${provider}". Use copilot or claude.`,
+                    );
+                }
+                options.provider = provider;
+                break;
+            }
             case "--verbose":
             case "-v":
                 options.verbose = true;
@@ -82,7 +101,8 @@ Options:
   -r, --request <text>       Natural language request (required)
   -a, --action <name>        Action name (required)
   -p, --parameters <json>    Action parameters as JSON (default: {})
-  -m, --model <model>        Claude model to use (default: claude-sonnet-4-20250514)
+  --provider <provider>      Model provider: copilot or claude (default: copilot)
+  -m, --model <model>        Model to use (default: ${defaultCopilotGrammarModel})
   -v, --verbose              Show detailed analysis
   -h, --help                 Show this help message
 
@@ -152,8 +172,18 @@ async function main() {
         );
 
         // Generate grammar
-        console.log(`\nGenerating grammar with ${options.model}...`);
-        const generator = new ClaudeGrammarGenerator(options.model!);
+        const model =
+            options.model ??
+            (options.provider === "claude"
+                ? defaultClaudeGrammarModel
+                : defaultCopilotGrammarModel);
+        console.log(
+            `\nGenerating grammar with ${options.provider}:${model}...`,
+        );
+        const generator =
+            options.provider === "claude"
+                ? new ClaudeGrammarGenerator(model)
+                : new CopilotGrammarGenerator(model);
         const analysis = await generator.generateGrammar(testCase, schemaInfo);
 
         // Display results

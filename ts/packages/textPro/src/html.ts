@@ -658,7 +658,7 @@ export class HtmlToMdConvertor {
 
     private appendImage(element: cheerio.Element) {
         const src = element.attribs["src"];
-        if (src.length > 0) {
+        if (src && src.length > 0) {
             const alt = element.attribs["alt"] ?? "";
             this.appendMarkup(`![${alt}](${src})`);
             this.eventHandler?.onImg(alt, src);

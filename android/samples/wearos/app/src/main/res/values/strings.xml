@@ -11,6 +11,13 @@
     <string name="stop_playing_recording">Stop Playing Recording</string>
     <string name="stop_playing_music">Stop Playing Music</string>
     <string name="speech_to_text_in_progress">Speech to Text in Progress</string>
+    <string name="speech_to_text_prompt">What should TypeAgent do?</string>
+    <string name="prompt_sending">Sending…</string>
+    <string name="prompt_handed_to_phone">Handed to phone</string>
+    <string name="prompt_too_long">Prompt too long</string>
+    <string name="prompt_send_failed">Could not hand prompt to phone</string>
+    <string name="phone_unavailable">Phone unavailable</string>
+    <string name="speech_recognition_unavailable">Speech recognition unavailable</string>
     <string name="take_a_picture">Take a picture</string>
     <string name="email_picture">Email Picture</string>
 </resources>

@@ -221,7 +221,18 @@ export class ActionSchemaFileCache {
                       parsedActionSchema: parseActionSchemaSource(
                           source,
                           actionConfig.schemaName,
-                          actionConfig.schemaType,
+                          typeof actionConfig.schemaType === "string"
+                              ? actionConfig.schemaType
+                              : {
+                                    ...actionConfig.schemaType,
+                                    ...(actionConfig.schemaType.entities ===
+                                    undefined
+                                        ? {}
+                                        : {
+                                              entity: actionConfig.schemaType
+                                                  .entities,
+                                          }),
+                                },
                           fullPath,
                           config ? <SchemaConfig>JSON.parse(config) : undefined,
                           true,
@@ -330,6 +341,18 @@ export function createSchemaInfoProvider(
     const result: SchemaInfoProvider = {
         getActionSchemaFileHash: (schemaName) =>
             getActionSchemaFile(schemaName).sourceHash,
+        getActionCacheBinding: (schemaName, actionName) => {
+            const binding = provider.getActionConfig(schemaName).cacheBinding;
+            const actionFingerprint = binding?.actionFingerprints[actionName];
+            return binding === undefined || actionFingerprint === undefined
+                ? undefined
+                : {
+                      sourceId: binding.sourceId,
+                      actionFingerprint,
+                  };
+        },
+        getSchemaCacheBinding: (schemaName) =>
+            provider.getActionConfig(schemaName).cacheBinding,
         getActionNamespace: (schemaName) =>
             getActionSchemaFile(schemaName).parsedActionSchema.actionNamespace,
         getActionCacheEnabled: (schemaName, actionName) =>

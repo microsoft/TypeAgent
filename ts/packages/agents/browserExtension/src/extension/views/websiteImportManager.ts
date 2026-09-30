@@ -401,6 +401,7 @@ export class WebsiteImportManager {
                     (callback as any)._messageListener,
                 );
             }
+            (callback as any)._removeImportProgressListener?.();
             if (
                 (callback as any)._progressHandler &&
                 (callback as any)._importId

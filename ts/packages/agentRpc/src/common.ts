@@ -138,20 +138,27 @@ export function createChannelProvider(
             return;
         }
         if (message.name === undefined) {
-            debugError(
-                `Missing channel name in message: ${JSON.stringify(message)}`,
-            );
+            debugError("Missing channel name in message");
             return;
         }
         const channelAdapter = channelAdapters.get(message.name);
         if (channelAdapter === undefined) {
             debugError(
-                `Invalid channel name ${message.name} in message (available: ${Array.from(channelAdapters.keys()).join(", ")})`,
+                `Invalid channel name in message (available channels: ${channelAdapters.size})`,
             );
             return;
         }
-        const msgType = message.message?.type || "unknown";
-        const callId = message.message?.callId ?? "n/a";
+        // Remote envelopes may contain capabilities or action parameters.
+        // Log only recognized routing metadata, never arbitrary wire values.
+        const type = message.message?.type;
+        const msgType =
+            typeof type === "string" &&
+            ["call", "invoke", "invokeResult", "invokeError"].includes(type)
+                ? type
+                : "unknown";
+        const callId = Number.isSafeInteger(message.message?.callId)
+            ? message.message.callId
+            : "n/a";
         debug(
             `routing message to channel: ${message.name} (type=${msgType}, callId=${callId})`,
         );

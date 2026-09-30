@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">TypeAgent Android Chat Sample</string>
+    <!-- Title of the system share sheet opened by the shareText device action. -->
+    <string name="share_chooser_title">Share via</string>
 </resources>

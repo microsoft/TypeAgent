@@ -19,6 +19,30 @@ An Android Jetpack Compose chat client that connects to a TypeAgent agent-server
   [Conversation persistence](#conversation-persistence))
 - DevTunnel authentication via `X-Tunnel-Authorization` header
 - Build-time configuration via environment variables and `BuildConfig`
+- Wear OS prompt handoff from the companion sample
+
+## Wear OS prompt handoff
+
+The companion project at [`../wearos`](../wearos/) recognizes speech on the
+watch and opens this app with a `typeagentchat://main` deep link. The phone owns
+the only TypeAgent WebSocket connection and submits the prompt after that
+connection is ready.
+
+This is intentionally a fire-and-forget POC. The watch reports whether Android
+handed the prompt to the paired phone, but TypeAgent responses remain in the
+phone chat.
+
+External prompts fill the composer and wait for an explicit Send tap by default.
+To enable automatic execution for controlled POC testing, build with:
+
+```powershell
+.\gradlew.bat -Ptypeagent.wear.autoexecute=true assembleDebug
+```
+
+The deep link is `BROWSABLE`, as required by `RemoteActivityHelper`, and can
+therefore be invoked by another app. The build flag is a demo switch, not an
+authentication boundary. Use the Wear Data Layer before enabling automatic
+execution in a production app.
 
 ## Conversation persistence
 
@@ -106,6 +130,11 @@ interaction traffic.
 | `composeSms` | `Intent.ACTION_SENDTO` with an `smsto:` URI and `sms_body` | Opens a pre-filled draft — the user still presses send, so no `SEND_SMS` permission is needed. With no recipient the draft opens with an empty To field; an *unusable* recipient is rejected rather than silently dropped. |
 | `webSearch` | `Intent.ACTION_WEB_SEARCH` with `SearchManager.QUERY` | The query travels as an extra rather than being spliced into a URL, so it needs no encoding. |
 | `openWebPage` | `Intent.ACTION_VIEW` with an `http`/`https` URI | The scheme allowlist is the load-bearing check: `ACTION_VIEW` would otherwise follow `market:`, `file:` or any app's own deep-link scheme, turning "open this page" into an arbitrary-app launcher driven by text the model read. URLs containing whitespace are refused rather than repaired into a different host. |
+| `composeEmail` | `Intent.ACTION_SENDTO` with a bare `mailto:` URI plus `EXTRA_EMAIL`/`EXTRA_CC`/`EXTRA_BCC` | Opens a draft — the user still presses send, so nothing leaves the device unattended. `ACTION_SENDTO` is used rather than `ACTION_SEND` so only mail apps resolve, not every share target. Recipients ride as extras rather than being spliced into the URI, which keeps encoding out of the picture. One unusable address fails the whole action: a draft addressed to fewer people than asked for looks like success. |
+| `shareText` | `Intent.ACTION_SEND` (`text/plain`) wrapped in `Intent.createChooser` | The user picks the destination app, so the model never chooses where the text goes. `createChooser` always resolves, so the inner `ACTION_SEND` intent is resolved first — otherwise a device with no text handler would report a false success. Newlines survive here (unlike the URI-bound actions) because shared text is a document, not a query. |
+| `openSettings` | `Settings.ACTION_*` for a fixed screen | The model picks from a closed `AndroidSettingsScreen` enum, never a raw action string, so it cannot be steered into an arbitrary system activity. Screens only *display* settings; nothing is toggled. `appInfo` is pinned to this app's own package. |
+| `createCalendarEvent` | `Intent.ACTION_INSERT` on `CalendarContract.Events.CONTENT_URI` | Opens the calendar app's pre-filled *new event* editor — the user still saves it, so no `WRITE_CALENDAR` permission is needed. Times are ISO-8601 and are resolved without `java.time` (minSdk 24). All-day events are anchored at UTC midnight as `CalendarContract` requires; an all-day event that also carries a time of day is rejected rather than guessed at. Spans longer than 366 days are refused. |
+| `playMusicFromSearch` | `MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH` | Asks whichever music app claims the intent to play the best match. What actually plays is up to that app, so the action reports what it dispatched, not what started. An unrecognised `focus` fails rather than falling back to `any`, which would quietly search for something broader than asked. |
 
 All actions require the app to be in the foreground: Android 10+ silently refuses
 background activity starts (no exception is thrown), so the app checks its own
@@ -169,6 +198,7 @@ The app connects automatically on launch. Tap **Retry** in the status bar if the
 
 - **Token storage**: `TYPEAGENT_TUNNEL_TOKEN` is compiled into `BuildConfig`. Do not distribute APKs built with a sensitive or long-lived token.
 - **Token transmission**: The token is sent only as an HTTP upgrade header and is never logged.
+- **Wear prompt transport**: The POC deep link is externally reachable. Only enable automatic execution with `-Ptypeagent.wear.autoexecute=true` on controlled test devices.
 
 [devtunnel]: https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/
 [devtunnel-cli]: https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/get-started

@@ -4,6 +4,7 @@
 import { isDeepStrictEqual } from "node:util";
 
 import { PythonNumber } from "../../pythonLiteral.js";
+import { isRecord, parsePythonLexemeJson } from "../../rawJsonScan.js";
 
 const PENDING_ACTION_NAME = "pendingRequestAction";
 const MAX_RAW_RESPONSE_DEPTH = 100;
@@ -27,88 +28,7 @@ export interface DroidCallRawActionCandidates {
 
 // Return objects as named records while rejecting arrays and scalar values.
 function asRecord(value: unknown): Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : {};
-}
-
-// Return the end of one balanced JSON object or array candidate.
-function findJsonEnd(text: string, start: number): number | undefined {
-    const stack: string[] = [];
-    let quoted = false;
-    let escaped = false;
-    for (let index = start; index < text.length; index++) {
-        const character = text[index]!;
-        if (quoted) {
-            if (escaped) escaped = false;
-            else if (character === "\\") escaped = true;
-            else if (character === '"') quoted = false;
-            continue;
-        }
-        if (character === '"') {
-            quoted = true;
-            continue;
-        }
-        if (character === "{" || character === "[") {
-            stack.push(character);
-            continue;
-        }
-        if (character !== "}" && character !== "]") continue;
-
-        const opener = stack.pop();
-        const matches =
-            (opener === "{" && character === "}") ||
-            (opener === "[" && character === "]");
-        if (!matches) return undefined;
-        if (stack.length === 0) return index + 1;
-    }
-    return undefined;
-}
-
-// Preserve number spellings because the official grader compares Python values.
-function parseJsonWithNumberLexemes(text: string): unknown[] {
-    if (text.length > MAX_RAW_RESPONSE_LENGTH) {
-        throw new SyntaxError("Response exceeds maxLength");
-    }
-    const values: unknown[] = [];
-    let candidateCount = 0;
-    const parse = JSON.parse as unknown as (
-        source: string,
-        reviver: (
-            key: string,
-            value: unknown,
-            context?: { source?: string },
-        ) => unknown,
-    ) => unknown;
-    for (let start = 0; start < text.length; start++) {
-        if (text[start] !== "{" && text[start] !== "[") continue;
-        candidateCount++;
-        if (candidateCount > MAX_JSON_CANDIDATES) {
-            throw new SyntaxError("Response exceeds maxJsonCandidates");
-        }
-        const end = findJsonEnd(text, start);
-        if (end === undefined) continue;
-        try {
-            values.push(
-                parse(text.slice(start, end), (_key, value, context) => {
-                    if (typeof value !== "number") return value;
-                    if (context?.source === undefined) {
-                        throw new Error(
-                            "JSON.parse does not expose number lexemes",
-                        );
-                    }
-                    return new PythonNumber(context.source);
-                }),
-            );
-            start = end - 1;
-        } catch {
-            // A balanced prose fragment may precede the JSON response.
-        }
-    }
-    if (values.length === 0) {
-        throw new SyntaxError("Response does not contain valid JSON");
-    }
-    return values;
+    return isRecord(value) ? value : {};
 }
 
 // Reject action parameters that exceed the parser's nesting limit.
@@ -213,7 +133,11 @@ export function parseDroidCallRawResponse(
     text: string,
 ): DroidCallRawActionCandidates {
     let selected: DroidCallRawActionCandidates | undefined;
-    for (const value of parseJsonWithNumberLexemes(text)) {
+    for (const value of parsePythonLexemeJson(text, {
+        multiple: true,
+        maxLength: MAX_RAW_RESPONSE_LENGTH,
+        maxCandidates: MAX_JSON_CANDIDATES,
+    })) {
         const result: DroidCallRawActionCandidates = {
             actions: [],
             finalizedActionNames: [],

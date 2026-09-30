@@ -9,7 +9,7 @@ import {
     resolveExistingFileWithinRoot,
     resolveRealDirectory,
     resolveWritableFileWithinRoot,
-} from "../src/agent/pathPolicy.js";
+} from "../src/agent/documentPathPolicy.js";
 
 describe("markdown creation path policy", () => {
     let temporaryDirectory: string;

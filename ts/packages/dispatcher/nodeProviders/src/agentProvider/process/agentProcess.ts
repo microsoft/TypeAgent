@@ -3,6 +3,7 @@
 
 import registerDebug from "debug";
 import { AppAgent } from "@typeagent/agent-sdk";
+import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import {
     AgentControlMessage,
     AgentInterfaceFunctionName,
@@ -69,6 +70,8 @@ process.on("SIGINT", () => {
 });
 
 async function startAgentProcess(): Promise<void> {
+    initRuntimeConfigFromProcessEnv();
+
     const loadedAgentDebug = loadAgentDebug(modulePath, registerDebug);
     const agentDebug = loadedAgentDebug?.debug;
     if (loadedAgentDebug !== undefined) {

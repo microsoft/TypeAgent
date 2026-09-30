@@ -10,7 +10,6 @@ import type { AiSearchLookupMode } from "./lookup/aiSearchLookup.mjs";
 import { ChildProcess } from "child_process";
 import { TabTitleIndex } from "./tabTitleIndex.mjs";
 import { TextEmbeddingModel } from "@typeagent/aiclient";
-import type { WebsiteCollection, IndexData } from "@typeagent/website-memory";
 import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import { ChoiceManager } from "@typeagent/agent-sdk/helpers/action";
 
@@ -21,12 +20,22 @@ import {
     AgentWebSocketServer,
 } from "./agentWebSocketServer.mjs";
 import { getClientType } from "@typeagent/agent-server-protocol";
+import type { MemoryService } from "@typeagent/memory-service";
+import type { BrowserMemoryService } from "./browserMemoryService.mjs";
+import type { GraphCache } from "./knowledge/types/knowledgeTypes.mjs";
+
+export type BrowserAgentInitOptions = {
+    browserControl?: BrowserControl;
+    memoryServiceClient?: MemoryService;
+};
 
 export type BrowserActionContext = {
     sessionId: string;
     clientBrowserControl?: BrowserControl | undefined;
     externalBrowserControl?: ExternalBrowserClient | undefined;
     useExternalBrowserControl: boolean;
+    memoryServiceClient?: MemoryService;
+    browserMemoryService?: BrowserMemoryService;
     preferredClientType?: "extension" | "electron" | undefined;
     // Runtime override for the internet-lookup backend (@browser lookup ...);
     // takes precedence over azureAISearch.mode / AZURE_AI_SEARCH_LOOKUP_MODE.
@@ -40,10 +49,8 @@ export type BrowserActionContext = {
     browserProcess?: ChildProcess | undefined;
     tabTitleIndex?: TabTitleIndex | undefined;
     allowDynamicAgentDomains?: string[];
-    websiteCollection?: WebsiteCollection | undefined;
-    graphJsonStorage?: any | undefined; // GraphologyPersistenceManager - field name maintained for compatibility
+    graphCache?: GraphCache | undefined;
     fuzzyMatchingModel?: TextEmbeddingModel | undefined;
-    index: IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
     // Handle returned by sessionContext.registerPort for the views
@@ -73,6 +80,21 @@ export type BrowserActionContext = {
     // enable/disable doesn't double-count.
     browserSchemaEnabled?: boolean | undefined;
 };
+
+export function normalizeBrowserAgentInitOptions(
+    options: unknown,
+): BrowserAgentInitOptions {
+    if (
+        typeof options === "object" &&
+        options !== null &&
+        ("browserControl" in options || "memoryServiceClient" in options)
+    ) {
+        return options as BrowserAgentInitOptions;
+    }
+    return options === undefined
+        ? {}
+        : { browserControl: options as BrowserControl };
+}
 
 export function getBrowserControl(agentContext: BrowserActionContext) {
     const browserControl = agentContext.useExternalBrowserControl

@@ -6,16 +6,17 @@ TypeAgent translation-bench dataset named **`seal-tools-validation`**.
 
 ## Files
 
-- `get-dataset.ts` — downloads the HuggingFace **`validation`** split (700 rows)
-  via the datasets-server rows API (JSON, no parquet reader) and caches it as
-  `seal-tools-validation.hf.jsonl`.
-- `pythonLiteral.ts` — tolerant parser for the Python `repr()` literals embedded
-  in each row's conversation (`api_list = [...]`, and the gold call list).
+- `getDataset.ts` — shared Seal-Tools source support: pinned download of the
+  HuggingFace **`validation`** split (700 rows) through
+  `../huggingFaceRows.ts`, row parsing through `../pythonLiteral.ts`
+  (`api_list = [...]`, `task_instruction`, gold call list), and conversion of
+  each tool to an OpenAI function schema.
 - `toTypeAgentSchema.ts` — `toTypeAgentEvalRow()` casts one row into a
   self-contained TypeAgent **eval row**: the utterance plus **only that row's
   own `api_list` tools** (OpenAI function form) and the gold ordered actions.
 - `typeAgentOverrides.ts` — audited corrections and exclusions used only by the
   supplemental TypeAgent score. Raw Seal gold remains unchanged.
+- `sealToolsScorer.ts` — Seal-compatible tool and parameter scoring.
 - `index.ts` — entry point that runs download → convert → write JSONL.
 
 ## Mapping
@@ -41,6 +42,11 @@ request. Rows with a clear source-gold error use an explicit corrected
 `expectedActions` value. Each affected row records the reason in
 `typeAgentScoring`.
 
+`sealToolsGoldActions` retains numeric Python spellings in JSON as
+`{ "__pythonNumber": "..." }`. The Seal-compatible scorer recognizes these
+markers after the generated rows are read back from JSONL. Overrides also update
+`dimensions.arity` and `dimensions.shape` to match the corrected actions.
+
 ## Build & run
 
 From `ts/packages/benchmarks`:
@@ -52,7 +58,7 @@ node dist/translationBench/public_datasets/Seal-Tools/index.js
 
 Outputs land in this folder:
 
-- `seal-tools-validation.jsonl` — one self-contained eval row per line (utterance
-  - its own tools + gold actions). Committed via **Git LFS** (`.gitattributes`).
-- `seal-tools-validation.hf.jsonl` — the raw HuggingFace download cache;
-  **gitignored** and reused on the next run to skip re-downloading.
+- `seal-tools-validation.jsonl` — generated TypeAgent rows; kept local.
+- `seal-tools-validation.hf.jsonl` — raw HuggingFace cache reused on the next run.
+
+Both generated files are gitignored.

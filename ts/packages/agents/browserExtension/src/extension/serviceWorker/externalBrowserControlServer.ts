@@ -33,6 +33,48 @@ async function ensureActiveTab() {
     return targetTab;
 }
 
+async function getWindowIdByTitle(title: string): Promise<number> {
+    const trimmedTitle = title.trim();
+    if (trimmedTitle.length === 0) {
+        throw new Error("Browser window title is empty.");
+    }
+
+    const { caseInsensitiveWindowTitleMatching = true } =
+        await chrome.storage.sync.get({
+            caseInsensitiveWindowTitleMatching: true,
+        });
+    const normalizeTitle = (value: string) =>
+        caseInsensitiveWindowTitleMatching
+            ? value.trim().toLowerCase()
+            : value.trim();
+    const normalizedTitle = normalizeTitle(trimmedTitle);
+
+    const windows = await chrome.windows.getAll({ populate: true });
+    const matchingWindows = windows.filter((window) => {
+        if (window.type !== "normal" || window.id === undefined) {
+            return false;
+        }
+        // A browser window's visible title comes from its active tab. Inactive
+        // tab titles identify tabs, not separate windows.
+        const activeTab = window.tabs?.find((tab) => tab.active);
+        return (
+            activeTab?.title !== undefined &&
+            normalizeTitle(activeTab.title) === normalizedTitle
+        );
+    });
+
+    if (matchingWindows.length === 0) {
+        throw new Error(`No browser window found with title '${title}'.`);
+    }
+    if (matchingWindows.length > 1) {
+        throw new Error(
+            `Multiple browser windows found with title '${title}'.`,
+        );
+    }
+
+    return matchingWindows[0].id!;
+}
+
 /**
  * Resolves once chrome.tabs.onUpdated fires status === "complete" for the
  * given tabId, or after `timeout` ms. Always register this BEFORE issuing the
@@ -224,6 +266,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const libraryMapping: Record<string, string> = {
                 "/annotationsLibrary.html": "views/annotationsLibrary.html",
                 "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
+                "/memoryCenter.html": "views/memoryCenter.html",
                 "/macrosLibrary.html": "views/macrosLibrary.html",
                 "/entityGraphView.html": "views/entityGraphView.html",
                 "/topicGraphView.html": "views/topicGraphView.html",
@@ -462,13 +505,26 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             return url;
         },
 
-        closeWindow: async () => {
+        closeWindow: async (title?: string) => {
+            const runtimeTitle: unknown = title;
+            if (
+                runtimeTitle !== undefined &&
+                typeof runtimeTitle !== "string"
+            ) {
+                throw new Error("Browser window title must be a string.");
+            }
+            if (typeof runtimeTitle === "string") {
+                await chrome.windows.remove(
+                    await getWindowIdByTitle(runtimeTitle),
+                );
+                return;
+            }
+
             const current = await chrome.windows.getCurrent();
-            if (current.id) {
-                await chrome.windows.remove(current.id);
-            } else {
+            if (current.id === undefined) {
                 throw new Error("No current window found to close.");
             }
+            await chrome.windows.remove(current.id);
         },
 
         search: async (

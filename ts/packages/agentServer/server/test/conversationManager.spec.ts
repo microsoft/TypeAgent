@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "@jest/globals";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { DispatcherOptions } from "agent-dispatcher";
+import type { ClientIO, DispatcherOptions } from "agent-dispatcher";
 import { createConversationManager } from "../src/conversationManager.js";
 
 const tempDirs: string[] = [];
@@ -153,5 +153,65 @@ describe("ConversationManager renameConversation", () => {
             )?.name,
         ).toBe("Project");
         await manager.close();
+    });
+});
+
+describe("ConversationManager structured joins", () => {
+    test("rejects a read-only conversation before initializing an execution dispatcher", async () => {
+        const manager = await createConversationManager(
+            "test-host",
+            {} as DispatcherOptions,
+            await createTempDir(),
+        );
+        try {
+            const imported = await manager.importCopilotMirror({
+                sessionId: "copilot-session",
+                name: "Read-only mirror",
+                createdAt: new Date(0).toISOString(),
+                displayLogEntries: [],
+                lastSyncedTurnIndex: 0,
+            });
+            await expect(
+                manager.joinConversation(
+                    imported.conversationId,
+                    {} as ClientIO,
+                    () => {},
+                    {
+                        conversationId: imported.conversationId,
+                        structuredActions: {},
+                    },
+                ),
+            ).rejects.toThrow(
+                "Structured execution is unavailable in a read-only conversation",
+            );
+            expect((await manager.listConversations())[0].clientCount).toBe(0);
+        } finally {
+            await manager.close();
+        }
+    });
+
+    test("rejects mismatched explicit targets before restoring a dispatcher", async () => {
+        const manager = await createConversationManager(
+            "test-host",
+            {} as DispatcherOptions,
+            await createTempDir(),
+        );
+        try {
+            const conversation = await manager.createConversation("Target");
+            await expect(
+                manager.joinConversation(
+                    conversation.conversationId,
+                    {} as ClientIO,
+                    () => {},
+                    {
+                        conversationId: "different",
+                        structuredActions: {},
+                    },
+                ),
+            ).rejects.toThrow("explicit target conversationId");
+            expect((await manager.listConversations())[0].clientCount).toBe(0);
+        } finally {
+            await manager.close();
+        }
     });
 });

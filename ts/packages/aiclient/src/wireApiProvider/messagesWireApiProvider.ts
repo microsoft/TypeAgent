@@ -142,6 +142,9 @@ export class MessagesWireApiProvider implements ProviderAdapter {
         if (cs.top_p !== undefined) {
             body.top_p = cs.top_p;
         }
+        if (cs.reasoning_effort !== undefined) {
+            body.output_config = { effort: cs.reasoning_effort };
+        }
         if (request.stream) {
             body.stream = true;
         }

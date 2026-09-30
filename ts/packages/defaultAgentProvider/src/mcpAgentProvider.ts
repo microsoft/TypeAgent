@@ -42,6 +42,7 @@ export type McpAppAgent = {
     agent: AppAgent;
     connection: McpConnection | undefined;
     serverProcess?: ChildProcess | undefined;
+    loadError?: Error;
 };
 export type McpAppAgentRecord = {
     agentP: Promise<McpAppAgent>;
@@ -243,6 +244,7 @@ function createMcpAppAgentRecord(
         let connection: McpConnection | undefined;
         let serverProcess: ChildProcess | undefined;
         let agent: AppAgent;
+        let loadError: Error | undefined;
         try {
             if (info.serverCommand !== undefined) {
                 const occupied =
@@ -317,9 +319,11 @@ function createMcpAppAgentRecord(
                     return convertToolResult(action.actionName, result);
                 },
             };
-        } catch (error: any) {
+        } catch (error: unknown) {
+            loadError =
+                error instanceof Error ? error : new Error(String(error));
             debugError(
-                `[${appAgentName}] failed to connect: ${error?.message ?? error}`,
+                `[${appAgentName}] failed to connect: ${loadError.message}`,
             );
             if (connection !== undefined) {
                 await connection.close().catch(() => {});
@@ -332,7 +336,7 @@ function createMcpAppAgentRecord(
             agent = {
                 updateAgentContext() {
                     // Delay throwing error until the agent is used.
-                    throw error;
+                    throw loadError;
                 },
             };
         }
@@ -354,6 +358,7 @@ function createMcpAppAgentRecord(
             connection,
             agent,
             serverProcess,
+            ...(loadError === undefined ? {} : { loadError }),
         };
     };
     return {
@@ -381,9 +386,12 @@ export function createMcpAppAgentProvider(
         agentName: string,
         manifest: AppAgentManifest,
     ) => void)[] = [];
+    const schemaFailedCallbacks: ((agentName: string, error: Error) => void)[] =
+        [];
 
     // Manifests that are already resolved (so late-registered callbacks fire immediately)
     const resolvedManifests = new Map<string, AppAgentManifest>();
+    const schemaFailures = new Map<string, Error>();
 
     function startBackgroundAgent(appAgentName: string) {
         if (
@@ -405,19 +413,41 @@ export function createMcpAppAgentProvider(
             instanceConfig?.[appAgentName],
         );
         backgroundRecords.set(appAgentName, record);
+        schemaFailures.delete(appAgentName);
 
-        record.agentP
-            .then((agentData) => {
+        const notifyFailure = (error: Error) => {
+            if (backgroundRecords.get(appAgentName) === record) {
+                backgroundRecords.delete(appAgentName);
+            }
+            schemaFailures.set(appAgentName, error);
+            for (const cb of schemaFailedCallbacks) {
+                cb(appAgentName, error);
+            }
+        };
+
+        record.agentP.then(
+            (agentData) => {
                 if (agentData.connection !== undefined) {
+                    schemaFailures.delete(appAgentName);
                     resolvedManifests.set(appAgentName, agentData.manifest);
                     for (const cb of schemaReadyCallbacks) {
                         cb(appAgentName, agentData.manifest);
                     }
+                } else {
+                    notifyFailure(
+                        agentData.loadError ??
+                            new Error(
+                                `MCP agent '${appAgentName}' failed to load`,
+                            ),
+                    );
                 }
-            })
-            .catch(() => {
-                // errors surface when the agent is actually used
-            });
+            },
+            (error: unknown) => {
+                notifyFailure(
+                    error instanceof Error ? error : new Error(String(error)),
+                );
+            },
+        );
     }
 
     function getMpcAppAgentRecord(appAgentName: string) {
@@ -437,6 +467,21 @@ export function createMcpAppAgentProvider(
         const info = infos[appAgentName];
         if (info === undefined) {
             throw new Error(`Invalid app agent: ${appAgentName}`);
+        }
+        if (info.serverCommand !== undefined) {
+            // Retry through the background path so a recovered connection also
+            // publishes its generated schema to the dispatcher.
+            startBackgroundAgent(appAgentName);
+            const retry = backgroundRecords.get(appAgentName);
+            if (retry === undefined) {
+                throw new Error(
+                    `Failed to start MCP app agent: ${appAgentName}`,
+                );
+            }
+            retry.count++;
+            backgroundRecords.delete(appAgentName);
+            mcpAppAgents.set(appAgentName, retry);
+            return retry;
         }
         const record = createMcpAppAgentRecord(
             name,
@@ -464,6 +509,13 @@ export function createMcpAppAgentProvider(
             // Fire immediately for any agents already resolved
             for (const [agentName, manifest] of resolvedManifests) {
                 callback(agentName, manifest);
+            }
+        },
+
+        onSchemaFailed(callback) {
+            schemaFailedCallbacks.push(callback);
+            for (const [agentName, error] of schemaFailures) {
+                callback(agentName, error);
             }
         },
 

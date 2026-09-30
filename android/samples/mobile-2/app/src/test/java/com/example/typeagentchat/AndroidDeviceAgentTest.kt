@@ -23,10 +23,16 @@ class AndroidDeviceAgentTest {
         assertEquals("instance-1", registration.getString("instanceId"))
         assertEquals("Pixel 8", registration.getString("displayName"))
         assertEquals(true, registration.getBoolean("multiInstance"))
-        assertEquals(
-            "executeAction",
-            registration.getJSONArray("agentInterface").getString(0)
-        )
+        // The declared set must be exactly what the RPC dispatcher answers: the
+        // server builds its proxy from this and, with several devices hosting
+        // the agent, rejects one that declares a different set.
+        val declared = registration.getJSONArray("agentInterface")
+        assertEquals(AndroidDeviceAgent.SUPPORTED_METHODS.size, declared.length())
+        for (index in AndroidDeviceAgent.SUPPORTED_METHODS.indices) {
+            assertEquals(AndroidDeviceAgent.SUPPORTED_METHODS[index], declared.getString(index))
+        }
+        assertTrue(AndroidDeviceAgent.supports("executeAction"))
+        assertFalse(AndroidDeviceAgent.supports("getDynamicDisplay"))
         assertEquals(
             "export type AndroidDeviceAction = never;",
             registration
@@ -279,6 +285,110 @@ class AndroidDeviceAgentTest {
         )
 
         assertEquals(listOf(Calendar.MONDAY, Calendar.TUESDAY), parsed.action.days)
+    }
+
+    @Test
+    fun parsesComposeEmailExecuteAction() {
+        val parsed = parseSuccess<AndroidDeviceAction.ComposeEmail>(
+            "composeEmail",
+            JSONObject()
+                .put("originalRequest", "Email Ada the notes")
+                .put("to", JSONArray(listOf("ada@example.com")))
+                .put("subject", "Notes")
+        )
+
+        assertEquals(listOf("ada@example.com"), parsed.action.to)
+        assertTrue(
+            parse("composeEmail", JSONObject().put("to", JSONArray(listOf("not an address"))))
+                is AndroidDeviceActionParseResult.ActionError
+        )
+    }
+
+    @Test
+    fun parsesShareTextExecuteAction() {
+        val parsed = parseSuccess<AndroidDeviceAction.ShareText>(
+            "shareText",
+            JSONObject()
+                .put("originalRequest", "Share the address")
+                .put("text", "1 Microsoft Way, Redmond WA")
+        )
+
+        assertEquals("1 Microsoft Way, Redmond WA", parsed.action.text)
+        assertTrue(
+            parse("shareText", JSONObject().put("text", "   "))
+                is AndroidDeviceActionParseResult.ActionError
+        )
+    }
+
+    @Test
+    fun reportsOverlongShareTextAsAnActionError() {
+        val parsed = parse(
+            "shareText",
+            JSONObject().put("text", "x".repeat(MAX_SHARE_TEXT_CHARS + 1))
+        )
+
+        assertEquals(
+            AndroidDeviceActionParseResult.ActionError(
+                "Invalid shareText parameters: text is required and must not exceed " +
+                    "$MAX_SHARE_TEXT_CHARS characters."
+            ),
+            parsed
+        )
+    }
+
+    @Test
+    fun parsesOpenSettingsExecuteAction() {
+        val parsed = parseSuccess<AndroidDeviceAction.OpenSettings>(
+            "openSettings",
+            JSONObject()
+                .put("originalRequest", "Turn on wifi")
+                .put("screen", "wifi")
+        )
+
+        assertEquals(AndroidSettingsScreen.Wifi, parsed.action.screen)
+        // A raw intent action must never be accepted here.
+        assertTrue(
+            parse("openSettings", JSONObject().put("screen", "android.settings.SETTINGS"))
+                is AndroidDeviceActionParseResult.ActionError
+        )
+    }
+
+    @Test
+    fun parsesCreateCalendarEventExecuteAction() {
+        val parsed = parseSuccess<AndroidDeviceAction.CreateCalendarEvent>(
+            "createCalendarEvent",
+            JSONObject()
+                .put("originalRequest", "Add lunch on the 24th")
+                .put("title", "Lunch")
+                .put("start", "2026-08-24T12:00")
+        )
+
+        assertEquals("Lunch", parsed.action.title)
+        assertTrue(parsed.action.endMillis > parsed.action.startMillis)
+        assertTrue(
+            parse(
+                "createCalendarEvent",
+                JSONObject().put("title", "Lunch").put("start", "next Tuesday at 3")
+            ) is AndroidDeviceActionParseResult.ActionError
+        )
+    }
+
+    @Test
+    fun parsesPlayMusicFromSearchExecuteAction() {
+        val parsed = parseSuccess<AndroidDeviceAction.PlayMusicFromSearch>(
+            "playMusicFromSearch",
+            JSONObject()
+                .put("originalRequest", "Play Miles Davis")
+                .put("query", "Miles Davis")
+                .put("focus", "artist")
+        )
+
+        assertEquals("Miles Davis", parsed.action.query)
+        assertEquals(MusicSearchFocus.Artist, parsed.action.focus)
+        assertTrue(
+            parse("playMusicFromSearch", JSONObject().put("query", "   "))
+                is AndroidDeviceActionParseResult.ActionError
+        )
     }
 
     @Test

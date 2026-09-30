@@ -3,7 +3,10 @@
 
 import { Result, success, error } from "typechat";
 import registerDebug from "debug";
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import { TextEmbeddingModel } from "./models.js";
+import { runWithLocalEmbeddingModelLock } from "./localEmbeddingLock.js";
 
 const debug = registerDebug("typeagent:aiclient:localEmbedding");
 
@@ -17,6 +20,8 @@ export const DefaultLocalEmbeddingModel = "Xenova/all-MiniLM-L6-v2";
 
 // Batch size kept modest to bound peak memory on CPU-only hosts.
 const DefaultMaxBatchSize = 32;
+
+let pipelineInitializationQueue = Promise.resolve();
 
 // Minimal structural type for the transformers.js feature-extraction pipeline
 // so we don't take a hard type-level dependency on the package (it is loaded
@@ -38,6 +43,38 @@ export type LocalEmbeddingModelSettings = {
     cacheDir?: string | undefined;
 };
 
+function serializePipelineInitialization<T>(
+    operation: () => Promise<T>,
+): Promise<T> {
+    const result = pipelineInitializationQueue.then(operation, operation);
+    pipelineInitializationQueue = result.then(
+        () => undefined,
+        () => undefined,
+    );
+    return result;
+}
+
+function getModelCacheDir(
+    cacheDir: string,
+    modelName: string,
+): string | undefined {
+    const root = path.resolve(cacheDir);
+    const modelDir = path.resolve(root, modelName);
+    return modelDir.startsWith(`${root}${path.sep}`) ? modelDir : undefined;
+}
+
+function isCachedModelLoadFailure(
+    failure: unknown,
+    modelCacheDir: string,
+): boolean {
+    const message =
+        failure instanceof Error ? failure.message : String(failure);
+    return (
+        message.includes("Load model from") &&
+        message.toLocaleLowerCase().includes(modelCacheDir.toLocaleLowerCase())
+    );
+}
+
 /**
  * Create a CPU-only local text embedding model backed by transformers.js
  * (onnxruntime-node). The underlying runtime and model weights are loaded
@@ -55,19 +92,60 @@ export function createLocalEmbeddingModel(
 
     async function getPipeline(): Promise<FeatureExtractionPipeline> {
         if (pipelinePromise === undefined) {
-            pipelinePromise = (async () => {
+            pipelinePromise = serializePipelineInitialization(async () => {
                 debug(`Loading local embedding model '${modelName}'`);
                 const transformers = await import("@huggingface/transformers");
-                if (cacheDir) {
-                    transformers.env.cacheDir = cacheDir;
-                }
-                const extractor = await transformers.pipeline(
-                    "feature-extraction",
-                    modelName,
-                );
+                const effectiveCacheDir =
+                    cacheDir ?? transformers.env.cacheDir ?? undefined;
+
+                const loadPipeline = async () => {
+                    if (effectiveCacheDir) {
+                        transformers.env.cacheDir = effectiveCacheDir;
+                    }
+                    return (await transformers.pipeline(
+                        "feature-extraction",
+                        modelName,
+                    )) as unknown as FeatureExtractionPipeline;
+                };
+
+                const loadWithRecovery = async () => {
+                    try {
+                        return await loadPipeline();
+                    } catch (failure) {
+                        if (effectiveCacheDir) {
+                            const modelCacheDir = getModelCacheDir(
+                                effectiveCacheDir,
+                                modelName,
+                            );
+                            if (
+                                modelCacheDir &&
+                                isCachedModelLoadFailure(failure, modelCacheDir)
+                            ) {
+                                debug(
+                                    `Removing incomplete local embedding cache '${modelCacheDir}' and retrying`,
+                                );
+                                await rm(modelCacheDir, {
+                                    recursive: true,
+                                    force: true,
+                                });
+                                return loadPipeline();
+                            }
+                        }
+                        throw failure;
+                    }
+                };
+
+                const extractor = effectiveCacheDir
+                    ? await runWithLocalEmbeddingModelLock(
+                          effectiveCacheDir,
+                          modelName,
+                          loadWithRecovery,
+                      )
+                    : await loadWithRecovery();
+
                 debug(`Loaded local embedding model '${modelName}'`);
-                return extractor as unknown as FeatureExtractionPipeline;
-            })();
+                return extractor;
+            });
             // If loading fails, clear the cache so a later call can retry.
             pipelinePromise.catch(() => {
                 pipelinePromise = undefined;
@@ -84,9 +162,10 @@ export function createLocalEmbeddingModel(
                 normalize: true,
             });
             return success(output.tolist());
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
             return error(
-                `Local embedding model '${modelName}' failed: ${e.message ?? e}`,
+                `Local embedding model '${modelName}' failed: ${message}`,
             );
         }
     }

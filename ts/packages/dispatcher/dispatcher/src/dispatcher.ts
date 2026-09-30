@@ -26,7 +26,7 @@ import {
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
 import { getActionContext } from "./execute/actionContext.js";
-import { emitActionResult } from "./execute/actionHandlers.js";
+import { emitActionResult, executeActions } from "./execute/actionHandlers.js";
 import {
     closeCommandHandlerContext,
     CommandHandlerContext,
@@ -36,6 +36,11 @@ import {
 import { randomUUID } from "node:crypto";
 import { context as otelContext } from "@opentelemetry/api";
 import { getAgentSchemas } from "./context/system/describe/agentSchemaInfo.js";
+import {
+    StructuredActionDiscovery,
+    type StructuredActionAccess,
+} from "./structuredAction/discovery.js";
+import { StructuredActionExecution } from "./structuredAction/execution.js";
 
 async function getDynamicDisplay(
     context: CommandHandlerContext,
@@ -200,7 +205,18 @@ export function createDispatcherFromContext(
     context: CommandHandlerContext,
     connectionId?: ConnectionId,
     closeFn?: () => Promise<void>,
+    structuredActionAccess?: StructuredActionAccess,
 ): Dispatcher {
+    const structuredActions = new StructuredActionDiscovery(
+        context,
+        structuredActionAccess,
+    );
+    const structuredExecution = new StructuredActionExecution(
+        context,
+        structuredActions,
+        { executeActions, getActionContext },
+        connectionId,
+    );
     const submitInput = (
         command: string,
         clientRequestId: unknown,
@@ -389,6 +405,13 @@ export function createDispatcherFromContext(
         async getAgentSchemas(agentName?: string) {
             return getAgentSchemas(context, agentName);
         },
+        async searchActions(request) {
+            return structuredActions.searchActions(request);
+        },
+        executeAction: (request) => structuredExecution.executeAction(request),
+        continueAction: (request) =>
+            structuredExecution.continueAction(request),
+        cancelAction: (request) => structuredExecution.cancelAction(request),
         async cancelCommand(requestId: string): Promise<CancelResult> {
             const kind = context.requestQueue.classifyCancel(requestId, "user");
             if (kind === "queued") {
@@ -569,6 +592,11 @@ export function createDispatcherFromContext(
                 | { selected: number; remember: boolean }
                 | QuestionFormResponse,
         ) {
+            // Structured execution owns its agent choice directly and never
+            // registers it with the legacy choice route.
+            if (!context.pendingChoiceRoutes.has(choiceId)) {
+                throw new Error("Choice not found or expired");
+            }
             return context.commandLock(async () => {
                 const pending = context.pendingChoiceRoutes.get(choiceId);
                 if (!pending) {

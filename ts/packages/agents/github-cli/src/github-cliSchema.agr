@@ -538,6 +538,27 @@
     }
 };
 
+<ResolveMergeConflicts> = resolve merge conflicts from $(targetBranch:wildcard) -> {
+    actionName: "resolveMergeConflicts",
+    parameters: {
+        targetBranch
+    }
+}
+  | bring $(targetBranch:wildcard) into this branch and resolve conflicts -> {
+    actionName: "resolveMergeConflicts",
+    parameters: {
+        targetBranch
+    }
+}
+  | bring the default branch into this branch and resolve conflicts -> {
+    actionName: "resolveMergeConflicts",
+    parameters: {}
+}
+  | merge the default branch into this branch and resolve conflicts -> {
+    actionName: "resolveMergeConflicts",
+    parameters: {}
+};
+
 import { GithubCliActions } from "./github-cliSchema.ts";
 
 <Start> : GithubCliActions = <AuthLogin>
@@ -576,4 +597,5 @@ import { GithubCliActions } from "./github-cliSchema.ts";
   | <GistList>
   | <ReleaseList>
   | <DependabotAlerts>
+  | <ResolveMergeConflicts>
   | <ApiRequest>;

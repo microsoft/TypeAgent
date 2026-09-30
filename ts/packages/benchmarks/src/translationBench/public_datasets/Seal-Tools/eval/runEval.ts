@@ -85,7 +85,7 @@ import {
     summarizeSealToolsTypeAgentRows,
     type SealToolsTypeAgentFilter,
 } from "./typeAgentGrader.js";
-import type { SealToolsGoldAction } from "../toTypeAgentSchema.js";
+import type { SealToolsGoldCall } from "../toTypeAgentSchema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // dist/translationBench/public_datasets/Seal-Tools/eval -> package root.
@@ -295,7 +295,7 @@ async function runOneModel(
     model: string,
     suite: ReturnType<typeof buildSealToolsSuite>["suite"],
     sourceManifest: ReturnType<typeof buildSealToolsSuite>["sourceManifest"],
-    goldByCaseId: ReadonlyMap<string, readonly SealToolsGoldAction[]>,
+    goldByCaseId: ReadonlyMap<string, readonly SealToolsGoldCall[]>,
     goldDigest: string,
     implementationDigest: string,
     actionContext: ActionContext<CommandHandlerContext>,

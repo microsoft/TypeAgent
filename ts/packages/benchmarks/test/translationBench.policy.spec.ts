@@ -18,7 +18,7 @@ import {
     assertParameterOverridesMatchCatalog,
     buildActionParametersGraderCatalog,
     type GeneratedActionCatalog,
-} from "../src/translationBench/policy/policyGenerator.js";
+} from "../src/translationBench/synthesizer/catalogGenerator/index.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Jest runs compiled specs from dist/test; assets live under package root.

@@ -30,7 +30,81 @@ export interface PythonLiteralParseResult {
     end: number;
 }
 
-const NUMBER_PATTERN = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+function isWhitespace(ch: string): boolean {
+    return ch.trim() === "";
+}
+
+function isDigit(ch: string): boolean {
+    return ch >= "0" && ch <= "9";
+}
+
+function isHexDigit(ch: string): boolean {
+    return isDigit(ch) || (ch >= "a" && ch <= "f") || (ch >= "A" && ch <= "F");
+}
+
+function isWordChar(ch: string): boolean {
+    return (
+        (ch >= "a" && ch <= "z") ||
+        (ch >= "A" && ch <= "Z") ||
+        isDigit(ch) ||
+        ch === "_"
+    );
+}
+
+function isIdentifierStart(ch: string): boolean {
+    return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_";
+}
+
+function skipWhitespace(text: string, offset: number): number {
+    while (offset < text.length && isWhitespace(text[offset]!)) {
+        offset++;
+    }
+    return offset;
+}
+
+/**
+ * Optional "-", then "0" or [1-9][0-9]*, optional "." + digits (only when a
+ * digit follows), optional e/E exponent (only when digits follow). Returns
+ * the lexeme, or undefined when the integer part does not match.
+ */
+function scanNumberLexeme(text: string, offset: number): string | undefined {
+    let i = offset;
+    if (text[i] === "-") {
+        i++;
+    }
+    const lead = text[i];
+    if (lead === "0") {
+        i++;
+    } else if (lead !== undefined && lead >= "1" && lead <= "9") {
+        i++;
+        while (i < text.length && isDigit(text[i]!)) {
+            i++;
+        }
+    } else {
+        return undefined;
+    }
+    if (text[i] === "." && text[i + 1] !== undefined && isDigit(text[i + 1]!)) {
+        i += 2;
+        while (i < text.length && isDigit(text[i]!)) {
+            i++;
+        }
+    }
+    const e = text[i];
+    if (e === "e" || e === "E") {
+        let j = i + 1;
+        const sign = text[j];
+        if (sign === "+" || sign === "-") {
+            j++;
+        }
+        if (j < text.length && isDigit(text[j]!)) {
+            i = j;
+            while (i < text.length && isDigit(text[i]!)) {
+                i++;
+            }
+        }
+    }
+    return text.slice(offset, i);
+}
 
 type ParseResult = PythonLiteralParseResult;
 
@@ -91,10 +165,7 @@ class PythonLiteralParser {
     }
 
     public skipWhitespace(offset: number): number {
-        while (offset < this.text.length && /\s/u.test(this.text[offset]!)) {
-            offset++;
-        }
-        return offset;
+        return skipWhitespace(this.text, offset);
     }
 
     public error(message: string, offset: number): SyntaxError {
@@ -188,7 +259,7 @@ class PythonLiteralParser {
                     : 0;
         if (width !== 0) {
             const digits = this.text.slice(offset + 1, offset + 1 + width);
-            if (!new RegExp(`^[0-9a-fA-F]{${width}}$`).test(digits)) {
+            if (digits.length !== width || ![...digits].every(isHexDigit)) {
                 throw this.error("invalid Python string escape", offset - 1);
             }
             const codePoint = Number.parseInt(digits, 16);
@@ -259,12 +330,10 @@ class PythonLiteralParser {
     }
 
     private parseNumber(offset: number): PythonLiteralParseResult {
-        NUMBER_PATTERN.lastIndex = offset;
-        const match = NUMBER_PATTERN.exec(this.text);
-        if (match === null) {
+        const lexeme = scanNumberLexeme(this.text, offset);
+        if (lexeme === undefined) {
             throw this.error("unexpected Python literal token", offset);
         }
-        const lexeme = match[0];
         const number = Number(lexeme);
         if (
             !this.preserveNumberLexemes &&
@@ -286,7 +355,7 @@ class PythonLiteralParser {
             return false;
         }
         const next = this.text[offset + keyword.length];
-        return next === undefined || !/[A-Za-z0-9_]/u.test(next);
+        return next === undefined || !isWordChar(next);
     }
 }
 
@@ -370,6 +439,33 @@ function findClosingParen(text: string, open: number): number {
     throw new Error(`unterminated function call at index ${open}`);
 }
 
+/**
+ * Matches a bare `result<digits>` token starting at `index`: digits must be
+ * followed by a non-word char or end of text. Returns the digits and the
+ * full matched length.
+ */
+function scanResultReference(
+    text: string,
+    index: number,
+): { digits: string; length: number } | undefined {
+    if (!text.startsWith("result", index)) {
+        return undefined;
+    }
+    let end = index + "result".length;
+    const digitsStart = end;
+    while (end < text.length && isDigit(text[end]!)) {
+        end++;
+    }
+    if (end === digitsStart) {
+        return undefined;
+    }
+    const next = text[end];
+    if (next !== undefined && isWordChar(next)) {
+        return undefined;
+    }
+    return { digits: text.slice(digitsStart, end), length: end - index };
+}
+
 // Quote bare resultN tokens so the Python-literal parser can preserve them
 // inside lists and dictionaries without changing ordinary string contents.
 function replaceResultReferences(text: string): string {
@@ -390,14 +486,14 @@ function replaceResultReferences(text: string): string {
             output += character;
             continue;
         }
-        const reference = /^result(\d+)\b/.exec(text.slice(index));
+        const reference = scanResultReference(text, index);
         const previous = index === 0 ? undefined : text[index - 1];
         if (
-            reference !== null &&
-            (previous === undefined || !/\w/.test(previous))
+            reference !== undefined &&
+            (previous === undefined || !isWordChar(previous))
         ) {
-            output += JSON.stringify(`#${reference[1]}`);
-            index += reference[0].length - 1;
+            output += JSON.stringify(`#${reference.digits}`);
+            index += reference.length - 1;
             continue;
         }
         output += character;
@@ -423,7 +519,7 @@ function parseArguments(text: string): {
         }
         if (equals === 0) throw new Error(`invalid argument: ${part}`);
         const name = part.slice(0, equals).trim();
-        if (!/^\w+$/.test(name))
+        if (name.length === 0 || ![...name].every(isWordChar))
             throw new Error(`invalid argument name: ${name}`);
         args[name] = parseValue(part.slice(equals + 1));
     }
@@ -432,36 +528,84 @@ function parseArguments(text: string): {
 
 export function parseDroidCallCode(text: string): DroidCall[] {
     const calls: DroidCall[] = [];
-    const pattern = /\bresult(\d+)\s*=\s*([A-Za-z_]\w*)\s*\(/g;
-    for (
-        let match = pattern.exec(text);
-        match !== null;
-        match = pattern.exec(text)
-    ) {
-        const open = pattern.lastIndex - 1;
+    let i = 0;
+    while (i < text.length) {
+        // `result` must start a token (word boundary) and be followed
+        // directly by digits, then `=`, then `name(`.
+        if (
+            !text.startsWith("result", i) ||
+            (i > 0 && isWordChar(text[i - 1]!))
+        ) {
+            i++;
+            continue;
+        }
+        let j = i + "result".length;
+        const digitsStart = j;
+        while (j < text.length && isDigit(text[j]!)) {
+            j++;
+        }
+        if (j === digitsStart) {
+            i++;
+            continue;
+        }
+        const digits = text.slice(digitsStart, j);
+        j = skipWhitespace(text, j);
+        if (text[j] !== "=") {
+            i++;
+            continue;
+        }
+        j = skipWhitespace(text, j + 1);
+        const nameStart = j;
+        if (j < text.length && isIdentifierStart(text[j]!)) {
+            j++;
+            while (j < text.length && isWordChar(text[j]!)) {
+                j++;
+            }
+        }
+        const name = text.slice(nameStart, j);
+        if (name.length === 0) {
+            i++;
+            continue;
+        }
+        j = skipWhitespace(text, j);
+        if (text[j] !== "(") {
+            i++;
+            continue;
+        }
+        const open = j;
         const close = findClosingParen(text, open);
         const parsed = parseArguments(text.slice(open + 1, close));
-        const id = Number(match[1]);
+        const id = Number(digits);
         if (!Number.isSafeInteger(id)) {
-            throw new RangeError(`invalid result id: ${match[1]}`);
+            throw new RangeError(`invalid result id: ${digits}`);
         }
         calls.push({
             id,
-            name: match[2]!,
+            name,
             arguments: parsed.arguments,
             ...(parsed.positionalArguments.length === 0
                 ? {}
                 : { positionalArguments: parsed.positionalArguments }),
         });
-        pattern.lastIndex = close + 1;
+        i = close + 1;
     }
     return calls;
 }
 
-const RESULT_REFERENCE = /^#\d+$/;
+function isResultReference(value: string): boolean {
+    if (!value.startsWith("#") || value.length === 1) {
+        return false;
+    }
+    for (let i = 1; i < value.length; i++) {
+        if (!isDigit(value[i]!)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 export function hasDroidCallResultReference(value: unknown): boolean {
-    if (typeof value === "string") return RESULT_REFERENCE.test(value);
+    if (typeof value === "string") return isResultReference(value);
     if (Array.isArray(value)) return value.some(hasDroidCallResultReference);
     if (typeof value === "object" && value !== null) {
         return Object.values(value).some(hasDroidCallResultReference);

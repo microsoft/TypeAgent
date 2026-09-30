@@ -133,7 +133,6 @@ External: `async`, `debug`, `fast-levenshtein`, `typechat`
 - [examples-lib](../../examples/examplesLib/README.md)
 - [image-memory](../../packages/memory/image/README.md)
 - [knowpro-test](../../packages/knowProTest/README.md)
-- [memory-mcp](../../examples/mcpMemory/README.md)
 - [memory-storage](../../packages/memory/storage/README.md)
 - _…and 3 more workspace consumers._
 

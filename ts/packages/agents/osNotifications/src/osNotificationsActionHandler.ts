@@ -434,6 +434,11 @@ export function instantiate(): AppAgent {
         // new ActionResult which the dispatcher renders. The AppAgent
         // signature types context as ActionContext<unknown>; cast to our
         // agent context to access choiceManager.
+        cancelChoice: async (choiceId, context) => {
+            (context.agentContext as AgentContext).choiceManager.cancelChoice(
+                choiceId,
+            );
+        },
         handleChoice: async (choiceId, response, context) => {
             const ctx = (context as ActionContext<AgentContext>).sessionContext
                 .agentContext;

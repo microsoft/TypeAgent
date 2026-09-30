@@ -36,28 +36,50 @@ export interface UICommandResult {
 // Agent → View: Content requests
 export interface GetDocumentContentMessage {
     type: "getDocumentContent";
+    requestId: string;
+    expectedBindingToken?: string;
+    expectedRoot?: string;
+    expectedRelativePath?: string;
 }
 
 export interface DocumentContentMessage {
     type: "documentContent";
+    requestId: string;
     content: string;
-    source?: "client-serializer" | "yjs-fallback" | "error";
+    source?: "file" | "error";
     error?: string;
     timestamp: number;
+    bindingToken: string | null;
+    boundFilePath: string | null;
+    boundRoot: string | null;
+    boundRelativePath: string | null;
+    revision: string | null;
+    identityMismatch?: boolean;
 }
 
 // Agent → View: LLM operations
 export interface LLMOperationsMessage {
     type: "applyLLMOperations";
+    requestId: string;
     operations: any[]; // DocumentOperation[]
     timestamp: number;
+    expectedBindingToken?: string;
+    expectedRoot?: string;
+    expectedRelativePath?: string;
+    expectedRevision: string;
+    expectedUpdatedRevision?: string;
 }
 
 export interface OperationsAppliedMessage {
     type: "operationsApplied";
+    requestId: string;
     success: boolean;
     operationCount?: number;
     error?: string;
+    identityMismatch?: boolean;
+    revisionMismatch?: boolean;
+    bindingToken?: string | null;
+    revision?: string | null;
 }
 
 // View → Frontend: Auto-save notifications

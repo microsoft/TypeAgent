@@ -339,6 +339,11 @@ export function instantiate(): AppAgent {
         executeAction: executeEmailAction,
         checkReadiness: checkEmailReadiness,
         setup: setupEmail,
+        cancelChoice: async (choiceId, context) => {
+            (
+                context.agentContext as EmailActionContext
+            ).choiceManager.cancelChoice(choiceId);
+        },
         handleChoice: async (choiceId, response, context) => {
             const ctx = (context as ActionContext<EmailActionContext>)
                 .sessionContext.agentContext;

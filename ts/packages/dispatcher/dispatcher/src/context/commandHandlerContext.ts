@@ -35,6 +35,7 @@ import {
     getAppAgentName,
     TypeAgentTranslator,
 } from "../translation/agentTranslators.js";
+import { persistProviderDisabledDefaults } from "./installedProviderDefaults.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { nullClientIO } from "./interactiveIO.js";
@@ -120,6 +121,11 @@ import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
 import { ActionContextWithClose } from "../execute/actionContext.js";
 import { initializeMemory } from "./memory.js";
+import type { MemoryService } from "@typeagent/memory-service";
+import {
+    ConversationDurableMemory,
+    getMemoryServiceFromAgentOptions,
+} from "./conversationDurableMemory.js";
 import { StorageProvider } from "../storageProvider/storageProvider.js";
 import {
     AgentGrammarRegistry,
@@ -131,14 +137,11 @@ import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
 import { CosmosPartitionKeyBuilder } from "@typeagent/telemetry";
 import { DefaultAzureCredential } from "@azure/identity";
 import { DisplayLog } from "../displayLog.js";
-import {
-    fromJSONParsedActionSchema,
-    ParsedActionSchemaJSON,
-} from "@typeagent/action-schema";
 import { RequestQueue } from "../queue/requestQueue.js";
 import type { QueueExecutionContext } from "../queue/requestQueue.js";
 import { createSnapshotCoalescer } from "../queue/snapshotCoalescer.js";
 import { processCommand as runProcessCommand } from "../command/command.js";
+import { closeStructuredActions } from "../structuredAction/executionHooks.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -339,6 +342,8 @@ export type CommandHandlerContext = {
     activityContext?: ActivityContext | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
     conversationMemory?: ConversationMemory | undefined;
+    conversationDurableMemory?: ConversationDurableMemory | undefined;
+    readonly durableMemoryService?: MemoryService | undefined;
     /**
      * Host-provided enumeration of sibling conversations (id + name), used to
      * offer `@conversation switch/rename/delete` name completions. Undefined
@@ -361,6 +366,8 @@ export type CommandHandlerContext = {
      * without a unified index.
      */
     readonly conversationContentSink?: ConversationContentSink | undefined;
+    /** Stable host conversation identifier used by durable event provenance. */
+    readonly conversationId?: string | undefined;
     /**
      * Host-provided cross-conversation content search (see
      * {@link ConversationSearcher}). Injected by the agent-server; undefined
@@ -643,6 +650,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
         requestKnowledgeExtraction?: boolean;
         actionResultEntityStorage?: boolean;
         actionResultKnowledgeExtraction?: boolean;
+        durableMemoryService?: MemoryService;
     };
 
     /**
@@ -669,6 +677,8 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
      * by the agent-server; omitted by standalone hosts.
      */
     conversationContentSink?: ConversationContentSink | undefined;
+    /** Stable host conversation identifier for durable event provenance. */
+    conversationId?: string | undefined;
 
     /**
      * Cross-conversation content search over the host's unified message index
@@ -915,6 +925,10 @@ export async function installAppProvider(
         context.agentGrammarRegistry,
         useNFAGrammar,
     );
+
+    if (provider.defaultEnabled === false) {
+        persistProviderDisabledDefaults(context, provider);
+    }
 
     await setAppAgentStates(context);
     // Re-run collision detection now that a new agent has been installed.
@@ -1308,6 +1322,10 @@ export async function initializeCommandHandlerContext(
             getConversationList: options?.getConversationList,
             copilotImport: options?.copilotImport,
             conversationContentSink: options?.conversationContentSink,
+            conversationId: options?.conversationId,
+            durableMemoryService:
+                options?.conversationMemorySettings?.durableMemoryService ??
+                getMemoryServiceFromAgentOptions(options?.agentInitOptions),
             searchConversations: options?.searchConversations,
             summarizeConversation: options?.summarizeConversation,
             indexConversations: options?.indexConversations,
@@ -1416,6 +1434,7 @@ export async function initializeCommandHandlerContext(
                     qctx.attachments,
                     qctx.options,
                     qctx.traceContext,
+                    qctx.work,
                 );
                 try {
                     context.displayLog.logCommandResult(
@@ -1753,8 +1772,28 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
             await grammarStore.load(grammarStorePath);
             debug(`Loaded grammar store from ${grammarStorePath}`);
 
+            for (const schemaName of grammarStore.getSchemaNames()) {
+                const actionConfig =
+                    context.agents.tryGetActionConfig(schemaName);
+                if (actionConfig === undefined) continue;
+                const schemaHash =
+                    context.agents.getActionSchemaFileForConfig(
+                        actionConfig,
+                    ).sourceHash;
+                await grammarStore.reconcileSchema(schemaName, {
+                    schemaHash,
+                    ...(actionConfig.cacheBinding === undefined
+                        ? {}
+                        : {
+                              sourceId: actionConfig.cacheBinding.sourceId,
+                              actionFingerprints:
+                                  actionConfig.cacheBinding.actionFingerprints,
+                          }),
+                });
+            }
+
             // Merge persisted dynamic rules into agent grammars
-            const allRules = grammarStore.getAllRules();
+            const allRules = grammarStore.getAllActiveRules();
             const schemaRules = new Map<string, string[]>();
 
             // Group rules by schema
@@ -1813,63 +1852,20 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     // Enable auto-save
     await grammarStore.setAutoSave(config.cache.autoSave);
 
-    // Import getPackageFilePath for resolving schema paths
-    const { getPackageFilePath } = await import(
-        "../utils/getPackageFilePath.js"
-    );
-
     // Configure agent cache with grammar generation support
     context.agentCache.configureGrammarGeneration(
         context.agentGrammarRegistry,
         grammarStore,
         true,
         (schemaName: string) => {
-            // Get compiled schema file path (.pas.json) from action config for grammar generation
             const actionConfig = context.agents.tryGetActionConfig(schemaName);
             if (!actionConfig) {
                 throw new Error(
                     `Action config not found for schema: ${schemaName}`,
                 );
             }
-
-            let schemaPath: string | undefined;
-
-            // Use schemaFilePath directly if it's already a .pas.json file
-            if (
-                actionConfig.schemaFilePath &&
-                actionConfig.schemaFilePath.endsWith(".pas.json")
-            ) {
-                schemaPath = getPackageFilePath(actionConfig.schemaFilePath);
-            } else if (
-                actionConfig.schemaFilePath &&
-                actionConfig.schemaFilePath.endsWith(".ts")
-            ) {
-                // Fallback: try to derive .pas.json path from .ts schemaFilePath
-                // Try common pattern: ./src/schema.ts -> ../dist/schema.pas.json
-                const derivedPath = actionConfig.schemaFilePath
-                    .replace(/^\.\/src\//, "../dist/")
-                    .replace(/\.ts$/, ".pas.json");
-                debug(
-                    `Attempting fallback .pas.json path for ${schemaName}: ${derivedPath}`,
-                );
-                try {
-                    schemaPath = getPackageFilePath(derivedPath);
-                } catch {
-                    // Fallback path doesn't exist, continue to error
-                }
-            }
-
-            if (!schemaPath) {
-                throw new Error(
-                    `Compiled schema file path (.pas.json) not found for schema: ${schemaName}. ` +
-                        `Please ensure the schema is compiled to a .pas.json file.`,
-                );
-            }
-
-            const content = fs.readFileSync(schemaPath, "utf-8");
-            return fromJSONParsedActionSchema(
-                JSON.parse(content) as ParsedActionSchemaJSON,
-            );
+            return context.agents.getActionSchemaFileForConfig(actionConfig)
+                .parsedActionSchema;
         },
     );
 
@@ -1951,6 +1947,7 @@ function processSetAppAgentStateResult(
 export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
+    closeStructuredActions(context);
     // Stop accepting exclusive mutations in this closing session.
     context.appAgentProviderSetController.dispose();
     // Tear down any reasoning subagents (spawned command-executor processes and

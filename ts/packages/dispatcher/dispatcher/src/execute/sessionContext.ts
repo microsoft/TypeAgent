@@ -19,6 +19,7 @@ import { IndexData } from "@typeagent/image-memory";
 import { IndexManager } from "../context/indexManager.js";
 import { validateGrammarPatternsImpl } from "../validation/grammarValidationService.mjs";
 import registerDebug from "debug";
+import { getStructuredExecution } from "../structuredAction/executionHooks.js";
 
 const debug = registerDebug("typeagent:dispatcher:sessionContext");
 const debugClientCountWarn = registerDebug(
@@ -228,7 +229,9 @@ export function createSessionContext<T = unknown>(
             defaultId?: number,
         ): Promise<number> {
             return context.clientIO.question(
-                undefined,
+                getStructuredExecution(context) === undefined
+                    ? undefined
+                    : context.currentRequestId,
                 message,
                 choices,
                 defaultId,

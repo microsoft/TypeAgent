@@ -1,11 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Storage } from "@typeagent/agent-sdk";
+import type { ActionCacheBinding, Storage } from "@typeagent/agent-sdk";
+import { createHash } from "node:crypto";
 import type {
     ScriptRecipe,
     GrammarPattern,
     SandboxPolicy,
+    ScriptSource,
+    StoredScriptSourceType,
 } from "../types/scriptRecipe.js";
 import {
     generateGrammarRuleText,
@@ -63,7 +66,7 @@ export interface PowerShellFlowIndexEntry {
     parameters: PowerShellFlowParameterMeta[];
     created: string;
     updated: string;
-    source: "reasoning" | "manual" | "seed";
+    source: StoredScriptSourceType;
     usageCount: number;
     lastUsed?: string | undefined;
     enabled: boolean;
@@ -124,7 +127,7 @@ export class PowerShellStore {
 
     async saveFlow(
         recipe: ScriptRecipe,
-        source: "reasoning" | "manual" | "seed" = "manual",
+        source: StoredScriptSourceType = "manual",
     ): Promise<string> {
         this.ensureInitialized();
 
@@ -135,6 +138,12 @@ export class PowerShellStore {
         const flowPath = `flows/${actionName}.flow.json`;
         const scriptPath = `scripts/${actionName}.ps1`;
         let addedEntry: PowerShellFlowIndexEntry | undefined;
+        const now = new Date().toISOString();
+        const storedSource: ScriptSource = {
+            ...(recipe.source ?? {}),
+            type: source,
+            timestamp: recipe.source?.timestamp ?? now,
+        };
 
         const flowDef: PowerShellFlowDefinition = {
             version: 1,
@@ -146,7 +155,7 @@ export class PowerShellStore {
             expectedOutputFormat: recipe.script.expectedOutputFormat,
             grammarPatterns: recipe.grammarPatterns,
             sandbox: recipe.sandbox,
-            source: recipe.source,
+            source: storedSource,
         };
 
         try {
@@ -169,7 +178,6 @@ export class PowerShellStore {
                     description: p.description,
                 }));
 
-            const now = new Date().toISOString();
             addedEntry = {
                 actionName,
                 displayName: recipe.displayName,
@@ -225,6 +233,7 @@ export class PowerShellStore {
         newScript: string,
         newCmdlets: string[],
         newModules?: string[],
+        newSource?: ScriptSource,
     ): Promise<void> {
         this.ensureInitialized();
         const entry = this.index.flows[actionName];
@@ -246,6 +255,9 @@ export class PowerShellStore {
         if (newModules !== undefined) {
             flow.sandbox.allowedModules = newModules;
         }
+        if (newSource !== undefined) {
+            flow.source = newSource;
+        }
 
         try {
             await this.storage.write(entry.scriptPath, newScript);
@@ -255,6 +267,9 @@ export class PowerShellStore {
             );
 
             entry.updated = new Date().toISOString();
+            if (newSource !== undefined) {
+                entry.source = newSource.type;
+            }
             this.index.lastModified = entry.updated;
             await this.saveIndex();
             debug(`Flow script updated: ${actionName}`);
@@ -285,11 +300,8 @@ export class PowerShellStore {
         patterns: GrammarPattern[],
     ): Promise<number> {
         this.ensureInitialized();
-        const entry = this.index.flows[actionName];
-        if (!entry) throw new Error(`Flow not found: ${actionName}`);
-
-        const json = await this.storage.read(entry.flowPath, "utf8");
-        const flow = JSON.parse(json) as PowerShellFlowDefinition;
+        const flow = await this.getFlow(actionName);
+        if (!flow) throw new Error(`Flow not found: ${actionName}`);
         const existing = new Set(
             flow.grammarPatterns.map((pattern) => pattern.pattern),
         );
@@ -300,17 +312,64 @@ export class PowerShellStore {
             return 0;
         }
 
-        flow.grammarPatterns.push(...additions);
-        await this.storage.write(entry.flowPath, JSON.stringify(flow, null, 2));
-        entry.grammarRuleText = generateGrammarRuleText(
-            actionName,
-            flow.grammarPatterns,
-        );
-        entry.updated = new Date().toISOString();
-        this.index.lastModified = entry.updated;
-        await this.saveIndex();
-        await this.writeDynamicGrammarFile();
+        await this.replaceGrammarPatterns(actionName, [
+            ...flow.grammarPatterns,
+            ...additions,
+        ]);
         return additions.length;
+    }
+
+    async replaceGrammarPatterns(
+        actionName: string,
+        patterns: GrammarPattern[],
+    ): Promise<void> {
+        this.ensureInitialized();
+        const entry = this.index.flows[actionName];
+        if (!entry) throw new Error(`Flow not found: ${actionName}`);
+
+        const previousFlowJson = await this.storage.read(
+            entry.flowPath,
+            "utf8",
+        );
+        const previousEntry = { ...entry };
+        const previousLastModified = this.index.lastModified;
+        const flow = JSON.parse(previousFlowJson) as PowerShellFlowDefinition;
+        flow.grammarPatterns = patterns;
+
+        try {
+            await this.storage.write(
+                entry.flowPath,
+                JSON.stringify(flow, null, 2),
+            );
+            entry.grammarRuleText = generateGrammarRuleText(
+                actionName,
+                patterns,
+            );
+            entry.updated = new Date().toISOString();
+            this.index.lastModified = entry.updated;
+            await this.saveIndex();
+            await this.writeDynamicGrammarFile();
+        } catch (error) {
+            const rollbackErrors: unknown[] = [];
+            this.index.flows[actionName] = previousEntry;
+            this.index.lastModified = previousLastModified;
+            try {
+                await this.storage.write(entry.flowPath, previousFlowJson);
+            } catch (rollbackError) {
+                rollbackErrors.push(rollbackError);
+            }
+            try {
+                await this.saveIndex();
+            } catch (rollbackError) {
+                rollbackErrors.push(rollbackError);
+            }
+            try {
+                await this.writeDynamicGrammarFile();
+            } catch (rollbackError) {
+                rollbackErrors.push(rollbackError);
+            }
+            throwPersistenceError(error, rollbackErrors);
+        }
     }
 
     async getFlow(
@@ -461,6 +520,35 @@ export class PowerShellStore {
 
     getFlowGrammarRules(actionName: string): string | undefined {
         return this.index.flows[actionName]?.grammarRuleText;
+    }
+
+    async getActionCacheBinding(): Promise<ActionCacheBinding> {
+        const actionFingerprints: Record<string, string> = {};
+        for (const entry of Object.values(this.index.flows)) {
+            if (!entry.enabled) continue;
+            const flowJson = await this.storage.read(entry.flowPath, "utf8");
+            const flow = JSON.parse(flowJson) as PowerShellFlowDefinition;
+            const script = await this.storage.read(entry.scriptPath, "utf8");
+            actionFingerprints[entry.actionName] = createHash("sha256")
+                .update(
+                    JSON.stringify({
+                        version: flow.version,
+                        actionName: flow.actionName,
+                        displayName: flow.displayName,
+                        description: flow.description,
+                        parameters: flow.parameters,
+                        expectedOutputFormat: flow.expectedOutputFormat,
+                        sandbox: flow.sandbox,
+                    }),
+                )
+                .update("\0")
+                .update(script)
+                .digest("base64");
+        }
+        return {
+            sourceId: "typeagent.powershell",
+            actionFingerprints,
+        };
     }
 
     async writeDynamicGrammarFile(): Promise<void> {

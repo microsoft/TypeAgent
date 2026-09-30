@@ -39,6 +39,8 @@ export interface ImportProgress {
         | "fetching"
         | "processing"
         | "extracting"
+        | "graph-building"
+        | "persisting"
         | "complete"
         | "error";
     totalItems: number;
@@ -166,8 +168,11 @@ export type ErrorCallback = (error: ImportError) => void;
 // Chrome extension message types
 export interface ImportWebsiteDataMessage {
     type: "importWebsiteDataWithProgress";
-    parameters: ImportOptions;
-    importId: string;
+    parameters: ImportOptions & {
+        importId: string;
+        totalItems?: number;
+        progressCallback?: boolean;
+    };
 }
 
 export interface ImportHtmlFolderMessage {

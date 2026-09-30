@@ -15,6 +15,7 @@ import { SessionMcpCredentialStore } from "./mcp/mcpCredentialStore.js";
 import { defaultMcpPolicy } from "./mcp/mcpPolicy.js";
 import { JsonlMcpAuditSink } from "./mcp/mcpAudit.js";
 import { McpConfigDiscovery } from "./mcp/mcpConfigDiscovery.js";
+import type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
 
 export interface DefaultAgentRuntime {
     readonly appAgentSources: [AppAgentSource, AppAgentSource];
@@ -26,6 +27,7 @@ export function createDefaultAgentRuntime(
     instanceDir: string,
     options?: DefaultAppAgentSourceOptions,
     mcpServices?: Partial<McpHostServices>,
+    runtimeMcpSeed: Record<string, NormalizedMcpServerConfig> = {},
 ): DefaultAgentRuntime {
     const services: McpHostServices = {
         credentialStore:
@@ -48,6 +50,7 @@ export function createDefaultAgentRuntime(
         getInstanceConfigProvider(instanceDir),
         services,
         discovery,
+        runtimeMcpSeed,
     );
     const installed = createDefaultInstalledAgentSource(
         instanceDir,

@@ -9,8 +9,8 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.microsoft.typeagent.wearos"
-        minSdk = 34
+        applicationId = "com.example.typeagentchat"
+        minSdk = 30
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -53,6 +53,8 @@ dependencies {
     implementation(libs.constraintlayout.compose.android)
     implementation(libs.constraintlayout)
     implementation(libs.wear.remote.interactions)
+    implementation(libs.concurrent.futures.ktx)
+    implementation(libs.fragment.ktx)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.ui.test.junit4)
     debugImplementation(libs.ui.tooling)

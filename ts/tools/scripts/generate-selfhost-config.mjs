@@ -15,11 +15,9 @@
  *   - ollama:  local OpenAI-compatible chat (`ollama serve`).
  *   - copilot: GitHub Copilot SDK chat (requires an authenticated `copilot` CLI).
  *
- * Embeddings are independent of the chat provider (the Copilot SDK has none).
- * By default we configure the bundled CPU-only local embedder (transformers.js,
- * no GPU / API key / network at runtime after first download). Callers can
- * instead point at an Ollama or OpenAI embedding endpoint, or disable embeddings
- * entirely (embedding-dependent features then degrade gracefully).
+ * Embeddings default to the matching provider for Copilot, and to the bundled
+ * CPU-only local embedder for Ollama. Callers can override that choice or
+ * disable embeddings entirely.
  *
  * Config path precedence mirrors getKeys / the @typeagent/config loader:
  *   --out
@@ -35,11 +33,13 @@
  *   --force                     Overwrite an existing config.local.yaml.
  *   --ollama-host <url>         Ollama base URL (default http://localhost:11434).
  *   --chat-model <name>         Ollama chat model (default llama3.2).
- *   --copilot-model <name>      Copilot chat model (default claude-haiku-4.5).
- *   --embedding <mode>          local (default) | ollama | openai | none.
+ *   --copilot-model <name>      Copilot chat model (default gpt-5.6-luna).
+ *   --embedding <mode>          copilot | local | ollama | openai | none.
  *   --embedding-endpoint <url>  Embedding endpoint (openai mode; full path).
  *   --embedding-model <name>    Embedding model name.
  *   --local-embedding-model <n> transformers.js model (default Xenova/all-MiniLM-L6-v2).
+ *   --local-embedding-cache-dir <path>
+ *                               Persistent cache for local model files.
  *   --openai-key <key>          API key for openai embedding mode.
  *   --dry-run                   Print the YAML to stdout without writing.
  */
@@ -53,8 +53,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
 const DEFAULT_OLLAMA_CHAT_MODEL = "llama3.2";
-const DEFAULT_COPILOT_MODEL = "claude-haiku-4.5";
-const DEFAULT_COPILOT_FALLBACK_MODELS = ["gpt-5-mini", "gpt-5.4-mini"];
+const DEFAULT_COPILOT_MODEL = "gpt-5.6-luna";
+const DEFAULT_COPILOT_FALLBACK_MODELS = [
+    "gpt-5.4-mini",
+    "gpt-5-mini",
+    "gpt-5.4",
+];
+const DEFAULT_COPILOT_EMBEDDING_MODEL = "text-embedding-3-small";
 const DEFAULT_LOCAL_EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
 const DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
 
@@ -129,6 +134,15 @@ function renderYaml(node, indent = 0) {
                 continue;
             }
             out += `${pad}${key}:\n${nested}`;
+        } else if (Array.isArray(value)) {
+            if (value.length === 0) {
+                out += `${pad}${key}: []\n`;
+                continue;
+            }
+            out += `${pad}${key}:\n`;
+            for (const item of value) {
+                out += `${pad}  - ${yamlScalar(item)}\n`;
+            }
         } else {
             out += `${pad}${key}: ${yamlScalar(value)}\n`;
         }
@@ -146,6 +160,7 @@ function buildConfigTree(options) {
         embeddingEndpoint,
         embeddingModel,
         localEmbeddingModel,
+        localEmbeddingCacheDir,
         openaiKey,
     } = options;
 
@@ -174,10 +189,20 @@ function buildConfigTree(options) {
     // Embedding wiring (independent of chat provider).
     const embeddingSection = {};
     switch (embedding) {
+        case "copilot":
+            embeddingSection.provider = "copilot";
+            embeddingSection.model =
+                embeddingModel || DEFAULT_COPILOT_EMBEDDING_MODEL;
+            break;
         case "local":
             embeddingSection.provider = "local";
             embeddingSection.model =
                 localEmbeddingModel || DEFAULT_LOCAL_EMBEDDING_MODEL;
+            if (localEmbeddingCacheDir) {
+                embeddingSection.cacheDir = path.resolve(
+                    localEmbeddingCacheDir,
+                );
+            }
             break;
         case "ollama":
             openAI.apiKey ??= "ollama";
@@ -236,8 +261,10 @@ function main() {
         return 1;
     }
 
-    const embedding = (arg("--embedding") ?? "local").toLowerCase();
-    const validEmbedding = ["local", "ollama", "openai", "none"];
+    const embedding = (
+        arg("--embedding") ?? (provider === "copilot" ? "copilot" : "local")
+    ).toLowerCase();
+    const validEmbedding = ["copilot", "local", "ollama", "openai", "none"];
     if (!validEmbedding.includes(embedding)) {
         console.error(
             `generate-selfhost-config: --embedding must be one of ${validEmbedding.join(", ")}.`,
@@ -254,6 +281,7 @@ function main() {
         embeddingEndpoint: arg("--embedding-endpoint"),
         embeddingModel: arg("--embedding-model"),
         localEmbeddingModel: arg("--local-embedding-model"),
+        localEmbeddingCacheDir: arg("--local-embedding-cache-dir"),
         openaiKey: arg("--openai-key"),
     };
 

@@ -82,12 +82,16 @@ describe("configToEnv: shim projection", () => {
             TYPEAGENT_EMBEDDING_PROVIDER: "local",
             TYPEAGENT_EMBEDDING_MODEL: "Xenova/all-MiniLM-L6-v2",
             TYPEAGENT_EMBEDDING_CACHE_DIR: "/var/lib/typeagent/models",
+            TYPEAGENT_EMBEDDING_SIZE: "384",
+            TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE: "16",
         };
         const config = buildConfig(flat);
         expect(config.embedding).toEqual({
             provider: "local",
             model: "Xenova/all-MiniLM-L6-v2",
             cacheDir: "/var/lib/typeagent/models",
+            size: 384,
+            maxBatchSize: 16,
         });
         const out = configToEnv(config);
         for (const [k, v] of Object.entries(flat)) {

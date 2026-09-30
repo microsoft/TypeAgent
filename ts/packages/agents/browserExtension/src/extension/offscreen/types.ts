@@ -146,12 +146,13 @@ export interface ServiceWorkerMessage {
  * Messages for offscreen document communication
  */
 export interface OffscreenMessage {
-    type: "downloadContent" | "processHtmlContent" | "ping";
+    type: "downloadContent" | "processHtmlContent" | "cancel" | "ping";
     url?: string;
     htmlContent?: string;
     filePath?: string;
     options?: DownloadOptions | ProcessingOptions;
     messageId?: string;
+    targetMessageId?: string;
 }
 
 /**

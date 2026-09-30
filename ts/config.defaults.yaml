@@ -13,4 +13,4 @@ azureOpenAI:
 
 reasoning:
   timeoutMs: 1200000
-  copilotModel: claude-opus-4.8
+  copilotModel: gpt-5.6-sol

@@ -43,6 +43,61 @@ describe("docImport.offline", () => {
         },
         testTimeout,
     );
+    test("aggregates structural parts without link knowledge", () => {
+        const markdown = [
+            "# Ada Lovelace",
+            "",
+            "Read the [citation](https://example.test/citation).",
+            "",
+            "## Analytical Engine",
+            "",
+            "Ada described an algorithm for the engine.",
+        ].join("\n");
+        const parts = docPartsFromMarkdown(markdown, 20, "fixture", {
+            collectLinkKnowledge: false,
+            maxTokensPerPart: 100,
+        });
+
+        expect(parts).toHaveLength(1);
+        expect(parts[0].textChunks.join("\n")).toContain("Analytical Engine");
+        expect(parts[0].knowledge?.topics).toEqual(
+            expect.arrayContaining(["Ada Lovelace", "Analytical Engine"]),
+        );
+        expect(parts[0].knowledge?.entities).not.toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    type: expect.arrayContaining(["url"]),
+                }),
+            ]),
+        );
+    });
+    test("retains structure without promoting it to knowledge", () => {
+        const markdown = [
+            "# Reference",
+            "",
+            "## Helpful links",
+            "",
+            "- Read the [guide](https://example.test/guide).",
+            "- Review *important guidance*.",
+        ].join("\n");
+        const parts = docPartsFromMarkdown(markdown, 2048, "fixture", {
+            collectLinkKnowledge: false,
+            collectStructuralKnowledge: false,
+        });
+
+        expect(parts.flatMap((part) => part.textChunks).join("\n")).toContain(
+            "Helpful links",
+        );
+        expect(parts.flatMap((part) => part.tags)).toEqual(
+            expect.arrayContaining(["heading", "list"]),
+        );
+        for (const part of parts) {
+            expect(part.knowledge).toMatchObject({
+                entities: [],
+                topics: [],
+            });
+        }
+    });
 });
 
 describeIf(

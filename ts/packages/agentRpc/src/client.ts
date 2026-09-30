@@ -46,7 +46,21 @@ import { getActiveTypeAgentSpanAttributes } from "@typeagent/telemetry/traceCont
 export type AgentRpcOptions = {
     trustedContextPropagation?: boolean;
     logger?: RpcStructuredLogger;
+    channelName?: string;
 };
+
+function getAgentChannelName(name: string, options?: AgentRpcOptions): string {
+    return options?.channelName ?? `agent:${name}`;
+}
+
+function getOptionsChannelName(
+    name: string,
+    options?: AgentRpcOptions,
+): string {
+    return options?.channelName === undefined
+        ? `options:${name}`
+        : `${options.channelName}:options`;
+}
 
 /**
  * Race a promise against an AbortSignal. If the signal fires before the
@@ -164,7 +178,9 @@ function createOptionsRpc(
     name: string,
     options?: AgentRpcOptions,
 ) {
-    const channel = channelProvider.createChannel(`options:${name}`);
+    const channel = channelProvider.createChannel(
+        getOptionsChannelName(name, options),
+    );
     const optionsMap = createObjectMap();
     return {
         optionsMap,
@@ -190,9 +206,17 @@ function createOptionsRpc(
                             fn = options[name];
                         } else {
                             const funcName = names.pop();
-                            thisObject = getObjectProperty(options, name);
+                            thisObject = getObjectProperty(
+                                options,
+                                names.join("."),
+                            );
                             fn = thisObject[funcName!];
                         }
+                    }
+                    if (typeof fn !== "function") {
+                        throw new Error(
+                            `Options callback '${name}' for object ${param.id} is not a function`,
+                        );
                     }
                     return fn.call(thisObject, ...param.args);
                 },
@@ -209,7 +233,9 @@ export async function createAgentRpcClient(
     agentInterface: AgentInterfaceFunctionName[],
     options?: AgentRpcOptions,
 ) {
-    const channel = channelProvider.createChannel(`agent:${name}`);
+    const channel = channelProvider.createChannel(
+        getAgentChannelName(name, options),
+    );
     const contextMap = createObjectMap<SessionContext<ShimContext>>();
     // Tracks port registration handles returned by sessionContext.registerPort
     // so the out-of-process agent can release them via the regId we sent back.
@@ -613,6 +639,28 @@ export async function createAgentRpcClient(
 
     // The shim needs to implement all the APIs regardless whether the actual agent
     // has that API.  We remove remove it the one that is not necessary below.
+    async function invokeWithActionCancellation<T>(
+        context: ActionContext<ShimContext>,
+        contextParams: ActionContextParams,
+        invoke: () => Promise<T>,
+    ): Promise<T> {
+        const signal = context.abortSignal;
+        signal?.throwIfAborted();
+        const onAbort = () =>
+            rpc.send("cancelAction", {
+                actionContextId: contextParams.actionContextId,
+            });
+        signal?.addEventListener("abort", onAbort, { once: true });
+        try {
+            const pending = invoke();
+            return await (context.waitForCompletionOnAbort
+                ? pending
+                : raceWithSignal(pending, signal));
+        } finally {
+            signal?.removeEventListener("abort", onAbort);
+        }
+    }
+
     const agent: Required<AppAgent> = {
         initializeAgentContext(settings?: AppAgentInitSettings) {
             return rpc.invoke("initializeAgentContext", {
@@ -635,32 +683,14 @@ export async function createAgentRpcClient(
             action: TypeAgentAction,
             context: ActionContext<ShimContext>,
         ) {
-            return withActionContextAsync(context, (contextParams) => {
-                const signal = context.abortSignal;
-                if (signal) {
-                    const onAbort = () =>
-                        rpc.send("cancelAction", {
-                            actionContextId: contextParams.actionContextId,
-                        });
-                    signal.addEventListener("abort", onAbort, { once: true });
-                    return raceWithSignal(
-                        rpc.invoke("executeAction", {
-                            ...contextParams,
-                            action,
-                        }),
-                        signal,
-                    ).finally(() => {
-                        signal.removeEventListener("abort", onAbort);
-                    });
-                }
-                return raceWithSignal(
+            return withActionContextAsync(context, (contextParams) =>
+                invokeWithActionCancellation(context, contextParams, () =>
                     rpc.invoke("executeAction", {
                         ...contextParams,
                         action,
                     }),
-                    signal,
-                );
-            });
+                ),
+            );
         },
         validateWildcardMatch(
             action: AppAction,
@@ -791,6 +821,12 @@ export async function createAgentRpcClient(
                 entityTypeName,
             });
         },
+        cancelChoice(choiceId: string, context: SessionContext<ShimContext>) {
+            return rpc.invoke("cancelChoice", {
+                ...getContextParam(context),
+                choiceId,
+            });
+        },
         handleChoice(
             choiceId: string,
             response:
@@ -801,11 +837,13 @@ export async function createAgentRpcClient(
             context: ActionContext<ShimContext>,
         ) {
             return withActionContextAsync(context, (contextParams) =>
-                rpc.invoke("handleChoice", {
-                    ...contextParams,
-                    choiceId,
-                    response,
-                }),
+                invokeWithActionCancellation(context, contextParams, () =>
+                    rpc.invoke("handleChoice", {
+                        ...contextParams,
+                        choiceId,
+                        response,
+                    }),
+                ),
             );
         },
         getDynamicSchema(
@@ -869,7 +907,7 @@ export async function createAgentRpcClient(
         // Options are agent-scoped (created once per initializeAgentContext call)
         // so they can be released when the context is torn down.
         if (optionsRpc !== undefined) {
-            channelProvider.deleteChannel(`options:${name}`);
+            channelProvider.deleteChannel(getOptionsChannelName(name, options));
             optionsRpc = undefined;
         }
         return result;

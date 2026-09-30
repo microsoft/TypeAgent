@@ -111,6 +111,36 @@ class AndroidDeviceSchemaAssetTest {
         assertTrue("AlarmActionParser rejects the day names $rejected", rejected.isEmpty())
     }
 
+    @Test
+    fun `the settings screens the schema offers match the ones the parser accepts`() {
+        // The Kotlin enum is the allowlist. A screen the schema offers but the
+        // enum does not know fails the action at the moment a user asks for it,
+        // and a screen the enum has but the schema hides is unreachable.
+        assertEquals(
+            AndroidSettingsScreen.entries.map { it.schemaName }.sorted(),
+            schemaUnionMembers("AndroidSettingsScreen").sorted()
+        )
+    }
+
+    @Test
+    fun `the music search focus values match the ones the parser accepts`() {
+        assertEquals(
+            MusicSearchFocus.entries.map { it.schemaName }.sorted(),
+            schemaUnionMembers("MusicSearchFocus").sorted()
+        )
+    }
+
+    /** Reads the string literals of a named string-union type alias. */
+    private fun schemaUnionMembers(typeName: String): List<String> =
+        Regex("""export type $typeName =([^;]*);""")
+            .find(schema)
+            ?.groupValues
+            ?.get(1)
+            ?.split("|")
+            ?.map { it.trim().trim('"') }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+
     private fun isAlarmDayAccepted(day: String): Boolean {
         val parameters = JSONObject()
             .put("originalRequest", "wake me up")

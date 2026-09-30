@@ -22,7 +22,10 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { EventEmitter } from "node:events";
-import { createEnhancedClientIO } from "../src/enhancedConsole.js";
+import {
+    __testQuestionWithCompletion,
+    createEnhancedClientIO,
+} from "../src/enhancedConsole.js";
 import type {
     PendingInteractionRequest,
     Dispatcher,
@@ -127,14 +130,19 @@ beforeEach(() => {
         writable: true,
         configurable: true,
     });
+    const fakeStdout = new EventEmitter() as EventEmitter & {
+        write(s: string): boolean;
+        columns: number;
+        rows: number;
+    };
+    fakeStdout.write = (s: string) => {
+        stdoutOutput.push(s);
+        return true;
+    };
+    fakeStdout.columns = 80;
+    fakeStdout.rows = 24;
     Object.defineProperty(process, "stdout", {
-        value: {
-            write: (s: string) => {
-                stdoutOutput.push(s);
-                return true;
-            },
-            columns: 80,
-        },
+        value: fakeStdout,
         writable: true,
         configurable: true,
     });
@@ -156,6 +164,25 @@ afterEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("requestInteraction — user answers", () => {
+    it("does not leak interaction input into the active command prompt", async () => {
+        const { dispatcher, calls } = makeDispatcherStub();
+        const clientIO = createEnhancedClientIO(undefined, {
+            current: dispatcher,
+        });
+        const commandInput = __testQuestionWithCompletion("> ", undefined);
+        await flushAsync();
+
+        clientIO.requestInteraction(makeQuestion("int-exclusive-input"));
+        await flushAsync();
+
+        fakeStdin.typeAnswer("1");
+        await flushAsync();
+        expect(calls[0].args[0]).toMatchObject({ value: 0 });
+
+        fakeStdin.typeAnswer("next");
+        await expect(commandInput).resolves.toBe("next");
+    });
+
     it("calls respondToInteraction with index 0 when user picks choice 1 (Yes)", async () => {
         const { dispatcher, calls } = makeDispatcherStub();
         const dispatcherRef = { current: dispatcher };

@@ -22,13 +22,13 @@ import { finished } from "node:stream/promises";
 
 import { Command } from "commander";
 
-import type { ParamSpec } from "../policy/paramTypes.js";
+import type { ParamSpec } from "../synthesizer/catalogGenerator/paramTypes.js";
 import {
     renderSchemaType,
     schemaTypeToParamSpec,
     type SchemaFieldNode,
     type SchemaTypeNode,
-} from "../policy/schemaTypeConvert.js";
+} from "../synthesizer/catalogGenerator/schemaTypeConvert.js";
 
 /**
  * Schemas whose actions are omitted from the packaged catalog action list.

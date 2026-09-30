@@ -7,7 +7,9 @@ import {
 } from "./importProgressEvents.mjs";
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../browserActions.mjs";
-import { WebSocket } from "ws";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:browser:import:progress");
 
 export class ImportWebSocketHandler {
     private context: SessionContext<BrowserActionContext>;
@@ -25,13 +27,8 @@ export class ImportWebSocketHandler {
 
     private forwardProgressToWebSocket(progress: ImportProgressEvent) {
         try {
-            // Get client from agentWebSocketServer instead of currentClient
             const agentServer = this.context.agentContext.agentWebSocketServer;
-            const client = agentServer?.getActiveClient(
-                this.context.agentContext.sessionId,
-            );
-
-            if (client && client.socket.readyState === WebSocket.OPEN) {
+            if (agentServer) {
                 const websocketProgress = {
                     type: "importProgress",
                     totalItems: progress.total,
@@ -56,16 +53,22 @@ export class ImportWebSocketHandler {
                     }),
                 };
 
-                const progressMessage = {
-                    method: "importProgress",
-                    params: {
+                const sent = agentServer.sendEventToActiveClient(
+                    this.context.agentContext.sessionId,
+                    "importProgress",
+                    {
                         importId: progress.importId,
                         progress: websocketProgress,
                     },
-                    source: "browserAgent",
-                };
-
-                client.socket.send(JSON.stringify(progressMessage));
+                );
+                debug(
+                    "%s phase=%s progress=%d/%d sent=%s",
+                    progress.importId,
+                    progress.phase,
+                    progress.current,
+                    progress.total,
+                    sent,
+                );
             }
         } catch (error) {
             console.error(

@@ -18,6 +18,14 @@ import type {
 } from "./displayLogEntry.js";
 import type { PendingInteractionResponse } from "./pendingInteraction.js";
 import type { CancelResult, QueueSnapshot, SubmitResult } from "./queue.js";
+import type {
+    ActionSearchRequest,
+    ActionSearchResult,
+    ExecuteActionRequest,
+    ContinueActionRequest,
+    CancelActionRequest,
+    StructuredActionExecutionResult,
+} from "./structuredAction.js";
 
 export const DispatcherName = "dispatcher";
 export const DispatcherEmoji = "🤖";
@@ -361,6 +369,11 @@ export type ProcessCommandOptions = {
      */
     noReasoning?: boolean;
     /**
+     * Control only the unknown/clarification translation transition to
+     * reasoning. Unlike noReasoning, this does not disable explicit reasoning.
+     */
+    translationReasoningFallback?: boolean;
+    /**
      * Restrict translation and grammar matching to this subset of currently
      * active schemas. The request returns notHandled when any requested schema
      * is unavailable.
@@ -507,6 +520,18 @@ export interface Dispatcher {
      * @param agentName optional — if provided, returns only the named agent
      */
     getAgentSchemas(agentName?: string): Promise<AgentSchemaInfo[]>;
+
+    searchActions(request: ActionSearchRequest): Promise<ActionSearchResult>;
+
+    executeAction(
+        request: ExecuteActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
+    continueAction(
+        request: ContinueActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
+    cancelAction(
+        request: CancelActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
 
     /**
      * Respond to a pending choice from an agent.

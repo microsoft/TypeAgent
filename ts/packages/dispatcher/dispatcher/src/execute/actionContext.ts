@@ -11,6 +11,7 @@ import {
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { makeClientIOMessage } from "../context/interactiveIO.js";
 import { RequestId } from "@typeagent/dispatcher-types";
+import { getStructuredExecution } from "../structuredAction/executionHooks.js";
 
 export type ActionContextWithClose = {
     actionContext: ActionContext<unknown>;
@@ -36,6 +37,9 @@ export function getActionContext(
     );
     const actionIO: ActionIO = {
         setDisplay(content: DisplayContent): void {
+            getStructuredExecution(context, requestId.requestId)?.display(
+                content,
+            );
             context.displayCount++;
             context.clientIO.setDisplay(
                 makeClientIOMessage(
@@ -55,6 +59,9 @@ export function getActionContext(
             // it, so an action that only shows a spinner still gets the
             // synthesized "completed" acknowledgment.
             if (mode !== "temporary") {
+                getStructuredExecution(context, requestId.requestId)?.display(
+                    content,
+                );
                 context.displayCount++;
             }
             context.clientIO.appendDisplay(
@@ -77,10 +84,16 @@ export function getActionContext(
     };
     const actionContext: ActionContext<unknown> = {
         streamingContext: undefined,
-        isFromReasoningLoop: context.isInsideReasoningLoop,
+        waitForCompletionOnAbort:
+            getStructuredExecution(context, requestId.requestId) !== undefined,
+        isFromReasoningLoop:
+            getStructuredExecution(context, requestId.requestId) ===
+                undefined && context.isInsideReasoningLoop,
         workingDirectory: systemContext.currentOptions?.workingDirectory,
         activityContext:
             // Only make activityContext available if the action is from the same agent.
+            getStructuredExecution(context, requestId.requestId) ===
+                undefined &&
             context.activityContext?.appAgentName === appAgentName
                 ? structuredClone(context.activityContext)
                 : undefined,
