@@ -10,12 +10,13 @@ import type { LoadedActionEligibilityPolicy } from "../../policy/loadPolicy.js";
 import {
     ACTION_PARAM_CREATE_POLICY_DOCS,
     ACTION_PARAM_VERIFY_MODE_DOCS,
-    LEGACY_RULE_RE,
     actionId,
     actionParameterSourceFingerprint,
     activePolicy,
     assertParameterOverridesMatchCatalog,
     graderRulesFingerprint,
+    hasDefaultRule,
+    isLegacyRule,
     nestedParamSpecEqual,
     type ActionParameterFieldGrader,
     type ActionParamVerifyMode,
@@ -158,7 +159,7 @@ function countFieldSources(
         } else {
             throw new Error(`Field '${actionLabel}.${label}' missing source`);
         }
-        if (LEGACY_RULE_RE.test(field.rule) || /default/i.test(field.rule)) {
+        if (isLegacyRule(field.rule) || hasDefaultRule(field.rule)) {
             throw new Error(
                 `Field '${actionLabel}.${label}' has legacy/default rule '${field.rule}'`,
             );
@@ -178,8 +179,8 @@ function countFieldSources(
                 );
             }
             if (
-                LEGACY_RULE_RE.test(field.item.rule) ||
-                /default/i.test(field.item.rule)
+                isLegacyRule(field.item.rule) ||
+                hasDefaultRule(field.item.rule)
             ) {
                 throw new Error(
                     `Field '${actionLabel}.${label}.item' has legacy/default rule '${field.item.rule}'`,

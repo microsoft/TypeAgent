@@ -11,6 +11,7 @@ import type {
     MemoryCenterInvokeFunctions,
     MemoryCenterJob,
     MemoryCenterKnowledge,
+    MemoryCenterKnowledgeSuppression,
     MemoryCenterPage,
     MemoryCenterHowToSettings,
     MemoryCenterProcedureCandidate,
@@ -20,6 +21,7 @@ import type {
 } from "@typeagent/browser-control-rpc/serviceTypes";
 import { createChromeRpcClient } from "./chromeRpcClient";
 import { createElectronRpcClient } from "./electronRpcClient";
+import { renderMarkdown } from "./utils/markdownRenderer";
 
 const ACTIVE_CORPUS_KEY = "memoryCenter.activeCorpusId";
 const PAGE_SIZE = 25;
@@ -69,6 +71,8 @@ const sourceFilter = element<HTMLInputElement>("sourceFilter");
 const entityList = element<HTMLDivElement>("entityList");
 const topicList = element<HTMLDivElement>("topicList");
 const relationshipList = element<HTMLDivElement>("relationshipList");
+const suppressionList = element<HTMLDivElement>("suppressionList");
+const contentPreview = element<HTMLDivElement>("contentPreview");
 const jobList = element<HTMLDivElement>("jobList");
 const activityList = element<HTMLDivElement>("activityList");
 const errorBanner = element<HTMLDivElement>("errorBanner");
@@ -108,6 +112,8 @@ let procedureCandidates: MemoryCenterProcedureCandidate[] = [];
 let procedures: MemoryCenterProcedureSummary[] = [];
 let selectedProcedure: MemoryCenterProcedureVersion | undefined;
 let isNewProcedure = false;
+let knowledgeSuppressions: MemoryCenterKnowledgeSuppression[] = [];
+let knowledgeCurationAvailable = true;
 
 function setError(error?: unknown): void {
     if (error === undefined) {
@@ -406,6 +412,7 @@ async function loadActivity(): Promise<void> {
 function renderContent(): void {
     if (!contentPage) {
         contentEditor.value = "";
+        contentPreview.replaceChildren();
         contentRange.textContent = "";
         element<HTMLButtonElement>("contentPrevious").disabled = true;
         element<HTMLButtonElement>("contentNext").disabled = true;
@@ -413,6 +420,7 @@ function renderContent(): void {
     }
     originalPageContent = contentPage.content;
     contentEditor.value = contentPage.content;
+    contentPreview.innerHTML = renderMarkdown(contentPage.content);
     const end = contentPage.offset + contentPage.content.length;
     contentRange.textContent = `${contentPage.offset + 1}-${end} of ${contentPage.totalChars} characters · revision ${contentPage.revisionId}`;
     element<HTMLButtonElement>("contentPrevious").disabled =
@@ -421,20 +429,105 @@ function renderContent(): void {
         contentPage.nextOffset === undefined;
 }
 
+function showContentMode(mode: "write" | "preview"): void {
+    const preview = mode === "preview";
+    if (preview) contentPreview.innerHTML = renderMarkdown(contentEditor.value);
+    contentEditor.classList.toggle("hidden", preview);
+    contentPreview.classList.toggle("hidden", !preview);
+    for (const [id, active] of [
+        ["writeTab", !preview],
+        ["previewTab", preview],
+    ] as const) {
+        const tab = element<HTMLButtonElement>(id);
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", String(active));
+    }
+}
+
+function createKnowledgeChip(
+    text: string,
+    kind: MemoryCenterKnowledgeSuppression["kind"],
+    name: string,
+): HTMLDivElement {
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    const label = document.createElement("span");
+    label.textContent = text;
+    chip.appendChild(label);
+    if (!knowledgeCurationAvailable) return chip;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "chip-remove";
+    remove.textContent = "×";
+    remove.title = `Hide ${kind} from this source`;
+    remove.setAttribute("aria-label", `Hide ${kind} ${name}`);
+    remove.addEventListener("click", () => {
+        void run(async () => {
+            if (!activeCorpus || !selectedSource) return;
+            await invoke("memorySuppressSourceKnowledge", {
+                corpusId: activeCorpus.corpusId,
+                sourceId: selectedSource.sourceId,
+                kind,
+                name,
+            });
+            await loadSourceKnowledge();
+        });
+    });
+    chip.appendChild(remove);
+    return chip;
+}
+
+function renderSuppressions(): void {
+    suppressionList.replaceChildren();
+    element<HTMLSpanElement>("suppressionCount").textContent =
+        knowledgeSuppressions.length === 0
+            ? ""
+            : `(${knowledgeSuppressions.length})`;
+    for (const suppression of knowledgeSuppressions) {
+        const row = document.createElement("div");
+        row.className = "revision";
+        const label = document.createElement("span");
+        label.textContent = `${suppression.name} · ${suppression.kind}`;
+        const restore = document.createElement("button");
+        restore.type = "button";
+        restore.textContent = "Restore";
+        restore.addEventListener("click", () => {
+            void run(async () => {
+                if (!activeCorpus || !selectedSource) return;
+                await invoke("memoryRestoreSourceKnowledge", {
+                    corpusId: activeCorpus.corpusId,
+                    sourceId: selectedSource.sourceId,
+                    kind: suppression.kind,
+                    name: suppression.name,
+                });
+                await loadSourceKnowledge();
+            });
+        });
+        row.append(label, restore);
+        suppressionList.appendChild(row);
+    }
+    if (knowledgeSuppressions.length === 0) setEmpty(suppressionList, "None");
+    else suppressionList.classList.remove("empty");
+}
+
 function renderKnowledge(knowledge?: MemoryCenterKnowledge): void {
     if (!knowledge) {
+        knowledgeSuppressions = [];
         setEmpty(entityList, "No source selected.");
         setEmpty(topicList, "No source selected.");
         setEmpty(relationshipList, "No source selected.");
+        renderSuppressions();
         return;
     }
 
     entityList.replaceChildren();
     for (const entity of knowledge.entities) {
-        appendTextItem(
-            entityList,
-            `${entity.name} (${entity.types.join(", ") || "entity"}) · ${entity.mentionCount}`,
-            "chip",
+        entityList.appendChild(
+            createKnowledgeChip(
+                `${entity.name} (${entity.types.join(", ") || "entity"}) · ${entity.mentionCount}`,
+                "entity",
+                entity.name,
+            ),
         );
     }
     entityList.classList.toggle("empty", knowledge.entities.length === 0);
@@ -442,10 +535,12 @@ function renderKnowledge(knowledge?: MemoryCenterKnowledge): void {
 
     topicList.replaceChildren();
     for (const topic of knowledge.topics) {
-        appendTextItem(
-            topicList,
-            `${topic.name} · ${topic.mentionCount}`,
-            "chip",
+        topicList.appendChild(
+            createKnowledgeChip(
+                `${topic.name} · ${topic.mentionCount}`,
+                "topic",
+                topic.name,
+            ),
         );
     }
     topicList.classList.toggle("empty", knowledge.topics.length === 0);
@@ -466,6 +561,36 @@ function renderKnowledge(knowledge?: MemoryCenterKnowledge): void {
     if (knowledge.relationships.length === 0) {
         relationshipList.textContent = "None";
     }
+    renderSuppressions();
+}
+
+async function loadSourceKnowledge(): Promise<void> {
+    if (!activeCorpus || !selectedSource) return;
+    const params = {
+        corpusId: activeCorpus.corpusId,
+        sourceId: selectedSource.sourceId,
+    };
+    const knowledge = await invoke("memoryGetSourceKnowledge", params);
+    try {
+        knowledgeSuppressions = await invoke(
+            "memoryListSourceKnowledgeSuppressions",
+            params,
+        );
+        knowledgeCurationAvailable = true;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+            !message.includes(
+                "No invoke handler memoryListSourceKnowledgeSuppressions",
+            ) &&
+            !message.includes("Knowledge curation is unavailable")
+        ) {
+            throw error;
+        }
+        knowledgeSuppressions = [];
+        knowledgeCurationAvailable = false;
+    }
+    renderKnowledge(knowledge);
 }
 
 function canCancel(job: MemoryCenterJob): boolean {
@@ -551,15 +676,31 @@ function renderProcedureCandidates(): void {
         const save = document.createElement("button");
         save.type = "button";
         save.textContent = "Save";
+        const errorMessage = document.createElement("div");
+        errorMessage.className = "job-error";
+        errorMessage.setAttribute("role", "alert");
         save.addEventListener("click", () => {
             void run(async () => {
-                const version = await invoke("memorySaveProcedure", {
-                    corpusId: candidate.corpusId,
-                    candidateId: candidate.candidateId,
-                });
-                selectedProcedure = version;
-                isNewProcedure = false;
-                await loadHowTos();
+                save.disabled = true;
+                errorMessage.textContent = "";
+                try {
+                    const version = await invoke("memorySaveProcedure", {
+                        corpusId: candidate.corpusId,
+                        candidateId: candidate.candidateId,
+                    });
+                    selectedProcedure = version;
+                    isNewProcedure = false;
+                    await loadHowTos();
+                    procedureList
+                        .querySelector<HTMLButtonElement>("button.selected")
+                        ?.focus();
+                } catch (error) {
+                    errorMessage.textContent =
+                        error instanceof Error ? error.message : String(error);
+                    throw error;
+                } finally {
+                    save.disabled = false;
+                }
             });
         });
         const reject = document.createElement("button");
@@ -575,7 +716,7 @@ function renderProcedureCandidates(): void {
             });
         });
         actions.append(save, reject);
-        item.append(title, subtitle, actions);
+        item.append(title, subtitle, actions, errorMessage);
         candidateList.appendChild(item);
     }
     element<HTMLSpanElement>("candidateCount").textContent =
@@ -783,21 +924,18 @@ async function selectSource(sourceId: string): Promise<void> {
     }
     contentOffsets = [0];
     contentPageIndex = 0;
+    showContentMode("write");
     renderSources();
     renderSource();
-    const [content, knowledge] = await Promise.all([
-        invoke("memoryGetSourceContent", {
-            corpusId,
-            sourceId,
-            revisionId: selectedSource.activeRevisionId,
-            offset: 0,
-            maxChars: CONTENT_PAGE_SIZE,
-        }),
-        invoke("memoryGetSourceKnowledge", { corpusId, sourceId }),
-    ]);
-    contentPage = content;
+    contentPage = await invoke("memoryGetSourceContent", {
+        corpusId,
+        sourceId,
+        revisionId: selectedSource.activeRevisionId,
+        offset: 0,
+        maxChars: CONTENT_PAGE_SIZE,
+    });
     renderContent();
-    renderKnowledge(knowledge);
+    await loadSourceKnowledge();
 }
 
 async function loadContentPage(offset: number): Promise<void> {
@@ -895,6 +1033,12 @@ element<HTMLButtonElement>("refreshJobsButton").addEventListener(
     () => {
         void run(loadJobs);
     },
+);
+element<HTMLButtonElement>("writeTab").addEventListener("click", () =>
+    showContentMode("write"),
+);
+element<HTMLButtonElement>("previewTab").addEventListener("click", () =>
+    showContentMode("preview"),
 );
 corpusSelect.addEventListener("change", () => {
     void run(() => selectCorpus(corpusSelect.value));

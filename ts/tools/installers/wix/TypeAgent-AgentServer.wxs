@@ -53,7 +53,24 @@
     <Binary Id="ProgressVbs" SourceFile="$(var.InstallerSourceDir)\progress.vbs" />
 
     <!-- Upgrade: replaces older versions, blocks downgrades -->
-    <MajorUpgrade DowngradeErrorMessage="A newer version of TypeAgent is already installed." />
+    <MajorUpgrade Schedule="afterInstallExecute" DowngradeErrorMessage="A newer version of TypeAgent is already installed." />
+
+    <Binary Id="MaintainServerPs1" SourceFile="$(var.InstallerSourceDir)\maintain-server.ps1" />
+    <Binary Id="MaintenanceVbs" SourceFile="$(var.InstallerSourceDir)\maintenance.vbs" />
+    <CustomAction Id="PrepareMaintenance" BinaryKey="MaintenanceVbs"
+                  VBScriptCall="PrepareMaintenance" Execute="immediate" Return="check" />
+    <!-- Flush only maintenance before removing the old product. InstallFinalize
+         executes the remaining installation script in the same transaction.
+         Scheduling rollback actions before an unflushed RemoveExistingProducts
+         after InstallInitialize is invalid (MSI error 2613). -->
+    <CustomAction Id="BeginMaintenance" BinaryKey="WixCA" DllEntry="WixQuietExec64"
+                 Execute="deferred" Return="check" Impersonate="yes" />
+    <CustomAction Id="RollbackMaintenance" BinaryKey="WixCA" DllEntry="WixQuietExec64"
+                  Execute="rollback" Return="ignore" Impersonate="yes" />
+    <CustomAction Id="CompleteMaintenance" BinaryKey="WixCA" DllEntry="WixQuietExec64"
+                  Execute="deferred" Return="check" Impersonate="yes" />
+    <CustomAction Id="CommitMaintenance" BinaryKey="WixCA" DllEntry="WixQuietExec64"
+                  Execute="commit" Return="ignore" Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
          Endpoint provider selection
@@ -169,9 +186,21 @@
                   VBScriptCall="CopySetupCommand"
                   Execute="immediate"
                   Return="ignore" />
+    <CustomAction Id="CheckTypeAgentPlugin"
+                  BinaryKey="ExitDialogVbs"
+                  VBScriptCall="CheckTypeAgentPlugin"
+                  Execute="immediate"
+                  Return="ignore" />
+    <CustomAction Id="ResetTypeAgentPluginStatus"
+                  BinaryKey="ExitDialogVbs"
+                  VBScriptCall="ResetTypeAgentPluginStatus"
+                  Execute="immediate"
+                  Return="ignore" />
 
     <InstallUISequence>
+      <Custom Action="ResetTypeAgentPluginStatus" Before="ExecuteAction">NOT REMOVE~="ALL"</Custom>
       <Custom Action="CheckTypeAgentConfig" After="ExecuteAction">NOT Installed AND PROVIDER="AISYSTEMS"</Custom>
+      <Custom Action="CheckTypeAgentPlugin" After="CheckTypeAgentConfig">NOT REMOVE~="ALL"</Custom>
     </InstallUISequence>
 
     <!-- ═══════════════════════════════════════════════
@@ -363,7 +392,8 @@
     <!-- ═══════════════════════════════════════════════
          Custom actions — Copilot CLI plugin registration
          Runs register-plugin.ps1 as the installing user.
-          Registration failures are fatal.
+         Registration failures are non-fatal and shown on the completion page.
+         Repair retries registration, including the prerequisite setup retry.
          ═══════════════════════════════════════════════ -->
 
     <!-- Pass the PowerShell command as CustomActionData to the deferred CA -->
@@ -702,6 +732,11 @@
                   Impersonate="yes" />
 
     <InstallExecuteSequence>
+      <Custom Action="PrepareMaintenance" After="InstallInitialize">NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="RollbackMaintenance" Before="BeginMaintenance">NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="BeginMaintenance" After="PrepareMaintenance">NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="CommitMaintenance" After="BeginMaintenance">NOT UPGRADINGPRODUCTCODE</Custom>
+      <InstallExecute After="CommitMaintenance" />
       <Custom Action="ResetMainProgress"        After="InstallFiles">NOT REMOVE~="ALL"</Custom>
       <Custom Action="MainProgress1"            After="ResetMainProgress">NOT REMOVE~="ALL"</Custom>
       <Custom Action="ExtractAgentServerPayload" After="MainProgress1">NOT REMOVE~="ALL"</Custom>
@@ -720,7 +755,8 @@
       <Custom Action="MainProgress6"           After="ProvisionAiSystemsConfig">NOT REMOVE~="ALL"</Custom>
       <Custom Action="InstallPrereqs"          After="MainProgress6">NOT REMOVE~="ALL"</Custom>
       <Custom Action="MainProgress7"           After="InstallPrereqs">NOT REMOVE~="ALL"</Custom>
-      <Custom Action="StartAgentServer"        After="MainProgress7">(NOT REMOVE~="ALL") AND (STARTSERVER="1")</Custom>
+      <Custom Action="CompleteMaintenance"     After="MainProgress7">NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="StartAgentServer"        After="CompleteMaintenance">(NOT REMOVE~="ALL") AND (STARTSERVER="1")</Custom>
       <Custom Action="MainProgress8"           After="StartAgentServer">NOT REMOVE~="ALL"</Custom>
       <Custom Action="EnableAutostart"         After="MainProgress8">(NOT REMOVE~="ALL") AND (AUTOSTART="1")</Custom>
       <Custom Action="ShellLocationMissing"    After="EnableAutostart">(NOT REMOVE~="ALL") AND (SHELL="1") AND (NOT SHELLBASEURL) AND (NOT SHELLSTORAGE) AND ((NOT SHELLFEED) OR (NOT SHELLPACKAGE) OR (NOT SHELLORG) OR (NOT SHELLPROJECT))</Custom>
@@ -844,18 +880,18 @@
       <!-- ═══ Completion dialog ═══
            Replaces the stock WixUI ExitDialog so the post-install setup command
            is shown in a selectable, copyable Edit control with a Copy button. -->
-      <Dialog Id="TypeAgentExitDlg" Width="370" Height="270" Title="!(loc.ExitDialog_Title)">
-        <Control Id="Finish" Type="PushButton" X="236" Y="243" Width="56" Height="17"
+      <Dialog Id="TypeAgentExitDlg" Width="370" Height="320" Title="!(loc.ExitDialog_Title)">
+        <Control Id="Finish" Type="PushButton" X="236" Y="293" Width="56" Height="17"
                  Default="yes" Cancel="yes" Text="!(loc.WixUIFinish)">
           <Publish Event="EndDialog" Value="Return">1</Publish>
         </Control>
-        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17"
+        <Control Id="Cancel" Type="PushButton" X="304" Y="293" Width="56" Height="17"
                  Disabled="yes" Text="!(loc.WixUICancel)" />
-        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234"
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="284"
                  TabSkip="no" Text="!(loc.ExitDialogBitmap)" />
-        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"
+        <Control Id="Back" Type="PushButton" X="180" Y="293" Width="56" Height="17"
                  Disabled="yes" Text="!(loc.WixUIBack)" />
-        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="284" Width="370" Height="0" />
         <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="40"
                  Transparent="yes" NoPrefix="yes" Text="!(loc.ExitDialogTitle)" />
         
@@ -909,6 +945,11 @@
         <Control Id="DescriptionAfterRetry" Type="Text" X="135" Y="156" Width="220" Height="20"
                  Transparent="yes" NoPrefix="yes" Hidden="yes" Text="!(loc.ExitDialogDescription)">
           <Condition Action="show">NOT Installed AND TYPEAGENTCONFIGMISSING="1"</Condition>
+        </Control>
+        <Control Id="PluginRepairText" Type="Text" X="135" Y="185" Width="220" Height="70"
+                 Transparent="yes" NoPrefix="yes" Hidden="yes"
+                 Text="Copilot plugin setup did not complete. Reopen this TypeAgent installer and choose Repair to retry automatically. If Repair fails, check msi-register-plugin.log in %LOCALAPPDATA%\TypeAgent\logs. Restart Copilot after a successful repair.">
+          <Condition Action="show">NOT REMOVE~="ALL" AND TYPEAGENTPLUGININCOMPLETE="1"</Condition>
         </Control>
       </Dialog>
 

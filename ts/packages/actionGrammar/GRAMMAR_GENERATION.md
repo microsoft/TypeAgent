@@ -4,7 +4,7 @@ This document describes the grammar generation system moved from `agentSdkWrappe
 
 ## Overview
 
-The grammar generation system uses Claude to analyze request/action pairs and automatically generate Action Grammar rules for caching. This enables the system to learn from user interactions and build up a comprehensive grammar over time.
+The grammar generation system uses Copilot by default to analyze schemas and automatically generate Action Grammar rules for caching. Provider-aware APIs and CLIs also support explicit Claude generation.
 
 ## Architecture
 
@@ -145,7 +145,8 @@ Options:
 - `-s, --schema <path>`: Path to .pas.json schema file
 - `-o, --output <path>`: Output path for .agr file
 - `-e, --examples <number>`: Number of examples per action (default: 3)
-- `-m, --model <model>`: Claude model to use
+- `--provider <provider>`: `copilot` (default) or `claude`
+- `-m, --model <model>`: Model to use (default: `gpt-5.6-sol`)
 - `-i, --input <path>`: Existing grammar to extend
 - `--improve <instructions>`: Improvement instructions
 

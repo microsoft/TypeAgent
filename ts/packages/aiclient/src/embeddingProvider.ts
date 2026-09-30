@@ -5,6 +5,7 @@ import { TextEmbeddingModel } from "./models.js";
 import { createEmbeddingModel } from "./openai.js";
 import { EnvVars } from "./apiTypes.js";
 import { createLocalEmbeddingModel } from "./localEmbedding.js";
+import { getRuntimeConfig } from "./runtimeConfig.js";
 import {
     createCopilotEmbeddingModel,
     DefaultCopilotEmbeddingModel,
@@ -23,33 +24,40 @@ export type EmbeddingProvider =
     | "copilot"
     | "none";
 
-// Flattened form of the config `embedding:` section.
-enum EmbeddingEnvVars {
-    PROVIDER = "TYPEAGENT_EMBEDDING_PROVIDER",
-    MODEL = "TYPEAGENT_EMBEDDING_MODEL",
-    CACHE_DIR = "TYPEAGENT_EMBEDDING_CACHE_DIR",
+// Embedding sizes of well-known defaults, used when no size is configured.
+const LocalDefaultEmbeddingSize = 384; // Xenova/all-MiniLM-L6-v2
+const HostedDefaultEmbeddingSize = 1536; // ada-002 / text-embedding-3-small
+
+// The `embedding:` section of the runtime config.
+function getEmbeddingConfig() {
+    return getRuntimeConfig().embedding;
 }
 
-function isEmbeddingProvider(value: string): value is EmbeddingProvider {
-    return (
-        value === "local" ||
-        value === "openai" ||
-        value === "azure" ||
-        value === "copilot" ||
-        value === "none"
-    );
+/**
+ * The embedding vector size for the configured provider. An explicit
+ * `embedding.size` always wins; otherwise the default model's size is used:
+ * `LocalDefaultEmbeddingSize` for the local provider,
+ * `HostedDefaultEmbeddingSize` for hosted endpoints. Set `size` when using a
+ * non-default model. Configuration only; never loads a model.
+ */
+export function getEmbeddingSize(): number {
+    const configured = getEmbeddingConfig()?.size;
+    if (configured !== undefined) return configured;
+    return getEmbeddingProvider() === "local"
+        ? LocalDefaultEmbeddingSize
+        : HostedDefaultEmbeddingSize;
 }
 
 /**
  * Determine the configured embedding provider using configuration only
  * (no network access, no model loading). An explicit
- * `TYPEAGENT_EMBEDDING_PROVIDER` always wins; otherwise the provider is
+ * `embedding.provider` always wins; otherwise the provider is
  * inferred from the presence of hosted embedding endpoints, defaulting to
  * "none" when nothing is configured.
  */
 export function getEmbeddingProvider(): EmbeddingProvider {
-    const explicit = process.env[EmbeddingEnvVars.PROVIDER]?.trim();
-    if (explicit && isEmbeddingProvider(explicit)) {
+    const explicit = getEmbeddingConfig()?.provider;
+    if (explicit !== undefined) {
         return explicit;
     }
     if (
@@ -86,24 +94,35 @@ export function tryCreateEmbeddingModel(
     dimensions?: number,
 ): TextEmbeddingModel | undefined {
     const provider = getEmbeddingProvider();
+    const config = getEmbeddingConfig();
     switch (provider) {
         case "none":
             return undefined;
         case "local":
             return createLocalEmbeddingModel({
-                model: process.env[EmbeddingEnvVars.MODEL]?.trim() || undefined,
-                cacheDir:
-                    process.env[EmbeddingEnvVars.CACHE_DIR]?.trim() ||
-                    undefined,
+                model: config?.model,
+                cacheDir: config?.cacheDir,
+                maxBatchSize: config?.maxBatchSize,
             });
         case "copilot":
             return createCopilotEmbeddingModel(
-                process.env[EmbeddingEnvVars.MODEL]?.trim() ||
-                    DefaultCopilotEmbeddingModel,
+                config?.model ?? DefaultCopilotEmbeddingModel,
+                undefined,
+                undefined,
+                {
+                    dimensions: dimensions ?? config?.size,
+                    maxBatchSize: config?.maxBatchSize,
+                },
             );
-        default:
+        default: {
+            dimensions ??= config?.size;
+            const options = {
+                modelName: config?.model,
+                maxBatchSize: config?.maxBatchSize,
+            };
             return endpoint !== undefined
-                ? createEmbeddingModel(endpoint, dimensions)
-                : createEmbeddingModel(undefined, dimensions);
+                ? createEmbeddingModel(endpoint, dimensions, options)
+                : createEmbeddingModel(undefined, dimensions, options);
+        }
     }
 }

@@ -212,6 +212,12 @@ export type MemoryCenterReindexResult = {
     indexVersion: string;
 };
 
+export type MemoryCenterKnowledgeSuppression = {
+    sourceId: string;
+    kind: "entity" | "topic";
+    name: string;
+};
+
 export type MemoryCenterActivityType =
     | "visited"
     | "bookmarked"
@@ -271,6 +277,22 @@ export type MemoryCenterInvokeFunctions = {
         corpusId: string;
         sourceId: string;
     }): Promise<MemoryCenterKnowledge>;
+    memoryListSourceKnowledgeSuppressions(params: {
+        corpusId: string;
+        sourceId: string;
+    }): Promise<MemoryCenterKnowledgeSuppression[]>;
+    memorySuppressSourceKnowledge(params: {
+        corpusId: string;
+        sourceId: string;
+        kind: MemoryCenterKnowledgeSuppression["kind"];
+        name: string;
+    }): Promise<MemoryCenterKnowledgeSuppression[]>;
+    memoryRestoreSourceKnowledge(params: {
+        corpusId: string;
+        sourceId: string;
+        kind: MemoryCenterKnowledgeSuppression["kind"];
+        name: string;
+    }): Promise<MemoryCenterKnowledgeSuppression[]>;
     memoryImportDocument(params: {
         corpusId: string;
         title: string;
@@ -537,7 +559,16 @@ export type BrowserAgentInvokeFunctions = {
         textOnly?: boolean;
         mode?: string;
         extractedKnowledge?: any;
-    }): Promise<any>;
+        activityType?: "visited" | "captured";
+        reportHowToStatus?: boolean;
+    }): Promise<{
+        indexed: boolean;
+        knowledgeExtracted: boolean;
+        entityCount: number;
+        warnings?: string[];
+        howTo?: { enabled: boolean; candidateCount: number };
+        error?: string;
+    }>;
 
     checkPageIndexStatus(params: { url: string }): Promise<any>;
     getPageIndexedKnowledge(params: { url: string }): Promise<any>;

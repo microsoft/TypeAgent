@@ -416,6 +416,19 @@ export interface MemoryKnowledgeGraph {
     relationships: MemoryGraphRelationship[];
 }
 
+export type SourceKnowledgeKind = "entity" | "topic";
+
+export interface SourceKnowledgeSuppression {
+    sourceId: string;
+    kind: SourceKnowledgeKind;
+    name: string;
+}
+
+export interface SourceKnowledgeSuppressionRequest
+    extends SourceKnowledgeSuppression {
+    corpusId: string;
+}
+
 export interface MemoryServiceCapabilities {
     chatProvider?: string;
     embeddingProvider?: string;
@@ -557,6 +570,16 @@ export interface MemoryService {
         corpusId: string,
         sourceId: string,
     ): Promise<MemoryKnowledgeGraph>;
+    listSourceKnowledgeSuppressions?(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<SourceKnowledgeSuppression[]>;
+    suppressSourceKnowledge?(
+        request: SourceKnowledgeSuppressionRequest,
+    ): Promise<SourceKnowledgeSuppression[]>;
+    restoreSourceKnowledge?(
+        request: SourceKnowledgeSuppressionRequest,
+    ): Promise<SourceKnowledgeSuppression[]>;
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
@@ -646,6 +669,7 @@ export interface IndexedDocument {
     source: SourceDocument;
     revision: SourceRevision;
     content: string;
+    indexTags?: string[];
     pipeline: {
         mode: IngestionMode;
         maxCharsPerChunk?: number;
@@ -672,7 +696,11 @@ export interface CorpusIndex {
         signal: AbortSignal,
         onProgress: (progress: JobProgress) => Promise<void>,
     ): Promise<void>;
-    search(query: string, limit: number): Promise<CorpusIndexMatch[]>;
+    search(
+        query: string,
+        limit: number,
+        tags?: string[],
+    ): Promise<CorpusIndexMatch[]>;
     getKnowledgeGraph(
         sourceIds?: ReadonlySet<string>,
     ): Promise<MemoryKnowledgeGraph>;

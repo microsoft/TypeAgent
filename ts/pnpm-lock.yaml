@@ -1299,9 +1299,15 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
+      '@github/copilot-sdk':
+        specifier: 1.0.13
+        version: 1.0.13
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -1926,6 +1932,9 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
+      '@github/copilot-sdk':
+        specifier: 1.0.13
+        version: 1.0.13
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@4.3.6)
@@ -2582,9 +2591,6 @@ importers:
 
   packages/agents/email:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../../typeagent
@@ -3319,15 +3325,18 @@ importers:
 
   packages/agents/powershell:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
       '@typeagent/agent-flows':
         specifier: workspace:*
         version: link:../../agent-flows
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../config
       debug:
         specifier: ^4.3.4
         version: 4.4.3(supports-color@8.1.1)
@@ -3552,9 +3561,6 @@ importers:
 
   packages/agents/taskflow:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
       '@typeagent/agent-flows':
         specifier: workspace:*
         version: link:../../agent-flows
@@ -3670,12 +3676,12 @@ importers:
 
   packages/agents/utility:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/browser-control-rpc':
         specifier: workspace:*
         version: link:../browserControlRpc
@@ -5304,6 +5310,22 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/git-story:
+    dependencies:
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
+    devDependencies:
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.43
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/grammarTools/cli:
     dependencies:
       '@typeagent/action-grammar':
@@ -5605,9 +5627,6 @@ importers:
 
   packages/kp:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
@@ -5622,7 +5641,7 @@ importers:
         version: 4.4.3(supports-color@8.1.1)
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@4.4.3)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.8
@@ -5642,12 +5661,6 @@ importers:
 
   packages/mcp/thoughts:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.4.3)
-      '@anthropic-ai/sdk':
-        specifier: ^0.93.0
-        version: 0.93.0(zod@4.4.3)
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
@@ -8818,51 +8831,51 @@ packages:
     resolution: {integrity: sha1-z1UvE6Vpr/KGJdnTfbNcomvn1ZQ=}
 
   '@github/copilot-sdk-darwin-arm64@1.0.13':
-    resolution: {integrity: sha1-E1C7OtV78Uif9acJtkiVMYcOwno=}
+    resolution: {integrity: sha512-AvBV5dzjNWpGwgoCnttrETnt7rLI4pTFQsRSM7GU5TK+YqShauffdMU06Bn/d+IDX2fj1Z4ThH7yl/gHCDvoNQ==}
     cpu: [arm64]
     os: [darwin]
 
   '@github/copilot-sdk-darwin-x64@1.0.13':
-    resolution: {integrity: sha1-8JlBgPGmh/mG6Ntt1uKgYo+/4H4=}
+    resolution: {integrity: sha512-ZNQmTnHwk8bO/E514k0sFBsuCVNpFj8jMH4jeLncASQM4RRdOqYhXlYLW7H/ts7ANjdfMJjJY29NUqzEWaADOA==}
     cpu: [x64]
     os: [darwin]
 
   '@github/copilot-sdk-linux-arm64@1.0.13':
-    resolution: {integrity: sha1-j8EQsK0ia+NZMyT0vWO4e73zOKU=}
+    resolution: {integrity: sha512-km1jvveDwlJbht8luFyBurz0wUxPHSzdkZRMJEJgVHYfMn03gi0gdnZ6fC6JWgkiffNZpukSxRPJmPfRobw6Aw==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
   '@github/copilot-sdk-linux-x64@1.0.13':
-    resolution: {integrity: sha1-LAAMh3TY4wLAemLNec5TJe5xtEQ=}
+    resolution: {integrity: sha512-4AbzC8Nb1dWYQ1uxbHGAh0ZAoOJeL3Ms1oe3byZLn8ENP1PfoyD8DJZUSsyXGYHxL7oLJyUqd3wyt18ifIg8iw==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
   '@github/copilot-sdk-linuxmusl-arm64@1.0.13':
-    resolution: {integrity: sha1-OGpaHk6oDBcavPuH0z1Ks8lMujg=}
+    resolution: {integrity: sha512-pCUjly1nXcNpYDZNnKrglFIFejbb+QDkloilldu+0tTbSzb8gEmVsbGwpfwyZXfNQf5Je5FFjsOfQR9PXH1NDQ==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
   '@github/copilot-sdk-linuxmusl-x64@1.0.13':
-    resolution: {integrity: sha1-Wh2T9+rExyAOjIuZ598iJD38Ghs=}
+    resolution: {integrity: sha512-y5RmqAbKSYHt+OwQdILIiiMSibXdd7/0kO7kFoTZCN2gn2eGRA8wJbXlf6KZh+yYgWSJGUL8677LDJd3WnIHbA==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
   '@github/copilot-sdk-win32-arm64@1.0.13':
-    resolution: {integrity: sha1-syiDiHYBtnxP5LbP3aCT3AZcKeg=}
+    resolution: {integrity: sha512-azISXh4pEVfX0hPzu58wZTYg3tdWG4L1nNpiRa/wdBxhcovbxw+eZVkI4C6FZMx0tiNYFkqWzVTV7oKskNybcw==}
     cpu: [arm64]
     os: [win32]
 
   '@github/copilot-sdk-win32-x64@1.0.13':
-    resolution: {integrity: sha1-rgJLcDBgPLXY58/YSScIYaO11g8=}
+    resolution: {integrity: sha512-lvS7kMbuuxydBQxPDHCkuUwbC858Rvcz3Q3vv0mxnLKuWJ75lAcqERefqA2p4beaPdez+ifZOA5heUT0rx3GnA==}
     cpu: [x64]
     os: [win32]
 
   '@github/copilot-sdk@1.0.13':
-    resolution: {integrity: sha1-R5uTEp2RjnOGevKTnLEThopcwVo=}
+    resolution: {integrity: sha512-/j6/tGc9HOtcupuYFloOKk0fpScdpy65EVF1LKg2Z2VQOojCGPgBGkhgVGVDaqW7UB6TV2qbQZa9rKJimJ0wWQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   '@hapi/bourne@3.0.0':
@@ -9592,7 +9605,7 @@ packages:
     os: [freebsd]
 
   '@koromix/koffi-linux-arm64@3.2.1':
-    resolution: {integrity: sha1-ddSlPuDQYfoVnMG+eugLBNEAkg8=}
+    resolution: {integrity: sha512-K+cGUL5iBcDqxmsocrjmlASqDf24gc7artbVW3PewG2c9AqwC63lezgwvB85Nx4lZAQjB6zIFHh9A7t1yGbwhw==}
     cpu: [arm64]
     os: [linux]
 
@@ -9617,7 +9630,7 @@ packages:
     os: [linux]
 
   '@koromix/koffi-linux-x64@3.2.1':
-    resolution: {integrity: sha1-I3tGQNc4A+tny7pDe1Eu2HkzgD0=}
+    resolution: {integrity: sha512-c7hw7Qs/r5gnFRTQLcbifBwRU7wiocj+2pVuDQ5Ahb3r36SZmupmgYbTWcLvTW+hul1jd7SKRV0d14ZJq/tvSw==}
     cpu: [x64]
     os: [linux]
 
@@ -35300,11 +35313,6 @@ snapshots:
     optionalDependencies:
       typescript: 5.4.5
       zod: 4.3.6
-
-  typechat@0.1.1(typescript@5.4.5)(zod@4.4.3):
-    optionalDependencies:
-      typescript: 5.4.5
-      zod: 4.4.3
 
   typed-array-buffer@1.0.3:
     dependencies:

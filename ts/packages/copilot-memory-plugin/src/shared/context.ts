@@ -2,10 +2,11 @@
 // Licensed under the MIT License.
 
 /**
- * Marker prepended to memory injected into a turn. Hooks skip a second
- * injection when this marker is already present.
+ * XML tag wrapping memory injected into a turn. Hooks skip a second
+ * injection when the opening tag is already present.
  */
-export const MEMORY_CONTEXT_MARKER = "TYPEAGENT_MEMORY_CONTEXT";
+const MEMORY_CONTEXT_TAG = "typeagent-memory";
+export const MEMORY_CONTEXT_MARKER = `<${MEMORY_CONTEXT_TAG}>`;
 
 export type RecallAnswer = {
     type: "Answered" | "NoAnswer";
@@ -18,15 +19,20 @@ function formatMemoryContext(answer: string): string {
         MEMORY_CONTEXT_MARKER,
         "Relevant memory from earlier sessions in this workspace:",
         answer.trim(),
+        `</${MEMORY_CONTEXT_TAG}>`,
     ].join("\n");
 }
 
+/**
+ * Puts tagged memory before the prompt so the user's request stays last:
+ *   <typeagent-memory>...use pnpm...</typeagent-memory>\n\nhow do I install?
+ */
 export function appendMemoryContext(prompt: string, answer: string): string {
     const trimmed = answer.trim();
     if (!trimmed || prompt.includes(MEMORY_CONTEXT_MARKER)) {
         return prompt;
     }
-    return `${prompt}\n\n${formatMemoryContext(trimmed)}`;
+    return `${formatMemoryContext(trimmed)}\n\n${prompt}`;
 }
 
 export function readString(

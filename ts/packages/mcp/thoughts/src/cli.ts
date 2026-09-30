@@ -3,6 +3,7 @@
 // Licensed under the MIT License.
 
 import { loadConfigSync } from "@typeagent/config";
+import { stopCopilotClient } from "@typeagent/aiclient";
 import * as path from "path";
 import * as fs from "fs";
 import { ThoughtsProcessor } from "./thoughtsProcessor.js";
@@ -14,7 +15,7 @@ interface CliOptions {
     input?: string; // Input file path or "-" for stdin
     output?: string; // Output file path or "-" for stdout
     instructions?: string; // Additional formatting instructions
-    model?: string; // Claude model to use
+    model?: string; // LLM endpoint to use
     tags?: string[]; // Tags/keywords for later lookup
     help?: boolean;
 }
@@ -83,8 +84,8 @@ Options:
   -t, --tags <tags>          Comma-separated tags/keywords for later lookup
                              Examples: "meeting,q1-2026,action-items"
                                        "project-alpha,design,brainstorm"
-  -m, --model <model>        Claude model to use
-                             Default: claude-sonnet-4-20250514
+  -m, --model <model>        LLM endpoint to use
+                             Default: copilot:gpt-5.6-sol
   -h, --help                 Show this help message
 
 Environment Variables:
@@ -181,7 +182,7 @@ async function main() {
             process.exit(1);
         }
 
-        console.error(`Processing ${rawText.length} characters with Claude...`);
+        console.error(`Processing ${rawText.length} characters with an LLM...`);
 
         // Process thoughts
         const processor = new ThoughtsProcessor(options.model);
@@ -212,4 +213,4 @@ async function main() {
     }
 }
 
-main();
+main().finally(stopCopilotClient);

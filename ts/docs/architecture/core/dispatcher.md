@@ -375,6 +375,62 @@ entity references. Named entities (e.g., "that song", "the meeting") are
 looked up in conversation memory. Ambiguous references trigger a user
 clarification prompt via the `ClientIO` layer.
 
+**Intermediate results** - A translated `resultEntityId` labels a completed
+action; it does not require that every successful action manufacture an
+entity. The three consumers have distinct contracts:
+
+- A legacy `${result-id}` parameter consumes `resultEntity.name` and retains
+  same-agent entity metadata. A missing entity remains an error.
+- A `{ "$result": "id" }` parameter consumes only the explicit `resultValue`,
+  not display text, structured display `rawData`, or an entity name. Before
+  invoking the consumer, the dispatcher validates the concrete value against
+  its parameter schema without the translation-time placeholder exemption.
+  Empty strings, empty arrays, zero, and false are values, not missing results.
+- A `pendingRequestAction` remains in the execution queue until its earlier
+  action completes. Translation receives request-local snapshots of completed
+  actions and their actual results, including display-only outputs, even when
+  conversation history or memory extraction is disabled. These outputs are
+  context for translating the remaining request, not instructions to replay
+  earlier actions or an automatic switch to reasoning.
+
+  Deferred context uses a projection of result values, entity bindings, history
+  text, and display data, rather than serializing execution metadata. Identical
+  value/text representations and duplicate structured `rawData` are omitted;
+  display alternates and presentation flags are not sent. Distinct display
+  content is preserved even when history text is only a summary. Entity metadata
+  continues to be available through the history's entity references.
+
+  The serialized UTF-8 envelope containing the remaining request and its full
+  history context is limited to 64 KiB. The limit includes all completed outputs,
+  action parameters, inherited prompt sections, entities, activity state, and
+  additional instructions. This is a deterministic deferred-context safeguard,
+  not a token limit for the complete model prompt (which also includes schemas
+  and other translation instructions). Oversized context stops before translating
+  or executing the continuation, with an explicit error: no output is silently
+  truncated or summarized and completed producers are not replayed. Concrete
+  `$result` substitution is unchanged and does not use this prompt-size limit.
+
+  Deferred translation retains the caller's active-schema and schema-family
+  restrictions. An unavailable or empty scope stops the continuation rather than
+  widening it to globally active schemas. Newly translated actions also pass the
+  execution-eligibility check before entering the queue; unknown or disabled
+  actions stop the continuation without reasoning fallback or producer replay.
+
+  An unused result label does not turn a successful mutation into a failure.
+  Errors stop the chain; missing references and invalid concrete values fail
+  before their consumers execute. Deferred translation cannot use an action
+  still awaiting confirmation. Continuations retain completed-action history
+  while each newly translated plan has its own result-reference bindings.
+
+In legacy action execution, a pending user choice stops the remaining queue,
+including actions without result references and any returned additional
+actions. The choice remains available, but the dispatcher explicitly reports
+that the remaining steps were not executed and will not resume automatically.
+This interruption does not trigger reasoning fallback or replay completed
+actions. A standalone choice retains its existing behavior. Structured
+execution continues to resolve choices through its own awaited interaction
+path before returning to the action queue.
+
 Translated actions may also contain **entity placeholders** — explicit
 references the LLM emits as string values pointing back at entities
 provided in the prompt's history context. `resolveEntityPlaceholders()`

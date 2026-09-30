@@ -8,14 +8,11 @@
  * packs chunks into a prompt up to a character budget, and asks the LLM
  * to produce a grounded natural-language answer.
  *
- * Tries aiclient OpenAI first (direct API, no subprocess).
- * Falls back to Claude Agent SDK query() if aiclient is not available.
+ * Uses the configured aiclient endpoint.
  */
 
-import { openai, ChatModel } from "@typeagent/aiclient";
+import { openai } from "@typeagent/aiclient";
 import { PromptSection } from "typechat";
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "./cliPath.js";
 import { ScoredChunkResult, SearchResult } from "./types.js";
 
 import registerDebug from "debug";
@@ -23,31 +20,7 @@ const debug = registerDebug("kp:answer");
 
 /** Default character budget for the evidence block in the prompt. */
 const DEFAULT_CHAR_BUDGET = 12_000;
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
-
-/** Lazy singleton chat model for answer generation. */
-let answerModel: ChatModel | undefined;
-let answerModelAvailable: boolean | undefined;
-
-function getAnswerModel(): ChatModel | undefined {
-    if (answerModelAvailable === false) return undefined;
-    if (answerModel) return answerModel;
-
-    try {
-        const settings = openai.getChatModelSettings("GPT_5_MINI");
-        settings.timeout = 120_000;
-        answerModel = openai.createChatModel(settings);
-        answerModel.completionSettings.max_completion_tokens = 4096;
-        delete (answerModel.completionSettings as any).temperature;
-        answerModelAvailable = true;
-        debug("aiclient answer model created (GPT_5_MINI)");
-        return answerModel;
-    } catch (e) {
-        debug("aiclient answer model not available: %s", e);
-        answerModelAvailable = false;
-        return undefined;
-    }
-}
+const DEFAULT_MODEL = "copilot:gpt-5.6-sol";
 
 export interface AnswerGeneratorConfig {
     model?: string;
@@ -98,7 +71,7 @@ export async function generateAnswer(
     ctx: AnswerContext,
     config?: AnswerGeneratorConfig,
 ): Promise<AnswerResult> {
-    const agentModel = config?.model ?? DEFAULT_MODEL;
+    const modelName = config?.model ?? DEFAULT_MODEL;
     const charBudget = config?.charBudget ?? DEFAULT_CHAR_BUDGET;
 
     // Pack chunks into evidence block up to budget
@@ -147,34 +120,11 @@ export async function generateAnswer(
         systemPrompt += ANSWER_HTML_SUFFIX;
     }
 
-    // Try aiclient first, fall back to agent SDK
-    const model = getAnswerModel();
-    let responseText: string;
-    if (model) {
-        try {
-            responseText = await callLLMOpenAI(model, systemPrompt, userPrompt);
-        } catch (e: any) {
-            debug(
-                "aiclient answer failed, falling back to agent SDK: %s",
-                e?.message,
-            );
-            answerModelAvailable = false;
-            answerModel = undefined;
-            responseText = await callLLMAgentSdk(
-                `${systemPrompt}\n\n${userPrompt}`,
-                agentModel,
-            );
-        }
-    } else {
-        responseText = await callLLMAgentSdk(
-            `${systemPrompt}\n\n${userPrompt}`,
-            agentModel,
-        );
-    }
-
-    if (!responseText) {
-        responseText =
-            "Unable to generate an answer from the retrieved content.";
+    const model = openai.createChatModel(modelName);
+    model.completionSettings.max_completion_tokens = 4096;
+    const responseText = await callLLM(model, systemPrompt, userPrompt);
+    if (!responseText.trim()) {
+        throw new Error("Answer generation returned an empty response");
     }
 
     return {
@@ -187,8 +137,8 @@ export async function generateAnswer(
 /**
  * Call the LLM via aiclient OpenAI chat model.
  */
-async function callLLMOpenAI(
-    model: ChatModel,
+async function callLLM(
+    model: ReturnType<typeof openai.createChatModel>,
     systemPrompt: string,
     userPrompt: string,
 ): Promise<string> {
@@ -201,30 +151,6 @@ async function callLLMOpenAI(
         throw new Error(result.message);
     }
     return result.data;
-}
-
-/**
- * Call the LLM via the agent SDK query() API (fallback).
- */
-async function callLLMAgentSdk(
-    prompt: string,
-    modelName: string,
-): Promise<string> {
-    const queryInstance = query({
-        prompt,
-        options: { model: modelName, ...claudeExecutableOption() },
-    });
-
-    let responseText = "";
-    for await (const message of queryInstance) {
-        if (message.type === "result") {
-            if (message.subtype === "success") {
-                responseText = message.result || "";
-                break;
-            }
-        }
-    }
-    return responseText;
 }
 
 /**

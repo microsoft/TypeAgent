@@ -70,6 +70,12 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             forward("memoryGetSourceContent", params),
         memoryGetSourceKnowledge: (params) =>
             forward("memoryGetSourceKnowledge", params),
+        memoryListSourceKnowledgeSuppressions: (params) =>
+            forward("memoryListSourceKnowledgeSuppressions", params),
+        memorySuppressSourceKnowledge: (params) =>
+            forward("memorySuppressSourceKnowledge", params),
+        memoryRestoreSourceKnowledge: (params) =>
+            forward("memoryRestoreSourceKnowledge", params),
         memoryImportDocument: (params) =>
             forward("memoryImportDocument", params),
         memoryReplaceSource: (params) => forward("memoryReplaceSource", params),
@@ -475,7 +481,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         async indexPageContentDirect(params: any) {
             const targetTab = await getActiveTab();
             if (targetTab) {
-                const success = await indexPageContent(
+                const result = await indexPageContent(
                     targetTab,
                     params.showNotification !== false,
                     {
@@ -484,7 +490,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                         activityType: "captured",
                     },
                 );
-                return { success };
+                return { success: result.indexed, error: result.error };
             }
             return {
                 success: false,
@@ -495,12 +501,12 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         async autoIndexPage(params: any) {
             const targetTab = await getActiveTab();
             if (targetTab && (await shouldIndexPage(targetTab.url!))) {
-                const success = await indexPageContent(targetTab, false, {
+                const result = await indexPageContent(targetTab, false, {
                     quality: params.quality,
                     textOnly: params.textOnly,
                     activityType: "visited",
                 });
-                return { success };
+                return { success: result.indexed, error: result.error };
             }
             return {
                 success: false,

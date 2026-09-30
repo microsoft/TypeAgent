@@ -10,7 +10,7 @@ import { getAssistantConfig } from "./assistantConfig.js";
  */
 function parseArgs(): { assistant: string; help: boolean; debug: boolean } {
     const args = process.argv.slice(2);
-    let assistant = "claude";
+    let assistant = "copilot";
     let help = false;
     let debug = false;
 
@@ -36,15 +36,17 @@ function printUsage(): void {
 Usage: coder-wrapper [options]
 
 Options:
-  -a, --assistant <name>  Specify the assistant to use (default: claude)
+  -a, --assistant <name>  Specify the assistant to use (default: copilot)
   -d, --debug            Enable debug logging with cache timing information
   -h, --help             Show this help message
 
 Available assistants:
+  copilot                GitHub Copilot CLI
   claude                 Claude Code CLI
 
 Examples:
-  coder-wrapper                    # Use Claude Code (default)
+  coder-wrapper                    # Use GitHub Copilot CLI (default)
+  coder-wrapper -a copilot         # Explicitly use GitHub Copilot CLI
   coder-wrapper -a claude          # Explicitly use Claude Code
   coder-wrapper --debug            # Enable debug logging
 

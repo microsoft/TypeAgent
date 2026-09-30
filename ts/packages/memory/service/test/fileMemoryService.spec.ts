@@ -4,6 +4,7 @@
 import {
     mkdir,
     mkdtemp,
+    readFile,
     readdir,
     rename,
     rm,
@@ -17,6 +18,7 @@ import {
     procedureFromMarkdown,
     procedureToMarkdown,
 } from "../src/personalHowToStore.js";
+import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
 import type {
     CorpusIndex,
     CorpusIndexMatch,
@@ -181,6 +183,8 @@ describe("FileMemoryService", () => {
         );
         index = new FakeCorpusIndex();
         service = new FileMemoryService(rootDirectory, {
+            procedureIndexFactory: (_corpusId, directory) =>
+                new FakeProcedureCorpusIndex(directory),
             indexFactory: (_corpusId, indexDirectory) => {
                 index.indexDirectory = indexDirectory;
                 return index;
@@ -683,6 +687,7 @@ describe("FileMemoryService", () => {
                 title: "Runbook",
                 markdown: "Version one.",
             },
+            pipeline: { mode: "basic", maxCharsPerChunk: 4_000 },
         });
         await waitForTerminalJob(service, accepted.jobId);
 
@@ -702,6 +707,11 @@ describe("FileMemoryService", () => {
         expect(
             (await service.getSource(corpus.corpusId, "runbook"))?.revisions,
         ).toHaveLength(2);
+        expect(
+            (await service.getSource(corpus.corpusId, "runbook"))?.revisions.at(
+                -1,
+            )?.pipeline,
+        ).toEqual({ mode: "basic", maxCharsPerChunk: 4_000 });
         await expect(
             service.getSourceContent({
                 corpusId: corpus.corpusId,
@@ -929,6 +939,118 @@ describe("FileMemoryService", () => {
         await expect(
             service.getSourceKnowledge(corpus.corpusId, "missing"),
         ).rejects.toThrow("Unknown source 'missing'");
+    });
+
+    test("suppresses and restores source knowledge across reindex and restart", async () => {
+        const corpus = await service.createCorpus("Curated knowledge");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "design-doc",
+                sourceType: "markdown",
+                title: "Design",
+                markdown: "TypeAgent uses a memory service.",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+        index.graph = {
+            entities: [
+                {
+                    name: "TypeAgent",
+                    types: ["software"],
+                    mentionCount: 2,
+                    sourceIds: ["design-doc", "other-doc"],
+                },
+                {
+                    name: "Memory Service",
+                    types: ["component"],
+                    mentionCount: 1,
+                    sourceIds: ["design-doc"],
+                },
+            ],
+            topics: [
+                {
+                    name: "Architecture",
+                    mentionCount: 1,
+                    sourceIds: ["design-doc"],
+                },
+            ],
+            relationships: [
+                {
+                    fromEntity: "TypeAgent",
+                    toEntity: "Memory Service",
+                    relationshipType: "uses",
+                    count: 1,
+                    sourceIds: ["design-doc"],
+                },
+            ],
+        };
+
+        await service.suppressSourceKnowledge({
+            corpusId: corpus.corpusId,
+            sourceId: "design-doc",
+            kind: "entity",
+            name: "typeagent",
+        });
+        await service.suppressSourceKnowledge({
+            corpusId: corpus.corpusId,
+            sourceId: "design-doc",
+            kind: "topic",
+            name: "Architecture",
+        });
+
+        await expect(
+            service.getSourceKnowledge(corpus.corpusId, "design-doc"),
+        ).resolves.toEqual({
+            entities: [index.graph.entities[1]],
+            topics: [],
+            relationships: [],
+        });
+        await expect(
+            service.getKnowledgeGraph(corpus.corpusId),
+        ).resolves.toMatchObject({
+            entities: [
+                { name: "TypeAgent", sourceIds: ["other-doc"] },
+                { name: "Memory Service", sourceIds: ["design-doc"] },
+            ],
+        });
+        await service.reindexCorpus(corpus.corpusId);
+        await service.close();
+
+        const restartedIndex = new FakeCorpusIndex();
+        restartedIndex.graph = structuredClone(index.graph);
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => restartedIndex,
+        });
+        await expect(
+            service.listSourceKnowledgeSuppressions(
+                corpus.corpusId,
+                "design-doc",
+            ),
+        ).resolves.toEqual([
+            { sourceId: "design-doc", kind: "entity", name: "typeagent" },
+            {
+                sourceId: "design-doc",
+                kind: "topic",
+                name: "Architecture",
+            },
+        ]);
+        await expect(
+            service.getSourceKnowledge(corpus.corpusId, "design-doc"),
+        ).resolves.toMatchObject({ entities: [{ name: "Memory Service" }] });
+
+        await service.restoreSourceKnowledge({
+            corpusId: corpus.corpusId,
+            sourceId: "design-doc",
+            kind: "entity",
+            name: "TypeAgent",
+        });
+        await expect(
+            service.getSourceKnowledge(corpus.corpusId, "design-doc"),
+        ).resolves.toMatchObject({
+            entities: [{ name: "TypeAgent" }, { name: "Memory Service" }],
+            relationships: [{ relationshipType: "uses" }],
+        });
     });
 
     test("keeps the prior committed revision when rebuilding fails", async () => {
@@ -1334,6 +1456,96 @@ describe("FileMemoryService", () => {
         });
     });
 
+    test("detects a procedural web page in the corpus without saving it as an approved procedure", async () => {
+        const corpus = await service.createCorpus("Browser page");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "web:guide",
+                sourceType: "web",
+                canonicalUri: "https://example.test/guide",
+                title: "Guide",
+                markdown: [
+                    "## Guide (Frame 0)",
+                    "## How to install the tool",
+                    "1. Download the package",
+                    "2. Run the installer",
+                ].join("\n"),
+            },
+        });
+        expect((await waitForTerminalJob(service, accepted.jobId)).state).toBe(
+            "complete",
+        );
+        expect(await service.listProcedureCandidates(corpus.corpusId)).toEqual([
+            expect.objectContaining({
+                title: "How to install the tool",
+                state: "detected",
+                citations: [
+                    expect.objectContaining({
+                        sourceId: accepted.sourceId,
+                        revisionId: accepted.revisionId,
+                    }),
+                ],
+            }),
+        ]);
+        expect(
+            await service.listProcedures({ corpusId: corpus.corpusId }),
+        ).toEqual([]);
+    });
+
+    test("saves a detected browser how-to with its auto-generated candidate ID", async () => {
+        const corpus = await service.createCorpus("Detected browser how-to");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "web:how-to",
+                sourceType: "web",
+                title: "How to install",
+                markdown: [
+                    "# How to install",
+                    "1. Download the package",
+                    "2. Run the installer",
+                ].join("\n"),
+            },
+        });
+        expect((await waitForTerminalJob(service, accepted.jobId)).state).toBe(
+            "complete",
+        );
+        const [candidate] = await service.listProcedureCandidates(
+            corpus.corpusId,
+            ["detected"],
+        );
+        expect(candidate.candidateId).toMatch(/^auto:/);
+
+        const saved = await service.saveProcedure({
+            corpusId: corpus.corpusId,
+            candidateId: candidate.candidateId,
+        });
+        expect(saved.state).toBe("saved");
+        expect(saved.procedureId).toBe(candidate.candidateId);
+        expect(saved.document.citations).toEqual(candidate.citations);
+        expect(
+            await service.listProcedureCandidates(corpus.corpusId, [
+                "detected",
+            ]),
+        ).toEqual([]);
+        expect(
+            await service.listProcedures({ corpusId: corpus.corpusId }),
+        ).toEqual([
+            expect.objectContaining({
+                procedureId: saved.procedureId,
+                state: "saved",
+            }),
+        ]);
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => new FakeCorpusIndex(),
+        });
+        expect(
+            await service.getProcedure(corpus.corpusId, saved.procedureId),
+        ).toMatchObject({ document: saved.document });
+    });
+
     test.each([
         { enabled: false, detectCandidates: true },
         { enabled: true, detectCandidates: false },
@@ -1558,6 +1770,279 @@ describe("FileMemoryService", () => {
         ).toMatchObject({ version: 1, state: "saved" });
     });
 
+    test("searches the latest procedure versions within the selected corpus and state", async () => {
+        const corpus = await service.createCorpus("Operations");
+        const otherCorpus = await service.createCorpus("Other operations");
+        const save = async (
+            procedureId: string,
+            title: string,
+            steps: string[],
+            corpusId = corpus.corpusId,
+        ) =>
+            service.saveProcedure({
+                corpusId,
+                procedureId,
+                document: { title, steps, citations: [] },
+            });
+        await save("troubleshoot", "Troubleshoot Service X", [
+            "Inspect deployment status.",
+        ]);
+        await save("logs", "Service X incident response", [
+            "Inspect logs for errors before restarting the service.",
+        ]);
+        await save("unrelated", "Service X firmware rollout", [
+            "Deploy printer firmware and check its configuration.",
+        ]);
+        await save("archived", "Troubleshoot Service X archive", [
+            "Review logs.",
+        ]);
+        await service.archiveProcedure(corpus.corpusId, "archived", 1);
+        await save(
+            "elsewhere",
+            "Troubleshoot Service X elsewhere",
+            ["Review logs."],
+            otherCorpus.corpusId,
+        );
+
+        const search = (
+            query: string,
+            states: Array<"saved" | "stale" | "archived"> = ["saved"],
+            limit?: number,
+        ) =>
+            service.searchProcedures({
+                corpusId: corpus.corpusId,
+                query,
+                states,
+                ...(limit === undefined ? {} : { limit }),
+            });
+        const ids = async (query: string) =>
+            (await search(query)).map((match) => match.procedure.procedureId);
+
+        expect(await ids("Troubleshoot Service X")).toEqual(["troubleshoot"]);
+        expect(await ids("Service X incident response")).toEqual(["logs"]);
+        expect(
+            (await search("Service X", undefined, 1))[0].procedure.procedureId,
+        ).toBe("troubleshoot");
+        expect(
+            (await search("Service X", ["archived"])).map(
+                (match) => match.procedure.procedureId,
+            ),
+        ).toEqual(["archived"]);
+
+        await service.saveProcedure({
+            corpusId: corpus.corpusId,
+            procedureId: "logs",
+            expectedVersion: 1,
+            document: {
+                title: "Service X maintenance",
+                steps: ["Check the deployment schedule."],
+                citations: [],
+            },
+        });
+        expect(await ids("Service X incident response")).toEqual([]);
+        expect(
+            (await service.getProcedure(corpus.corpusId, "logs", 1))?.document
+                .steps,
+        ).toEqual(["Inspect logs for errors before restarting the service."]);
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => new FakeCorpusIndex(),
+            procedureIndexFactory: (_corpusId, directory) =>
+                new FakeProcedureCorpusIndex(directory),
+        });
+        expect(await ids("Troubleshoot Service X")).toEqual(["troubleshoot"]);
+    });
+
+    test("rebuilds versioned procedure indexes and filters states before limiting", async () => {
+        await service.close();
+        const createService = () =>
+            new FileMemoryService(rootDirectory, {
+                indexFactory: () => new FakeCorpusIndex(),
+                procedureIndexFactory: (_corpusId, directory) =>
+                    new FakeProcedureCorpusIndex(directory),
+            });
+        service = createService();
+        const { corpusId } = await service.createCorpus("Semantic procedures");
+        await service.saveProcedure({
+            corpusId,
+            procedureId: "recovery",
+            document: {
+                title: "Restore availability to Zephyr cluster",
+                steps: ["Inspect system logs and restart unhealthy workers."],
+                citations: [],
+            },
+        });
+        await service.saveProcedure({
+            corpusId,
+            procedureId: "unrelated",
+            document: {
+                title: "Rotate Zephyr credentials",
+                steps: ["Issue new certificates and distribute them."],
+                citations: [],
+            },
+        });
+        await service.saveProcedure({
+            corpusId,
+            procedureId: "wrong-service",
+            document: {
+                title: "Restore availability to Service Y cluster",
+                steps: ["Inspect its system logs."],
+                citations: [],
+            },
+        });
+        await service.saveProcedure({
+            corpusId,
+            procedureId: "archived",
+            document: {
+                title: "Restore availability to Zephyr cluster",
+                steps: ["Review historical incident notes."],
+                citations: [],
+            },
+        });
+        await service.archiveProcedure(corpusId, "archived", 1);
+        const query = "Restore availability to Zephyr cluster";
+        const search = (states: Array<"saved" | "stale" | "archived">) =>
+            service.searchProcedures({ corpusId, query, states, limit: 1 });
+        expect(
+            (await search(["saved"])).map(
+                (match) => match.procedure.procedureId,
+            ),
+        ).toEqual(["recovery"]);
+        expect(
+            (await search(["archived"])).map(
+                (match) => match.procedure.procedureId,
+            ),
+        ).toEqual(["archived"]);
+        expect(
+            await service.searchProcedures({
+                corpusId,
+                query: "Restore availability to Service X cluster",
+                states: ["saved"],
+            }),
+        ).toEqual([]);
+
+        await service.saveProcedure({
+            corpusId,
+            procedureId: "recovery",
+            expectedVersion: 1,
+            document: {
+                title: "Deploy release artifacts",
+                steps: ["Ship the signed packages."],
+                citations: [],
+            },
+        });
+        expect(await search(["saved"])).toEqual([]);
+        expect(
+            (await service.getProcedure(corpusId, "recovery", 1))?.document
+                .title,
+        ).toBe("Restore availability to Zephyr cluster");
+        await service.close();
+        const procedureDirectory = path.join(
+            rootDirectory,
+            corpusId,
+            "personal-how-to",
+        );
+        const storedIndex = JSON.parse(
+            await readFile(path.join(procedureDirectory, "index.json"), "utf8"),
+        ) as { indexGeneration: string };
+        await rm(
+            path.join(
+                procedureDirectory,
+                "search-index",
+                storedIndex.indexGeneration,
+            ),
+            { recursive: true },
+        );
+        service = createService();
+        expect(await search(["saved"])).toEqual([]);
+        expect(
+            (await search(["archived"])).map(
+                (match) => match.procedure.procedureId,
+            ),
+        ).toEqual(["archived"]);
+        await service.saveProcedure({
+            corpusId,
+            procedureId: "recovery",
+            expectedVersion: 2,
+            document: {
+                title: "Restore availability to Zephyr cluster",
+                steps: ["Check on-call incident reports."],
+                citations: [],
+            },
+        });
+        expect(
+            (await search(["saved"])).map((match) => match.version.version),
+        ).toEqual([3]);
+    });
+
+    test("does not publish a procedure version when its structured index fails", async () => {
+        await service.close();
+        let failRebuild = false;
+        const createService = () =>
+            new FileMemoryService(rootDirectory, {
+                indexFactory: () => new FakeCorpusIndex(),
+                procedureIndexFactory: (_corpusId, directory) => {
+                    const index = new FakeProcedureCorpusIndex(directory);
+                    if (failRebuild) {
+                        index.rebuild = async () => {
+                            throw new Error("Procedure index rebuild failed");
+                        };
+                    }
+                    return index;
+                },
+            });
+        service = createService();
+        const { corpusId } = await service.createCorpus("Atomic procedures");
+        const document = {
+            title: "Recover Zephyr",
+            steps: ["Check the incident logs"],
+            citations: [],
+        };
+        await service.saveProcedure({
+            corpusId,
+            procedureId: "recovery",
+            document,
+        });
+        failRebuild = true;
+        await expect(
+            service.saveProcedure({
+                corpusId,
+                procedureId: "recovery",
+                expectedVersion: 1,
+                document: {
+                    ...document,
+                    title: "Deploy Zephyr",
+                },
+            }),
+        ).rejects.toThrow("Procedure index rebuild failed");
+        expect(await service.getProcedure(corpusId, "recovery")).toMatchObject({
+            version: 1,
+            document,
+        });
+        expect(
+            await service.getProcedure(corpusId, "recovery", 2),
+        ).toBeUndefined();
+        await service.close();
+        failRebuild = false;
+        service = createService();
+        expect(
+            (
+                await service.searchProcedures({
+                    corpusId,
+                    query: "Recover Zephyr",
+                    states: ["saved"],
+                })
+            ).map((match) => match.version.version),
+        ).toEqual([1]);
+        expect(
+            await service.searchProcedures({
+                corpusId,
+                query: "Deploy Zephyr",
+                states: ["saved"],
+            }),
+        ).toEqual([]);
+    });
+
     test("rejects invalid saves and detects projection corruption", async () => {
         const corpus = await service.createCorpus("How-to");
         await expect(
@@ -1666,8 +2151,8 @@ describe("FileMemoryService", () => {
             corpusId: corpus.corpusId,
             procedureId: "dependent",
             document: {
-                title: "Dependent",
-                steps: ["Follow the source"],
+                title: "Troubleshoot Service X",
+                steps: ["Inspect Service X logs after an error"],
                 citations: [
                     {
                         sourceId: accepted.sourceId,
@@ -1697,6 +2182,27 @@ describe("FileMemoryService", () => {
         expect(
             await service.getProcedure(corpus.corpusId, "dependent", 1),
         ).toMatchObject({ version: 1, state: "saved" });
+        expect(
+            await service.searchProcedures({
+                corpusId: corpus.corpusId,
+                query: "Inspect Service X logs after an error",
+                states: ["saved"],
+            }),
+        ).toEqual([]);
+        expect(
+            await service.searchProcedures({
+                corpusId: corpus.corpusId,
+                query: "Inspect Service X logs after an error",
+                states: ["stale"],
+            }),
+        ).toEqual([
+            expect.objectContaining({
+                version: expect.objectContaining({
+                    version: 2,
+                    state: "stale",
+                }),
+            }),
+        ]);
 
         await service.saveProcedure({
             corpusId: corpus.corpusId,
