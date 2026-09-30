@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e1f7d3bf6c811d8ec2f4b5a91920017e587823fbe06393546dc91cd20fbf0eaf -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6834a9e4535a9ca6c2a88627213df93d69164bc02a7a037605c2ab51dc9637f9 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -52,9 +52,9 @@ _None._
 - [./src/translationBench/public_datasets/Seal-Tools/index.ts](./src/translationBench/public_datasets/Seal-Tools/index.ts)
 - [./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts](./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts)
 - [./src/translationBench/runner/index.ts](./src/translationBench/runner/index.ts)
+- [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
-- [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
-- _…and 126 more under `./src/`._
+- _…and 133 more under `./src/`._
 
 ### Environment variables
 
@@ -78,6 +78,6 @@ _15 environment variables referenced from `./src/` (set in `ts/.env` or your she
 
 ---
 
-_Auto-generated against commit `673a5348ac4d210dabe5bafe24ce10e24b290f2e` on `2026-09-03T06:14:18.659Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `01d22ac976107f8004cd688fee6e99140173a072` on `2026-09-30T19:25:42.001Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
