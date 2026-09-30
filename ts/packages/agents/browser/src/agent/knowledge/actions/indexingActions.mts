@@ -19,12 +19,16 @@ export async function indexWebPageContent(
         mode?: "basic" | "content" | "full";
         extractedKnowledge?: any;
         activityType?: "visited" | "captured";
+        reportHowToStatus?: boolean;
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
     indexed: boolean;
     knowledgeExtracted: boolean;
     entityCount: number;
+    warnings?: string[];
+    howTo?: { enabled: boolean; candidateCount: number };
+    error?: string;
 }> {
     try {
         if (parameters.extractedKnowledge) {
@@ -45,6 +49,9 @@ export async function indexWebPageContent(
         const combinedTextContent = extractionInputs
             .map((input) => `## ${input.title}\n\n${input.textContent}`)
             .join("\n\n");
+        if (!combinedTextContent) {
+            throw new Error("The page did not contain enough text to index");
+        }
 
         const memoryService = context.agentContext.browserMemoryService;
         if (memoryService === undefined) {
@@ -60,6 +67,9 @@ export async function indexWebPageContent(
                 activityType: parameters.activityType ?? "captured",
             },
             parameters.mode ?? "content",
+            parameters.reportHowToStatus === undefined
+                ? {}
+                : { reportHowToStatus: parameters.reportHowToStatus },
         );
         debug(`Stored current page in durable memory: ${parameters.url}`);
 
@@ -67,6 +77,9 @@ export async function indexWebPageContent(
             indexed: true,
             knowledgeExtracted: parameters.extractKnowledge,
             entityCount: knowledge.entities.length,
+            ...(parameters.reportHowToStatus
+                ? { warnings: knowledge.warnings, howTo: knowledge.howTo }
+                : {}),
         };
     } catch (error) {
         console.error("Error indexing page content:", error);
@@ -74,6 +87,7 @@ export async function indexWebPageContent(
             indexed: false,
             knowledgeExtracted: false,
             entityCount: 0,
+            error: error instanceof Error ? error.message : String(error),
         };
     }
 }

@@ -10,13 +10,20 @@ Git runs any `git-<name>` binary on `PATH` as `git <name>`, so the
 $ cd ts/packages/git-story
 $ pnpm build
 $ npm link            # puts git-story on PATH
-$ git story init   # registers Copilot CLI hooks for this repo
+$ git story init   # registers Copilot CLI and git hooks for this repo
 $ git story hooks copilot user-prompt-submitted
 Hello World
+$ echo input | git story hooks git pre-commit a b
+git-story pre-commit: args=["a","b"] stdin="input\n"
 ```
 
 `init` writes the hooks to `.github/copilot/settings.local.json` and adds that
 file to `.git/info/exclude`, so it stays local to the clone.
+
+`init` also writes a `pre-commit` script to the git hooks directory (honors
+`core.hooksPath`). The script runs `exec git-story hooks git pre-commit "$@"`,
+so git's hook arguments and stdin reach the command unchanged. `init` does not
+overwrite a hook that it did not write.
 
 ## Trademarks
 

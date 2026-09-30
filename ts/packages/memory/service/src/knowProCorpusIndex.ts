@@ -54,9 +54,10 @@ function toDocParts(document: IndexedDocument): DocPart[] {
     const uri = sourceUri(document);
     const chunkCharacters =
         document.pipeline.maxCharsPerChunk ?? structuralChunkCharacters;
+    let parts: DocPart[];
     switch (document.source.sourceType) {
         case "html":
-            return docPartsFromHtml(
+            parts = docPartsFromHtml(
                 document.content,
                 false,
                 chunkCharacters,
@@ -64,19 +65,27 @@ function toDocParts(document: IndexedDocument): DocPart[] {
                 undefined,
                 durableDocPartOptions,
             );
+            break;
         case "markdown":
         case "web":
-            return docPartsFromMarkdown(
+            parts = docPartsFromMarkdown(
                 document.content,
                 chunkCharacters,
                 uri,
                 durableDocPartOptions,
             );
+            break;
         case "vtt":
-            return docPartsFromVtt(document.content, uri);
+            parts = docPartsFromVtt(document.content, uri);
+            break;
         case "text":
-            return docPartsFromText(document.content, chunkCharacters, uri);
+            parts = docPartsFromText(document.content, chunkCharacters, uri);
+            break;
     }
+    for (const part of parts) {
+        part.tags.push(...(document.indexTags ?? []));
+    }
+    return parts;
 }
 
 function parseSourceUri(
@@ -375,13 +384,18 @@ export class KnowProCorpusIndex implements CorpusIndex {
     public async search(
         query: string,
         limit: number,
+        tags?: string[],
     ): Promise<CorpusIndexMatch[]> {
         const matches = new Map<number, number>();
         if (this.memory !== undefined) {
             const options = kp.createLanguageSearchOptionsTypical();
             options.maxMessageMatches = limit;
             options.maxKnowledgeMatches = limit;
-            const result = await this.memory.searchWithLanguage(query, options);
+            const result = await this.memory.searchWithLanguage(
+                query,
+                options,
+                tags === undefined ? undefined : { tags },
+            );
             if (!result.success) {
                 throw new Error(result.message);
             }
@@ -417,6 +431,12 @@ export class KnowProCorpusIndex implements CorpusIndex {
             .split(/\s+/)
             .filter((term) => term.length > 0);
         const basicMatches = this.basicDocuments.flatMap((document) => {
+            if (
+                tags !== undefined &&
+                !document.indexTags?.some((tag) => tags.includes(tag))
+            ) {
+                return [];
+            }
             const normalizedContent = document.content.toLocaleLowerCase();
             const matchedTerms = queryTerms.filter((term) =>
                 normalizedContent.includes(term),

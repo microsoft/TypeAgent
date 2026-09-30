@@ -3,6 +3,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import {
+    access,
     appendFile,
     cp,
     mkdir,
@@ -128,6 +129,7 @@ interface CorpusRuntime {
 
 export interface FileMemoryServiceOptions {
     indexFactory?: CorpusIndexFactory;
+    procedureIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
 }
 
@@ -478,6 +480,7 @@ function defaultCapabilities(): MemoryServiceCapabilities {
 
 export class FileMemoryService implements MemoryService, PersonalHowToService {
     private readonly indexFactory: CorpusIndexFactory;
+    private readonly procedureIndexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
     private readonly personalHowToStore: PersonalHowToStore;
     private readonly corpora = new Map<string, CorpusRuntime>();
@@ -493,8 +496,14 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         options: FileMemoryServiceOptions = {},
     ) {
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
+        this.procedureIndexFactory =
+            options.procedureIndexFactory ?? this.indexFactory;
         this.capabilities = options.capabilities ?? defaultCapabilities();
-        this.personalHowToStore = new PersonalHowToStore(rootDirectory);
+        this.personalHowToStore = new PersonalHowToStore(
+            rootDirectory,
+            (corpusId, procedures) =>
+                this.publishProcedureIndex(corpusId, procedures),
+        );
     }
 
     public initialize(): Promise<void> {
@@ -1702,8 +1711,86 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<ProcedureSearchMatch[]> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
-        await this.getCorpusRuntime(request.corpusId);
-        return this.personalHowToStore.search(request);
+        if (request.query.trim().length === 0) {
+            throw new Error("Procedure search query cannot be empty");
+        }
+        return this.enqueueWrite(request.corpusId, async () => {
+            const summaries = await this.personalHowToStore.list(request);
+            if (summaries.length === 0) {
+                return [];
+            }
+            let generation = await this.personalHowToStore.getIndexGeneration(
+                request.corpusId,
+            );
+            if (
+                generation === undefined ||
+                !(await access(
+                    path.join(
+                        this.procedureIndexDirectory(
+                            request.corpusId,
+                            generation,
+                        ),
+                        "ready",
+                    ),
+                ).then(
+                    () => true,
+                    (error: NodeJS.ErrnoException) => {
+                        if (error.code === "ENOENT") {
+                            return false;
+                        }
+                        throw error;
+                    },
+                ))
+            ) {
+                await this.personalHowToStore.rebuildIndex(request.corpusId);
+                generation = await this.personalHowToStore.getIndexGeneration(
+                    request.corpusId,
+                );
+            }
+            if (generation === undefined) {
+                throw new Error("Procedure index generation is missing");
+            }
+            const index = this.procedureIndexFactory(
+                request.corpusId,
+                this.procedureIndexDirectory(request.corpusId, generation),
+            );
+            await index.initialize();
+            const limit = Math.max(1, Math.min(request.limit ?? 20, 100));
+            const tags = request.states?.map(
+                (state) => `procedure-state:${state}`,
+            );
+            const matches = await index.search(
+                request.query.trim(),
+                limit,
+                tags,
+            );
+            const byId = new Map(
+                summaries.map((summary) => [summary.procedureId, summary]),
+            );
+            return Promise.all(
+                matches.map(async (match) => {
+                    const procedure = byId.get(match.sourceId);
+                    if (
+                        procedure === undefined ||
+                        match.revisionId !== String(procedure.latestVersion)
+                    ) {
+                        throw new Error(
+                            `Procedure index contains an unexpected version of '${match.sourceId}'`,
+                        );
+                    }
+                    return {
+                        procedure,
+                        version:
+                            await this.personalHowToStore.readIndexedVersion(
+                                request.corpusId,
+                                procedure.procedureId,
+                                procedure.latestVersion,
+                            ),
+                        score: match.score,
+                    };
+                }),
+            );
+        });
     }
 
     public async archiveProcedure(
@@ -2222,6 +2309,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                     `Source '${source.sourceId}' has no active revision`,
                 );
             }
+
             return {
                 source,
                 revision,
@@ -2229,6 +2317,89 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 pipeline: revision.pipeline ?? { mode: "content" },
             };
         });
+    }
+
+    private procedureIndexDirectory(
+        corpusId: string,
+        generation: string,
+    ): string {
+        return path.join(
+            this.rootDirectory,
+            corpusId,
+            "personal-how-to",
+            "search-index",
+            generation,
+        );
+    }
+
+    private async publishProcedureIndex(
+        corpusId: string,
+        summaries: ProcedureSummary[],
+    ): Promise<string> {
+        const committed =
+            await this.personalHowToStore.getIndexGeneration(corpusId);
+        const root = path.join(
+            this.rootDirectory,
+            corpusId,
+            "personal-how-to",
+            "search-index",
+        );
+        await mkdir(root, { recursive: true });
+        for (const entry of await readdir(root)) {
+            if (entry !== committed) {
+                await rm(path.join(root, entry), {
+                    recursive: true,
+                    force: true,
+                });
+            }
+        }
+        const generation = randomUUID();
+        const directory = this.procedureIndexDirectory(corpusId, generation);
+        await mkdir(directory, { recursive: true });
+        try {
+            const documents: IndexedDocument[] = await Promise.all(
+                summaries.map(async (summary) => {
+                    const version =
+                        await this.personalHowToStore.readIndexedVersion(
+                            corpusId,
+                            summary.procedureId,
+                            summary.latestVersion,
+                        );
+                    const revisionId = String(version.version);
+                    return {
+                        source: {
+                            sourceId: summary.procedureId,
+                            corpusId,
+                            sourceType: "markdown",
+                            title: version.document.title,
+                            activeRevisionId: revisionId,
+                        },
+                        revision: {
+                            revisionId,
+                            sourceId: summary.procedureId,
+                            contentHash: version.markdownHash,
+                            mimeType: "text/markdown",
+                            pipelineVersion,
+                            state: "ready",
+                        },
+                        content: version.markdown,
+                        indexTags: [`procedure-state:${summary.state}`],
+                        pipeline: { mode: "content" },
+                    };
+                }),
+            );
+            const index = this.procedureIndexFactory(corpusId, directory);
+            await index.rebuild(
+                documents,
+                new AbortController().signal,
+                async () => {},
+            );
+            await writeFile(path.join(directory, "ready"), "");
+            return generation;
+        } catch (error) {
+            await rm(directory, { recursive: true, force: true });
+            throw error;
+        }
     }
 
     private toMemorySource(source: StoredSource): MemorySource {

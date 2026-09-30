@@ -12,6 +12,7 @@ import type {
     MemoryServiceCapabilities,
     MemoryService,
     MemorySource,
+    PersonalHowToService,
 } from "@typeagent/memory-service";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
 
@@ -90,18 +91,21 @@ export interface BrowserSourceKnowledge {
     relationships: MemoryKnowledgeGraph["relationships"];
 }
 
-export interface BrowserSourceKnowledge {
-    source: MemorySource;
-    entities: MemoryKnowledgeGraph["entities"];
-    topics: MemoryKnowledgeGraph["topics"];
-    relationships: MemoryKnowledgeGraph["relationships"];
+export interface BrowserIngestResult extends BrowserSourceKnowledge {
+    warnings: string[];
+    howTo?: {
+        enabled: boolean;
+        candidateCount: number;
+    };
 }
 
 export class BrowserMemoryService {
     private corpusIdPromise: Promise<string> | undefined;
     private graphVersion = 0;
 
-    public constructor(private readonly client: MemoryService) {}
+    public constructor(
+        private readonly client: MemoryService & Partial<PersonalHowToService>,
+    ) {}
 
     public async ingest(
         document: BrowserMemoryDocument,
@@ -110,8 +114,9 @@ export class BrowserMemoryService {
             signal?: AbortSignal;
             onProgress?: (progress: JobProgress) => void;
             maxCharsPerChunk?: number;
+            reportHowToStatus?: boolean;
         } = {},
-    ): Promise<BrowserSourceKnowledge> {
+    ): Promise<BrowserIngestResult> {
         const corpusId = await this.getCorpusId();
         const result = await this.client.ingestDocument({
             corpusId,
@@ -160,7 +165,52 @@ export class BrowserMemoryService {
                 `Memory ingestion completed but source '${document.url}' was not found`,
             );
         }
-        return knowledge;
+        const warnings = [...job.warnings];
+        if (!options.reportHowToStatus) {
+            return { ...knowledge, warnings };
+        }
+        try {
+            if (
+                !this.client.getPersonalHowToSettings ||
+                !this.client.listProcedureCandidates
+            ) {
+                throw new Error("Personal how-to service is not available");
+            }
+            const settings =
+                await this.client.getPersonalHowToSettings(corpusId);
+            if (!settings.enabled || !settings.detectCandidates) {
+                return {
+                    ...knowledge,
+                    warnings,
+                    howTo: { enabled: false, candidateCount: 0 },
+                };
+            }
+            const candidates = await this.client.listProcedureCandidates(
+                corpusId,
+                ["detected", "draft"],
+            );
+            return {
+                ...knowledge,
+                warnings,
+                howTo: {
+                    enabled: true,
+                    candidateCount: candidates.filter((candidate) =>
+                        candidate.citations.some(
+                            (citation) =>
+                                citation.sourceId === result.sourceId &&
+                                citation.revisionId === result.revisionId,
+                        ),
+                    ).length,
+                },
+            };
+        } catch (error) {
+            warnings.push(
+                `Could not check how-to candidates: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+            return { ...knowledge, warnings };
+        }
     }
 
     public async search(
@@ -495,7 +545,7 @@ export class BrowserMemoryService {
 }
 
 export function getBrowserMemoryService(
-    client: MemoryService,
+    client: MemoryService & Partial<PersonalHowToService>,
 ): BrowserMemoryService {
     let service = adapters.get(client);
     if (service === undefined) {
