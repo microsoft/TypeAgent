@@ -425,6 +425,13 @@ export async function handleGetSuggestedSearches() {
 // Helper function to parse website stats from text response
 
 // Helper functions for knowledge indexing
+export interface PageIndexResult {
+    indexed: boolean;
+    error?: string;
+    warnings?: string[];
+    howTo?: { enabled: boolean; candidateCount: number };
+}
+
 export async function indexPageContent(
     tab: chrome.tabs.Tab,
     showNotification: boolean = true,
@@ -434,8 +441,9 @@ export async function indexPageContent(
         mode?: "basic" | "content" | "actions" | "full";
         extractedKnowledge?: any;
         activityType?: "visited" | "captured";
+        reportHowToStatus?: boolean;
     } = {},
-): Promise<boolean> {
+): Promise<PageIndexResult> {
     try {
         let htmlFragments = null;
         let extractKnowledge = true;
@@ -463,6 +471,7 @@ export async function indexPageContent(
             textOnly: options.textOnly || false,
             mode: options.mode || "content",
             activityType: options.activityType ?? "captured",
+            reportHowToStatus: options.reportHowToStatus ?? false,
         };
 
         if (options.extractedKnowledge) {
@@ -471,10 +480,13 @@ export async function indexPageContent(
             parameters.htmlFragments = htmlFragments;
         }
 
-        await sendActionToAgent({
+        const result: PageIndexResult = await sendActionToAgent({
             actionName: "indexWebPageContent",
             parameters: parameters,
         });
+        if (result?.indexed !== true) {
+            throw new Error(result?.error ?? "Page indexing failed");
+        }
 
         if (showNotification) {
             chrome.action.setBadgeText({ text: "✓", tabId: tab.id });
@@ -487,7 +499,7 @@ export async function indexPageContent(
             }, 3000);
         }
 
-        return true;
+        return result;
     } catch (error) {
         console.error("Error indexing page content:", error);
 
@@ -502,7 +514,10 @@ export async function indexPageContent(
             }, 3000);
         }
 
-        return false;
+        return {
+            indexed: false,
+            error: error instanceof Error ? error.message : String(error),
+        };
     }
 }
 

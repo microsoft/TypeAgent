@@ -676,15 +676,31 @@ function renderProcedureCandidates(): void {
         const save = document.createElement("button");
         save.type = "button";
         save.textContent = "Save";
+        const errorMessage = document.createElement("div");
+        errorMessage.className = "job-error";
+        errorMessage.setAttribute("role", "alert");
         save.addEventListener("click", () => {
             void run(async () => {
-                const version = await invoke("memorySaveProcedure", {
-                    corpusId: candidate.corpusId,
-                    candidateId: candidate.candidateId,
-                });
-                selectedProcedure = version;
-                isNewProcedure = false;
-                await loadHowTos();
+                save.disabled = true;
+                errorMessage.textContent = "";
+                try {
+                    const version = await invoke("memorySaveProcedure", {
+                        corpusId: candidate.corpusId,
+                        candidateId: candidate.candidateId,
+                    });
+                    selectedProcedure = version;
+                    isNewProcedure = false;
+                    await loadHowTos();
+                    procedureList
+                        .querySelector<HTMLButtonElement>("button.selected")
+                        ?.focus();
+                } catch (error) {
+                    errorMessage.textContent =
+                        error instanceof Error ? error.message : String(error);
+                    throw error;
+                } finally {
+                    save.disabled = false;
+                }
             });
         });
         const reject = document.createElement("button");
@@ -700,7 +716,7 @@ function renderProcedureCandidates(): void {
             });
         });
         actions.append(save, reject);
-        item.append(title, subtitle, actions);
+        item.append(title, subtitle, actions, errorMessage);
         candidateList.appendChild(item);
     }
     element<HTMLSpanElement>("candidateCount").textContent =

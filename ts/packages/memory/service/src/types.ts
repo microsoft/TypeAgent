@@ -669,6 +669,7 @@ export interface IndexedDocument {
     source: SourceDocument;
     revision: SourceRevision;
     content: string;
+    indexTags?: string[];
     pipeline: {
         mode: IngestionMode;
         maxCharsPerChunk?: number;
@@ -695,7 +696,11 @@ export interface CorpusIndex {
         signal: AbortSignal,
         onProgress: (progress: JobProgress) => Promise<void>,
     ): Promise<void>;
-    search(query: string, limit: number): Promise<CorpusIndexMatch[]>;
+    search(
+        query: string,
+        limit: number,
+        tags?: string[],
+    ): Promise<CorpusIndexMatch[]>;
     getKnowledgeGraph(
         sourceIds?: ReadonlySet<string>,
     ): Promise<MemoryKnowledgeGraph>;
