@@ -3,7 +3,6 @@
 
 package com.microsoft.typeagent.wearos.presentation
 
-import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -21,27 +20,17 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    private var speechToTextOverride = ""
-
-    private val requestAudioPermission = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { }
-
     private val recognizeSpeech = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode != Activity.RESULT_OK) {
-            speechToTextOverride = ""
             return@registerForActivityResult
         }
 
-        val recognizedText = speechToTextOverride.ifBlank {
-            result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-                .orEmpty()
-        }
-        speechToTextOverride = ""
+        val recognizedText = result.data
+            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()
+            .orEmpty()
         if (recognizedText.isBlank()) {
             return@registerForActivityResult
         }
@@ -62,11 +51,7 @@ class MainActivity : ComponentActivity() {
         )
         mainState = MainViewModel(
             activity = this,
-            requestPermission = {
-                requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
-            },
-            requestSpeechRecognition = { overrideText ->
-                speechToTextOverride = overrideText
+            requestSpeechRecognition = {
                 try {
                     recognizeSpeech.launch(
                         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -82,7 +67,6 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 } catch (_: ActivityNotFoundException) {
-                    speechToTextOverride = ""
                     mainState.onSpeechRecognitionUnavailable()
                 }
             },
