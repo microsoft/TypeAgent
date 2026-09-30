@@ -68,13 +68,20 @@ async function answersAsDaemon(state: DaemonState): Promise<boolean> {
 // daemon that died without cleanup or whose pid was reused.
 async function readState(): Promise<DaemonState | undefined> {
     const file = path.join(stateDir(), STATE_FILE);
-    let state: DaemonState;
+    let state: Partial<DaemonState> | null;
     try {
         state = JSON.parse(fs.readFileSync(file, "utf8"));
     } catch {
         return undefined;
     }
-    if (isAlive(state.pid) && (await answersAsDaemon(state))) return state;
+    // A corrupt file (e.g. `null`) is stale state, not a crash.
+    if (
+        Number.isInteger(state?.pid) &&
+        Number.isInteger(state?.port) &&
+        isAlive(state!.pid!) &&
+        (await answersAsDaemon(state as DaemonState))
+    )
+        return state as DaemonState;
     fs.rmSync(file, { force: true });
     return undefined;
 }
