@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Command, InvalidArgumentError, Option } from "commander";
+import { Command } from "commander";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -13,10 +13,10 @@ import { startServer } from "../server/server.js";
 // One daemon per user, shared by every project. Each API request names its
 // project by absolute path, so the daemon does not depend on any cwd.
 //
-//   git story daemon start --port 51234   (from any directory)
-//     └─ spawns detached `git-story daemon run --port 51234`
-//          └─ listens on 127.0.0.1:51234
-//          └─ writes ~/.git-story/daemon.json {"pid":4242,"port":51234}
+//   git story daemon start   (from any directory)
+//     └─ spawns detached `git-story daemon run`
+//          └─ listens on 127.0.0.1:51703 (DAEMON_PORT)
+//          └─ writes ~/.git-story/daemon.json {"pid":4242,"port":51703}
 //   GET /api/story/commits/739e112?project=/Users/me/repo
 //   GET /api/story/commits/739e112?project=C:\Users\me\repo  (URL-encoded)
 //   git story daemon status  -> reads daemon.json, asks the port for its pid
@@ -102,34 +102,16 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const url = (s: DaemonState) => `http://127.0.0.1:${s.port}`;
 
-const MIN_PORT = 1;
-const MAX_PORT = 65535;
+// Fixed so every client knows where the daemon listens. Chosen from the
+// IANA dynamic range (49152-65535) to avoid registered services.
+const DAEMON_PORT = 51703;
 
-// Required --port for commands that bind. No default: the caller owns the
-// port, so clients know where to connect. Example: --port 51234.
-const portOption = () =>
-    new Option("--port <port>", "TCP port to listen on (1-65535)")
-        .makeOptionMandatory()
-        .argParser((value) => {
-            const port = Number(value);
-            if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
-                throw new InvalidArgumentError(
-                    `Expected an integer from ${MIN_PORT} to ${MAX_PORT}.`,
-                );
-            }
-            return port;
-        });
-
-type PortOptions = { port: number };
-
-async function start({ port }: PortOptions): Promise<void> {
+async function start(): Promise<void> {
     const running = await readState();
     if (running) {
         process.stdout.write(
             `Already running (pid ${running.pid}) at ${url(running)}\n`,
         );
-        // Running on another port does not satisfy this request.
-        if (running.port !== port) process.exitCode = 1;
         return;
     }
     const dir = stateDir();
@@ -138,16 +120,12 @@ async function start({ port }: PortOptions): Promise<void> {
     // cwd is the state dir so the daemon never holds a project directory
     // open (Windows cannot delete a directory that is some process's cwd).
     // windowsHide: no console window on Windows.
-    const child = spawn(
-        process.execPath,
-        [CLI, "daemon", "run", "--port", String(port)],
-        {
-            cwd: dir,
-            detached: true,
-            stdio: ["ignore", log, log],
-            windowsHide: true,
-        },
-    );
+    const child = spawn(process.execPath, [CLI, "daemon", "run"], {
+        cwd: dir,
+        detached: true,
+        stdio: ["ignore", log, log],
+        windowsHide: true,
+    });
     child.unref();
     fs.closeSync(log);
     // Wait for `run` to write its state; fail fast if it exits first.
@@ -169,7 +147,6 @@ async function start({ port }: PortOptions): Promise<void> {
         process.stdout.write(
             `Already running (pid ${winner.pid}) at ${url(winner)}\n`,
         );
-        if (winner.port !== port) process.exitCode = 1;
         return;
     }
     if (!exited) child.kill();
@@ -203,7 +180,8 @@ async function stop(): Promise<void> {
 // Foreground server. `start` runs this detached. Writes the state file once
 // listening, removes it on SIGTERM/SIGINT.
 // Fails (see daemon.log) when the port is in use.
-async function run({ port }: PortOptions): Promise<void> {
+async function run(): Promise<void> {
+    const port = DAEMON_PORT;
     const file = path.join(stateDir(), STATE_FILE);
     let server: Awaited<ReturnType<typeof startServer>>;
     try {
@@ -238,21 +216,16 @@ export const daemonCommand = new Command("daemon").description(
     "Manage the git-story API server shared by all projects",
 );
 
-daemonCommand
-    .command("start")
-    .description("Start the daemon")
-    .addOption(portOption())
-    .action(start);
+daemonCommand.command("start").description("Start the daemon").action(start);
 
 daemonCommand.command("stop").description("Stop the daemon").action(stop);
 
 daemonCommand
     .command("restart")
     .description("Restart the daemon")
-    .addOption(portOption())
-    .action(async (options: PortOptions) => {
+    .action(async () => {
         await stop();
-        if (!process.exitCode) await start(options);
+        if (!process.exitCode) await start();
     });
 
 daemonCommand
@@ -270,5 +243,4 @@ daemonCommand
 daemonCommand
     .command("run", { hidden: true })
     .description("Run the server in the foreground")
-    .addOption(portOption())
     .action(run);
