@@ -39,6 +39,7 @@ import {
     isPendingRequest,
 } from "../../../translation/multipleActionSchema.js";
 import registerDebug from "debug";
+import { recordGhcpEvalEvent } from "../../../execute/ghcpEvalPolicy.js";
 import ExifReader from "exifreader";
 import { ProfileNames } from "../../../utils/profileNames.js";
 import {
@@ -1073,9 +1074,31 @@ export class RequestCommandHandler implements CommandHandler {
             let reasoningHandled = false;
             let allowLearning = false;
             let explanationResult = interpretResult;
-            if (needsReasoning && !systemContext.noReasoning) {
+            if (needsReasoning) {
+                recordGhcpEvalEvent("translation.reasoning.decision", {
+                    hasUnknownAction,
+                    hasClarificationAction,
+                    enabled:
+                        !systemContext.noReasoning &&
+                        systemContext.currentOptions
+                            ?.translationReasoningFallback !== false,
+                });
+            }
+            if (
+                needsReasoning &&
+                !systemContext.noReasoning &&
+                systemContext.currentOptions?.translationReasoningFallback !==
+                    false
+            ) {
                 try {
+                    debugRequest("translation.reasoning.enter", {
+                        hasUnknownAction,
+                        hasClarificationAction,
+                    });
+                    recordGhcpEvalEvent("translation.reasoning.enter");
                     await runConfiguredReasoning(request, context);
+                    debugRequest("translation.reasoning.completed");
+                    recordGhcpEvalEvent("translation.reasoning.completed");
                     reasoningHandled = true;
                     if (!applyPowerShellCapabilityOutcome(systemContext)) {
                         setDisposition(systemContext, {
@@ -1101,6 +1124,8 @@ export class RequestCommandHandler implements CommandHandler {
                         allowLearning = true;
                     }
                 } catch (e: any) {
+                    debugRequest("translation.reasoning.failed");
+                    recordGhcpEvalEvent("translation.reasoning.failed");
                     debugRequest(
                         `Reasoning fallback failed, using default handler: ${e.message}`,
                     );
@@ -1137,7 +1162,8 @@ export class RequestCommandHandler implements CommandHandler {
                 if (
                     !systemContext.noReasoning &&
                     execResult !== undefined &&
-                    execResult.fallbackToReasoning
+                    execResult.fallbackToReasoning &&
+                    process.env.TYPEAGENT_GHCP_EVAL_FIXTURES === undefined
                 ) {
                     const needsErrorReasoning = requestAction.actions.some(
                         ({ action }) => {

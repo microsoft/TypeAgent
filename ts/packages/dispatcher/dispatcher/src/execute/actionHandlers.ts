@@ -2,6 +2,12 @@
 // Licensed under the MIT License.
 
 import {
+    assertGhcpEvalAction,
+    markGhcpEvalExecutionFailure,
+    recordGhcpEvalEvent,
+} from "./ghcpEvalPolicy.js";
+
+import {
     ExecutableAction,
     FullAction,
     getFullActionName,
@@ -379,6 +385,12 @@ export async function executeAction(
 ): Promise<ActionResult> {
     const action = executableAction.action;
     const schemaName = action.schemaName;
+    assertGhcpEvalAction(schemaName, action.actionName, action.parameters);
+    recordGhcpEvalEvent("action.admitted", {
+        schemaName,
+        actionName: action.actionName,
+        parameters: action.parameters,
+    });
     // For nested action calls (e.g., from TaskFlow scripts), agentContext may be
     // the agent's own context rather than CommandHandlerContext. In that case,
     // use _systemContext which exposes the CommandHandlerContext.
@@ -533,6 +545,13 @@ export async function executeAction(
                     schemaName,
                 );
 
+                if (outcome.result.error !== undefined)
+                    markGhcpEvalExecutionFailure();
+                recordGhcpEvalEvent("action.completed", {
+                    ...eventData,
+                    success: outcome.result.error === undefined,
+                    elapsedMs: Date.now() - actionStartedAt,
+                });
                 logActionCompleted(systemContext.logger, {
                     ...eventData,
                     success: outcome.result.error === undefined,
@@ -540,6 +559,11 @@ export async function executeAction(
                 });
                 return outcome.result;
             } catch (error) {
+                markGhcpEvalExecutionFailure();
+                recordGhcpEvalEvent("action.failed", {
+                    ...eventData,
+                    elapsedMs: Date.now() - actionStartedAt,
+                });
                 logActionCompleted(systemContext.logger, {
                     ...eventData,
                     success: false,

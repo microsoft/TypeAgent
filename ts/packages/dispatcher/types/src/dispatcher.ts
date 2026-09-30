@@ -369,6 +369,11 @@ export type ProcessCommandOptions = {
      */
     noReasoning?: boolean;
     /**
+     * Control only the unknown/clarification translation transition to
+     * reasoning. Unlike noReasoning, this does not disable explicit reasoning.
+     */
+    translationReasoningFallback?: boolean;
+    /**
      * Restrict translation and grammar matching to this subset of currently
      * active schemas. The request returns notHandled when any requested schema
      * is unavailable.
