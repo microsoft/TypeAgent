@@ -19,10 +19,6 @@ import {
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { formatUserContextForPrompt } from "./userContextPrompt.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
-import {
-    ConversationMessage,
-    ConversationMessageMeta,
-} from "@typeagent/conversation-memory";
 import registerDebug from "debug";
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -32,6 +28,7 @@ import { TypeAgentJsonValidator } from "@typeagent/typechat-utils";
 import { z } from "zod/v4";
 import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
 import {
+    rememberConversation,
     searchPersonalMemory,
     searchReasoningConversationMemory,
 } from "../context/personalMemorySearch.js";
@@ -723,45 +720,7 @@ function getClaudeOptions(
         inputSchema: rememberSchema,
         handler: async (args) => {
             debugMcp(`remember text=${args.text}`);
-            const memory = systemContext.conversationMemory;
-            if (
-                memory === undefined &&
-                systemContext.conversationDurableMemory === undefined
-            ) {
-                return {
-                    content: [
-                        {
-                            type: "text",
-                            text: "Conversation memory is not available.",
-                        },
-                    ],
-                };
-            }
-            memory?.queueAddMessage(
-                new ConversationMessage(
-                    args.text,
-                    new ConversationMessageMeta("reasoning", ["user"]),
-                ),
-            );
-            const turnId = systemContext.currentRequestId?.requestId;
-            if (turnId !== undefined) {
-                if (args.kind === "task-outcome") {
-                    systemContext.conversationDurableMemory?.recordTaskOutcome(
-                        args.text,
-                        turnId,
-                    );
-                } else if (args.kind === "decision") {
-                    systemContext.conversationDurableMemory?.recordDecision(
-                        args.text,
-                        turnId,
-                    );
-                } else {
-                    systemContext.conversationDurableMemory?.recordAssistantEvidence(
-                        args.text,
-                        turnId,
-                    );
-                }
-            }
+            await rememberConversation(systemContext, args.text, args.kind);
             return {
                 content: [{ type: "text", text: "Remembered." }],
             };

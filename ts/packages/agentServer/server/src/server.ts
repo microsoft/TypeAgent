@@ -433,6 +433,7 @@ async function main() {
                 // work (queueAddMessage), so the extraction LLM call runs in the
                 // background and does not block the turn.
                 conversationMemorySettings: {
+                    durableMemoryService: memoryService,
                     requestKnowledgeExtraction: true,
                     actionResultKnowledgeExtraction: true,
                 },
@@ -456,10 +457,11 @@ async function main() {
             instanceDir,
         );
     failedStartupCleanup = async () => {
-        await Promise.all([
-            memoryServiceHost.close(),
-            conversationManager.close(),
-        ]);
+        try {
+            await conversationManager.close();
+        } finally {
+            await memoryServiceHost.close();
+        }
     };
     const macroManager = new MacroManager(
         instanceDir,
@@ -526,8 +528,11 @@ async function main() {
     function teardownServer(): Promise<void> {
         teardownPromise ??= (async () => {
             wss?.close();
-            await memoryServiceHost.close();
-            await conversationManager.close();
+            try {
+                await conversationManager.close();
+            } finally {
+                await memoryServiceHost.close();
+            }
             removeServerPid(port);
         })();
         return teardownPromise;

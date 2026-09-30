@@ -185,6 +185,8 @@ describe("FileMemoryService", () => {
         service = new FileMemoryService(rootDirectory, {
             procedureIndexFactory: (_corpusId, directory) =>
                 new FakeProcedureCorpusIndex(directory),
+            eventIndexFactory: (_corpusId, directory) =>
+                new FakeProcedureCorpusIndex(directory),
             indexFactory: (_corpusId, indexDirectory) => {
                 index.indexDirectory = indexDirectory;
                 return index;
@@ -403,6 +405,7 @@ describe("FileMemoryService", () => {
             eventType: "page.visited",
             observedAt: "2026-09-21T10:00:00.000Z",
             content: "TypeAgent memory architecture",
+            metadata: { authority: "producer-reported" },
         });
         await service.appendEvent({
             ...shared,
@@ -424,6 +427,10 @@ describe("FileMemoryService", () => {
             conversationId: "conversation-1",
             runId: "run-1",
             content: "Discussed memory architecture",
+            metadata: {
+                authority: "verified-observation",
+                outcome: "failed",
+            },
         });
 
         await expect(
@@ -443,22 +450,290 @@ describe("FileMemoryService", () => {
                 corpusId: corpus.corpusId,
                 conversationIds: ["conversation-1"],
                 runIds: ["run-1"],
+                authorities: ["verified-observation"],
             }),
         ).resolves.toMatchObject({
             total: 1,
             items: [{ eventType: "turn.completed" }],
         });
+        const found = await service.searchEvents({
+            corpusId: corpus.corpusId,
+            query: "architecture",
+        });
+        expect(found.matches).toHaveLength(2);
+        expect(found.matches.map((match) => match.event.eventType)).toEqual(
+            expect.arrayContaining(["turn.completed", "page.visited"]),
+        );
         await expect(
             service.searchEvents({
                 corpusId: corpus.corpusId,
                 query: "architecture",
+                authorities: ["verified-observation"],
+                limit: 1,
             }),
         ).resolves.toMatchObject({
             matches: [
-                { event: { eventType: "turn.completed" } },
-                { event: { eventType: "page.visited" } },
+                {
+                    event: {
+                        eventType: "turn.completed",
+                        metadata: {
+                            authority: "verified-observation",
+                            outcome: "failed",
+                        },
+                    },
+                },
             ],
         });
+        const eventIndexRoot = path.join(
+            rootDirectory,
+            corpus.corpusId,
+            "event-search-index",
+        );
+        const generation = (await readdir(eventIndexRoot)).find(
+            (entry) => entry !== "state.json",
+        );
+        expect(generation).toBeDefined();
+        const documents = JSON.parse(
+            await readFile(
+                path.join(eventIndexRoot, generation!, "documents.json"),
+                "utf8",
+            ),
+        ) as IndexedDocument[];
+        expect(
+            documents.find(
+                (document) => document.source.title === "turn.completed",
+            )?.indexTags,
+        ).toContain("event-authority:verified-observation");
+        await expect(
+            service.appendEvent({
+                ...shared,
+                idempotencyKey: "unknown-authority",
+                eventType: "page.visited",
+                metadata: { authority: "unsupported-authority" },
+            }),
+        ).rejects.toThrow("Invalid event authority");
+        await expect(
+            service.appendEvent({
+                ...shared,
+                idempotencyKey: "bad-authority",
+                eventType: "page.visited",
+                metadata: { authority: 5 },
+            }),
+        ).rejects.toThrow("Event authority must be a string");
+    });
+
+    test("persists forgotten event keys and conversation/turn scopes without replay", async () => {
+        const { corpusId } = await service.createCorpus("Suppressed activity");
+        const event = (
+            idempotencyKey: string,
+            conversationId?: string,
+            turnId?: string,
+            producerId = "agent",
+        ) => ({
+            corpusId,
+            idempotencyKey,
+            producer: { producerId, producerType: "test" },
+            eventType: "turn.completed",
+            sourceKind: "conversation" as const,
+            content: `Private ${idempotencyKey} content`,
+            ...(conversationId === undefined ? {} : { conversationId }),
+            ...(turnId === undefined ? {} : { turnId }),
+        });
+        const removed = event("removed", "conversation-1", "turn-1");
+        const retained = event("retained", "conversation-1", "turn-2");
+        const other = event("other", "conversation-2", "turn-1");
+        const removedId = (await service.appendEvent(removed)).event.eventId;
+        await service.appendEvent(retained);
+        await service.appendEvent(other);
+        await service.forgetEvents({
+            corpusId,
+            eventIds: [removedId],
+            conversationIds: ["conversation-1"],
+        });
+        await expect(service.appendEvent(removed)).rejects.toMatchObject({
+            code: "EVENT_FORGOTTEN",
+        });
+        await expect(
+            service.appendEvent(
+                event("changed-key", "conversation-1", "turn-1"),
+            ),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await expect(service.appendEvent(other)).resolves.toMatchObject({
+            replayed: true,
+        });
+        await expect(
+            service.forgetEvents({
+                corpusId,
+                conversationIds: ["conversation-1"],
+            }),
+        ).resolves.toMatchObject({ deletedEventCount: 1 });
+        await expect(
+            service.forgetEvents({
+                corpusId,
+                conversationIds: ["empty-conversation"],
+            }),
+        ).resolves.toMatchObject({ deletedEventCount: 0 });
+        await expect(
+            service.forgetEvents({
+                corpusId,
+                conversationIds: ["conversation-2"],
+                turnIds: ["future-turn"],
+            }),
+        ).resolves.toMatchObject({ deletedEventCount: 0 });
+        await expect(
+            service.appendEvent(event("new", "conversation-1", "turn-3")),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await expect(
+            service.appendEvent(event("new", "empty-conversation", "turn-1")),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await expect(
+            service.appendEvent(event("new", "conversation-2", "future-turn")),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await service.appendEvent(event("allowed", "conversation-2", "turn-2"));
+        const keyOnly = event("key-only");
+        const keyOnlyId = (await service.appendEvent(keyOnly)).event.eventId;
+        await service.forgetEvents({ corpusId, eventIds: [keyOnlyId] });
+        await expect(service.appendEvent(keyOnly)).rejects.toMatchObject({
+            code: "EVENT_FORGOTTEN",
+        });
+        await service.appendEvent(
+            event("key-only", undefined, undefined, "independent"),
+        );
+        await service.forgetEvents({ corpusId, turnIds: ["global-turn"] });
+        await expect(
+            service.appendEvent(
+                event("blocked-globally", "conversation-2", "global-turn"),
+            ),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await service.forgetEvents({
+            corpusId,
+            sourceKinds: ["conversation"],
+            conversationIds: ["conversation-2"],
+            turnIds: ["authority-turn"],
+            authorities: ["evidence-only"],
+        });
+        await expect(
+            service.appendEvent({
+                ...event("reasoning", "conversation-2", "authority-turn"),
+                metadata: { authority: "evidence-only" },
+            }),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await service.appendEvent({
+            ...event("verified", "conversation-2", "authority-turn"),
+            metadata: { authority: "verified-observation" },
+        });
+        const ledger = await readFile(
+            path.join(rootDirectory, corpusId, "events.jsonl"),
+            "utf8",
+        );
+        expect(ledger).toContain('"recordType":"event-suppression"');
+        expect(ledger).not.toContain("Private removed content");
+        expect(ledger).not.toContain("Private retained content");
+        expect((await service.listEvents({ corpusId })).total).toBe(4);
+
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => new FakeCorpusIndex(),
+        });
+        await expect(service.appendEvent(removed)).rejects.toMatchObject({
+            code: "EVENT_FORGOTTEN",
+        });
+        await expect(
+            service.appendEvent(event("newer", "conversation-1", "turn-5")),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await expect(
+            service.appendEvent(
+                event("newer", "conversation-2", "future-turn"),
+            ),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        expect((await service.listEvents({ corpusId })).total).toBe(4);
+    });
+
+    test("suppresses an unindexed conversation turn using dispatcher forget selectors", async () => {
+        const { corpusId } = await service.createCorpus("Future turn");
+        await expect(
+            service.forgetEvents({
+                corpusId,
+                sourceKinds: ["conversation"],
+                conversationIds: ["conversation-1"],
+                turnIds: ["turn-1"],
+            }),
+        ).resolves.toMatchObject({ deletedEventCount: 0 });
+        const append = (
+            sourceKind: "conversation" | "web-activity",
+            turnId: string,
+        ) =>
+            service.appendEvent({
+                corpusId,
+                idempotencyKey: `${sourceKind}-${turnId}`,
+                producer: { producerId: "agent", producerType: "test" },
+                eventType: "turn.completed",
+                sourceKind,
+                conversationId: "conversation-1",
+                turnId,
+                content: "Turn content",
+            });
+        await expect(append("conversation", "turn-1")).rejects.toMatchObject({
+            code: "EVENT_FORGOTTEN",
+        });
+        await append("web-activity", "turn-1");
+        await append("conversation", "turn-2");
+        expect(
+            (await service.listEvents({ corpusId, turnIds: ["turn-1"] })).total,
+        ).toBe(1);
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => new FakeCorpusIndex(),
+        });
+        await expect(append("conversation", "turn-1")).rejects.toMatchObject({
+            code: "EVENT_FORGOTTEN",
+        });
+        expect((await service.listEvents({ corpusId })).total).toBe(2);
+    });
+
+    test("suppresses an empty conversation using the server migration selector", async () => {
+        const { corpusId } = await service.createCorpus("Deleted conversation");
+        await expect(
+            service.forgetEvents({
+                corpusId,
+                sourceKinds: ["conversation"],
+                conversationIds: ["deleted-conversation"],
+            }),
+        ).resolves.toMatchObject({ deletedEventCount: 0 });
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => new FakeCorpusIndex(),
+        });
+        await expect(
+            service.appendEvent({
+                corpusId,
+                idempotencyKey: JSON.stringify([
+                    "deleted-conversation",
+                    "server-turn",
+                    "user-turn",
+                ]),
+                producer: {
+                    producerId: "typeagent.agent-server.conversation-history",
+                    producerType: "conversation-history",
+                },
+                eventType: "user-turn",
+                sourceKind: "conversation",
+                conversationId: "deleted-conversation",
+                turnId: "server-turn",
+                content: "Retained transcript must not return",
+                metadata: { authority: "user-assertion" },
+            }),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await service.appendEvent({
+            corpusId,
+            idempotencyKey: "independent-activity",
+            producer: { producerId: "browser", producerType: "extension" },
+            eventType: "page.visited",
+            sourceKind: "web-activity",
+            conversationId: "deleted-conversation",
+            content: "Unrelated web activity",
+        });
+        expect((await service.listEvents({ corpusId })).total).toBe(1);
     });
 
     test("forgets events independently from linked documents", async () => {

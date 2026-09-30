@@ -3,7 +3,6 @@
 
 import { afterEach, describe, expect, test } from "@jest/globals";
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import type { ClientIO, DispatcherOptions } from "agent-dispatcher";
 import { createConversationManager } from "../src/conversationManager.js";
@@ -11,7 +10,7 @@ import { createConversationManager } from "../src/conversationManager.js";
 const tempDirs: string[] = [];
 
 async function createTempDir(): Promise<string> {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "agent-server-test-"));
+    const dir = await fs.mkdtemp(path.resolve(".agent-server-test-"));
     tempDirs.push(dir);
     return dir;
 }
