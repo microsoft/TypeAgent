@@ -1408,10 +1408,10 @@ export async function createConversationManager(
         },
 
         indexConversationMessage(
-            conversationId: string,
-            text: string,
-            sender?: string,
-            turnKey?: string,
+            _conversationId: string,
+            _text: string,
+            _sender?: string,
+            _turnKey?: string,
         ): void {
             // Dispatcher durable events are the sole live producer. Transcript
             // replay/import is indexed explicitly by indexConversations instead.
