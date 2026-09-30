@@ -5,7 +5,19 @@ import {
     induceMacroFromTrace,
     validateMacro,
     type RecordedInteractionTrace,
+    type ReplayToolHost,
 } from "@typeagent/copilot-macros";
+
+const replayHost: ReplayToolHost = {
+    inspectTool: async (mcpServerName, toolName) => ({
+        ...(mcpServerName ? { mcpServerName } : {}),
+        toolName,
+        schemaFingerprint: "v1",
+    }),
+    callTool: async () => {
+        throw new Error("Induction must not execute tools.");
+    },
+};
 
 function trace(
     call: Omit<
@@ -38,15 +50,136 @@ function trace(
 }
 
 describe("macro induction and validation", () => {
-    it("induces a replayable linear workspace draft", () => {
+    it("uses model-facing guards and references throughout a mixed agent procedure", async () => {
+        const source = trace({
+            result: {
+                content: '{"item":{"id":"item-123"}}',
+                detailedContent: "UI-only result",
+            },
+            modelResult: { item: { id: "item-123" } },
+        });
+        source.toolCalls.push({
+            toolCallId: "call-2",
+            name: "native_tool",
+            arguments: { itemId: "item-123" },
+            result: { content: '{"ok":true}', detailedContent: "UI-only" },
+            modelResult: { ok: true },
+            status: "completed",
+        });
+        const before = structuredClone(source);
+        const macro = await induceMacroFromTrace(
+            "trace-1",
+            source,
+            "macro-1",
+            "Mixed result views",
+            "",
+            "2026-09-29T08:00:00.000Z",
+            replayHost,
+        );
+
+        expect(source).toEqual(before);
+        expect(macro.executionClass).toBe("agentRequired");
+        expect(macro.steps[0].executionClass).toBe("replayable");
+        expect(macro.steps[0].postconditions).toEqual([
+            { kind: "resultType", valueType: "object" },
+            { kind: "resultPathExists", path: ["item", "id"] },
+        ]);
+        expect(macro.steps[1]).toMatchObject({
+            executionClass: "agentRequired",
+            arguments: {
+                kind: "template",
+                bindings: [
+                    {
+                        path: ["itemId"],
+                        expression: {
+                            kind: "stepResult",
+                            stepId: "step-1",
+                            path: ["item", "id"],
+                        },
+                    },
+                ],
+            },
+            postconditions: [
+                { kind: "resultType", valueType: "object" },
+                { kind: "resultPathExists", path: ["ok"] },
+            ],
+        });
+        expect(validateMacro(macro, source).valid).toBe(true);
+    });
+
+    it.each([
+        [null, "null"],
+        [false, "boolean"],
+        [0, "number"],
+        ["", "string"],
+    ])(
+        "retains the model-facing primitive %s",
+        async (modelResult, valueType) => {
+            const macro = await induceMacroFromTrace(
+                "trace-1",
+                trace({ mcpServerName: null, modelResult }),
+                "macro-1",
+                "Primitive result",
+                "",
+                "2026-09-29T08:00:00.000Z",
+            );
+            expect(macro.steps[0].postconditions).toEqual([
+                { kind: "resultType", valueType },
+            ]);
+            expect(macro.warnings).not.toContainEqual(
+                expect.stringContaining("no captured model-facing result"),
+            );
+        },
+    );
+
+    it("keeps deterministic replay guards on raw results", async () => {
+        const macro = await induceMacroFromTrace(
+            "trace-1",
+            trace({
+                result: { raw: "value" },
+                modelResult: { visible: "value" },
+            }),
+            "macro-1",
+            "Replay result",
+            "",
+            "2026-09-29T08:00:00.000Z",
+            replayHost,
+        );
+        expect(macro.executionClass).toBe("replayable");
+        expect(macro.steps[0].postconditions).toEqual([
+            { kind: "resultType", valueType: "object" },
+            { kind: "resultPathExists", path: ["raw"] },
+        ]);
+    });
+
+    it("preserves legacy guards and warns when model-facing evidence was not captured", async () => {
+        const macro = await induceMacroFromTrace(
+            "trace-1",
+            trace({ mcpServerName: null, result: { content: "legacy" } }),
+            "macro-1",
+            "Legacy result",
+            "",
+            "2026-09-29T08:00:00.000Z",
+        );
+        expect(macro.steps[0].postconditions).toContainEqual({
+            kind: "resultPathExists",
+            path: ["content"],
+        });
+        expect(macro.warnings).toContainEqual(
+            expect.stringContaining("no captured model-facing result"),
+        );
+    });
+
+    it("induces a replayable linear workspace draft", async () => {
         const source = trace();
-        const macro = induceMacroFromTrace(
+        const macro = await induceMacroFromTrace(
             "trace-1",
             source,
             "macro-1",
             "Read package",
             "Reads package metadata",
             "2026-08-14T10:01:00.000Z",
+            replayHost,
         );
 
         expect(macro).toMatchObject({
@@ -91,14 +224,20 @@ describe("macro induction and validation", () => {
         expect(validateMacro(macro, source).valid).toBe(true);
     });
 
-    it("classifies unknown tools as agent required", () => {
-        const macro = induceMacroFromTrace(
+    it("classifies native tools as agent required without inspecting them", async () => {
+        const macro = await induceMacroFromTrace(
             "trace-1",
             trace({ name: "shell", mcpServerName: null }),
             "macro-1",
             "Run command",
             "",
             "2026-08-14T10:01:00.000Z",
+            {
+                ...replayHost,
+                inspectTool: async () => {
+                    throw new Error("Native tools must not be inspected.");
+                },
+            },
         );
 
         expect(macro.executionClass).toBe("agentRequired");
@@ -107,24 +246,96 @@ describe("macro induction and validation", () => {
         );
     });
 
-    it("classifies captured MCP tools as replayable", () => {
-        const macro = induceMacroFromTrace(
+    it.each(["example-server", "github-mcp-server"])(
+        "classifies available MCP tools on %s as replayable",
+        async (mcpServerName) => {
+            const macro = await induceMacroFromTrace(
+                "trace-1",
+                trace({ name: "create_item", mcpServerName }),
+                "macro-1",
+                "Create item",
+                "",
+                "2026-08-14T10:01:00.000Z",
+                replayHost,
+            );
+
+            expect(macro.executionClass).toBe("replayable");
+            expect(macro.warnings).not.toContainEqual(
+                expect.stringContaining("agent-guided execution"),
+            );
+        },
+    );
+
+    it.each(["github-mcp-server", "unconfigured-server"])(
+        "requires an agent for unavailable MCP tools on %s",
+        async (mcpServerName) => {
+            const inspections: unknown[] = [];
+            const macro = await induceMacroFromTrace(
+                "trace-1",
+                trace({ name: "web_search", mcpServerName }),
+                "macro-1",
+                "Search",
+                "",
+                "2026-08-14T10:01:00.000Z",
+                {
+                    ...replayHost,
+                    inspectTool: async (...args) => {
+                        inspections.push(args);
+                        return undefined;
+                    },
+                },
+            );
+
+            expect(inspections).toEqual([
+                [mcpServerName, "web_search", { cwd: "." }],
+            ]);
+            expect(macro.executionClass).toBe("agentRequired");
+            expect(macro.steps[0]).toMatchObject({
+                toolName: "web_search",
+                mcpServerName,
+                executionClass: "agentRequired",
+            });
+            expect(macro.warnings).toContainEqual(
+                expect.stringContaining(`${mcpServerName}/web_search`),
+            );
+            expect(validateMacro(macro).valid).toBe(true);
+        },
+    );
+
+    it("requires an agent when no replay host is configured", async () => {
+        const macro = await induceMacroFromTrace(
             "trace-1",
-            trace({ name: "create_item", mcpServerName: "example-server" }),
+            trace(),
             "macro-1",
-            "Create item",
+            "Read",
             "",
             "2026-08-14T10:01:00.000Z",
         );
-
-        expect(macro.executionClass).toBe("replayable");
-        expect(macro.warnings).not.toContainEqual(
-            expect.stringContaining("agent-guided execution"),
-        );
+        expect(macro.executionClass).toBe("agentRequired");
+        expect(macro.steps[0].executionClass).toBe("agentRequired");
     });
 
-    it("turns redacted arguments into required secret inputs", () => {
-        const macro = induceMacroFromTrace(
+    it("propagates inspection failures instead of treating them as unavailable tools", async () => {
+        await expect(
+            induceMacroFromTrace(
+                "trace-1",
+                trace(),
+                "macro-1",
+                "Read",
+                "",
+                "2026-08-14T10:01:00.000Z",
+                {
+                    ...replayHost,
+                    inspectTool: async () => {
+                        throw new Error("Authentication failed");
+                    },
+                },
+            ),
+        ).rejects.toThrow("Authentication failed");
+    });
+
+    it("turns redacted arguments into required secret inputs", async () => {
+        const macro = await induceMacroFromTrace(
             "trace-1",
             trace({ arguments: { authorization: "[REDACTED]" } }),
             "macro-1",
@@ -156,7 +367,7 @@ describe("macro induction and validation", () => {
         });
     });
 
-    it("binds a later argument to an earlier captured result", () => {
+    it("binds a later argument to an earlier captured result", async () => {
         const source = trace();
         source.prompt = "Find package.json and inspect it";
         source.toolCalls[0].result = { match: { path: "src/package.json" } };
@@ -169,7 +380,7 @@ describe("macro induction and validation", () => {
             status: "completed",
         });
 
-        const macro = induceMacroFromTrace(
+        const macro = await induceMacroFromTrace(
             "trace-1",
             source,
             "macro-1",
@@ -194,10 +405,10 @@ describe("macro induction and validation", () => {
         });
     });
 
-    it("canonicalizes omitted tool arguments as an empty object", () => {
+    it("canonicalizes omitted tool arguments as an empty object", async () => {
         const source = trace();
         delete source.toolCalls[0].arguments;
-        const macro = induceMacroFromTrace(
+        const macro = await induceMacroFromTrace(
             "trace-1",
             source,
             "macro-1",
@@ -213,9 +424,9 @@ describe("macro induction and validation", () => {
         expect(JSON.parse(JSON.stringify(macro))).toEqual(macro);
     });
 
-    it("rejects a draft induced from a failed tool call", () => {
+    it("rejects a draft induced from a failed tool call", async () => {
         const source = trace({ status: "failed" });
-        const macro = induceMacroFromTrace(
+        const macro = await induceMacroFromTrace(
             "trace-1",
             source,
             "macro-1",

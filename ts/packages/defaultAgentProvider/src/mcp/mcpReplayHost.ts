@@ -31,7 +31,7 @@ import {
 type ActiveServer = {
     config: NormalizedMcpServerConfig;
     connection: McpReplayConnection;
-    catalog: McpToolCatalog;
+    catalog: McpToolCatalog | undefined;
 };
 
 export interface McpReplayConnection {
@@ -56,10 +56,6 @@ export class McpReplayHost implements ReplayToolHost {
     private readonly credentialStore: McpCredentialStore;
     private readonly audit: McpAuditSink;
     private readonly configs: NormalizedMcpServerConfig[];
-    private readonly discovered = new Map<
-        string,
-        Promise<NormalizedMcpServerConfig[]>
-    >();
     private readonly connectionFactory: (
         config: NormalizedMcpServerConfig,
     ) => Promise<McpReplayConnection>;
@@ -90,7 +86,8 @@ export class McpReplayHost implements ReplayToolHost {
         toolName: string,
         context: ReplayToolContext = {},
     ): Promise<ReplayToolDescriptor | undefined> {
-        const server = await this.getServer(mcpServerName, context);
+        const server = await this.getServer(mcpServerName, context, true);
+        if (!server) return undefined;
         const tool = this.getTool(server, toolName);
         if (!tool) return undefined;
         return {
@@ -116,8 +113,8 @@ export class McpReplayHost implements ReplayToolHost {
         context: ReplayToolContext = {},
     ): Promise<unknown> {
         const server = await this.getServer(mcpServerName, context);
-        const tool = this.getTool(server, toolName);
-        if (!tool) {
+        const tool = server && this.getTool(server, toolName);
+        if (!server || !tool) {
             throw new Error(
                 `MCP replay tool is unavailable: ${mcpServerName}/${toolName}`,
             );
@@ -187,53 +184,67 @@ export class McpReplayHost implements ReplayToolHost {
     private async getServer(
         serverName: string | undefined,
         context: ReplayToolContext,
-    ): Promise<ActiveServer> {
+        refreshCatalog = false,
+    ): Promise<ActiveServer | undefined> {
         if (!serverName || serverName === "typeagent-macros") {
-            throw new Error(
-                `MCP server is not replayable: ${serverName ?? "native"}`,
-            );
+            return undefined;
         }
-        const configs = await this.getConfigs(context.cwd);
+        const configs = this.getConfigs(context.cwd, serverName);
         const config = configs.find(
             (candidate) =>
                 candidate.name === serverName || candidate.id === serverName,
         );
         if (!config) {
-            throw new Error(
-                `MCP server '${serverName}' is Copilot-only or not configured in TypeAgent.`,
-            );
+            return undefined;
         }
         let active = this.active.get(config.id);
         if (!active) {
             active = this.connect(config);
             this.active.set(config.id, active);
             active.catch(() => this.active.delete(config.id));
+        } else if (refreshCatalog) {
+            const server = await active;
+            server.catalog = await this.readCatalog(
+                config.id,
+                server.connection,
+            );
         }
         return active;
     }
 
-    private async getConfigs(
+    private getConfigs(
         cwd: string | undefined,
-    ): Promise<NormalizedMcpServerConfig[]> {
+        serverName: string,
+    ): NormalizedMcpServerConfig[] {
         if (!cwd) return this.configs;
-        const resolvedCwd = path.resolve(cwd);
-        let configs = this.discovered.get(resolvedCwd);
-        if (!configs) {
-            configs = this.discoverConfigs(resolvedCwd);
-            this.discovered.set(resolvedCwd, configs);
-        }
-        return [...(await configs), ...this.configs];
+        return [
+            ...this.discoverConfigs(path.resolve(cwd), serverName),
+            ...this.configs,
+        ];
     }
 
-    private async discoverConfigs(
+    private discoverConfigs(
         cwd: string,
-    ): Promise<NormalizedMcpServerConfig[]> {
-        return new McpConfigDiscovery()
-            .discover({
-                workspacePath: cwd,
-                isFolderTrusted: () => true,
-            })
-            .configs.filter((entry) => entry.config.name !== "typeagent-macros")
+        serverName: string,
+    ): NormalizedMcpServerConfig[] {
+        const discovery = new McpConfigDiscovery().discover({
+            workspacePath: cwd,
+            isFolderTrusted: () => true,
+        });
+        const failures = discovery.diagnostics.filter(
+            (diagnostic) =>
+                (diagnostic.kind === "unreadable" ||
+                    diagnostic.kind === "invalid") &&
+                (diagnostic.serverName === undefined ||
+                    diagnostic.serverName === serverName),
+        );
+        if (failures.length > 0) {
+            throw new Error(
+                `MCP replay configuration discovery failed: ${failures.map((failure) => failure.message).join("; ")}`,
+            );
+        }
+        return discovery.configs
+            .filter((entry) => entry.config.name !== "typeagent-macros")
             .map((entry) => entry.config);
     }
 
@@ -242,11 +253,7 @@ export class McpReplayHost implements ReplayToolHost {
     ): Promise<ActiveServer> {
         const connection = await this.connectionFactory(config);
         try {
-            const catalog = buildMcpToolCatalog(
-                config.id,
-                await connection.listTools(),
-                "McpReplayAction",
-            );
+            const catalog = await this.readCatalog(config.id, connection);
             return { config, connection, catalog };
         } catch (error) {
             await connection.close();
@@ -258,9 +265,19 @@ export class McpReplayHost implements ReplayToolHost {
         server: ActiveServer,
         toolName: string,
     ): McpToolCatalogEntry | undefined {
-        return server.catalog.entries.get(
+        return server.catalog?.entries.get(
             getMcpToolIdentity(server.config.id, toolName),
         );
+    }
+
+    private async readCatalog(
+        configId: string,
+        connection: McpReplayConnection,
+    ): Promise<McpToolCatalog | undefined> {
+        const tools = await connection.listTools();
+        return tools.length === 0
+            ? undefined
+            : buildMcpToolCatalog(configId, tools, "McpReplayAction");
     }
 
     private asArguments(value: unknown): Record<string, unknown> {

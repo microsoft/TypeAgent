@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FileMemoryService, type IngestionJobStatus } from "../src/index.js";
+import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
 
 const fixtureDirectory = path.resolve("test", "data", "memory-validation");
 
@@ -129,7 +130,10 @@ describe("memory validation acceptance", () => {
         const rootDirectory = await mkdtemp(
             path.join(os.tmpdir(), "typeagent-memory-validation-"),
         );
-        let service = new FileMemoryService(rootDirectory);
+        let service = new FileMemoryService(rootDirectory, {
+            procedureIndexFactory: (_corpusId, directory) =>
+                new FakeProcedureCorpusIndex(directory),
+        });
         try {
             const corpus = await service.createCorpus(
                 "Deterministic memory validation",
@@ -445,7 +449,10 @@ describe("memory validation acceptance", () => {
             expect(reindexed.sourceCount).toBe(fixtureNames.length - 1);
 
             await service.close();
-            service = new FileMemoryService(rootDirectory);
+            service = new FileMemoryService(rootDirectory, {
+                procedureIndexFactory: (_corpusId, directory) =>
+                    new FakeProcedureCorpusIndex(directory),
+            });
 
             expect(
                 await service.getPersonalHowToSettings(corpus.corpusId),

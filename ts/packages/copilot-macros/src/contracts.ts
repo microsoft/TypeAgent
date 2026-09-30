@@ -7,6 +7,8 @@ export interface RecordedToolCall {
     mcpServerName?: string;
     arguments?: unknown;
     result?: unknown;
+    // Parsed model-facing tool text, distinct from the raw event/UI result.
+    modelResult?: unknown;
     status: "completed" | "failed" | "denied";
     permission?: unknown;
 }
@@ -328,6 +330,7 @@ export interface ReplayToolContext {
 }
 
 export interface ReplayToolHost {
+    // Missing servers/tools return undefined; connection and inspection failures throw.
     inspectTool(
         mcpServerName: string | undefined,
         toolName: string,

@@ -5,7 +5,11 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { MacroManager, type ReplayToolHost } from "@typeagent/copilot-macros";
+import {
+    MacroManager,
+    type RecordedToolCall,
+    type ReplayToolHost,
+} from "@typeagent/copilot-macros";
 
 async function captureTrace(
     manager: MacroManager,
@@ -15,6 +19,7 @@ async function captureTrace(
         mcpServerName?: string;
         status?: "completed" | "failed" | "denied";
         prompt?: string;
+        additionalCalls?: RecordedToolCall[];
     } = {},
 ): Promise<string> {
     const sessionId = options.sessionId ?? "session-1";
@@ -48,6 +53,7 @@ async function captureTrace(
                     result: { content: "{}" },
                     status: options.status ?? "completed",
                 },
+                ...(options.additionalCalls ?? []),
             ],
         },
     });
@@ -107,7 +113,7 @@ describe("MacroManager draft catalog", () => {
 
         await expect(manager.validateMacro(draft)).resolves.toMatchObject({
             valid: true,
-            executionClass: "replayable",
+            executionClass: "agentRequired",
         });
         const approved = await manager.approveMacro(draft);
         expect(approved).toMatchObject({ version: 2, state: "approved" });
@@ -118,7 +124,7 @@ describe("MacroManager draft catalog", () => {
         ).resolves.toMatchObject({
             version: 2,
             state: "approved",
-            executionClass: "replayable",
+            executionClass: "agentRequired",
         });
         await expect(
             restarted.inspectMacro({ macroId: draft.macroId, version: 1 }),
@@ -156,7 +162,7 @@ describe("MacroManager draft catalog", () => {
         await expect(
             manager.getMacroRequirements({ macroId: draft.macroId }),
         ).resolves.toMatchObject({
-            executionClass: "replayable",
+            executionClass: "agentRequired",
             tools: [{ toolName: "read" }],
         });
         await expect(
@@ -185,6 +191,143 @@ describe("MacroManager draft catalog", () => {
         expect(
             results.filter((result) => result.status === "rejected"),
         ).toHaveLength(1);
+    });
+
+    it.each([false, true])(
+        "hands Copilot-only MCP tools to the agent without replaying a prefix (mixed: %s)",
+        async (mixed) => {
+            const instanceDir = await mkdtemp(
+                path.join(os.tmpdir(), "catalog-"),
+            );
+            let calls = 0;
+            const manager = new MacroManager(instanceDir, {
+                inspectTool: async (mcpServerName, toolName) =>
+                    mcpServerName === "typeagent-workspace"
+                        ? {
+                              mcpServerName,
+                              toolName,
+                              schemaFingerprint: "v1",
+                          }
+                        : undefined,
+                callTool: async () => {
+                    calls++;
+                    return {};
+                },
+            });
+            const searchCall = {
+                toolCallId: "call-2",
+                name: "web_search",
+                mcpServerName: "github-mcp-server",
+                arguments: { query: "Seattle weather" },
+                result: { content: "Dry" },
+                status: "completed",
+            } satisfies RecordedToolCall;
+            const traceId = await captureTrace(
+                manager,
+                mixed
+                    ? { additionalCalls: [searchCall] }
+                    : {
+                          toolName: searchCall.name,
+                          mcpServerName: searchCall.mcpServerName,
+                      },
+            );
+            const draft = await manager.createMacroFromTrace({
+                traceId,
+                name: "Think about going outside",
+            });
+            const definition = await manager.inspectMacro(draft);
+            expect(definition.executionClass).toBe("agentRequired");
+            expect(definition.steps.map((step) => step.executionClass)).toEqual(
+                mixed ? ["replayable", "agentRequired"] : ["agentRequired"],
+            );
+            expect(definition.steps.at(-1)).toMatchObject({
+                toolName: "web_search",
+                mcpServerName: "github-mcp-server",
+            });
+            await expect(manager.validateMacro(draft)).resolves.toMatchObject({
+                valid: true,
+                executionClass: "agentRequired",
+            });
+            const approved = await manager.approveMacro(draft);
+            await expect(
+                manager.runMacro({
+                    ...approved,
+                    runId: "copilot-only-run",
+                    preference: "auto",
+                }),
+            ).resolves.toMatchObject({
+                status: "agentRequired",
+                launch: {
+                    agent: "typeagent-macro-runner",
+                    macro: {
+                        ...definition,
+                        version: 2,
+                        state: "approved",
+                        createdAt: expect.any(String),
+                    },
+                    reason: { stepIds: [mixed ? "step-2" : "step-1"] },
+                },
+            });
+            await expect(
+                manager.runMacro({
+                    ...approved,
+                    runId: "forced-replay",
+                    preference: "replay",
+                }),
+            ).rejects.toThrow("agent");
+            expect(calls).toBe(0);
+        },
+    );
+
+    it("does not persist a draft when replay tool inspection fails", async () => {
+        const instanceDir = await mkdtemp(path.join(os.tmpdir(), "catalog-"));
+        const manager = new MacroManager(instanceDir, {
+            inspectTool: async () => {
+                throw new Error("Connection failed");
+            },
+            callTool: async () => {
+                throw new Error("Must not execute");
+            },
+        });
+        const traceId = await captureTrace(manager);
+        await expect(
+            manager.createMacroFromTrace({
+                traceId,
+                name: "Read package",
+            }),
+        ).rejects.toThrow("Connection failed");
+        await expect(manager.listMacros()).resolves.toEqual([]);
+    });
+
+    it("rejects tools removed after draft creation without changing execution class", async () => {
+        const instanceDir = await mkdtemp(path.join(os.tmpdir(), "catalog-"));
+        let available = true;
+        const manager = new MacroManager(instanceDir, {
+            inspectTool: async (mcpServerName, toolName) =>
+                available
+                    ? {
+                          ...(mcpServerName ? { mcpServerName } : {}),
+                          toolName,
+                          schemaFingerprint: "v1",
+                      }
+                    : undefined,
+            callTool: async () => {
+                throw new Error("Must not execute");
+            },
+        });
+        const traceId = await captureTrace(manager);
+        const draft = await manager.createMacroFromTrace({
+            traceId,
+            name: "Read package",
+        });
+        available = false;
+        await expect(manager.approveMacro(draft)).rejects.toThrow(
+            "Replay tool is unavailable",
+        );
+        await expect(manager.inspectMacro(draft)).resolves.toMatchObject({
+            state: "draft",
+            executionClass: "replayable",
+        });
     });
 
     it("approves agent-required drafts but rejects unsuccessful source calls", async () => {

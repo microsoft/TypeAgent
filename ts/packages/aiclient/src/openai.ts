@@ -877,6 +877,15 @@ export function createEmbeddingModel(
 
     // https://platform.openai.com/docs/api-reference/embeddings/create#embeddings-create-input
     const maxBatchSize = Math.min(options?.maxBatchSize ?? 2048, 2048);
+    // Trace config overrides of the pool's settings for troubleshooting.
+    if (
+        options?.modelName !== undefined ||
+        options?.maxBatchSize !== undefined
+    ) {
+        debugOpenAI(
+            `Embedding overrides for ${pool.modelKey}: model=${options.modelName ?? settings.modelName}, maxBatchSize=${maxBatchSize}`,
+        );
+    }
     const defaultParams: any =
         settings.provider === "azure"
             ? {}

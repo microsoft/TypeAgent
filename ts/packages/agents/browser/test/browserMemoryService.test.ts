@@ -135,6 +135,13 @@ function createClient(): jest.Mocked<MemoryServiceClient> {
             },
             warnings: [],
         })),
+        getPersonalHowToSettings: jest.fn(async () => ({
+            revision: 0,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            enabled: true,
+            detectCandidates: true,
+        })),
+        listProcedureCandidates: jest.fn(async () => []),
         waitForJob: jest.fn(async () => ({
             jobId: "job-1",
             corpusId: "browser-corpus",
@@ -151,6 +158,96 @@ function createClient(): jest.Mocked<MemoryServiceClient> {
 }
 
 describe("BrowserMemoryService", () => {
+    test("reports candidates from the ingested page revision and job warnings", async () => {
+        const client = createClient();
+        client.getJob.mockResolvedValue({
+            ...(await client.getJob("job-1")),
+            warnings: ["Extractor needs attention"],
+        });
+        client.listProcedureCandidates.mockResolvedValue([
+            {
+                candidateId: "page",
+                corpusId: "browser-corpus",
+                state: "detected",
+                title: "How to save",
+                steps: ["Capture", "Review"],
+                citations: [{ sourceId: "source-1", revisionId: "revision-1" }],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+            {
+                candidateId: "other",
+                corpusId: "browser-corpus",
+                state: "detected",
+                title: "Older page revision",
+                steps: ["One", "Two"],
+                citations: [{ sourceId: "source-1", revisionId: "revision-0" }],
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+        ]);
+
+        const result = await new BrowserMemoryService(client).ingest(
+            {
+                url: "https://example.test/page",
+                title: "How to save",
+                markdown: "## Steps\n1. Capture\n2. Review",
+            },
+            "content",
+            { reportHowToStatus: true },
+        );
+
+        expect(result.howTo).toEqual({ enabled: true, candidateCount: 1 });
+        expect(result.warnings).toEqual(["Extractor needs attention"]);
+        expect(client.listProcedureCandidates).toHaveBeenCalledWith(
+            "browser-corpus",
+            ["detected", "draft"],
+        );
+    });
+
+    test("reports disabled how-to detection without listing candidates", async () => {
+        const client = createClient();
+        client.getPersonalHowToSettings.mockResolvedValue({
+            revision: 1,
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            enabled: true,
+            detectCandidates: false,
+        });
+
+        const result = await new BrowserMemoryService(client).ingest(
+            {
+                url: "https://example.test/page",
+                title: "Page",
+                markdown: "# Page",
+            },
+            "content",
+            { reportHowToStatus: true },
+        );
+        expect(result.howTo).toEqual({ enabled: false, candidateCount: 0 });
+        expect(client.listProcedureCandidates).not.toHaveBeenCalled();
+    });
+
+    test("preserves the saved page and warns when candidate status cannot be read", async () => {
+        const client = createClient();
+        client.listProcedureCandidates.mockRejectedValue(
+            new Error("Candidate store unavailable"),
+        );
+        const result = await new BrowserMemoryService(client).ingest(
+            {
+                url: "https://example.test/page",
+                title: "Page",
+                markdown: "## Steps\n1. First\n2. Second",
+            },
+            "content",
+            { reportHowToStatus: true },
+        );
+        expect(result.source.sourceId).toBeDefined();
+        expect(result.howTo).toBeUndefined();
+        expect(result.warnings).toEqual([
+            "Could not check how-to candidates: Candidate store unavailable",
+        ]);
+    });
+
     test("shares an adapter for browser sessions using the same client", () => {
         const client = createClient();
 

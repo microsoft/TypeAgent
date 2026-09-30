@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
+import { induceMacroFromTrace } from "@typeagent/copilot-macros";
 import { ExtensionTraceAssembler } from "../src/extension/trace-assembler.js";
 
 function event(
@@ -14,6 +15,135 @@ function event(
 }
 
 describe("extension trace assembler", () => {
+    it.each([
+        [
+            '{"answer":{"value":"public","apiKey":"secret"}}',
+            {
+                answer: { value: "public", apiKey: "[REDACTED]" },
+            },
+        ],
+        ["null", null],
+        ["false", false],
+        ["0", 0],
+        ['""', ""],
+        ["", ""],
+        ["plain text", "plain text"],
+        ['{"truncated":', '{"truncated":'],
+    ])(
+        "captures model-facing content %s without UI-only fields",
+        (content, expected) => {
+            const assembler = new ExtensionTraceAssembler("session-1", ".");
+            assembler.record(
+                event("user.message", "2026-09-29T08:00:00.000Z", {
+                    content: "Read the result",
+                }),
+            );
+            assembler.record(
+                event("tool.execution_start", "2026-09-29T08:00:01.000Z", {
+                    toolCallId: "call-1",
+                    toolName: "web_search",
+                    mcpServerName: "github-mcp-server",
+                }),
+            );
+            assembler.record(
+                event("tool.execution_complete", "2026-09-29T08:00:02.000Z", {
+                    toolCallId: "call-1",
+                    success: true,
+                    result: {
+                        content,
+                        detailedContent: "UI detail",
+                        contents: [],
+                    },
+                }),
+            );
+            const call = assembler.finish()?.toolCalls[0];
+            expect(call?.modelResult).toEqual(expected);
+            expect(call?.result).toMatchObject({
+                detailedContent: "UI detail",
+                contents: [],
+            });
+        },
+    );
+
+    it("does not manufacture model-facing evidence when content is absent", () => {
+        const assembler = new ExtensionTraceAssembler("session-1", ".");
+        assembler.record(
+            event("user.message", "2026-09-29T08:00:00.000Z", {
+                content: "Read",
+            }),
+        );
+        assembler.record(
+            event("tool.execution_start", "2026-09-29T08:00:01.000Z", {
+                toolCallId: "call-1",
+                toolName: "read",
+            }),
+        );
+        assembler.record(
+            event("tool.execution_complete", "2026-09-29T08:00:02.000Z", {
+                toolCallId: "call-1",
+                success: true,
+                result: { detailedContent: '{"notVisible":true}' },
+            }),
+        );
+        expect(assembler.finish()?.toolCalls[0]).not.toHaveProperty(
+            "modelResult",
+        );
+    });
+
+    it.each([
+        ["web_search", "github-mcp-server", "web_search"],
+        ["sample-fetch_data", "sample", "fetch_data"],
+    ])(
+        "preserves callable %s separately from MCP provenance through induction",
+        async (toolName, mcpServerName, mcpToolName) => {
+            const assembler = new ExtensionTraceAssembler("session-1", ".");
+            assembler.record(
+                event("user.message", "2026-09-29T08:00:00.000Z", {
+                    content: "Run the benign fixture",
+                }),
+            );
+            assembler.record(
+                event("tool.execution_start", "2026-09-29T08:00:01.000Z", {
+                    toolCallId: "call-1",
+                    toolName,
+                    mcpServerName,
+                    mcpToolName,
+                    arguments: { query: "IANA example domains" },
+                }),
+            );
+            assembler.record(
+                event("tool.execution_complete", "2026-09-29T08:00:02.000Z", {
+                    toolCallId: "call-1",
+                    success: true,
+                    result: { content: "Reserved for documentation" },
+                }),
+            );
+            const trace = assembler.finish();
+            expect(trace?.toolCalls[0]).toMatchObject({
+                name: toolName,
+                mcpServerName,
+            });
+            if (!trace) throw new Error("Expected completed capture");
+            const macro = await induceMacroFromTrace(
+                "trace-1",
+                trace,
+                "macro-1",
+                "Callable identity fixture",
+                "",
+                "2026-09-29T08:00:03.000Z",
+            );
+            expect(macro.steps[0]).toMatchObject({
+                toolName,
+                mcpServerName,
+                executionClass: "agentRequired",
+                arguments: {
+                    kind: "literal",
+                    value: { query: "IANA example domains" },
+                },
+            });
+        },
+    );
+
     it("builds a redacted trace from live session events", () => {
         const assembler = new ExtensionTraceAssembler("session-1", "C:\\repo");
         assembler.record(

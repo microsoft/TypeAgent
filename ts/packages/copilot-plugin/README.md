@@ -554,6 +554,33 @@ Macros containing Copilot-native tools use the macro runner for the whole
 procedure. TypeAgent never replays a prefix and hands only the remainder to
 the agent.
 
+For agent-guided execution, `step.toolName` preserves Copilot's captured
+callable name; `mcpServerName` preserves backend provenance, not a namespace
+to prepend. For example, Copilot CLI exposes `web_search` (rendered as
+`functions.web_search`) while its runtime metadata and execution events
+identify the backend as `github-mcp-server/web_search`. The runner uses the
+original callable and its live `{ query: string }` schema even when web search
+is absent from the deferred GitHub catalog. This does not substitute providers,
+grant permissions, or modify an existing approved macro. Unknown identities,
+incompatible arguments, permission denials, and cancellations still stop the
+run; no arbitrary aliases are inferred.
+
+Captures retain the raw Copilot event result for audit and deterministic replay,
+and separately retain the model-facing result text (parsed when it is JSON).
+When the whole procedure requires the runner, induction uses the model-facing
+values for normal result-type/path postconditions and prior-step bindings,
+including any replayable steps within that procedure. UI-only envelope fields
+are not evidence the runner can verify. Plain or truncated text remains a
+string, not an invented structured result.
+
+Older approved macros may require event-wrapper paths such as `content`,
+`detailedContent`, and `contents` that are not shown to the runner. Such runs
+must stop, not waive those guards. Record a new interaction after updating the
+plugin and restarting Copilot, inspect its newly induced guards and inputs, and
+explicitly approve the new draft. Existing traces without model-facing evidence
+and existing immutable versions are not silently rewritten. Resolving tool
+access alone does not make an old macro's result guards verifiable.
+
 ### Rollout Controls
 
 Each macro boundary is enabled by default and can be disabled independently:
