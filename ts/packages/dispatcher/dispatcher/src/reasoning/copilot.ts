@@ -37,15 +37,12 @@ import {
 } from "../translation/actionSchemaJsonTranslator.js";
 import { TypeAgentJsonValidator } from "@typeagent/typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
-import {
-    ConversationMessage,
-    ConversationMessageMeta,
-} from "@typeagent/conversation-memory";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { createLimiter } from "@typeagent/common-utils";
 import {
+    rememberConversation,
     searchPersonalMemory,
     searchReasoningConversationMemory,
 } from "../context/personalMemorySearch.js";
@@ -1606,41 +1603,7 @@ function getCopilotSessionConfig(
         handler: async (args: any) => {
             const { text, kind } = args;
             debug(`Remembering: ${text}`);
-            const memory = systemContext.conversationMemory;
-            if (
-                memory === undefined &&
-                systemContext.conversationDurableMemory === undefined
-            ) {
-                return {
-                    textResultForLlm: "Conversation memory is not available.",
-                    resultType: "success" as const,
-                };
-            }
-            memory?.queueAddMessage(
-                new ConversationMessage(
-                    text,
-                    new ConversationMessageMeta("reasoning", ["user"]),
-                ),
-            );
-            const turnId = systemContext.currentRequestId?.requestId;
-            if (turnId !== undefined) {
-                if (kind === "task-outcome") {
-                    systemContext.conversationDurableMemory?.recordTaskOutcome(
-                        text,
-                        turnId,
-                    );
-                } else if (kind === "decision") {
-                    systemContext.conversationDurableMemory?.recordDecision(
-                        text,
-                        turnId,
-                    );
-                } else {
-                    systemContext.conversationDurableMemory?.recordAssistantEvidence(
-                        text,
-                        turnId,
-                    );
-                }
-            }
+            await rememberConversation(systemContext, text, kind);
             return {
                 textResultForLlm: "Remembered.",
                 resultType: "success" as const,

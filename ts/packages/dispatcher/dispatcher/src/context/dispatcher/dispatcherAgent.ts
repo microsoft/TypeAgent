@@ -449,7 +449,8 @@ async function clarifyWithLookup(
     // strategy disables. Only bail when there is no conversation memory at all.
     if (
         systemContext.conversationMemory === undefined &&
-        systemContext.conversationManager === undefined
+        systemContext.conversationManager === undefined &&
+        systemContext.conversationDurableMemory === undefined
     ) {
         return undefined;
     }

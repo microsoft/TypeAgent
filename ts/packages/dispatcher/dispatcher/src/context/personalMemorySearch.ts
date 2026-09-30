@@ -8,6 +8,11 @@ import type {
     ProcedureSearchMatch,
 } from "@typeagent/memory-service";
 import registerDebug from "debug";
+import {
+    ConversationMessage,
+    ConversationMessageMeta,
+    type ConversationMemory,
+} from "@typeagent/conversation-memory";
 import type { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
     conversationCorpusName,
@@ -33,19 +38,57 @@ function distinctEvidence(
     });
 }
 
-export async function searchReasoningConversationMemory(
+export async function rememberConversation(
     context: Pick<
         CommandHandlerContext,
-        "conversationDurableMemory" | "conversationMemory"
+        "conversationDurableMemory" | "conversationMemory" | "currentRequestId"
     >,
+    text: string,
+    kind?: "decision" | "task-outcome" | "context",
+): Promise<void> {
+    const durable = context.conversationDurableMemory;
+    if (durable !== undefined) {
+        const turnId = context.currentRequestId?.requestId;
+        if (turnId === undefined) {
+            throw new Error(
+                "Cannot remember without an active conversation turn.",
+            );
+        }
+        if (kind === "decision") {
+            durable.recordDecision(text, turnId);
+        } else if (kind === "task-outcome") {
+            durable.recordTaskOutcome(text, turnId);
+        } else {
+            durable.recordAssistantEvidence(text, turnId);
+        }
+        await durable.flush();
+        return;
+    }
+    const memory = context.conversationMemory;
+    if (memory === undefined) {
+        throw new Error("Conversation memory is not available.");
+    }
+    const result = await memory.addMessage(
+        new ConversationMessage(
+            text,
+            new ConversationMessageMeta("reasoning", ["user"]),
+        ),
+    );
+    if (!result.success) {
+        throw new Error(result.message);
+    }
+}
+
+export async function searchReasoningConversationMemory(
+    context: Pick<CommandHandlerContext, "conversationDurableMemory"> & {
+        conversationMemory?:
+            | Pick<ConversationMemory, "getAnswerFromLanguage">
+            | undefined;
+    },
     question: string,
 ): Promise<string | undefined> {
-    const durableResult = await searchDurableConversationMemory(
-        context,
-        question,
-    );
-    if (durableResult !== undefined) {
-        return durableResult;
+    if (context.conversationDurableMemory !== undefined) {
+        return searchDurableConversationMemory(context, question);
     }
     const memory = context.conversationMemory;
     if (memory === undefined) {

@@ -22,14 +22,46 @@ permanently active.
 with explicit citations and does not claim model-generated synthesis.
 
 The service also provides a shared episode/event substrate for conversation,
-web-activity, and procedural producers. Events are appended to a per-corpus
-log without rebuilding the document index and are deduplicated by producer and
+web-activity, and procedural producers. Events are appended to an authoritative
+per-corpus log without requiring models and are deduplicated by producer and
 idempotency key, including after restart. Typed provenance includes source
 kind, producer, event type, conversation/run/turn, sender, action, observed
 time, and event time. Events can link to durable document sources without
-copying source content, and can be listed, searched, filtered, or forgotten
-independently. Linked sources are deleted only when explicitly requested and
-when no retained event still links to them.
+copying source content. `searchEvents` lazily reconciles a separate per-corpus
+KnowPro content index of event projections with the log, including after
+restart. It uses structured knowledge and message search rather than lexical
+event scoring; a missing or outdated index is rebuilt, and model/indexing
+failures are reported instead of silently falling back. An outdated generation
+is physically removed before a rebuild, including when extraction subsequently
+fails, so searches cannot recover or use that generation. Ledger-backed event
+ID tags restrict all requested provenance and date filters before KnowPro
+ranks and limits results. `authorities` filters by the producer-supplied
+`metadata.authority` label before ranking, and that label is also indexed as
+an immutable `event-authority:` tag. Events without a label do not match an
+explicit authority filter. Supported labels are `user-assertion`,
+`evidence-only`, `verified-observation`, `explicit`, and `producer-reported`;
+unsupported labels are rejected. A failed action result retains its
+`verified-observation` provenance alongside `metadata.outcome: "failed"`:
+authority does not assert success. `eventIndexFactory` can
+inject a deterministic
+`CorpusIndexFactory` for offline tests; by default it uses the procedure
+index factory (which defaults to the corpus KnowPro factory). Events can be
+listed or forgotten independently of documents. Forgetting purges event index
+generations before a later search can access them; linked sources are deleted
+only when explicitly requested and when no retained event still links to them.
+Forgetting also commits suppression tombstones to the event ledger: each
+deleted producer/idempotency key and turn is suppressed, while a
+`conversationIds` forget without `eventIds` or `turnIds` suppresses the whole
+conversation (optionally scoped by `sourceKinds`). Supplying `eventIds` with
+`conversationIds` instead narrows deletion to those events and does not mark
+the whole conversation forgotten. `turnIds` can
+explicitly suppress a turn (optionally scoped by `conversationIds` and
+`sourceKinds` and `authorities`) even when no event is present yet. A suppressed append throws
+`ForgottenEventError`
+(`code: "EVENT_FORGOTTEN"`) instead of returning a replay or a fabricated
+event. Tombstones survive restart and are excluded from listing and indexing.
+Clearing a corpus retains tombstones and suppresses its previously indexed
+conversations so retained upstream transcripts cannot backfill them.
 
 Personal how-to storage is corpus-owned but persisted independently from the
 source manifest, so importing, replacing, reindexing, or forgetting sources

@@ -25,6 +25,7 @@ import {
     ConversationSummaryResult,
 } from "agent-dispatcher";
 import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
+import type { MemoryService } from "@typeagent/memory-service";
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import type {
     DisplayLogEntry,
@@ -200,10 +201,8 @@ export type ConversationManager = {
         maxMatches?: number,
     ): Promise<ConversationMatch[]>;
     /**
-     * Index a conversation message into the unified content-search index
-     * (tagged by conversation id). Populated by callers as turns arrive.
-     * `turnKey` (the source turn's id) is recorded on user messages so the
-     * turn is counted once and skipped by a later history backfill.
+     * Legacy transcript tee hook, retained for API compatibility. Live durable
+     * events are written exclusively by the dispatcher; this hook does not write.
      */
     indexConversationMessage(
         conversationId: string,
@@ -213,16 +212,15 @@ export type ConversationManager = {
     ): void;
     /**
      * Cross-conversation content search: rank conversations by how well their
-     * indexed messages match the query. Accepts a natural-language `question`,
-     * keyword `terms`, or both (blended). Returns [] when the unified index has
-     * no model provider configured.
+     * retained events match the query. The full natural-language question takes
+     * precedence over legacy terms. Service/projection failures propagate.
      */
     searchConversationContent(
         query: ContentSearchQuery,
         maxMatches?: number,
     ): Promise<ConversationContentMatch[]>;
     /**
-     * Backfill conversation history into the unified content index. For each
+     * Backfill conversation history into the shared durable event ledger. For each
      * targeted conversation, indexes the user turns not already present (live
      * or from an earlier backfill) and reports how many were newly indexed.
      * `currentConversationId` resolves the `current` target. `onProgress`, if
@@ -450,11 +448,14 @@ export async function createConversationManager(
                     "No conversation metadata found, starting fresh",
                 );
             } else {
-                // File exists but is unreadable or malformed — log and start fresh
+                // A fresh registry would make retained ledger events look deleted.
+                // Do not run destructive reconciliation against corrupt metadata.
                 debugConversationErr(
-                    "Failed to load conversation metadata, starting fresh:",
+                    "Failed to load conversation metadata:",
                     e,
                 );
+                await unlockInstanceDir();
+                throw e;
             }
         }
     }
@@ -631,8 +632,10 @@ export async function createConversationManager(
             clientCount: record.sharedDispatcher?.clientCount ?? 0,
             createdAt: record.createdAt,
             messageCount: await countUserMessages(record.conversationId),
-            indexedMessageCount: conversationSearchIndex.getIndexedTurns(
-                record.conversationId,
+            indexedMessageCount: (
+                await conversationSearchIndex.getIndexedTurns(
+                    record.conversationId,
+                )
             ).size,
             ...(record.source !== undefined ? { source: record.source } : {}),
             ...(record.readOnly !== undefined
@@ -933,23 +936,47 @@ export async function createConversationManager(
     }
     void conversationNameIndex.prime();
 
-    // Unified content-search index across all conversations, tagged by
-    // conversation id. Inert when no model provider is configured.
-    const conversationSearchIndex = await createConversationSearchIndex(
-        path.join(conversationsDir, "_unified"),
-    );
+    const conversationSearchIndex = await initializeContentIndex();
 
-    // Re-apply deletes from previous runs. The unified index persists messages
-    // (append-only) but its tombstone set is in-memory, so any indexed
-    // conversation that no longer exists in the live registry must be
-    // tombstoned again now, or its content would resurface in search.
-    const staleTombstoned = conversationSearchIndex.reconcileTombstones(
-        new Set(conversations.keys()),
-    );
-    if (staleTombstoned > 0) {
-        debugConversation(
-            `Unified index: tombstoned ${staleTombstoned} deleted conversation(s) on startup`,
-        );
+    async function initializeContentIndex() {
+        try {
+            const memoryAgentOptions = baseOptions.agentInitOptions?.memory as
+                | { memoryServiceClient?: MemoryService }
+                | undefined;
+            const conversationMemoryService =
+                baseOptions.conversationMemorySettings?.durableMemoryService ??
+                memoryAgentOptions?.memoryServiceClient;
+            // This is a view of the shared ledger, never a second answer index.
+            const index = await createConversationSearchIndex(
+                path.join(conversationsDir, "_unified"),
+                { service: conversationMemoryService },
+            );
+
+            const staleTombstoned = await index.reconcileTombstones(
+                new Set(conversations.keys()),
+            );
+            if (staleTombstoned > 0) {
+                debugConversation(
+                    `Conversation ledger: purged ${staleTombstoned} deleted conversation(s) on startup`,
+                );
+            }
+            for (const record of conversations.values()) {
+                const turns = selectUnindexedTurns(
+                    await readDisplayLogEntries(record.conversationId),
+                    () => false,
+                );
+                await index.initializeConversation(
+                    record.conversationId,
+                    turns.map((turn) => turn.turnKey),
+                    record.source === "copilot",
+                    record.copilot?.sessionId,
+                );
+            }
+            return index;
+        } catch (error) {
+            await unlockInstanceDir();
+            throw error;
+        }
     }
 
     const manager: ConversationManager = {
@@ -972,6 +999,11 @@ export async function createConversationManager(
                 clientAgents: createClientAgentRegistry(),
             };
             conversations.set(conversationId, record);
+            await conversationSearchIndex.initializeConversation(
+                conversationId,
+                [],
+                false,
+            );
             conversationNameIndex.update(conversationId, resolvedName);
             await saveMetadata();
             debugConversation(
@@ -989,6 +1021,11 @@ export async function createConversationManager(
         async importCopilotMirror(
             params: ImportCopilotMirrorParams,
         ): Promise<ImportCopilotMirrorResult> {
+            if (conversationSearchIndex.isSourceDeleted(params.sessionId)) {
+                throw new Error(
+                    `Copilot source was previously deleted: ${params.sessionId}`,
+                );
+            }
             const existing = findMirrorBySessionId(params.sessionId);
             if (existing !== undefined) {
                 // Content is idempotent, but reconcile the display name so a
@@ -1061,6 +1098,12 @@ export async function createConversationManager(
                 JSON.stringify(params.displayLogEntries),
             );
             await fs.promises.rename(tmpPath, logPath);
+            await conversationSearchIndex.initializeConversation(
+                conversationId,
+                [],
+                true,
+                params.sessionId,
+            );
 
             await saveMetadata();
             debugConversation(
@@ -1370,12 +1413,8 @@ export async function createConversationManager(
             sender?: string,
             turnKey?: string,
         ): void {
-            conversationSearchIndex.addMessage(
-                conversationId,
-                text,
-                sender,
-                turnKey,
-            );
+            // Dispatcher durable events are the sole live producer. Transcript
+            // replay/import is indexed explicitly by indexConversations instead.
         },
 
         async searchConversationContent(
@@ -1432,16 +1471,20 @@ export async function createConversationManager(
             const plan: {
                 id: string;
                 name: string;
-                turns: { text: string; turnKey: string }[];
+                turns: { text: string; turnKey: string; eventTime?: string }[];
             }[] = [];
             for (const id of ids) {
                 const record = conversations.get(id);
                 if (record === undefined) {
                     continue;
                 }
-                const alreadyIndexed =
-                    conversationSearchIndex.getIndexedTurns(id);
                 const entries = await readDisplayLogEntries(id);
+                const candidates = selectUnindexedTurns(entries, () => false);
+                const alreadyIndexed =
+                    await conversationSearchIndex.getBackfillExcludedTurns(
+                        id,
+                        candidates.map((turn) => turn.turnKey),
+                    );
                 const turns = selectUnindexedTurns(entries, (turnKey) =>
                     alreadyIndexed.has(turnKey),
                 );
@@ -1465,24 +1508,29 @@ export async function createConversationManager(
             onProgress?.({ done, total, name: plan[0]?.name ?? "" });
             const indexed: ConversationIndexResult["indexed"] = [];
             for (const { id, name, turns } of plan) {
-                for (const { text, turnKey } of turns) {
+                const result = {
+                    name,
+                    newlyIndexed: 0,
+                    totalMessages: await countUserMessages(id),
+                };
+                indexed.push(result);
+                for (const { text, turnKey, eventTime } of turns) {
                     conversationSearchIndex.addMessage(
                         id,
                         text,
                         "user",
                         turnKey,
-                        () => {
+                        (wasIndexed) => {
+                            if (wasIndexed) {
+                                result.newlyIndexed++;
+                            }
                             done++;
                             debugIndex("indexed %d/%d (%s)", done, total, name);
                             onProgress?.({ done, total, name });
                         },
+                        eventTime,
                     );
                 }
-                indexed.push({
-                    name,
-                    newlyIndexed: turns.length,
-                    totalMessages: await countUserMessages(id),
-                });
             }
             // addMessage only queues; drain so the command reports completion
             // once the turns are actually indexed and written to disk, not
@@ -1533,9 +1581,9 @@ export async function createConversationManager(
                 record.sharedDispatcher = undefined;
             }
 
+            await conversationSearchIndex.tombstone(conversationId);
             conversations.delete(conversationId);
             conversationNameIndex.remove(conversationId);
-            conversationSearchIndex.tombstone(conversationId);
 
             // Remove persist directory
             const persistDir = getConversationPersistDir(conversationId);
@@ -1562,10 +1610,13 @@ export async function createConversationManager(
                     promises.push(record.sharedDispatcher.close());
                 }
             }
-            await Promise.all(promises);
-            await saveMetadata();
-            await conversationSearchIndex.close();
-            await unlockInstanceDir();
+            try {
+                await Promise.all(promises);
+                await saveMetadata();
+                await conversationSearchIndex.close();
+            } finally {
+                await unlockInstanceDir();
+            }
             debugConversation("ConversationManager closed");
         },
     };
