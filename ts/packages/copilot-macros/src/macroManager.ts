@@ -227,13 +227,14 @@ export class MacroManager {
         if (!request.name.trim()) throw new Error("Macro name is required.");
         return this.mutateCatalog(async () => {
             const trace = await this.readTrace(request.traceId);
-            const macro = induceMacroFromTrace(
+            const macro = await induceMacroFromTrace(
                 request.traceId,
                 trace,
                 randomUUID(),
                 request.name.trim(),
                 request.description?.trim() ?? trace.prompt,
                 new Date().toISOString(),
+                this.replayHost,
             );
             await this.writeVersion(macro);
             await this.upsertSummary(macro);

@@ -46,6 +46,19 @@ function permissionWasDenied(result: unknown): boolean {
     return kind === "cancelled" || kind?.startsWith("denied") === true;
 }
 
+function getModelResult(result: unknown): unknown {
+    if (!result || typeof result !== "object") return undefined;
+    const content = (result as Record<string, unknown>).content;
+    if (typeof content !== "string") return undefined;
+    try {
+        return JSON.parse(content);
+    } catch (error) {
+        // Plain text (including truncated JSON) is the actual model-visible value.
+        if (error instanceof SyntaxError) return content;
+        throw error;
+    }
+}
+
 export class ExtensionTraceAssembler {
     private turn: ActiveTurn | undefined;
 
@@ -163,6 +176,10 @@ export class ExtensionTraceAssembler {
         if (!call || turn.completedCalls.has(key)) return;
 
         call.result = redactTraceValue(event.data.result ?? event.data.error);
+        const modelResult = getModelResult(event.data.result);
+        if (modelResult !== undefined) {
+            call.modelResult = redactTraceValue(modelResult);
+        }
         if (call.status !== "denied") {
             call.status = event.data.success === false ? "failed" : "completed";
         }

@@ -11,14 +11,21 @@ import type {
     MacroValidationIssue,
     MacroValidationReport,
     RecordedInteractionTrace,
+    ReplayToolHost,
     ValueExpression,
 } from "./contracts.js";
 
-function classifyTool(
-    _toolName: string,
+async function classifyTool(
+    toolName: string,
     mcpServerName: string | undefined,
-): MacroExecutionClass {
-    return mcpServerName ? "replayable" : "agentRequired";
+    cwd: string,
+    replayHost: ReplayToolHost | undefined,
+): Promise<MacroExecutionClass> {
+    if (!mcpServerName || !replayHost) return "agentRequired";
+    const descriptor = await replayHost.inspectTool(mcpServerName, toolName, {
+        cwd,
+    });
+    return descriptor ? "replayable" : "agentRequired";
 }
 
 function getValueType(value: unknown): MacroValueType {
@@ -151,23 +158,46 @@ function convertArguments(
         : { kind: "template", value, bindings };
 }
 
-export function induceMacroFromTrace(
+export async function induceMacroFromTrace(
     traceId: string,
     trace: RecordedInteractionTrace,
     macroId: string,
     name: string,
     description: string,
     createdAt: string,
-): CopilotToolMacro {
+    replayHost?: ReplayToolHost,
+): Promise<CopilotToolMacro> {
     const warnings: string[] = [];
     const inputs: MacroInput[] = [];
     const steps: MacroStep[] = [];
-    trace.toolCalls.forEach((call, index) => {
+    const executionClasses: MacroExecutionClass[] = [];
+    for (const call of trace.toolCalls) {
+        executionClasses.push(
+            await classifyTool(
+                call.name,
+                call.mcpServerName,
+                trace.cwd,
+                replayHost,
+            ),
+        );
+    }
+    const agentRequired = executionClasses.includes("agentRequired");
+    const calls = trace.toolCalls.map((call) =>
+        agentRequired && call.modelResult !== undefined
+            ? { ...call, result: call.modelResult }
+            : call,
+    );
+    for (const [index, call] of calls.entries()) {
         const id = `step-${index + 1}`;
-        const executionClass = classifyTool(call.name, call.mcpServerName);
+        const executionClass = executionClasses[index];
         if (executionClass === "agentRequired") {
             warnings.push(
                 `${id} uses ${call.mcpServerName ? `${call.mcpServerName}/` : ""}${call.name} and requires agent-guided execution.`,
+            );
+        }
+        if (agentRequired && call.modelResult === undefined) {
+            warnings.push(
+                `${id} has no captured model-facing result. Review its result guards and recapture if the runner cannot observe the required fields.`,
             );
         }
         if (call.status !== "completed") {
@@ -186,7 +216,7 @@ export function induceMacroFromTrace(
                 id,
                 trace.prompt,
                 steps,
-                trace.toolCalls.slice(0, index),
+                calls.slice(0, index),
                 inputs,
                 warnings,
             ),
@@ -196,7 +226,7 @@ export function induceMacroFromTrace(
                 ? {}
                 : { postconditions: inferPostconditions(call.result) }),
         });
-    });
+    }
 
     return {
         schemaVersion: 1,
@@ -205,11 +235,7 @@ export function induceMacroFromTrace(
         name,
         description,
         state: "draft",
-        executionClass: steps.every(
-            (step) => step.executionClass === "replayable",
-        )
-            ? "replayable"
-            : "agentRequired",
+        executionClass: agentRequired ? "agentRequired" : "replayable",
         inputs,
         steps,
         sourceTraceId: traceId,
