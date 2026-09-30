@@ -16,7 +16,7 @@ import { startServer } from "../server/server.js";
 //   git story daemon start   (from any directory)
 //     └─ spawns detached `node daemonMain.js` (no CLI command)
 //          └─ listens on 127.0.0.1:51703 (DAEMON_PORT)
-//          └─ writes ~/.git-story/daemon.json {"pid":4242,"port":51703}
+//          └─ writes ~/.typeagent/git-story/daemon.json {"pid":4242,"port":51703}
 //   GET /api/story/commits/739e112?project=/Users/me/repo
 //   GET /api/story/commits/739e112?project=C:\Users\me\repo  (URL-encoded)
 //   git story daemon status  -> reads daemon.json, asks the port for its pid
@@ -28,7 +28,8 @@ import { startServer } from "../server/server.js";
 // Only the port holder writes daemon.json; others only read it.
 //
 // `~` is os.homedir(): /Users/me on macOS, C:\Users\me on Windows.
-const STATE_DIR = ".git-story";
+// Shared TypeAgent user dir, as in packages/config.
+const STATE_DIR = path.join(".typeagent", "git-story");
 const STATE_FILE = "daemon.json";
 const LOG_FILE = "daemon.log";
 const START_TIMEOUT_MS = 5000;
