@@ -5312,9 +5312,15 @@ importers:
 
   packages/git-story:
     dependencies:
+      '@hono/node-server':
+        specifier: ^1.19.17
+        version: 1.19.17(hono@4.13.5)
       commander:
         specifier: ^12.1.0
         version: 12.1.0
+      hono:
+        specifier: '>=4.12.8 <5.0.0'
+        version: 4.13.5
     devDependencies:
       '@types/jest':
         specifier: ^29.5.7
