@@ -170,17 +170,34 @@ export async function induceMacroFromTrace(
     const warnings: string[] = [];
     const inputs: MacroInput[] = [];
     const steps: MacroStep[] = [];
-    for (const [index, call] of trace.toolCalls.entries()) {
-        const id = `step-${index + 1}`;
-        const executionClass = await classifyTool(
-            call.name,
-            call.mcpServerName,
-            trace.cwd,
-            replayHost,
+    const executionClasses: MacroExecutionClass[] = [];
+    for (const call of trace.toolCalls) {
+        executionClasses.push(
+            await classifyTool(
+                call.name,
+                call.mcpServerName,
+                trace.cwd,
+                replayHost,
+            ),
         );
+    }
+    const agentRequired = executionClasses.includes("agentRequired");
+    const calls = trace.toolCalls.map((call) =>
+        agentRequired && call.modelResult !== undefined
+            ? { ...call, result: call.modelResult }
+            : call,
+    );
+    for (const [index, call] of calls.entries()) {
+        const id = `step-${index + 1}`;
+        const executionClass = executionClasses[index];
         if (executionClass === "agentRequired") {
             warnings.push(
                 `${id} uses ${call.mcpServerName ? `${call.mcpServerName}/` : ""}${call.name} and requires agent-guided execution.`,
+            );
+        }
+        if (agentRequired && call.modelResult === undefined) {
+            warnings.push(
+                `${id} has no captured model-facing result. Review its result guards and recapture if the runner cannot observe the required fields.`,
             );
         }
         if (call.status !== "completed") {
@@ -199,7 +216,7 @@ export async function induceMacroFromTrace(
                 id,
                 trace.prompt,
                 steps,
-                trace.toolCalls.slice(0, index),
+                calls.slice(0, index),
                 inputs,
                 warnings,
             ),
@@ -218,11 +235,7 @@ export async function induceMacroFromTrace(
         name,
         description,
         state: "draft",
-        executionClass: steps.every(
-            (step) => step.executionClass === "replayable",
-        )
-            ? "replayable"
-            : "agentRequired",
+        executionClass: agentRequired ? "agentRequired" : "replayable",
         inputs,
         steps,
         sourceTraceId: traceId,

@@ -50,6 +50,126 @@ function trace(
 }
 
 describe("macro induction and validation", () => {
+    it("uses model-facing guards and references throughout a mixed agent procedure", async () => {
+        const source = trace({
+            result: {
+                content: '{"item":{"id":"item-123"}}',
+                detailedContent: "UI-only result",
+            },
+            modelResult: { item: { id: "item-123" } },
+        });
+        source.toolCalls.push({
+            toolCallId: "call-2",
+            name: "native_tool",
+            arguments: { itemId: "item-123" },
+            result: { content: '{"ok":true}', detailedContent: "UI-only" },
+            modelResult: { ok: true },
+            status: "completed",
+        });
+        const before = structuredClone(source);
+        const macro = await induceMacroFromTrace(
+            "trace-1",
+            source,
+            "macro-1",
+            "Mixed result views",
+            "",
+            "2026-09-29T08:00:00.000Z",
+            replayHost,
+        );
+
+        expect(source).toEqual(before);
+        expect(macro.executionClass).toBe("agentRequired");
+        expect(macro.steps[0].executionClass).toBe("replayable");
+        expect(macro.steps[0].postconditions).toEqual([
+            { kind: "resultType", valueType: "object" },
+            { kind: "resultPathExists", path: ["item", "id"] },
+        ]);
+        expect(macro.steps[1]).toMatchObject({
+            executionClass: "agentRequired",
+            arguments: {
+                kind: "template",
+                bindings: [
+                    {
+                        path: ["itemId"],
+                        expression: {
+                            kind: "stepResult",
+                            stepId: "step-1",
+                            path: ["item", "id"],
+                        },
+                    },
+                ],
+            },
+            postconditions: [
+                { kind: "resultType", valueType: "object" },
+                { kind: "resultPathExists", path: ["ok"] },
+            ],
+        });
+        expect(validateMacro(macro, source).valid).toBe(true);
+    });
+
+    it.each([
+        [null, "null"],
+        [false, "boolean"],
+        [0, "number"],
+        ["", "string"],
+    ])(
+        "retains the model-facing primitive %s",
+        async (modelResult, valueType) => {
+            const macro = await induceMacroFromTrace(
+                "trace-1",
+                trace({ mcpServerName: null, modelResult }),
+                "macro-1",
+                "Primitive result",
+                "",
+                "2026-09-29T08:00:00.000Z",
+            );
+            expect(macro.steps[0].postconditions).toEqual([
+                { kind: "resultType", valueType },
+            ]);
+            expect(macro.warnings).not.toContainEqual(
+                expect.stringContaining("no captured model-facing result"),
+            );
+        },
+    );
+
+    it("keeps deterministic replay guards on raw results", async () => {
+        const macro = await induceMacroFromTrace(
+            "trace-1",
+            trace({
+                result: { raw: "value" },
+                modelResult: { visible: "value" },
+            }),
+            "macro-1",
+            "Replay result",
+            "",
+            "2026-09-29T08:00:00.000Z",
+            replayHost,
+        );
+        expect(macro.executionClass).toBe("replayable");
+        expect(macro.steps[0].postconditions).toEqual([
+            { kind: "resultType", valueType: "object" },
+            { kind: "resultPathExists", path: ["raw"] },
+        ]);
+    });
+
+    it("preserves legacy guards and warns when model-facing evidence was not captured", async () => {
+        const macro = await induceMacroFromTrace(
+            "trace-1",
+            trace({ mcpServerName: null, result: { content: "legacy" } }),
+            "macro-1",
+            "Legacy result",
+            "",
+            "2026-09-29T08:00:00.000Z",
+        );
+        expect(macro.steps[0].postconditions).toContainEqual({
+            kind: "resultPathExists",
+            path: ["content"],
+        });
+        expect(macro.warnings).toContainEqual(
+            expect.stringContaining("no captured model-facing result"),
+        );
+    });
+
     it("induces a replayable linear workspace draft", async () => {
         const source = trace();
         const macro = await induceMacroFromTrace(
