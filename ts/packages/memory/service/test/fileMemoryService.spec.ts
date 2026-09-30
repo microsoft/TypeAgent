@@ -683,6 +683,7 @@ describe("FileMemoryService", () => {
                 title: "Runbook",
                 markdown: "Version one.",
             },
+            pipeline: { mode: "basic", maxCharsPerChunk: 4_000 },
         });
         await waitForTerminalJob(service, accepted.jobId);
 
@@ -702,6 +703,11 @@ describe("FileMemoryService", () => {
         expect(
             (await service.getSource(corpus.corpusId, "runbook"))?.revisions,
         ).toHaveLength(2);
+        expect(
+            (await service.getSource(corpus.corpusId, "runbook"))?.revisions.at(
+                -1,
+            )?.pipeline,
+        ).toEqual({ mode: "basic", maxCharsPerChunk: 4_000 });
         await expect(
             service.getSourceContent({
                 corpusId: corpus.corpusId,
@@ -929,6 +935,118 @@ describe("FileMemoryService", () => {
         await expect(
             service.getSourceKnowledge(corpus.corpusId, "missing"),
         ).rejects.toThrow("Unknown source 'missing'");
+    });
+
+    test("suppresses and restores source knowledge across reindex and restart", async () => {
+        const corpus = await service.createCorpus("Curated knowledge");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "design-doc",
+                sourceType: "markdown",
+                title: "Design",
+                markdown: "TypeAgent uses a memory service.",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+        index.graph = {
+            entities: [
+                {
+                    name: "TypeAgent",
+                    types: ["software"],
+                    mentionCount: 2,
+                    sourceIds: ["design-doc", "other-doc"],
+                },
+                {
+                    name: "Memory Service",
+                    types: ["component"],
+                    mentionCount: 1,
+                    sourceIds: ["design-doc"],
+                },
+            ],
+            topics: [
+                {
+                    name: "Architecture",
+                    mentionCount: 1,
+                    sourceIds: ["design-doc"],
+                },
+            ],
+            relationships: [
+                {
+                    fromEntity: "TypeAgent",
+                    toEntity: "Memory Service",
+                    relationshipType: "uses",
+                    count: 1,
+                    sourceIds: ["design-doc"],
+                },
+            ],
+        };
+
+        await service.suppressSourceKnowledge({
+            corpusId: corpus.corpusId,
+            sourceId: "design-doc",
+            kind: "entity",
+            name: "typeagent",
+        });
+        await service.suppressSourceKnowledge({
+            corpusId: corpus.corpusId,
+            sourceId: "design-doc",
+            kind: "topic",
+            name: "Architecture",
+        });
+
+        await expect(
+            service.getSourceKnowledge(corpus.corpusId, "design-doc"),
+        ).resolves.toEqual({
+            entities: [index.graph.entities[1]],
+            topics: [],
+            relationships: [],
+        });
+        await expect(
+            service.getKnowledgeGraph(corpus.corpusId),
+        ).resolves.toMatchObject({
+            entities: [
+                { name: "TypeAgent", sourceIds: ["other-doc"] },
+                { name: "Memory Service", sourceIds: ["design-doc"] },
+            ],
+        });
+        await service.reindexCorpus(corpus.corpusId);
+        await service.close();
+
+        const restartedIndex = new FakeCorpusIndex();
+        restartedIndex.graph = structuredClone(index.graph);
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: () => restartedIndex,
+        });
+        await expect(
+            service.listSourceKnowledgeSuppressions(
+                corpus.corpusId,
+                "design-doc",
+            ),
+        ).resolves.toEqual([
+            { sourceId: "design-doc", kind: "entity", name: "typeagent" },
+            {
+                sourceId: "design-doc",
+                kind: "topic",
+                name: "Architecture",
+            },
+        ]);
+        await expect(
+            service.getSourceKnowledge(corpus.corpusId, "design-doc"),
+        ).resolves.toMatchObject({ entities: [{ name: "Memory Service" }] });
+
+        await service.restoreSourceKnowledge({
+            corpusId: corpus.corpusId,
+            sourceId: "design-doc",
+            kind: "entity",
+            name: "TypeAgent",
+        });
+        await expect(
+            service.getSourceKnowledge(corpus.corpusId, "design-doc"),
+        ).resolves.toMatchObject({
+            entities: [{ name: "TypeAgent" }, { name: "Memory Service" }],
+            relationships: [{ relationshipType: "uses" }],
+        });
     });
 
     test("keeps the prior committed revision when rebuilding fails", async () => {

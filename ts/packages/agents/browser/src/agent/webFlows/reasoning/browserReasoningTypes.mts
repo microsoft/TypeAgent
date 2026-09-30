@@ -6,7 +6,9 @@ export interface BrowserReasoningConfig {
     startUrl?: string;
     maxSteps: number;
     model: string;
+    provider?: "copilot" | "claude";
     traceCapture: boolean;
+    abortSignal?: AbortSignal;
 }
 
 export const DEFAULT_BROWSER_REASONING_CONFIG: Omit<
@@ -14,7 +16,8 @@ export const DEFAULT_BROWSER_REASONING_CONFIG: Omit<
     "goal"
 > = {
     maxSteps: 30,
-    model: "claude-sonnet-4-5-20250929",
+    model: "gpt-5.6-sol",
+    provider: "copilot",
     traceCapture: true,
 };
 

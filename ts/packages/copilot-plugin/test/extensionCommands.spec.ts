@@ -59,9 +59,14 @@ describe("extension commands", () => {
             JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
         ).toMatchObject({ mode: "mcp" });
         expect(messages).toEqual([
-            "TypeAgent mode switched to mcp.",
-            "Usage: /typeagent-mode direct|mcp|dev|bypass",
+            expect.stringContaining(
+                "TypeAgent mode switched to mcp (delegate).",
+            ),
+            "Usage: /typeagent-mode direct|mcp [delegate|mixed]|dev|bypass",
         ]);
+        expect(messages[0]).toContain(
+            "Delegate policy (default): delegate the user's exact request through processCommand.",
+        );
     });
 
     it("loads explicit selected skills from plugin configuration", () => {

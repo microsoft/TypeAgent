@@ -11,7 +11,7 @@ import {
     dotProduct,
 } from "@typeagent/agent-runtime";
 import { TextEmbeddingModel } from "@typeagent/aiclient";
-import * as levenshtein from "fast-levenshtein";
+import levenshtein from "fast-levenshtein";
 import { Scored } from "./common.js";
 import {
     ListIndexingResult,

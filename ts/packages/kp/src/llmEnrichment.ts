@@ -5,28 +5,21 @@
  * Batch LLM enrichment: processes the extracted vocabulary with an LLM
  * to get lemmas, related terms, entity types, and parent types.
  *
- * Tries the aiclient OpenAI chat model first (direct API, no subprocess).
- * Falls back to the Claude Agent SDK query() API if aiclient is not available.
+ * Uses the configured aiclient endpoint.
  *
  * Processes vocabulary in batches (synchronous — we need the lemmas
  * before building the index).
  */
 
-import { openai, ChatModel } from "@typeagent/aiclient";
+import { openai, type ChatModel } from "@typeagent/aiclient";
 import { PromptSection } from "typechat";
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "./cliPath.js";
 import { DictionaryEntry, RelatedTerm, RelationType } from "./types.js";
 import { ExtractedKeyword } from "./keywordExtractor.js";
 
 import registerDebug from "debug";
 const debug = registerDebug("kp:enrich");
 
-/** Lazy singleton chat model from aiclient. */
-let chatModel: ChatModel | undefined;
-let chatModelAvailable: boolean | undefined;
-
-const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_MODEL = "copilot:gpt-5.6-sol";
 const DEFAULT_BATCH_SIZE = 150;
 
 export interface EnrichmentConfig {
@@ -69,31 +62,6 @@ OUTPUT FORMAT: Return a JSON array of objects. Each object has these fields:
 Return ONLY the JSON array, no other text.`;
 
 /**
- * Get or create the aiclient chat model. Returns undefined if not configured.
- */
-function getChatModel(): ChatModel | undefined {
-    if (chatModelAvailable === false) return undefined;
-    if (chatModel) return chatModel;
-
-    try {
-        // Get settings and increase timeout for large batch enrichment (default 60s is too short)
-        const settings = openai.getChatModelSettings("GPT_5_MINI");
-        settings.timeout = 120_000;
-        chatModel = openai.createChatModel(settings);
-        chatModel.completionSettings.max_completion_tokens = 16384;
-        // GPT-5 doesn't support temperature=0; remove the default set by aiclient
-        delete (chatModel.completionSettings as any).temperature;
-        chatModelAvailable = true;
-        debug("aiclient chat model created");
-        return chatModel;
-    } catch (e) {
-        debug("aiclient chat model not available: %s", e);
-        chatModelAvailable = false;
-        return undefined;
-    }
-}
-
-/**
  * Build the term list string from keywords (shared by both paths).
  */
 function buildTermList(keywords: ExtractedKeyword[]): string {
@@ -108,7 +76,7 @@ function buildTermList(keywords: ExtractedKeyword[]): string {
 /**
  * Enrich a vocabulary batch via the aiclient OpenAI chat model.
  */
-async function enrichBatchOpenAI(
+async function enrichBatchWithModel(
     model: ChatModel,
     keywords: ExtractedKeyword[],
 ): Promise<DictionaryEntry[]> {
@@ -129,71 +97,14 @@ async function enrichBatchOpenAI(
 }
 
 /**
- * Enrich a vocabulary batch via the agent SDK query() API (fallback).
- */
-async function enrichBatchAgentSdk(
-    keywords: ExtractedKeyword[],
-    agentModel: string,
-): Promise<DictionaryEntry[]> {
-    const termList = buildTermList(keywords);
-    const userPrompt = `Enrich these ${keywords.length} keywords:\n\n${termList}`;
-
-    const queryInstance = query({
-        prompt: `${ENRICHMENT_SYSTEM_PROMPT}\n\n${userPrompt}`,
-        options: {
-            model: agentModel,
-            ...claudeExecutableOption(),
-        },
-    });
-
-    let responseText = "";
-    for await (const message of queryInstance) {
-        if (message.type === "result") {
-            if (message.subtype === "success") {
-                responseText = message.result || "";
-                break;
-            } else {
-                const errors =
-                    "errors" in message ? (message as any).errors : undefined;
-                throw new Error(
-                    `LLM enrichment failed: ${errors?.join(", ") || "Unknown error"}`,
-                );
-            }
-        }
-    }
-
-    if (!responseText) {
-        throw new Error("No response from LLM");
-    }
-
-    return parseEnrichmentResponse(responseText, keywords);
-}
-
-/**
  * Enrich a vocabulary batch with the LLM.
- * Tries aiclient OpenAI first; falls back to agent SDK query().
  * Returns DictionaryEntry[] for the batch.
  */
 async function enrichBatch(
     keywords: ExtractedKeyword[],
-    agentModel: string,
-    onProgress?: (message: string) => void,
+    model: ChatModel,
 ): Promise<DictionaryEntry[]> {
-    const model = getChatModel();
-    if (model) {
-        try {
-            return await enrichBatchOpenAI(model, keywords);
-        } catch (e: any) {
-            const msg = e?.message || String(e);
-            debug("aiclient batch failed, switching to agent SDK: %s", msg);
-            onProgress?.(
-                `OpenAI API failed: ${msg.substring(0, 100)}. Falling back to agent SDK...`,
-            );
-            chatModelAvailable = false;
-            chatModel = undefined;
-        }
-    }
-    return enrichBatchAgentSdk(keywords, agentModel);
+    return enrichBatchWithModel(model, keywords);
 }
 
 /**
@@ -214,10 +125,7 @@ function parseEnrichmentResponse(
     // Find the array
     const arrayStart = jsonText.indexOf("[");
     if (arrayStart === -1) {
-        debug(
-            "No JSON array in LLM response, falling back to identity entries",
-        );
-        return keywords.map(fallbackEntry);
+        throw new Error("LLM enrichment response did not contain a JSON array");
     }
 
     // Find matching bracket
@@ -235,16 +143,16 @@ function parseEnrichmentResponse(
     }
 
     if (arrayEnd === -1) {
-        debug("Unmatched brackets in LLM response, falling back");
-        return keywords.map(fallbackEntry);
+        throw new Error("LLM enrichment response contained unmatched brackets");
     }
 
     let raw: any[];
     try {
         raw = JSON.parse(jsonText.substring(arrayStart, arrayEnd + 1));
     } catch (e) {
-        debug("JSON parse failed: %s", e);
-        return keywords.map(fallbackEntry);
+        throw new Error(
+            `Failed to parse LLM enrichment response: ${e instanceof Error ? e.message : String(e)}`,
+        );
     }
 
     // Convert to DictionaryEntry[], validating fields
@@ -319,16 +227,16 @@ export async function enrichVocabulary(
     keywords: ExtractedKeyword[],
     config?: EnrichmentConfig,
 ): Promise<DictionaryEntry[]> {
-    const agentModel = config?.model ?? DEFAULT_MODEL;
+    const modelName = config?.model ?? DEFAULT_MODEL;
     const batchSize = config?.batchSize ?? DEFAULT_BATCH_SIZE;
 
     if (keywords.length === 0) return [];
 
     debug(
-        "Enriching %d keywords in batches of %d (agent fallback model: %s)",
+        "Enriching %d keywords in batches of %d (model: %s)",
         keywords.length,
         batchSize,
-        agentModel,
+        modelName,
     );
 
     const allEntries: DictionaryEntry[] = [];
@@ -336,11 +244,10 @@ export async function enrichVocabulary(
     const onProgress = config?.onProgress;
     const enrichStart = Date.now();
 
-    // Report which API path will be used
-    const model = getChatModel();
-    const apiPath = model ? "aiclient OpenAI" : "agent SDK query()";
-    onProgress?.(`Enrichment API: ${apiPath}`);
-    debug("Using %s", apiPath);
+    const model = openai.createChatModel(modelName);
+    model.completionSettings.max_completion_tokens = 16384;
+    onProgress?.(`Enrichment model: ${modelName}`);
+    debug("Using %s", modelName);
 
     for (let i = 0; i < keywords.length; i += batchSize) {
         const batch = keywords.slice(i, i + batchSize);
@@ -357,7 +264,7 @@ export async function enrichVocabulary(
 
         const batchStart = Date.now();
         try {
-            const entries = await enrichBatch(batch, agentModel, onProgress);
+            const entries = await enrichBatch(batch, model);
             allEntries.push(...entries);
             const batchMs = Date.now() - batchStart;
             debug("Batch %d completed in %dms", batchNum, batchMs);

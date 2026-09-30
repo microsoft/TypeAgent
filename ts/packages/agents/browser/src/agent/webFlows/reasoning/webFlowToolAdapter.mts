@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
+import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
+import type { Tool, ToolResultObject } from "@github/copilot-sdk";
 import { z } from "zod/v4";
 import {
     WebFlowBrowserAPI,
@@ -30,6 +31,7 @@ export interface RecordedStep {
 
 export interface WebFlowToolCallbacks {
     onStepRecorded?: (step: RecordedStep) => void;
+    onToolCall?: (tool: string, args: unknown) => void;
     onThinking?: (text: string) => void;
     onText?: (text: string) => void;
 }
@@ -81,6 +83,38 @@ export class WebFlowToolAdapter {
             this.createCheckPageStateTool(),
             this.createQueryContentTool(),
         ];
+    }
+
+    buildCopilotTools(
+        beforeToolCall?: (tool: string, args: unknown) => void,
+    ): Tool<Record<string, unknown>>[] {
+        return this.buildTools().map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            parameters: z.toJSONSchema(z.object(tool.inputSchema)),
+            skipPermission: true,
+            handler: async (args): Promise<ToolResultObject> => {
+                this.callbacks?.onToolCall?.(tool.name, args);
+                beforeToolCall?.(tool.name, args);
+                const result = await tool.handler(args, {} as never);
+                const textResultForLlm = result.content
+                    .filter(
+                        (
+                            item,
+                        ): item is Extract<
+                            (typeof result.content)[number],
+                            { type: "text" }
+                        > => item.type === "text",
+                    )
+                    .map((item) => item.text)
+                    .join("\n");
+                return {
+                    textResultForLlm,
+                    resultType: result.isError ? "failure" : "success",
+                    ...(result.isError ? { error: textResultForLlm } : {}),
+                };
+            },
+        }));
     }
 
     private recordStep(

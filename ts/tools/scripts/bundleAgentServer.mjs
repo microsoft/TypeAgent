@@ -267,6 +267,10 @@ export async function bundleAgentServer(args) {
     const agents = await bundleProfileAgents(
         args.profile,
         path.join(out, "node_modules"),
+        {
+            platform: args.platform,
+            arch: args.arch,
+        },
     );
     fs.writeFileSync(
         path.join(out, ".typeagent-profile"),

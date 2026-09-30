@@ -13,6 +13,7 @@
 # temp directories
 build/
 dist/
+/ts/packages/agents/powershell/broker/
 out/
 node_modules/
 dist-pub/

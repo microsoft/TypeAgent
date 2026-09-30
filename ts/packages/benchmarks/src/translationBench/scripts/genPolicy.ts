@@ -15,9 +15,13 @@ import { Command } from "commander";
 import { getChatModelNames, openai as llmClient } from "@typeagent/aiclient";
 
 import {
+    assertRemovedActionsMatchCatalog,
+    getPackagedActionEligibilityPolicy,
+    listActionsWithLlmJudgeFields,
+} from "../policy/index.js";
+import {
     buildActionParametersGraderCatalog,
     diffActionParametersGrader,
-    listLlmAsAJudgeExcludedActions,
     loadActionParametersGraderCatalogFile,
     type ActionParametersGraderCatalog,
     type GeneratedActionCatalog,
@@ -34,9 +38,9 @@ const DEFAULT_OUT =
 
 export function parseCli(argv: string[]) {
     const program = new Command()
-        .name("genActionParametersGrader")
+        .name("genPolicy")
         .description(
-            "Build action-parameters-grader.generated.json (llmAsAJudge derived from verify modes)",
+            "Build action-parameters-grader.generated.json from catalog + policy/action-eligibility.json",
         )
         .option(
             "--catalog <path>",
@@ -45,7 +49,7 @@ export function parseCli(argv: string[]) {
         )
         .option("--out <path>", "grader output path", DEFAULT_OUT)
         .option("--force", "full rebuild (default is incremental)", false)
-        .option("--model <name>", "chat model for regex-miss LLM fallback")
+        .option("--model <name>", "chat model for hardcode-miss LLM fallback")
         .argument("[catalog]", "optional positional catalog path")
         .argument("[out]", "optional positional out path")
         .allowExcessArguments(false)
@@ -190,7 +194,7 @@ export async function main(
 
     const preview = diffActionParametersGrader(catalog, previous);
     process.stderr.write(
-        `[genActionParametersGrader] mode=${force ? "force" : "incremental"} ` +
+        `[genPolicy] mode=${force ? "force" : "incremental"} ` +
             `diff: +${preview.added.length} ~${preview.updated.length} ` +
             `-${preview.removed.length} =${preview.unchanged.length}\n`,
     );
@@ -200,16 +204,24 @@ export async function main(
             ? await createGraderLlm(args.model)
             : undefined;
 
+    const policy = getPackagedActionEligibilityPolicy();
+    assertRemovedActionsMatchCatalog(
+        policy.policy,
+        catalog.actions.map((a) => ({
+            schemaName: a.schemaName,
+            actionName: a.actionName,
+        })),
+    );
     const grader = await buildActionParametersGraderCatalog(catalog, {
+        assertOverridesMatchCatalog: true,
+        policy,
         ...(previous !== undefined ? { previous } : {}),
         ...(force ? { forceFull: true } : {}),
         ...(llm !== undefined ? { llm } : {}),
         includeLastDiff: true,
         onProgress(done, total) {
             if (total === 0) return;
-            process.stderr.write(
-                `[genActionParametersGrader] classify ${done}/${total}\n`,
-            );
+            process.stderr.write(`[genPolicy] classify ${done}/${total}\n`);
         },
     });
 
@@ -227,18 +239,20 @@ export async function main(
     }
 
     const d = grader.lastDiff ?? preview;
-    const excluded = listLlmAsAJudgeExcludedActions(grader);
+    const llmJudgeActions = listActionsWithLlmJudgeFields(grader);
     process.stderr.write(
-        `[genActionParametersGrader] wrote ${outPath}: ` +
+        `[genPolicy] wrote ${outPath}: ` +
             `${Object.keys(grader.byAction).length} actions ` +
             `(+${d.added.length} ~${d.updated.length} -${d.removed.length} =${d.unchanged.length}); ` +
-            `regexFields=${grader.regexMatchCount} llmFields=${grader.llmFallbackCount}; ` +
-            `llmAsAJudgeActions=${excluded.length}; ` +
+            `hardcodeFields=${grader.hardcodeMatchCount} llmFields=${grader.llmFallbackCount}; ` +
+            `actionsWithLlmJudgeFields=${llmJudgeActions.length}; ` +
+            `policyHash=${policy.contentHash.slice(0, 16)}; ` +
+            `rulesFingerprint=${grader.rulesFingerprint ?? "none"}; ` +
             `catalogVersion=${catalog.catalogVersion}\n`,
     );
 }
 
 main().catch((error) => {
-    console.error("genActionParametersGrader failed:", error);
+    console.error("genPolicy failed:", error);
     process.exit(1);
 });

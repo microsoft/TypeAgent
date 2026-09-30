@@ -1,15 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
+import { openai } from "@typeagent/aiclient";
 import type { ScriptRecipe } from "../types/scriptRecipe.js";
 import { basename } from "path";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:powershell:analyzer");
 
-const ANALYSIS_MODEL = "claude-sonnet-4-5-20250929";
+const ANALYSIS_MODEL = "copilot:gpt-5.6-sol";
 const MAX_SCRIPT_SIZE = 100 * 1024; // 100KB
 
 export class ScriptAnalyzer {
@@ -31,23 +30,14 @@ export class ScriptAnalyzer {
             overrideActionName,
         );
 
-        let result = "";
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: ANALYSIS_MODEL,
-                maxTurns: 1,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        for await (const message of queryInstance) {
-            if (message.type === "result" && message.subtype === "success") {
-                result = message.result;
-            }
+        const completion = await openai
+            .createChatModel(ANALYSIS_MODEL)
+            .complete(prompt);
+        if (!completion.success) {
+            throw new Error(`Script analysis failed: ${completion.message}`);
         }
-
-        if (!result) {
+        const result = completion.data;
+        if (!result.trim()) {
             throw new Error("LLM returned no result during script analysis");
         }
 
@@ -66,12 +56,27 @@ export class ScriptAnalyzer {
                 "Analysis produced invalid recipe: missing actionName or script.body",
             );
         }
+        if (recipe.script.body !== scriptContent) {
+            throw new Error(
+                "Analysis changed the imported PowerShell script content.",
+            );
+        }
 
         recipe.version = 1;
+        recipe.sandbox = {
+            ...recipe.sandbox,
+            allowedPaths: [],
+            allowedModules: [],
+            networkAccess: false,
+            maxExecutionTime: Math.min(
+                Math.max(recipe.sandbox?.maxExecutionTime ?? 30, 1),
+                120,
+            ),
+        };
         recipe.source = {
-            type: "manual",
+            type: "imported",
             timestamp: new Date().toISOString(),
-            originalRequest: `Imported from ${filePath}`,
+            originalRequest: "Imported PowerShell script",
         };
 
         return recipe;
@@ -113,9 +118,8 @@ Analyze this script and generate a recipe JSON object:
    - isAlias: true for terse shell-like forms, false for natural language
    - examples: 2-3 example invocations
    Include at least one natural language pattern and one terse alias if applicable.
-8. **sandbox**: Only cmdlets actually used in the script plus standard pipeline utilities
-   (Select-Object, Where-Object, ForEach-Object, Format-Table, Out-String, Sort-Object).
-   Set networkAccess: true only if the script uses network cmdlets (Invoke-WebRequest, etc.).
+8. **sandbox**: Identify only the cmdlets used by the script. Imported scripts do not
+   receive module, network, executable, or external filesystem capabilities.
 
 Return ONLY a JSON object matching this schema (no markdown fences, no explanation):
 {
@@ -137,8 +141,8 @@ Return ONLY a JSON object matching this schema (no markdown fences, no explanati
   ],
   "sandbox": {
     "allowedCmdlets": ["Get-ChildItem", "Select-Object"],
-    "allowedPaths": ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-    "allowedModules": ["Microsoft.PowerShell.Management"],
+    "allowedPaths": [],
+    "allowedModules": [],
     "maxExecutionTime": 30,
     "networkAccess": false
   }

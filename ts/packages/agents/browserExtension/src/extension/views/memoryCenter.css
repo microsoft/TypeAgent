@@ -70,18 +70,25 @@ main {
 
 .toolbar {
   display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: end;
   gap: 10px;
   margin-bottom: 14px;
 }
 
 .toolbar label {
-  min-width: 280px;
+  min-width: min(280px, 100%);
+  flex: 1 1 240px;
 }
 
 .toolbar .summary {
   margin-left: auto;
   color: var(--muted);
+}
+
+.toolbar > button {
+  flex: 0 0 auto;
 }
 
 label {
@@ -126,6 +133,14 @@ button.danger {
   border-color: var(--danger);
   color: white;
   background: var(--danger);
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
 }
 
 .workspace {
@@ -331,6 +346,39 @@ h3 {
   gap: 5px;
 }
 
+.source-details,
+.hidden-knowledge {
+  margin: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.source-details summary,
+.hidden-knowledge summary {
+  padding: 10px 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.editor-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.editor-tab {
+  margin-bottom: -1px;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  background: var(--background);
+}
+
+.editor-tab.active {
+  border-bottom-color: var(--surface);
+  background: var(--surface);
+  font-weight: 650;
+}
+
 .revision {
   padding: 7px;
   border-left: 3px solid var(--border);
@@ -347,6 +395,21 @@ h3 {
   line-height: 1.45;
 }
 
+.markdown-preview {
+  min-height: 270px;
+  padding: 12px;
+  overflow-wrap: anywhere;
+  border: 1px solid #cbd0d8;
+  border-top: 0;
+  line-height: 1.55;
+}
+
+.markdown-preview pre {
+  padding: 10px;
+  overflow: auto;
+  background: var(--background);
+}
+
 .content-actions {
   margin-top: 8px;
 }
@@ -358,9 +421,22 @@ h3 {
 }
 
 .chip {
-  padding: 4px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 5px 4px 7px;
   border-radius: 12px;
   background: #eef0ff;
+}
+
+.chip-remove {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  line-height: 1;
 }
 
 .empty {
@@ -460,7 +536,6 @@ dialog .checkbox {
 }
 
 @media (max-width: 720px) {
-  .toolbar,
   .workspace,
   .side-column,
   .howto-workspace {
@@ -470,5 +545,10 @@ dialog .checkbox {
 
   .toolbar .summary {
     margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .toolbar label {
+    flex-basis: 100%;
   }
 }

@@ -12,7 +12,10 @@ import WebSocket, { WebSocketServer } from "ws";
 import { jest } from "@jest/globals";
 import registerDebug from "debug";
 
-import { connectAgentServer } from "../src/agentServerClient.js";
+import {
+    connectAgentServer,
+    connectDispatcher,
+} from "../src/agentServerClient.js";
 import { fakeClientIO } from "./conversation-stubConnection.js";
 
 // Spin up a real ws server that speaks the agent-rpc control channel so the
@@ -20,6 +23,7 @@ import { fakeClientIO } from "./conversation-stubConnection.js";
 async function startStubServer(
     convs: ConversationInfo[],
     resumeToken?: string,
+    joinFailure?: string,
 ): Promise<{
     url: string;
     dropSockets: () => void;
@@ -60,15 +64,18 @@ async function startStubServer(
 
         const handlers = {
             listConversations: async () => convs,
-            joinConversation: async () => ({
-                conversationId: "c1",
-                connectionId: "conn-1",
-                name: "Shell",
-                pendingInteractions: [pendingInteraction],
-                ...(resumeToken === undefined
-                    ? {}
-                    : { structuredActions: { resumeToken } }),
-            }),
+            joinConversation: async () => {
+                if (joinFailure !== undefined) throw new Error(joinFailure);
+                return {
+                    conversationId: "c1",
+                    connectionId: "conn-1",
+                    name: "Shell",
+                    pendingInteractions: [pendingInteraction],
+                    ...(resumeToken === undefined
+                        ? {}
+                        : { structuredActions: { resumeToken } }),
+                };
+            },
             createConversation: async (name: string) => ({
                 conversationId: "c-new",
                 name,
@@ -109,6 +116,27 @@ function makeInfo(id: string, name: string): ConversationInfo {
 }
 
 describe("connectAgentServer reconnect (rebind)", () => {
+    test("closes every failed dispatcher join without replacing a missing conversation", async () => {
+        const stub = await startStubServer(
+            [],
+            undefined,
+            "Conversation not found: deleted",
+        );
+        try {
+            for (let attempt = 0; attempt < 3; attempt++) {
+                await expect(
+                    connectDispatcher(fakeClientIO, stub.url, {
+                        conversationId: "deleted",
+                    }),
+                ).rejects.toThrow("Conversation not found: deleted");
+                await new Promise((resolve) => setTimeout(resolve, 50));
+                expect(stub.liveSocketCount()).toBe(0);
+            }
+        } finally {
+            await stub.close();
+        }
+    });
+
     test("reuses the connection and rebinds the control rpc across a reconnect", async () => {
         const stub = await startStubServer([makeInfo("a", "Shell")]);
         let dropped = 0;

@@ -70,6 +70,12 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             forward("memoryGetSourceContent", params),
         memoryGetSourceKnowledge: (params) =>
             forward("memoryGetSourceKnowledge", params),
+        memoryListSourceKnowledgeSuppressions: (params) =>
+            forward("memoryListSourceKnowledgeSuppressions", params),
+        memorySuppressSourceKnowledge: (params) =>
+            forward("memorySuppressSourceKnowledge", params),
+        memoryRestoreSourceKnowledge: (params) =>
+            forward("memoryRestoreSourceKnowledge", params),
         memoryImportDocument: (params) =>
             forward("memoryImportDocument", params),
         memoryReplaceSource: (params) => forward("memoryReplaceSource", params),

@@ -45,20 +45,22 @@
     "asc:system": "asc -i ./src/namespaces/system/systemActionsSchema.mts -o ./dist/systemSchema.pas.json -t PowerShellSystemActions",
     "benchmark": "npx tsx benchmark/run-benchmark.mts",
     "benchmark:dry": "npx tsx benchmark/run-benchmark.mts --dry-run",
-    "build": "concurrently npm:tsc npm:asc:all npm:agc:all",
-    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "build": "concurrently npm:tsc npm:asc:all npm:agc:all npm:build:broker",
+    "build:broker": "node scripts/buildBroker.mjs",
+    "clean": "rimraf --glob dist broker *.tsbuildinfo *.done.build.log",
     "compile": "node scripts/compileRecipes.mjs",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "pnpm run test:local",
-    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "test:local": "pnpm run jest-esm --runInBand --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.150",
     "@typeagent/agent-flows": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "debug": "^4.3.4"
   },
   "devDependencies": {
@@ -301,6 +303,28 @@
           "package": "@typeagent/powershell-typeagent",
           "source": "scripts/scriptHost.ps1",
           "destination": "scripts/scriptHost.ps1"
+        },
+        {
+          "package": "@typeagent/powershell-typeagent",
+          "source": "broker/win-x64",
+          "destination": "broker/win-x64",
+          "platforms": [
+            "win32"
+          ],
+          "architectures": [
+            "x64"
+          ]
+        },
+        {
+          "package": "@typeagent/powershell-typeagent",
+          "source": "broker/win-arm64",
+          "destination": "broker/win-arm64",
+          "platforms": [
+            "win32"
+          ],
+          "architectures": [
+            "arm64"
+          ]
         }
       ]
     }

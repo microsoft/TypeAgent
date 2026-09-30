@@ -20,8 +20,12 @@ import {
     getEnhancedConsolePrompt,
     formatQueueBadge,
     cancelAllInQueue,
+    setPendingExitMessage,
+    clearRecentSubmissions,
     __testGetCurrentRequestId,
     __testSetCurrentRequestId,
+    __testRememberSubmittedId,
+    __testRestoreTerminalState,
     __testActivateTerminalLayout,
 } from "../src/enhancedConsole.js";
 import {
@@ -38,17 +42,25 @@ import type {
 // stdout capture
 
 let stdoutOutput: string[];
+let stderrOutput: string[];
 let realStdoutWrite: typeof process.stdout.write;
+let realStderrWrite: typeof process.stderr.write;
 let realConsoleLog: typeof console.log;
 
 beforeEach(() => {
     stdoutOutput = [];
+    stderrOutput = [];
     realStdoutWrite = process.stdout.write.bind(process.stdout);
+    realStderrWrite = process.stderr.write.bind(process.stderr);
     realConsoleLog = console.log;
     process.stdout.write = ((chunk: any) => {
         stdoutOutput.push(typeof chunk === "string" ? chunk : String(chunk));
         return true;
     }) as typeof process.stdout.write;
+    process.stderr.write = ((chunk: any) => {
+        stderrOutput.push(typeof chunk === "string" ? chunk : String(chunk));
+        return true;
+    }) as typeof process.stderr.write;
     console.log = (...args: unknown[]) => {
         stdoutOutput.push(args.map((a) => String(a)).join(" ") + "\n");
     };
@@ -56,15 +68,18 @@ beforeEach(() => {
     setQueueDispatcher(undefined);
     setCliConnectionId(undefined);
     __testSetCurrentRequestId(undefined);
+    clearRecentSubmissions();
 });
 
 afterEach(() => {
     process.stdout.write = realStdoutWrite;
+    process.stderr.write = realStderrWrite;
     console.log = realConsoleLog;
     applyQueueSnapshot(undefined);
     setQueueDispatcher(undefined);
     setCliConnectionId(undefined);
     __testSetCurrentRequestId(undefined);
+    clearRecentSubmissions();
 });
 
 // Helpers
@@ -94,6 +109,27 @@ function makeSnapshot(
 }
 
 const captured = () => stdoutOutput.join("");
+
+describe("CLI primary-buffer messages", () => {
+    it("prints exit messages immediately when no alternate screen is active", () => {
+        setPendingExitMessage("Disconnected from dispatcher");
+
+        expect(stderrOutput.join("")).toBe("Disconnected from dispatcher\n");
+    });
+
+    it("restores the scroll region and cursor without an alternate screen", () => {
+        const layout = __testActivateTerminalLayout(1);
+        stdoutOutput.length = 0;
+        try {
+            __testRestoreTerminalState();
+
+            expect(stdoutOutput.join("")).toContain("\x1b[r\x1b[?25h");
+            expect(stdoutOutput.join("")).not.toContain("\x1b[?1049l");
+        } finally {
+            layout.teardown();
+        }
+    });
+});
 
 // Tests
 
@@ -519,6 +555,89 @@ describe("CLI cancel UX", () => {
         const badge3 = formatQueueBadge();
         expect(prompt3).not.toContain("queue:");
         expect(badge3).toBe("");
+    });
+
+    it("shows processing for this CLI's running request and counts only waiting entries", () => {
+        setCliConnectionId("conn-test");
+        const running = makeEntry(
+            "99999999-aaaa-aaaa-aaaa-000000000010",
+            "local task",
+            "running",
+        );
+
+        expect(formatQueueBadge(makeSnapshot(running, []))).toContain(
+            "(processing)",
+        );
+
+        const badge = formatQueueBadge(
+            makeSnapshot(running, [
+                makeEntry("99999999-bbbb-bbbb-bbbb-000000000011", "x"),
+                makeEntry("99999999-cccc-cccc-cccc-000000000012", "y"),
+            ]),
+        );
+        expect(badge).toContain("(processing · queue: 2)");
+    });
+
+    it("does not show processing for another client's broadcast request", () => {
+        setCliConnectionId("conn-local");
+        const clientIO = createEnhancedClientIO(undefined, {
+            current: undefined,
+        });
+        const peer = makeEntry(
+            "aaaaaaaa-bbbb-cccc-dddd-000000000013",
+            "peer task",
+            "running",
+        );
+
+        clientIO.setUserRequest({ requestId: peer.requestId }, peer.text);
+
+        expect(formatQueueBadge(makeSnapshot(peer, []))).toContain(
+            "(queue: 1)",
+        );
+    });
+
+    it("keeps processing ownership after requestStarted consumes no fallback", () => {
+        const clientIO = createEnhancedClientIO(undefined, {
+            current: undefined,
+        });
+        const local = makeEntry(
+            "cccccccc-dddd-eeee-ffff-000000000015",
+            "local task",
+            "running",
+        );
+        local.originatorConnectionId = "missing-or-stale-originator";
+        __testRememberSubmittedId(local.requestId);
+
+        clientIO.requestStarted!(local, 1);
+
+        expect(captured()).not.toContain("▶ running:");
+        expect(formatQueueBadge()).toContain("(processing)");
+    });
+
+    it("redraws when a local request transitions from processing to idle", () => {
+        setCliConnectionId("conn-test");
+        const clientIO = createEnhancedClientIO(undefined, {
+            current: undefined,
+        });
+        const layout = __testActivateTerminalLayout(1);
+        try {
+            clientIO.queueStateChanged!(
+                makeSnapshot(
+                    makeEntry(
+                        "bbbbbbbb-cccc-dddd-eeee-000000000014",
+                        "local task",
+                        "running",
+                    ),
+                    [],
+                    1,
+                ),
+            );
+            clientIO.queueStateChanged!(makeSnapshot(null, [], 2));
+
+            expect(layout.redrawCount()).toBe(2);
+        } finally {
+            layout.teardown();
+        }
     });
 });
 

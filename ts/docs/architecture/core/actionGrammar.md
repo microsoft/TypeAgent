@@ -234,14 +234,19 @@ agents at once.
 The `generation/` subsystem uses LLMs to automatically create grammar
 rules from action schemas or confirmed user interactions.
 
-**Three generation strategies:**
+**Four generation strategies:**
 
-1. **`ClaudeGrammarGenerator`** — Analyzes individual request/action pairs.
+1. **`CopilotGrammarGenerator`** — The runtime default for confirmed
+   request/action pairs. It uses the Copilot SDK with `gpt-5.6-sol` to
+   extract linguistic patterns, parameter mappings, and alternative
+   phrasings. Produces `GrammarAnalysis` with rule patterns.
+
+2. **`ClaudeGrammarGenerator`** — Retained for existing CLI and API callers.
    Given a natural language request and its confirmed action, Claude
    extracts linguistic patterns, parameter mappings, and alternative
    phrasings. Produces `GrammarAnalysis` with rule patterns.
 
-2. **`SchemaToGrammarGenerator`** — Batch generation from action schemas.
+3. **`SchemaToGrammarGenerator`** — Batch generation from action schemas.
    Reads `.pas.json` (Parameter Action Schema) files — JSON
    representations of an agent's TypeScript action types, containing
    action names, parameter types, and descriptions extracted from the
@@ -249,7 +254,7 @@ rules from action schemas or confirmed user interactions.
    produces example natural language requests for each action and
    synthesizes complete `.agr` grammar text with test cases.
 
-3. **`ScenarioBasedGrammarGenerator`** — Uses pre-defined scenario templates
+4. **`ScenarioBasedGrammarGenerator`** — Uses pre-defined scenario templates
    (music player, calendar, lists) to generate grammar rules for common
    action patterns without LLM calls.
 

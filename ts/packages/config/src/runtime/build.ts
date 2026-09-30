@@ -964,6 +964,11 @@ function buildEmbedding(
     const providerRaw = popString(flat, "TYPEAGENT_EMBEDDING_PROVIDER");
     const model = popString(flat, "TYPEAGENT_EMBEDDING_MODEL");
     const cacheDir = popString(flat, "TYPEAGENT_EMBEDDING_CACHE_DIR");
+    const size = popPositiveInt(flat, "TYPEAGENT_EMBEDDING_SIZE");
+    const maxBatchSize = popPositiveInt(
+        flat,
+        "TYPEAGENT_EMBEDDING_MAX_BATCH_SIZE",
+    );
 
     let provider: EmbeddingProviderMode | undefined;
     if (providerRaw !== undefined) {
@@ -983,14 +988,35 @@ function buildEmbedding(
         }
     }
 
-    if (provider === undefined && model === undefined && cacheDir === undefined)
+    if (
+        provider === undefined &&
+        model === undefined &&
+        cacheDir === undefined &&
+        size === undefined &&
+        maxBatchSize === undefined
+    )
         return undefined;
 
     return {
         ...(provider !== undefined ? { provider } : {}),
         ...(model !== undefined ? { model } : {}),
         ...(cacheDir !== undefined ? { cacheDir } : {}),
+        ...(size !== undefined ? { size } : {}),
+        ...(maxBatchSize !== undefined ? { maxBatchSize } : {}),
     };
+}
+
+// Pop a positive integer; malformed values are left in extra untouched.
+function popPositiveInt(
+    flat: Map<string, string>,
+    key: string,
+): number | undefined {
+    const raw = popString(flat, key);
+    if (raw === undefined) return undefined;
+    const n = Number(raw);
+    if (Number.isInteger(n) && n > 0) return n;
+    flat.set(key, raw);
+    return undefined;
 }
 
 // Re-exported helpers for tests / future builders.

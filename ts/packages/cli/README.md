@@ -166,12 +166,14 @@ agent-cli connect --conversation <id>    # connect to a specific conversation by
 agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
 agent-cli connect --hidden               # start the server hidden (no visible window)
 agent-cli connect --memory               # use an ephemeral conversation (deleted on exit)
+agent-cli connect --scrollback           # retain session output in terminal scrollback
 ```
 
 - By default, `connect` targets a conversation named `"CLI"`. If no such conversation exists on the server it is created automatically.
 - Pass `--resume` / `-r` to instead resume the last used conversation (persisted client-side in `~/.typeagent/cli-state.json`). If that conversation no longer exists, you will be prompted to join the `"CLI"` conversation.
 - Pass `--conversation` / `-s <id>` to connect to any specific conversation by its UUID. Takes priority over `--resume` if both are provided.
 - Pass `--memory` to use an ephemeral conversation that is created fresh and automatically deleted when you exit. Cannot be combined with `--conversation` or `--resume`.
+- Pass `--scrollback` to use the primary terminal buffer so session output remains after exit. The fixed prompt still uses an ANSI scroll region while active, so wheel and scrollbar behavior can vary by terminal.
 - The server is started automatically if it is not already running. By default it starts in a visible window; pass `--hidden` to suppress the window.
 - On connect (and on every conversation switch), the conversation name is printed after any replayed history, just below the `─── now ─────` separator.
 
