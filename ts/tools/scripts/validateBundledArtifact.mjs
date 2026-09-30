@@ -43,11 +43,17 @@ async function waitForAddedResources(resourcesBefore, timeoutMs) {
 }
 
 function parseArgs(argv) {
-    const args = { maxFiles: 8000 };
+    const args = {
+        maxFiles: 8000,
+        platform: process.platform,
+        arch: process.arch,
+    };
     for (let i = 2; i < argv.length; i++) {
         const arg = argv[i];
         if (arg === "--dir") args.dir = argv[++i];
         else if (arg === "--max-files") args.maxFiles = Number(argv[++i]);
+        else if (arg === "--platform") args.platform = argv[++i];
+        else if (arg === "--arch") args.arch = argv[++i];
         else throw new Error(`Unknown argument: ${arg}`);
     }
     if (!args.dir) {
@@ -101,7 +107,7 @@ function packageRoot(root, packageName) {
     return path.join(root, "node_modules", ...packageName.split("/"));
 }
 
-function validateDeclaredBundleFiles(root, packageName) {
+function validateDeclaredBundleFiles(root, packageName, target) {
     const packageDirectory = packageRoot(root, packageName);
     const pkg = readJson(path.join(packageDirectory, "package.json"));
     for (const entry of pkg.typeagent?.bundle?.entries ?? []) {
@@ -117,6 +123,18 @@ function validateDeclaredBundleFiles(root, packageName) {
         }
     }
     for (const mapping of pkg.typeagent?.bundle?.assetMappings ?? []) {
+        if (
+            mapping.platforms !== undefined &&
+            !mapping.platforms.includes(target.platform)
+        ) {
+            continue;
+        }
+        if (
+            mapping.architectures !== undefined &&
+            !mapping.architectures.includes(target.arch)
+        ) {
+            continue;
+        }
         const file = path.join(packageDirectory, mapping.destination);
         if (!fs.existsSync(file)) {
             throw new Error(
@@ -169,7 +187,7 @@ function validateBrowserRuntime(root) {
     }
 }
 
-function validateFlowRuntime(root, packageNames) {
+function validateFlowRuntime(root, packageNames, target) {
     for (const [packageName, relative] of [
         ["@typeagent/taskflow-typeagent", "src/script/taskFlowSandbox.d.ts"],
         ["@typeagent/powershell-typeagent", "scripts/scriptHost.ps1"],
@@ -182,9 +200,26 @@ function validateFlowRuntime(root, packageNames) {
             throw new Error(`${packageName}: runtime file is missing ${file}.`);
         }
     }
+    if (
+        target.platform === "win32" &&
+        packageNames.has("@typeagent/powershell-typeagent")
+    ) {
+        const architecture = target.arch === "arm64" ? "win-arm64" : "win-x64";
+        const broker = path.join(
+            packageRoot(root, "@typeagent/powershell-typeagent"),
+            "broker",
+            architecture,
+            "PowerShellSandboxBroker.exe",
+        );
+        if (!fs.existsSync(broker) || !fs.statSync(broker).isFile()) {
+            throw new Error(
+                `@typeagent/powershell-typeagent: sandbox broker is missing ${broker}.`,
+            );
+        }
+    }
 }
 
-async function validateAgents(root) {
+async function validateAgents(root, target) {
     const require = createRequire(
         path.join(root, "default-agent-provider", "package.json"),
     );
@@ -195,7 +230,7 @@ async function validateAgents(root) {
         distribution.agents.map((agent) => agent.packageName),
     );
     for (const agent of distribution.agents) {
-        validateDeclaredBundleFiles(root, agent.packageName);
+        validateDeclaredBundleFiles(root, agent.packageName, target);
         const resourcesBefore = getBackgroundResources();
         const manifest = require(`${agent.packageName}/agent/manifest`);
         if (!manifest || typeof manifest !== "object") {
@@ -220,7 +255,7 @@ async function validateAgents(root) {
     if (packageNames.has("@typeagent/browser")) {
         validateBrowserRuntime(root);
     }
-    validateFlowRuntime(root, packageNames);
+    validateFlowRuntime(root, packageNames, target);
 }
 
 function validateNativeRuntime(root) {
@@ -261,7 +296,10 @@ async function main() {
                 .join("\n")}`,
         );
     }
-    await validateAgents(args.dir);
+    await validateAgents(args.dir, {
+        platform: args.platform,
+        arch: args.arch,
+    });
     validateNativeRuntime(args.dir);
     console.log(
         `Validated bundled artifact: ${metrics.files} files, ` +

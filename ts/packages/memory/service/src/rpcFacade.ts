@@ -33,6 +33,12 @@ export function createMemoryServiceRpcFacade(
         getSource: (...args) => service.getSource(...args),
         getSourceContent: (...args) => service.getSourceContent(...args),
         getSourceKnowledge: (...args) => service.getSourceKnowledge(...args),
+        listSourceKnowledgeSuppressions: (...args) =>
+            service.listSourceKnowledgeSuppressions!(...args),
+        suppressSourceKnowledge: (...args) =>
+            service.suppressSourceKnowledge!(...args),
+        restoreSourceKnowledge: (...args) =>
+            service.restoreSourceKnowledge!(...args),
         ingestDocument: (request) => service.ingestDocument(request),
         replaceSource: (request) => service.replaceSource(request),
         previewForgetSource: (...args) => service.previewForgetSource(...args),

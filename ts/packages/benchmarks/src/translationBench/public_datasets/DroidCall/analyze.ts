@@ -13,6 +13,7 @@ import {
     type DroidCallShape,
 } from "../pythonLiteral.js";
 import { DROIDCALL_SOURCE, downloadDroidCall } from "../huggingFaceRows.js";
+import { readJsonlLines } from "../../../core/fileJson.js";
 
 interface CanonicalRow {
     query: string;
@@ -192,19 +193,7 @@ async function readSourceSnapshot(rawDir: string): Promise<SourceSnapshot> {
 }
 
 function parseJsonl<T>(fileName: SourceFileName, contents: Buffer): T[] {
-    const rows: T[] = [];
-    for (const [index, line] of contents
-        .toString("utf8")
-        .split("\n")
-        .entries()) {
-        if (line.trim().length === 0) continue;
-        try {
-            rows.push(JSON.parse(line) as T);
-        } catch (error) {
-            throw new Error(`${fileName}:${index + 1}: ${String(error)}`);
-        }
-    }
-    return rows;
+    return readJsonlLines<T>(contents.toString("utf8"), fileName);
 }
 
 export interface DroidCallAnalysis {

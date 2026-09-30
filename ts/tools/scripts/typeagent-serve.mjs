@@ -498,6 +498,21 @@ async function cmdStart({
     spawnImpl = spawn,
     inspectConfig = inspectLocalConfig,
 } = {}) {
+    if (
+        fs.existsSync(
+            path.resolve(
+                path.dirname(serverPath),
+                "..",
+                "..",
+                ".msi-maintenance",
+            ),
+        )
+    ) {
+        console.error(
+            "TypeAgent setup is in progress. Server startup is temporarily disabled.",
+        );
+        return 1;
+    }
     if (await isListening(port)) {
         console.log(
             `A process is already listening on port ${port} ` +

@@ -124,6 +124,13 @@ function validateCase(
 
 function pythonString(value: unknown): string {
     if (value instanceof PythonNumber) return value.lexeme;
+    if (
+        isRecord(value) &&
+        Object.keys(value).length === 1 &&
+        typeof value.__pythonNumber === "string"
+    ) {
+        return value.__pythonNumber;
+    }
     if (typeof value === "string") return value;
     if (value === null) return "None";
     if (value === true) return "True";
@@ -147,6 +154,13 @@ function pythonRepr(value: unknown): string {
 
 function foldStringCase(value: unknown): unknown {
     if (value instanceof PythonNumber) return value;
+    if (
+        isRecord(value) &&
+        Object.keys(value).length === 1 &&
+        typeof value.__pythonNumber === "string"
+    ) {
+        return value;
+    }
     if (typeof value === "string") return value.toLocaleLowerCase("en-US");
     if (Array.isArray(value)) return value.map(foldStringCase);
     if (typeof value === "object" && value !== null) {

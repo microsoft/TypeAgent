@@ -14,6 +14,12 @@
       "description": "TypeAgent integration for Copilot CLI - route action requests to TypeAgent agents for calendar, email, music, browser, and other domain-specific actions",
       "version": "0.0.1",
       "source": "./packages/copilot-plugin"
+    },
+    {
+      "name": "typeagent-memory",
+      "description": "TypeAgent memory for Copilot CLI - remember and recall in the current workspace conversation",
+      "version": "0.0.1",
+      "source": "./packages/copilot-memory-plugin"
     }
   ]
 }

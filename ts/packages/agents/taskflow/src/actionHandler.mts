@@ -37,17 +37,14 @@ const debug = registerDebug("typeagent:taskflow:handler");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SAMPLES_DIR = join(__dirname, "..", "samples");
 
-// How long flow authoring will wait for grammar validation before proceeding.
-// Each validation LLM op is itself capped at 30s; this bounds the overall wait
-// so authoring never blocks on a slow/hung validation.
+// How long flow authoring waits for grammar validation before failing closed.
 const GRAMMAR_VALIDATION_WAIT_MS = 15_000;
 
 /**
  * Await a grammar-validation result, but only up to `budgetMs`. Returns
- * `undefined` if validation does not finish in time or rejects, so flow
- * authoring can proceed with the patterns as authored. The underlying
- * validation keeps running in the background (each LLM op has its own timeout);
- * any late rejection is swallowed.
+ * `undefined` if validation does not finish in time or rejects. The underlying
+ * validation keeps running in the background, and any late rejection is
+ * consumed.
  */
 async function awaitValidationWithinBudget(
     validation: Promise<GrammarValidationResult>,
@@ -76,6 +73,69 @@ async function awaitValidationWithinBudget(
 
 interface TaskFlowAgentContext {
     store?: TaskFlowStore | undefined;
+}
+
+async function validateTaskFlowGrammarPatterns(
+    actionName: string,
+    description: string,
+    patterns: unknown,
+    context: ActionContext<TaskFlowAgentContext>,
+): Promise<{ patterns: string[] } | { error: ActionResult }> {
+    if (
+        !Array.isArray(patterns) ||
+        patterns.some(
+            (pattern) =>
+                typeof pattern !== "string" || pattern.trim().length === 0,
+        )
+    ) {
+        return {
+            error: createActionResultFromError(
+                "Grammar patterns must be a JSON array of non-empty strings.",
+            ),
+        };
+    }
+
+    let approvedPatterns = patterns.map((pattern) => pattern.trim());
+    const validate = context.sessionContext.validateGrammarPatterns;
+    if (approvedPatterns.length === 0 || validate === undefined) {
+        return { patterns: approvedPatterns };
+    }
+
+    const validationResult = await awaitValidationWithinBudget(
+        validate({
+            actionName,
+            description,
+            patterns: approvedPatterns,
+        }),
+        GRAMMAR_VALIDATION_WAIT_MS,
+    );
+    if (validationResult === undefined) {
+        return {
+            error: createActionResultFromError(
+                `Grammar pattern validation did not complete within ${GRAMMAR_VALIDATION_WAIT_MS / 1000} seconds. No patterns were saved.`,
+            ),
+        };
+    }
+    if (!validationResult.approved) {
+        const suggestions = validationResult.suggestions
+            ? ` Suggestions: ${validationResult.suggestions.join("; ")}`
+            : "";
+        return {
+            error: createActionResultFromError(
+                `Grammar pattern validation failed: ${(validationResult.errors ?? []).join("; ")}${suggestions}`,
+            ),
+        };
+    }
+    if (validationResult.warnings?.length) {
+        context.sessionContext.notify(
+            AppAgentEvent.Warning,
+            `Grammar pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
+        );
+    }
+    if (validationResult.patterns?.length) {
+        approvedPatterns = validationResult.patterns;
+    }
+    return { patterns: approvedPatterns };
 }
 
 // ── Sample seeding ──────────────────────────────────────────────────────────
@@ -274,67 +334,16 @@ async function handleTaskFlowAction(
                 );
             }
 
-            // Validate grammar patterns before saving. Validation makes LLM
-            // calls, so we wait at most GRAMMAR_VALIDATION_WAIT_MS for it; if it
-            // doesn't finish in time (or errors), we proceed with the patterns
-            // as authored rather than blocking flow creation.
-            if (
-                grammarPatterns.length > 0 &&
-                context.sessionContext.validateGrammarPatterns
-            ) {
-                const validationResult = await awaitValidationWithinBudget(
-                    context.sessionContext.validateGrammarPatterns({
-                        actionName: flowName,
-                        description,
-                        patterns: grammarPatterns,
-                    }),
-                    GRAMMAR_VALIDATION_WAIT_MS,
-                );
-
-                if (validationResult === undefined) {
-                    context.sessionContext.notify(
-                        AppAgentEvent.Warning,
-                        "⚠️ Grammar pattern validation didn't finish within " +
-                            `${GRAMMAR_VALIDATION_WAIT_MS / 1000}s — proceeding with the patterns as authored.`,
-                    );
-                } else if (!validationResult.approved) {
-                    const errorMsg = [
-                        "❌ Grammar pattern validation failed:",
-                        "",
-                        ...(validationResult.errors ?? []),
-                    ].join("\n");
-
-                    const suggestionMsg = validationResult.suggestions
-                        ? [
-                              "",
-                              "Suggestions:",
-                              ...validationResult.suggestions,
-                          ].join("\n")
-                        : "";
-
-                    return createActionResultFromError(
-                        errorMsg + suggestionMsg,
-                    );
-                } else {
-                    if (
-                        validationResult.warnings &&
-                        validationResult.warnings.length > 0
-                    ) {
-                        context.sessionContext.notify(
-                            AppAgentEvent.Warning,
-                            `⚠️ Pattern validation warnings:\n${validationResult.warnings.join("\n")}`,
-                        );
-                    }
-
-                    // Use refined patterns if provided
-                    if (
-                        validationResult.patterns &&
-                        validationResult.patterns.length > 0
-                    ) {
-                        grammarPatterns = validationResult.patterns;
-                    }
-                }
+            const grammarValidation = await validateTaskFlowGrammarPatterns(
+                flowName,
+                description,
+                grammarPatterns,
+                context,
+            );
+            if ("error" in grammarValidation) {
+                return grammarValidation.error;
             }
+            grammarPatterns = grammarValidation.patterns;
 
             // Create recipe
             const recipe: ScriptRecipe = {
@@ -350,7 +359,17 @@ async function handleTaskFlowAction(
             try {
                 await context.sessionContext.reloadAgentSchema();
             } catch (e) {
-                debug(`Schema reload after create: ${e}`);
+                try {
+                    await store.deleteFlow(flowName);
+                    await context.sessionContext.reloadAgentSchema();
+                } catch (rollbackError) {
+                    return createActionResultFromError(
+                        `Task flow '${flowName}' activation failed and rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+                    );
+                }
+                return createActionResultFromError(
+                    `Task flow '${flowName}' was not created because its schema could not be activated: ${e instanceof Error ? e.message : String(e)}`,
+                );
             }
 
             return createActionResultFromTextDisplay(
@@ -386,6 +405,8 @@ async function handleTaskFlowAction(
                 | string
                 | undefined;
             const newParametersJson = params.parameters as string | undefined;
+            const previousGrammarPatterns =
+                await store.getGrammarPatterns(flowName);
 
             // Parse new grammar patterns if provided
             let newGrammarPatterns: string[] | undefined;
@@ -397,6 +418,19 @@ async function handleTaskFlowAction(
                         `Invalid JSON in grammarPatterns: ${newGrammarPatternsJson}`,
                     );
                 }
+            }
+
+            if (newGrammarPatterns !== undefined) {
+                const grammarValidation = await validateTaskFlowGrammarPatterns(
+                    flowName,
+                    newDescription ?? existingFlow.description,
+                    newGrammarPatterns,
+                    context,
+                );
+                if ("error" in grammarValidation) {
+                    return grammarValidation.error;
+                }
+                newGrammarPatterns = grammarValidation.patterns;
             }
 
             // Parse new parameters if provided
@@ -490,11 +524,101 @@ async function handleTaskFlowAction(
             try {
                 await context.sessionContext.reloadAgentSchema();
             } catch (e) {
-                debug(`Schema reload after edit: ${e}`);
+                try {
+                    await store.updateFlow(flowName, {
+                        ...(existingFlow.script === undefined
+                            ? {}
+                            : { script: existingFlow.script }),
+                        description: existingFlow.description,
+                        grammarPatterns: previousGrammarPatterns,
+                        parameters: existingFlow.parameters,
+                    });
+                    await context.sessionContext.reloadAgentSchema();
+                } catch (rollbackError) {
+                    return createActionResultFromError(
+                        `Task flow '${flowName}' activation failed and rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+                    );
+                }
+                return createActionResultFromError(
+                    `Task flow '${flowName}' was not updated because its schema could not be activated: ${e instanceof Error ? e.message : String(e)}`,
+                );
             }
 
             return createActionResultFromTextDisplay(
                 `Updated task flow '${flowName}'.`,
+            );
+        }
+
+        case "addTaskFlowPatterns": {
+            if (!store) {
+                return createActionResultFromError(
+                    "Task flow store not available",
+                );
+            }
+            const flowName = action.parameters?.name as string | undefined;
+            if (!flowName) {
+                return createActionResultFromError(
+                    "Missing required parameter: name",
+                );
+            }
+            const flow = await store.getFlow(flowName);
+            if (!flow) {
+                return createActionResultFromError(
+                    `Task flow '${flowName}' not found.`,
+                );
+            }
+            let patterns: unknown;
+            const suppliedPatterns = action.parameters?.grammarPatterns;
+            if (typeof suppliedPatterns === "string") {
+                try {
+                    patterns = JSON.parse(suppliedPatterns);
+                } catch {
+                    return createActionResultFromError(
+                        "Invalid JSON in grammarPatterns.",
+                    );
+                }
+            } else {
+                patterns = suppliedPatterns;
+            }
+            const validation = await validateTaskFlowGrammarPatterns(
+                flowName,
+                flow.description,
+                patterns,
+                context,
+            );
+            if ("error" in validation) {
+                return validation.error;
+            }
+
+            const previousPatterns = await store.getGrammarPatterns(flowName);
+            const added = await store.addGrammarPatterns(
+                flowName,
+                validation.patterns,
+            );
+            if (added > 0) {
+                try {
+                    await context.sessionContext.reloadAgentSchema();
+                } catch (error) {
+                    try {
+                        await store.replaceGrammarPatterns(
+                            flowName,
+                            previousPatterns,
+                        );
+                        await context.sessionContext.reloadAgentSchema();
+                    } catch (rollbackError) {
+                        return createActionResultFromError(
+                            `The TaskFlow grammar update failed and rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+                        );
+                    }
+                    return createActionResultFromError(
+                        `No patterns were added because the updated TaskFlow grammar could not be activated: ${error instanceof Error ? error.message : String(error)}`,
+                    );
+                }
+            }
+            return createActionResultFromTextDisplay(
+                added > 0
+                    ? `Added ${added} grammar pattern(s) to task flow '${flowName}'.`
+                    : `Task flow '${flowName}' already contains those grammar patterns.`,
             );
         }
 
@@ -518,7 +642,9 @@ async function handleTaskFlowAction(
                 action.parameters ?? {},
                 context,
             );
-            await store.recordUsage(action.actionName);
+            if (result.error === undefined) {
+                await store.recordUsage(action.actionName);
+            }
             return result;
         }
     }
@@ -593,6 +719,7 @@ const TASKFLOW_BUILTIN_ACTIONS = new Set([
     "deleteTaskFlow",
     "createTaskFlow",
     "editTaskFlow",
+    "addTaskFlowPatterns",
 ]);
 
 export function instantiate(): AppAgent {
@@ -655,6 +782,7 @@ export function instantiate(): AppAgent {
             return {
                 format: "ts",
                 content: _agentStore.generateDynamicSchemaText(),
+                cacheBinding: await _agentStore.getActionCacheBinding(),
             };
         },
 

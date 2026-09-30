@@ -83,6 +83,25 @@ export function createAgentInvokeHandlers(
             getMemoryService().getSourceContent(params),
         memoryGetSourceKnowledge: ({ corpusId, sourceId }) =>
             getMemoryService().getSourceKnowledge(corpusId, sourceId),
+        memoryListSourceKnowledgeSuppressions: ({ corpusId, sourceId }) => {
+            const operation =
+                getMemoryService().listSourceKnowledgeSuppressions;
+            if (!operation)
+                throw new Error("Knowledge curation is unavailable");
+            return operation.call(getMemoryService(), corpusId, sourceId);
+        },
+        memorySuppressSourceKnowledge: (params) => {
+            const operation = getMemoryService().suppressSourceKnowledge;
+            if (!operation)
+                throw new Error("Knowledge curation is unavailable");
+            return operation.call(getMemoryService(), params);
+        },
+        memoryRestoreSourceKnowledge: (params) => {
+            const operation = getMemoryService().restoreSourceKnowledge;
+            if (!operation)
+                throw new Error("Knowledge curation is unavailable");
+            return operation.call(getMemoryService(), params);
+        },
         memoryImportDocument: ({
             corpusId,
             title,

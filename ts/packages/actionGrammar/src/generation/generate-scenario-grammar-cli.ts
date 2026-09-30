@@ -3,6 +3,7 @@
 // Licensed under the MIT License.
 
 import { loadConfigSync } from "@typeagent/config";
+import { stopCopilotClient } from "@typeagent/aiclient";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -11,6 +12,11 @@ loadConfigSync();
 import { ScenarioBasedGrammarGenerator } from "./scenarioBasedGenerator.js";
 import { loadSchemaInfo } from "./schemaReader.js";
 import { getScenariosForAgent } from "./scenarioTemplates.js";
+import {
+    defaultGrammarModel,
+    GrammarModelProvider,
+    resolveGrammarModel,
+} from "./grammarModel.js";
 
 interface GenerateScenarioGrammarOptions {
     schema: string;
@@ -19,6 +25,7 @@ interface GenerateScenarioGrammarOptions {
     patternsPerScenario?: number;
     frenchRatio?: number;
     model?: string;
+    provider?: GrammarModelProvider;
     help?: boolean;
 }
 
@@ -28,7 +35,6 @@ function parseArgs(): GenerateScenarioGrammarOptions {
         schema: "",
         patternsPerScenario: 20,
         frenchRatio: 0.1,
-        model: "claude-sonnet-4-20250514",
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -65,6 +71,16 @@ function parseArgs(): GenerateScenarioGrammarOptions {
             case "-m":
                 options.model = args[++i];
                 break;
+            case "--provider":
+                const provider = args[++i];
+                if (provider === "copilot" || provider === "claude") {
+                    options.provider = provider;
+                } else {
+                    throw new Error(
+                        `Unsupported provider "${provider}". Use copilot or claude.`,
+                    );
+                }
+                break;
             case "--help":
             case "-h":
                 options.help = true;
@@ -100,7 +116,8 @@ Options:
                              If not specified, attempts to infer from schema name
   -p, --patterns <number>    Number of patterns per (action × scenario) (default: 20)
   -f, --french-ratio <ratio> Ratio of French patterns to English (default: 0.1 for 10%)
-  -m, --model <model>        Claude model to use (default: claude-sonnet-4-20250514)
+  --provider <provider>      Model provider: copilot or claude (default: copilot)
+  -m, --model <model>        Model to use (default: ${defaultGrammarModel})
   -h, --help                 Show this help message
 
 Features:
@@ -176,7 +193,9 @@ async function main() {
             );
 
         console.log(`\nGenerating comprehensive grammar...`);
-        console.log(`  Model: ${options.model}`);
+        const modelConfig = resolveGrammarModel(options);
+        console.log(`  Provider: ${modelConfig.provider}`);
+        console.log(`  Model: ${modelConfig.model}`);
         console.log(`  Patterns per scenario: ${options.patternsPerScenario}`);
         console.log(
             `  French ratio: ${(options.frenchRatio! * 100).toFixed(0)}%`,
@@ -184,7 +203,10 @@ async function main() {
 
         // Generate grammar
         const generator = new ScenarioBasedGrammarGenerator({
-            model: options.model!,
+            ...(options.model === undefined ? {} : { model: options.model }),
+            ...(options.provider === undefined
+                ? {}
+                : { provider: options.provider }),
             maxRetries: 3,
         });
 
@@ -232,4 +254,4 @@ async function main() {
     }
 }
 
-main();
+main().finally(stopCopilotClient);

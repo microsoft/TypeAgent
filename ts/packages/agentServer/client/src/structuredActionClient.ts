@@ -20,6 +20,12 @@ import { findOrCreateNamedConversation } from "./conversation/lifecycle.js";
 export interface StructuredActionClientOptions {
     url?: string;
     conversationId?: string;
+    /** Resolve caller context before the first structured join. Undefined keeps a dedicated conversation. */
+    resolveConversationId?: (
+        connection: AgentServerConnection,
+    ) => Promise<string | undefined>;
+    /** Check caller-owned context selection before dispatch, including on reused bindings. */
+    validateConversationId?: (conversationId: string) => Promise<void>;
     clientIO?: ClientIO;
     /** Called once when this client needs its own named conversation. */
     createConversationName?: () => string;
@@ -39,6 +45,7 @@ export type StructuredActionClientErrorReason =
     | "resume_rejected"
     | "resume_failed"
     | "conversation_not_found"
+    | "conversation_changed"
     | "client_closed"
     | "caller_cancelled"
     | "delivery_uncertain";
@@ -54,6 +61,8 @@ const errorMessages: Record<StructuredActionClientErrorReason, string> = {
         "Unable to resume the existing structured binding. No replacement owner was created. Prior delivery may be uncertain; do not replay interrupted work.",
     conversation_not_found:
         "The requested structured conversation no longer exists. No replacement conversation or owner was created. Do not replay interrupted work.",
+    conversation_changed:
+        "The selected TypeAgent conversation changed. This request was not dispatched. Start a fresh Copilot session to use the new context; do not replay interrupted work.",
     client_closed:
         "The structured client is closed; this request was not dispatched. Closing does not imply cancellation or rollback of prior work.",
     caller_cancelled:
@@ -146,6 +155,8 @@ export class StructuredActionClient {
     #generation = 0;
     #name: string | undefined;
     readonly #createConversationName: () => string;
+    readonly #resolveConversationId: StructuredActionClientOptions["resolveConversationId"];
+    readonly #validateConversationId: StructuredActionClientOptions["validateConversationId"];
     readonly #clientIO: ClientIO;
     readonly #connect: NonNullable<StructuredActionClientOptions["connect"]>;
 
@@ -158,6 +169,8 @@ export class StructuredActionClient {
             throw new Error("TypeAgent conversationId must not be empty.");
         }
         this.#conversationId = configured;
+        this.#resolveConversationId = options.resolveConversationId;
+        this.#validateConversationId = options.validateConversationId;
         this.#clientIO = options.clientIO ?? defaultClientIO();
         this.#createConversationName =
             options.createConversationName ??
@@ -221,10 +234,18 @@ export class StructuredActionClient {
                     "caller_cancelled",
                 );
             const dispatcher = await this.dispatcher();
+            await this.#validateConversationId?.(this.#conversationId!);
             if (signal?.aborted)
                 throw new StructuredActionClientError(
                     false,
                     "caller_cancelled",
+                );
+            if (this.#closed)
+                throw new StructuredActionClientError(false, "client_closed");
+            if (dispatcher !== this.#dispatcher)
+                throw new StructuredActionClientError(
+                    false,
+                    "connection_failed",
                 );
             dispatched = true;
             return operation(dispatcher);
@@ -280,14 +301,7 @@ export class StructuredActionClient {
                     this.#connection = undefined;
                 }
             });
-            if (this.#conversationId === undefined) {
-                this.#name ??= this.#createConversationName();
-                const conversation = await findOrCreateNamedConversation(
-                    connection,
-                    this.#name,
-                );
-                this.#conversationId = conversation.conversationId;
-            }
+            this.#conversationId ??= await this.selectConversation(connection);
             if (this.#closed)
                 throw new StructuredActionClientError(false, "client_closed");
             this.#joinAttempted = true;
@@ -331,6 +345,24 @@ export class StructuredActionClient {
                     : "connection_failed",
             );
         }
+    }
+
+    private async selectConversation(
+        connection: AgentServerConnection,
+    ): Promise<string> {
+        const resolved = await this.#resolveConversationId?.(connection);
+        if (resolved !== undefined) {
+            if (typeof resolved !== "string" || !resolved.trim()) {
+                throw new Error("TypeAgent conversationId must not be empty.");
+            }
+            return resolved;
+        }
+        this.#name ??= this.#createConversationName();
+        const conversation = await findOrCreateNamedConversation(
+            connection,
+            this.#name,
+        );
+        return conversation.conversationId;
     }
 
     /** Disconnect without claiming pending work was cancelled or rolled back. */

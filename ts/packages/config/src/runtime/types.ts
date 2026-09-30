@@ -315,6 +315,13 @@ export interface EmbeddingConfig {
     readonly model?: string | undefined;
     /** Directory used to cache / pre-stage local model weights. */
     readonly cacheDir?: string | undefined;
+    /**
+     * Embedding vector size (dimensions). Used to size embedding indexes and,
+     * for hosted providers that support it, requested from the endpoint.
+     */
+    readonly size?: number | undefined;
+    /** Maximum number of inputs per embedding batch. */
+    readonly maxBatchSize?: number | undefined;
 }
 
 export interface ReasoningConfig {

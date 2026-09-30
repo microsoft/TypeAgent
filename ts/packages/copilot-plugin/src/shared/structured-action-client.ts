@@ -1,20 +1,41 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { StructuredActionClient } from "@typeagent/agent-server-client";
-import { randomUUID } from "node:crypto";
+import {
+    StructuredActionClient,
+    StructuredActionClientError,
+    type StructuredActionClientOptions,
+} from "@typeagent/agent-server-client";
 import { createClientIO, TYPEAGENT_URL } from "./typeagent-client.js";
-import { readConfig } from "./plugin-config.js";
+import { getConversationId } from "./plugin-config.js";
+import {
+    readSelectedConversationId,
+    selectConversationId,
+} from "./conversation-selection.js";
 
 /** Plugin configuration only; transport and private binding live in the client package. */
-export function createStructuredActionClient(): StructuredActionClient {
-    const conversationId =
-        process.env.TYPEAGENT_CONVERSATION_ID ?? readConfig()?.conversationId;
+export function createStructuredActionClient(
+    connect?: StructuredActionClientOptions["connect"],
+): StructuredActionClient {
+    const conversationId = getConversationId();
+    const clientIO = createClientIO({});
     return new StructuredActionClient({
         url: TYPEAGENT_URL,
-        clientIO: createClientIO({}),
-        createConversationName: () =>
-            `Copilot structured actions ${randomUUID()}`,
+        clientIO,
+        ...(connect === undefined ? {} : { connect }),
         ...(conversationId === undefined ? {} : { conversationId }),
+        resolveConversationId: (connection) =>
+            selectConversationId(connection, clientIO, TYPEAGENT_URL),
+        validateConversationId: async (conversationId) => {
+            if (
+                (await readSelectedConversationId(TYPEAGENT_URL)) !==
+                conversationId
+            ) {
+                throw new StructuredActionClientError(
+                    false,
+                    "conversation_changed",
+                );
+            }
+        },
     });
 }

@@ -50,7 +50,9 @@ export function createPowerShellExecutionFailure(
     }
     const error = result.stderr || `Script exited with code ${result.exitCode}`;
     if (
-        /denied|not allowed|requires networkAccess|outside allowed|unauthorized/i.test(
+        result.errorCode === "powershell.policyDenied" ||
+        result.errorCode?.startsWith("broker.") === true ||
+        /broker|denied|not allowed|requires networkAccess|outside allowed|unauthorized/i.test(
             error,
         )
     ) {

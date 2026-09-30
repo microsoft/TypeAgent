@@ -2,9 +2,13 @@
 // Licensed under the MIT License.
 
 import { spawn } from "child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { getPowerShellExecutionGates } from "../config/executionGates.mjs";
+import type { ScriptExecutionProvenance } from "../types/scriptRecipe.js";
+import { executeBrokeredPowerShell } from "./windowsSandboxBroker.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,9 +39,18 @@ const MAX_OUTPUT_SIZE = 1024 * 1024; // 1MB
 
 export type ScriptParameterRole = "path" | "executable";
 
+interface ScriptExecutionProfiler {
+    measure(
+        name: string,
+        start?: boolean,
+        data?: unknown,
+    ): { stop(data?: unknown): void };
+}
+
 export interface ScriptExecutionRequest {
     script: string;
     parameters: Record<string, unknown>;
+    provenance?: ScriptExecutionProvenance | undefined;
     parameterRoles?: Partial<Record<string, ScriptParameterRole>>;
     sandbox: {
         allowedCmdlets: string[];
@@ -48,6 +61,7 @@ export interface ScriptExecutionRequest {
     };
     workingDirectory?: string;
     abortSignal?: AbortSignal | undefined;
+    profiler?: ScriptExecutionProfiler | undefined;
 }
 
 export interface ScriptExecutionResult {
@@ -58,12 +72,173 @@ export interface ScriptExecutionResult {
     duration: number;
     truncated: boolean;
     cancelled: boolean;
+    errorCode?: string | undefined;
+}
+
+const knownDynamicProvenance = new Set<ScriptExecutionProvenance>([
+    "generated",
+    "manual",
+    "seed",
+    "imported",
+    "edited",
+]);
+
+type DynamicScriptExecutionProvenance = Exclude<
+    ScriptExecutionProvenance,
+    "reviewed-static"
+>;
+
+function isDynamicProvenance(
+    provenance: ScriptExecutionProvenance | undefined,
+): provenance is DynamicScriptExecutionProvenance {
+    return provenance !== undefined && knownDynamicProvenance.has(provenance);
+}
+
+export const DYNAMIC_POWERSHELL_COMMANDS = new Set([
+    "ConvertFrom-Csv",
+    "ConvertFrom-Json",
+    "ConvertTo-Csv",
+    "ConvertTo-Json",
+    "ForEach-Object",
+    "Format-List",
+    "Format-Table",
+    "Get-Date",
+    "Group-Object",
+    "Measure-Object",
+    "Out-String",
+    "Select-Object",
+    "Sort-Object",
+    "Start-Sleep",
+    "Where-Object",
+    "Write-Output",
+]);
+
+function createPolicyDeniedResult(message: string): ScriptExecutionResult {
+    return {
+        success: false,
+        stdout: "",
+        stderr: message,
+        exitCode: -1,
+        duration: 0,
+        truncated: false,
+        cancelled: false,
+        errorCode: "powershell.policyDenied",
+    };
 }
 
 export async function executeScript(
     request: ScriptExecutionRequest,
 ): Promise<ScriptExecutionResult> {
     request.abortSignal?.throwIfAborted();
+    if (!isDynamicProvenance(request.provenance)) {
+        return createPolicyDeniedResult(
+            "PowerShell policy denied execution because script provenance is missing or unknown.",
+        );
+    }
+    const gates = getPowerShellExecutionGates();
+    if (!gates.dynamicExecution.enabled) {
+        return createPolicyDeniedResult(
+            "PowerShell policy denied dynamic script execution because it is disabled.",
+        );
+    }
+    if (!gates.brokerExecution.enabled) {
+        return createPolicyDeniedResult(
+            "PowerShell policy denied dynamic script execution because broker execution is disabled.",
+        );
+    }
+    if (request.sandbox.networkAccess) {
+        return createPolicyDeniedResult(
+            "PowerShell policy denied dynamic network access because the sandbox broker does not grant network capability.",
+        );
+    }
+    if (request.sandbox.allowedModules.length > 0) {
+        return createPolicyDeniedResult(
+            "PowerShell policy denied dynamic module loading because the sandbox broker does not grant module capability.",
+        );
+    }
+    if (request.sandbox.allowedPaths.length > 0) {
+        return createPolicyDeniedResult(
+            "PowerShell policy denied dynamic filesystem access because the sandbox broker does not grant external path capability.",
+        );
+    }
+    const unsupportedCommands = request.sandbox.allowedCmdlets.filter(
+        (command) => !DYNAMIC_POWERSHELL_COMMANDS.has(command),
+    );
+    if (unsupportedCommands.length > 0) {
+        return createPolicyDeniedResult(
+            "PowerShell policy denied an unsupported dynamic command.",
+        );
+    }
+
+    const profile = request.profiler?.measure(
+        "powershellSandboxExecution",
+        true,
+        {
+            provenance: request.provenance,
+            policyVersion: "appcontainer-v1",
+            isolationMode: "appcontainer",
+            languageMode: "ConstrainedLanguage",
+            scriptHash: createHash("sha256")
+                .update(request.script)
+                .digest("hex"),
+        },
+    );
+    try {
+        const result = await executeBrokeredPowerShell({
+            script: request.script,
+            parameters: request.parameters,
+            provenance: request.provenance,
+            allowedCommands: request.sandbox.allowedCmdlets,
+            maxExecutionTime: request.sandbox.maxExecutionTime,
+            abortSignal: request.abortSignal,
+        });
+        profile?.stop({
+            success: result.success,
+            cancelled: result.cancelled,
+            errorCode: result.errorCode,
+            duration: result.duration,
+        });
+        return result;
+    } catch (error) {
+        profile?.stop({ success: false, outcome: "exception" });
+        throw error;
+    }
+}
+
+export async function executeReviewedStaticScript(
+    request: Omit<ScriptExecutionRequest, "provenance">,
+): Promise<ScriptExecutionResult> {
+    request.abortSignal?.throwIfAborted();
+    const profile = request.profiler?.measure(
+        "powershellReviewedExecution",
+        true,
+        {
+            provenance: "reviewed-static",
+            policyVersion: "reviewed-static-v1",
+            isolationMode: "legacy-reviewed",
+            languageMode: "FullLanguage",
+            scriptHash: createHash("sha256")
+                .update(request.script)
+                .digest("hex"),
+        },
+    );
+    try {
+        const result = await executeLegacyScript(request);
+        profile?.stop({
+            success: result.success,
+            cancelled: result.cancelled,
+            duration: result.duration,
+        });
+        return result;
+    } catch (error) {
+        profile?.stop({ success: false, outcome: "exception" });
+        throw error;
+    }
+}
+
+async function executeLegacyScript(
+    request: Omit<ScriptExecutionRequest, "provenance">,
+): Promise<ScriptExecutionResult> {
     const scriptHostPath = join(packageRoot, "scripts", "scriptHost.ps1");
 
     const args = [

@@ -8,6 +8,7 @@ import { DateTimeRange } from "./dateTimeSchema.js";
 import { createTagIndexOnStorage, TagIndex } from "../knowledgeStore.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
 import { getAllTermsInFilter } from "./knowledgeTermSearch2.js";
+import { TextIndexSettings } from "../textIndex.js";
 
 export interface ThreadDefinition {
     description: string;
@@ -39,6 +40,7 @@ export interface ThreadIndex<TThreadId = any> {
 export async function createThreadIndexOnStorage(
     rootPath: string,
     storageProvider: StorageProvider,
+    settings?: TextIndexSettings,
 ): Promise<ThreadIndex<string>> {
     type ThreadId = string;
     const threadStore =
@@ -47,7 +49,13 @@ export async function createThreadIndexOnStorage(
             "entries",
         );
     const textIndex = await storageProvider.createTextIndex<ThreadId>(
-        { caseSensitive: false, semanticIndex: true, concurrency: 1 },
+        {
+            caseSensitive: false,
+            semanticIndex:
+                settings === undefined ? true : settings.semanticIndex,
+            concurrency: 1,
+            embeddingModel: settings?.embeddingModel,
+        },
         rootPath,
         "description",
         "TEXT",

@@ -20,6 +20,7 @@ import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
 
 export interface DocPartOptions {
     collectLinkKnowledge?: boolean;
+    collectStructuralKnowledge?: boolean;
     maxTokensPerPart?: number;
 }
 
@@ -235,6 +236,8 @@ export function docPartsFromMarkdown(
 ): DocPart[] {
     const knowledgeOptions = tp.createKnowledgeCollectionOptions();
     knowledgeOptions.collectLinks = options?.collectLinkKnowledge ?? true;
+    knowledgeOptions.collectStructuralKnowledge =
+        options?.collectStructuralKnowledge ?? true;
     const [textBlocks, knowledgeBlocks] = tp.markdownToTextAndKnowledgeBlocks(
         markdown,
         maxCharsPerChunk,

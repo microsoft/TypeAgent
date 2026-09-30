@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type TestActions = AddAction | RandomNumberAction;
+export type TestActions = AddAction | RandomNumberAction | FallbackErrorAction;
 type AddAction = {
     actionName: "add";
     parameters: {
@@ -12,4 +12,8 @@ type AddAction = {
 
 type RandomNumberAction = {
     actionName: "random";
+};
+
+type FallbackErrorAction = {
+    actionName: "fallbackError";
 };

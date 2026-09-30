@@ -38,8 +38,7 @@ import { emailsToChunks } from "./emailKpBridge.js";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
+import { openai } from "@typeagent/aiclient";
 
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:email:kp");
@@ -50,7 +49,7 @@ const DEFAULT_STORAGE_DIR = path.join(
     "kp",
     "email",
 );
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL = "copilot:gpt-5.6-sol";
 const DEFAULT_BACKFILL_BATCH = 50;
 const MAX_BACKFILL_AGE_DAYS = 180; // 6 months
 const MAX_TOTAL_EMAILS = 2000;
@@ -402,25 +401,13 @@ export class EmailKpIndex {
     async generateQueryPlan(userQuery: string): Promise<QueryPlan> {
         const prompt = `${QUERY_PLAN_PROMPT}\n\nUser question: "${userQuery}"`;
 
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: this.model,
-                // Use a PATH-installed `claude` when present; contributes
-                // nothing (bundled-binary fallback) in dev/CI.
-                ...claudeExecutableOption(),
-            },
-        });
-
-        let responseText = "";
-        for await (const message of queryInstance) {
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    responseText = message.result || "";
-                    break;
-                }
-            }
+        const result = await openai
+            .createChatModel(this.model)
+            .complete(prompt);
+        if (!result.success) {
+            throw new Error(`Query planning failed: ${result.message}`);
         }
+        const responseText = result.data;
 
         const jsonStart = responseText.indexOf("{");
         const jsonEnd = responseText.lastIndexOf("}");

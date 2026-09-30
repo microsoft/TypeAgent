@@ -1,20 +1,24 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutableOption } from "./cliPath.js";
 import { SchemaInfo, ActionInfo } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
 import { loadGrammarRulesNoThrow } from "../grammarLoader.js";
+import {
+    createGrammarModelQuery,
+    GrammarModelOptions,
+    GrammarModelProvider,
+    GrammarModelQuery,
+} from "./grammarModel.js";
 
 /**
  * Configuration for grammar generation from a schema
  */
-export interface SchemaGrammarConfig {
+export interface SchemaGrammarConfig extends GrammarModelOptions {
     // Number of example requests to generate per common action
     examplesPerAction?: number;
-    // Model to use for generation
-    model?: string;
+    // Provider to use for generation (default: Copilot)
+    provider?: GrammarModelProvider;
     // Whether to include common patterns (like Ordinal, Cardinal)
     includeCommonPatterns?: boolean;
     // Maximum number of retries for fixing grammar errors
@@ -239,12 +243,12 @@ Requirements:
 Response format: JSON array of strings, e.g. ["request 1", "request 2"]`;
 
 export class SchemaToGrammarGenerator {
-    private model: string;
     private maxRetries: number;
+    private readonly queryModel: GrammarModelQuery;
 
     constructor(config: SchemaGrammarConfig = {}) {
-        this.model = config.model || "claude-sonnet-4-20250514";
-        this.maxRetries = config.maxRetries || 3;
+        this.queryModel = createGrammarModelQuery(config);
+        this.maxRetries = config.maxRetries ?? 3;
     }
 
     /**
@@ -361,23 +365,7 @@ export class SchemaToGrammarGenerator {
             .replace("{actionList}", actionList)
             .replace("{exampleCount}", String(count));
 
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: this.model,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        let responseText = "";
-        for await (const message of queryInstance) {
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    responseText = message.result || "";
-                    break;
-                }
-            }
-        }
+        const responseText = await this.queryModel(prompt);
 
         const jsonMatch = responseText.match(/\[[\s\S]*?\]/);
         if (!jsonMatch) {
@@ -417,23 +405,7 @@ export class SchemaToGrammarGenerator {
             .replace("{actionName}", actionInfo.actionName)
             .replace("{parameters}", parameters);
 
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: this.model,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        let responseText = "";
-        for await (const message of queryInstance) {
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    responseText = message.result || "";
-                    break;
-                }
-            }
-        }
+        const responseText = await this.queryModel(prompt);
 
         const jsonMatch = responseText.match(/\[[\s\S]*?\]/);
         if (!jsonMatch) {
@@ -487,23 +459,7 @@ export class SchemaToGrammarGenerator {
                 .replace("{examples}", examplesDescription);
         }
 
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: this.model,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        let responseText = "";
-        for await (const message of queryInstance) {
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    responseText = message.result || "";
-                    break;
-                }
-            }
-        }
+        const responseText = await this.queryModel(prompt);
 
         // Extract grammar text (might be wrapped in markdown code blocks)
         let grammar = responseText;
@@ -588,7 +544,7 @@ export class SchemaToGrammarGenerator {
     }
 
     /**
-     * Ask Claude to fix grammar errors
+     * Ask the configured model to fix grammar errors
      */
     private async fixGrammar(
         grammarText: string,
@@ -642,25 +598,7 @@ Remember the CRITICAL SYNTAX RULES:
 
 Return the complete corrected grammar, starting with the copyright header.`;
 
-        const queryInstance = query({
-            prompt,
-            options: {
-                model: this.model,
-                ...claudeExecutableOption(),
-            },
-        });
-
-        let responseText = "";
-        for await (const message of queryInstance) {
-            if (message.type === "result") {
-                if (message.subtype === "success") {
-                    responseText = message.result || "";
-                    break;
-                } else {
-                    return null;
-                }
-            }
-        }
+        const responseText = await this.queryModel(prompt);
 
         // Extract grammar
         let grammar = responseText;

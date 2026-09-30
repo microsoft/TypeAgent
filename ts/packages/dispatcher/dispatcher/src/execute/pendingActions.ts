@@ -11,6 +11,7 @@ import {
     resolveUnionType,
     ActionSchemaEntityTypeDefinition,
     isResultReference,
+    validateType,
 } from "@typeagent/action-schema";
 import {
     ExecutableAction,
@@ -41,7 +42,10 @@ import { conversation as kp } from "@typeagent/knowledge-processor";
 import { getObjectProperty } from "@typeagent/common-utils";
 import { ActionSchemaFile } from "../translation/actionConfigProvider.js";
 import { tryGetActionParametersType } from "../translation/actionSchemaUtils.js";
-import { isPendingRequestAction } from "../translation/pendingRequest.js";
+import {
+    isPendingRequestAction,
+    type CompletedAction,
+} from "../translation/pendingRequest.js";
 import { getStructuredExecution } from "../structuredAction/executionHooks.js";
 
 const debugEntities = registerDebug("typeagent:dispatcher:actions:entities");
@@ -164,12 +168,12 @@ interface EntityResolver {
     ) => Promise<PromptEntity | undefined>;
     setResultEntity: (
         name: string,
-        entity: PromptEntity,
+        entity: PromptEntity | undefined,
         value?: unknown,
     ) => void;
-    // Look up the concrete value registered for a ${result-<id>} reference,
-    // once the producing action has run. found=false before then.
-    getResultValue?: (name: string) => { found: boolean; value: unknown };
+    // Preparation returns found=false for declared results; execution throws
+    // if the producer did not supply a concrete value.
+    getResultValue: (name: string) => { found: boolean; value: unknown };
 }
 
 function createResultEntityResolver(): EntityResolver {
@@ -197,18 +201,21 @@ function createResultEntityResolver(): EntityResolver {
         },
         setResultEntity: (
             name: string,
-            entity: PromptEntity,
+            entity: PromptEntity | undefined,
             value?: unknown,
         ) => {
-            resultEntityMap.set(name, entity);
+            if (entity !== undefined) {
+                resultEntityMap.set(name, entity);
+            }
             if (value !== undefined) {
                 resultValueMap.set(name, value);
             }
         },
         getResultValue: (name: string) => {
-            return resultValueMap.has(name)
-                ? { found: true, value: resultValueMap.get(name) }
-                : { found: false, value: undefined };
+            if (!resultValueMap.has(name)) {
+                throw new Error(`Result value reference not found: ${name}`);
+            }
+            return { found: true, value: resultValueMap.get(name) };
         },
     };
 }
@@ -922,8 +929,17 @@ function createParameterEntityResolver(
 
             return undefined;
         },
-        setResultEntity: (name: string, entity: PromptEntity) => {
+        setResultEntity: (name: string) => {
+            if (resultEntityMap.has(name)) {
+                throw new Error(`Duplicate result entity reference: ${name}`);
+            }
             resultEntityMap.add(name);
+        },
+        getResultValue: (name: string) => {
+            if (!resultEntityMap.has(name)) {
+                throw new Error(`Result value reference not found: ${name}`);
+            }
+            return { found: false, value: undefined };
         },
     };
 }
@@ -940,18 +956,18 @@ async function getParameterEntities(
 ): Promise<EntityField | undefined> {
     if (isResultReference(value)) {
         // { "$result": "<id>" } references the value of a prior action's result.
-        // At execution (after that action ran) substitute its concrete value and
-        // let the type walking below validate it against the consuming
-        // parameter's type ("customer ready"). Before then (translation) the
-        // result is not available, so leave the reference in place.
-        const resolved = entityResolver.getResultValue?.(
+        // Validate and substitute concrete data only after the producer ran.
+        // During preparation leave declared references in place.
+        const resolved = entityResolver.getResultValue(
             `\${result-${value.$result}}`,
         );
-        if (resolved?.found !== true) {
+        if (!resolved.found) {
             return;
         }
-        value = resolved.value;
-        obj[key] = value;
+        validateType(originalFieldType, resolved.value, false);
+        obj[key] = structuredClone(resolved.value);
+        // Concrete output is data, not another entity/reference expression.
+        return;
     }
     const resolvedType = resolveUnionType(
         originalFieldType,
@@ -1053,6 +1069,7 @@ export async function resolveEntities(
             return result;
         },
         setResultEntity: entityResolver.setResultEntity.bind(entityResolver),
+        getResultValue: entityResolver.getResultValue.bind(entityResolver),
     };
 
     const entities = await getParameterObjectEntities(
@@ -1077,6 +1094,7 @@ export async function resolveEntities(
 
 export type PendingAction = {
     executableAction: ExecutableAction;
+    completedActions: CompletedAction[];
     resolvedEntities?: Entity[] | undefined;
     resultEntityResolver?: EntityResolver | undefined;
 };
@@ -1091,8 +1109,9 @@ export async function toPendingActions(
     context: ActionContext<CommandHandlerContext>,
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
+    completedActions: CompletedAction[] = [],
 ): Promise<PendingAction[]> {
-    let resultEntityResolver: EntityResolver | undefined;
+    const resultEntityResolver = createResultEntityResolver();
     const systemContext = context.sessionContext.agentContext;
     const agents = systemContext.agents;
     const structured = getStructuredExecution(systemContext);
@@ -1109,6 +1128,14 @@ export async function toPendingActions(
         await structured?.guard(executableAction.action, "prepare");
         if (isPendingRequestAction(executableAction.action)) {
             // Pending request action is an internal action.  It doesn't have any entities.
+            entityResolver.getResultValue(
+                `\${result-${executableAction.action.parameters.pendingResultEntityId}}`,
+            );
+            pendingActions.push({
+                executableAction,
+                completedActions,
+                resultEntityResolver,
+            });
             continue;
         }
         const resolvedEntities = await resolveEntities(
@@ -1130,15 +1157,13 @@ export async function toPendingActions(
                     executableAction: {
                         action: clarifyEntityAction as any,
                     },
+                    completedActions,
                 },
             ];
         }
 
         const resultEntityId = executableAction.resultEntityId;
         if (resultEntityId !== undefined) {
-            if (resultEntityResolver === undefined) {
-                resultEntityResolver = createResultEntityResolver();
-            }
             const name = `\${result-${resultEntityId}}`;
             entityResolver.setResultEntity(name, {
                 name,
@@ -1148,6 +1173,7 @@ export async function toPendingActions(
         }
         const pending: PendingAction = {
             executableAction,
+            completedActions,
             resolvedEntities,
             resultEntityResolver,
         };

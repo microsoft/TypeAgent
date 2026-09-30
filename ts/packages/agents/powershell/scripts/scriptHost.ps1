@@ -1,22 +1,18 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# scriptHost.ps1 — Sandboxed PowerShell execution host for PowerShell agent
+# scriptHost.ps1 - PowerShell execution host for PowerShell agent
 # Creates a runspace with cmdlet whitelisting, module loading, and timeout enforcement.
-# Security: Path restrictions, network controls, cmdlet whitelisting.
-# Language: FullLanguage mode (allows [PSCustomObject], [math]::Round, etc.)
+# Untrusted requests are additionally isolated by the Windows broker.
 
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$ScriptBody,
+    [string]$ScriptBody = '',
 
-    [Parameter(Mandatory=$true)]
-    [string]$ParametersJson,
+    [string]$ParametersJson = '{}',
 
     [string]$ParameterRolesJson = '{}',
 
-    [Parameter(Mandatory=$true)]
-    [string]$AllowedCmdletsJson,
+    [string]$AllowedCmdletsJson = '[]',
 
     [string]$AllowedPathsJson = '[]',
 
@@ -24,10 +20,19 @@ param(
 
     [string]$NetworkAccess = "false",
 
-    [int]$TimeoutSeconds = 30
+    [int]$TimeoutSeconds = 30,
+
+    [string]$RequestPath,
+
+    [switch]$Diagnostics
 )
 
 $ErrorActionPreference = 'Stop'
+$UntrustedMode = $false
+$BrokerDiagnostics = $Diagnostics.IsPresent
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = $utf8NoBom
+$OutputEncoding = $utf8NoBom
 
 function Remove-TrailingDirectorySeparator {
     param([string]$Path)
@@ -104,26 +109,254 @@ function Test-AllowedFileSystemPath {
     return $false
 }
 
+function Test-UntrustedScript {
+    param(
+        [string]$Source,
+        [string[]]$AllowedCommands
+    )
+
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput(
+        $Source,
+        [ref]$tokens,
+        [ref]$parseErrors
+    )
+    if ($parseErrors.Count -gt 0) {
+        throw "PowerShell policy denied execution (AST_PARSE_ERROR)."
+    }
+
+    $safeTypeNames = @(
+        'array',
+        'bool',
+        'boolean',
+        'byte',
+        'char',
+        'datetime',
+        'decimal',
+        'double',
+        'float',
+        'guid',
+        'hashtable',
+        'int',
+        'int16',
+        'int32',
+        'int64',
+        'long',
+        'object',
+        'pscustomobject',
+        'psobject',
+        'regex',
+        'sbyte',
+        'short',
+        'single',
+        'string',
+        'switch',
+        'timespan',
+        'uint',
+        'uint16',
+        'uint32',
+        'uint64',
+        'ulong',
+        'uri',
+        'ushort',
+        'version'
+    )
+    $allowedForEachParameters = @(
+        'Begin',
+        'Confirm',
+        'End',
+        'InputObject',
+        'Process',
+        'RemainingScripts',
+        'WhatIf'
+    )
+    $violations = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    [void]$ast.FindAll({
+        param($node)
+
+        if ($node -is [System.Management.Automation.Language.TypeExpressionAst]) {
+            [void]$violations.Add("AST_TYPE_EXPRESSION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.TypeConstraintAst]) {
+            $typeName = $node.TypeName.FullName
+            if ($typeName -notin $safeTypeNames) {
+                [void]$violations.Add("AST_TYPE_CONSTRAINT")
+                return $false
+            }
+        }
+        if ($node -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+            [void]$violations.Add("AST_MEMBER_INVOCATION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.RedirectionAst]) {
+            [void]$violations.Add("AST_REDIRECTION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.UsingExpressionAst]) {
+            [void]$violations.Add("AST_USING_EXPRESSION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.UsingStatementAst]) {
+            [void]$violations.Add("AST_USING_STATEMENT")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.ConfigurationDefinitionAst]) {
+            [void]$violations.Add("AST_CONFIGURATION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+            [void]$violations.Add("AST_FUNCTION_DEFINITION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.TypeDefinitionAst]) {
+            [void]$violations.Add("AST_TYPE_DEFINITION")
+            return $false
+        }
+        if ($node -is [System.Management.Automation.Language.CommandAst]) {
+            if (
+                $node.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Ampersand -or
+                $node.InvocationOperator -eq [System.Management.Automation.Language.TokenKind]::Dot
+            ) {
+                [void]$violations.Add("AST_INVOCATION_OPERATOR")
+                return $false
+            }
+            $commandName = $node.GetCommandName()
+            if ([string]::IsNullOrWhiteSpace($commandName)) {
+                [void]$violations.Add("AST_DYNAMIC_COMMAND")
+                return $false
+            }
+            if ($commandName -notin $AllowedCommands) {
+                [void]$violations.Add("AST_COMMAND_NOT_ALLOWED")
+                return $false
+            }
+            if ($commandName -ieq 'ForEach-Object') {
+                $hasProcessScriptBlock = $false
+                for ($index = 1; $index -lt $node.CommandElements.Count; $index++) {
+                    $element = $node.CommandElements[$index]
+                    if ($element -is [System.Management.Automation.Language.ScriptBlockExpressionAst]) {
+                        $hasProcessScriptBlock = $true
+                        continue
+                    }
+                    if (
+                        $element -is [System.Management.Automation.Language.CommandParameterAst] -and
+                        $element.ParameterName -notin $allowedForEachParameters
+                    ) {
+                        [void]$violations.Add("AST_FOREACH_PARAMETER")
+                        return $false
+                    }
+                }
+                if (-not $hasProcessScriptBlock) {
+                    [void]$violations.Add("AST_FOREACH_MEMBER_MODE")
+                    return $false
+                }
+            }
+        }
+        return $false
+    }, $true)
+
+    $requirements = $ast.ScriptRequirements
+    if ($null -ne $requirements) {
+        if (@($requirements.RequiredModules).Count -gt 0) {
+            [void]$violations.Add("AST_REQUIRED_MODULE")
+        }
+        if (@($requirements.RequiredPSSnapIns).Count -gt 0) {
+            [void]$violations.Add("AST_REQUIRED_SNAPIN")
+        }
+        if ($requirements.IsElevationRequired) {
+            [void]$violations.Add("AST_REQUIRES_ELEVATION")
+        }
+    }
+
+    if ($violations.Count -gt 0) {
+        throw "PowerShell policy denied execution ($([string]::Join(',', $violations)))."
+    }
+}
+
 try {
-    $allowedCmdlets = $AllowedCmdletsJson | ConvertFrom-Json
-    $params = $ParametersJson | ConvertFrom-Json
-    $parameterRoles = $ParameterRolesJson | ConvertFrom-Json
-    if ($null -eq $parameterRoles -or $parameterRoles -isnot [pscustomobject]) {
-        Write-Error "Parameter roles must be a JSON object."
-        exit 1
-    }
-    # Parse allowed paths - must handle array properly to avoid PowerShell array unwrapping issues
-    $parsedPaths = $AllowedPathsJson | ConvertFrom-Json
-    if ($parsedPaths -is [array]) {
-        $AllowedPaths = $parsedPaths
+    if ($RequestPath) {
+        [void][System.Reflection.Assembly]::Load(
+            'System.Web.Extensions, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31BF3856AD364E35'
+        )
+        $jsonSerializer =
+            [System.Web.Script.Serialization.JavaScriptSerializer]::new()
+        $request = $jsonSerializer.DeserializeObject(
+            [System.IO.File]::ReadAllText($RequestPath)
+        )
+        if ([int]$request['protocolVersion'] -ne 1) {
+            [Console]::Error.WriteLine("Unsupported PowerShell broker protocol.")
+            exit 1
+        }
+        $ScriptBody = [string]$request['script']
+        $params = $jsonSerializer.DeserializeObject(
+            [string]$request['parametersJson']
+        )
+        $allowedCmdlets = @($request['allowedCommands'])
+        $parameterRoles = [pscustomobject]@{}
+        $AllowedPaths = @()
+        $AllowedModules = @()
+        $NetworkAccess = 'false'
+        $TimeoutSeconds = [int]$request['timeoutSeconds']
+        $BrokerDiagnostics =
+            $BrokerDiagnostics -or [bool]$request['diagnostics']
+        $UntrustedMode = $true
     } else {
-        $AllowedPaths = @($parsedPaths)
+        $allowedCmdlets = @($AllowedCmdletsJson | ConvertFrom-Json)
+        $params = $ParametersJson | ConvertFrom-Json
+        $parameterRoles = $ParameterRolesJson | ConvertFrom-Json
+        if ($null -eq $parameterRoles -or $parameterRoles -isnot [pscustomobject]) {
+            Write-Error "Parameter roles must be a JSON object."
+            exit 1
+        }
+        # Parse allowed paths - must handle array properly to avoid PowerShell array unwrapping issues
+        $parsedPaths = $AllowedPathsJson | ConvertFrom-Json
+        if ($parsedPaths -is [array]) {
+            $AllowedPaths = $parsedPaths
+        } else {
+            $AllowedPaths = @($parsedPaths)
+        }
+        $parsedModules = $AllowedModulesJson | ConvertFrom-Json
+        if ($parsedModules -is [array]) {
+            $AllowedModules = $parsedModules
+        } else {
+            $AllowedModules = @($parsedModules)
+        }
     }
-    $parsedModules = $AllowedModulesJson | ConvertFrom-Json
-    if ($parsedModules -is [array]) {
-        $AllowedModules = $parsedModules
-    } else {
-        $AllowedModules = @($parsedModules)
+
+    if ($UntrustedMode) {
+        $safeUntrustedCommands = @(
+            'ConvertFrom-Csv',
+            'ConvertFrom-Json',
+            'ConvertTo-Csv',
+            'ConvertTo-Json',
+            'ForEach-Object',
+            'Format-List',
+            'Format-Table',
+            'Get-Date',
+            'Group-Object',
+            'Measure-Object',
+            'Out-String',
+            'Select-Object',
+            'Sort-Object',
+            'Start-Sleep',
+            'Where-Object',
+            'Write-Output'
+        )
+        $unsupportedCommands =
+            [System.Collections.Generic.List[string]]::new()
+        foreach ($allowedCmdlet in $allowedCmdlets) {
+            if ($allowedCmdlet -notin $safeUntrustedCommands) {
+                $unsupportedCommands.Add([string]$allowedCmdlet)
+            }
+        }
+        if ($unsupportedCommands.Count -gt 0) {
+            Write-Error "PowerShell policy denied unsupported commands."
+            exit 1
+        }
+        Test-UntrustedScript $ScriptBody $allowedCmdlets
     }
 
     # Expand environment variable references in allowed paths
@@ -234,26 +467,28 @@ try {
 
     # Auto-resolve the source module for each allowed cmdlet and ensure it is imported.
     $resolvedModules = [System.Collections.Generic.List[string]]::new()
-    foreach ($m in $AllowedModules) {
-        if ($m -and -not $resolvedModules.Contains($m)) {
-            $resolvedModules.Add($m)
-        }
-    }
-    foreach ($cmdletName in $allowedCmdlets) {
-        try {
-            # Include Function so CDXML-backed commands resolve too — many
-            # built-in networking/storage "cmdlets" (Get-NetTCPConnection in
-            # NetTCPIP, Get-NetAdapter, etc.) are CDXML functions, not compiled
-            # cmdlets, and would otherwise resolve to nothing and skip their module.
-            $resolvedCmd = Get-Command $cmdletName -CommandType Cmdlet, Function -ErrorAction SilentlyContinue |
-                Select-Object -First 1
-            if ($resolvedCmd -and $resolvedCmd.ModuleName -and
-                -not $resolvedModules.Contains($resolvedCmd.ModuleName)) {
-                $resolvedModules.Add($resolvedCmd.ModuleName)
+    if (-not $UntrustedMode) {
+        foreach ($m in $AllowedModules) {
+            if ($m -and -not $resolvedModules.Contains($m)) {
+                $resolvedModules.Add($m)
             }
-        } catch {
-            # Cmdlet not resolvable in the host; the removal/whitelist step will
-            # surface it as unavailable at execution time.
+        }
+        foreach ($cmdletName in $allowedCmdlets) {
+            try {
+                # Include Function so CDXML-backed commands resolve too — many
+                # built-in networking/storage "cmdlets" (Get-NetTCPConnection in
+                # NetTCPIP, Get-NetAdapter, etc.) are CDXML functions, not compiled
+                # cmdlets, and would otherwise resolve to nothing and skip their module.
+                $resolvedCmd = Get-Command $cmdletName -CommandType Cmdlet, Function -ErrorAction SilentlyContinue |
+                    Select-Object -First 1
+                if ($resolvedCmd -and $resolvedCmd.ModuleName -and
+                    -not $resolvedModules.Contains($resolvedCmd.ModuleName)) {
+                    $resolvedModules.Add($resolvedCmd.ModuleName)
+                }
+            } catch {
+                # Cmdlet not resolvable in the host; the removal/whitelist step will
+                # surface it as unavailable at execution time.
+            }
         }
     }
     $AllowedModules = $resolvedModules.ToArray()
@@ -261,13 +496,12 @@ try {
     # Create session state with default cmdlets
     $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
 
-    # Disable module auto-loading. With auto-loading off, only explicitly imported modules
-    # (allowedModules + auto-resolved) are available, so the whitelist holds.
-    # Explicit ImportPSModule calls are unaffected, so CDXML flows still work.
-    $iss.Variables.Add(
-        (New-Object System.Management.Automation.Runspaces.SessionStateVariableEntry(
-            'PSModuleAutoLoadingPreference', 'None', 'Disable implicit module auto-loading in the sandbox'))
-    )
+    if ($UntrustedMode) {
+        $iss.Variables.Add(
+            ([System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
+                'PSModuleAutoLoadingPreference', 'None', 'Disable implicit module auto-loading in the sandbox'))
+        )
+    }
 
     # Import allowed modules into the session state
     # This makes module cmdlets (like Get-NetTCPConnection from NetTCPIP) available
@@ -281,32 +515,9 @@ try {
         }
     }
 
-    # Microsoft.PowerShell.Core cmdlets are never stripped. CDXML commands (the
-    # Net*/Storage*/Defender* families, e.g. Get-NetTCPConnection) invoke CIM
-    # operations through Core cmdlets at runtime; removing Core makes them
-    # silently return empty results instead of erroring.
-    $coreCmdletNames = @(
-        Get-Command -Module 'Microsoft.PowerShell.Core' -CommandType Cmdlet -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty Name
-    )
-
-    # Remove cmdlets not in the allowed list (after module import so we can whitelist module cmdlets)
-    $commandsToRemove = @()
-    foreach ($cmd in $iss.Commands) {
-        if ($cmd.CommandType -eq 'Cmdlet' -and
-            $cmd.Name -notin $allowedCmdlets -and
-            $cmd.Name -notin $coreCmdletNames) {
-            $commandsToRemove += $cmd
-        }
+    if ($UntrustedMode) {
+        $iss.LanguageMode = [System.Management.Automation.PSLanguageMode]::ConstrainedLanguage
     }
-    foreach ($cmd in $commandsToRemove) {
-        $iss.Commands.Remove($cmd.Name, $cmd)
-    }
-
-    # FullLanguage mode (default) - allows [PSCustomObject], [math]::Round(), etc.
-    # Security is provided by: cmdlet whitelisting, path restrictions, network controls
-    # Note: If stricter lockdown is needed, uncomment the line below:
-    # $iss.LanguageMode = [System.Management.Automation.PSLanguageMode]::ConstrainedLanguage
 
     # Create runspace
     $runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($iss)
@@ -319,8 +530,14 @@ try {
     [void]$ps.AddScript($ScriptBody)
 
     # Pass parameters to the script's param() block
-    foreach ($prop in $params.PSObject.Properties) {
-        [void]$ps.AddParameter($prop.Name, $prop.Value)
+    if ($UntrustedMode) {
+        foreach ($entry in $params.GetEnumerator()) {
+            [void]$ps.AddParameter($entry.Key, $entry.Value)
+        }
+    } else {
+        foreach ($prop in $params.PSObject.Properties) {
+            [void]$ps.AddParameter($prop.Name, $prop.Value)
+        }
     }
 
     # Execute with timeout
@@ -329,7 +546,7 @@ try {
 
     if (-not $completed) {
         $ps.Stop()
-        Write-Error "Script execution timed out after $TimeoutSeconds seconds"
+        [Console]::Error.WriteLine("Script execution timed out after $TimeoutSeconds seconds.")
         exit 1
     }
 
@@ -337,13 +554,19 @@ try {
 
     # Render output — Out-String handles both plain objects and Format-* objects
     if ($output.Count -gt 0) {
-        $output | Out-String -Width 200 | Write-Output
+        if ($UntrustedMode) {
+            foreach ($item in $output) {
+                [Console]::Out.WriteLine([string]$item)
+            }
+        } else {
+            $output | Out-String -Width 200 | Write-Output
+        }
     }
 
     # Report errors
     if ($ps.HadErrors) {
         foreach ($err in $ps.Streams.Error) {
-            Write-Error $err
+            [Console]::Error.WriteLine([string]$err)
         }
         exit 1
     }
@@ -353,6 +576,14 @@ try {
     $ps.Dispose()
 
 } catch {
-    Write-Error "ScriptHost error: $_"
+    [Console]::Error.WriteLine(
+        $(if ($RequestPath -and $BrokerDiagnostics) {
+            "PowerShell policy denied execution: $($_.Exception.ToString())"
+        } elseif ($RequestPath) {
+            "PowerShell policy denied execution."
+        } else {
+            "ScriptHost error: $($_.Exception.Message)"
+        })
+    )
     exit 1
 }

@@ -345,6 +345,30 @@ On uninstall the MSI removes the extension only when the installed version
 still matches the version originally installed by TypeAgent, so it does not
 delete an independently upgraded extension.
 
+## Copilot plugin registration and repair
+
+The MSI registers `typeagent@typeagent-local` with Copilot CLI and verifies
+that it is enabled. CLI discovery skips broken or unresponsive candidates
+(10 seconds per version probe); each registration command has a two-minute
+deadline. On Windows, a timed-out launcher and its child processes are stopped.
+Registration is attempted again after prerequisite setup.
+
+If registration fails, TypeAgent remains installed, but the completion page
+shows **Copilot plugin setup did not complete** instead of silently losing the
+integration. No terminal command is required to retry: reopen the same MSI,
+choose **Repair**, and complete the wizard. Repair reruns payload extraction,
+CLI discovery, registration, and verification. A failed repair shows the same
+notice; a successful repair clears it. Restart Copilot to load the plugin.
+Repair also restores a plugin that was removed after installation.
+
+Diagnostics are written to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-register-plugin.log`.
+The adjacent `.status` file records the latest attempt: `incomplete` until
+verification succeeds, then `complete`. The interactive installer clears old
+status before starting so a previous success cannot hide a failed launch.
+Silent installations have no completion dialog; check the log and status
+file for registration results. MSI success alone does not certify registration.
+
 ## Endpoint provider selection
 
 TypeAgent needs an LLM endpoint configuration (`config.local.yaml`) at runtime.
@@ -392,7 +416,7 @@ not contact Key Vault. For `AISYSTEMS`, the MSI
 (interactive) custom action `ProvisionAiSystemsConfig` that runs
 `node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in
 as the installing user). It is **non-fatal**: if sign-in is unavailable during
-the install, the final page (ExitDialog) reminds the user to run `provision`
+the install, the final page (`TypeAgentExitDlg`) shows the `provision` command to run
 manually.
 
 The MSI rejects `PROVIDER=OLLAMA` and the legacy `EMBEDDING` and `OLLAMAHOST`
@@ -419,7 +443,14 @@ msiexec /i TypeAgent-<version>-win32-x64.msi STARTSERVER=0 AUTOSTART=0
 ```
 
 Both CLIs require a one-time interactive sign-in (`claude`, then `copilot`)
-before agent actions work; the ExitDialog reminds the user of this.
+before agent actions work. The final page (`TypeAgentExitDlg`, a custom
+replacement for the stock WixUI `ExitDialog`) reminds the user to sign in on
+first use. Provisioning runs automatically during install. Copilot provisioning
+failures roll back the install, so only for `AISYSTEMS` (non-fatal Azure
+sign-in) does the page check `%USERPROFILE%\.typeagent\config.local.yaml`
+(`CheckTypeAgentConfig`); if it's missing, the page shows the `provision` retry
+command, with the resolved install path, in a selectable text box with a
+**Copy** button. Both actions live in `exit-dialog.vbs`.
 
 ## Optional: install the TypeAgent Shell (desktop app)
 
@@ -495,6 +526,74 @@ az pipelines run --name "azure-build-publish-all" --branch main
 
 ## Troubleshooting
 
+### Windows transaction CI
+
+The `Windows MSI lifecycle` workflow runs real `msiexec` transactions on a
+disposable `windows-2022` hosted runner, under one account and within one job.
+It builds the current production WiX authoring plus a pinned pre-change baseline
+(`d7bbde6bf88b442cab7f412acf4fd74b00becb96`). Packages use a separate test product
+identity and installation directory. A deterministic Node server and a child
+holding a non-delete-sharing Windows file handle replace the application runtime.
+Authentication, Copilot registration, VS Code, provisioning, and downloads are
+explicitly disabled: this is an installer transaction gate, not a full-product
+or released-binary compatibility certification.
+
+The gate exercises initial install, rollback after shutdown/extraction/restart,
+upgrade with a running scheduled task, automatic recovery by a subsequent MSI
+after an interrupted prepared transaction (with and without a running server),
+repair of a missing payload file, and repeated uninstall/reinstall. Assertions check MSI product registration,
+payload versions/hashes, server health, process cleanup, task state, retained user
+data, and maintenance markers. It fails if ICE validation cannot run or if a
+failure injection is not reached. Logs, transformed authoring, test MSIs,
+compiled action sequences, and results are retained even on failure.
+
+`ts/tools/scripts/test/msiLifecycle/build.ps1` can compile packages locally
+without installing them. If local machine policy prevents ICE validation, the
+manifest marks those packages unvalidated. `run.ps1` rejects unvalidated packages
+and refuses to install outside a clean disposable GitHub-hosted runner. Do not
+bypass these guards on a development machine.
+
+The production sequence first queues rollback, shutdown, and commit maintenance,
+then uses an early `InstallExecute` to run shutdown without ending the transaction.
+`RemoveExistingProducts` follows immediately, before `ProcessComponents` or
+installation of new files. `InstallFinalize` executes the remaining installation
+script. This avoids error 2613: rollback/commit actions may not be queued before
+an unflushed `RemoveExistingProducts` immediately after `InstallInitialize`.
+
+Actual reboot/power-loss injection, interactive UAC/logon, and authenticated
+integrations remain separate coverage gaps. Passing this job does not establish
+those behaviors.
+
+### Copilot plugin registration fails with "spawn UNKNOWN"
+
+WinGet's `Microsoft\WinGet\Links\copilot.exe` can fail to launch even when the
+actual package executable works. The launcher is not necessarily a symbolic
+link: a broken ordinary file remains unchanged by `realpath`.
+Registration canonicalizes Windows paths and probes explicit overrides and PATH
+candidates first. If those and the usual launcher fallbacks fail, it probes
+`copilot.exe` directly inside `GitHub.Copilot_*` package directories under
+`%LOCALAPPDATA%\Microsoft\WinGet\Packages` and `%ProgramW6432%\WinGet\Packages`
+(also `%ProgramFiles%` when different). Discovery is non-recursive and does not
+search unrelated packages. Missing launchers fail before spawning a shell;
+other probe and package-enumeration errors are logged.
+
+The Windows workflow also runs discovery regressions using a real broken
+non-symlink launcher and a runnable substitute package executable. These tests
+do not exercise authenticated Copilot registration or the MSI service context.
+
+For an older installer without this fix, set `COPILOT_CLI_PATH` to the real
+WinGet package executable and rerun registration from PowerShell:
+
+```powershell
+$env:COPILOT_CLI_PATH = "C:\path\to\the\actual\WinGet\package\copilot.exe"
+& "$env:LOCALAPPDATA\TypeAgent\register-plugin.ps1"
+```
+
+Use the actual existing executable path, not the `Links` launcher. This override
+also supports custom WinGet package locations outside the default directories.
+Repair with the same older MSI may repeat the failure. Registration diagnostics
+are in `%LOCALAPPDATA%\TypeAgent\logs\msi-register-plugin.log`.
+
 ### "WiX Toolset not found"
 
 **Error:**
@@ -538,11 +637,65 @@ az artifacts universal download: ... (404 or auth error)
 
 ### "Unable to clear payload directory"
 
-An upgrade cannot replace the agent-server while TypeAgent or another process
-is using a native module from the install directory. Setup reports the process
-ID and loaded module when Windows allows module inspection. Close TypeAgent,
-stop the agent server, and retry setup. Restart Windows if the file remains
-locked.
+Setup stops the installed agent server automatically before upgrade, repair, or
+uninstall. It pauses the installation's scheduled task, requests graceful
+shutdown on ports owned by that instance, and waits before terminating remaining
+verified processes and their captured children. Processes are checked by their
+installation paths, user identity, and creation times; unrelated Node processes
+are not stopped.
+
+The maintenance action runs before an older MSI's uninstall actions and before
+any payload is removed. It checks for remaining file locks, then preserves the
+old agent-server and plugin directories in a transaction-specific temporary
+folder. Rollback restores those directories and the previous scheduled-task
+definition, and attempts to restart each previously running server. It restores
+the running task and independently restores manually launched instances, using
+their original Node executable, arguments, working directory, and environment.
+For older launchers without saved launch metadata, maintenance reads the owned
+process's Windows process parameters through a read-only handle before shutdown.
+The captured environment is encrypted with current-user Windows DPAPI in the
+transaction state, never written to the log, and removed after recovery or commit.
+Failure to capture a live server's context aborts before stopping it.
+Unrecognized root Node entry points also fail before shutdown rather than losing
+their restart commands. Restored manual servers receive only null input and file
+output handles, not MSI's inherited pipes; their output is written to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-restored-server.log`.
+
+Rollback also blocks startup again if installation had already restarted the
+new server. Even when the original shutdown failed, rollback reconciles surviving
+processes and captured children before restarting anything. Failed rollback keeps
+the marker and recovery state instead of starting duplicate servers. Persisted
+process identities use UTC ticks rather than JSON dates, which lose precision in
+Windows PowerShell 5.1. A process exiting during ownership checks or termination
+is harmless only after its original identity is confirmed gone; errors affecting
+a still-live process remain fatal.
+
+A successful
+install uses `STARTSERVER` and `AUTOSTART` as usual; uninstall never restarts the
+server. The updated launcher and server reject startup while
+`%LOCALAPPDATA%\TypeAgent\.msi-maintenance` exists.
+
+Shutdown errors abort setup before payload deletion and are logged in
+`%LOCALAPPDATA%\TypeAgent\logs\msi-maintenance.log`. External/protected processes
+can still prevent replacement; setup reports the locked file rather than
+partially deleting the payload. If maintenance is interrupted outside normal MSI rollback (for example by power
+loss), the marker and backup are retained. The next installer automatically
+validates and restores a complete previous transaction using its current embedded
+recovery implementation, then continues installation with fresh rollback
+protection. It does not execute the previous transaction's staged script.
+Before restoring directories, rollback atomically records their Windows
+volume/file identities. A later retry can recognize those same directories if
+task restoration failed after the backups were moved, without accepting arbitrary
+replacement folders as valid backups. Recovery also carries forward a scheduled
+task's running intent while its asynchronous startup is still pending.
+
+Automatic recovery accepts only a matching installation root and a sibling
+`TypeAgent-msi-*.tmp` transaction with valid state and complete saved payloads.
+It refuses redirected paths, missing backups, invalid state, and running-server
+state without supported launch context. Those failures preserve the marker and
+remaining backups and report why recovery could not proceed. Recovery is not a
+force-delete option and never discards the only previous payload to make setup
+continue.
 
 Detailed extraction diagnostics are written to
 `%LOCALAPPDATA%\TypeAgent\logs\msi-extract-payload.log` and to the verbose MSI
