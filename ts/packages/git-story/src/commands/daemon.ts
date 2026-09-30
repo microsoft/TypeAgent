@@ -2,23 +2,28 @@
 // Licensed under the MIT License.
 
 import { Command } from "commander";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DAEMON_ROUTE } from "../server/router.js";
 import { startServer } from "../server/server.js";
 
-// One daemon per repository. Its state lives in the git dir, so worktrees of
-// one clone share it and nothing shows up in `git status`.
+// One daemon per user, shared by every project. Each API request names its
+// project by absolute path, so the daemon does not depend on any cwd.
 //
-//   git story daemon start
-//     └─ spawns detached `git-story daemon run` (cwd = repo root)
+//   git story daemon start            (from any directory)
+//     └─ spawns detached `git-story daemon run`
 //          └─ listens on 127.0.0.1:<free port>
-//          └─ writes .git/git-story/daemon.json {"pid":4242,"port":51234}
-//   git story daemon status  -> reads daemon.json, checks pid is alive
-//   git story daemon stop    -> SIGTERM pid; `run` deletes daemon.json on exit
-const STATE_DIR = "git-story";
+//          └─ writes ~/.git-story/daemon.json {"pid":4242,"port":51234}
+//   GET /api/story/commits/739e112?project=/Users/me/repo
+//   GET /api/story/commits/739e112?project=C:\Users\me\repo  (URL-encoded)
+//   git story daemon status  -> reads daemon.json, asks the port for its pid
+//   git story daemon stop    -> kills pid; stale daemon.json is cleaned up
+//
+// `~` is os.homedir(): /Users/me on macOS, C:\Users\me on Windows.
+const STATE_DIR = ".git-story";
 const STATE_FILE = "daemon.json";
 const LOG_FILE = "daemon.log";
 const START_TIMEOUT_MS = 5000;
@@ -33,17 +38,7 @@ const CLI = path.resolve(
     "../cli.js",
 );
 
-const git = (...args: string[]) =>
-    execFileSync("git", args, { encoding: "utf8" }).trim();
-
-// Absolute state dir, e.g. /repo/.git/git-story. `--git-common-dir` is
-// relative to the cwd, so resolve it.
-function stateDir(): string {
-    return path.join(
-        path.resolve(git("rev-parse", "--git-common-dir")),
-        STATE_DIR,
-    );
-}
+const stateDir = () => path.join(os.homedir(), STATE_DIR);
 
 function isAlive(pid: number): boolean {
     try {
@@ -85,7 +80,7 @@ async function readState(): Promise<DaemonState | undefined> {
 }
 
 // Writes the state file only if none exists, so of two concurrent `run`s
-// exactly one owns the repository. Retries once after clearing stale state.
+// exactly one runs. Retries once after clearing stale state.
 async function claimState(state: DaemonState): Promise<boolean> {
     const file = path.join(stateDir(), STATE_FILE);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -118,10 +113,14 @@ async function start(): Promise<void> {
     const dir = stateDir();
     fs.mkdirSync(dir, { recursive: true });
     const log = fs.openSync(path.join(dir, LOG_FILE), "a");
+    // cwd is the state dir so the daemon never holds a project directory
+    // open (Windows cannot delete a directory that is some process's cwd).
+    // windowsHide: no console window on Windows.
     const child = spawn(process.execPath, [CLI, "daemon", "run"], {
-        cwd: git("rev-parse", "--show-toplevel"),
+        cwd: dir,
         detached: true,
         stdio: ["ignore", log, log],
+        windowsHide: true,
     });
     child.unref();
     fs.closeSync(log);
@@ -138,7 +137,7 @@ async function start(): Promise<void> {
         }
         await sleep(POLL_MS);
     }
-    // The child exits when a concurrent start claimed the repository first.
+    // The child exits when a concurrent start won.
     const winner = await readState();
     if (winner) {
         process.stdout.write(
@@ -159,9 +158,12 @@ async function stop(): Promise<void> {
         process.stdout.write("Not running\n");
         return;
     }
+    // SIGTERM runs `run`'s cleanup on macOS/Linux. Windows has no signals:
+    // Node terminates the process, and the next readState drops the stale file.
     process.kill(state.pid, "SIGTERM");
     for (let t = 0; t < STOP_TIMEOUT_MS; t += POLL_MS) {
         if (!isAlive(state.pid)) {
+            fs.rmSync(path.join(stateDir(), STATE_FILE), { force: true });
             process.stdout.write(`Stopped (pid ${state.pid})\n`);
             return;
         }
@@ -178,7 +180,7 @@ async function run(): Promise<void> {
     const { server, port } = await startServer();
     const state: DaemonState = { pid: process.pid, port };
     if (!(await claimState(state))) {
-        process.stderr.write("Another daemon owns this repository\n");
+        process.stderr.write("Another daemon is already running\n");
         server.close();
         process.exitCode = 1;
         return;
@@ -194,9 +196,9 @@ async function run(): Promise<void> {
     process.once("SIGINT", shutdown);
 }
 
-// `daemon`: manages the per-repository HTTP API server.
+// `daemon`: manages the per-user HTTP API server.
 export const daemonCommand = new Command("daemon").description(
-    "Manage the git-story API server for this repository",
+    "Manage the git-story API server shared by all projects",
 );
 
 daemonCommand.command("start").description("Start the daemon").action(start);
