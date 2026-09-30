@@ -27,8 +27,8 @@ overwrite a hook that it did not write.
 
 ## Daemon
 
-`git story daemon start|stop|restart|status` manages one HTTP API server per
-user, shared by all projects. It binds `127.0.0.1` on a free port and keeps
+`git story daemon start|restart --port <port>` and `stop|status` manage one HTTP API server per
+user, shared by all projects. It binds `127.0.0.1` on the given port, which is required, and keeps
 its pid and port in `~/.git-story/daemon.json`, log in
 `~/.git-story/daemon.log` (`~` is the user home directory on macOS and
 Windows).
@@ -37,7 +37,7 @@ Each request names its project by absolute path in the `project` query
 parameter:
 
 ```text
-$ git story daemon start
+$ git story daemon start --port 51703
 Started (pid 70006) at http://127.0.0.1:51703
 $ curl -G http://127.0.0.1:51703/api/story/commits/79f77a3 --data-urlencode project=/Users/me/repo
 {"hash":"79f77a337c682a14ec7df45d309c4856cf3bf236","subject":"hello story"}
