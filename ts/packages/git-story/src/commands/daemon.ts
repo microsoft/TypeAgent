@@ -22,6 +22,11 @@ import { startServer } from "../server/server.js";
 //   git story daemon status  -> reads daemon.json, asks the port for its pid
 //   git story daemon stop    -> kills pid; stale daemon.json is cleaned up
 //
+// Single instance: the bound port is the lock. The OS lets one process
+// listen on 127.0.0.1:51703; a second `run` fails with EADDRINUSE. The OS
+// frees it when the holder exits or crashes, so no stale lock survives.
+// Only the port holder writes daemon.json; others only read it.
+//
 // `~` is os.homedir(): /Users/me on macOS, C:\Users\me on Windows.
 const STATE_DIR = ".git-story";
 const STATE_FILE = "daemon.json";
@@ -64,8 +69,8 @@ async function answersAsDaemon(state: DaemonState): Promise<boolean> {
     }
 }
 
-// Running daemon's state, or undefined. Removes a state file left by a
-// daemon that died without cleanup or whose pid was reused.
+// Running daemon's state, or undefined for a missing, corrupt, or stale
+// file. Never deletes: only the port holder owns the file.
 async function readState(): Promise<DaemonState | undefined> {
     const file = path.join(stateDir(), STATE_FILE);
     let state: Partial<DaemonState> | null;
@@ -82,27 +87,19 @@ async function readState(): Promise<DaemonState | undefined> {
         (await answersAsDaemon(state as DaemonState))
     )
         return state as DaemonState;
-    fs.rmSync(file, { force: true });
     return undefined;
 }
 
-// Writes the state file only if none exists, so of two concurrent `run`s
-// exactly one runs. Retries once after clearing stale state.
-async function claimState(state: DaemonState): Promise<boolean> {
+// Removes the state file only if `pid` still owns it, so a stopping daemon
+// never deletes a newer daemon's state.
+function removeStateIfOwned(pid: number): void {
     const file = path.join(stateDir(), STATE_FILE);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-            fs.writeFileSync(file, JSON.stringify(state) + "\n", {
-                flag: "wx",
-            });
-            return true;
-        } catch (e) {
-            if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-            if (await readState()) return false;
-        }
+    try {
+        if (JSON.parse(fs.readFileSync(file, "utf8"))?.pid !== pid) return;
+    } catch {
+        return;
     }
-    return false;
+    fs.rmSync(file, { force: true });
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -174,7 +171,7 @@ async function stop(): Promise<void> {
     process.kill(state.pid, "SIGTERM");
     for (let t = 0; t < STOP_TIMEOUT_MS; t += POLL_MS) {
         if (!isAlive(state.pid)) {
-            fs.rmSync(path.join(stateDir(), STATE_FILE), { force: true });
+            removeStateIfOwned(state.pid);
             process.stdout.write(`Stopped (pid ${state.pid})\n`);
             return;
         }
@@ -200,16 +197,18 @@ async function run(): Promise<void> {
         process.exitCode = 1;
         return;
     }
+    // Holding the port makes this the only daemon: publish its state.
+    // Write then rename so readers never see a partial file.
     const state: DaemonState = { pid: process.pid, port };
-    if (!(await claimState(state))) {
-        process.stderr.write("Another daemon is already running\n");
-        server.close();
-        process.exitCode = 1;
-        return;
-    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(state) + "\n");
+    fs.renameSync(tmp, file);
     process.stdout.write(`Listening at ${url(state)}\n`);
     const shutdown = () => {
-        fs.rmSync(file, { force: true });
+        // Before close: the port is still held, so no new daemon can have
+        // written its state yet.
+        removeStateIfOwned(process.pid);
         server.close(() => process.exit(0));
         // Do not wait on keep-alive connections.
         server.closeAllConnections();
