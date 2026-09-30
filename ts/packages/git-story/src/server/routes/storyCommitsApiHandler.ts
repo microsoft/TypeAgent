@@ -18,14 +18,9 @@ export type StoryCommit = {
 // GET /api/story/commits/{hash}: the commit's story. No story capture exists
 // yet, so this returns the resolved commit.
 // Example: /api/story/commits/739e112 -> {"hash":"739e112dd...","subject":"..."}
-export const storyCommitsApiHandler: RouteHandler = async (
-    req,
-    res,
-    params,
-) => {
-    const { hash } = params;
+export const storyCommitsApiHandler: RouteHandler = async ({ hash }) => {
     if (!HASH_PATTERN.test(hash)) {
-        return res.json(400, { error: `Invalid commit hash: ${hash}` });
+        return { status: 400, body: { error: `Invalid commit hash: ${hash}` } };
     }
     let stdout: string;
     try {
@@ -36,9 +31,9 @@ export const storyCommitsApiHandler: RouteHandler = async (
             `${hash}^{commit}`,
         ]));
     } catch {
-        return res.json(404, { error: `Commit not found: ${hash}` });
+        return { status: 404, body: { error: `Commit not found: ${hash}` } };
     }
     const [full, subject] = stdout.trimEnd().split("\n");
     const body: StoryCommit = { hash: full, subject };
-    res.json(200, body);
+    return { status: 200, body };
 };
