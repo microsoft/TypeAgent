@@ -14,7 +14,7 @@ import { startServer } from "../server/server.js";
 // project by absolute path, so the daemon does not depend on any cwd.
 //
 //   git story daemon start   (from any directory)
-//     └─ spawns detached `git-story daemon run`
+//     └─ spawns detached `node daemonMain.js` (no CLI command)
 //          └─ listens on 127.0.0.1:51703 (DAEMON_PORT)
 //          └─ writes ~/.git-story/daemon.json {"pid":4242,"port":51703}
 //   GET /api/story/commits/739e112?project=/Users/me/repo
@@ -23,7 +23,7 @@ import { startServer } from "../server/server.js";
 //   git story daemon stop    -> kills pid; stale daemon.json is cleaned up
 //
 // Single instance: the bound port is the lock. The OS lets one process
-// listen on 127.0.0.1:51703; a second `run` fails with EADDRINUSE. The OS
+// listen on 127.0.0.1:51703; a second daemon fails with EADDRINUSE. The OS
 // frees it when the holder exits or crashes, so no stale lock survives.
 // Only the port holder writes daemon.json; others only read it.
 //
@@ -38,9 +38,10 @@ const IDENTITY_TIMEOUT_MS = 1000;
 
 type DaemonState = { pid: number; port: number };
 
-const CLI = path.resolve(
+// Entry point `start` spawns; not exposed as a CLI command.
+const DAEMON_MAIN = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
-    "../cli.js",
+    "../daemonMain.js",
 );
 
 const stateDir = () => path.join(os.homedir(), STATE_DIR);
@@ -124,7 +125,7 @@ async function start(): Promise<void> {
     // cwd is the state dir so the daemon never holds a project directory
     // open (Windows cannot delete a directory that is some process's cwd).
     // windowsHide: no console window on Windows.
-    const child = spawn(process.execPath, [CLI, "daemon", "run"], {
+    const child = spawn(process.execPath, [DAEMON_MAIN], {
         cwd: dir,
         detached: true,
         stdio: ["ignore", log, log],
@@ -132,7 +133,7 @@ async function start(): Promise<void> {
     });
     child.unref();
     fs.closeSync(log);
-    // Wait for `run` to write its state; fail fast if it exits first.
+    // Wait for the daemon to write its state; fail fast if it exits first.
     let exited = false;
     child.once("exit", () => (exited = true));
     for (let t = 0; t < START_TIMEOUT_MS && !exited; t += POLL_MS) {
@@ -166,7 +167,7 @@ async function stop(): Promise<void> {
         process.stdout.write("Not running\n");
         return;
     }
-    // SIGTERM runs `run`'s cleanup on macOS/Linux. Windows has no signals:
+    // SIGTERM runs the daemon's cleanup on macOS/Linux. Windows has no signals:
     // Node terminates the process, and the next readState drops the stale file.
     process.kill(state.pid, "SIGTERM");
     for (let t = 0; t < STOP_TIMEOUT_MS; t += POLL_MS) {
@@ -181,10 +182,10 @@ async function stop(): Promise<void> {
     process.exitCode = 1;
 }
 
-// Foreground server. `start` runs this detached. Writes the state file once
+// Daemon body, run by daemonMain.js in the process `start` spawns. Writes the state file once
 // listening, removes it on SIGTERM/SIGINT.
 // Fails (see daemon.log) when the port is in use.
-async function run(): Promise<void> {
+export async function runDaemon(): Promise<void> {
     const port = DAEMON_PORT;
     const file = path.join(stateDir(), STATE_FILE);
     let server: Awaited<ReturnType<typeof startServer>>;
@@ -245,8 +246,3 @@ daemonCommand
                 : "Not running\n",
         );
     });
-
-daemonCommand
-    .command("run", { hidden: true })
-    .description("Run the server in the foreground")
-    .action(run);
