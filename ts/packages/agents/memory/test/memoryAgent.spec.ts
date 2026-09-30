@@ -445,7 +445,7 @@ test("folder import enforces file and byte limits", async () => {
     ).rejects.toThrow("exceeds the 9 byte limit");
 });
 
-test("import profiles map to service pipeline options and complete", async () => {
+test("imports use the canonical content pipeline and restore without profiles", async () => {
     await writeFile(resolve(scratch, "profile.md"), "# Profile", "utf8");
     const requests: DocumentIngestRequest[] = [];
     const service = createFakeService(async (request) => {
@@ -472,10 +472,7 @@ test("import profiles map to service pipeline options and complete", async () =>
 
     await agent.executeCommand?.(
         ["import", "file"],
-        commandParams(
-            { path: resolve(scratch, "profile.md") },
-            { profile: "deep" },
-        ),
+        commandParams({ path: resolve(scratch, "profile.md") }),
         actionContext(state, storage),
     );
     await [...state.imports.values()][0].promise;
@@ -488,14 +485,10 @@ test("import profiles map to service pipeline options and complete", async () =>
 
     expect(requests[0].pipeline).toEqual({
         updatePolicy: "skipIfUnchanged",
-        mode: "full",
-        maxCharsPerChunk: 2_000,
+        mode: "content",
+        maxCharsPerChunk: 8_000,
     });
-    expect(completions?.groups[0].completions).toEqual([
-        "fast",
-        "balanced",
-        "deep",
-    ]);
+    expect(completions?.groups ?? []).toEqual([]);
 
     const restored = (await agent.initializeAgentContext?.({
         options: service,
@@ -510,9 +503,9 @@ test("import profiles map to service pipeline options and complete", async () =>
         commandParams(),
         actionContext(restored, storage),
     );
-    expect(displayText(status)).toContain('"profile": "deep"');
-    expect(displayText(status)).toContain('"mode": "full"');
-    expect(displayText(status)).toContain('"maxCharsPerChunk": 2000');
+    expect(displayText(status)).not.toContain('"profile"');
+    expect(displayText(status)).toContain('"mode": "content"');
+    expect(displayText(status)).toContain('"maxCharsPerChunk": 8000');
 });
 
 test("restoration rejects malformed JSON with its parse cause", async () => {
@@ -546,7 +539,7 @@ test("restoration rejects malformed JSON with its parse cause", async () => {
 
 test("restoration rejects an unsupported schema", async () => {
     const { storage, values } = memoryStorage();
-    values.set(importStoragePath, JSON.stringify({ version: 2, batches: [] }));
+    values.set(importStoragePath, JSON.stringify({ version: 3, batches: [] }));
     const agent = instantiate();
     const state = (await agent.initializeAgentContext?.({
         options: createFakeService(),
@@ -558,7 +551,7 @@ test("restoration rejects an unsupported schema", async () => {
             sessionContext(state, storage),
             "memory",
         ),
-    ).rejects.toThrow("Unsupported memory import storage version '2'");
+    ).rejects.toThrow("Unsupported memory import storage version '3'");
     expect(state.imports.size).toBe(0);
 });
 
@@ -567,12 +560,11 @@ test("restoration rejects invalid entries before merging valid ones", async () =
     values.set(
         importStoragePath,
         JSON.stringify({
-            version: 1,
+            version: 2,
             batches: [
                 {
                     batchId: "valid",
                     corpusId: "corpus-1",
-                    profile: null,
                     pipeline: {
                         mode: "content",
                         maxCharsPerChunk: 8_000,
@@ -597,6 +589,67 @@ test("restoration rejects invalid entries before merging valid ones", async () =
     ).rejects.toThrow("batch entry 1 is invalid");
     expect(state.imports.size).toBe(0);
 });
+
+test.each([1, 0])(
+    "restoration rejects pre-release batch version %s without changing storage",
+    async (version) => {
+        const { storage, values } = memoryStorage();
+        const serialized = JSON.stringify({ version, batches: [] });
+        values.set(importStoragePath, serialized);
+        const agent = instantiate();
+        const state = (await agent.initializeAgentContext?.({
+            options: createFakeService(),
+        })) as MemoryAgentContext;
+        await expect(
+            agent.updateAgentContext?.(
+                true,
+                sessionContext(state, storage),
+                "memory",
+            ),
+        ).rejects.toThrow(
+            `Unsupported memory import storage version '${version}'`,
+        );
+        expect(values.get(importStoragePath)).toBe(serialized);
+    },
+);
+
+test.each([
+    { profile: "fast", pipeline: { mode: "content", maxCharsPerChunk: 8000 } },
+    { pipeline: { mode: "basic", maxCharsPerChunk: 8000 } },
+    { pipeline: { mode: "summary", maxCharsPerChunk: 8000 } },
+    { pipeline: { mode: "full", maxCharsPerChunk: 8000 } },
+])(
+    "restoration rejects obsolete profile or pipeline state %j",
+    async (obsolete) => {
+        const { storage, values } = memoryStorage();
+        values.set(
+            importStoragePath,
+            JSON.stringify({
+                version: 2,
+                batches: [
+                    {
+                        batchId: "old",
+                        corpusId: "corpus-1",
+                        jobIds: [],
+                        ...obsolete,
+                    },
+                ],
+            }),
+        );
+        const agent = instantiate();
+        const state = (await agent.initializeAgentContext?.({
+            options: createFakeService(),
+        })) as MemoryAgentContext;
+        await expect(
+            agent.updateAgentContext?.(
+                true,
+                sessionContext(state, storage),
+                "memory",
+            ),
+        ).rejects.toThrow("batch entry 0 is invalid");
+        expect(state.imports.size).toBe(0);
+    },
+);
 
 test("accepted jobs are cancelled when durable tracking cannot be persisted", async () => {
     await writeFile(resolve(scratch, "persistence.md"), "# Persist", "utf8");

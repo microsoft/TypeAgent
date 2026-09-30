@@ -10,12 +10,30 @@ request a preview and short-lived confirmation token, then confirm deletion.
 Confirmation survives a service restart, and activation rebuilds the complete
 corpus index before removing superseded index generations.
 
-The ingestion pipeline persists `mode` and `maxCharsPerChunk` with each
-revision. `basic` mode is model-free and contributes bounded exact-search
-evidence without semantic knowledge extraction; the remaining modes use the
-structured KnowPro index. Nonterminal jobs found after a service restart are
-marked failed with an explicit interruption reason so they are never left
-permanently active.
+Ingestion accepts only `content` mode and uses the structured KnowPro index
+for all document search and knowledge extraction. Revisions retain their
+pipeline settings and raw content; historical revisions with an older mode
+are replayed as content when their derived index is rebuilt. Source listings
+and lookups report their pipeline mode as `content` without rewriting retained
+legacy revision metadata, so those records remain valid against the current
+service protocol. Nonterminal jobs found after a service restart are marked
+failed with an explicit interruption reason so they are never left permanently
+active. The separate website-memory HTML/content-capture extraction modes are
+not part of this service ingestion pipeline.
+
+Each derived document, conversation-event, and procedure index generation
+records `index-schema.json` with schema version 1, engine `knowpro`, and its
+index kind. The descriptor is written after the semantic index persists and
+before publication. Missing or older descriptors, and current generations
+whose required semantic data is missing, trigger a scoped reset and rebuild
+from retained revisions, events, or procedure versions. Malformed or
+unreadable descriptors and future versions fail explicitly rather than
+deleting an index the service cannot interpret. Canonical raw content,
+histories, event ledgers, and forget tombstones are not migrated or removed
+by a derived-index reset. Extraction failures remain errors and can be
+retried against those canonical records. Persisted generation pointers must
+name a generated index directory; malformed or out-of-root pointers fail
+before any automatic reset.
 
 `getCapabilities()` reports `management: true` and `groundedAnswer: true`.
 `answer` is deliberately extractive: it returns bounded source-linked evidence

@@ -252,12 +252,11 @@ export async function extractKnowledgeFromPageStreaming(
     try {
         emitProgress(id, url, "content", 5, "Normalizing page content");
         const markdown = normalizePageDocument(htmlFragments, url, title);
-        const ingestionMode =
-            parameters.mode === "basic"
-                ? "basic"
-                : parameters.mode === "full"
-                  ? "full"
-                  : "content";
+        if (parameters.mode !== undefined && parameters.mode !== "content") {
+            throw new Error(
+                "Unsupported extraction mode. Only 'content' is supported.",
+            );
+        }
         const knowledge = await memoryService.ingest(
             {
                 url,
@@ -267,7 +266,7 @@ export async function extractKnowledgeFromPageStreaming(
                     ? {}
                     : { capturedAt: parameters.timestamp }),
             },
-            ingestionMode,
+            "content",
             {
                 ...(parameters.signal === undefined
                     ? {}
@@ -328,7 +327,7 @@ async function handleKnowledgeExtractionProgressFromEvent(
 export async function performKnowledgeExtraction(
     url: string,
     context: ActionContext<BrowserActionContext>,
-    extractionMode: string,
+    extractionMode: "content",
 ): Promise<any | null> {
     const browserControl = getActionBrowserControl(context);
     const htmlFragments =
@@ -404,7 +403,7 @@ export async function performKnowledgeExtraction(
 export async function performKnowledgeExtractionWithNotifications(
     url: string,
     sessionContext: SessionContext<BrowserActionContext>,
-    extractionMode: string,
+    extractionMode: "content",
     parameters: any,
 ): Promise<void> {
     const knowledge = await extractKnowledgeFromPageStreaming(

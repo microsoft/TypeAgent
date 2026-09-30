@@ -11,7 +11,7 @@ function getChromeRpc() {
 
 interface ExtensionSettings {
     agentServerHost: string;
-    defaultExtractionMode: "basic" | "content" | "full";
+    defaultExtractionMode: "content";
     maxConcurrentExtractions: number;
     qualityThreshold: number;
     enableIntelligentAnalysis: boolean;
@@ -53,7 +53,6 @@ class EnhancedOptionsPage {
     async initialize() {
         await this.loadSavedSettings();
         await this.checkAIModelStatus();
-        this.updateModeUI();
         this.updateRangeDisplays();
         this.updateAIStatusDisplay();
     }
@@ -64,15 +63,6 @@ class EnhancedOptionsPage {
             "optionsForm",
         ) as HTMLFormElement;
         optionsForm.addEventListener("submit", (e) => this.saveOptions(e));
-
-        // Mode selection
-        document.querySelectorAll(".mode-option").forEach((option) => {
-            option.addEventListener("click", (e) => {
-                const mode = (e.currentTarget as HTMLElement).dataset
-                    .mode as any;
-                this.selectMode(mode);
-            });
-        });
 
         // Range inputs
         const concurrencyRange = document.getElementById(
@@ -106,6 +96,11 @@ class EnhancedOptionsPage {
     private async loadSavedSettings() {
         try {
             const saved = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+            if (saved.defaultExtractionMode !== "content") {
+                throw new Error(
+                    "Unsupported extraction mode. Reset settings to use 'content'.",
+                );
+            }
             this.settings = { ...DEFAULT_SETTINGS, ...saved };
 
             // Update form fields
@@ -201,41 +196,9 @@ class EnhancedOptionsPage {
             statusContainer.className = "ai-status ai-unavailable";
             statusContainer.innerHTML = `
                 <i class="bi bi-exclamation-triangle"></i>
-                <span>AI model not available - only Basic mode will work</span>
+                <span>AI model not available - content extraction requires a model</span>
             `;
         }
-    }
-
-    private selectMode(mode: "basic" | "content" | "full") {
-        // Update visual selection
-        document.querySelectorAll(".mode-option").forEach((option) => {
-            option.classList.remove("selected");
-        });
-        document
-            .querySelector(`[data-mode="${mode}"]`)
-            ?.classList.add("selected");
-
-        // Update radio button
-        (
-            document.querySelector(`input[value="${mode}"]`) as HTMLInputElement
-        ).checked = true;
-
-        // Update settings
-        this.settings.defaultExtractionMode = mode;
-        this.settings.enableIntelligentAnalysis = mode !== "basic";
-
-        // Show warning if AI required but not available
-        if (mode !== "basic" && !this.aiStatus.available) {
-            this.showStatus(
-                `${mode} mode requires AI model but none is available. Consider using Basic mode.`,
-                "warning",
-            );
-        }
-    }
-
-    private updateModeUI() {
-        const selectedMode = this.settings.defaultExtractionMode;
-        this.selectMode(selectedMode);
     }
 
     private updateRangeDisplays() {
@@ -276,14 +239,6 @@ class EnhancedOptionsPage {
 
         // Update settings
         this.settings.agentServerHost = agentServerHost;
-
-        // Get selected mode
-        const selectedMode = document.querySelector(
-            'input[name="defaultMode"]:checked',
-        ) as HTMLInputElement;
-        if (selectedMode) {
-            this.settings.defaultExtractionMode = selectedMode.value as any;
-        }
 
         // Auto-discovery settings
         const autoDiscoveryEl = document.getElementById(
@@ -341,8 +296,8 @@ class EnhancedOptionsPage {
             confirm("Are you sure you want to reset all settings to defaults?")
         ) {
             this.settings = { ...DEFAULT_SETTINGS };
+            await chrome.storage.sync.set(this.settings);
             await this.loadSavedSettings();
-            this.updateModeUI();
             this.updateRangeDisplays();
             this.showStatus("Settings reset to defaults", "info");
         }

@@ -327,7 +327,12 @@ export async function importWebsiteDataFromSession(
             );
         };
 
-        const extractionMode = mode || "basic";
+        if (mode !== undefined && mode !== "content") {
+            throw new Error(
+                "Unsupported import mode. Only 'content' is supported.",
+            );
+        }
+        const extractionMode = "content";
 
         // Build options object with only defined values
         const importOptions: any = {};
@@ -335,8 +340,6 @@ export async function importWebsiteDataFromSession(
         if (days !== undefined) importOptions.days = days;
         if (folder !== undefined) importOptions.folder = folder;
 
-        // Add extraction mode
-        if (mode !== undefined) importOptions.mode = mode;
         if (maxConcurrent !== undefined)
             importOptions.maxConcurrent = maxConcurrent;
         if (contentTimeout !== undefined)
@@ -344,136 +347,123 @@ export async function importWebsiteDataFromSession(
         if (maxCharsPerChunk !== undefined)
             importOptions.maxCharsPerChunk = maxCharsPerChunk;
 
-        let websites: any[] = [];
+        const websites: any[] = [];
 
-        if (extractionMode === "basic") {
-            // Basic mode: import metadata only, no content fetching or AI extraction
-            websites = await website.importWebsites(
+        // Enumerate browser metadata only; original page content is ingested below.
+        const metadataWebsites = await website.importWebsites(
+            source,
+            type,
+            filePath,
+            { ...importOptions, mode: "basic" },
+            progressCallback,
+        );
+
+        if (metadataWebsites.length > 0) {
+            importState = {
+                importId,
+                totalWebsites: metadataWebsites.length,
+                processedWebsites: 0,
+                lastSavePoint: 0,
+                failedUrls: [],
+                startTime: Date.now(),
+                lastProgressTime: Date.now(),
+                extractionMode,
                 source,
                 type,
                 filePath,
-                importOptions,
-                progressCallback,
-            );
-        } else {
-            // LLM-based modes (content, full, etc.): fetch content and extract knowledge directly
-            // First get basic metadata to know what to process
-            const metadataWebsites = await website.importWebsites(
-                source,
-                type,
-                filePath,
-                { ...importOptions, mode: "basic" },
-                progressCallback,
+            };
+            await ImportStateManager.saveImportState(importState);
+            logStructuredProgress(
+                0,
+                metadataWebsites.length,
+                `Fetching and extracting with ${extractionMode} mode`,
+                "extracting",
+                importContext,
             );
 
-            if (metadataWebsites.length > 0) {
-                importState = {
-                    importId,
-                    totalWebsites: metadataWebsites.length,
-                    processedWebsites: 0,
-                    lastSavePoint: 0,
-                    failedUrls: [],
-                    startTime: Date.now(),
-                    lastProgressTime: Date.now(),
-                    extractionMode,
-                    source,
-                    type,
-                    filePath,
-                };
-                await ImportStateManager.saveImportState(importState);
-                logStructuredProgress(
-                    0,
-                    metadataWebsites.length,
-                    `Fetching and extracting with ${extractionMode} mode`,
-                    "extracting",
-                    importContext,
+            logStructuredProgress(
+                0,
+                metadataWebsites.length,
+                "Fetching content from URLs",
+                "fetching",
+                importContext,
+            );
+
+            const htmlFetcher = new website.HtmlFetcher();
+            let persistedCount = 0;
+            persistedDuringExtraction = true;
+
+            for (let i = 0; i < metadataWebsites.length; i++) {
+                const site = metadataWebsites[i];
+                const fetchResult = await htmlFetcher.fetchHtml(
+                    site.metadata.url,
+                    importOptions.contentTimeout || 10000,
                 );
 
-                logStructuredProgress(
-                    0,
-                    metadataWebsites.length,
-                    "Fetching content from URLs",
-                    "fetching",
-                    importContext,
-                );
-
-                const htmlFetcher = new website.HtmlFetcher();
-                let persistedCount = 0;
-                persistedDuringExtraction = true;
-
-                for (let i = 0; i < metadataWebsites.length; i++) {
-                    const site = metadataWebsites[i];
-                    const fetchResult = await htmlFetcher.fetchHtml(
-                        site.metadata.url,
-                        importOptions.contentTimeout || 10000,
-                    );
-
-                    if (fetchResult.html) {
-                        try {
-                            if (fetchResult.html.trim().length > 0) {
-                                const completedWebsite: any = {
-                                    ...site,
-                                    textChunks: [fetchResult.html],
-                                };
-                                const knowledge =
-                                    await ingestWebsitesIntoMemoryService(
-                                        [completedWebsite],
-                                        extractionMode,
-                                        context.agentContext,
-                                        importContext,
-                                        i,
-                                        metadataWebsites.length,
-                                        importOptions.maxCharsPerChunk,
-                                        "html",
-                                    );
-                                websites.push(completedWebsite);
-                                completedWebsite.knowledge = {
-                                    entities: knowledge[0].entities,
-                                    topics: knowledge[0].topics.map(
-                                        (topic) => topic.name,
-                                    ),
-                                    actions: knowledge[0].relationships,
-                                };
-                                persistedCount++;
-                                importState.processedWebsites = persistedCount;
-                                importState.lastSavePoint = persistedCount;
-                                importState.lastProgressTime = Date.now();
-                                await ImportStateManager.saveImportState(
-                                    importState,
+                if (fetchResult.html) {
+                    try {
+                        if (fetchResult.html.trim().length > 0) {
+                            const completedWebsite: any = {
+                                ...site,
+                                textChunks: [fetchResult.html],
+                            };
+                            const knowledge =
+                                await ingestWebsitesIntoMemoryService(
+                                    [completedWebsite],
+                                    extractionMode,
+                                    context.agentContext,
+                                    importContext,
+                                    i,
+                                    metadataWebsites.length,
+                                    importOptions.maxCharsPerChunk,
+                                    "html",
                                 );
-                            }
-                        } catch (error) {
-                            debug(
-                                `Failed to process HTML for ${site.metadata.url}:`,
-                                error,
+                            websites.push(completedWebsite);
+                            completedWebsite.knowledge = {
+                                entities: knowledge[0].entities,
+                                topics: knowledge[0].topics.map(
+                                    (topic) => topic.name,
+                                ),
+                                actions: knowledge[0].relationships,
+                            };
+                            persistedCount++;
+                            importState.processedWebsites = persistedCount;
+                            importState.lastSavePoint = persistedCount;
+                            importState.lastProgressTime = Date.now();
+                            await ImportStateManager.saveImportState(
+                                importState,
                             );
-                            importState.failedUrls.push(site.metadata.url);
                         }
-                    } else {
+                    } catch (error) {
                         debug(
-                            `Failed to fetch content for ${site.metadata.url}: ${fetchResult.error}`,
+                            `Failed to process HTML for ${site.metadata.url}:`,
+                            error,
                         );
-
-                        if (
-                            fetchResult.error?.includes("404") ||
-                            fetchResult.error?.includes("403") ||
-                            fetchResult.error?.includes("410")
-                        ) {
-                            importState.failedUrls.push(site.metadata.url);
-                        }
+                        importState.failedUrls.push(site.metadata.url);
                     }
-
-                    logStructuredProgress(
-                        i + 1,
-                        metadataWebsites.length,
-                        `Processed ${i + 1}/${metadataWebsites.length} pages`,
-                        "processing",
-                        importContext,
+                } else {
+                    debug(
+                        `Failed to fetch content for ${site.metadata.url}: ${fetchResult.error}`,
                     );
+
+                    if (
+                        fetchResult.error?.includes("404") ||
+                        fetchResult.error?.includes("403") ||
+                        fetchResult.error?.includes("410")
+                    ) {
+                        importState.failedUrls.push(site.metadata.url);
+                    }
                 }
+
+                logStructuredProgress(
+                    i + 1,
+                    metadataWebsites.length,
+                    `Processed ${i + 1}/${metadataWebsites.length} pages`,
+                    "processing",
+                    importContext,
+                );
             }
         }
-
         // Set up periodic durable-ingestion checkpoints.
         const pendingWebsites = persistedDuringExtraction ? [] : websites;
         const chunkSize = Math.min(50, Math.ceil(pendingWebsites.length * 0.2));
@@ -714,7 +704,12 @@ export async function importHtmlFolderFromSession(
         const errors: any[] = [];
         let successCount = 0;
 
-        const extractionMode = options.mode || "basic";
+        if (options.mode !== undefined && options.mode !== "content") {
+            throw new Error(
+                "Unsupported import mode. Only 'content' is supported.",
+            );
+        }
+        const extractionMode = "content";
 
         // Validate folder path first
         const validation = await validateHtmlFolder(folderPath, options);
@@ -932,7 +927,7 @@ export async function importHtmlFolderFromSession(
             totalFiles: htmlFiles.length,
             totalProcessed: htmlFiles.length,
             successfullyImported: successCount,
-            knowledgeExtracted: options?.mode !== "basic" ? successCount : 0,
+            knowledgeExtracted: successCount,
             entitiesFound: importedEntities.size,
             topicsIdentified: importedTopics.size,
             actionsDetected: importedRelationshipCount,
@@ -1077,7 +1072,7 @@ function normalizeImportedHtml(content: string | string[]): string {
 
 async function ingestWebsitesIntoMemoryService(
     websites: website.Website[],
-    mode: website.ExtractionMode,
+    mode: "content",
     agentContext: BrowserActionContext,
     importContext: {
         importId: string;

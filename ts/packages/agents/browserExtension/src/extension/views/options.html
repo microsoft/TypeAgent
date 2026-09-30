@@ -56,42 +56,16 @@
           </div>
         </div>
 
-        <!-- Default Extraction Mode -->
+        <!-- Content Extraction -->
         <div class="section">
           <div class="section-title">
-            <i class="bi bi-cpu me-2"></i>Default Extraction Mode
+            <i class="bi bi-cpu me-2"></i>Content Extraction
           </div>
           <p class="text-muted small mb-3">
-            Choose the default mode for knowledge extraction operations
+            Knowledge extraction uses the model-driven content pipeline.
           </p>
 
           <div id="modeOptions">
-            <div class="mode-option" data-mode="basic">
-              <div class="d-flex justify-content-between align-items-start">
-                <div class="flex-grow-1">
-                  <div class="mode-title">
-                    <i class="bi bi-lightning-charge text-warning me-2"></i
-                    >Basic Mode
-                  </div>
-                  <div class="mode-description">
-                    Fast metadata extraction without AI - perfect for bulk
-                    operations
-                  </div>
-                  <div class="mode-features">
-                    <span class="feature-badge">URL Analysis</span>
-                    <span class="feature-badge">Domain Classification</span>
-                    <span class="feature-badge">Basic Topics</span>
-                  </div>
-                </div>
-                <input
-                  type="radio"
-                  name="defaultMode"
-                  value="basic"
-                  class="form-check-input mt-1"
-                />
-              </div>
-            </div>
-
             <div class="mode-option" data-mode="content">
               <div class="d-flex justify-content-between align-items-start">
                 <div class="flex-grow-1">
@@ -107,61 +81,6 @@
                     <span class="feature-badge">Topic Identification</span>
                   </div>
                 </div>
-                <input
-                  type="radio"
-                  name="defaultMode"
-                  value="content"
-                  class="form-check-input mt-1"
-                  checked
-                />
-              </div>
-            </div>
-
-            <div class="mode-option" data-mode="actions">
-              <div class="d-flex justify-content-between align-items-start">
-                <div class="flex-grow-1">
-                  <div class="mode-title">
-                    <i class="bi bi-cursor text-success me-2"></i>Actions Mode
-                  </div>
-                  <div class="mode-description">
-                    AI analysis plus interaction detection for dynamic pages
-                  </div>
-                  <div class="mode-features">
-                    <span class="feature-badge">AI Content Analysis</span>
-                    <span class="feature-badge">Action Detection</span>
-                    <span class="feature-badge">Interactive Elements</span>
-                  </div>
-                </div>
-                <input
-                  type="radio"
-                  name="defaultMode"
-                  value="actions"
-                  class="form-check-input mt-1"
-                />
-              </div>
-            </div>
-
-            <div class="mode-option" data-mode="full">
-              <div class="d-flex justify-content-between align-items-start">
-                <div class="flex-grow-1">
-                  <div class="mode-title">
-                    <i class="bi bi-gem text-info me-2"></i>Full Mode
-                  </div>
-                  <div class="mode-description">
-                    Complete AI analysis with relationships and cross-references
-                  </div>
-                  <div class="mode-features">
-                    <span class="feature-badge">Full AI Analysis</span>
-                    <span class="feature-badge">Relationship Extraction</span>
-                    <span class="feature-badge">Cross-references</span>
-                  </div>
-                </div>
-                <input
-                  type="radio"
-                  name="defaultMode"
-                  value="full"
-                  class="form-check-input mt-1"
-                />
               </div>
             </div>
           </div>

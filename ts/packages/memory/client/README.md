@@ -8,6 +8,13 @@ It also exposes the personal how-to settings, candidate lifecycle, and
 versioned procedure save, get, list, search, and archive operations through
 both in-process and MCP clients.
 
+Document ingestion uses one model-driven `content` pipeline and KnowPro
+retrieval. The mode can be omitted; chunk sizing remains configurable.
+The protocol rejects the removed `basic`, `summary`, and `full` modes rather
+than translating them or falling back to a different search engine. An
+accepted ingestion request is not an assertion that indexing has completed;
+use the job status to observe completion or failures.
+
 The typed `answer` operation returns deterministic extractive answers with
 source-linked citations. It does not claim model-generated synthesis.
 

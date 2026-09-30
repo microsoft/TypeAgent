@@ -5,14 +5,7 @@ import { EventEmitter } from "node:events";
 
 export interface KnowledgeExtractionProgressEvent {
     extractionId: string;
-    phase:
-        | "content"
-        | "basic"
-        | "summary"
-        | "analyzing"
-        | "extracting"
-        | "complete"
-        | "error";
+    phase: "content" | "analyzing" | "extracting" | "complete" | "error";
     totalItems: number;
     processedItems: number;
     currentItem: string | undefined;

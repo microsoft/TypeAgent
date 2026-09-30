@@ -23,7 +23,7 @@ test("event search uses structured knowledge with ledger filters before the limi
                     title: sourceId,
                     text: `Page ${sourceId}`,
                 },
-                pipeline: { mode: "basic" },
+                pipeline: { mode: "content" },
             });
             await waitForJob(service, ingested.jobId);
         }

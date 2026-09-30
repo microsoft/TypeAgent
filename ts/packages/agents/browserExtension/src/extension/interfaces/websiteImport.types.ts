@@ -13,7 +13,7 @@ export interface ImportOptions {
     limit?: number;
     days?: number;
     folder?: string;
-    mode?: "basic" | "content" | "full";
+    mode?: "content";
     maxConcurrent?: number;
     contentTimeout?: number;
 }
@@ -21,7 +21,7 @@ export interface ImportOptions {
 // Folder import specific options
 export interface FolderImportOptions {
     folderPath: string;
-    mode?: "basic" | "content" | "full";
+    mode?: "content";
     preserveStructure?: boolean;
     recursive?: boolean;
     fileTypes?: string[];

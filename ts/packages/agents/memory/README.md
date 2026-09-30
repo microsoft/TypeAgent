@@ -84,17 +84,11 @@ and `--exclude` are repeatable globs over root-relative paths. Defaults are
 1,000 files, 50 MiB total, and four concurrent ingestion requests; lower limits
 can be supplied with `--maxFiles`, `--maxBytes`, and `--concurrency`.
 
-`--profile` selects a public ingestion preset:
-
-- `fast`: basic indexing with 8,000-character chunks
-- `balanced`: content indexing with 4,000-character chunks
-- `deep`: full indexing with 2,000-character chunks
-
-Without `--profile`, imports use the service-equivalent default of content
-indexing with 8,000-character chunks. The selected profile and effective
-pipeline are stored with the batch and included in status output after
-restoration. Profile names are available through command completion for both
-file and folder import.
+Imports use the model-driven `content` pipeline with 8,000-character chunks.
+The effective pipeline is stored with the batch and included in restored status
+output. There are no import profiles or alternate processing modes.
+Pre-release version 1 batch state is rejected explicitly rather than migrated;
+new batches use version 2. Accepted service jobs remain managed by the service.
 
 Every candidate is checked after `realpath`. A symlink or junction that resolves
 outside the import root is reported as a per-file error, and linked directories

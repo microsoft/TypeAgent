@@ -4,7 +4,6 @@
 interface AutoIndexingSettings {
     autoIndexing: boolean;
     excludeSensitiveSites: boolean;
-    indexingQuality: "fast" | "balanced" | "deep";
     indexOnlyTextContent: boolean;
 }
 
@@ -15,7 +14,6 @@ class AutoIndexingManager {
     private settings: AutoIndexingSettings = {
         autoIndexing: false,
         excludeSensitiveSites: true,
-        indexingQuality: "balanced",
         indexOnlyTextContent: false,
     };
 
@@ -45,7 +43,6 @@ class AutoIndexingManager {
         const relevantKeys = [
             "autoIndexing",
             "excludeSensitiveSites",
-            "indexingQuality",
             "indexOnlyTextContent",
         ];
         return relevantKeys.some((key) => changes[key]);
@@ -56,14 +53,12 @@ class AutoIndexingManager {
             const result = await chrome.storage.sync.get([
                 "autoIndexing",
                 "excludeSensitiveSites",
-                "indexingQuality",
                 "indexOnlyTextContent",
             ]);
 
             this.settings = {
                 autoIndexing: result.autoIndexing || false,
                 excludeSensitiveSites: result.excludeSensitiveSites !== false, // default true
-                indexingQuality: result.indexingQuality || "balanced",
                 indexOnlyTextContent: result.indexOnlyTextContent || false,
             };
 
@@ -283,7 +278,6 @@ class AutoIndexingManager {
             const response = await chrome.runtime.sendMessage({
                 type: "autoIndexPage",
                 url: window.location.href,
-                quality: this.settings.indexingQuality,
                 textOnly: this.settings.indexOnlyTextContent,
             });
 

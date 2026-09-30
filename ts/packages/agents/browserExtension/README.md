@@ -45,6 +45,16 @@ CLI (`new`, `list`, `info`, `switch`, `prev`, `next`, `rename`,
 the panel and replays the new conversation's history, so peer activity
 from a Shell or CLI joined to the same conversation is also visible.
 
+## Memory imports
+
+Website and HTML-folder imports, automatic indexing, and save-page capture use
+the model-driven `content` pipeline. The options page and import dialogs do not
+offer alternate modes or quality presets. Content extraction requires an
+available model; there is no metadata-only indexing fallback. Unsupported
+pre-release extraction settings are reported explicitly; use **Reset to
+Defaults** on the options page to discard them. Procedure discovery settings
+and candidate review remain independent of memory processing.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

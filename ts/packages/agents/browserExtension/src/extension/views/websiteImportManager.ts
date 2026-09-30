@@ -576,9 +576,9 @@ export class WebsiteImportManager {
             );
         }
 
-        if (options.mode && options.mode !== "basic") {
-            warnings.push(
-                "AI analysis will increase processing time significantly",
+        if (options.mode !== undefined && options.mode !== "content") {
+            errors.push(
+                "Unsupported import mode. Only 'content' is supported.",
             );
         }
 

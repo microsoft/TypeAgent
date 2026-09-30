@@ -660,9 +660,6 @@ export class WebsiteImportUI {
         const folderInput = modal.querySelector(
             "#webBookmarkFolder",
         ) as HTMLInputElement;
-        const extractionModeInput = modal.querySelector(
-            "#webExtractionMode",
-        ) as HTMLInputElement;
         const maxConcurrentInput = modal.querySelector(
             "#webMaxConcurrent",
         ) as HTMLInputElement;
@@ -670,16 +667,10 @@ export class WebsiteImportUI {
             "#webContentTimeout",
         ) as HTMLInputElement;
 
-        // Convert slider value to mode string
-        const modeMap = ["basic", "summary", "content", "full"];
-        const extractionMode = extractionModeInput?.value
-            ? (modeMap[parseInt(extractionModeInput.value)] as any)
-            : "content";
-
         const options: ImportOptions = {
             source,
             type,
-            mode: extractionMode,
+            mode: "content",
             maxConcurrent: maxConcurrentInput?.value
                 ? parseInt(maxConcurrentInput.value)
                 : 5,
@@ -719,9 +710,6 @@ export class WebsiteImportUI {
         }
 
         // Get form values with updated IDs
-        const extractionModeInput = modal.querySelector(
-            "#folderExtractionMode",
-        ) as HTMLInputElement;
         const preserveStructureInput = modal.querySelector(
             "#folderPreserveStructure",
         ) as HTMLInputElement;
@@ -738,15 +726,9 @@ export class WebsiteImportUI {
             "#folderSkipHidden",
         ) as HTMLInputElement;
 
-        // Convert slider value to mode string
-        const modeMap = ["basic", "summary", "content", "full"];
-        const extractionMode = extractionModeInput?.value
-            ? (modeMap[parseInt(extractionModeInput.value)] as any)
-            : "content";
-
         const options: FolderImportOptions = {
             folderPath: folderPathInput.value.trim(),
-            mode: extractionMode,
+            mode: "content",
             preserveStructure: preserveStructureInput?.checked ?? true,
             recursive: recursiveInput?.checked ?? true,
             fileTypes: [".html", ".htm", ".mhtml"],
@@ -960,17 +942,6 @@ export class WebsiteImportUI {
             });
         });
 
-        // Setup extraction mode slider
-        const extractionSlider = modal.querySelector(
-            "#extractionMode",
-        ) as HTMLInputElement;
-        if (extractionSlider) {
-            this.setupSliderEventListeners(
-                extractionSlider,
-                "#webModeDescription",
-            );
-        }
-
         // Start import button - use replaceWith to remove any existing event listeners
         const startButton = modal.querySelector("#startWebActivityImport");
         if (startButton) {
@@ -1097,17 +1068,6 @@ export class WebsiteImportUI {
                 this.updateFolderImportState();
             });
         });
-
-        // Setup extraction mode slider
-        const folderExtractionSlider = modal.querySelector(
-            "#folderExtractionMode",
-        ) as HTMLInputElement;
-        if (folderExtractionSlider) {
-            this.setupSliderEventListeners(
-                folderExtractionSlider,
-                "#folderModeDescription",
-            );
-        }
 
         // Start import button - use replaceWith to remove any existing event listeners
         if (startButton) {
@@ -1285,89 +1245,5 @@ export class WebsiteImportUI {
                     }
                 });
         }
-    }
-
-    /**
-     * Setup event listeners for extraction mode slider
-     */
-    private setupSliderEventListeners(
-        slider: HTMLInputElement,
-        descriptionSelector: string,
-    ): void {
-        const modal = slider.closest(".modal");
-        if (!modal) return;
-
-        // Handle slider input
-        slider.addEventListener("input", () => {
-            const modeMap = ["basic", "summary", "content", "full"];
-            const mode = modeMap[parseInt(slider.value)];
-            slider.setAttribute("data-mode", mode);
-            this.updateSliderLabels(slider);
-            this.updateModeDescription(descriptionSelector, mode);
-        });
-
-        // Handle label clicks
-        const labels = modal.querySelectorAll(".slider-label");
-        labels.forEach((label, index) => {
-            label.addEventListener("click", () => {
-                const modeMap = ["basic", "summary", "content", "full"];
-                slider.value = index.toString();
-                slider.setAttribute("data-mode", modeMap[index]);
-                this.updateSliderLabels(slider);
-                this.updateModeDescription(descriptionSelector, modeMap[index]);
-            });
-        });
-
-        // Initialize state
-        this.updateSliderLabels(slider);
-        this.updateModeDescription(descriptionSelector, "content");
-    }
-
-    /**
-     * Update slider labels and ticks visual state
-     */
-    private updateSliderLabels(slider: HTMLInputElement): void {
-        const modal = slider.closest(".modal");
-        if (!modal) return;
-
-        const activeValue = parseInt(slider.value);
-        const labels = modal.querySelectorAll(".slider-label");
-        const ticks = modal.querySelectorAll(".slider-tick");
-
-        labels.forEach((label, index) => {
-            if (index === activeValue) {
-                label.classList.add("active");
-            } else {
-                label.classList.remove("active");
-            }
-        });
-
-        ticks.forEach((tick, index) => {
-            if (index === activeValue) {
-                tick.classList.add("active");
-            } else {
-                tick.classList.remove("active");
-            }
-        });
-    }
-
-    /**
-     * Update mode description text
-     */
-    private updateModeDescription(selector: string, mode: string): void {
-        const descriptionElement = document.querySelector(selector);
-        if (!descriptionElement) return;
-
-        const descriptions: Record<string, string> = {
-            basic: "Fast metadata extraction without AI - perfect for bulk operations",
-            summary:
-                "AI-enhanced content summarization with key insights extraction",
-            content:
-                "AI-powered content analysis with entity and topic extraction",
-            full: "Complete AI analysis with relationships and cross-references",
-        };
-
-        descriptionElement.textContent =
-            descriptions[mode] || descriptions.content;
     }
 }

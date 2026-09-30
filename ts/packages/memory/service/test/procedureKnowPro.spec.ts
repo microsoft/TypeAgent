@@ -96,7 +96,7 @@ test("KnowPro filters structured procedure knowledge by state before ranking", a
                 title: "Runbook",
                 text: "Original runbook",
             },
-            pipeline: { mode: "basic" },
+            pipeline: { mode: "content" },
         });
         await waitForJob(source.jobId);
         await service.saveProcedure({

@@ -1393,10 +1393,15 @@ async function openWebPage(
     if (await shouldRunKnowledgeExtraction(url, context)) {
         const browserSettings = await browserControl.getBrowserSettings();
         try {
+            if (browserSettings.extractionMode !== "content") {
+                throw new Error(
+                    "Unsupported extraction mode. Only 'content' is supported.",
+                );
+            }
             const extractionInfo = await performKnowledgeExtraction(
                 url,
                 context,
-                browserSettings.extractionMode,
+                "content",
             );
             // Return immediately with dynamic display information for real-time progress
             if (extractionInfo && extractionInfo.dynamicDisplayId) {

@@ -22,6 +22,17 @@ puppeteer helpers).
 
 ## Architecture
 
+### Memory imports and page capture
+
+Browser history, bookmark, HTML-folder imports, and saved pages use the shared
+model-driven `content` memory pipeline. No processing presets or metadata-only
+indexing modes are exposed. Existing supported `maxCharsPerChunk` options still
+tune chunk sizing within that pipeline. Unsupported pre-release import modes
+are reported as errors instead of mapped or migrated. Browser metadata
+enumeration is not indexing: imported URLs are fetched and their original
+content is submitted to durable memory. Save-page capture and procedure
+candidate discovery/review remain separate from processing-mode selection.
+
 ### Agent WebSocket Server
 
 The browser agent exposes a WebSocket server (`AgentWebSocketServer`) on a
