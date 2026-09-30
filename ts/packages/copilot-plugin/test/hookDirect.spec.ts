@@ -79,6 +79,15 @@ function setDisplay(content: DisplayContent): EmitDisplay {
 const forced = { forceHandled: true };
 
 describe("direct TypeAgent hook", () => {
+    it("passes the hook session ID rather than relying on inherited environment", async () => {
+        const { dependencies } = createDependencies({});
+        await handleDirect(input, forced, dependencies);
+        expect(dependencies.connectToTypeAgent).toHaveBeenCalledWith(
+            expect.anything(),
+            input.sessionId,
+        );
+    });
+
     it.each([false, true])(
         "preserves pending user input instead of claiming completion (forced: %s)",
         async (forceHandled) => {

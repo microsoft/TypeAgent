@@ -123,8 +123,12 @@ export function createClientIO(callbacks: DisplayCallbacks): ClientIO {
  */
 export async function connectToTypeAgent(
     clientIO: ClientIO,
+    sessionId: string | undefined = process.env.COPILOT_AGENT_SESSION_ID,
 ): Promise<Dispatcher> {
-    let conversationId = await readSelectedConversationId(TYPEAGENT_URL);
+    let conversationId = await readSelectedConversationId(
+        TYPEAGENT_URL,
+        sessionId,
+    );
     if (conversationId === undefined) {
         const connection = await connectToAgentServer();
         try {
@@ -132,6 +136,7 @@ export async function connectToTypeAgent(
                 connection,
                 clientIO,
                 TYPEAGENT_URL,
+                sessionId,
             );
         } finally {
             await connection.close();

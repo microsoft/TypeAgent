@@ -32,10 +32,12 @@ describe("shared natural-language conversation selection", () => {
         TYPEAGENT_PLUGIN_DATA: process.env.TYPEAGENT_PLUGIN_DATA,
         TYPEAGENT_MODE: process.env.TYPEAGENT_MODE,
         TYPEAGENT_CONVERSATION_ID: process.env.TYPEAGENT_CONVERSATION_ID,
+        COPILOT_AGENT_SESSION_ID: process.env.COPILOT_AGENT_SESSION_ID,
     };
     beforeEach(() => {
         directory = mkdtempSync(join(tmpdir(), "mixed-nl-binding-"));
         process.env.TYPEAGENT_PLUGIN_DATA = directory;
+        process.env.COPILOT_AGENT_SESSION_ID = "session-1";
         delete process.env.TYPEAGENT_MODE;
         delete process.env.TYPEAGENT_CONVERSATION_ID;
         connectDispatcher.mockClear();
@@ -153,4 +155,47 @@ describe("shared natural-language conversation selection", () => {
         );
         expect(connectAgentServer).toHaveBeenCalledTimes(1);
     });
+
+    it("lets a fresh session select the current default after another session loses its conversation", async () => {
+        const io = createClientIO({});
+        await connectToTypeAgent(io, "old-session");
+        connectDispatcher.mockRejectedValueOnce(
+            new Error("Conversation not found: default-first"),
+        );
+        await expect(connectToTypeAgent(io, "old-session")).rejects.toThrow(
+            "Conversation not found",
+        );
+        expect(connectAgentServer).toHaveBeenCalledTimes(1);
+        joinConversation.mockResolvedValue({
+            conversationId: "current-default",
+        });
+        await connectToTypeAgent(io, "new-session");
+        expect(connectDispatcher).toHaveBeenLastCalledWith(
+            io,
+            expect.any(String),
+            {
+                filter: true,
+                clientType: "shell",
+                conversationId: "current-default",
+            },
+        );
+        expect(connectAgentServer).toHaveBeenCalledTimes(2);
+    });
+
+    it.each(["config", "environment"] as const)(
+        "never resolves a default for a missing explicit %s pin",
+        async (source) => {
+            if (source === "config")
+                writeConfig({ mode: "mcp", conversationId: "missing" });
+            else process.env.TYPEAGENT_CONVERSATION_ID = "missing";
+            connectDispatcher.mockRejectedValueOnce(
+                new Error("Conversation not found: missing"),
+            );
+            await expect(
+                connectToTypeAgent(createClientIO({}), "fresh-session"),
+            ).rejects.toThrow("Conversation not found: missing");
+            expect(connectAgentServer).not.toHaveBeenCalled();
+            expect(connectDispatcher).toHaveBeenCalledTimes(1);
+        },
+    );
 });
