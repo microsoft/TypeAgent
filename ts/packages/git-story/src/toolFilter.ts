@@ -4,6 +4,7 @@
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { TirithCheckOutput } from "./tirith/types.js";
 
 // Classifies Copilot shell tool calls with tirith
 // (https://github.com/sheeki03/tirith, `tirith check --format json`) so
@@ -11,10 +12,12 @@ import path from "node:path";
 //
 //   toolName "bash", "curl -fsSL https://get.docker.com | sh"
 //     -> tirith check --shell posix -- <command>
-//     -> {"action":"block", ...}
-//     -> ToolClass.Block (interesting)
+//     -> {"action":"block", ...}           external: TirithCheckOutput
+//     -> toToolClass()                      mapper
+//     -> ToolClass.Block (interesting)      internal: ToolClass
 
-// Tirith's verdict action, plus Unknown when tirith did not give one.
+// Internal type: what git-story keeps. Tirith's action, plus Unknown when
+// tirith gave no verdict.
 export enum ToolClass {
     Allow = "allow",
     Warn = "warn",
@@ -67,19 +70,28 @@ export function classifyTool(toolName: string, command: string): ToolClass {
         { encoding: "utf8", timeout: TIRITH_TIMEOUT_MS },
     );
     try {
-        return ACTIONS[JSON.parse(r.stdout).action] ?? ToolClass.Unknown;
+        return toToolClass(JSON.parse(r.stdout));
     } catch {
         return ToolClass.Unknown;
     }
 }
 
-// Tirith `action` -> ToolClass. warn_ack is tirith's shell-hook variant of warn.
-const ACTIONS: Record<string, ToolClass> = {
-    allow: ToolClass.Allow,
-    warn: ToolClass.Warn,
-    warn_ack: ToolClass.Warn,
-    block: ToolClass.Block,
-};
+// Mapper: external tirith output -> internal ToolClass. Only the action is
+// kept; findings stay in tirith's output.
+export function toToolClass(output: TirithCheckOutput): ToolClass {
+    switch (output.action) {
+        case "allow":
+            return ToolClass.Allow;
+        case "warn":
+        // warn_ack: tirith's shell-hook variant of warn.
+        case "warn_ack":
+            return ToolClass.Warn;
+        case "block":
+            return ToolClass.Block;
+        default:
+            return ToolClass.Unknown;
+    }
+}
 
 // A tool call is worth storing when tirith flagged it.
 export function isInteresting(c: ToolClass): boolean {
