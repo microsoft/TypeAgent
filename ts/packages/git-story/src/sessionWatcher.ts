@@ -1,11 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-    CommitContext,
-    SessionMetadata,
-    SessionStory,
-} from "./gitCommitStory.js";
+import type { SessionMetadata } from "./gitCommitStory.js";
 
 export interface SessionWatchRequest {
     projectPath: string;
@@ -14,12 +10,9 @@ export interface SessionWatchRequest {
     metadata: SessionMetadata;
 }
 
-export interface SessionWatcher<TMemory> {
+export interface SessionWatcher {
     // Registers a local transcript for background processing.
     watch(request: SessionWatchRequest): Promise<void>;
-
-    // Returns privacy-filtered summaries and memories mapped to this candidate commit.
-    getSessionStories(commit: CommitContext): Promise<SessionStory<TMemory>[]>;
 
     // Stops this watcher's background work and releases its resources.
     stop(): Promise<void>;
