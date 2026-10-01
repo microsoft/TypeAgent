@@ -109,7 +109,7 @@ async function handleKnowledgeExtractionProgressFromEvent(
 async function performKnowledgeExtraction(
     url: string,
     context: ActionContext<BrowserActionContext>,
-    extractionMode: string,
+    extractionMode: "content",
 ): Promise<any | null> {
     try {
         const browserControl = getActionBrowserControl(context);

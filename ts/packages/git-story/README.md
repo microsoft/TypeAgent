@@ -25,6 +25,26 @@ file to `.git/info/exclude`, so it stays local to the clone.
 so git's hook arguments and stdin reach the command unchanged. `init` does not
 overwrite a hook that it did not write.
 
+## Daemon
+
+`git story daemon start|stop|restart|status` manages one HTTP API server per
+user, shared by all projects. It binds `127.0.0.1:51703` and keeps
+its pid and port in `~/.typeagent/git-story/daemon.json`, log in
+`~/.typeagent/git-story/daemon.log` (`~` is the user home directory on macOS and
+Windows).
+
+Each request names its project by absolute path in the `project` query
+parameter:
+
+```text
+$ git story daemon start
+Started (pid 70006) at http://127.0.0.1:51703
+$ curl -G http://127.0.0.1:51703/api/story/commits/79f77a3 --data-urlencode project=/Users/me/repo
+{"hash":"79f77a337c682a14ec7df45d309c4856cf3bf236","subject":"hello story"}
+```
+
+Routes are in `src/server/router.ts`; handlers are in `src/server/routes/`.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

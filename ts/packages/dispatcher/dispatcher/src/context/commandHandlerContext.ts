@@ -1966,6 +1966,8 @@ export async function closeCommandHandlerContext(
     } catch {
         // best-effort
     }
+    await context.conversationDurableMemory?.flush();
+    await context.conversationMemory?.waitForPendingTasks();
     // Save the session because the token count is in it.
     context.session.save();
     // Tear down every loaded agent, including those vended by the dynamic

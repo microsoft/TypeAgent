@@ -5,7 +5,7 @@ export type CorpusState = "ready" | "indexing" | "degraded" | "error";
 
 export type SourceType = "web" | "markdown" | "text" | "html" | "vtt";
 
-export type IngestionMode = "basic" | "summary" | "content" | "full";
+export type IngestionMode = "content";
 
 export type UpdatePolicy =
     | "skipIfUnchanged"
@@ -291,6 +291,13 @@ export type MemoryEventSender =
     | "agent"
     | "other";
 
+export type MemoryEventAuthority =
+    | "user-assertion"
+    | "evidence-only"
+    | "verified-observation"
+    | "explicit"
+    | "producer-reported";
+
 export interface MemoryEventProducer {
     producerId: string;
     producerType: string;
@@ -341,9 +348,11 @@ export interface MemoryEventAppendResult {
 
 export interface MemoryEventFilter {
     sourceKinds?: MemoryEventSourceKind[];
+    authorities?: MemoryEventAuthority[];
     producerIds?: string[];
     eventTypes?: string[];
     conversationIds?: string[];
+    turnIds?: string[];
     runIds?: string[];
     linkedSourceIds?: string[];
     observedFrom?: string;

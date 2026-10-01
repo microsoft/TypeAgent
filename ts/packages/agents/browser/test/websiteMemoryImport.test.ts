@@ -29,12 +29,30 @@ import { importProgressEvents } from "../src/agent/import/importProgressEvents.m
 import { ImportStateManager } from "../src/agent/import/importStateManager.mjs";
 import { importWebsiteDataFromSession } from "../src/agent/websiteMemory.mjs";
 
-describe("non-basic website import", () => {
+describe("content website import", () => {
     afterEach(() => {
         jest.restoreAllMocks();
         jest.clearAllMocks();
         importProgressEvents.removeAllListeners();
     });
+
+    test.each(["basic", "summary", "full"])(
+        "rejects obsolete import mode %s",
+        async (mode) => {
+            const result = await importWebsiteDataFromSession(
+                {
+                    source: "chrome",
+                    type: "history",
+                    mode,
+                    importId: "obsolete",
+                },
+                { agentContext: {} } as SessionContext<BrowserActionContext>,
+            );
+            expect(result.success).toBe(false);
+            expect(result.message).toContain("Only 'content' is supported");
+            expect(importWebsites).not.toHaveBeenCalled();
+        },
+    );
 
     test("submits one normalized document and forwards chunk policy", async () => {
         const site = {

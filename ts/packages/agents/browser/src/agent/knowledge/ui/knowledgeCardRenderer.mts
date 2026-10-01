@@ -11,8 +11,6 @@ export interface ProgressState {
     phase:
         | "initializing"
         | "content"
-        | "basic"
-        | "summary"
         | "analyzing"
         | "extracting"
         | "complete"
@@ -340,8 +338,6 @@ export function updateExtractionProgressState(
         const phasePercentages: Record<string, number> = {
             initializing: 5,
             content: 15,
-            basic: 30,
-            summary: 50,
             analyzing: 75,
             extracting: 90,
             complete: 100,

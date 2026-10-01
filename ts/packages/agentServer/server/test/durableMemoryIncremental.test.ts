@@ -151,7 +151,7 @@ describe("durable memory incremental production path", () => {
                     markdown: fullPageFixture(),
                 },
                 pipeline: {
-                    mode: "full",
+                    mode: "content",
                     maxCharsPerChunk: 8_000,
                 },
             });
@@ -230,7 +230,7 @@ describe("durable memory incremental production path", () => {
                             "utf8",
                         ),
                     },
-                    pipeline: { mode: "full", maxCharsPerChunk: 8_000 },
+                    pipeline: { mode: "content", maxCharsPerChunk: 8_000 },
                 });
                 const job = await waitForTerminalJob(service, accepted.jobId);
                 expect(job.state).toBe("complete");

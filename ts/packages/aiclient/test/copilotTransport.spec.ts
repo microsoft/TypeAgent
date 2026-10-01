@@ -275,11 +275,39 @@ describe("Copilot session fallback", () => {
 describe("selectCopilotModel", () => {
     test("uses the requested model when it is available", () => {
         const selected = selectCopilotModel(
-            "gpt-5.6-luna",
+            "gpt-6-luna",
             ["gpt-5.4-mini"],
-            [makeModel("gpt-5.4-mini"), makeModel("gpt-5.6-luna")],
+            [
+                makeModel("gpt-5.4-mini"),
+                makeModel("gpt-5.6-luna"),
+                makeModel("gpt-6-luna"),
+            ],
         );
-        expect(selected?.id).toBe("gpt-5.6-luna");
+        expect(selected?.id).toBe("gpt-6-luna");
+    });
+
+    test.each(["luna", "sol"])(
+        "uses GPT-5.6 %s before generic fallbacks when GPT-6 is unavailable",
+        (tier) => {
+            const selected = selectCopilotModel(
+                `gpt-6-${tier}`,
+                ["gpt-5.4-mini"],
+                [makeModel("gpt-5.4-mini"), makeModel(`gpt-5.6-${tier}`)],
+            );
+            expect(selected?.id).toBe(`gpt-5.6-${tier}`);
+        },
+    );
+
+    test("skips a disabled GPT-5.6 tier fallback", () => {
+        const selected = selectCopilotModel(
+            "gpt-6-luna",
+            ["gpt-5.4-mini"],
+            [
+                makeModel("gpt-5.6-luna", { policy: "disabled" }),
+                makeModel("gpt-5.4-mini"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.4-mini");
     });
 
     test("uses the first configured concrete fallback", () => {

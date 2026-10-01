@@ -502,7 +502,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             const targetTab = await getActiveTab();
             if (targetTab && (await shouldIndexPage(targetTab.url!))) {
                 const result = await indexPageContent(targetTab, false, {
-                    quality: params.quality,
                     textOnly: params.textOnly,
                     activityType: "visited",
                 });
@@ -1240,8 +1239,14 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
 
         async saveExtractionSettings(params: any) {
             try {
+                const mode = params.settings?.mode ?? params.mode ?? "content";
+                if (mode !== "content") {
+                    throw new Error(
+                        "Unsupported extraction mode. Only 'content' is supported.",
+                    );
+                }
                 await chrome.storage.sync.set({
-                    extractionMode: params.settings?.mode || params.mode,
+                    extractionMode: mode,
                     suggestQuestions:
                         params.settings?.suggestQuestions ??
                         params.suggestQuestions,

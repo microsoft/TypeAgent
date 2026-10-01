@@ -283,6 +283,7 @@ async function importCandidate(
                 },
                 pipeline: {
                     updatePolicy: "skipIfUnchanged",
+                    mode: "content",
                     ...options.pipeline,
                 },
             },
@@ -338,6 +339,11 @@ export async function importMarkdownPath(
     service: MemoryService,
     options: MarkdownImportOptions,
 ): Promise<ImportBatchManifest> {
+    if (options.pipeline !== undefined && options.pipeline.mode !== "content") {
+        throw new Error(
+            "Unsupported import mode. Only 'content' is supported.",
+        );
+    }
     const startedAt = new Date().toISOString();
     const { root, candidates, errors } = await collectCandidates(
         options.path,

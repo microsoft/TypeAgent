@@ -17,6 +17,11 @@ import path from "node:path";
 import lockfile from "proper-lockfile";
 import { createKnowProCorpusIndex } from "./knowProCorpusIndex.js";
 import {
+    classifyIndexSchema,
+    stampIndexSchema,
+    type IndexKind,
+} from "./indexSchema.js";
+import {
     detectProcedureCandidates,
     PersonalHowToStore,
 } from "./personalHowToStore.js";
@@ -33,6 +38,7 @@ import type {
     MemoryCorpus,
     MemoryCorpusStatus,
     MemoryEvent,
+    MemoryEventAuthority,
     MemoryEventAppendRequest,
     MemoryEventAppendResult,
     MemoryEventFilter,
@@ -97,9 +103,52 @@ const eventSenders = new Set([
     "agent",
     "other",
 ]);
+const eventAuthorities: ReadonlySet<string> = new Set<MemoryEventAuthority>([
+    "user-assertion",
+    "evidence-only",
+    "verified-observation",
+    "explicit",
+    "producer-reported",
+]);
 
 interface StoredRevision extends SourceRevision {
     content: string;
+}
+
+interface EventIndexState {
+    generation: string;
+    watermark: string;
+}
+
+type EventSuppression =
+    | {
+          recordType: "event-suppression";
+          scope: "idempotency";
+          producerId: string;
+          idempotencyKey: string;
+      }
+    | {
+          recordType: "event-suppression";
+          scope: "conversation";
+          conversationId: string;
+          sourceKind?: MemoryEvent["sourceKind"];
+      }
+    | {
+          recordType: "event-suppression";
+          scope: "turn";
+          conversationId?: string;
+          turnId: string;
+          sourceKind?: MemoryEvent["sourceKind"];
+          authority?: MemoryEventAuthority;
+      };
+
+export class ForgottenEventError extends Error {
+    public readonly code = "EVENT_FORGOTTEN";
+
+    public constructor() {
+        super("Event was previously forgotten and cannot be appended");
+        this.name = "ForgottenEventError";
+    }
 }
 
 interface StoredSource extends SourceDocument {
@@ -124,12 +173,17 @@ interface CorpusRuntime {
     index: CorpusIndex;
     events: MemoryEvent[];
     eventIdempotency: Map<string, MemoryEvent>;
+    eventSuppressions: EventSuppression[];
+    suppressedEventKeys: Set<string>;
+    suppressedConversations: Set<string>;
+    suppressedTurns: Set<string>;
     writeTail: Promise<void>;
 }
 
 export interface FileMemoryServiceOptions {
     indexFactory?: CorpusIndexFactory;
     procedureIndexFactory?: CorpusIndexFactory;
+    eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
 }
 
@@ -214,9 +268,16 @@ function raceWithAbort<T>(
         const abort = () =>
             reject(signal.reason ?? new Error("Operation cancelled"));
         signal.addEventListener("abort", abort, { once: true });
-        operation
-            .then(resolve, reject)
-            .finally(() => signal.removeEventListener("abort", abort));
+        operation.then(
+            (value) => {
+                signal.removeEventListener("abort", abort);
+                resolve(value);
+            },
+            (error) => {
+                signal.removeEventListener("abort", abort);
+                reject(error);
+            },
+        );
     });
 }
 
@@ -248,6 +309,21 @@ function contentFor(request: DocumentIngestRequest): string {
 
 function hashContent(content: string): string {
     return createHash("sha256").update(content).digest("hex");
+}
+
+function eventIndexWatermark(events: readonly MemoryEvent[]): string {
+    return hashContent(events.map((event) => event.eventId).join("\n"));
+}
+
+function contentPipeline(
+    pipeline: SourceRevision["pipeline"],
+): IndexedDocument["pipeline"] {
+    return {
+        mode: "content",
+        ...(pipeline?.maxCharsPerChunk === undefined
+            ? {}
+            : { maxCharsPerChunk: pipeline.maxCharsPerChunk }),
+    };
 }
 
 function createStoredSource(
@@ -317,26 +393,68 @@ function validateIdentifier(kind: string, value: string): void {
     }
 }
 
+function validateIndexGeneration(
+    generation: unknown,
+): asserts generation is string {
+    if (
+        typeof generation !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            generation,
+        )
+    ) {
+        throw new Error(`Invalid index generation '${String(generation)}'`);
+    }
+}
+
 function validateTimestamp(kind: string, value: string): void {
     if (!Number.isFinite(Date.parse(value))) {
         throw new Error(`Invalid ${kind} '${value}'`);
     }
 }
 
-function eventIdempotencyKey(event: {
-    producer: { producerId: string };
-    idempotencyKey: string;
-}): string {
-    return `${event.producer.producerId}\n${event.idempotencyKey}`;
+function eventIdempotencyKey(
+    event:
+        | { producer: { producerId: string }; idempotencyKey: string }
+        | { producerId: string; idempotencyKey: string },
+): string {
+    const producerId =
+        "producer" in event ? event.producer.producerId : event.producerId;
+    return `${producerId}\n${event.idempotencyKey}`;
 }
 
-function matchesEventFilter(
+function validateEventAuthority(
+    authority: string,
+): asserts authority is MemoryEventAuthority {
+    if (!eventAuthorities.has(authority)) {
+        throw new Error(`Invalid event authority '${authority}'`);
+    }
+}
+
+function eventAuthority(
+    event: Pick<MemoryEvent, "metadata">,
+): MemoryEventAuthority | undefined {
+    const authority = event.metadata?.authority;
+    if (authority === undefined) {
+        return undefined;
+    }
+    if (typeof authority !== "string") {
+        throw new Error("Event authority must be a string");
+    }
+    validateEventAuthority(authority);
+    return authority;
+}
+
+function matchesEventProvenance(
     event: MemoryEvent,
     filter: MemoryEventFilter,
 ): boolean {
+    const authority = eventAuthority(event);
     return (
         (filter.sourceKinds === undefined ||
             filter.sourceKinds.includes(event.sourceKind)) &&
+        (filter.authorities === undefined ||
+            (authority !== undefined &&
+                filter.authorities.includes(authority))) &&
         (filter.producerIds === undefined ||
             filter.producerIds.includes(event.producer.producerId)) &&
         (filter.eventTypes === undefined ||
@@ -344,13 +462,25 @@ function matchesEventFilter(
         (filter.conversationIds === undefined ||
             (event.conversationId !== undefined &&
                 filter.conversationIds.includes(event.conversationId))) &&
+        (filter.turnIds === undefined ||
+            (event.turnId !== undefined &&
+                filter.turnIds.includes(event.turnId))) &&
         (filter.runIds === undefined ||
             (event.runId !== undefined &&
                 filter.runIds.includes(event.runId))) &&
         (filter.linkedSourceIds === undefined ||
             filter.linkedSourceIds.some((sourceId) =>
                 event.linkedSourceIds?.includes(sourceId),
-            )) &&
+            ))
+    );
+}
+
+function matchesEventFilter(
+    event: MemoryEvent,
+    filter: MemoryEventFilter,
+): boolean {
+    return (
+        matchesEventProvenance(event, filter) &&
         (filter.observedFrom === undefined ||
             Date.parse(event.observedAt) >= Date.parse(filter.observedFrom)) &&
         (filter.observedTo === undefined ||
@@ -360,6 +490,98 @@ function matchesEventFilter(
         (filter.eventTo === undefined ||
             Date.parse(event.eventTime) <= Date.parse(filter.eventTo))
     );
+}
+
+function suppressedConversationKey(
+    conversationId: string,
+    sourceKind?: MemoryEvent["sourceKind"],
+): string {
+    return JSON.stringify([conversationId, sourceKind ?? null]);
+}
+
+function suppressedTurnKey(
+    conversationId: string | undefined,
+    turnId: string,
+    sourceKind?: MemoryEvent["sourceKind"],
+    authority?: MemoryEventAuthority,
+): string {
+    return JSON.stringify([
+        conversationId ?? null,
+        turnId,
+        sourceKind ?? null,
+        authority ?? null,
+    ]);
+}
+
+function isSuppressedTurn(
+    runtime: CorpusRuntime,
+    request: MemoryEventAppendRequest,
+): boolean {
+    if (request.turnId === undefined) {
+        return false;
+    }
+    for (const conversationId of [request.conversationId, undefined]) {
+        for (const sourceKind of [request.sourceKind, undefined]) {
+            for (const authority of [eventAuthority(request), undefined]) {
+                if (
+                    runtime.suppressedTurns.has(
+                        suppressedTurnKey(
+                            conversationId,
+                            request.turnId,
+                            sourceKind,
+                            authority,
+                        ),
+                    )
+                ) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+function isWholeConversationForget(
+    request: MemoryEventFilter & { eventIds?: string[] },
+): boolean {
+    return (
+        request.conversationIds !== undefined &&
+        request.turnIds === undefined &&
+        (request.eventIds?.length ?? 0) === 0 &&
+        request.authorities === undefined &&
+        request.producerIds === undefined &&
+        request.eventTypes === undefined &&
+        request.runIds === undefined &&
+        request.linkedSourceIds === undefined &&
+        request.observedFrom === undefined &&
+        request.observedTo === undefined &&
+        request.eventFrom === undefined &&
+        request.eventTo === undefined
+    );
+}
+
+function addExplicitTurnSuppressions(
+    request: MemoryEventFilter,
+    add: (suppression: EventSuppression) => void,
+): void {
+    for (const turnId of request.turnIds ?? []) {
+        for (const conversationId of request.conversationIds ?? [undefined]) {
+            for (const sourceKind of request.sourceKinds ?? [undefined]) {
+                for (const authority of request.authorities ?? [undefined]) {
+                    add({
+                        recordType: "event-suppression",
+                        scope: "turn",
+                        ...(conversationId === undefined
+                            ? {}
+                            : { conversationId }),
+                        turnId,
+                        ...(sourceKind === undefined ? {} : { sourceKind }),
+                        ...(authority === undefined ? {} : { authority }),
+                    });
+                }
+            }
+        }
+    }
 }
 
 function pageOffset(token: string | undefined): number {
@@ -404,7 +626,9 @@ async function readJson<T>(filePath: string): Promise<T | undefined> {
     }
 }
 
-async function readEvents(filePath: string): Promise<MemoryEvent[]> {
+async function readEventRecords(
+    filePath: string,
+): Promise<(MemoryEvent | EventSuppression)[]> {
     let content: string;
     try {
         content = await readFile(filePath, "utf8");
@@ -422,7 +646,7 @@ async function readEvents(filePath: string): Promise<MemoryEvent[]> {
         .filter((line) => line.length > 0)
         .map((line, index) => {
             try {
-                return JSON.parse(line) as MemoryEvent;
+                return JSON.parse(line) as MemoryEvent | EventSuppression;
             } catch (error) {
                 throw new Error(
                     `Invalid event record at line ${index + 1}: ${String(error)}`,
@@ -481,6 +705,7 @@ function defaultCapabilities(): MemoryServiceCapabilities {
 export class FileMemoryService implements MemoryService, PersonalHowToService {
     private readonly indexFactory: CorpusIndexFactory;
     private readonly procedureIndexFactory: CorpusIndexFactory;
+    private readonly eventIndexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
     private readonly personalHowToStore: PersonalHowToStore;
     private readonly corpora = new Map<string, CorpusRuntime>();
@@ -498,6 +723,8 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
         this.procedureIndexFactory =
             options.procedureIndexFactory ?? this.indexFactory;
+        this.eventIndexFactory =
+            options.eventIndexFactory ?? this.procedureIndexFactory;
         this.capabilities = options.capabilities ?? defaultCapabilities();
         this.personalHowToStore = new PersonalHowToStore(
             rootDirectory,
@@ -568,6 +795,10 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 index,
                 events: [],
                 eventIdempotency: new Map(),
+                eventSuppressions: [],
+                suppressedEventKeys: new Set(),
+                suppressedConversations: new Set(),
+                suppressedTurns: new Set(),
                 writeTail: Promise.resolve(),
             });
             return structuredClone(corpus);
@@ -663,6 +894,16 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         let clearedCount = 0;
         await this.enqueueWrite(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
+            if (runtime.manifest.indexGeneration !== undefined) {
+                await classifyIndexSchema(
+                    this.indexDirectory(
+                        corpusId,
+                        runtime.manifest.indexGeneration,
+                    ),
+                    "documents",
+                    false,
+                );
+            }
             clearedCount = runtime.manifest.sources.length;
             const indexGeneration = randomUUID();
             await mkdir(this.indexDirectory(corpusId, indexGeneration), {
@@ -673,6 +914,11 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 [],
                 new AbortController().signal,
                 async () => {},
+            );
+            await stampIndexSchema(
+                this.indexDirectory(corpusId, indexGeneration),
+                "documents",
+                false,
             );
             const timestamp = now();
             const candidateManifest: CorpusManifest = {
@@ -689,11 +935,31 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 this.manifestPath(corpusId),
                 candidateManifest,
             );
-            await writeFile(this.eventsPath(corpusId), "");
+            const suppressions = this.collectEventSuppressions(
+                runtime.eventSuppressions,
+                runtime.events,
+                {
+                    conversationIds: [
+                        ...new Set(
+                            runtime.events.flatMap((event) =>
+                                event.conversationId === undefined
+                                    ? []
+                                    : [event.conversationId],
+                            ),
+                        ),
+                    ],
+                },
+            );
+            await this.writeEvents(corpusId, [], suppressions);
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
             runtime.events = [];
             runtime.eventIdempotency.clear();
+            this.setEventSuppressions(runtime, suppressions);
+            await this.removeDerivedIndexRoot(
+                this.eventIndexRoot(corpusId),
+                "conversation-events",
+            );
             await this.removeInactiveIndexGenerations(
                 corpusId,
                 indexGeneration,
@@ -810,16 +1076,18 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (source === undefined) {
             throw new Error(`Unknown source '${sourceId}'`);
         }
-        const runtime = await this.getCorpusRuntime(corpusId);
-        await runtime.index.initialize();
-        const graph = await runtime.index.getKnowledgeGraph(
-            new Set([sourceId]),
-        );
-        return applyKnowledgeSuppressions(
-            graph,
-            runtime.manifest.knowledgeSuppressions ?? [],
-            new Set([sourceId]),
-        );
+        return this.enqueueWrite(corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(corpusId);
+            await this.ensureDocumentIndex(corpusId, runtime);
+            const graph = await runtime.index.getKnowledgeGraph(
+                new Set([sourceId]),
+            );
+            return applyKnowledgeSuppressions(
+                graph,
+                runtime.manifest.knowledgeSuppressions ?? [],
+                new Set([sourceId]),
+            );
+        });
     }
 
     public async listSourceKnowledgeSuppressions(
@@ -861,6 +1129,12 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<DocumentIngestResult> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
+        if (
+            request.pipeline?.mode !== undefined &&
+            request.pipeline.mode !== "content"
+        ) {
+            throw new Error("Pipeline mode must be 'content'");
+        }
         if (
             request.pipeline?.maxCharsPerChunk !== undefined &&
             (!Number.isInteger(request.pipeline.maxCharsPerChunk) ||
@@ -967,7 +1241,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             if (source === undefined) {
                 throw new Error(`Unknown source '${sourceId}'`);
             }
-            await runtime.index.initialize();
+            await this.ensureDocumentIndex(corpusId, runtime);
             const graph = await runtime.index.getKnowledgeGraph(
                 new Set([sourceId]),
             );
@@ -1176,6 +1450,22 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 };
                 return;
             }
+            if (
+                runtime.suppressedEventKeys.has(key) ||
+                (request.conversationId !== undefined &&
+                    (runtime.suppressedConversations.has(
+                        suppressedConversationKey(
+                            request.conversationId,
+                            request.sourceKind,
+                        ),
+                    ) ||
+                        runtime.suppressedConversations.has(
+                            suppressedConversationKey(request.conversationId),
+                        ))) ||
+                isSuppressedTurn(runtime, request)
+            ) {
+                throw new ForgottenEventError();
+            }
             const linkedSourceIds = [...new Set(request.linkedSourceIds ?? [])];
             for (const sourceId of linkedSourceIds) {
                 if (
@@ -1271,65 +1561,51 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<MemoryEventSearchResult> {
         await this.initialize();
         this.validateEventFilterRequest(request);
-        const query = request.query.trim().toLocaleLowerCase();
+        const query = request.query.trim();
         if (query.length === 0) {
             throw new Error("Event search query must not be empty");
         }
-        const runtime = await this.getCorpusRuntime(request.corpusId);
         const limit = Math.max(1, Math.min(request.limit ?? 20, 100));
-        const matches = runtime.events
-            .filter((event) => matchesEventFilter(event, request))
-            .map((event) => {
-                const searchable = [
-                    event.content,
-                    event.eventType,
-                    event.actionName,
-                    event.conversationId,
-                    event.runId,
-                    event.metadata === undefined
-                        ? undefined
-                        : JSON.stringify(event.metadata),
-                ]
-                    .filter((value): value is string => value !== undefined)
-                    .join("\n");
-                const normalized = searchable.toLocaleLowerCase();
-                const offset = normalized.indexOf(query);
-                if (offset < 0) {
-                    return undefined;
+        return this.enqueueWrite(request.corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(request.corpusId);
+            const eligible = runtime.events.filter((event) =>
+                matchesEventFilter(event, request),
+            );
+            if (eligible.length === 0) {
+                await this.purgeObsoleteEventIndex(request.corpusId, runtime);
+                return { query: request.query, matches: [] };
+            }
+            const index = await this.getEventIndex(request.corpusId, runtime);
+            const eligibleById = new Map(
+                eligible.map((event) => [event.eventId, event]),
+            );
+            const tags =
+                eligible.length === runtime.events.length
+                    ? undefined
+                    : eligible.map((event) => `event-id:${event.eventId}`);
+            const matches: MemoryEventSearchResult["matches"] = [];
+            const seen = new Set<string>();
+            for (const match of await index.search(query, limit * 4, tags)) {
+                const event = eligibleById.get(match.sourceId);
+                if (event === undefined) {
+                    throw new Error(
+                        `Event index returned an out-of-scope event '${match.sourceId}'`,
+                    );
                 }
-                const snippetStart = Math.max(0, offset - 80);
-                const snippet = searchable.slice(
-                    snippetStart,
-                    Math.min(searchable.length, offset + query.length + 160),
-                );
-                return {
-                    event,
-                    snippet,
-                    score: 1 + 1 / (1 + offset),
-                };
-            })
-            .filter(
-                (
-                    match,
-                ): match is {
-                    event: MemoryEvent;
-                    snippet: string;
-                    score: number;
-                } => match !== undefined,
-            )
-            .sort(
-                (left, right) =>
-                    right.score - left.score ||
-                    Date.parse(right.event.observedAt) -
-                        Date.parse(left.event.observedAt) ||
-                    right.event.eventId.localeCompare(left.event.eventId),
-            )
-            .slice(0, limit)
-            .map((match) => ({
-                ...match,
-                event: structuredClone(match.event),
-            }));
-        return { query: request.query, matches };
+                if (!seen.has(event.eventId)) {
+                    seen.add(event.eventId);
+                    matches.push({
+                        event: structuredClone(event),
+                        snippet: match.snippet,
+                        score: match.score,
+                    });
+                }
+                if (matches.length === limit) {
+                    break;
+                }
+            }
+            return { query: request.query, matches };
+        });
     }
 
     public async forgetEvents(
@@ -1344,9 +1620,11 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (
             eventIds.length === 0 &&
             request.sourceKinds === undefined &&
+            request.authorities === undefined &&
             request.producerIds === undefined &&
             request.eventTypes === undefined &&
             request.conversationIds === undefined &&
+            request.turnIds === undefined &&
             request.runIds === undefined &&
             request.linkedSourceIds === undefined &&
             request.observedFrom === undefined &&
@@ -1368,6 +1646,11 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             const deletedIds = new Set(deleted.map((event) => event.eventId));
             const remaining = runtime.events.filter(
                 (event) => !deletedIds.has(event.eventId),
+            );
+            const suppressions = this.collectEventSuppressions(
+                runtime.eventSuppressions,
+                deleted,
+                request,
             );
             const linkedSourceIds = [
                 ...new Set(
@@ -1400,11 +1683,27 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                     new AbortController().signal,
                 );
             }
-            await this.writeEvents(request.corpusId, remaining);
+            if (
+                deleted.length > 0 ||
+                suppressions.length > runtime.eventSuppressions.length
+            ) {
+                await this.writeEvents(
+                    request.corpusId,
+                    remaining,
+                    suppressions,
+                );
+            }
             runtime.events = remaining;
             runtime.eventIdempotency = new Map(
                 remaining.map((event) => [eventIdempotencyKey(event), event]),
             );
+            this.setEventSuppressions(runtime, suppressions);
+            if (deleted.length > 0) {
+                await this.removeDerivedIndexRoot(
+                    this.eventIndexRoot(request.corpusId),
+                    "conversation-events",
+                );
+            }
             result = {
                 corpusId: request.corpusId,
                 deletedEventCount: deleted.length,
@@ -1427,76 +1726,81 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (query.length === 0) {
             throw new Error("Search query cannot be empty");
         }
-        const runtime = await this.getCorpusRuntime(request.corpusId);
-        await runtime.index.initialize();
-        const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
-        const candidates = await runtime.index.search(query, limit * 4);
-        const sourceIds =
-            request.sourceIds === undefined
-                ? undefined
-                : new Set(request.sourceIds);
-        const sourceTypes =
-            request.sourceTypes === undefined
-                ? undefined
-                : new Set(request.sourceTypes);
-        const requestedTags = request.tags ?? [];
-        let usedCharacters = 0;
-        const maxCharacters = request.maxResponseChars ?? 50_000;
-        const matches: MemoryEvidence[] = [];
-        for (const candidate of candidates) {
-            const source = runtime.manifest.sources.find(
-                (item) => item.sourceId === candidate.sourceId,
-            );
-            const revision = source?.revisions.find(
-                (item) => item.revisionId === candidate.revisionId,
-            );
-            if (
-                source === undefined ||
-                revision === undefined ||
-                source.activeRevisionId !== revision.revisionId ||
-                (sourceIds !== undefined && !sourceIds.has(source.sourceId)) ||
-                (sourceTypes !== undefined &&
-                    !sourceTypes.has(source.sourceType)) ||
-                requestedTags.some((tag) => !source.tags?.includes(tag))
-            ) {
-                continue;
+        return this.enqueueWrite(request.corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(request.corpusId);
+            await this.ensureDocumentIndex(request.corpusId, runtime);
+            const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
+            const candidates = await runtime.index.search(query, limit * 4);
+            const sourceIds =
+                request.sourceIds === undefined
+                    ? undefined
+                    : new Set(request.sourceIds);
+            const sourceTypes =
+                request.sourceTypes === undefined
+                    ? undefined
+                    : new Set(request.sourceTypes);
+            const requestedTags = request.tags ?? [];
+            let usedCharacters = 0;
+            const maxCharacters = request.maxResponseChars ?? 50_000;
+            const matches: MemoryEvidence[] = [];
+            for (const candidate of candidates) {
+                const source = runtime.manifest.sources.find(
+                    (item) => item.sourceId === candidate.sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (item) => item.revisionId === candidate.revisionId,
+                );
+                if (
+                    source === undefined ||
+                    revision === undefined ||
+                    source.activeRevisionId !== revision.revisionId ||
+                    (sourceIds !== undefined &&
+                        !sourceIds.has(source.sourceId)) ||
+                    (sourceTypes !== undefined &&
+                        !sourceTypes.has(source.sourceType)) ||
+                    requestedTags.some((tag) => !source.tags?.includes(tag))
+                ) {
+                    continue;
+                }
+                if (usedCharacters + candidate.snippet.length > maxCharacters) {
+                    break;
+                }
+                usedCharacters += candidate.snippet.length;
+                matches.push({
+                    evidenceId: `${candidate.sourceId}:${candidate.revisionId}:${candidate.locator ?? matches.length}`,
+                    corpusId: request.corpusId,
+                    sourceId: candidate.sourceId,
+                    revisionId: candidate.revisionId,
+                    title: source.title,
+                    ...(source.canonicalUri === undefined
+                        ? {}
+                        : { canonicalUri: source.canonicalUri }),
+                    ...(candidate.locator === undefined
+                        ? {}
+                        : { locator: candidate.locator }),
+                    snippet: candidate.snippet,
+                    score: candidate.score,
+                    sourceType: source.sourceType,
+                    ...(revision.capturedAt === undefined
+                        ? {}
+                        : { capturedAt: revision.capturedAt }),
+                    indexedAt:
+                        revision.indexedAt ??
+                        revision.sourceModifiedAt ??
+                        now(),
+                });
+                if (matches.length === limit) {
+                    break;
+                }
             }
-            if (usedCharacters + candidate.snippet.length > maxCharacters) {
-                break;
-            }
-            usedCharacters += candidate.snippet.length;
-            matches.push({
-                evidenceId: `${candidate.sourceId}:${candidate.revisionId}:${candidate.locator ?? matches.length}`,
-                corpusId: request.corpusId,
-                sourceId: candidate.sourceId,
-                revisionId: candidate.revisionId,
-                title: source.title,
-                ...(source.canonicalUri === undefined
-                    ? {}
-                    : { canonicalUri: source.canonicalUri }),
-                ...(candidate.locator === undefined
-                    ? {}
-                    : { locator: candidate.locator }),
-                snippet: candidate.snippet,
-                score: candidate.score,
-                sourceType: source.sourceType,
-                ...(revision.capturedAt === undefined
-                    ? {}
-                    : { capturedAt: revision.capturedAt }),
-                indexedAt:
-                    revision.indexedAt ?? revision.sourceModifiedAt ?? now(),
-            });
-            if (matches.length === limit) {
-                break;
-            }
-        }
-        return {
-            query,
-            matches,
-            warnings: [...this.capabilities.warnings],
-            capabilitiesUsed: ["structured-search"],
-            indexVersion: this.indexVersion(runtime.manifest),
-        };
+            return {
+                query,
+                matches,
+                warnings: [...this.capabilities.warnings],
+                capabilitiesUsed: ["structured-search"],
+                indexVersion: this.indexVersion(runtime.manifest),
+            };
+        });
     }
 
     public async getCapabilities(): Promise<MemoryServiceCapabilities> {
@@ -1553,12 +1857,14 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<MemoryKnowledgeGraph> {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
-        const runtime = await this.getCorpusRuntime(corpusId);
-        await runtime.index.initialize();
-        return applyKnowledgeSuppressions(
-            await runtime.index.getKnowledgeGraph(),
-            runtime.manifest.knowledgeSuppressions ?? [],
-        );
+        return this.enqueueWrite(corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(corpusId);
+            await this.ensureDocumentIndex(corpusId, runtime);
+            return applyKnowledgeSuppressions(
+                await runtime.index.getKnowledgeGraph(),
+                runtime.manifest.knowledgeSuppressions ?? [],
+            );
+        });
     }
 
     private async updateSourceKnowledgeSuppression(
@@ -1724,22 +2030,13 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             );
             if (
                 generation === undefined ||
-                !(await access(
-                    path.join(
-                        this.procedureIndexDirectory(
-                            request.corpusId,
-                            generation,
-                        ),
-                        "ready",
-                    ),
-                ).then(
-                    () => true,
-                    (error: NodeJS.ErrnoException) => {
-                        if (error.code === "ENOENT") {
-                            return false;
-                        }
-                        throw error;
-                    },
+                (await classifyIndexSchema(
+                    this.procedureIndexDirectory(request.corpusId, generation),
+                    "procedures",
+                    true,
+                )) !== "current" ||
+                !(await this.hasReadyMarker(
+                    this.procedureIndexDirectory(request.corpusId, generation),
                 ))
             ) {
                 await this.personalHowToStore.rebuildIndex(request.corpusId);
@@ -1852,6 +2149,13 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         candidateManifest: CorpusManifest,
         signal: AbortSignal,
     ): Promise<void> {
+        if (runtime.manifest.indexGeneration !== undefined) {
+            await classifyIndexSchema(
+                this.indexDirectory(corpusId, runtime.manifest.indexGeneration),
+                "documents",
+                false,
+            );
+        }
         const indexGeneration = randomUUID();
         const candidateDirectory = this.indexDirectory(
             corpusId,
@@ -1869,6 +2173,11 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 signal,
             );
             this.throwIfAborted(signal);
+            await stampIndexSchema(
+                candidateDirectory,
+                "documents",
+                candidateManifest.sources.length > 0,
+            );
             candidateManifest.indexGeneration = indexGeneration;
             candidateManifest.corpus = {
                 ...candidateManifest.corpus,
@@ -1893,6 +2202,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         corpusId: string,
         activeGeneration: string,
     ): Promise<void> {
+        validateIndexGeneration(activeGeneration);
         const root = this.indexDirectory(corpusId);
         let entries;
         try {
@@ -1909,12 +2219,14 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                     (entry) =>
                         entry.isDirectory() && entry.name !== activeGeneration,
                 )
-                .map((entry) =>
-                    rm(path.join(root, entry.name), {
+                .map(async (entry) => {
+                    const directory = path.join(root, entry.name);
+                    await classifyIndexSchema(directory, "documents", false);
+                    await rm(directory, {
                         recursive: true,
                         force: true,
-                    }),
-                ),
+                    });
+                }),
         );
     }
 
@@ -2087,7 +2399,25 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 existing === undefined &&
                 runtime.manifest.sources.length > 0 &&
                 runtime.manifest.indexGeneration !== undefined &&
-                candidateIndex.append !== undefined;
+                candidateIndex.append !== undefined &&
+                (await classifyIndexSchema(
+                    this.indexDirectory(
+                        request.corpusId,
+                        runtime.manifest.indexGeneration,
+                    ),
+                    "documents",
+                    true,
+                )) === "current";
+            if (!canAppend && runtime.manifest.indexGeneration !== undefined) {
+                await classifyIndexSchema(
+                    this.indexDirectory(
+                        request.corpusId,
+                        runtime.manifest.indexGeneration,
+                    ),
+                    "documents",
+                    false,
+                );
+            }
             const reportProgress = async (progress: JobProgress) => {
                 if (!signal.aborted) {
                     await this.updateJob(
@@ -2106,6 +2436,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                     candidateIndexDirectory,
                     { recursive: true },
                 );
+                this.throwIfAborted(signal);
                 await raceWithAbort(
                     candidateIndex.append!(
                         [
@@ -2113,9 +2444,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                                 source,
                                 revision,
                                 content,
-                                pipeline: revision.pipeline ?? {
-                                    mode: "content",
-                                },
+                                pipeline: contentPipeline(revision.pipeline),
                             },
                         ],
                         signal,
@@ -2130,6 +2459,11 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 );
             }
             this.throwIfAborted(signal);
+            await stampIndexSchema(
+                candidateIndexDirectory,
+                "documents",
+                candidateManifest.sources.length > 0,
+            );
             revision.state = "ready";
             revision.indexedAt = now();
             candidateManifest.corpus.status = "ready";
@@ -2257,10 +2591,25 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (manifest === undefined) {
             throw new Error(`Unknown corpus '${corpusId}'`);
         }
-        const events = await readEvents(this.eventsPath(corpusId));
+        const records = await readEventRecords(this.eventsPath(corpusId));
+        const events: MemoryEvent[] = [];
+        const eventSuppressions: EventSuppression[] = [];
         const eventIdempotency = new Map<string, MemoryEvent>();
-        for (const event of events) {
+        const eventIds = new Set<string>();
+        for (const record of records) {
+            if ("recordType" in record) {
+                this.validateStoredEventSuppression(record);
+                eventSuppressions.push(record);
+                continue;
+            }
+            const event = record;
             this.validateStoredEvent(event, corpusId);
+            if (eventIds.has(event.eventId)) {
+                throw new Error(
+                    `Duplicate persisted event ID '${event.eventId}'`,
+                );
+            }
+            eventIds.add(event.eventId);
             const key = eventIdempotencyKey(event);
             if (eventIdempotency.has(key)) {
                 throw new Error(
@@ -2268,14 +2617,27 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 );
             }
             eventIdempotency.set(key, event);
+            events.push(event);
         }
         const runtime: CorpusRuntime = {
             manifest,
             index: this.createIndex(corpusId, manifest.indexGeneration),
             events,
             eventIdempotency,
+            eventSuppressions: [],
+            suppressedEventKeys: new Set(),
+            suppressedConversations: new Set(),
+            suppressedTurns: new Set(),
             writeTail: Promise.resolve(),
         };
+        this.setEventSuppressions(runtime, eventSuppressions);
+        for (const event of events) {
+            if (runtime.suppressedEventKeys.has(eventIdempotencyKey(event))) {
+                throw new Error(
+                    `Persisted event '${event.eventId}' is suppressed`,
+                );
+            }
+        }
         this.corpora.set(corpusId, runtime);
         return runtime;
     }
@@ -2290,7 +2652,41 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         );
     }
 
+    private async ensureDocumentIndex(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<void> {
+        const generation = runtime.manifest.indexGeneration;
+        if (generation !== undefined) {
+            validateIdentifier("index generation", generation);
+            const directory = this.indexDirectory(corpusId, generation);
+            if (
+                (await classifyIndexSchema(
+                    directory,
+                    "documents",
+                    runtime.manifest.sources.length > 0,
+                )) === "current"
+            ) {
+                await runtime.index.initialize();
+                return;
+            }
+            await rm(directory, { recursive: true, force: true });
+        } else if (runtime.manifest.sources.length === 0) {
+            await runtime.index.initialize();
+            return;
+        }
+        await this.rebuildAndActivate(
+            corpusId,
+            runtime,
+            structuredClone(runtime.manifest),
+            new AbortController().signal,
+        );
+    }
+
     private indexDirectory(corpusId: string, indexGeneration?: string): string {
+        if (indexGeneration !== undefined) {
+            validateIndexGeneration(indexGeneration);
+        }
         return path.join(
             this.rootDirectory,
             corpusId,
@@ -2314,7 +2710,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 source,
                 revision,
                 content: revision.content,
-                pipeline: revision.pipeline ?? { mode: "content" },
+                pipeline: contentPipeline(revision.pipeline),
             };
         });
     }
@@ -2323,6 +2719,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         corpusId: string,
         generation: string,
     ): string {
+        validateIndexGeneration(generation);
         return path.join(
             this.rootDirectory,
             corpusId,
@@ -2332,12 +2729,242 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         );
     }
 
+    private async hasReadyMarker(directory: string): Promise<boolean> {
+        try {
+            await access(path.join(directory, "ready"));
+            return true;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                return false;
+            }
+            throw error;
+        }
+    }
+
+    private eventIndexRoot(corpusId: string): string {
+        return path.join(this.rootDirectory, corpusId, "event-search-index");
+    }
+
+    private eventIndexDirectory(corpusId: string, generation: string): string {
+        validateIndexGeneration(generation);
+        return path.join(this.eventIndexRoot(corpusId), generation);
+    }
+
+    private async removeDerivedIndexRoot(
+        root: string,
+        indexKind: IndexKind,
+    ): Promise<void> {
+        let entries;
+        try {
+            entries = await readdir(root, { withFileTypes: true });
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                return;
+            }
+            throw error;
+        }
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                await classifyIndexSchema(
+                    path.join(root, entry.name),
+                    indexKind,
+                    false,
+                );
+            }
+        }
+        await rm(root, { recursive: true, force: true });
+    }
+
+    private async purgeObsoleteEventIndex(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<EventIndexState | undefined> {
+        const watermark = eventIndexWatermark(runtime.events);
+        const root = this.eventIndexRoot(corpusId);
+        const state = await readJson<EventIndexState>(
+            path.join(root, "state.json"),
+        );
+        if (state !== undefined) {
+            validateIndexGeneration(state.generation);
+            if (
+                (await classifyIndexSchema(
+                    this.eventIndexDirectory(corpusId, state.generation),
+                    "conversation-events",
+                    state.watermark === watermark && runtime.events.length > 0,
+                )) === "reset"
+            ) {
+                await this.removeDerivedIndexRoot(root, "conversation-events");
+                return undefined;
+            }
+        }
+        if (state?.watermark !== watermark) {
+            await this.removeDerivedIndexRoot(root, "conversation-events");
+            return undefined;
+        }
+        return state;
+    }
+
+    private async getEventIndex(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<CorpusIndex> {
+        const root = this.eventIndexRoot(corpusId);
+        const state = await this.purgeObsoleteEventIndex(corpusId, runtime);
+        if (state !== undefined) {
+            try {
+                await access(
+                    path.join(
+                        this.eventIndexDirectory(corpusId, state.generation),
+                        "ready",
+                    ),
+                );
+                const index = this.eventIndexFactory(
+                    corpusId,
+                    this.eventIndexDirectory(corpusId, state.generation),
+                );
+                await index.initialize();
+                return index;
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                    throw error;
+                }
+            }
+            await this.removeDerivedIndexRoot(root, "conversation-events");
+        }
+        await mkdir(root, { recursive: true });
+        const generation = randomUUID();
+        const directory = this.eventIndexDirectory(corpusId, generation);
+        await mkdir(directory);
+        try {
+            const index = this.eventIndexFactory(corpusId, directory);
+            await index.rebuild(
+                runtime.events.map((event) => this.eventDocument(event)),
+                new AbortController().signal,
+                async () => {},
+            );
+            await stampIndexSchema(
+                directory,
+                "conversation-events",
+                runtime.events.length > 0,
+            );
+            await writeFile(path.join(directory, "ready"), "");
+            await writeJsonAtomic(path.join(root, "state.json"), {
+                generation,
+                watermark: eventIndexWatermark(runtime.events),
+            } satisfies EventIndexState);
+            const obsolete = (
+                await readdir(root, { withFileTypes: true })
+            ).filter(
+                (entry) =>
+                    entry.name !== generation && entry.name !== "state.json",
+            );
+            for (const entry of obsolete) {
+                if (entry.isDirectory()) {
+                    await classifyIndexSchema(
+                        path.join(root, entry.name),
+                        "conversation-events",
+                        false,
+                    );
+                }
+            }
+            for (const entry of obsolete) {
+                await rm(path.join(root, entry.name), {
+                    recursive: true,
+                    force: true,
+                });
+            }
+            return index;
+        } catch (error) {
+            await rm(directory, { recursive: true, force: true });
+            throw error;
+        }
+    }
+
+    private eventDocument(event: MemoryEvent): IndexedDocument {
+        const authority = eventAuthority(event);
+        const content = [
+            `Event type: ${event.eventType}`,
+            `Producer: ${event.producer.producerId} (${event.producer.producerType})`,
+            `Source kind: ${event.sourceKind}`,
+            `Observed at: ${event.observedAt}`,
+            `Event time: ${event.eventTime}`,
+            ...(event.conversationId === undefined
+                ? []
+                : [`Conversation: ${event.conversationId}`]),
+            ...(event.runId === undefined ? [] : [`Run: ${event.runId}`]),
+            ...(event.turnId === undefined ? [] : [`Turn: ${event.turnId}`]),
+            ...(event.sender === undefined ? [] : [`Sender: ${event.sender}`]),
+            ...(event.actionName === undefined
+                ? []
+                : [`Action: ${event.actionName}`]),
+            ...(event.linkedSourceIds ?? []).map(
+                (sourceId) => `Linked source: ${sourceId}`,
+            ),
+            ...(event.content === undefined ? [] : [event.content]),
+            ...(event.metadata === undefined
+                ? []
+                : [JSON.stringify(event.metadata)]),
+        ].join("\n");
+        return {
+            source: {
+                sourceId: event.eventId,
+                corpusId: event.corpusId,
+                sourceType: "text",
+                title: event.eventType,
+                activeRevisionId: event.eventId,
+            },
+            revision: {
+                revisionId: event.eventId,
+                sourceId: event.eventId,
+                contentHash: hashContent(content),
+                mimeType: "text/plain",
+                pipelineVersion,
+                state: "ready",
+            },
+            content,
+            indexTags: [
+                `event-id:${event.eventId}`,
+                `event-source-kind:${event.sourceKind}`,
+                ...(authority === undefined
+                    ? []
+                    : [`event-authority:${authority}`]),
+                `event-producer:${event.producer.producerId}`,
+                `event-producer-type:${event.producer.producerType}`,
+                `event-type:${event.eventType}`,
+                `event-observed-at:${event.observedAt}`,
+                `event-time:${event.eventTime}`,
+                ...(event.conversationId === undefined
+                    ? []
+                    : [`event-conversation:${event.conversationId}`]),
+                ...(event.runId === undefined
+                    ? []
+                    : [`event-run:${event.runId}`]),
+                ...(event.turnId === undefined
+                    ? []
+                    : [`event-turn:${event.turnId}`]),
+                ...(event.sender === undefined
+                    ? []
+                    : [`event-sender:${event.sender}`]),
+                ...(event.actionName === undefined
+                    ? []
+                    : [`event-action:${event.actionName}`]),
+                ...(event.linkedSourceIds ?? []).map(
+                    (sourceId) => `event-linked-source:${sourceId}`,
+                ),
+            ],
+            pipeline: { mode: "content" },
+        };
+    }
+
     private async publishProcedureIndex(
         corpusId: string,
         summaries: ProcedureSummary[],
     ): Promise<string> {
         const committed =
             await this.personalHowToStore.getIndexGeneration(corpusId);
+        if (committed !== undefined) {
+            validateIndexGeneration(committed);
+        }
         const root = path.join(
             this.rootDirectory,
             corpusId,
@@ -2345,13 +2972,19 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             "search-index",
         );
         await mkdir(root, { recursive: true });
-        for (const entry of await readdir(root)) {
-            if (entry !== committed) {
-                await rm(path.join(root, entry), {
-                    recursive: true,
-                    force: true,
-                });
-            }
+        const entries = await readdir(root);
+        for (const entry of entries) {
+            await classifyIndexSchema(
+                path.join(root, entry),
+                "procedures",
+                false,
+            );
+        }
+        for (const entry of entries) {
+            await rm(path.join(root, entry), {
+                recursive: true,
+                force: true,
+            });
         }
         const generation = randomUUID();
         const directory = this.procedureIndexDirectory(corpusId, generation);
@@ -2394,6 +3027,11 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 new AbortController().signal,
                 async () => {},
             );
+            await stampIndexSchema(
+                directory,
+                "procedures",
+                documents.length > 0,
+            );
             await writeFile(path.join(directory, "ready"), "");
             return generation;
         } catch (error) {
@@ -2406,10 +3044,166 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         const { revisions, ...document } = source;
         return {
             ...structuredClone(document),
-            revisions: revisions.map(({ content: _content, ...revision }) =>
-                structuredClone(revision),
-            ),
+            revisions: revisions.map(({ content: _content, ...revision }) => ({
+                ...structuredClone(revision),
+                ...(revision.pipeline === undefined
+                    ? {}
+                    : { pipeline: contentPipeline(revision.pipeline) }),
+            })),
         };
+    }
+
+    private collectEventSuppressions(
+        existing: EventSuppression[],
+        deleted: MemoryEvent[],
+        request: MemoryEventFilter & { eventIds?: string[] },
+    ): EventSuppression[] {
+        const suppressions = [...existing];
+        const known = new Set(
+            suppressions.map((suppression) => JSON.stringify(suppression)),
+        );
+        const add = (suppression: EventSuppression) => {
+            const key = JSON.stringify(suppression);
+            if (!known.has(key)) {
+                known.add(key);
+                suppressions.push(suppression);
+            }
+        };
+        for (const event of deleted) {
+            add({
+                recordType: "event-suppression",
+                scope: "idempotency",
+                producerId: event.producer.producerId,
+                idempotencyKey: event.idempotencyKey,
+            });
+            if (event.turnId !== undefined) {
+                const authority = eventAuthority(event);
+                add({
+                    recordType: "event-suppression",
+                    scope: "turn",
+                    ...(event.conversationId === undefined
+                        ? {}
+                        : { conversationId: event.conversationId }),
+                    turnId: event.turnId,
+                    sourceKind: event.sourceKind,
+                    ...(request.authorities === undefined ||
+                    authority === undefined
+                        ? {}
+                        : { authority }),
+                });
+            }
+        }
+        addExplicitTurnSuppressions(request, add);
+        if (isWholeConversationForget(request)) {
+            for (const conversationId of request.conversationIds ?? []) {
+                for (const sourceKind of request.sourceKinds ?? [undefined]) {
+                    add({
+                        recordType: "event-suppression",
+                        scope: "conversation",
+                        conversationId,
+                        ...(sourceKind === undefined ? {} : { sourceKind }),
+                    });
+                }
+            }
+        }
+        return suppressions;
+    }
+
+    private setEventSuppressions(
+        runtime: CorpusRuntime,
+        suppressions: EventSuppression[],
+    ): void {
+        runtime.eventSuppressions = suppressions;
+        runtime.suppressedEventKeys = new Set(
+            suppressions
+                .filter(
+                    (
+                        item,
+                    ): item is Extract<
+                        EventSuppression,
+                        { scope: "idempotency" }
+                    > => item.scope === "idempotency",
+                )
+                .map(eventIdempotencyKey),
+        );
+        runtime.suppressedConversations = new Set(
+            suppressions.flatMap((item) =>
+                item.scope === "conversation"
+                    ? [
+                          suppressedConversationKey(
+                              item.conversationId,
+                              item.sourceKind,
+                          ),
+                      ]
+                    : [],
+            ),
+        );
+        runtime.suppressedTurns = new Set(
+            suppressions.flatMap((item) =>
+                item.scope === "turn"
+                    ? [
+                          suppressedTurnKey(
+                              item.conversationId,
+                              item.turnId,
+                              item.sourceKind,
+                              item.authority,
+                          ),
+                      ]
+                    : [],
+            ),
+        );
+    }
+
+    private validateStoredEventSuppression(
+        suppression: EventSuppression,
+    ): void {
+        if (suppression.recordType !== "event-suppression") {
+            throw new Error("Invalid persisted event suppression record");
+        }
+        switch (suppression.scope) {
+            case "idempotency":
+                validateIdentifier("producer ID", suppression.producerId);
+                if (
+                    typeof suppression.idempotencyKey !== "string" ||
+                    suppression.idempotencyKey.length === 0 ||
+                    suppression.idempotencyKey.length > 500
+                ) {
+                    throw new Error("Invalid persisted event idempotency key");
+                }
+                break;
+            case "conversation":
+                validateIdentifier(
+                    "conversation ID",
+                    suppression.conversationId,
+                );
+                if (
+                    suppression.sourceKind !== undefined &&
+                    !eventSourceKinds.has(suppression.sourceKind)
+                ) {
+                    throw new Error("Invalid persisted event source kind");
+                }
+                break;
+            case "turn":
+                validateIdentifier("turn ID", suppression.turnId);
+                if (
+                    suppression.sourceKind !== undefined &&
+                    !eventSourceKinds.has(suppression.sourceKind)
+                ) {
+                    throw new Error("Invalid persisted event source kind");
+                }
+                if (suppression.authority !== undefined) {
+                    validateEventAuthority(suppression.authority);
+                }
+                if (suppression.conversationId !== undefined) {
+                    validateIdentifier(
+                        "conversation ID",
+                        suppression.conversationId,
+                    );
+                }
+                break;
+            default:
+                throw new Error("Invalid persisted event suppression scope");
+        }
     }
 
     private validateEventAppendRequest(
@@ -2459,6 +3253,12 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 "Event metadata exceeds the 262144 character limit",
             );
         }
+        if (request.metadata !== undefined && "authority" in request.metadata) {
+            if (typeof request.metadata.authority !== "string") {
+                throw new Error("Event authority must be a string");
+            }
+            validateEventAuthority(request.metadata.authority);
+        }
         for (const [kind, value] of [
             ["conversation ID", request.conversationId],
             ["run ID", request.runId],
@@ -2486,6 +3286,9 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         request: MemoryEventFilter & { corpusId: string },
     ): void {
         validateIdentifier("corpus ID", request.corpusId);
+        for (const authority of request.authorities ?? []) {
+            validateEventAuthority(authority);
+        }
         for (const producerId of request.producerIds ?? []) {
             validateIdentifier("producer ID", producerId);
         }
@@ -2494,6 +3297,9 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         }
         for (const conversationId of request.conversationIds ?? []) {
             validateIdentifier("conversation ID", conversationId);
+        }
+        for (const turnId of request.turnIds ?? []) {
+            validateIdentifier("turn ID", turnId);
         }
         for (const runId of request.runIds ?? []) {
             validateIdentifier("run ID", runId);
@@ -2577,14 +3383,19 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     private async writeEvents(
         corpusId: string,
         events: MemoryEvent[],
+        suppressions: EventSuppression[],
     ): Promise<void> {
         await mkdir(path.dirname(this.eventsPath(corpusId)), {
             recursive: true,
         });
+        const records: (MemoryEvent | EventSuppression)[] = [
+            ...events,
+            ...suppressions,
+        ];
         const value =
-            events.length === 0
+            records.length === 0
                 ? ""
-                : `${events.map((event) => JSON.stringify(event)).join("\n")}\n`;
+                : `${records.map((record) => JSON.stringify(record)).join("\n")}\n`;
         const filePath = this.eventsPath(corpusId);
         const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
         const backupPath = `${filePath}.${randomUUID()}.bak`;

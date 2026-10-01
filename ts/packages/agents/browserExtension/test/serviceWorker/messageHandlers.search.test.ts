@@ -4,6 +4,7 @@
 import { sendActionToAgent } from "../../src/extension/serviceWorker/websocket";
 import {
     handleImportWebsiteDataWithProgress,
+    handleImportHtmlFolder,
     handleSearchWebMemories,
 } from "../../src/extension/serviceWorker/messageHandlers";
 import { broadcastEvent } from "../../src/extension/serviceWorker/extensionEventHelpers";
@@ -60,6 +61,57 @@ describe("handleImportWebsiteDataWithProgress", () => {
         jest.clearAllMocks();
     });
 
+    test.each(["basic", "summary", "full"])(
+        "rejects obsolete mode %s before submitting",
+        async (mode) => {
+            const result = await handleImportWebsiteDataWithProgress({
+                type: "importWebsiteDataWithProgress",
+                parameters: {
+                    source: "chrome",
+                    type: "bookmarks",
+                    importId: "obsolete",
+                    mode: mode as "content",
+                },
+            });
+            expect(result.success).toBe(false);
+            expect(result.error).toContain("Only 'content' is supported");
+            expect(sendActionToAgent).not.toHaveBeenCalled();
+            expect(broadcastEvent).toHaveBeenCalledWith(
+                "importProgress",
+                expect.objectContaining({
+                    progress: expect.objectContaining({ phase: "error" }),
+                }),
+            );
+        },
+    );
+
+    test("folder imports default to content and reject obsolete modes", async () => {
+        (sendActionToAgent as jest.Mock).mockResolvedValueOnce({
+            success: true,
+        });
+        await handleImportHtmlFolder({
+            parameters: { folderPath: "C:\\pages", importId: "folder" },
+        });
+        expect(sendActionToAgent).toHaveBeenCalledWith(
+            expect.objectContaining({
+                parameters: expect.objectContaining({
+                    options: expect.objectContaining({ mode: "content" }),
+                }),
+            }),
+        );
+        jest.clearAllMocks();
+        const result = await handleImportHtmlFolder({
+            parameters: {
+                folderPath: "C:\\pages",
+                importId: "old",
+                options: { mode: "basic" },
+            },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toContain("Only 'content' is supported");
+        expect(sendActionToAgent).not.toHaveBeenCalled();
+    });
+
     test("forwards the nested import id and known total", async () => {
         (sendActionToAgent as jest.Mock).mockResolvedValueOnce({
             success: true,
@@ -92,6 +144,7 @@ describe("handleImportWebsiteDataWithProgress", () => {
             parameters: expect.objectContaining({
                 importId: "import-10",
                 totalItems: 10,
+                mode: "content",
             }),
         });
         expect(broadcastEvent).toHaveBeenCalledTimes(1);

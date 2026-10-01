@@ -307,19 +307,28 @@ pending prompts/unsupported interaction rather than pretending completion.
 
 ### Explicit binding, reconnect, and trust
 
-NL and structured calls use the same conversation selection in every routing
-mode. With no explicit ID, the first caller resolves the server default and
-saves its **concrete conversation ID** under the plugin data directory's
-`conversation-bindings` folder, keyed by server URL. Later hooks, MCP processes,
-and reconnects reuse that ID even if the server default changes. Concurrent
-first callers atomically adopt the same saved ID. Routing mode does not change
-which conversation data is visible.
+NL, direct/dev hooks, extension history, and structured calls share automatic
+conversation selection **within a Copilot session**. The first caller resolves
+the server default and saves its concrete ID, keyed by server URL and host
+session ID. Later calls, reconnects, and resumed sessions retain that selection
+even if the server default changes. Concurrent first callers atomically adopt
+the same saved ID. A fresh Copilot session resolves the current server default,
+not another session's saved selection. This does not create a private TypeAgent
+conversation per chat: sessions resolving the same default still share its data.
 
-This is shared plugin/server context, not one conversation per Copilot chat:
-stdio does not provide an intrinsic Copilot session identity. Sessions using the
-same plugin data directory and server share the saved default, as NL callers
-already shared the server default. Separate plugin data directories or explicit
-IDs select separate context.
+Copilot CLI supplies `COPILOT_AGENT_SESSION_ID` to MCP children. Hooks use their
+input `sessionId` instead of a potentially inherited environment value; extension
+history uses the joined SDK session ID. Hosts without an MCP session ID share
+automatic NL/structured selection only inside that MCP process. Cross-process
+alignment on those hosts requires an explicit existing conversation ID.
+
+Session bindings live in `conversation-bindings/sessions` under
+`TYPEAGENT_PLUGIN_DATA`, or `~/.typeagent-copilot` by default. Unlike configuration
+lookup, binding storage does not use `CLAUDE_PLUGIN_DATA`: Copilot injects that
+variable into hooks but not MCP processes. Explicit `TYPEAGENT_PLUGIN_DATA`
+isolates both configuration and bindings and must be consistent across callers.
+Legacy server-only `conversation-bindings/*.json` defaults are ignored and left
+untouched; they are not explicit user pins and must not bind unrelated new chats.
 
 The two routes keep separate connections. Structured calls explicitly join the
 selected ID with `structuredActions: {}` to obtain an independent owner; the
@@ -338,12 +347,14 @@ before changing selection, then start fresh sessions; pending work is not
 automatically moved or replayed. Two fresh processes using the same public ID
 still get isolated structured owners.
 
-A missing/deleted conversation or an unreadable/corrupt saved binding is an
-error, not a reason to silently choose a new default. To select another existing
-conversation, configure its ID. To intentionally resolve the default again,
-close sessions, remove only the matching server's saved binding file, and start
-fresh sessions with no explicit ID. Configuration fields such as selected
-skills are not rewritten when the default ID is saved.
+A missing/deleted conversation or an unreadable/corrupt binding in the current
+session is an error, not a reason to silently choose a new default. To select
+another existing conversation, configure its ID and start a fresh session.
+Without an explicit pin, starting a **new** Copilot session resolves the current
+default; resuming the old session intentionally retains its selection and may
+still fail. No request is automatically retried, and pending approvals, scopes,
+and resume capabilities never move to another conversation. Configuration fields
+such as selected skills are not rewritten when a default ID is saved.
 
 The server's structured resume token is retained only in private volatile
 connector memory. It is never logged, printed, persisted, put in config, or sent
@@ -981,14 +992,14 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 
 **Environment variable overrides** (take precedence over config file):
 
-| Variable                    | Default                            | Description                                                                                      |
-| --------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `TYPEAGENT_MODE`            | `direct`                           | `direct`, `mcp`, `dev`, or `bypass`                                                              |
-| `TYPEAGENT_HOST`            | `localhost`                        | TypeAgent server host                                                                            |
-| `TYPEAGENT_PORT`            | `8999`                             | TypeAgent server port                                                                            |
-| `TYPEAGENT_CONVERSATION_ID` | Dedicated per-process conversation | Optional existing public conversation ID for structured tools; overrides config `conversationId` |
-| `TYPEAGENT_PLUGIN_DATA`     | `~/.typeagent-copilot`             | Config directory                                                                                 |
-| `TYPEAGENT_WORKSPACE_ROOTS` | Copilot process working directory  | Approved roots for workspace MCP tools, separated by the platform path delimiter                 |
+| Variable                    | Default                           | Description                                                                                                        |
+| --------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `TYPEAGENT_MODE`            | `direct`                          | `direct`, `mcp`, `dev`, or `bypass`                                                                                |
+| `TYPEAGENT_HOST`            | `localhost`                       | TypeAgent server host                                                                                              |
+| `TYPEAGENT_PORT`            | `8999`                            | TypeAgent server port                                                                                              |
+| `TYPEAGENT_CONVERSATION_ID` | Session-selected server default   | Optional existing public conversation ID for all routes; overrides config `conversationId` and automatic selection |
+| `TYPEAGENT_PLUGIN_DATA`     | `~/.typeagent-copilot`            | Config directory                                                                                                   |
+| `TYPEAGENT_WORKSPACE_ROOTS` | Copilot process working directory | Approved roots for workspace MCP tools, separated by the platform path delimiter                                   |
 
 ---
 
