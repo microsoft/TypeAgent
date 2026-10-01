@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 import { jest } from "@jest/globals";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { MacroManager } from "@typeagent/copilot-macros";
 import {
     SessionCapture,
     type SessionCaptureDependencies,
@@ -32,6 +37,46 @@ function dependencies(
 }
 
 describe("extension session capture", () => {
+    it("does not fail a newly claimed recording while finishing an earlier turn", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "capture-binding-"));
+        try {
+            const token = new MacroManager(directory).armRecording({
+                sessionId: "session-1",
+            });
+            const fail = jest.fn(async () => {});
+            const finalize = jest.fn(async () => {
+                throw new Error("Wrong turn finalized.");
+            });
+            const mocks = dependencies(async () => ({
+                getMacroRecordingState: async () => ({
+                    status: "claimed",
+                    token: {
+                        ...token,
+                        promptHash: createHash("sha256")
+                            .update("Selected next task")
+                            .digest("hex"),
+                    },
+                }),
+                failMacroRecording: fail,
+                finalizeMacroRecording: finalize,
+                close: async () => {},
+            }));
+            const capture = new SessionCapture(
+                "session-1",
+                ".",
+                () => {},
+                mocks,
+            );
+            capture.enqueue(event("user.message", { content: "Earlier task" }));
+            capture.enqueue(event("assistant.message", { content: "Done." }));
+            capture.enqueue(event("session.idle", {}));
+            await capture.flush();
+            expect(fail).not.toHaveBeenCalled();
+            expect(finalize).not.toHaveBeenCalled();
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    });
     it("does not fail extension startup when TypeAgent is unavailable", async () => {
         const errors: string[] = [];
         const capture = new SessionCapture(
@@ -114,4 +159,39 @@ describe("extension session capture", () => {
             expect(mocks.insertToolHistory).not.toHaveBeenCalled();
         },
     );
+
+    it("continues event ingestion while optional history persistence is blocked", async () => {
+        let release: () => void = () => {};
+        const blocked = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const connect = jest.fn<
+            SessionCaptureDependencies["connectAgentServer"]
+        >(async () => {
+            throw new Error("connection refused");
+        });
+        const mocks = dependencies(connect);
+        mocks.insertToolHistory.mockImplementation(async () => blocked);
+        const capture = new SessionCapture("session-1", ".", () => {}, mocks);
+        capture.enqueue(
+            event("tool.execution_start", {
+                toolCallId: "call-1",
+                toolName: "read",
+            }),
+        );
+        capture.enqueue(
+            event("tool.execution_complete", {
+                toolCallId: "call-1",
+                success: true,
+            }),
+        );
+        capture.enqueue(event("session.idle", {}));
+        try {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            expect(connect).toHaveBeenCalledTimes(1);
+        } finally {
+            release();
+            await capture.flush();
+        }
+    });
 });

@@ -532,6 +532,26 @@ function makeConnectionAdapter(): AgentServerConnection {
         throw new Error(`${op} not supported in browser extension adapter`);
     };
     return {
+        getMacroLearningPreference: (cwd) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("getMacroLearningPreference", cwd);
+        },
+        setMacroLearningPreference: (request) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("setMacroLearningPreference", request);
+        },
+        prepareMacroLearning: (request) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("prepareMacroLearning", request);
+        },
+        getMacroLearningJob: (jobId) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("getMacroLearningJob", jobId);
+        },
+        cancelMacroLearningJob: (jobId) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("cancelMacroLearningJob", jobId);
+        },
         armMacroRecording: (request) => {
             const { rpc } = requireFresh();
             return rpc.invoke("armMacroRecording", request);

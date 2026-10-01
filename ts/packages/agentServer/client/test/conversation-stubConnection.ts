@@ -118,6 +118,21 @@ export function makeStubConnection(
         }) as ConversationDispatcher;
 
     const stub: AgentServerConnection = {
+        async getMacroLearningPreference() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async setMacroLearningPreference() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async prepareMacroLearning() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async getMacroLearningJob() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async cancelMacroLearningJob() {
+            throw new Error("Not implemented by conversation test stub");
+        },
         async armMacroRecording() {
             throw new Error("Not implemented by conversation test stub");
         },

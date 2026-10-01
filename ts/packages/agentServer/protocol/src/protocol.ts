@@ -8,6 +8,9 @@ import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import type {
     ApproveMacroRequest,
     ArmRecordingRequest,
+    MacroLearningMode,
+    MacroLearningPreference,
+    MacroLearningJob,
     ClaimRecordingRequest,
     CopilotToolMacro,
     CreateMacroFromTraceRequest,
@@ -55,6 +58,9 @@ export type {
 export type {
     ApproveMacroRequest,
     ArmRecordingRequest,
+    MacroLearningMode,
+    MacroLearningPreference,
+    MacroLearningJob,
     ClaimRecordingRequest,
     CopilotToolMacro,
     CreateMacroFromTraceRequest,
@@ -332,6 +338,18 @@ export type ProcedureArtifactPromotion =
       };
 
 export type AgentServerInvokeFunctions = {
+    getMacroLearningPreference: (
+        cwd: string,
+    ) => Promise<MacroLearningPreference>;
+    setMacroLearningPreference: (request: {
+        cwd: string;
+        mode: MacroLearningMode;
+    }) => Promise<MacroLearningPreference>;
+    prepareMacroLearning: (request: {
+        traceId: string;
+    }) => Promise<MacroLearningJob>;
+    getMacroLearningJob: (jobId: string) => Promise<MacroLearningJob>;
+    cancelMacroLearningJob: (jobId: string) => Promise<MacroLearningJob>;
     armMacroRecording: (
         request: ArmRecordingRequest,
     ) => Promise<RecordingToken>;

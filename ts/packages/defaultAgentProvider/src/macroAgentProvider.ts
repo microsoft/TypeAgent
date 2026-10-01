@@ -31,7 +31,7 @@ export function getMacroActionName(macro: CopilotToolMacro): string {
     return `run_${macro.macroId.replace(/-/g, "_")}_v${macro.version}`;
 }
 
-function inputSchema(macro: CopilotToolMacro) {
+export function getMacroInputSchema(macro: CopilotToolMacro) {
     return {
         type: "object",
         properties: Object.fromEntries(
@@ -62,7 +62,7 @@ export function createMacroAppAgentProvider(
         return (await manager.getApprovedMacros()).filter(
             (macro) =>
                 !macro.inputs.some((input) => input.secret) &&
-                (macro.executionClass === "replayable"
+                (macro.executionClass === "replayable" && !macro.learning
                     ? features.replay
                     : features.agentHandoff),
         );
@@ -80,7 +80,7 @@ export function createMacroAppAgentProvider(
             ...macros.map((macro) => ({
                 name: getMacroActionName(macro),
                 description: `Run the entire approved macro '${macro.name}' (version ${macro.version}): ${macro.description}`,
-                inputSchema: inputSchema(macro),
+                inputSchema: getMacroInputSchema(macro),
             })),
         ];
         return {
@@ -114,6 +114,15 @@ export function createMacroAppAgentProvider(
             sessions.delete(context);
         },
         getDynamicSchema: async () => schema(),
+        async getDynamicGrammar() {
+            const macros = await routableMacros();
+            return {
+                format: "agr",
+                content: macros
+                    .flatMap((macro) => macro.learning?.grammarRules ?? [])
+                    .join("\n"),
+            };
+        },
         async executeAction(action, context) {
             try {
                 const macros = await routableMacros();

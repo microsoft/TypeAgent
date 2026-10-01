@@ -16,6 +16,7 @@ import { MacroManager } from "@typeagent/copilot-macros";
 import {
     McpReplayHost,
     createMacroAppAgentProvider,
+    createMacroLearningRuntime,
 } from "default-agent-provider";
 import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
 
@@ -84,6 +85,11 @@ export async function createInProcessAgentServer(
     const macroManager = new MacroManager(
         instanceDir,
         new McpReplayHost(instanceDir),
+    );
+    await macroManager.configureLearning(
+        createMacroLearningRuntime(undefined, () =>
+            macroManager.getApprovedMacros(),
+        ),
     );
     const conversationManager = await createConversationManager(
         hostName,

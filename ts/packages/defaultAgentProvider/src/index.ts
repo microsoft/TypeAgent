@@ -20,6 +20,11 @@ export {
     macroAgentName,
 } from "./macroAgentProvider.js";
 export {
+    createMacroLearningRuntime,
+    validateMacroGrammar,
+    type MacroLearningQuery,
+} from "./macroLearningRuntime.js";
+export {
     SessionMcpCredentialStore,
     type McpCredentialStore,
 } from "./mcp/mcpCredentialStore.js";

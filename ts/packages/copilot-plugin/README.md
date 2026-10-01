@@ -519,8 +519,10 @@ Should show `typeagent` under the plugins section.
 ## Tool-Composed Macros
 
 The plugin includes the `typeagent-macros` MCP server, the TypeAgent Macro
-Runner agent, and the `typeagent-macros` skill. Approved replayable macros run
-deterministically. If `run_macro` returns `agentRequired`, the skill hands the
+Runner agent, and the `typeagent-macros` skill. Legacy approved replayable macros
+can run deterministically. Newly learned macros always use the live runner,
+even when their steps are technically replayable. If `run_macro` returns
+`agentRequired`, the skill hands the
 complete launch payload to the runner, which executes the whole macro through
 Copilot's live tool and permission surface.
 
@@ -532,7 +534,72 @@ promotes the approved version.
 Macros are not a plugin routing mode. They are a tool surface available in
 direct, MCP, and dev modes.
 
-### Record, approve, and run a macro
+### Learn from one executed task
+
+Set a workspace learning preference, then select one task to learn:
+
+```text
+/typeagent-macro-learning prepare
+/typeagent-macro-record Read file package.json now
+/typeagent-macro-status
+```
+
+Use `/typeagent-macro-cancel` to cancel the selected recording or unfinished
+learning job without cancelling the user's task or revoking approved macros.
+With no task argument, `/typeagent-macro-record` selects the next ordinary
+interaction instead. The hook equivalents are `@typeagent macro learning
+prepare`, `@typeagent macro record`, `@typeagent macro status`, and
+`@typeagent macro cancel`. The hook recording command selects the next turn;
+the task-argument shortcut is an SDK extension command.
+
+The successful recording queues background recipe extraction, generalized
+macro building, offline evidence validation, and grammar generation. Learning
+does not execute the task again. Inspect status for the candidate/version or a
+specific failure; the original answer does not wait for model generation.
+Optional conversation indexing uses its own bounded background queue, not
+the event-ingestion path. Native `report_intent` telemetry is not a task operation.
+
+The four modes are:
+
+| Mode      | Behavior                                                                                                                |
+| --------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Off       | Coordinated learning is disabled.                                                                                       |
+| Prepare   | Prepare a candidate with staged grammar; explicit approval is required.                                                 |
+| Read-only | Automatically approve only when every tool is explicitly classified read-only; otherwise retain a reviewable candidate. |
+| All       | Automatically approve valid procedures, including writes.                                                               |
+
+Approval makes the stored grammar available immediately for the original
+request and generated equivalent requests. No preliminary macro execution,
+manual grammar file, or separate compile command is necessary. Subsequent
+natural requests pass changed inputs to the whole-procedure Copilot runner.
+Approval of a definition never approves future tool calls: native permission
+prompts, denials, and cancellations still apply. Explicit `preference: "replay"`
+cannot bypass this policy for newly learned macros.
+
+The background model uses the configured Copilot provider. Set
+`TYPEAGENT_MACRO_LEARNING_MODEL` on agent-server only to override its model.
+Unsupported operations/output requirements and incomplete evidence are not
+silently converted into ready macros.
+
+Grammar generation processes at most six requests concurrently, within the
+coordinator's 30-second model-stage deadline. Generated helpers use private
+macro/version/example namespaces. Model responses cannot mutate shared phrase
+sets, even when generation is rejected or the candidate awaits approval.
+Candidate and combined-catalog checks cover exact actions/inputs, changed
+values, competing routes, and representative negative intents. These checks
+are not a proof of arbitrary natural-language intent equivalence.
+
+This is an initial learning implementation, not a completed live WorkIQ
+certification. The engine supports preparation from stored traces and
+evidenced adaptation; automatic native-runner adaptation capture/submission
+and hosted-reasoning producer adapters are not yet connected. There is no
+automatic deterministic promotion or learning-mode environment override.
+Account/config identity drift, retention/privacy policy, broader wildcard
+safety, and real-model latency/coverage still require validation/hardening.
+Restart the existing agent-server and reload the built plugin before testing;
+building does not change an already running server or session.
+
+### Legacy manual lifecycle
 
 Use `@typeagent mode mcp mixed` for macro lifecycle requests. Ask Copilot to
 call the `typeagent-macros` lifecycle tools directly, not `processCommand` or
@@ -547,12 +614,8 @@ interactive prompt appeared in Copilot. Do not enable blanket permissions to
 work around this. Use the lifecycle server for approval, preserve normal tool
 permissions, and verify the stored macro state before retrying.
 
-1. Arm one interaction:
-
-   ```text
-   @typeagent macro record
-   ```
-
+1. Existing integrations can arm one interaction through the agent-server
+   `armMacroRecording` RPC without the `learning` flag.
 2. Complete one successful Copilot turn that uses an MCP tool.
 3. Retrieve the trace ID:
 

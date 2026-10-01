@@ -21,7 +21,7 @@ export class ReplayValidationError extends Error {
     }
 }
 
-function resolveExpression(
+export function resolveMacroExpression(
     expression: ValueExpression,
     inputs: Record<string, unknown>,
     results: ReadonlyMap<string, unknown>,
@@ -46,7 +46,11 @@ function resolveExpression(
                 parent = child as Record<string, unknown>;
             }
             Object.defineProperty(parent, binding.path.at(-1)!, {
-                value: resolveExpression(binding.expression, inputs, results),
+                value: resolveMacroExpression(
+                    binding.expression,
+                    inputs,
+                    results,
+                ),
                 configurable: true,
                 enumerable: true,
                 writable: true,
@@ -191,7 +195,10 @@ export async function inspectReplayTools(
             "Only approved macros can be replayed.",
         );
     }
-    if (macro.executionClass !== "replayable") {
+    if (
+        macro.executionClass !== "replayable" ||
+        macro.learning?.requiresLivePermissions === true
+    ) {
         throw new ReplayValidationError(
             "agentRequired",
             "This macro requires agent-guided execution.",
@@ -248,7 +255,7 @@ export async function replayMacro(
         const stepStartedAt = now();
         try {
             signal.throwIfAborted();
-            const argumentsValue = resolveExpression(
+            const argumentsValue = resolveMacroExpression(
                 step.arguments,
                 inputs,
                 results,

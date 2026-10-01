@@ -23,6 +23,7 @@ import {
     McpReplayHost,
     SessionMcpCredentialStore,
     createMacroAppAgentProvider,
+    createMacroLearningRuntime,
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
@@ -406,6 +407,11 @@ async function main() {
     const macroManager = new MacroManager(
         instanceDir,
         new McpReplayHost(instanceDir),
+    );
+    await macroManager.configureLearning(
+        createMacroLearningRuntime(undefined, () =>
+            macroManager.getApprovedMacros(),
+        ),
     );
 
     const conversationManager: ConversationManager =
