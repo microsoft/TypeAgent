@@ -3,6 +3,8 @@
 
 import {
     assertGhcpEvalAction,
+    isGhcpEvalReadOnlyAction,
+    isGhcpEvalRecoverableReadError,
     markGhcpEvalExecutionFailure,
     recordGhcpEvalEvent,
 } from "./ghcpEvalPolicy.js";
@@ -545,11 +547,15 @@ export async function executeAction(
                     schemaName,
                 );
 
+                const recoverable =
+                    isGhcpEvalReadOnlyAction(schemaName, action.actionName) &&
+                    isGhcpEvalRecoverableReadError(outcome.result.error);
                 if (outcome.result.error !== undefined)
-                    markGhcpEvalExecutionFailure();
+                    markGhcpEvalExecutionFailure(recoverable);
                 recordGhcpEvalEvent("action.completed", {
                     ...eventData,
                     success: outcome.result.error === undefined,
+                    recoverable,
                     elapsedMs: Date.now() - actionStartedAt,
                 });
                 logActionCompleted(systemContext.logger, {

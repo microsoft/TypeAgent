@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2d0e6b07a09267e83572600c217225a8dd52bc6018a5f6dd3dd4b5e2d0874171 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=76957f2ef1a2b36aaff562c9591e9b29df723407c09915b7eb081a463cb23829 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-plugin-eval — AI-generated documentation
@@ -38,6 +38,6 @@ _No tracked source files under `./src/`._
 
 ---
 
-_Auto-generated against commit `ba6a8b85088604d88c37360ec0bc092911ad38bc` on `2026-09-25T22:33:54.079Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin-eval docs:verify-links` to spot-check._
+_Auto-generated against commit `c4262a4a5f8520ce9c81061bb461b7d181d7a4af` on `2026-09-25T22:35:36.308Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin-eval docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
