@@ -168,6 +168,7 @@ let startPromise: Promise<CopilotClient> | undefined;
 let cachedCliPath: string | undefined;
 let cachedCliUrl: string | undefined;
 let exitHandlerInstalled = false;
+let endpointRpcUnavailable = false;
 
 export interface CopilotClientOptions {
     /** Path to the copilot CLI binary. Ignored when `cliUrl` is set. */
@@ -274,6 +275,22 @@ export async function getCopilotClient(
     return getClient(
         typeof options === "string" ? { cliPath: options } : options,
     );
+}
+
+/**
+ * Stop the process-wide Copilot client used by aiclient.
+ *
+ * Long-running hosts normally keep the client warm. Short-lived CLIs should
+ * call this before exiting so the Copilot child process does not keep the Node
+ * event loop alive.
+ */
+export async function stopCopilotClient(): Promise<void> {
+    const pendingClient = cachedClient ?? (await startPromise);
+    cachedClient = undefined;
+    startPromise = undefined;
+    if (pendingClient) {
+        await pendingClient.stop();
+    }
 }
 
 /**
@@ -517,6 +534,12 @@ export function selectCopilotModel(
 
     const requestedModel = byId.get(requested);
     if (requestedModel !== undefined) return requestedModel;
+
+    const previousTier = /^gpt-6-(luna|sol)$/.exec(requested)?.[1];
+    if (previousTier !== undefined) {
+        const previousModel = byId.get(`gpt-5.6-${previousTier}`);
+        if (previousModel !== undefined) return previousModel;
+    }
 
     for (const fallback of fallbackModels) {
         const fallbackModel = byId.get(fallback);
@@ -923,6 +946,103 @@ function hasImageContent(messages: PromptSection[]): boolean {
     );
 }
 
+function promptSectionsToText(messages: PromptSection[]): string | undefined {
+    const sections: string[] = [];
+    for (const message of messages) {
+        if (typeof message.content === "string") {
+            sections.push(`${message.role.toUpperCase()}:\n${message.content}`);
+            continue;
+        }
+        if (
+            message.content.some(
+                (content) =>
+                    typeof content !== "string" && content.type === "image_url",
+            )
+        ) {
+            return undefined;
+        }
+        const text = message.content
+            .map((content) =>
+                typeof content === "string"
+                    ? content
+                    : "text" in content
+                      ? content.text
+                      : "",
+            )
+            .join("\n");
+        sections.push(`${message.role.toUpperCase()}:\n${text}`);
+    }
+    return sections.join("\n\n");
+}
+
+export async function completeWithCopilotSession(
+    settings: CopilotApiSettings,
+    completionSettings: CompletionSettings,
+    messages: PromptSection[],
+    signal?: AbortSignal,
+    clientFactory: (
+        options: CopilotClientOptions,
+    ) => Promise<Pick<CopilotClient, "createSession">> = getClient,
+): Promise<Result<string>> {
+    const prompt = promptSectionsToText(messages);
+    if (prompt === undefined) {
+        return error(
+            "The installed Copilot CLI does not support provider endpoints, and its session fallback does not support image input.",
+        );
+    }
+
+    let session:
+        | Awaited<ReturnType<CopilotClient["createSession"]>>
+        | undefined;
+    let abortListener: (() => void) | undefined;
+    try {
+        if (signal?.aborted) {
+            return cancelledFailure();
+        }
+        const client = await clientFactory({
+            cliPath: settings.cliPath,
+            cliUrl: settings.cliUrl,
+        });
+        session = await client.createSession(
+            buildSessionConfig(settings, completionSettings, false),
+        );
+
+        let responsePromise = session.sendAndWait({ prompt }, settings.timeout);
+        if (signal) {
+            const activeSession = session;
+            const abortPromise = new Promise<never>((_, reject) => {
+                abortListener = () => {
+                    void activeSession.abort().catch(() => {});
+                    reject(signal.reason ?? new Error("Request cancelled"));
+                };
+                signal.addEventListener("abort", abortListener, { once: true });
+                if (signal.aborted) {
+                    abortListener();
+                }
+            });
+            responsePromise = Promise.race([responsePromise, abortPromise]);
+        }
+
+        const response = await responsePromise;
+        if (response === undefined) {
+            return error("Copilot returned no response");
+        }
+        return success(response.data.content);
+    } catch (err) {
+        return isAbort(err, signal)
+            ? cancelledFailure()
+            : classifiedFailure(
+                  err instanceof Error ? err.message : String(err),
+                  err,
+              );
+    } finally {
+        if (abortListener && signal) {
+            signal.removeEventListener("abort", abortListener);
+        }
+        await session?.disconnect().catch(() => {});
+    }
+}
+
 /**
  * Build a Copilot chat model that issues HTTP calls against an endpoint minted
  * by `endpointProvider`, mirroring the Azure/OpenAI HTTP path
@@ -1061,6 +1181,14 @@ export function createCopilotTransportModel(
         const tTotal = Date.now();
 
         let result: Result<unknown>;
+        if (endpointRpcUnavailable) {
+            return completeWithCopilotSession(
+                settings,
+                resolvedCompletionSettings,
+                messages,
+                signal,
+            );
+        }
         try {
             result = await callJsonApiWithPool(pool, request.build, options);
         } catch (err) {
@@ -1095,6 +1223,22 @@ export function createCopilotTransportModel(
                       );
             }
             if (!result.success) {
+                if (
+                    result.message.includes(
+                        "Unhandled method session.provider.getEndpoint",
+                    )
+                ) {
+                    endpointRpcUnavailable = true;
+                    debug(
+                        "Copilot provider endpoint RPC is unavailable; using SDK session transport",
+                    );
+                    return completeWithCopilotSession(
+                        settings,
+                        resolvedCompletionSettings,
+                        messages,
+                        signal,
+                    );
+                }
                 return result;
             }
         }

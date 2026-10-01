@@ -13,7 +13,16 @@ jest.mock("../../src/extension/serviceWorker/websocket", () => ({
     }),
 }));
 
+jest.mock("../../src/extension/serviceWorker/messageHandlers", () => ({
+    indexPageContent: jest.fn(),
+}));
+
+import { indexPageContent } from "../../src/extension/serviceWorker/messageHandlers";
+
 let contextMenuModule: any;
+const mockIndexPageContent = indexPageContent as jest.MockedFunction<
+    typeof indexPageContent
+>;
 
 describe("Context Menu Module", () => {
     beforeEach(() => {
@@ -24,6 +33,12 @@ describe("Context Menu Module", () => {
         chrome.contextMenus.remove.mockClear();
         chrome.sidePanel.open.mockClear();
         chrome.tabs.sendMessage.mockClear();
+        chrome.action.setTitle = jest.fn().mockResolvedValue(undefined);
+        mockIndexPageContent.mockResolvedValue({
+            indexed: true,
+            warnings: [],
+            howTo: { enabled: true, candidateCount: 1 },
+        });
 
         // Reload the module under test for each test
         jest.isolateModules(() => {
@@ -39,6 +54,21 @@ describe("Context Menu Module", () => {
             expect(
                 chrome.contextMenus.create.mock.calls.length,
             ).toBeGreaterThan(1);
+            const ids = chrome.contextMenus.create.mock.calls.map(
+                ([item]) => item.id,
+            );
+            expect(
+                ids.slice(
+                    ids.indexOf("askAboutPage"),
+                    ids.indexOf("menuSeparator2"),
+                ),
+            ).toEqual(["askAboutPage", "saveThisPage"]);
+            expect(chrome.contextMenus.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: "saveThisPage",
+                    documentUrlPatterns: ["http://*/*", "https://*/*"],
+                }),
+            );
         });
     });
 
@@ -75,6 +105,108 @@ describe("Context Menu Module", () => {
             expect(chrome.tabs.create).toHaveBeenCalledWith({
                 url: "chrome-extension://abcdefgh/views/memoryCenter.html",
                 active: true,
+            });
+        });
+
+        it("saves the clicked tab and reports discovered candidates", async () => {
+            const tab = {
+                id: 123,
+                url: "https://example.com/guide",
+                title: "Guide",
+            };
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "saveThisPage" },
+                tab,
+            );
+
+            expect(mockIndexPageContent).toHaveBeenCalledWith(tab, true, {
+                activityType: "captured",
+                mode: "content",
+                reportHowToStatus: true,
+            });
+            expect(chrome.sidePanel.open).not.toHaveBeenCalled();
+            expect(chrome.action.setTitle).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    tabId: 123,
+                    title: expect.stringContaining("1 how-to candidate"),
+                }),
+            );
+        });
+
+        it("does not index a missing or unsupported tab", async () => {
+            await contextMenuModule.handleContextMenuClick({
+                menuItemId: "saveThisPage",
+            });
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "saveThisPage" },
+                { id: 123, url: "chrome://settings" },
+            );
+            expect(mockIndexPageContent).not.toHaveBeenCalled();
+        });
+
+        it("shows indexing failures and how-to warnings without claiming success", async () => {
+            const tab = { id: 123, url: "https://example.com" };
+            mockIndexPageContent.mockResolvedValueOnce({
+                indexed: false,
+                error: "Not connected",
+            });
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "saveThisPage" },
+                tab,
+            );
+            expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
+                tabId: 123,
+                title: "Could not save page: Not connected",
+            });
+
+            mockIndexPageContent.mockResolvedValueOnce({
+                indexed: true,
+                warnings: ["Procedure candidate extraction failed"],
+            });
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "saveThisPage" },
+                tab,
+            );
+            expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
+                tabId: 123,
+                title: expect.stringContaining(
+                    "Procedure candidate extraction failed",
+                ),
+            });
+            expect(chrome.action.setBadgeText).toHaveBeenCalledWith({
+                tabId: 123,
+                text: "!",
+            });
+        });
+
+        it("distinguishes no how-to match from disabled detection", async () => {
+            const tab = { id: 123, url: "https://example.com" };
+            mockIndexPageContent.mockResolvedValueOnce({
+                indexed: true,
+                warnings: [],
+                howTo: { enabled: true, candidateCount: 0 },
+            });
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "saveThisPage" },
+                tab,
+            );
+            expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
+                tabId: 123,
+                title: expect.stringContaining("0 how-to candidate(s)"),
+            });
+
+            mockIndexPageContent.mockResolvedValueOnce({
+                indexed: true,
+                warnings: [],
+                howTo: { enabled: false, candidateCount: 0 },
+            });
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "saveThisPage" },
+                tab,
+            );
+            expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
+                tabId: 123,
+                title: expect.stringContaining("How-to detection is disabled"),
             });
         });
     });

@@ -15,6 +15,10 @@ import registerDebug from "debug";
 import { MacroManager } from "@typeagent/copilot-macros";
 import { McpReplayHost } from "default-agent-provider";
 import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
+import type {
+    MemoryService,
+    PersonalHowToService,
+} from "@typeagent/memory-service";
 
 import {
     createConversationManager,
@@ -78,9 +82,32 @@ export async function createInProcessAgentServer(
     instanceDir: string,
     options: InProcessAgentServerOptions,
 ): Promise<InProcessAgentServer> {
+    const memoryAgentOptions = dispatcherOptions.agentInitOptions?.memory as
+        | { memoryServiceClient?: MemoryService }
+        | undefined;
+    const injectedMemoryService =
+        dispatcherOptions.conversationMemorySettings?.durableMemoryService ??
+        memoryAgentOptions?.memoryServiceClient;
+    const ownedMemoryService =
+        injectedMemoryService === undefined
+            ? createDurableMemoryService(path.join(instanceDir, "memory"))
+            : undefined;
+    const memoryService = injectedMemoryService ?? ownedMemoryService!;
+    const procedureService =
+        "getProcedure" in memoryService &&
+        typeof memoryService.getProcedure === "function"
+            ? (memoryService as MemoryService &
+                  Pick<PersonalHowToService, "getProcedure">)
+            : undefined;
     const conversationManager = await createConversationManager(
         hostName,
-        dispatcherOptions,
+        {
+            ...dispatcherOptions,
+            conversationMemorySettings: {
+                ...dispatcherOptions.conversationMemorySettings,
+                durableMemoryService: memoryService,
+            },
+        },
         instanceDir,
         options.idleTimeoutMs ?? 0,
         options.testMode ?? false,
@@ -89,9 +116,6 @@ export async function createInProcessAgentServer(
     // Pre-warm so the first join is fast and conversation metadata exists.
     await conversationManager.prewarmMostRecentConversation();
 
-    const memoryService = createDurableMemoryService(
-        path.join(instanceDir, "memory"),
-    );
     const { skillCatalog, skillAcquirer } = await createLocalSkillServices(
         instanceDir,
         options.skillAcquisition,
@@ -104,7 +128,7 @@ export async function createInProcessAgentServer(
         ),
         skillCatalog,
         skillAcquirer,
-        procedureService: memoryService,
+        ...(procedureService === undefined ? {} : { procedureService }),
         shutdown: options.shutdown,
         getUserIdentity: options.getUserIdentity ?? defaultUserIdentity,
         // No discovery RPC here: embedded hosts run their own discovery
@@ -154,10 +178,11 @@ export async function createInProcessAgentServer(
         conversationManager,
         async close(): Promise<void> {
             closeTransport();
-            await Promise.all([
-                conversationManager.close(),
-                memoryService.close(),
-            ]);
+            try {
+                await conversationManager.close();
+            } finally {
+                await ownedMemoryService?.close();
+            }
         },
     };
 }

@@ -34,7 +34,16 @@ export type { WebFlowActions } from "./schema/webFlowActions.mjs";
 export { generateWebFlowFromTrace } from "./scriptGenerator.mjs";
 export { normalizeRecording } from "./recordingNormalizer.mjs";
 export type { RecordedAction, RecordingData } from "./recordingNormalizer.mjs";
-export { BrowserReasoningAgent } from "./reasoning/browserReasoningAgent.mjs";
+export {
+    BrowserReasoningAgent,
+    createCopilotClient,
+} from "./reasoning/browserReasoningAgent.mjs";
+export type {
+    BrowserReasoningCallbacks,
+    BrowserReasoningCopilotClient,
+    BrowserReasoningCopilotClientFactory,
+    BrowserReasoningCopilotSession,
+} from "./reasoning/browserReasoningAgent.mjs";
 export type {
     BrowserReasoningConfig,
     BrowserReasoningTrace,

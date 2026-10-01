@@ -64,6 +64,8 @@ export type SchemaContent = {
     // TODO: enable non-stringify pas content.
     content: string;
     config?: string | undefined; // for "ts" only
+    // Dynamic schemas can bind learned routes to individual action definitions.
+    cacheBinding?: ActionCacheBinding;
 };
 export type GrammarContent = {
     format: GrammarFormat;
@@ -83,6 +85,13 @@ export type ActionPolicy = {
     confirmation?: "required";
 };
 
+export type ActionCacheBinding = {
+    // Stable identity of the system that supplied this dynamic schema.
+    sourceId: string;
+    // Fingerprints of the source definitions keyed by action name.
+    actionFingerprints: Record<string, string>;
+};
+
 export type SchemaManifest = {
     description: string;
     schemaType: string | SchemaTypeNames; // string if there are only action schemas
@@ -94,6 +103,9 @@ export type SchemaManifest = {
     streamingActions?: string[];
     // Exact action names. Applies to structured invocation, not NL routing.
     actionPolicies?: Record<string, ActionPolicy>;
+    // Optional provenance used to invalidate learned routes when a dynamic
+    // action's source definition changes.
+    cacheBinding?: ActionCacheBinding;
 };
 
 export type ActionManifest = {

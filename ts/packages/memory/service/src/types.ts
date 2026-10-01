@@ -291,6 +291,13 @@ export type MemoryEventSender =
     | "agent"
     | "other";
 
+export type MemoryEventAuthority =
+    | "user-assertion"
+    | "evidence-only"
+    | "verified-observation"
+    | "explicit"
+    | "producer-reported";
+
 export interface MemoryEventProducer {
     producerId: string;
     producerType: string;
@@ -341,9 +348,11 @@ export interface MemoryEventAppendResult {
 
 export interface MemoryEventFilter {
     sourceKinds?: MemoryEventSourceKind[];
+    authorities?: MemoryEventAuthority[];
     producerIds?: string[];
     eventTypes?: string[];
     conversationIds?: string[];
+    turnIds?: string[];
     runIds?: string[];
     linkedSourceIds?: string[];
     observedFrom?: string;
@@ -414,6 +423,19 @@ export interface MemoryKnowledgeGraph {
     entities: MemoryGraphEntity[];
     topics: MemoryGraphTopic[];
     relationships: MemoryGraphRelationship[];
+}
+
+export type SourceKnowledgeKind = "entity" | "topic";
+
+export interface SourceKnowledgeSuppression {
+    sourceId: string;
+    kind: SourceKnowledgeKind;
+    name: string;
+}
+
+export interface SourceKnowledgeSuppressionRequest
+    extends SourceKnowledgeSuppression {
+    corpusId: string;
 }
 
 export interface MemoryServiceCapabilities {
@@ -557,6 +579,16 @@ export interface MemoryService {
         corpusId: string,
         sourceId: string,
     ): Promise<MemoryKnowledgeGraph>;
+    listSourceKnowledgeSuppressions?(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<SourceKnowledgeSuppression[]>;
+    suppressSourceKnowledge?(
+        request: SourceKnowledgeSuppressionRequest,
+    ): Promise<SourceKnowledgeSuppression[]>;
+    restoreSourceKnowledge?(
+        request: SourceKnowledgeSuppressionRequest,
+    ): Promise<SourceKnowledgeSuppression[]>;
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
@@ -646,6 +678,7 @@ export interface IndexedDocument {
     source: SourceDocument;
     revision: SourceRevision;
     content: string;
+    indexTags?: string[];
     pipeline: {
         mode: IngestionMode;
         maxCharsPerChunk?: number;
@@ -672,7 +705,11 @@ export interface CorpusIndex {
         signal: AbortSignal,
         onProgress: (progress: JobProgress) => Promise<void>,
     ): Promise<void>;
-    search(query: string, limit: number): Promise<CorpusIndexMatch[]>;
+    search(
+        query: string,
+        limit: number,
+        tags?: string[],
+    ): Promise<CorpusIndexMatch[]>;
     getKnowledgeGraph(
         sourceIds?: ReadonlySet<string>,
     ): Promise<MemoryKnowledgeGraph>;

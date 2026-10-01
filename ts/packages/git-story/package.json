@@ -1,0 +1,40 @@
+{
+  "name": "git-story",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Attach agent session stories to git commits",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/git-story"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "bin": {
+    "git-story": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.17",
+    "commander": "^12.1.0",
+    "hono": "^4.13.5"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.7",
+    "@types/node": "^20.10.0",
+    "jest": "^29.7.0",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}

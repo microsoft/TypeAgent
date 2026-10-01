@@ -1,0 +1,11 @@
+{
+  "name": "typeagent-memory",
+  "description": "TypeAgent memory for Copilot CLI - remember and recall in the current workspace conversation",
+  "version": "0.0.1",
+  "author": {
+    "name": "Microsoft"
+  },
+  "hooks": "hooks.json",
+  "mcpServers": ".mcp.json",
+  "skills": "skills/"
+}

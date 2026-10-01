@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    completeWithCopilotSession,
     createCopilotRuntimeConnection,
     createCopilotTransportModel,
     CopilotEndpoint,
@@ -203,14 +204,110 @@ describe("createCopilotRuntimeConnection", () => {
     });
 });
 
+describe("Copilot session fallback", () => {
+    test("completes text without the provider endpoint RPC", async () => {
+        let disconnected = false;
+        const result = await completeWithCopilotSession(
+            makeSettings("gpt-5.6-sol"),
+            {},
+            [
+                { role: "system", content: "Return plain text." },
+                { role: "user", content: "Hello" },
+            ],
+            undefined,
+            async () => ({
+                createSession: async () =>
+                    ({
+                        sendAndWait: async ({
+                            prompt,
+                        }: {
+                            prompt: string;
+                        }) => ({
+                            data: {
+                                content: prompt.includes("Hello")
+                                    ? "ready"
+                                    : "",
+                            },
+                        }),
+                        disconnect: async () => {
+                            disconnected = true;
+                        },
+                    }) as any,
+            }),
+        );
+
+        expect(result).toEqual({ success: true, data: "ready" });
+        expect(disconnected).toBe(true);
+    });
+
+    test("aborts and disconnects the fallback session", async () => {
+        const controller = new AbortController();
+        let aborted = false;
+        let disconnected = false;
+        const completion = completeWithCopilotSession(
+            makeSettings("gpt-5.6-sol"),
+            {},
+            [{ role: "user", content: "Wait" }],
+            controller.signal,
+            async () => ({
+                createSession: async () =>
+                    ({
+                        sendAndWait: async () => new Promise<never>(() => {}),
+                        abort: async () => {
+                            aborted = true;
+                        },
+                        disconnect: async () => {
+                            disconnected = true;
+                        },
+                    }) as any,
+            }),
+        );
+
+        controller.abort();
+        await expect(completion).resolves.toMatchObject({
+            success: false,
+        });
+        expect(aborted).toBe(true);
+        expect(disconnected).toBe(true);
+    });
+});
+
 describe("selectCopilotModel", () => {
     test("uses the requested model when it is available", () => {
         const selected = selectCopilotModel(
-            "gpt-5.6-luna",
+            "gpt-6-luna",
             ["gpt-5.4-mini"],
-            [makeModel("gpt-5.4-mini"), makeModel("gpt-5.6-luna")],
+            [
+                makeModel("gpt-5.4-mini"),
+                makeModel("gpt-5.6-luna"),
+                makeModel("gpt-6-luna"),
+            ],
         );
-        expect(selected?.id).toBe("gpt-5.6-luna");
+        expect(selected?.id).toBe("gpt-6-luna");
+    });
+
+    test.each(["luna", "sol"])(
+        "uses GPT-5.6 %s before generic fallbacks when GPT-6 is unavailable",
+        (tier) => {
+            const selected = selectCopilotModel(
+                `gpt-6-${tier}`,
+                ["gpt-5.4-mini"],
+                [makeModel("gpt-5.4-mini"), makeModel(`gpt-5.6-${tier}`)],
+            );
+            expect(selected?.id).toBe(`gpt-5.6-${tier}`);
+        },
+    );
+
+    test("skips a disabled GPT-5.6 tier fallback", () => {
+        const selected = selectCopilotModel(
+            "gpt-6-luna",
+            ["gpt-5.4-mini"],
+            [
+                makeModel("gpt-5.6-luna", { policy: "disabled" }),
+                makeModel("gpt-5.4-mini"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.4-mini");
     });
 
     test("uses the first configured concrete fallback", () => {

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ConversationMessage } from "@typeagent/conversation-memory";
@@ -91,4 +91,21 @@ describe("workspace scope", () => {
         await Promise.all([first, second]);
         expect(order).toEqual(["a-start", "a-end", "b-start", "b-end"]);
     });
+
+    it("aborts and rejects when the lock is compromised", async () => {
+        const dir = await mkdtemp(path.join(os.tmpdir(), "memory-lock-"));
+        let aborted = false;
+        const run = withMemoryLock(dir, async (signal) => {
+            // Simulate another process breaking the lock.
+            await rm(`${dir}.lock`, { recursive: true, force: true });
+            await new Promise<void>((resolve) =>
+                signal.addEventListener("abort", () => resolve(), {
+                    once: true,
+                }),
+            );
+            aborted = true;
+        });
+        await expect(run).rejects.toBeDefined();
+        expect(aborted).toBe(true);
+    }, 30_000);
 });

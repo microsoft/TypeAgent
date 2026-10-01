@@ -186,7 +186,10 @@ async function main() {
             throw new Error(`Workspace package '${npmName}' was not found.`);
         }
         console.log(`\n[${npmName}] bundling -> ${bundleName}/ ...`);
-        await bundleAgentPackage(source.directory, dest);
+        await bundleAgentPackage(source.directory, dest, {
+            platform: args.platform,
+            arch: args.arch,
+        });
         const generatedPackage = readJson(path.join(dest, "package.json"));
         if (Object.keys(generatedPackage.dependencies ?? {}).length > 0) {
             const workspace = writeRuntimeInstallWorkspace(dest);

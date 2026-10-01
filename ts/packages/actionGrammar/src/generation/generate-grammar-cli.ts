@@ -3,6 +3,7 @@
 // Licensed under the MIT License.
 
 import { loadConfigSync } from "@typeagent/config";
+import { stopCopilotClient } from "@typeagent/aiclient";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -10,12 +11,18 @@ loadConfigSync();
 
 import { SchemaToGrammarGenerator } from "./schemaToGrammarGenerator.js";
 import { loadSchemaInfo } from "./schemaReader.js";
+import {
+    defaultGrammarModel,
+    GrammarModelProvider,
+    resolveGrammarModel,
+} from "./grammarModel.js";
 
 interface GenerateGrammarOptions {
     schema: string;
     output?: string;
     examplesPerAction?: number;
     model?: string;
+    provider?: GrammarModelProvider;
     inputGrammar?: string;
     improve?: string;
     help?: boolean;
@@ -26,7 +33,6 @@ function parseArgs(): GenerateGrammarOptions {
     const options: GenerateGrammarOptions = {
         schema: "",
         examplesPerAction: 3,
-        model: "claude-sonnet-4-20250514",
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -47,6 +53,16 @@ function parseArgs(): GenerateGrammarOptions {
             case "--model":
             case "-m":
                 options.model = args[++i];
+                break;
+            case "--provider":
+                const provider = args[++i];
+                if (provider === "copilot" || provider === "claude") {
+                    options.provider = provider;
+                } else {
+                    throw new Error(
+                        `Unsupported provider "${provider}". Use copilot or claude.`,
+                    );
+                }
                 break;
             case "--input":
             case "-i":
@@ -84,7 +100,8 @@ Options:
                              Default: <schema-name>.agr (new grammar)
                                       <schema-name>.extended.agr (when extending)
   -e, --examples <number>    Number of examples per action (default: 3)
-  -m, --model <model>        Claude model to use (default: claude-sonnet-4-20250514)
+  --provider <provider>      Model provider: copilot or claude (default: copilot)
+  -m, --model <model>        Model to use (default: ${defaultGrammarModel})
   -i, --input <path>         Existing .agr file to extend/improve (optional)
   --improve <instructions>   Instructions for how to improve the grammar (optional)
   -h, --help                 Show this help message
@@ -152,7 +169,9 @@ async function main() {
         }
 
         console.log(`\nGenerating grammar...`);
-        console.log(`  Model: ${options.model}`);
+        const modelConfig = resolveGrammarModel(options);
+        console.log(`  Provider: ${modelConfig.provider}`);
+        console.log(`  Model: ${modelConfig.model}`);
         console.log(`  Examples per action: ${options.examplesPerAction}`);
         if (existingGrammar) {
             console.log(`  Mode: Extending existing grammar`);
@@ -163,7 +182,10 @@ async function main() {
 
         // Generate grammar
         const generator = new SchemaToGrammarGenerator({
-            model: options.model!,
+            ...(options.model === undefined ? {} : { model: options.model }),
+            ...(options.provider === undefined
+                ? {}
+                : { provider: options.provider }),
             examplesPerAction: options.examplesPerAction!,
         });
 
@@ -221,4 +243,4 @@ async function main() {
     }
 }
 
-main();
+main().finally(stopCopilotClient);

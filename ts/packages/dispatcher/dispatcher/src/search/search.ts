@@ -111,7 +111,10 @@ export async function lookupAndAnswer(
         // }
         case "lookupAndAnswerConversation": {
             const systemContext = context.sessionContext.agentContext;
-            if (systemContext.session.getConfig().execution.memory.legacy) {
+            if (
+                systemContext.conversationDurableMemory === undefined &&
+                systemContext.session.getConfig().execution.memory.legacy
+            ) {
                 return getAnswerFromConversationManager(
                     context,
                     lookupAction.parameters.question,

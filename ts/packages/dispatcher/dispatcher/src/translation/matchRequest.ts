@@ -30,6 +30,7 @@ import {
 import { resolveContextSelector } from "./matchContextSelector.js";
 import { displayInfo } from "@typeagent/agent-sdk/helpers/display";
 import { parseRecordingDirective } from "@typeagent/dispatcher-types";
+import { getConversationEntityMemory } from "../context/conversationEntityMemory.js";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -84,7 +85,7 @@ async function validateEntityWildcardMatch(
         `Validating entity wildcards: [${match.entityWildcardPropertyNames.join(", ")}] ` +
             `for actions: [${match.match.actions.map((a) => `${a.action.schemaName}.${a.action.actionName}`).join(", ")}]`,
     );
-    const conversationMemory = context.conversationMemory;
+    const conversationMemory = await getConversationEntityMemory(context);
     if (conversationMemory === undefined) {
         // Can't resolve entity without memory.
         debugConstValidation(
