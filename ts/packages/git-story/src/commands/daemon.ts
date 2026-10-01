@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cliLogger, daemonLogger } from "../logger.js";
 import { DAEMON_ROUTE } from "../server/router.js";
 import { startServer } from "../server/server.js";
 
@@ -31,7 +32,6 @@ import { startServer } from "../server/server.js";
 // Shared TypeAgent user dir, as in packages/config.
 const STATE_DIR = path.join(".typeagent", "git-story");
 const STATE_FILE = "daemon.json";
-const LOG_FILE = "daemon.log";
 const START_TIMEOUT_MS = 5000;
 const STOP_TIMEOUT_MS = 5000;
 const POLL_MS = 50;
@@ -122,7 +122,25 @@ async function start(): Promise<void> {
     }
     const dir = stateDir();
     fs.mkdirSync(dir, { recursive: true });
-    const log = fs.openSync(path.join(dir, LOG_FILE), "a");
+    // Uncaught output and crash traces use the daily daemon log.
+    const logFile = daemonLogger.file();
+    if (!path.isAbsolute(logFile)) {
+        const message = "Failed to resolve daemon log path";
+        process.stderr.write(`${message}\n`);
+        process.exitCode = 1;
+        return;
+    }
+    let log: number;
+    try {
+        fs.mkdirSync(path.dirname(logFile), { recursive: true, mode: 0o700 });
+        log = fs.openSync(logFile, "a", 0o600);
+    } catch (e) {
+        const message = `Failed to open daemon log ${logFile}: ${(e as Error).message}`;
+        process.stderr.write(`${message}\n`);
+        cliLogger.error(message);
+        process.exitCode = 1;
+        return;
+    }
     // cwd is the state dir so the daemon never holds a project directory
     // open (Windows cannot delete a directory that is some process's cwd).
     // windowsHide: no console window on Windows.
@@ -156,9 +174,8 @@ async function start(): Promise<void> {
         return;
     }
     if (!exited) child.kill();
-    process.stderr.write(
-        `Failed to start daemon, see ${path.join(dir, LOG_FILE)}\n`,
-    );
+    process.stderr.write(`Failed to start daemon, see ${logFile}\n`);
+    cliLogger.error(`Failed to start daemon, see ${logFile}`);
     process.exitCode = 1;
 }
 
@@ -193,9 +210,9 @@ export async function runDaemon(): Promise<void> {
     try {
         server = await startServer(port);
     } catch (e) {
-        process.stderr.write(
-            `Cannot listen on port ${port}: ${(e as Error).message}\n`,
-        );
+        const message = `Cannot listen on port ${port}: ${(e as Error).message}`;
+        process.stderr.write(`${message}\n`);
+        daemonLogger.error(message);
         process.exitCode = 1;
         return;
     }
@@ -207,6 +224,7 @@ export async function runDaemon(): Promise<void> {
     fs.writeFileSync(tmp, JSON.stringify(state) + "\n");
     fs.renameSync(tmp, file);
     process.stdout.write(`Listening at ${url(state)}\n`);
+    daemonLogger.info(`Listening at ${url(state)}`);
     const shutdown = () => {
         // Before close: the port is still held, so no new daemon can have
         // written its state yet.

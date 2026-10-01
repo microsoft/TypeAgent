@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { Command } from "commander";
+import { cliLogger } from "../logger.js";
 
 // Reads all of stdin. Hooks get their payload here (Copilot JSON, or lines
 // git pipes to hooks such as pre-push). Returns "" when stdin is a terminal.
@@ -25,6 +26,7 @@ hooksCommand
     .description("Handle the Copilot userPromptSubmitted hook")
     .action(() => {
         process.stdout.write("Hello World\n");
+        cliLogger.info("Hello World");
     });
 
 // `hooks git <hook> [args...]`: called by the scripts `init` writes to the
@@ -38,7 +40,7 @@ hooksCommand
     .argument("[args...]", "arguments git passed to the hook")
     .action(async (args: string[]) => {
         const input = await readStdin();
-        process.stdout.write(
-            `git-story pre-commit: args=${JSON.stringify(args)} stdin=${JSON.stringify(input)}\n`,
-        );
+        const message = `git-story pre-commit: args=${JSON.stringify(args)} stdin=${JSON.stringify(input)}`;
+        process.stdout.write(`${message}\n`);
+        cliLogger.info(message);
     });

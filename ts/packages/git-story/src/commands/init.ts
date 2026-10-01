@@ -5,6 +5,7 @@ import { Command } from "commander";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { cliLogger } from "../logger.js";
 
 // Copilot CLI reads repo-level hooks from this file. The `.local` variant is
 // per-clone, so init also adds it to `.git/info/exclude`.
@@ -48,9 +49,9 @@ export const initCommand = new Command("init")
             try {
                 settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
             } catch (e) {
-                process.stderr.write(
-                    `Failed to parse ${settingsPath}: ${(e as Error).message}\n`,
-                );
+                const message = `Failed to parse ${settingsPath}: ${(e as Error).message}`;
+                process.stderr.write(`${message}\n`);
+                cliLogger.error(message);
                 process.exitCode = 1;
                 return;
             }
@@ -86,7 +87,9 @@ export const initCommand = new Command("init")
             fs.mkdirSync(path.dirname(exclude), { recursive: true });
             fs.appendFileSync(exclude, `${COPILOT_SETTINGS}\n`);
         }
-        process.stdout.write(`Registered Copilot hooks in ${settingsPath}\n`);
+        const copilotMessage = `Registered Copilot hooks in ${settingsPath}`;
+        process.stdout.write(`${copilotMessage}\n`);
+        cliLogger.info(copilotMessage);
 
         // `--git-path hooks/<hook>` honors `core.hooksPath` and worktrees.
         for (const hook of GIT_HOOKS) {
@@ -97,16 +100,16 @@ export const initCommand = new Command("init")
                 fs.existsSync(hookPath) &&
                 !fs.readFileSync(hookPath, "utf8").includes(GIT_HOOK_MARKER)
             ) {
-                process.stderr.write(
-                    `Skipped ${hookPath}: existing hook not owned by git-story\n`,
-                );
+                const message = `Skipped ${hookPath}: existing hook not owned by git-story`;
+                process.stderr.write(`${message}\n`);
+                cliLogger.error(message);
                 process.exitCode = 1;
                 continue;
             }
             fs.mkdirSync(path.dirname(hookPath), { recursive: true });
             fs.writeFileSync(hookPath, gitHookScript(hook), { mode: 0o755 });
-            process.stdout.write(
-                `Registered git ${hook} hook in ${hookPath}\n`,
-            );
+            const message = `Registered git ${hook} hook in ${hookPath}`;
+            process.stdout.write(`${message}\n`);
+            cliLogger.info(message);
         }
     });
