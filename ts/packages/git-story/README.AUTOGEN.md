@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7be1ff9b402e11fa7eb5b3f181dc1ae40066fba9c6b98b65f310f43b53b57e76 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=06a525ebce005f173f4aec33a93ffdabe2aeb52f2adaee0acc26e2ccaea45a36 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # git-story — AI-generated documentation
@@ -26,14 +26,14 @@ _No public exports declared in `package.json`._
 
 Workspace: _None._
 
-External: `@hono/node-server`, `commander`, `hono`
+External: `@hono/node-server`, `commander`, `hono`, `tirith`
 
 ### Files of interest
 
-`./src/server/routes/daemonApiHandler.ts`, `./src/server/routes/storyCommitsApiHandler.ts`, `./src/cli.ts`, …and 7 more under `./src/`.
+`./src/server/routes/daemonApiHandler.ts`, `./src/server/routes/storyCommitsApiHandler.ts`, `./src/cli.ts`, …and 9 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `9e238f2dff5790580ec66b2fa78897a9334577e8` on `2026-09-30T18:50:32.999Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter git-story docs:verify-links` to spot-check._
+_Auto-generated against commit `e35cc1d15f43ccafded4013ed47e738e89b953bb` on `2026-10-01T17:43:46.781Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter git-story docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
