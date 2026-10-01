@@ -3,7 +3,7 @@
 
 import type { SessionMetadata } from "./gitCommitStory.js";
 
-export interface SessionWatchRequest {
+export interface ISessionWatchRequest {
     projectPath: string;
     sessionId: string;
     transcriptPath: string;
@@ -11,7 +11,7 @@ export interface SessionWatchRequest {
 }
 
 export class SessionWatcher {
-    async watch(_request: SessionWatchRequest): Promise<void> {
+    async watch(_request: ISessionWatchRequest): Promise<void> {
         throw new Error("SessionWatcher.watch is not implemented");
     }
 

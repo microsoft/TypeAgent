@@ -7,18 +7,18 @@ import type {
     SessionStory,
 } from "./gitCommitStory.js";
 
-export interface StoryBuildRequest {
+export interface IStoryBuildRequest {
     commit: CommitContext;
     sessions: SessionStory[];
 }
 
-export interface StoryBuildResult {
+export interface IStoryBuildResult {
     story: GitCommitStory;
     commitMessage: string;
 }
 
 export class StoryBuilder {
-    async build(_request: StoryBuildRequest): Promise<StoryBuildResult> {
+    async build(_request: IStoryBuildRequest): Promise<IStoryBuildResult> {
         throw new Error("StoryBuilder.build is not implemented");
     }
 }
