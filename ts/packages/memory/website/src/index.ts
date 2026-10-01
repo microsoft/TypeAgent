@@ -16,23 +16,15 @@ export {
 } from "./extraction/types.js";
 
 export * from "./importWebsites.js";
-export * from "./indexingService.js";
-export * from "./websiteCollection.js";
-export * from "./websiteDocPart.js";
-export * from "./websiteDocPartMeta.js";
-export * from "./tables.js";
 export * from "./websiteMeta.js";
 
 export {
-    BatchProcessor,
     ContentExtractor,
     ExtractionConfig,
     ExtractionInput,
     ExtractionResult,
     ExtractionQualityMetrics,
     EXTRACTION_MODE_CONFIGS,
-    BatchProgress,
-    BatchError,
     AIModelRequiredError,
     AIExtractionFailedError,
     getEffectiveConfig,

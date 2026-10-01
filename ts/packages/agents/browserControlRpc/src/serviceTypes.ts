@@ -466,23 +466,9 @@ export type BrowserAgentInvokeFunctions = {
         combineStrategies?: boolean;
     }): Promise<any>;
 
-    getHierarchicalTopics(params: {
-        centerTopic?: string;
-        includeRelationships?: boolean;
-        maxDepth?: number;
-        domain?: string;
-    }): Promise<any>;
-
     getTopicImportanceLayer(params: {
         maxNodes?: number;
         minImportanceThreshold?: number;
-    }): Promise<any>;
-
-    getTopicViewportNeighborhood(params: {
-        centerTopic: string;
-        viewportTopicIds: string[];
-        maxNodes?: number;
-        maxDepth?: number;
     }): Promise<any>;
 
     getTopicMetrics(params: { topicId: string }): Promise<any>;
@@ -515,8 +501,6 @@ export type BrowserAgentInvokeFunctions = {
     getKnowledgeGraphStatus(params: {}): Promise<any>;
     buildKnowledgeGraph(params: any): Promise<any>;
     rebuildKnowledgeGraph(params: {}): Promise<any>;
-    testMergeTopicHierarchies(params: {}): Promise<any>;
-    mergeTopicHierarchies(params: {}): Promise<any>;
     getGlobalGraphLayoutData(params: any): Promise<any>;
 
     getEntityNeighborhood(params: {
@@ -885,9 +869,7 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         searchWebMemories(params: any): Promise<any>;
         searchByEntities(params: any): Promise<any>;
         searchByTopics(params: any): Promise<any>;
-        getHierarchicalTopics(params: any): Promise<any>;
         getTopicImportanceLayer(params: any): Promise<any>;
-        getTopicViewportNeighborhood(params: any): Promise<any>;
         getTopicMetrics(params: any): Promise<any>;
         getTopicDetails(params: any): Promise<any>;
         getEntityDetails(params: any): Promise<any>;
@@ -916,8 +898,6 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         getKnowledgeGraphStatus(): Promise<any>;
         buildKnowledgeGraph(params: any): Promise<any>;
         rebuildKnowledgeGraph(): Promise<any>;
-        testMergeTopicHierarchies(): Promise<any>;
-        mergeTopicHierarchies(): Promise<any>;
         getGlobalGraphLayoutData(params: any): Promise<any>;
         getEntityNeighborhood(params: any): Promise<any>;
         getEntityNeighborhoodLayoutData(params: any): Promise<any>;

@@ -36,8 +36,14 @@ name a generated index directory; malformed or out-of-root pointers fail
 before any automatic reset.
 
 `getCapabilities()` reports `management: true` and `groundedAnswer: true`.
-`answer` is deliberately extractive: it returns bounded source-linked evidence
-with explicit citations and does not claim model-generated synthesis.
+`answer` generates its answer with KnowPro's answer generator over the
+retrieved evidence and returns bounded, source-linked citations with
+`mode: "synthesized"`. `answerMode: "extractive"` returns the ranked evidence
+snippets verbatim (`mode: "extractive"`). When `answerMode` is omitted,
+synthesis is used if the corpus index supports it. Answer generation uses the
+chat model from the index settings and fails with an error rather than falling
+back silently. `sourceIds` scopes a synthesized answer to messages from those
+sources.
 
 The service also provides a shared episode/event substrate for conversation,
 web-activity, and procedural producers. Events are appended to an authoritative

@@ -15,6 +15,7 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import type {
     CorpusIndex,
+    CorpusIndexAnswer,
     CorpusIndexMatch,
     IndexedDocument,
     JobProgress,
@@ -357,7 +358,14 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 }
             }
         }
-        const semanticMatches = [...matches]
+        return this.toCorpusMatches(matches, limit);
+    }
+
+    private toCorpusMatches(
+        matches: ReadonlyMap<number, number>,
+        limit: number,
+    ): CorpusIndexMatch[] {
+        return [...matches]
             .sort((left, right) => right[1] - left[1])
             .slice(0, limit)
             .flatMap(([messageOrdinal, score]) => {
@@ -375,7 +383,82 @@ export class KnowProCorpusIndex implements CorpusIndex {
                     },
                 ];
             });
-        return semanticMatches;
+    }
+
+    public async answer(
+        query: string,
+        limit: number,
+        sourceIds?: ReadonlySet<string>,
+    ): Promise<CorpusIndexAnswer> {
+        const memory = this.memory;
+        if (memory === undefined) {
+            return { matches: [], whyNoAnswer: "The corpus has no index." };
+        }
+        const options = kp.createLanguageSearchOptionsTypical();
+        options.maxMessageMatches = limit;
+        options.maxKnowledgeMatches = limit;
+        const searched = await memory.searchWithLanguage(query, options);
+        if (!searched.success) {
+            throw new Error(searched.message);
+        }
+        const matches = new Map<number, number>();
+        const answers: string[] = [];
+        const reasons: string[] = [];
+        for (const searchResult of searched.data) {
+            let scoped = searchResult;
+            if (sourceIds !== undefined) {
+                scoped = {
+                    ...searchResult,
+                    knowledgeMatches: new Map(),
+                    messageMatches: searchResult.messageMatches.filter(
+                        (match) => {
+                            const source = parseSourceUri(
+                                memory.messages.get(match.messageOrdinal)
+                                    ?.metadata.sourceUrl,
+                            );
+                            return (
+                                source !== undefined &&
+                                sourceIds.has(source.sourceId)
+                            );
+                        },
+                    ),
+                };
+            }
+            for (const match of scoped.messageMatches) {
+                const previous = matches.get(match.messageOrdinal);
+                if (previous === undefined || match.score > previous) {
+                    matches.set(match.messageOrdinal, match.score);
+                }
+            }
+            if (
+                scoped.messageMatches.length === 0 &&
+                scoped.knowledgeMatches.size === 0
+            ) {
+                continue;
+            }
+            const generated = await memory.getAnswerFromSearchResults(
+                scoped,
+                query,
+            );
+            if (!generated.success) {
+                throw new Error(generated.message);
+            }
+            if (generated.data === undefined) {
+                continue;
+            }
+            if (generated.data.type === "Answered") {
+                if (generated.data.answer) {
+                    answers.push(generated.data.answer);
+                }
+            } else if (generated.data.whyNoAnswer) {
+                reasons.push(generated.data.whyNoAnswer);
+            }
+        }
+        return {
+            matches: this.toCorpusMatches(matches, limit),
+            answer: answers.length === 0 ? undefined : answers.join("\n\n"),
+            whyNoAnswer: reasons.length === 0 ? undefined : reasons.join(" "),
+        };
     }
 
     public async getKnowledgeGraph(

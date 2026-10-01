@@ -15,8 +15,10 @@ than translating them or falling back to a different search engine. An
 accepted ingestion request is not an assertion that indexing has completed;
 use the job status to observe completion or failures.
 
-The typed `answer` operation returns deterministic extractive answers with
-source-linked citations. It does not claim model-generated synthesis.
+The typed `answer` operation returns an answer with source-linked citations.
+By default the answer is synthesized by KnowPro's answer generator over the
+retrieved evidence (`mode: "synthesized"`); `answerMode: "extractive"` returns
+the ranked evidence snippets verbatim (`mode: "extractive"`).
 
 ## Trademarks
 

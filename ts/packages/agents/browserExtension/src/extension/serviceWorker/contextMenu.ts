@@ -156,12 +156,6 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Ask about this page",
-        id: "askAboutPage",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
         title: "Save this page",
         id: "saveThisPage",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
@@ -265,14 +259,6 @@ export async function handleContextMenuClick(
             await openChatAndInjectCommand(
                 tab.id!,
                 "@browser extractKnowledge",
-            );
-            break;
-        }
-
-        case "askAboutPage": {
-            await openChatAndInjectCommand(
-                tab.id!,
-                "@browser ask What is this page about?",
             );
             break;
         }

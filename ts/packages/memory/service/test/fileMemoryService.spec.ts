@@ -38,6 +38,7 @@ class FakeCorpusIndex implements CorpusIndex {
     public blockNextRebuild = false;
     public blockNextAppend = false;
     public ignoreNextAbort = false;
+    public answer?: NonNullable<CorpusIndex["answer"]>;
     public graph: MemoryKnowledgeGraph = {
         entities: [],
         topics: [],
@@ -358,6 +359,105 @@ describe("FileMemoryService", () => {
         });
         expect(result.answer).toContain("[1]");
         expect(result.answer).toContain("Restart the failed indexing worker.");
+    });
+
+    test("synthesizes answers through the index when supported", async () => {
+        const corpus = await service.createCorpus("Synthesized");
+        for (const [sourceId, text] of [
+            ["book-a", "Guest one recommended Dune."],
+            ["book-b", "Guest two recommended Emma."],
+        ]) {
+            const accepted = await service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceId,
+                    sourceType: "markdown",
+                    title: sourceId,
+                    markdown: text,
+                },
+            });
+            await waitForTerminalJob(service, accepted.jobId);
+        }
+        const calls: Array<ReadonlySet<string> | undefined> = [];
+        index.answer = async (_query, _limit, sourceIds) => {
+            calls.push(sourceIds);
+            return {
+                answer: "Dune and Emma were recommended.",
+                matches: await index.search("recommended", 10),
+            };
+        };
+
+        const defaulted = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "Which books were recommended?",
+        });
+        expect(defaulted.mode).toBe("synthesized");
+        expect(defaulted.answer).toBe("Dune and Emma were recommended.");
+        expect(defaulted.citations.map((item) => item.sourceId).sort()).toEqual(
+            ["book-a", "book-b"],
+        );
+
+        const scoped = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "Which books were recommended?",
+            sourceIds: ["book-a"],
+        });
+        expect(scoped.citations.map((item) => item.sourceId)).toEqual([
+            "book-a",
+        ]);
+        expect(calls[1]).toEqual(new Set(["book-a"]));
+
+        const extractive = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "recommended",
+            answerMode: "extractive",
+        });
+        expect(extractive.mode).toBe("extractive");
+        expect(extractive.answer).toContain("[1]");
+        expect(calls).toHaveLength(2);
+    });
+
+    test("reports no answer and rejects unsupported synthesis", async () => {
+        const corpus = await service.createCorpus("NoAnswer");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "doc",
+                sourceType: "markdown",
+                title: "Doc",
+                markdown: "Unrelated text.",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+        await expect(
+            service.answer({
+                corpusId: corpus.corpusId,
+                question: "anything",
+                answerMode: "synthesized",
+            }),
+        ).rejects.toThrow("does not support synthesized answers");
+
+        index.answer = async () => ({
+            matches: [],
+            whyNoAnswer: "Nothing relevant.",
+        });
+        const result = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "anything",
+        });
+        expect(result.mode).toBe("synthesized");
+        expect(result.answer).toBe("No supporting memory evidence was found.");
+        expect(result.citations).toEqual([]);
+
+        index.answer = async () => {
+            throw new Error("model unavailable");
+        };
+        await expect(
+            service.answer({
+                corpusId: corpus.corpusId,
+                question: "anything",
+            }),
+        ).rejects.toThrow("model unavailable");
     });
 
     test("appends events idempotently across service restarts", async () => {

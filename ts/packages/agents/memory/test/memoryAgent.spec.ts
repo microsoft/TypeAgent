@@ -218,9 +218,10 @@ function createFakeService(
             capabilitiesUsed: ["exactSearch"],
             indexVersion: "1",
         }),
-        answer: async ({ question }) => ({
+        answer: async ({ question, answerMode }) => ({
             question,
             answer: "The launch date is Tuesday.",
+            mode: answerMode ?? "synthesized",
             citations: [createEvidence()],
             grounded: true,
             indexVersion: "1",
@@ -682,7 +683,7 @@ test("accepted jobs are cancelled when durable tracking cannot be persisted", as
     expect(cancelJob).toHaveBeenCalledWith("job-persistence.md");
 });
 
-test("commands retain corpus and extractive answer evidence", async () => {
+test("commands retain corpus and answer evidence", async () => {
     const service = createFakeService();
     const answerSpy = jest.spyOn(service, "answer");
     const agent = instantiate();
@@ -714,11 +715,35 @@ test("commands retain corpus and extractive answer evidence", async () => {
             question: "When is launch?",
         }),
     );
-    expect(displayText(answer)).toContain("Grounded extractive answer");
+    expect(displayText(answer)).toContain("Grounded synthesized answer");
     expect(displayText(answer)).toContain("The launch date is Tuesday.");
     expect(displayText(answer)).toContain("source-1");
     expect(displayText(answer)).toContain("revision-1");
     expect(displayText(explanation)).toContain('"sourceId": "source-1"');
+});
+
+test("ask --extractive requests extractive answers", async () => {
+    const service = createFakeService();
+    const answerSpy = jest.spyOn(service, "answer");
+    const agent = instantiate();
+    const state = (await agent.initializeAgentContext?.({
+        options: service,
+    })) as MemoryAgentContext;
+    const context = actionContext(state);
+    await agent.executeCommand?.(
+        ["corpus", "use"],
+        commandParams({ corpusId: "corpus-1" }),
+        context,
+    );
+    const answer = await agent.executeCommand?.(
+        ["ask"],
+        commandParams({ question: "When is launch?" }, { extractive: true }),
+        context,
+    );
+    expect(answerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ answerMode: "extractive" }),
+    );
+    expect(displayText(answer)).toContain("Grounded extractive answer");
 });
 
 test("accepts agent-server options and completes service identifiers", async () => {

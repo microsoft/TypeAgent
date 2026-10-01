@@ -20,22 +20,19 @@ import {
 
 // Import new panels
 import { KnowledgeSearchPanel } from "./knowledgeSearchPanel";
-import { KnowledgeDiscoveryPanel } from "./knowledgeDiscoveryPanel";
 import { KnowledgeAnalyticsPanel } from "./knowledgeAnalyticsPanel";
 
 // Import interfaces
 import {
     SearchServices,
-    DiscoveryServices,
     AnalyticsServices,
     DefaultSearchServices,
-    DefaultDiscoveryServices,
     DefaultAnalyticsServices,
 } from "./knowledgeUtilities";
 import { CachedAnalyticsService } from "./services/cachedAnalyticsService";
 
 interface FullPageNavigation {
-    currentPage: "search" | "discover" | "analytics";
+    currentPage: "search" | "analytics";
 }
 
 interface LibraryStats {
@@ -78,13 +75,11 @@ class WebsiteLibraryPanelFullPage {
 
     // Panel instances
     private searchPanel: KnowledgeSearchPanel | null = null;
-    private discoveryPanel: KnowledgeDiscoveryPanel | null = null;
     private analyticsPanel: KnowledgeAnalyticsPanel | null = null;
 
     // Service implementations
     private services: {
         search: SearchServices;
-        discovery: DiscoveryServices;
         analytics: AnalyticsServices;
     };
 
@@ -101,7 +96,6 @@ class WebsiteLibraryPanelFullPage {
         );
         this.services = {
             search: new DefaultSearchServices(extensionService),
-            discovery: new DefaultDiscoveryServices(extensionService),
             analytics: new CachedAnalyticsService(defaultAnalyticsService),
         };
     }
@@ -163,11 +157,7 @@ class WebsiteLibraryPanelFullPage {
                 }
 
                 // Handle regular pages
-                if (
-                    page === "search" ||
-                    page === "discover" ||
-                    page === "analytics"
-                ) {
+                if (page === "search" || page === "analytics") {
                     this.navigateToPage(page).catch(console.error);
                 }
             });
@@ -303,9 +293,6 @@ class WebsiteLibraryPanelFullPage {
         if (this.searchPanel) {
             this.searchPanel.setConnectionStatus(this.isConnected);
         }
-        if (this.discoveryPanel) {
-            this.discoveryPanel.setConnectionStatus(this.isConnected);
-        }
         if (this.analyticsPanel) {
             this.analyticsPanel.setConnectionStatus(this.isConnected);
         }
@@ -344,7 +331,7 @@ class WebsiteLibraryPanelFullPage {
         });
     }
 
-    private async navigateToPage(page: "search" | "discover" | "analytics") {
+    private async navigateToPage(page: "search" | "analytics") {
         this.navigation.currentPage = page;
 
         this.updateNavigation();
@@ -353,9 +340,6 @@ class WebsiteLibraryPanelFullPage {
         switch (page) {
             case "search":
                 await this.initializeSearchPage();
-                break;
-            case "discover":
-                await this.initializeDiscoverPage();
                 break;
             case "analytics":
                 await this.initializeAnalyticsPage();
@@ -373,20 +357,6 @@ class WebsiteLibraryPanelFullPage {
                 );
                 await this.searchPanel.initialize();
                 this.searchPanel.setConnectionStatus(this.isConnected);
-            }
-        }
-    }
-
-    private async initializeDiscoverPage() {
-        if (!this.discoveryPanel) {
-            const container = document.getElementById("discover-page");
-            if (container) {
-                this.discoveryPanel = new KnowledgeDiscoveryPanel(
-                    container,
-                    this.services.discovery,
-                );
-                await this.discoveryPanel.initialize();
-                this.discoveryPanel.setConnectionStatus(this.isConnected);
             }
         }
     }
@@ -583,10 +553,6 @@ class WebsiteLibraryPanelFullPage {
 
     private async handleImportComplete(result: ImportResult): Promise<void> {
         await this.loadLibraryStats();
-
-        if (this.navigation.currentPage === "discover" && this.discoveryPanel) {
-            await this.discoveryPanel.refreshData();
-        }
 
         notificationManager.showSuccess(
             `Successfully imported ${result.itemCount} items!`,
@@ -883,7 +849,6 @@ class WebsiteLibraryPanelFullPage {
             document.getElementById("viewEntityGraphBtn");
         const rebuildGraphBtn = document.getElementById("rebuildGraphBtn");
         const buildGraphBtn = document.getElementById("buildGraphBtn");
-        const mergeTopicsBtn = document.getElementById("mergeTopicsBtn");
 
         if (!graphStateIcon || !graphStateText || !graphStateDescription)
             return;
@@ -904,7 +869,6 @@ class WebsiteLibraryPanelFullPage {
         if (viewEntityGraphBtn) viewEntityGraphBtn.style.display = "none";
         if (rebuildGraphBtn) rebuildGraphBtn.style.display = "none";
         if (buildGraphBtn) buildGraphBtn.style.display = "none";
-        if (mergeTopicsBtn) mergeTopicsBtn.style.display = "none";
 
         if (safeStatus.isBuilding) {
             // Show building state
@@ -944,7 +908,6 @@ class WebsiteLibraryPanelFullPage {
             if (viewEntityGraphBtn)
                 viewEntityGraphBtn.style.display = "inline-block";
             if (rebuildGraphBtn) rebuildGraphBtn.style.display = "inline-block";
-            if (mergeTopicsBtn) mergeTopicsBtn.style.display = "inline-block";
         } else if (safeStatus.error) {
             // Show error state
             graphStateIcon.innerHTML =
@@ -968,7 +931,6 @@ class WebsiteLibraryPanelFullPage {
             document.getElementById("viewEntityGraphBtn");
         const rebuildGraphBtn = document.getElementById("rebuildGraphBtn");
         const buildGraphBtn = document.getElementById("buildGraphBtn");
-        const mergeTopicsBtn = document.getElementById("mergeTopicsBtn");
 
         // Remove existing listeners to avoid duplicates
         viewEntityGraphBtn?.removeEventListener(
@@ -977,7 +939,6 @@ class WebsiteLibraryPanelFullPage {
         );
         rebuildGraphBtn?.removeEventListener("click", this.handleRebuildGraph);
         buildGraphBtn?.removeEventListener("click", this.handleBuildGraph);
-        mergeTopicsBtn?.removeEventListener("click", this.handleMergeTopics);
 
         // Add new listeners
         if (viewEntityGraphBtn) {
@@ -996,12 +957,6 @@ class WebsiteLibraryPanelFullPage {
             buildGraphBtn.addEventListener(
                 "click",
                 this.handleBuildGraph.bind(this),
-            );
-        }
-        if (mergeTopicsBtn) {
-            mergeTopicsBtn.addEventListener(
-                "click",
-                this.handleMergeTopics.bind(this),
             );
         }
     }
@@ -1102,38 +1057,6 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private async handleMergeTopics() {
-        try {
-            this.updateGraphStatusDisplay({
-                hasGraph: true,
-                entityCount: 0,
-                relationshipCount: 0,
-                communityCount: 0,
-                isBuilding: true,
-            });
-
-            notificationManager.showInfo("Merging topic hierarchies...");
-
-            const result = await extensionService.mergeTopicHierarchies();
-
-            await this.loadGraphStatus();
-
-            notificationManager.showSuccess(
-                result.message ||
-                    `Topics merged successfully: ${result.mergeCount} topics merged`,
-            );
-        } catch (error) {
-            console.error("Failed to merge topics:", error);
-            const errorMessage =
-                error instanceof Error ? error.message : "Unknown error";
-            notificationManager.showError(
-                `Failed to merge topics: ${errorMessage}`,
-            );
-
-            await this.loadGraphStatus();
-        }
-    }
-
     public performSearchWithQuery(query: string) {
         if (this.searchPanel) {
             this.searchPanel.performSearchWithQuery(query);
@@ -1143,9 +1066,6 @@ class WebsiteLibraryPanelFullPage {
     public destroy() {
         if (this.searchPanel) {
             this.searchPanel.destroy();
-        }
-        if (this.discoveryPanel) {
-            this.discoveryPanel.destroy();
         }
         if (this.analyticsPanel) {
             this.analyticsPanel.destroy();

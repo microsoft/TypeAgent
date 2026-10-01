@@ -1,5 +1,15 @@
 # Conversation Search — Design & Plan
 
+> **Superseded in part (2026-10-01).** The storage decisions below (a separate
+> unified KnowPro index, per-conversation memory as source of truth, tombstone
+> and compaction in that index) were replaced by the conversation event ledger.
+> In hosts with a durable memory service, `search_conversations` calls
+> `searchEvents` on the profile conversation corpus and groups the results; the
+> ledger is canonical and its KnowPro projection is derived. See
+> [Memory architecture](../../architecture/memory/memory.md) and
+> `packages/agentServer/server/docs/conversation-memory.md`. The goals, fuzzy
+> name lookup and command surface described here remain accurate.
+
 Status: **implemented; follow-up work remains** — fuzzy name lookup, the unified
 tagged index, live and Copilot population, content search, summarization, and
 historical backfill are available in connected mode. Compaction and reliable

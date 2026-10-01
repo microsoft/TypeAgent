@@ -441,17 +441,6 @@ export class ChromeExtensionService extends ExtensionServiceBase {
         });
     }
 
-    async getDiscoverInsights(
-        limit: number = 10,
-        timeframe: string = "30d",
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "getDiscoverInsights",
-            limit,
-            timeframe,
-        });
-    }
-
     async saveSearch(query: string, results: any): Promise<void> {
         return this.sendMessage({
             type: "saveSearch",
@@ -774,17 +763,6 @@ export class ElectronExtensionService extends ExtensionServiceBase {
 
     async getRecentSearches(): Promise<string[]> {
         return this.sendMessage({ action: "getRecentSearches" });
-    }
-
-    async getDiscoverInsights(
-        limit: number = 10,
-        timeframe: string = "30d",
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "getDiscoverInsights",
-            limit,
-            timeframe,
-        });
     }
 
     async saveSearch(query: string, results: any): Promise<void> {
@@ -1186,10 +1164,6 @@ export interface SearchServices {
     }): Promise<any>;
 }
 
-export interface DiscoveryServices {
-    loadDiscoverData(): Promise<any>;
-}
-
 // Default implementations using the existing ChromeExtensionService
 export class DefaultAnalyticsServices implements AnalyticsServices {
     constructor(private chromeService: ExtensionServiceBase) {}
@@ -1322,20 +1296,5 @@ export class DefaultSearchServices implements SearchServices {
         neighborhoodDepth?: number;
     }): Promise<any> {
         return this.chromeService.getTopicTimelines(parameters);
-    }
-}
-
-export class DefaultDiscoveryServices implements DiscoveryServices {
-    constructor(private chromeService: ExtensionServiceBase) {}
-
-    async loadDiscoverData(): Promise<any> {
-        return {
-            success: false,
-            error: "Discovery insights not available",
-            trendingTopics: [],
-            readingPatterns: [],
-            popularPages: [],
-            topDomains: [],
-        };
     }
 }
