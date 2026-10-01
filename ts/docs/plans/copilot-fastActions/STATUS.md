@@ -3,24 +3,26 @@
 Working tracker for [PLAN.md](./PLAN.md). Keep implementation, documentation,
 and live verification as separate states.
 
-_Last updated: 2026-09-09._
+_Last updated: 2026-09-30._
 
 ## Implementation status
 
-| Area                                       | Status | Notes                                                             |
-| ------------------------------------------ | ------ | ----------------------------------------------------------------- |
-| Dev-mode PowerShell schema-family routing  | done   | Static namespaces and dynamic flows receive first refusal         |
-| Typed handled and not-handled dispositions | done   | `notSuitable` returns the original prompt to Copilot              |
-| PowerShell capability fallback             | done   | Existing-flow preference, synthesis, aliases, and bounded repair  |
-| Transactional flow creation                | done   | Pending, execute once, promote, reload, and rollback              |
-| Flow persistence and same-process locking  | done   | Cross-process storage locking remains open                        |
-| Explicit macro trace recording             | done   | One armed interaction per session                                 |
-| Macro induction and validation             | done   | Narrow deterministic induction from one trace                     |
-| Immutable macro approval                   | done   | Approval creates a new version                                    |
-| Deterministic MCP replay                   | done   | Full preflight, ordered calls, bindings, and postconditions       |
-| Agent-runner handoff                       | done   | Whole-macro handoff with budgets                                  |
-| Adaptation candidate submission            | done   | Successful adaptations become new drafts                          |
-| Macro rollout controls                     | done   | Recording, induction, replay, and handoff are independently gated |
+| Area                                       | Status | Notes                                                                                  |
+| ------------------------------------------ | ------ | -------------------------------------------------------------------------------------- |
+| Dev-mode PowerShell schema-family routing  | done   | Static namespaces and dynamic flows receive first refusal                              |
+| Typed handled and not-handled dispositions | done   | `notSuitable` returns the original prompt to Copilot                                   |
+| PowerShell capability fallback             | done   | Existing-flow preference, synthesis, aliases, and bounded repair                       |
+| Transactional flow creation                | done   | Pending, execute once, promote, reload, and rollback                                   |
+| Flow persistence and same-process locking  | done   | Cross-process storage locking remains open                                             |
+| Explicit macro trace recording             | done   | One armed interaction per session                                                      |
+| Macro induction and validation             | done   | Narrow deterministic induction from one trace                                          |
+| Immutable macro approval                   | done   | Approval creates a new version                                                         |
+| Deterministic MCP replay                   | done   | Full preflight, ordered calls, bindings, and postconditions                            |
+| Agent-runner handoff                       | done   | Whole-macro handoff with budgets                                                       |
+| Adaptation candidate submission            | done   | Successful adaptations become new drafts                                               |
+| Macro rollout controls                     | done   | Recording, induction, replay, and handoff are independently gated                      |
+| Approved macro grammar routing             | done   | Dynamic typed actions, learned routing, version/source fingerprints, lifecycle refresh |
+| Routed Copilot runner handoff              | done   | Direct continuation and MCP launch; actual live runner execution still unverified      |
 
 ## Documentation status
 
@@ -60,5 +62,8 @@ _Last updated: 2026-09-09._
 - [x] Dev-mode options match `hook-dev-actions.ts`.
 - [x] Macro lifecycle matches `MacroManager`.
 - [x] Replay guarantees match `deterministicReplay.ts`.
+- [x] Offline macro routing, input changes, handoff, lifecycle invalidation, and feature flags covered by focused tests.
+- [ ] Validate generated/persisted NFA macro routes against live Agency tools after restart.
+- [ ] Validate actual Copilot runner invocation and completion from a routed handoff.
 - [x] Package ownership follows the wiki contribution guide.
 - [ ] Build the DocFX site when the plan is promoted into published content.

@@ -35,6 +35,9 @@ import {
     SpeechToken,
     ApproveMacroRequest,
     ArmRecordingRequest,
+    MacroLearningMode,
+    MacroLearningPreference,
+    MacroLearningJob,
     ClaimRecordingRequest,
     CopilotToolMacro,
     CreateMacroFromTraceRequest,
@@ -172,6 +175,16 @@ export type ConversationDispatcher = {
 };
 
 export type AgentServerConnection = {
+    getMacroLearningPreference(cwd: string): Promise<MacroLearningPreference>;
+    setMacroLearningPreference(request: {
+        cwd: string;
+        mode: MacroLearningMode;
+    }): Promise<MacroLearningPreference>;
+    prepareMacroLearning(request: {
+        traceId: string;
+    }): Promise<MacroLearningJob>;
+    getMacroLearningJob(jobId: string): Promise<MacroLearningJob>;
+    cancelMacroLearningJob(jobId: string): Promise<MacroLearningJob>;
     armMacroRecording(request: ArmRecordingRequest): Promise<RecordingToken>;
     getMacroRecordingState(sessionId: string): Promise<RecordingState>;
     claimMacroRecording(
@@ -424,6 +437,16 @@ export function createAgentServerConnection(
     let closed = false;
 
     const connection: AgentServerConnection = {
+        getMacroLearningPreference: (cwd) =>
+            rpc.invoke("getMacroLearningPreference", cwd),
+        setMacroLearningPreference: (request) =>
+            rpc.invoke("setMacroLearningPreference", request),
+        prepareMacroLearning: (request) =>
+            rpc.invoke("prepareMacroLearning", request),
+        getMacroLearningJob: (jobId) =>
+            rpc.invoke("getMacroLearningJob", jobId),
+        cancelMacroLearningJob: (jobId) =>
+            rpc.invoke("cancelMacroLearningJob", jobId),
         async armMacroRecording(
             request: ArmRecordingRequest,
         ): Promise<RecordingToken> {

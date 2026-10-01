@@ -137,6 +137,41 @@ describe("action result handoff", () => {
         expect(executed).toEqual(["produce", "consume"]);
     });
 
+    test("propagates a standalone agent handoff as command data", async () => {
+        const handoff = {
+            agentName: "typeagent-macro-runner",
+            payload: { macro: { macroId: "approved", version: 2 } },
+        };
+        results.set("launch", { entities: [], agentHandoff: handoff });
+        await expect(
+            executeActions([produce("launch")], undefined, context),
+        ).resolves.toBeUndefined();
+        expect(system.commandResult?.agentHandoff).toEqual(handoff);
+        expect(executed).toEqual(["produce"]);
+    });
+
+    test("does not execute trailing actions after an agent handoff", async () => {
+        results.set("launch", {
+            entities: [],
+            agentHandoff: {
+                agentName: "typeagent-macro-runner",
+                payload: {},
+            },
+        });
+        const outcome = await executeActions(
+            [
+                produce("launch"),
+                createExecutableAction("handoff", "consume", { value: "next" }),
+            ],
+            undefined,
+            context,
+        );
+        expect(outcome?.error).toContain("standalone action");
+        expect(outcome?.fallbackToReasoning).toBe(false);
+        expect(executed).toEqual(["produce"]);
+        expect(system.commandResult?.agentHandoff).toBeUndefined();
+    });
+
     test.each(["", "  passport\n\ncharger\n", "${result-another}"])(
         "passes the exact concrete text value %j, not display text or entity name",
         async (value) => {

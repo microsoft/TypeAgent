@@ -93,6 +93,9 @@ export class McpReplayHost implements ReplayToolHost {
         return {
             mcpServerName: server.config.name,
             toolName,
+            readOnly:
+                tool.annotations?.readOnlyHint === true &&
+                tool.annotations?.destructiveHint !== true,
             schemaFingerprint: createHash("sha256")
                 .update(
                     JSON.stringify({

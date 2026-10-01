@@ -22,11 +22,14 @@ export interface RecordedInteractionTrace {
     startedAt: string;
     completedAt: string;
     toolCalls: RecordedToolCall[];
+    handoffRunId?: string;
 }
 
 export interface ArmRecordingRequest {
     sessionId: string;
     ttlMs?: number;
+    learning?: boolean;
+    cwd?: string;
 }
 
 export interface ClaimRecordingRequest {
@@ -42,6 +45,7 @@ export interface RecordingToken {
     expiresAt: string;
     cwd?: string;
     promptHash?: string;
+    learning?: boolean;
 }
 
 export interface RecordingState {
@@ -49,6 +53,7 @@ export interface RecordingState {
     token?: RecordingToken;
     trace?: TraceSummary;
     error?: string;
+    learningJob?: MacroLearningJob;
 }
 
 export interface FinalizeRecordingRequest {
@@ -61,6 +66,7 @@ export interface TraceSummary {
     sessionId: string;
     createdAt: string;
     toolCallCount: number;
+    learningJobId?: string;
 }
 
 export type MacroExecutionClass = "replayable" | "agentRequired";
@@ -124,6 +130,83 @@ export interface CopilotToolMacro {
     createdAt: string;
     warnings: string[];
     candidateProvenance?: MacroCandidateProvenance;
+    learning?: {
+        jobId: string;
+        cwd: string;
+        mode: MacroLearningMode;
+        requiresLivePermissions: true;
+        grammarRules: string[];
+        exampleInputs: Record<string, unknown>;
+        requests: string[];
+    };
+}
+
+export type MacroLearningMode = "off" | "prepare" | "read-only" | "all";
+
+export interface MacroLearningPreference {
+    cwd: string;
+    mode: MacroLearningMode;
+    revision: number;
+}
+
+export interface MacroExecutionRecipe {
+    schemaVersion: 1;
+    traceId: string;
+    request: string;
+    toolCallIds: string[];
+    description: string;
+    uncertainties: string[];
+}
+
+export interface MacroLearningBuild {
+    name: string;
+    description: string;
+    inputs: MacroInput[];
+    steps: MacroStep[];
+    exampleInputs: Record<string, unknown>;
+    requests: string[];
+    // The builder must explicitly report unsupported selection or full-output synthesis.
+    unsupportedOutputs?: string[];
+}
+
+export interface MacroLearningJob {
+    jobId: string;
+    traceId: string;
+    cwd: string;
+    sessionId: string;
+    mode: MacroLearningMode;
+    status:
+        | "queued"
+        | "extracting"
+        | "building"
+        | "needsReview"
+        | "ready"
+        | "failed"
+        | "cancelled";
+    macro?: MacroVersionRef;
+    error?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface MacroLearningRuntime {
+    extract(
+        trace: RecordedInteractionTrace,
+        traceId: string,
+        signal: AbortSignal,
+    ): Promise<MacroExecutionRecipe>;
+    build(
+        recipe: MacroExecutionRecipe,
+        trace: RecordedInteractionTrace,
+        baseline: CopilotToolMacro,
+        signal: AbortSignal,
+    ): Promise<MacroLearningBuild>;
+    generateGrammar(
+        macro: CopilotToolMacro,
+        exampleInputs: Record<string, unknown>,
+        requests: string[],
+        signal: AbortSignal,
+    ): Promise<string[]>;
 }
 
 export interface MacroCandidateProvenance {
@@ -276,6 +359,12 @@ export interface SubmitMacroCandidateRequest {
     };
 }
 
+export interface EvidencedMacroCandidateRequest
+    extends SubmitMacroCandidateRequest {
+    traceId: string;
+    exampleInputs: Record<string, unknown>;
+}
+
 export interface MacroRunStep {
     stepId: string;
     toolName: string;
@@ -323,6 +412,7 @@ export interface ReplayToolDescriptor {
     mcpServerName?: string;
     toolName: string;
     schemaFingerprint: string;
+    readOnly?: boolean;
 }
 
 export interface ReplayToolContext {

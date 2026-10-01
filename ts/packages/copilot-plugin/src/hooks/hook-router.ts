@@ -39,22 +39,40 @@ import {
     getModeDescription,
     handleModeSetting,
 } from "../shared/mode-command.js";
+import { cancelMacroWork, learningSetting } from "../shared/macro-learning.js";
 
 async function handleMacroCommand(
     input: HookInput,
     lower: string,
 ): Promise<HookOutput | undefined> {
+    const learning = lower.match(/^@typeagent\s+macro\s+learning(?:\s+(.+))?$/);
+    if (learning) {
+        return {
+            handled: true,
+            responseContent: await learningSetting(input.cwd, learning[1]),
+            handledBy: "typeagent",
+        };
+    }
     const match = lower.match(
         /^@typeagent\s+macro\s+(record|cancel|status)\s*$/,
     );
     if (!match) return undefined;
 
     const command = match[1];
+    if (command === "cancel") {
+        return {
+            handled: true,
+            responseContent: await cancelMacroWork(input.sessionId),
+            handledBy: "typeagent",
+        };
+    }
     const connection = await connectToAgentServer();
     try {
         if (command === "record") {
             const token = await connection.armMacroRecording({
                 sessionId: input.sessionId,
+                cwd: input.cwd,
+                learning: true,
             });
             return {
                 handled: true,
@@ -62,15 +80,6 @@ async function handleMacroCommand(
                 handledBy: "typeagent",
             };
         }
-        if (command === "cancel") {
-            await connection.cancelMacroRecording(input.sessionId);
-            return {
-                handled: true,
-                responseContent: "Macro recording cancelled.",
-                handledBy: "typeagent",
-            };
-        }
-
         const state = await connection.getMacroRecordingState(input.sessionId);
         const detail =
             state.status === "completed" && state.trace
@@ -82,7 +91,15 @@ async function handleMacroCommand(
                     : "";
         return {
             handled: true,
-            responseContent: `Macro recording status: **${state.status}**.${detail}`,
+            responseContent: `Macro recording status: **${state.status}**.${detail}${
+                state.learningJob
+                    ? ` Learning: **${state.learningJob.status}** (${state.learningJob.jobId}).${
+                          state.learningJob.macro
+                              ? ` Macro: ${state.learningJob.macro.macroId}, version ${state.learningJob.macro.version}.`
+                              : ""
+                      }${state.learningJob.error ? ` ${state.learningJob.error}` : ""}`
+                    : ""
+            }`,
             handledBy: "typeagent",
         };
     } finally {

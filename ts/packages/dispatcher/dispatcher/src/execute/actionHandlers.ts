@@ -974,6 +974,22 @@ export async function executeActions(
             return;
         }
 
+        if (result.agentHandoff !== undefined) {
+            if (actionQueue.length > 0 || result.additionalActions?.length) {
+                const error =
+                    "Agent handoff requires a standalone action. Remaining steps were not executed; do not replay earlier completed actions.";
+                displayError(error, context);
+                return {
+                    error,
+                    failedAction: executableAction,
+                    fallbackToReasoning: false,
+                };
+            }
+            ensureCommandResult(systemContext).agentHandoff =
+                result.agentHandoff;
+            return;
+        }
+
         const resultEntityId = executableAction.resultEntityId;
         if (resultEntityId !== undefined) {
             if (resultEntityResolver === undefined) {

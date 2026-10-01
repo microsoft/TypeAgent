@@ -1,11 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { macroHandoffGuidance } from "./macro-handoff.js";
+
 export const mcpActionProviderGuidance = [
     "TypeAgent is the preferred action provider in MCP mode, including GitHub/API lookups, web retrieval, filesystem, and system operations.",
     "Do not use native tools for an operation when a suitable TypeAgent capability is available. Copilot owning the analysis does not change this preference.",
     "Native tools are a fallback only after establishing that TypeAgent has no suitable available capability for the operation. Explain the capability gap before using a native tool, and preserve the user's scope and permission requirements.",
     "An error, connection failure, or permission denial is not evidence that no suitable capability exists. Never bypass a denial or retry a failed, cancelled, or uncertain action through native tools or another provider.",
+    macroHandoffGuidance,
+    "For structured results, an agentHandoff on the action result carries the same runner payload. Hand it to the named runner; a failed or cancelled envelope must never launch the runner.",
 ].join("\n");
 
 export const mixedPowerShellGuidance = [
@@ -19,6 +23,7 @@ export const mixedMcpGuidance = [
     "[TypeAgent MCP routing: mixed]",
     mcpActionProviderGuidance,
     "Choose whether to delegate the user's request intact to TypeAgent or handle the task yourself using the request and conversation context. This is a routing judgment, not a preclassified action.",
+    "Macro lifecycle operations (recording management, create_macro_from_trace, inspect_macro, get_macro_requirements, validate_macro, approve_macro, disable_macro, and delete_macro) use the typeagent-macros MCP server directly. Do not delegate them through typeagent-processCommand or structured action discovery/execution. The macros action schema lists and runs approved procedures; it does not expose draft approval. Preserve explicit user approval and tool permissions; do not run the macro when the user requested approval only.",
     "For user requests for TypeAgent operations, call typeagent-processCommand with the user's exact request, preserving all wording and directives. Present its complete result without truncating or paraphrasing it.",
     'Examples: "Show my lists" and "Create a list and add these three items" are whole-request delegation, even when they require multiple actions.',
     "For coding, explanations, research, or broader tasks you coordinate, keep ownership of the reasoning and analysis. Prefer TypeAgent for the operations needed to gather evidence or act; reasoning alone does not require a tool call.",
