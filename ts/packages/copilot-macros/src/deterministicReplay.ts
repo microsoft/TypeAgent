@@ -142,24 +142,10 @@ function isAbort(error: unknown, signal: AbortSignal): boolean {
     );
 }
 
-export async function inspectReplayTools(
+export function validateMacroInputs(
     macro: CopilotToolMacro,
-    host: ReplayToolHost,
-    context: ReplayToolContext = {},
-    inputs: Record<string, unknown> = {},
-): Promise<Map<string, ReplayToolDescriptor>> {
-    if (macro.state !== "approved") {
-        throw new ReplayValidationError(
-            "macroNotApproved",
-            "Only approved macros can be replayed.",
-        );
-    }
-    if (macro.executionClass !== "replayable") {
-        throw new ReplayValidationError(
-            "agentRequired",
-            "This macro requires agent-guided execution.",
-        );
-    }
+    inputs: Record<string, unknown>,
+): void {
     for (const input of macro.inputs) {
         if (
             input.required &&
@@ -181,14 +167,7 @@ export async function inspectReplayTools(
             );
         }
     }
-    const descriptors = new Map<string, ReplayToolDescriptor>();
     for (const step of macro.steps) {
-        if (step.executionClass !== "replayable") {
-            throw new ReplayValidationError(
-                "agentRequired",
-                `Step requires agent-guided execution: ${step.id}`,
-            );
-        }
         for (const inputName of referencedInputs(step.arguments)) {
             if (!Object.prototype.hasOwnProperty.call(inputs, inputName)) {
                 throw new ReplayValidationError(
@@ -196,6 +175,36 @@ export async function inspectReplayTools(
                     `Required macro input is missing: ${inputName}`,
                 );
             }
+        }
+    }
+}
+
+export async function inspectReplayTools(
+    macro: CopilotToolMacro,
+    host: ReplayToolHost,
+    context: ReplayToolContext = {},
+    inputs: Record<string, unknown> = {},
+): Promise<Map<string, ReplayToolDescriptor>> {
+    if (macro.state !== "approved") {
+        throw new ReplayValidationError(
+            "macroNotApproved",
+            "Only approved macros can be replayed.",
+        );
+    }
+    if (macro.executionClass !== "replayable") {
+        throw new ReplayValidationError(
+            "agentRequired",
+            "This macro requires agent-guided execution.",
+        );
+    }
+    validateMacroInputs(macro, inputs);
+    const descriptors = new Map<string, ReplayToolDescriptor>();
+    for (const step of macro.steps) {
+        if (step.executionClass !== "replayable") {
+            throw new ReplayValidationError(
+                "agentRequired",
+                `Step requires agent-guided execution: ${step.id}`,
+            );
         }
         const descriptor = await host.inspectTool(
             step.mcpServerName,

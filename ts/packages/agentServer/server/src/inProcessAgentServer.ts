@@ -13,7 +13,10 @@ import os from "node:os";
 import path from "node:path";
 import registerDebug from "debug";
 import { MacroManager } from "@typeagent/copilot-macros";
-import { McpReplayHost } from "default-agent-provider";
+import {
+    McpReplayHost,
+    createMacroAppAgentProvider,
+} from "default-agent-provider";
 import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
 
 import {
@@ -78,9 +81,19 @@ export async function createInProcessAgentServer(
     instanceDir: string,
     options: InProcessAgentServerOptions,
 ): Promise<InProcessAgentServer> {
+    const macroManager = new MacroManager(
+        instanceDir,
+        new McpReplayHost(instanceDir),
+    );
     const conversationManager = await createConversationManager(
         hostName,
-        dispatcherOptions,
+        {
+            ...dispatcherOptions,
+            appAgentProviders: [
+                ...(dispatcherOptions.appAgentProviders ?? []),
+                createMacroAppAgentProvider(macroManager),
+            ],
+        },
         instanceDir,
         options.idleTimeoutMs ?? 0,
         options.testMode ?? false,
@@ -98,10 +111,7 @@ export async function createInProcessAgentServer(
     );
     const { handler } = createAgentServerConnectionHandler({
         conversationManager,
-        macroManager: new MacroManager(
-            instanceDir,
-            new McpReplayHost(instanceDir),
-        ),
+        macroManager,
         skillCatalog,
         skillAcquirer,
         procedureService: memoryService,

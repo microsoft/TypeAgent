@@ -144,6 +144,27 @@ adapted procedure. It verifies handoff identity, source version, execution
 outcome, and budget use before writing a new draft. It never changes or
 approves the source macro.
 
+## Natural-language action integration
+
+Agent-server shares this manager with the dynamic `macros` provider in
+[`defaultAgentProvider`](../defaultAgentProvider/src/macroAgentProvider.ts).
+Current approved macros without secret inputs become typed, version-pinned
+actions. Existing dispatcher translation and learning can create grammar routes;
+approval itself does not generate a grammar. Replay and runner-handoff flags
+filter the available actions and are rechecked at execution.
+
+`onCatalogChanged()` lets providers refresh active session schemas after
+successful mutations. A refresh failure is reported explicitly even though the
+catalog has already been saved. Schema source/action fingerprints reconcile
+learned rules when a route is removed or replaced.
+
+`runMacro(request, { requireLatestApproved: true, signal })` is used for routed
+execution. It rejects a superseded approved version and propagates cancellation
+to replay. Explicit calls without `requireLatestApproved` preserve existing
+approved pinned-version behavior. Agent-required runs validate inputs before
+returning a whole-procedure launch; the caller remains responsible for invoking
+Copilot's runner and observing its actual outcome.
+
 ## Persistence
 
 `MacroManager` stores data under the supplied agent-server instance directory:

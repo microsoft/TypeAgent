@@ -13,7 +13,6 @@ import {
     getActionDescription,
     SchemaCreator as sc,
 } from "@typeagent/action-schema";
-import { getCombinedActionSchemaTypeName } from "./agentTranslators.js";
 import { PromptLogger } from "@typeagent/telemetry";
 import { withChatModelTelemetryPurpose } from "@typeagent/aiclient";
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
@@ -48,7 +47,7 @@ function createSelectionActionTypeDefinition(
         return undefined;
     }
 
-    const typeName = `${getCombinedActionSchemaTypeName(actionConfig)}Assistant`;
+    const typeName = `AssistantSelection_${Buffer.from(schemaName, "utf8").toString("hex")}`;
 
     const schema = sc.type(
         typeName,
@@ -79,23 +78,6 @@ function createSelectionSchema(
     };
 }
 
-const selectSchemaCache = new Map<
-    string,
-    InlineTranslatorSchemaDef | undefined
->();
-function getSelectionSchema(
-    schemaName: string,
-    provider: ActionConfigProvider,
-): InlineTranslatorSchemaDef | undefined {
-    if (selectSchemaCache.has(schemaName)) {
-        return selectSchemaCache.get(schemaName);
-    }
-
-    const result = createSelectionSchema(schemaName, provider);
-    selectSchemaCache.set(schemaName, result);
-    return result;
-}
-
 const unknownAssistantSelectionSchemaDef: InlineTranslatorSchemaDef = {
     kind: "inline",
     typeName: "UnknownAssistantSelection",
@@ -116,7 +98,7 @@ export function getAssistantSelectionSchemas(
 ) {
     const schemaEntries: AssistantSelectionSchemaEntry[] = [];
     for (const schemaName of schemaNames) {
-        const schema = getSelectionSchema(schemaName, provider);
+        const schema = createSelectionSchema(schemaName, provider);
         if (schema !== undefined) {
             schemaEntries.push({ name: schemaName, schema });
         }

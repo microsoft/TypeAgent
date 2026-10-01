@@ -22,6 +22,7 @@ import {
     getDefaultConstructionProvider,
     McpReplayHost,
     SessionMcpCredentialStore,
+    createMacroAppAgentProvider,
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
@@ -402,15 +403,19 @@ async function main() {
     // (shell, CLI dispatcher) skip this and let each dispatcher mint
     // its own — see DispatcherOptions.portRegistrar in agent-dispatcher.
     const portRegistrar = new PortRegistrar();
+    const macroManager = new MacroManager(
+        instanceDir,
+        new McpReplayHost(instanceDir),
+    );
 
     const conversationManager: ConversationManager =
         await createConversationManager(
             "agent server",
             {
-                appAgentProviders: getDefaultAppAgentProviders(
-                    instanceDir,
-                    configName,
-                ),
+                appAgentProviders: [
+                    ...getDefaultAppAgentProviders(instanceDir, configName),
+                    createMacroAppAgentProvider(macroManager),
+                ],
                 appAgentSources: defaultAgentRuntime.appAgentSources,
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
@@ -461,10 +466,6 @@ async function main() {
             conversationManager.close(),
         ]);
     };
-    const macroManager = new MacroManager(
-        instanceDir,
-        new McpReplayHost(instanceDir),
-    );
     const { skillCatalog, skillAcquirer } =
         await createLocalSkillServices(instanceDir);
 

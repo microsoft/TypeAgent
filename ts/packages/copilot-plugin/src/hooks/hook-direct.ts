@@ -20,6 +20,7 @@ import {
 } from "../shared/typeagent-client.js";
 import { emitProgress } from "../shared/hook-progress.js";
 import type { HookInput, HookOutput } from "./types.js";
+import { macroHandoffContext } from "../shared/macro-handoff.js";
 
 export interface DirectHandlingOptions {
     forceHandled?: boolean;
@@ -66,6 +67,14 @@ function toForcedCommandOutput(
         responseContent,
         handledBy: "typeagent",
     };
+}
+
+function hasSuccessfulAgentHandoff(
+    result: CommandResult | undefined,
+): result is CommandResult & {
+    agentHandoff: NonNullable<CommandResult["agentHandoff"]>;
+} {
+    return !!result?.agentHandoff && !result.lastError && !result.cancelled;
 }
 
 export async function handleDirect(
@@ -138,6 +147,7 @@ export async function handleDirect(
     });
 
     let dispatcher: Dispatcher | null = null;
+    let acceptedMacro = false;
     try {
         dependencies.emitProgress("Connecting to TypeAgent...", {
             temporary: true,
@@ -147,9 +157,19 @@ export async function handleDirect(
             temporary: true,
         });
         const result = await awaitCommand(dispatcher, input.prompt);
+        acceptedMacro =
+            result?.actions?.some((action) => action.schemaName === "macros") ??
+            false;
 
         if (pendingPrompts.length > 0) return pendingResult();
-        if (options.forceHandled) {
+        if (hasSuccessfulAgentHandoff(result)) {
+            acceptedMacro = true;
+            return {
+                modifiedPrompt: input.prompt,
+                additionalContext: macroHandoffContext(result.agentHandoff),
+            };
+        }
+        if (options.forceHandled || acceptedMacro) {
             return toForcedCommandOutput(result, responseCollector.messages);
         }
 
@@ -182,7 +202,7 @@ export async function handleDirect(
     } catch (error) {
         if (pendingPrompts.length > 0) return pendingResult();
         console.error("TypeAgent error:", error);
-        if (options.forceHandled) {
+        if (options.forceHandled || acceptedMacro) {
             return {
                 handled: true,
                 responseContent: `TypeAgent could not execute the command: ${

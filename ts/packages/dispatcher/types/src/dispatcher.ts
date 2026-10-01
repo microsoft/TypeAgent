@@ -10,6 +10,7 @@ import {
     TemplateSchema,
     TypeAgentAction,
     AfterWildcard,
+    AgentHandoff,
 } from "@typeagent/agent-sdk";
 import type {
     DisplayLogEntry,
@@ -152,6 +153,7 @@ export type CommandResult = {
     // Machine-readable completion reported by PowerShell capability reasoning.
     capabilityOutcome?: PowerShellCapabilityOutcome;
     codingOutcome?: CodingTaskOutcome;
+    agentHandoff?: AgentHandoff;
     metrics?: RequestMetrics;
     // Token usage for translating the user's request into actions (the LLM
     // "translation" step). Absent for @-commands and cached translations.

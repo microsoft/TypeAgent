@@ -2,10 +2,123 @@
 // Licensed under the MIT License.
 
 import { Result, success, error } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import { parseToolsJsonSchema } from "@typeagent/action-schema";
 import {
     AssistantSelection,
+    getAssistantSelectionSchemas,
     selectFromPartitions,
 } from "../src/translation/unknownSwitcher.js";
+import {
+    convertToActionConfig,
+    type ActionConfig,
+} from "../src/translation/actionConfig.js";
+import type {
+    ActionConfigProvider,
+    ActionSchemaFile,
+} from "../src/translation/actionConfigProvider.js";
+
+function selectionProvider(
+    definitions: Record<string, string[]>,
+): ActionConfigProvider {
+    const configs: Record<string, ActionConfig> = Object.fromEntries(
+        Object.keys(definitions).map((name) => [
+            name,
+            convertToActionConfig(name, {
+                emojiChar: "",
+                description: name,
+                schema: {
+                    description: name,
+                    schemaType: "AgentActions",
+                    schemaFile: { format: "pas", content: "" },
+                },
+            })[name],
+        ]),
+    );
+    return {
+        tryGetActionConfig: (name) => configs[name],
+        getActionConfig(name) {
+            const config = configs[name];
+            if (!config) throw new Error(`Unknown test schema: ${name}`);
+            return config;
+        },
+        getActionConfigs: () => Object.values(configs),
+        getActionSchemaFileForConfig(config): ActionSchemaFile {
+            const names = definitions[config.schemaName];
+            return {
+                schemaName: config.schemaName,
+                sourceHash: JSON.stringify(names),
+                parsedActionSchema: parseToolsJsonSchema(
+                    names.map((name) => ({
+                        name,
+                        description: name,
+                        inputSchema: { type: "object", properties: {} },
+                    })),
+                    "AgentActions",
+                ),
+            };
+        },
+    };
+}
+
+describe("assistant selection schemas", () => {
+    it("validates multiple MCP schemas with the same entry type and distinct names", () => {
+        const definitions = {
+            "mcp-one": ["first"],
+            mcp_one: ["second"],
+        };
+        const schemas = getAssistantSelectionSchemas(
+            Object.keys(definitions),
+            selectionProvider(definitions),
+        );
+        expect(
+            new Set(schemas.map((entry) => entry.schema.typeName)).size,
+        ).toBe(2);
+        const text = [
+            ...schemas.map((entry) => entry.schema.schema),
+            `export type Selection = ${schemas.map((entry) => entry.schema.typeName).join(" | ")};`,
+        ].join("\n");
+        const validator = createTypeScriptJsonValidator<AssistantSelection>(
+            text,
+            "Selection",
+        );
+        expect(
+            validator.validate({ assistant: "mcp-one", action: "first" }),
+        ).toEqual(success({ assistant: "mcp-one", action: "first" }));
+        expect(
+            validator.validate({ assistant: "mcp_one", action: "second" }),
+        ).toEqual(success({ assistant: "mcp_one", action: "second" }));
+        expect(
+            validator.validate({ assistant: "mcp-one", action: "second" })
+                .success,
+        ).toBe(false);
+    });
+
+    it("uses the current actions after a dynamic catalog change", () => {
+        const definitions = { macros: ["listApprovedMacros"] };
+        const provider = selectionProvider(definitions);
+        expect(
+            getAssistantSelectionSchemas(["macros"], provider)[0].schema.schema,
+        ).not.toContain("run_macro_v2");
+        definitions.macros.push("run_macro_v2");
+        expect(
+            getAssistantSelectionSchemas(["macros"], provider)[0].schema.schema,
+        ).toContain("run_macro_v2");
+        definitions.macros = ["listApprovedMacros"];
+        expect(
+            getAssistantSelectionSchemas(["macros"], provider)[0].schema.schema,
+        ).not.toContain("run_macro_v2");
+    });
+
+    it("does not reuse another provider's schema for the same name", () => {
+        const first = selectionProvider({ shared: ["first"] });
+        const second = selectionProvider({ shared: ["second"] });
+        getAssistantSelectionSchemas(["shared"], first);
+        const schemas = getAssistantSelectionSchemas(["shared"], second);
+        expect(schemas[0].schema.schema).toContain('"second"');
+        expect(schemas[0].schema.schema).not.toContain('"first"');
+    });
+});
 
 function makeTranslator(
     result: Result<AssistantSelection>,

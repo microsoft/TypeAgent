@@ -44,6 +44,7 @@ import {
     inspectReplayTools,
     replayMacro,
     ReplayValidationError,
+    validateMacroInputs,
 } from "./deterministicReplay.js";
 import { induceMacroFromTrace, validateMacro } from "./macroDefinition.js";
 
@@ -54,6 +55,21 @@ const maxPersistedRunValueBytes = 256 * 1024;
 const maxPersistedRunPreviewCharacters = 16 * 1024;
 const maxCandidateBytes = 256 * 1024;
 const maxCandidateItems = 100;
+
+interface MacroRunOptions {
+    signal?: AbortSignal | undefined;
+    requireLatestApproved?: boolean;
+}
+
+function forwardAbortSignal(
+    signal: AbortSignal | undefined,
+    controller: AbortController,
+): () => void {
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) controller.abort();
+    return () => signal?.removeEventListener("abort", abort);
+}
 
 interface AgentHandoffRecord {
     runId: string;
@@ -91,12 +107,27 @@ export class MacroManager {
     private readonly rootDir: string;
     private readonly activeRuns = new Map<string, AbortController>();
     private catalogMutation: Promise<void> = Promise.resolve();
+    private readonly catalogListeners = new Set<() => Promise<void>>();
 
     constructor(
         instanceDir: string,
         private readonly replayHost?: ReplayToolHost,
     ) {
         this.rootDir = path.join(instanceDir, "copilot-macros");
+    }
+
+    onCatalogChanged(listener: () => Promise<void>): () => void {
+        this.catalogListeners.add(listener);
+        return () => this.catalogListeners.delete(listener);
+    }
+
+    async getApprovedMacros(): Promise<CopilotToolMacro[]> {
+        const summaries = await this.readCatalog();
+        return Promise.all(
+            summaries
+                .filter((macro) => macro.state === "approved")
+                .map((macro) => this.inspectMacro(macro)),
+        );
     }
 
     armRecording(request: ArmRecordingRequest): RecordingToken {
@@ -584,20 +615,23 @@ export class MacroManager {
         });
     }
 
-    async runMacro(request: RunMacroRequest): Promise<RunMacroResponse> {
+    async runMacro(
+        request: RunMacroRequest,
+        options: MacroRunOptions = {},
+    ): Promise<RunMacroResponse> {
+        options.signal?.throwIfAborted();
         this.validateMacroId(request.runId);
         if (this.activeRuns.has(request.runId)) {
             throw new Error(`Macro run is already active: ${request.runId}`);
         }
         const macro = await this.inspectMacro(request);
-        if (macro.state !== "approved") {
-            throw new Error("Only approved macros can run.");
-        }
+        await this.validateRunRoute(macro, options);
         const preference = request.preference ?? "auto";
         if (
             preference === "agent" ||
             macro.executionClass === "agentRequired"
         ) {
+            validateMacroInputs(macro, request.inputs ?? {});
             if (preference === "replay") {
                 throw new Error("This macro requires agent-guided execution.");
             }
@@ -677,6 +711,7 @@ export class MacroManager {
             10 * 60_000,
         );
         const controller = new AbortController();
+        const unlinkAbort = forwardAbortSignal(options.signal, controller);
         let timedOut = false;
         const timeout = setTimeout(() => {
             timedOut = true;
@@ -719,6 +754,7 @@ export class MacroManager {
         } finally {
             clearTimeout(timeout);
             this.activeRuns.delete(request.runId);
+            unlinkAbort();
         }
         if (timedOut) {
             run = {
@@ -733,6 +769,27 @@ export class MacroManager {
         run = await this.writeRun(run, macro);
         await this.recordMetric("replay", run.status);
         return { status: run.status, run } as RunMacroResponse;
+    }
+
+    private async validateRunRoute(
+        macro: CopilotToolMacro,
+        options: MacroRunOptions,
+    ): Promise<void> {
+        if (macro.state !== "approved") {
+            throw new Error("Only approved macros can run.");
+        }
+        if (options.requireLatestApproved) {
+            const latest = await this.getLatestSummary(macro.macroId);
+            if (
+                latest.state !== "approved" ||
+                latest.version !== macro.version
+            ) {
+                throw new Error(
+                    "The macro route is no longer the current approved version.",
+                );
+            }
+        }
+        options.signal?.throwIfAborted();
     }
 
     cancelMacroRun(runId: string): void {
@@ -980,6 +1037,17 @@ export class MacroManager {
             () => undefined,
             () => undefined,
         );
-        return result;
+        return result.then(async (value) => {
+            try {
+                await Promise.all(
+                    [...this.catalogListeners].map((listener) => listener()),
+                );
+            } catch (error) {
+                throw new Error(
+                    `Macro catalog was saved, but route refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+                );
+            }
+            return value;
+        });
     }
 }

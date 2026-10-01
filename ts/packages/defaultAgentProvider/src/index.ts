@@ -15,6 +15,11 @@ export {
 } from "./defaultAgentRuntime.js";
 export { getDefaultConstructionProvider } from "./defaultConstructionProvider.js";
 export {
+    createMacroAppAgentProvider,
+    getMacroActionName,
+    macroAgentName,
+} from "./macroAgentProvider.js";
+export {
     SessionMcpCredentialStore,
     type McpCredentialStore,
 } from "./mcp/mcpCredentialStore.js";

@@ -534,6 +534,19 @@ direct, MCP, and dev modes.
 
 ### Record, approve, and run a macro
 
+Use `@typeagent mode mcp mixed` for macro lifecycle requests. Ask Copilot to
+call the `typeagent-macros` lifecycle tools directly, not `processCommand` or
+structured action discovery/execution. The `macros` action schema lists and
+runs approved procedures; it does not create, review, or approve drafts.
+Return to Direct mode when testing approved macro grammar routing.
+
+The server-hosted reasoning agent has its own permission prompts. The plugin's
+natural-language client cannot continue those prompts; a timeout/cancellation
+can resolve a permission question to its safe default, Deny, even though no
+interactive prompt appeared in Copilot. Do not enable blanket permissions to
+work around this. Use the lifecycle server for approval, preserve normal tool
+permissions, and verify the stored macro state before retrying.
+
 1. Arm one interaction:
 
    ```text
@@ -588,6 +601,45 @@ explicitly approve the new draft. Existing traces without model-facing evidence
 and existing immutable versions are not silently rewritten. Resolving tool
 access alone does not make an old macro's result guards verifiable.
 
+### Route approved macros from natural language
+
+Agent-server publishes current approved macros as typed actions in the `macros`
+agent. The macro name/description describe the whole procedure; parameters are
+its declared inputs. The generated action identity pins the macro ID and
+approved version. Drafts, disabled macros, and macros with secret inputs are not
+published on this surface. Explicit macro lifecycle tools remain available.
+
+For a Direct-mode grammar demo:
+
+```text
+@typeagent mode direct
+@typeagent run @config cache grammarSystem nfa
+@typeagent run @config match grammar on
+@typeagent run list approved macros
+```
+
+Ask for the approved procedure with concrete inputs. The initial request can
+use translation and learn a grammar through the normal dispatcher learning
+path; approval alone does not generate utterances. Repeat a covered request
+with another input, inspect its grammar/cache evidence, and verify the actual
+tool arguments. A grammar miss uses normal routing, not a guaranteed macro hit.
+
+Replayable selections run full macro preflight and return durable sanitized run
+evidence. Agent-required selections return a complete launch payload: the Direct
+hook continues Copilot with runner instructions, and MCP `processCommand`
+returns the launch. Structured action results retain `agentHandoff`; shared MCP
+guidance directs Copilot to pass its complete payload to `typeagent-macro-runner`.
+Do not call `run_macro` again or repeat the original request after handoff.
+A handoff means the procedure was selected, not that the runner completed it.
+
+Accepted macro failures/cancellations are terminal in Direct mode, preventing
+Copilot from duplicating possibly completed effects. Handoffs must be standalone
+actions; queued trailing actions are rejected and are not automatically resumed.
+Approval, disable, and deletion refresh schemas and reconcile learned routes.
+Execution also rejects a stale version even if a cached action reaches the
+handler. These routes select only the current approved version; explicit
+`run_macro` calls retain their existing pinned-version behavior.
+
 ### Rollout Controls
 
 Each macro boundary is enabled by default and can be disabled independently:
@@ -601,7 +653,10 @@ Each macro boundary is enabled by default and can be disabled independently:
 
 Set a variable to `0`, `false`, or `off` before starting Copilot to disable
 that boundary. These flags do not change direct, MCP, dev, or PowerShell mode
-selection. Restart Copilot after changing them.
+selection. Restart Copilot after changing them. For natural-language macro
+routing, set replay/handoff flags consistently in both the agent-server and
+Copilot plugin environments and restart both processes. Disabled boundaries
+remove the corresponding macros from the routed catalog and block execution.
 
 ### Recovery And Rollback
 
