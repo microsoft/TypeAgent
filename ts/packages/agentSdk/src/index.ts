@@ -90,6 +90,7 @@ export {
     ActionResultSuccessNoDisplay,
     ActionResultSuccess,
     ActionResult,
+    AgentHandoff,
     ActionResultActivityContext,
     ActionTokenUsage,
     SerializedError,

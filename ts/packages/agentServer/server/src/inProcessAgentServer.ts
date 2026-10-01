@@ -13,7 +13,11 @@ import os from "node:os";
 import path from "node:path";
 import registerDebug from "debug";
 import { MacroManager } from "@typeagent/copilot-macros";
-import { McpReplayHost } from "default-agent-provider";
+import {
+    McpReplayHost,
+    createMacroAppAgentProvider,
+    createMacroLearningRuntime,
+} from "default-agent-provider";
 import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
 import type {
     MemoryService,
@@ -82,6 +86,15 @@ export async function createInProcessAgentServer(
     instanceDir: string,
     options: InProcessAgentServerOptions,
 ): Promise<InProcessAgentServer> {
+    const macroManager = new MacroManager(
+        instanceDir,
+        new McpReplayHost(instanceDir),
+    );
+    await macroManager.configureLearning(
+        createMacroLearningRuntime(undefined, () =>
+            macroManager.getApprovedMacros(),
+        ),
+    );
     const memoryAgentOptions = dispatcherOptions.agentInitOptions?.memory as
         | { memoryServiceClient?: MemoryService }
         | undefined;
@@ -103,6 +116,10 @@ export async function createInProcessAgentServer(
         hostName,
         {
             ...dispatcherOptions,
+            appAgentProviders: [
+                ...(dispatcherOptions.appAgentProviders ?? []),
+                createMacroAppAgentProvider(macroManager),
+            ],
             conversationMemorySettings: {
                 ...dispatcherOptions.conversationMemorySettings,
                 durableMemoryService: memoryService,
@@ -122,10 +139,7 @@ export async function createInProcessAgentServer(
     );
     const { handler } = createAgentServerConnectionHandler({
         conversationManager,
-        macroManager: new MacroManager(
-            instanceDir,
-            new McpReplayHost(instanceDir),
-        ),
+        macroManager,
         skillCatalog,
         skillAcquirer,
         ...(procedureService === undefined ? {} : { procedureService }),

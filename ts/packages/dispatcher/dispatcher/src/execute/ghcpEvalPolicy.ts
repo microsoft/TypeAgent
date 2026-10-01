@@ -4,15 +4,21 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isGhcpEvalArtifact } from "./ghcpEvalArtifacts.js";
+import { ghcpEvalDenialDiagnostic } from "./ghcpEvalDiagnostics.js";
 import {
     ghcpEvalFileActionAllowed,
     readGhcpEvalFilePolicy,
 } from "./ghcpEvalFiles.js";
+import {
+    ghcpEvalListActionAllowed,
+    readGhcpEvalListPolicy,
+    ghcpEvalListExternalReadAllowed,
+} from "./ghcpEvalLists.js";
 
 let executionFailureObserved = false;
 
-export function markGhcpEvalExecutionFailure(): void {
-    if (process.env.TYPEAGENT_GHCP_EVAL_FIXTURES !== undefined)
+export function markGhcpEvalExecutionFailure(recoverable = false): void {
+    if (process.env.TYPEAGENT_GHCP_EVAL_FIXTURES !== undefined && !recoverable)
         executionFailureObserved = true;
 }
 
@@ -49,6 +55,55 @@ const reads = new Map<string, Set<string>>([
     ],
 ]);
 
+export function isGhcpEvalReadOnlyAction(
+    schemaName: string,
+    actionName: string,
+): boolean {
+    return (
+        reads.get(schemaName)?.has(actionName) === true ||
+        (schemaName === "powershell.powershell-files" &&
+            (actionName === "readFile" || actionName === "listFiles")) ||
+        (schemaName === "list" &&
+            (actionName === "getList" || actionName === "listLists"))
+    );
+}
+
+// An ordinary I/O failure is positive evidence, unlike an absent SDK error.
+// Authorization, cancellation and uncertain delivery always take precedence.
+export function isGhcpEvalRecoverableReadError(error: unknown): boolean {
+    return (
+        typeof error === "string" &&
+        !/(deni(?:ed|al)|unauthoriz|forbidden|permission|policy|sandbox|reject|EACCES|EPERM|\b401\b|\b403\b|cancel|uncertain|abort)/i.test(
+            error,
+        ) &&
+        /\b(ENOENT|ENOTDIR|EISDIR|ETIMEDOUT|ECONNRESET|EAI_AGAIN)\b/.test(error)
+    );
+}
+
+function categoryActionAllowed(
+    schemaName: string,
+    actionName: string,
+    parameters: unknown,
+): boolean {
+    if (process.env.TYPEAGENT_GHCP_EVAL_CATEGORY === "lists") {
+        const policy = readGhcpEvalListPolicy();
+        if (!policy) return false;
+        return schemaName === "list"
+            ? ghcpEvalListActionAllowed(actionName, parameters, policy)
+            : ghcpEvalListExternalReadAllowed(
+                  schemaName,
+                  actionName,
+                  parameters,
+                  policy,
+              );
+    }
+    return schemaName === "list"
+        ? !process.env.TYPEAGENT_GHCP_EVAL_FILE_POLICY ||
+              (actionName === "listLists" &&
+                  readGhcpEvalFilePolicy()?.allowListInventory === true)
+        : reads.get(schemaName)?.has(actionName) === true;
+}
+
 /** Apply only to an explicitly isolated evaluation server, never normal sessions. */
 export function assertGhcpEvalAction(
     schemaName: string,
@@ -61,14 +116,11 @@ export function assertGhcpEvalAction(
         throw new Error(
             "GHCP eval stopped execution after a failed or cancelled action",
         );
+    const listCategory = process.env.TYPEAGENT_GHCP_EVAL_CATEGORY === "lists";
     if (
-        (schemaName === "list" &&
-            (!process.env.TYPEAGENT_GHCP_EVAL_FILE_POLICY ||
-                (actionName === "listLists" &&
-                    readGhcpEvalFilePolicy()?.allowListInventory === true))) ||
+        categoryActionAllowed(schemaName, actionName, parameters) ||
         schemaName === "dispatcher" ||
-        schemaName.startsWith("dispatcher.") ||
-        reads.get(schemaName)?.has(actionName)
+        schemaName.startsWith("dispatcher.")
     ) {
         return;
     }
@@ -94,7 +146,7 @@ export function assertGhcpEvalAction(
             typeof parameters.path === "string"
         ) {
             if (isGhcpEvalArtifact(parameters.path)) return;
-            if (!policy) {
+            if (!policy && !listCategory) {
                 const requested = fs
                     .realpathSync(parameters.path)
                     .toLowerCase();
@@ -109,7 +161,16 @@ export function assertGhcpEvalAction(
             }
         }
     }
-    recordGhcpEvalEvent("action.denied", { schemaName, actionName });
+    if (process.env.TYPEAGENT_GHCP_EVAL_TRACE)
+        recordGhcpEvalEvent(
+            "action.denied",
+            ghcpEvalDenialDiagnostic(
+                schemaName,
+                actionName,
+                parameters,
+                fixtureRoot,
+            ),
+        );
     markGhcpEvalExecutionFailure();
     throw new Error(
         `GHCP eval policy denied ${schemaName}.${actionName} before execution`,

@@ -37,5 +37,11 @@ cancellation, and timeout are terminal outcomes, not adaptation signals.
 
 - Create drafts only from explicitly captured traces.
 - Validate drafts before asking the user to approve them.
-- Approval is always an explicit user action.
+- Selected completed recordings automatically enter recipe extraction, generalized
+  building, grammar validation, and registration. Do not rerun the task to teach it.
+- The workspace preference is Off, Prepare, Read-only, or All. Prepare requires
+  review; Read-only auto-approves read-only procedures; All auto-approves valid
+  procedures including writes. Never change that preference for the user.
+- Newly learned macros execute through the live macro runner. Macro approval does
+  not grant tool permission; denial and cancellation remain terminal.
 - Use `get_macro_run` only for sanitized persisted deterministic run evidence.

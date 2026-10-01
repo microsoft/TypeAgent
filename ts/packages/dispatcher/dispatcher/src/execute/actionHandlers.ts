@@ -3,6 +3,8 @@
 
 import {
     assertGhcpEvalAction,
+    isGhcpEvalReadOnlyAction,
+    isGhcpEvalRecoverableReadError,
     markGhcpEvalExecutionFailure,
     recordGhcpEvalEvent,
 } from "./ghcpEvalPolicy.js";
@@ -545,11 +547,15 @@ export async function executeAction(
                     schemaName,
                 );
 
+                const recoverable =
+                    isGhcpEvalReadOnlyAction(schemaName, action.actionName) &&
+                    isGhcpEvalRecoverableReadError(outcome.result.error);
                 if (outcome.result.error !== undefined)
-                    markGhcpEvalExecutionFailure();
+                    markGhcpEvalExecutionFailure(recoverable);
                 recordGhcpEvalEvent("action.completed", {
                     ...eventData,
                     success: outcome.result.error === undefined,
+                    recoverable,
                     elapsedMs: Date.now() - actionStartedAt,
                 });
                 logActionCompleted(systemContext.logger, {
@@ -971,6 +977,22 @@ export async function executeActions(
                     fallbackToReasoning: false,
                 };
             }
+            return;
+        }
+
+        if (result.agentHandoff !== undefined) {
+            if (actionQueue.length > 0 || result.additionalActions?.length) {
+                const error =
+                    "Agent handoff requires a standalone action. Remaining steps were not executed; do not replay earlier completed actions.";
+                displayError(error, context);
+                return {
+                    error,
+                    failedAction: executableAction,
+                    fallbackToReasoning: false,
+                };
+            }
+            ensureCommandResult(systemContext).agentHandoff =
+                result.agentHandoff;
             return;
         }
 

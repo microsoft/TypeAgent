@@ -15,6 +15,39 @@ function event(
 }
 
 describe("extension trace assembler", () => {
+    it.each(["report_intent", "functions.report_intent"])(
+        "excludes native %s telemetry from learned operations",
+        (toolName) => {
+            const assembler = new ExtensionTraceAssembler("session", ".");
+            assembler.record(
+                event("user.message", "2026-09-30T00:00:00.000Z", {
+                    content: "Read a file",
+                }),
+            );
+            for (const [id, name] of [
+                ["intent", toolName],
+                ["read", "view"],
+            ]) {
+                assembler.record(
+                    event("tool.execution_start", "2026-09-30T00:00:01.000Z", {
+                        toolCallId: id,
+                        toolName: name,
+                        arguments: { path: "package.json" },
+                    }),
+                );
+                assembler.record(
+                    event(
+                        "tool.execution_complete",
+                        "2026-09-30T00:00:02.000Z",
+                        { toolCallId: id, success: true, result: "Done" },
+                    ),
+                );
+            }
+            expect(
+                assembler.finish()?.toolCalls.map((call) => call.name),
+            ).toEqual(["view"]);
+        },
+    );
     it.each([
         [
             '{"answer":{"value":"public","apiKey":"secret"}}',

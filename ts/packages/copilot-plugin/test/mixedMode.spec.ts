@@ -45,6 +45,26 @@ describe("mixed MCP routing", () => {
         else process.env.TYPEAGENT_MODE = originalMode;
     });
 
+    it("keeps macro approval on its lifecycle server without delegating or running it", () => {
+        handleModeSetting("mcp mixed", "@typeagent mode");
+        const prompt =
+            "I approve macro test-id, draft version 1. Call approve_macro; do not run it.";
+        const output = handleMcpRedirect({ ...input, prompt });
+        expect(output.modifiedPrompt).toBe(prompt);
+        expect(output.additionalContext).toContain(
+            "use the typeagent-macros MCP server directly",
+        );
+        expect(output.additionalContext).toContain(
+            "Do not delegate them through typeagent-processCommand",
+        );
+        expect(output.additionalContext).toContain(
+            "Preserve explicit user approval and tool permissions",
+        );
+        expect(output.additionalContext).toContain(
+            "do not run the macro when the user requested approval only",
+        );
+    });
+
     it("defaults to delegation without steering selected steps to structured calls", () => {
         expect(getMcpRouting()).toBe("delegate");
         handleModeSetting("mcp", "@typeagent mode");

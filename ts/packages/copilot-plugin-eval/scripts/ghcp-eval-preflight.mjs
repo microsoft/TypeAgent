@@ -7,11 +7,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import {
-    corpusVersion,
     fileFixture,
     filePolicy,
+    fileHandlerConfirmation,
     logicalFileContent,
+    protocolVersion,
 } from "./ghcp-eval-corpus.mjs";
+import { evaluationCategory } from "./ghcp-eval-categories.mjs";
+import {
+    listFilePolicy,
+    resetLists,
+    listsUnchanged,
+} from "./ghcp-eval-lists.mjs";
+import {
+    listRequiredContracts,
+    preflightListPolicy,
+    verifyListPreflight,
+} from "./ghcp-eval-list-preflight.mjs";
 import { evalModel, validateEvalLedger } from "./ghcp-eval-config.mjs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -28,8 +40,15 @@ const root = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "../../..",
 );
-const [outputDirectory, configDirectory, ledgerPath, evidenceMode] =
-    process.argv.slice(2);
+const [
+    outputDirectory,
+    configDirectory,
+    ledgerPath,
+    evidenceMode,
+    categoryName = "common-files",
+] = process.argv.slice(2);
+const category = evaluationCategory(categoryName);
+const listCategory = category.name === "lists";
 if (!outputDirectory || !configDirectory || !ledgerPath) {
     throw new Error(
         "Usage: node ghcp-eval-preflight.mjs <new-output-directory> <model-config-directory> <credit-ledger>",
@@ -53,25 +72,44 @@ for (const [name, content] of Object.entries(fileFixture)) {
     fs.writeFileSync(path.join(fixtures, name), content);
 }
 env.TYPEAGENT_GHCP_EVAL_FIXTURES = fixtures;
+env.TYPEAGENT_GHCP_EVAL_CATEGORY = category.name;
+delete env.TYPEAGENT_GHCP_EVAL_LIST_POLICY;
+delete env.TYPEAGENT_GHCP_EVAL_CORRELATION;
+if (listCategory) {
+    env.TYPEAGENT_GHCP_EVAL_LIST_POLICY = path.resolve(
+        outputDirectory,
+        "list-policy.json",
+    );
+    fs.writeFileSync(
+        env.TYPEAGENT_GHCP_EVAL_LIST_POLICY,
+        JSON.stringify(preflightListPolicy("")),
+    );
+}
 env.TYPEAGENT_GHCP_EVAL_FILE_POLICY = path.resolve(
     outputDirectory,
     "file-policy.json",
 );
 fs.writeFileSync(
     env.TYPEAGENT_GHCP_EVAL_FILE_POLICY,
-    JSON.stringify({
-        ...filePolicy("M3"),
-        allowInventory: true,
-        allowListInventory: true,
-        prerequisites: {},
-    }),
+    JSON.stringify(
+        listCategory
+            ? listFilePolicy("list-R4")
+            : {
+                  ...filePolicy("M3"),
+                  allowInventory: true,
+                  allowListInventory: true,
+                  prerequisites: {},
+              },
+    ),
 );
 fs.mkdirSync(env.TYPEAGENT_PLUGIN_DATA);
 stageCopilotPlugin(path.join(outputDirectory, "plugin"));
 const result = {
     kind: "catalog_preflight_not_eval",
     model: evalModel,
-    corpusVersion,
+    corpusVersion: category.corpusVersion,
+    protocolVersion,
+    category: category.name,
     status: "running",
     contracts: [],
     missing: [],
@@ -87,6 +125,7 @@ const stdout = fs.openSync(
 const stderr = fs.openSync(log, "a");
 let server;
 let client;
+let verifiedListStore;
 try {
     server = startProcess(
         process.execPath,
@@ -114,18 +153,20 @@ try {
             stderr: "inherit",
         }),
     );
-    const required = [
-        ["list", "listLists"],
-        ["github-cli", "prFiles"],
-        ["github-cli", "prChecks"],
-        ["github-cli", "issueView"],
-        ["powershell.powershell-files", "readFile"],
-        ["powershell.powershell-files", "listFiles"],
-        ["powershell.powershell-files", "writeFile"],
-        ["powershell.powershell-files", "copyFile"],
-        ["ipconfig", "displayFullConfigurationInformation"],
-        ["ipconfig", "displayDNSResolverCacheContents"],
-    ];
+    const required = listCategory
+        ? listRequiredContracts
+        : [
+              ["list", "listLists"],
+              ["github-cli", "prFiles"],
+              ["github-cli", "prChecks"],
+              ["github-cli", "issueView"],
+              ["powershell.powershell-files", "readFile"],
+              ["powershell.powershell-files", "listFiles"],
+              ["powershell.powershell-files", "writeFile"],
+              ["powershell.powershell-files", "copyFile"],
+              ["ipconfig", "displayFullConfigurationInformation"],
+              ["ipconfig", "displayDNSResolverCacheContents"],
+          ];
     let scopeId;
     for (const [schemaName, actionName] of required) {
         let contract;
@@ -167,13 +208,24 @@ try {
     }
     result.status = result.missing.length === 0 ? "passed" : "blocked";
     if (result.status === "passed" && evidenceMode === "--external-evidence") {
-        const requests = [
-            ["prFiles", 3058],
-            ["prChecks", 3058],
-            ["prFiles", 3067],
-            ["prChecks", 3067],
-            ["issueView", 2617],
-        ].map(([actionName, number]) => ({
+        if (listCategory)
+            verifiedListStore = await verifyListPreflight(
+                client,
+                scopeId,
+                env,
+                result,
+            );
+        const requests = (
+            listCategory
+                ? [["issueView", 2617]]
+                : [
+                      ["prFiles", 3058],
+                      ["prChecks", 3058],
+                      ["prFiles", 3067],
+                      ["prChecks", 3067],
+                      ["issueView", 2617],
+                  ]
+        ).map(([actionName, number]) => ({
             schemaName: "github-cli",
             actionName,
             parameters: {
@@ -184,44 +236,51 @@ try {
                     : {}),
             },
         }));
-        requests.push(
-            { schemaName: "list", actionName: "listLists", parameters: {} },
-            {
-                schemaName: "powershell.powershell-files",
-                actionName: "listFiles",
-                parameters: { path: fixtures },
-            },
-            {
+        if (listCategory)
+            requests.push({
                 schemaName: "powershell.powershell-files",
                 actionName: "readFile",
-                parameters: { path: path.join(fixtures, "report-a.txt") },
-            },
-            {
-                schemaName: "powershell.powershell-files",
-                actionName: "copyFile",
-                parameters: {
-                    source: path.join(fixtures, "grocery.txt"),
-                    destination: path.join(fixtures, "grocery-backup.txt"),
+                parameters: { path: path.join(fixtures, "trip.txt") },
+            });
+        else
+            requests.push(
+                { schemaName: "list", actionName: "listLists", parameters: {} },
+                {
+                    schemaName: "powershell.powershell-files",
+                    actionName: "listFiles",
+                    parameters: { path: fixtures },
                 },
-            },
-            {
-                schemaName: "powershell.powershell-files",
-                actionName: "writeFile",
-                parameters: {
-                    path: path.join(fixtures, "grocery.txt"),
-                    content: "apples",
-                    append: true,
+                {
+                    schemaName: "powershell.powershell-files",
+                    actionName: "readFile",
+                    parameters: { path: path.join(fixtures, "report-a.txt") },
                 },
-            },
-            ...[
-                "displayFullConfigurationInformation",
-                "displayDNSResolverCacheContents",
-            ].map((actionName) => ({
-                schemaName: "ipconfig",
-                actionName,
-                parameters: {},
-            })),
-        );
+                {
+                    schemaName: "powershell.powershell-files",
+                    actionName: "copyFile",
+                    parameters: {
+                        source: path.join(fixtures, "grocery.txt"),
+                        destination: path.join(fixtures, "grocery-backup.txt"),
+                    },
+                },
+                {
+                    schemaName: "powershell.powershell-files",
+                    actionName: "writeFile",
+                    parameters: {
+                        path: path.join(fixtures, "grocery.txt"),
+                        content: "apples",
+                        append: true,
+                    },
+                },
+                ...[
+                    "displayFullConfigurationInformation",
+                    "displayDNSResolverCacheContents",
+                ].map((actionName) => ({
+                    schemaName: "ipconfig",
+                    actionName,
+                    parameters: {},
+                })),
+            );
         for (const action of requests) {
             let response = await client.callTool(
                 {
@@ -260,7 +319,34 @@ try {
                     { timeout: 60_000 },
                 );
             }
+            const question = response.structuredContent;
+            const handlerAnswer = fileHandlerConfirmation(
+                question?.prompt,
+                action,
+            );
+            if (
+                question?.status === "requires_interaction" &&
+                question.scopeId === scopeId &&
+                question.operationId === pending?.operationId &&
+                handlerAnswer
+            ) {
+                response = await client.callTool(
+                    {
+                        name: "typeagent-continueAction",
+                        arguments: {
+                            protocolVersion: 1,
+                            scopeId,
+                            operationId: question.operationId,
+                            interactionId: question.interactionId,
+                            response: handlerAnswer,
+                        },
+                    },
+                    undefined,
+                    { timeout: 60_000 },
+                );
+            }
             result.externalEvidence.push({
+                schemaName: action.schemaName,
                 actionName: action.actionName,
                 number: action.parameters.number,
                 capturedAt: new Date().toISOString(),
@@ -318,6 +404,18 @@ try {
         if (client) await client.close();
     } finally {
         if (server) await stopProcess(server);
+        if (verifiedListStore) {
+            try {
+                resetLists(verifiedListStore);
+                if (!listsUnchanged(verifiedListStore))
+                    throw new Error("List preflight reset failed");
+                result.listOperationsVerified = result.status === "passed";
+            } catch (error) {
+                result.status = "failed";
+                result.error = String(error);
+                process.exitCode = 1;
+            }
+        }
         fs.writeFileSync(
             path.join(outputDirectory, "result.json"),
             JSON.stringify(result, null, 2) + "\n",

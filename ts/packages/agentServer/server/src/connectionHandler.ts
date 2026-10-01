@@ -363,6 +363,16 @@ export function createAgentServerConnectionHandler(
         let staleNotifier: (() => void) | undefined;
 
         const invokeFunctions: AgentServerInvokeFunctions = {
+            getMacroLearningPreference: (cwd) =>
+                macroManager.getMacroLearningPreference(cwd),
+            setMacroLearningPreference: (request) =>
+                macroManager.setMacroLearningPreference(request),
+            prepareMacroLearning: (request) =>
+                macroManager.prepareMacroLearning(request),
+            getMacroLearningJob: (jobId) =>
+                macroManager.getMacroLearningJob(jobId),
+            cancelMacroLearningJob: (jobId) =>
+                macroManager.cancelMacroLearningJob(jobId),
             armMacroRecording: async (request) =>
                 macroManager.armRecording(request),
             getMacroRecordingState: async (sessionId) =>

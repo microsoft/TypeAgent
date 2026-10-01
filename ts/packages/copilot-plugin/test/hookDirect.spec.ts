@@ -79,6 +79,43 @@ function setDisplay(content: DisplayContent): EmitDisplay {
 const forced = { forceHandled: true };
 
 describe("direct TypeAgent hook", () => {
+    it("continues Copilot with the complete runner launch instead of claiming completion", async () => {
+        const launch = {
+            agent: "typeagent-macro-runner",
+            macro: { macroId: "approved", version: 2 },
+            inputs: { topic: "different topic" },
+        };
+        const { dependencies } = createDependencies({
+            actions: [{ schemaName: "macros", actionName: "run_approved_v2" }],
+            agentHandoff: {
+                agentName: "typeagent-macro-runner",
+                payload: launch,
+            },
+        });
+        const result = await handleDirect(input, {}, dependencies);
+        expect(result.handled).toBeUndefined();
+        expect(result.modifiedPrompt).toBe(input.prompt);
+        expect(result.additionalContext).toContain(
+            JSON.stringify({ status: "agentRequired", launch }, null, 2),
+        );
+        expect(result.additionalContext).toContain(
+            "Do not call run_macro again",
+        );
+    });
+
+    it.each([
+        { lastError: "Replay failed after step one." },
+        { cancelled: true },
+    ])("keeps accepted macro failures handled: %j", async (outcome) => {
+        const { dependencies } = createDependencies({
+            actions: [{ schemaName: "macros", actionName: "run_approved_v2" }],
+            ...outcome,
+        });
+        const result = await handleDirect(input, {}, dependencies);
+        expect(result.handled).toBe(true);
+        expect(result.additionalContext).toBeUndefined();
+    });
+
     it("passes the hook session ID rather than relying on inherited environment", async () => {
         const { dependencies } = createDependencies({});
         await handleDirect(input, forced, dependencies);
