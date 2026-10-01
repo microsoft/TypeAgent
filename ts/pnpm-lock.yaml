@@ -5131,9 +5131,6 @@ importers:
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../../utils/typechatUtils
-      '@typeagent/website-memory':
-        specifier: workspace:*
-        version: link:../../memory/website
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -5986,63 +5983,18 @@ importers:
 
   packages/memory/website:
     dependencies:
-      '@typeagent/agent-runtime':
-        specifier: workspace:*
-        version: link:../../typeagent
-      '@typeagent/aiclient':
-        specifier: workspace:*
-        version: link:../../aiclient
-      '@typeagent/common-utils':
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
-      '@typeagent/conversation-memory':
-        specifier: workspace:*
-        version: link:../conversation
       '@typeagent/knowledge-processor':
         specifier: workspace:*
         version: link:../../knowledgeProcessor
       '@typeagent/knowpro':
         specifier: workspace:*
         version: link:../../knowPro
-      '@typeagent/memory-storage':
-        specifier: workspace:*
-        version: link:../storage
-      '@typeagent/telemetry':
-        specifier: workspace:*
-        version: link:../../telemetry
       better-sqlite3:
         specifier: 12.8.0
         version: 12.8.0
-      cheerio:
-        specifier: ^1.0.0
-        version: 1.1.0
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
-      get-folder-size:
-        specifier: ^5.0.0
-        version: 5.0.0
-      graphology:
-        specifier: ^0.25.4
-        version: 0.25.4(graphology-types@0.24.8)
-      graphology-communities-louvain:
-        specifier: ^2.0.1
-        version: 2.0.2(graphology-types@0.24.8)
-      graphology-metrics:
-        specifier: ^2.1.0
-        version: 2.4.0(graphology-types@0.24.8)
-      graphology-types:
-        specifier: ^0.24.7
-        version: 0.24.8
-      jsdom:
-        specifier: ^28.1.0
-        version: 28.1.0
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/better-sqlite3':
         specifier: 7.6.13
@@ -6053,9 +6005,6 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      '@types/jsdom':
-        specifier: ^28.0.0
-        version: 28.0.0
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -6071,9 +6020,6 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
-      test-lib:
-        specifier: workspace:*
-        version: link:../../testLib
       typescript:
         specifier: ~5.4.5
         version: 5.4.5

@@ -258,17 +258,27 @@ export interface MemorySearchResult {
     indexVersion: string;
 }
 
+export type AnswerMode = "synthesized" | "extractive";
+
 export interface MemoryAnswerRequest {
     corpusId: string;
     question: string;
     limit?: number;
     maxResponseChars?: number;
     sourceIds?: string[];
+    /**
+     * `synthesized` generates the answer with KnowPro's answer generator over
+     * the retrieved evidence. `extractive` returns the ranked evidence
+     * snippets verbatim. When omitted, `synthesized` is used if the corpus
+     * index supports it and `extractive` otherwise.
+     */
+    answerMode?: AnswerMode;
 }
 
 export interface MemoryAnswerResult {
     question: string;
     answer: string;
+    mode: AnswerMode;
     citations: MemoryEvidence[];
     grounded: true;
     indexVersion: string;
@@ -693,6 +703,12 @@ export interface CorpusIndexMatch {
     locator?: string;
 }
 
+export interface CorpusIndexAnswer {
+    answer?: string | undefined;
+    whyNoAnswer?: string | undefined;
+    matches: CorpusIndexMatch[];
+}
+
 export interface CorpusIndex {
     initialize(): Promise<void>;
     rebuild(
@@ -710,6 +726,11 @@ export interface CorpusIndex {
         limit: number,
         tags?: string[],
     ): Promise<CorpusIndexMatch[]>;
+    answer?(
+        query: string,
+        limit: number,
+        sourceIds?: ReadonlySet<string>,
+    ): Promise<CorpusIndexAnswer>;
     getKnowledgeGraph(
         sourceIds?: ReadonlySet<string>,
     ): Promise<MemoryKnowledgeGraph>;

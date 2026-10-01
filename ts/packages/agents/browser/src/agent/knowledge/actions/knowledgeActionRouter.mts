@@ -28,7 +28,6 @@ import {
     getKnowledgeGraphStatus,
     buildKnowledgeGraph,
     rebuildKnowledgeGraph,
-    mergeTopicHierarchies,
     getEntityNeighborhood,
     getEntityNeighborhoodLayoutData,
     getGlobalImportanceLayer,
@@ -48,7 +47,6 @@ import {
 } from "./utilityActions.mjs";
 import {
     getPageIndexedKnowledge,
-    getDiscoverInsights,
     generateSmartSuggestedQuestions,
 } from "./queryActions.mjs";
 
@@ -91,8 +89,6 @@ export async function handleKnowledgeAction(
             return await buildKnowledgeGraph(parameters, context);
         case "rebuildKnowledgeGraph":
             return await rebuildKnowledgeGraph(parameters, context);
-        case "mergeTopicHierarchies":
-            return await mergeTopicHierarchies(parameters, context);
         case "getEntityNeighborhood":
             return await getEntityNeighborhood(parameters, context);
         case "getEntityNeighborhoodLayoutData":
@@ -121,8 +117,6 @@ export async function handleKnowledgeAction(
             return await getActivityTrends(parameters, context);
         case "getPageIndexedKnowledge":
             return await getPageIndexedKnowledge(parameters, context);
-        case "getDiscoverInsights":
-            return await getDiscoverInsights(parameters, context);
         case "getKnowledgeStats":
             return await getDetailedKnowledgeStats(parameters, context);
         case "checkAIModelStatus":
@@ -152,10 +146,6 @@ export async function handleKnowledgeAction(
             return await analyzeDurableKnowledgeGaps(parameters, context);
         case "getViewportBasedNeighborhood":
             return await getDurableViewportNeighborhood(parameters, context);
-        case "getTopicViewportNeighborhood":
-            return await getDurableTopicViewport(parameters, context);
-        case "testMergeTopicHierarchies":
-            return await testDurableTopicMerge(context);
 
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
@@ -249,47 +239,4 @@ async function getDurableViewportNeighborhood(
             totalNodes: entities.length,
         },
     };
-}
-
-async function getDurableTopicViewport(
-    parameters: any,
-    context: SessionContext<BrowserActionContext>,
-) {
-    const graph = await getDurableGraph(context);
-    const requested = new Set<string>(
-        [parameters.centerTopic, ...(parameters.viewportTopicIds ?? [])]
-            .filter(Boolean)
-            .map((topic) => String(topic).toLowerCase()),
-    );
-    const topics = graph.topics
-        .filter(
-            (topic) =>
-                requested.size === 0 || requested.has(topic.name.toLowerCase()),
-        )
-        .slice(0, parameters.maxNodes ?? 5000);
-    return {
-        topics,
-        relationships: [],
-        metadata: {
-            centerTopic: parameters.centerTopic,
-            totalNodes: topics.length,
-        },
-    };
-}
-
-async function testDurableTopicMerge(
-    context: SessionContext<BrowserActionContext>,
-) {
-    const graph = await getDurableGraph(context);
-    const normalized = new Set<string>();
-    let mergeCount = 0;
-    for (const topic of graph.topics) {
-        const key = topic.name.trim().toLowerCase();
-        if (normalized.has(key)) {
-            mergeCount++;
-        } else {
-            normalized.add(key);
-        }
-    }
-    return { success: true, mergeCount };
 }

@@ -35,7 +35,6 @@ import {
     handleSearchByEntities,
     handleSearchByTopics,
     handleHybridSearch,
-    handleGetHierarchicalTopics,
     handleGetTopicMetrics,
     handleGetSearchSuggestions,
     handleSaveSearchHistory,
@@ -829,32 +828,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
-        async testMergeTopicHierarchies() {
-            try {
-                return await forward("testMergeTopicHierarchies", {});
-            } catch (error) {
-                console.error("Error testing topic merge:", error);
-                return {
-                    success: false,
-                    mergeCount: 0,
-                    error: "Failed to test topic merge",
-                };
-            }
-        },
-
-        async mergeTopicHierarchies() {
-            try {
-                return await forward("mergeTopicHierarchies", {});
-            } catch (error) {
-                console.error("Error merging topic hierarchies:", error);
-                return {
-                    success: false,
-                    mergeCount: 0,
-                    error: "Failed to merge topic hierarchies",
-                };
-            }
-        },
-
         async getGlobalGraphLayoutData(params: any) {
             try {
                 return await forward(
@@ -1011,32 +984,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
-        async getTopicViewportNeighborhood(params: any) {
-            try {
-                return await forward("getTopicViewportNeighborhood", {
-                    centerTopic: params.centerTopic,
-                    viewportTopicIds: params.viewportTopicIds,
-                    maxNodes: params.maxNodes,
-                    maxDepth: params.maxDepth,
-                });
-            } catch (error) {
-                console.error(
-                    "Error getting topic viewport neighborhood:",
-                    error,
-                );
-                return {
-                    topics: [],
-                    relationships: [],
-                    metadata: {
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : "Unknown error",
-                    },
-                };
-            }
-        },
-
         async getTopicMetrics(params: any) {
             return handleGetTopicMetrics(params);
         },
@@ -1108,10 +1055,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                             : "Unknown error",
                 };
             }
-        },
-
-        async getHierarchicalTopics(params: any) {
-            return handleGetHierarchicalTopics(params);
         },
 
         // =============================================================

@@ -23,6 +23,7 @@ import {
     createGraphologyCache,
     invalidateAllGraphologyCaches,
 } from "../utils/graphologyCache.mjs";
+import { buildTopicCooccurrenceEdges } from "../utils/topicCooccurrence.mjs";
 import registerDebug from "debug";
 
 // ============================================================================
@@ -488,7 +489,7 @@ async function getGraphologyGraphs(
                 count: topic.mentionCount,
                 confidence: 1,
             })),
-            [],
+            buildTopicCooccurrenceEdges(durableGraph.topics),
         );
         await cacheGraphologyGraphs(entityGraph, topicGraph, {
             buildTime: Date.now() - startedAt,
@@ -716,24 +717,6 @@ export async function rebuildKnowledgeGraph(
             error: error instanceof Error ? error.message : "Unknown error",
         };
     }
-}
-
-export async function mergeTopicHierarchies(
-    parameters: {},
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    success: boolean;
-    mergeCount: number;
-    message?: string;
-    error?: string;
-}> {
-    void parameters;
-    void context;
-    return {
-        success: false,
-        mergeCount: 0,
-        error: "Topic hierarchy merging is unsupported for durable browser memory because MemoryService does not provide a hierarchy mutation API.",
-    };
 }
 
 // ============================================================================
@@ -2416,8 +2399,8 @@ export async function getTopicMetrics(
                 parameters.topicId,
             );
             const degree = topicGraph.degree(parameters.topicId);
-            const inDegree = topicGraph.inDegree(parameters.topicId);
-            const outDegree = topicGraph.outDegree(parameters.topicId);
+            const inDegree = degree;
+            const outDegree = degree;
 
             // Extract metrics from node attributes and graph structure
             const metrics = {

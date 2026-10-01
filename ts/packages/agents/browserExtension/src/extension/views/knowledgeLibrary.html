@@ -77,11 +77,6 @@
             <span class="nav-label">Search</span>
           </div>
 
-          <div class="nav-item" data-page="discover" title="Discover">
-            <i class="nav-icon bi bi-lightbulb"></i>
-            <span class="nav-label">Discover</span>
-          </div>
-
           <div class="nav-item" data-page="analytics" title="Analytics">
             <i class="nav-icon bi bi-graph-up"></i>
             <span class="nav-label">Analytics</span>
@@ -258,72 +253,6 @@
 
           <!-- Empty State -->
           <div class="empty-state" id="searchEmptyState"></div>
-        </div>
-
-        <!-- Discover Page -->
-        <div id="discover-page" class="page-content">
-          <div class="page-header">
-            <h1 class="page-title">
-              <i class="bi bi-lightbulb text-primary"></i>Discover Content
-              Trends
-            </h1>
-            <p class="page-subtitle">
-              Explore your reading patterns, popular topics, and content
-              insights
-            </p>
-          </div>
-
-          <!-- Trending Topics -->
-          <div class="content-section">
-            <div class="section-header">
-              <h2 class="section-title">
-                <i class="bi bi-trending-up"></i>Trending in Your Library
-              </h2>
-            </div>
-
-            <div class="discovery-grid" id="trendingContent">
-              <!-- Trending content will be populated here -->
-            </div>
-          </div>
-
-          <!-- Reading Patterns -->
-          <div class="content-section">
-            <div class="section-header">
-              <h2 class="section-title">
-                <i class="bi bi-clock-history"></i>Your Reading Patterns
-              </h2>
-            </div>
-
-            <div class="discovery-grid" id="readingPatterns">
-              <!-- Reading patterns will be populated here -->
-            </div>
-          </div>
-
-          <!-- Recently Popular -->
-          <div class="content-section">
-            <div class="section-header">
-              <h2 class="section-title">
-                <i class="bi bi-fire"></i>Recently Popular Pages
-              </h2>
-            </div>
-
-            <div class="results-grid" id="popularPages">
-              <!-- Popular pages will be populated here -->
-            </div>
-          </div>
-
-          <!-- Empty State -->
-          <div class="empty-state" id="discoverEmptyState">
-            <i class="bi bi-lightbulb"></i>
-            <h6>No Data to Discover</h6>
-            <p class="mb-3">
-              Import your bookmarks or browsing history to see content trends
-              and reading patterns.
-            </p>
-            <button class="action-btn primary" data-action="showImportModal">
-              <i class="bi bi-plus-circle"></i>Import Data
-            </button>
-          </div>
         </div>
 
         <!-- Analytics Page -->
@@ -1246,14 +1175,6 @@
                 </button>
               </div>
               <div class="d-flex gap-2">
-                <button
-                  id="mergeTopicsBtn"
-                  class="btn btn-success"
-                  style="display: none"
-                  title="Merge topic hierarchies using LLM and save to database"
-                >
-                  <i class="bi bi-diagram-3"></i> Merge Topics
-                </button>
                 <button
                   id="rebuildGraphBtn"
                   class="btn btn-warning"

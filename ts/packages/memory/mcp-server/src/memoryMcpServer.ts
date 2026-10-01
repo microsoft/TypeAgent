@@ -715,7 +715,7 @@ export class MemoryMcpServer {
             memoryToolNames.answer,
             {
                 description:
-                    "Answer from bounded source-linked memory evidence with explicit citations.",
+                    "Answer a question from memory. By default the answer is synthesized by the KnowPro answer generator over retrieved evidence; set answerMode to extractive for verbatim evidence snippets. Citations are always source-linked.",
                 inputSchema: answerRequestSchema,
                 outputSchema: outputSchema(answerResultSchema),
                 annotations: { readOnlyHint: true },

@@ -7,7 +7,8 @@ Memory types explored:
 - [Conversation memories](./conversation/README.md) are memories that represented
   as sequences of messages. Such memories include chat and conversation transcripts, agent interactions, emails, document parts, etc. Conversation memories are dynamic, mutable and built/indexed incrementally and on demand.
 - [Image memory](./image/README.md) in the [image-memory](./image/README.md) package
-- [Website memory](./website/README.md) in the [website-memory](./website/README.md) package
+- [Website memory](./website/README.md) in the [website-memory](./website/README.md) package: browser-data import helpers and HTML content extraction. Website content is stored and searched by the durable memory service.
+- [Memory service](./service/README.md): the durable, KnowPro-backed store used by conversations, saved web pages, documents and how-tos.
 
 ## Trademarks
 

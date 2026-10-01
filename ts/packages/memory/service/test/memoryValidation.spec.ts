@@ -299,6 +299,7 @@ describe("memory validation acceptance", () => {
                 corpusId: corpus.corpusId,
                 question: "Aurora-7 telemetry dropout Valparaiso",
                 sourceIds: ["smoke-beta"],
+                answerMode: "extractive",
             });
             expect(answer).toMatchObject({
                 grounded: true,
