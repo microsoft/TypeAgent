@@ -82,12 +82,12 @@ function qualityScore(counts: ReturnType<typeof sourceIdsFor>): number {
 }
 
 export async function getExtractionAnalytics(
-    parameters: { timeRange?: string; mode?: string },
+    parameters: { timeRange?: string; mode?: "content" },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{ success: boolean; analytics: any }> {
     try {
         const { sources } = await loadSnapshot(context);
-        const modes = { basic: 0, content: 0, actions: 0, full: 0 };
+        const modes = { content: 0 };
         for (const source of sources) {
             const mode = source.metadata?.extractionMode;
             if (typeof mode === "string" && mode in modes) {

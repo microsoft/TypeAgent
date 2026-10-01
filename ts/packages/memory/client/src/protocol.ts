@@ -107,7 +107,7 @@ export const revisionSchema = z.object({
     pipelineVersion: z.string(),
     pipeline: z
         .object({
-            mode: z.enum(["basic", "summary", "content", "full"]),
+            mode: z.literal("content"),
             maxCharsPerChunk: z.number().int().positive().optional(),
         })
         .optional(),
@@ -145,7 +145,7 @@ export const ingestRequestSchema = z.object({
     }),
     pipeline: z
         .object({
-            mode: z.enum(["basic", "summary", "content", "full"]).optional(),
+            mode: z.literal("content").optional(),
             maxCharsPerChunk: z.number().int().positive().optional(),
             updatePolicy: z
                 .enum([

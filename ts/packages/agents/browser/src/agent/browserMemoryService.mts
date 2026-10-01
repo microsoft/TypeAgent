@@ -117,6 +117,11 @@ export class BrowserMemoryService {
             reportHowToStatus?: boolean;
         } = {},
     ): Promise<BrowserIngestResult> {
+        if (mode !== "content") {
+            throw new Error(
+                "Unsupported ingestion mode. Only 'content' is supported.",
+            );
+        }
         const corpusId = await this.getCorpusId();
         const result = await this.client.ingestDocument({
             corpusId,

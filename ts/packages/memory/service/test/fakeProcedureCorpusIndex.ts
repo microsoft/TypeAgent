@@ -3,6 +3,7 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { writeFakeSemanticIndex } from "./fakeSemanticIndex.js";
 import type {
     CorpusIndex,
     CorpusIndexMatch,
@@ -11,7 +12,7 @@ import type {
 } from "../src/types.js";
 
 export class FakeProcedureCorpusIndex implements CorpusIndex {
-    private documents: IndexedDocument[] = [];
+    protected documents: IndexedDocument[] = [];
 
     public constructor(private readonly directory: string) {}
 
@@ -23,10 +24,16 @@ export class FakeProcedureCorpusIndex implements CorpusIndex {
 
     public async rebuild(documents: IndexedDocument[]): Promise<void> {
         this.documents = structuredClone(documents);
+        await writeFakeSemanticIndex(this.directory, documents);
         await writeFile(
             path.join(this.directory, "documents.json"),
             JSON.stringify(documents),
         );
+    }
+
+    public async append(documents: IndexedDocument[]): Promise<void> {
+        await this.initialize();
+        await this.rebuild([...this.documents, ...documents]);
     }
 
     public async search(

@@ -336,7 +336,7 @@ describe("BrowserMemoryService", () => {
                     pageType: "documentation",
                     capturedAt: "2026-04-05T06:07:08.000Z",
                 },
-                "basic",
+                "content",
             );
 
             expect(client.appendEvent).toHaveBeenCalledWith(
@@ -367,7 +367,7 @@ describe("BrowserMemoryService", () => {
 
         await service.ingest(
             { ...document, capturedAt: "2026-04-01T00:00:00.000Z" },
-            "basic",
+            "content",
         );
         await service.ingest(
             {
@@ -375,7 +375,7 @@ describe("BrowserMemoryService", () => {
                 url: `${document.url}#second-section`,
                 capturedAt: "2026-04-02T00:00:00.000Z",
             },
-            "basic",
+            "content",
         );
 
         expect(client.ingestDocument).toHaveBeenCalledTimes(2);
@@ -444,23 +444,23 @@ describe("BrowserMemoryService", () => {
         expect(client.getSourceKnowledge).not.toHaveBeenCalled();
     });
 
-    test("forwards model-free mode and chunk policy to durable ingestion", async () => {
+    test("forwards content mode and chunk policy to durable ingestion", async () => {
         const client = createClient();
 
         await new BrowserMemoryService(client).ingest(
             {
-                url: "https://example.test/basic",
-                title: "Basic page",
-                markdown: "Exact-search content",
+                url: "https://example.test/content",
+                title: "Content page",
+                markdown: "Model-driven content",
             },
-            "basic",
+            "content",
             { maxCharsPerChunk: 512 },
         );
 
         expect(client.ingestDocument).toHaveBeenCalledWith(
             expect.objectContaining({
                 pipeline: {
-                    mode: "basic",
+                    mode: "content",
                     updatePolicy: "skipIfUnchanged",
                     maxCharsPerChunk: 512,
                 },

@@ -119,7 +119,7 @@ export function createAgentInvokeHandlers(
                     ...(tags === undefined ? {} : { tags }),
                 },
                 pipeline: {
-                    mode: "full",
+                    mode: "content",
                     updatePolicy: "retainRevisionHistory",
                 },
             }),

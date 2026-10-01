@@ -5,7 +5,7 @@ export type CorpusState = "ready" | "indexing" | "degraded" | "error";
 
 export type SourceType = "web" | "markdown" | "text" | "html" | "vtt";
 
-export type IngestionMode = "basic" | "summary" | "content" | "full";
+export type IngestionMode = "content";
 
 export type UpdatePolicy =
     | "skipIfUnchanged"

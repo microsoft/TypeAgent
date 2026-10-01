@@ -45,7 +45,6 @@ interface ClearPreview {
 
 interface ImportBatchState {
     corpusId: string;
-    profile: ImportPipelineProfile | null;
     pipeline: ImportPipelineOptions;
     controller?: AbortController;
     jobIds: Set<string>;
@@ -58,7 +57,6 @@ interface ImportBatchState {
 interface PersistedImportBatch {
     batchId: string;
     corpusId: string;
-    profile: ImportPipelineProfile | null;
     pipeline: ImportPipelineOptions;
     jobIds: string[];
     manifest?: ImportBatchManifest;
@@ -104,20 +102,10 @@ type CompletionProvider = (
 const ACTIVE_CORPUS_STORAGE_PATH = "memory-agent-active-corpus.txt";
 const IMPORT_BATCHES_STORAGE_PATH = "memory-agent-import-batches.json";
 
-export type ImportPipelineProfile = "fast" | "balanced" | "deep";
-
 interface ImportPipelineOptions {
     readonly mode: IngestionMode;
     readonly maxCharsPerChunk: number;
 }
-
-export const importPipelineProfiles: Readonly<
-    Record<ImportPipelineProfile, ImportPipelineOptions>
-> = {
-    fast: { mode: "basic", maxCharsPerChunk: 8_000 },
-    balanced: { mode: "content", maxCharsPerChunk: 4_000 },
-    deep: { mode: "full", maxCharsPerChunk: 2_000 },
-};
 
 const defaultImportPipeline: ImportPipelineOptions = {
     mode: "content",
@@ -236,21 +224,12 @@ function isOptionalString(value: unknown): value is string | undefined {
     return value === undefined || typeof value === "string";
 }
 
-function isImportPipelineProfile(
-    value: unknown,
-): value is ImportPipelineProfile {
-    return value === "fast" || value === "balanced" || value === "deep";
-}
-
 function isImportPipelineOptions(
     value: unknown,
 ): value is ImportPipelineOptions {
     return (
         isRecord(value) &&
-        (value.mode === "basic" ||
-            value.mode === "summary" ||
-            value.mode === "content" ||
-            value.mode === "full") &&
+        value.mode === "content" &&
         typeof value.maxCharsPerChunk === "number" &&
         Number.isSafeInteger(value.maxCharsPerChunk) &&
         value.maxCharsPerChunk > 0
@@ -294,7 +273,7 @@ function parsePersistedImportBatch(
         !isRecord(value) ||
         typeof value.batchId !== "string" ||
         typeof value.corpusId !== "string" ||
-        (value.profile !== null && !isImportPipelineProfile(value.profile)) ||
+        "profile" in value ||
         !isImportPipelineOptions(value.pipeline) ||
         !Array.isArray(value.jobIds) ||
         !value.jobIds.every((jobId) => typeof jobId === "string") ||
@@ -320,7 +299,6 @@ function parsePersistedImportBatch(
     return {
         batchId: value.batchId,
         corpusId: value.corpusId,
-        profile: value.profile,
         pipeline: value.pipeline,
         jobIds: value.jobIds,
         ...(value.manifest === undefined ? {} : { manifest: value.manifest }),
@@ -341,7 +319,6 @@ async function persistImportBatches(
         ([batchId, batch]) => ({
             batchId,
             corpusId: batch.corpusId,
-            profile: batch.profile,
             pipeline: batch.pipeline,
             jobIds: [...batch.jobIds],
             ...(batch.manifest === undefined
@@ -355,7 +332,7 @@ async function persistImportBatches(
     );
     await context.sessionStorage.write(
         IMPORT_BATCHES_STORAGE_PATH,
-        JSON.stringify({ version: 1, batches }),
+        JSON.stringify({ version: 2, batches }),
         "utf8",
     );
 }
@@ -393,7 +370,7 @@ async function restoreImportBatches(
             "Invalid memory import storage: expected a versioned batch list.",
         );
     }
-    if (parsed.version !== 1) {
+    if (parsed.version !== 2) {
         throw new ImportStorageStateError(
             `Unsupported memory import storage version '${String(parsed.version)}'.`,
         );
@@ -425,7 +402,6 @@ async function restoreImportBatches(
             if (existing.error === undefined && persisted.error !== undefined) {
                 existing.error = persisted.error;
             }
-            existing.profile = persisted.profile;
             if (existing.controller === undefined) {
                 existing.pipeline = persisted.pipeline;
             }
@@ -436,7 +412,6 @@ async function restoreImportBatches(
         }
         context.imports.set(persisted.batchId, {
             corpusId: persisted.corpusId,
-            profile: persisted.profile,
             pipeline: persisted.pipeline,
             jobIds: new Set(persisted.jobIds),
             ...(persisted.manifest === undefined
@@ -647,18 +622,6 @@ async function importBatchCompletions(
     return completionGroups(names, "batchId", [...context.imports.keys()]);
 }
 
-async function importProfileCompletions(
-    _context: MemoryAgentContext,
-    _params: PartialParams,
-    names: string[],
-): Promise<CompletionGroups> {
-    return completionGroups(
-        names,
-        "profile",
-        Object.keys(importPipelineProfiles),
-    );
-}
-
 async function resolveCorpus(context: MemoryAgentContext, idOrName: string) {
     const direct = await context.service.getCorpus(idOrName);
     if (direct !== undefined) {
@@ -823,43 +786,9 @@ const importParameters = {
             description: "Maximum concurrent ingestions",
             type: "number",
         },
-        profile: {
-            description: "Ingestion profile: fast, balanced, or deep",
-            type: "string",
-        },
         wait: { description: "Wait for ingestion jobs", default: false },
     },
 } as const;
-
-function getImportPipelineProfile(value: unknown): {
-    profile: ImportPipelineProfile | null;
-    pipeline: ImportPipelineOptions;
-} {
-    if (value === undefined) {
-        return { profile: null, pipeline: defaultImportPipeline };
-    }
-    switch (value) {
-        case "fast":
-            return {
-                profile: "fast",
-                pipeline: importPipelineProfiles.fast,
-            };
-        case "balanced":
-            return {
-                profile: "balanced",
-                pipeline: importPipelineProfiles.balanced,
-            };
-        case "deep":
-            return {
-                profile: "deep",
-                pipeline: importPipelineProfiles.deep,
-            };
-        default:
-            throw new Error(
-                `Unknown import profile '${String(value)}'. Choose fast, balanced, or deep.`,
-            );
-    }
-}
 
 async function beginImport(
     context: MemoryAgentContext,
@@ -870,7 +799,7 @@ async function beginImport(
     const controller = new AbortController();
     const path = stringValue(args(params).path, "path");
     const importFlags = flags(params);
-    const { profile, pipeline } = getImportPipelineProfile(importFlags.profile);
+    const pipeline = defaultImportPipeline;
     const include = optionalStringArray(importFlags.include, "include");
     const exclude = optionalStringArray(importFlags.exclude, "exclude");
     const maxFiles = optionalNumber(importFlags.maxFiles);
@@ -880,7 +809,6 @@ async function beginImport(
     const jobIds = new Set<string>();
     const batch: ImportBatchState = {
         corpusId,
-        profile,
         pipeline,
         controller,
         jobIds,
@@ -941,7 +869,6 @@ async function beginImport(
     return markdown({
         batchId,
         state: "running",
-        profile,
         pipeline,
         status: `@memory import status ${batchId}`,
     });
@@ -1028,7 +955,6 @@ async function inspectImportBatch(
                 batchId,
                 state: batch.error === undefined ? "submitting" : "failed",
                 acceptedJobs: 0,
-                profile: batch.profile,
                 pipeline: batch.pipeline,
                 ...(batch.error === undefined ? {} : { error: batch.error }),
             },
@@ -1050,7 +976,6 @@ async function inspectImportBatch(
         status: {
             batchId,
             state: importBatchState(batch, summary),
-            profile: batch.profile,
             pipeline: batch.pipeline,
             jobStates: summary.jobStates,
             failedJobs,
@@ -1083,15 +1008,11 @@ async function getImportBatchStatus(
 const importCommands: CommandHandlerTable = {
     description: "Import Markdown files and manage import batches",
     commands: {
-        file: parameters(
-            importParameters,
-            (context, params) => beginImport(context, params, "file"),
-            importProfileCompletions,
+        file: parameters(importParameters, (context, params) =>
+            beginImport(context, params, "file"),
         ),
-        folder: parameters(
-            importParameters,
-            (context, params) => beginImport(context, params, "folder"),
-            importProfileCompletions,
+        folder: parameters(importParameters, (context, params) =>
+            beginImport(context, params, "folder"),
         ),
         status: parameters(
             {

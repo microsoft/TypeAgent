@@ -14,7 +14,7 @@ export interface ImportState {
     failedUrls: string[];
     startTime: number;
     lastProgressTime: number;
-    extractionMode: string;
+    extractionMode: "content";
     source: string;
     type: string;
     filePath?: string;
@@ -42,9 +42,21 @@ export class ImportStateManager {
         try {
             const statePath = path.join(this.STATE_DIR, `${importId}.json`);
             const data = await fs.readFile(statePath, "utf-8");
-            return JSON.parse(data);
+            const state = JSON.parse(data);
+            if (state.extractionMode !== "content") {
+                throw new Error(
+                    "Unsupported pending import mode. Only 'content' is supported.",
+                );
+            }
+            return state;
         } catch (error) {
             debug(`Failed to load import state for ${importId}: ${error}`);
+            if (
+                error instanceof Error &&
+                error.message.startsWith("Unsupported pending import mode")
+            ) {
+                throw error;
+            }
             return null;
         }
     }

@@ -17,6 +17,11 @@ import path from "node:path";
 import lockfile from "proper-lockfile";
 import { createKnowProCorpusIndex } from "./knowProCorpusIndex.js";
 import {
+    classifyIndexSchema,
+    stampIndexSchema,
+    type IndexKind,
+} from "./indexSchema.js";
+import {
     detectProcedureCandidates,
     PersonalHowToStore,
 } from "./personalHowToStore.js";
@@ -263,9 +268,16 @@ function raceWithAbort<T>(
         const abort = () =>
             reject(signal.reason ?? new Error("Operation cancelled"));
         signal.addEventListener("abort", abort, { once: true });
-        operation
-            .then(resolve, reject)
-            .finally(() => signal.removeEventListener("abort", abort));
+        operation.then(
+            (value) => {
+                signal.removeEventListener("abort", abort);
+                resolve(value);
+            },
+            (error) => {
+                signal.removeEventListener("abort", abort);
+                reject(error);
+            },
+        );
     });
 }
 
@@ -301,6 +313,17 @@ function hashContent(content: string): string {
 
 function eventIndexWatermark(events: readonly MemoryEvent[]): string {
     return hashContent(events.map((event) => event.eventId).join("\n"));
+}
+
+function contentPipeline(
+    pipeline: SourceRevision["pipeline"],
+): IndexedDocument["pipeline"] {
+    return {
+        mode: "content",
+        ...(pipeline?.maxCharsPerChunk === undefined
+            ? {}
+            : { maxCharsPerChunk: pipeline.maxCharsPerChunk }),
+    };
 }
 
 function createStoredSource(
@@ -367,6 +390,19 @@ function createStoredSource(
 function validateIdentifier(kind: string, value: string): void {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) {
         throw new Error(`Invalid ${kind} '${value}'`);
+    }
+}
+
+function validateIndexGeneration(
+    generation: unknown,
+): asserts generation is string {
+    if (
+        typeof generation !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            generation,
+        )
+    ) {
+        throw new Error(`Invalid index generation '${String(generation)}'`);
     }
 }
 
@@ -858,6 +894,16 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         let clearedCount = 0;
         await this.enqueueWrite(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
+            if (runtime.manifest.indexGeneration !== undefined) {
+                await classifyIndexSchema(
+                    this.indexDirectory(
+                        corpusId,
+                        runtime.manifest.indexGeneration,
+                    ),
+                    "documents",
+                    false,
+                );
+            }
             clearedCount = runtime.manifest.sources.length;
             const indexGeneration = randomUUID();
             await mkdir(this.indexDirectory(corpusId, indexGeneration), {
@@ -868,6 +914,11 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 [],
                 new AbortController().signal,
                 async () => {},
+            );
+            await stampIndexSchema(
+                this.indexDirectory(corpusId, indexGeneration),
+                "documents",
+                false,
             );
             const timestamp = now();
             const candidateManifest: CorpusManifest = {
@@ -905,10 +956,10 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             runtime.events = [];
             runtime.eventIdempotency.clear();
             this.setEventSuppressions(runtime, suppressions);
-            await rm(this.eventIndexRoot(corpusId), {
-                recursive: true,
-                force: true,
-            });
+            await this.removeDerivedIndexRoot(
+                this.eventIndexRoot(corpusId),
+                "conversation-events",
+            );
             await this.removeInactiveIndexGenerations(
                 corpusId,
                 indexGeneration,
@@ -1025,16 +1076,18 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (source === undefined) {
             throw new Error(`Unknown source '${sourceId}'`);
         }
-        const runtime = await this.getCorpusRuntime(corpusId);
-        await runtime.index.initialize();
-        const graph = await runtime.index.getKnowledgeGraph(
-            new Set([sourceId]),
-        );
-        return applyKnowledgeSuppressions(
-            graph,
-            runtime.manifest.knowledgeSuppressions ?? [],
-            new Set([sourceId]),
-        );
+        return this.enqueueWrite(corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(corpusId);
+            await this.ensureDocumentIndex(corpusId, runtime);
+            const graph = await runtime.index.getKnowledgeGraph(
+                new Set([sourceId]),
+            );
+            return applyKnowledgeSuppressions(
+                graph,
+                runtime.manifest.knowledgeSuppressions ?? [],
+                new Set([sourceId]),
+            );
+        });
     }
 
     public async listSourceKnowledgeSuppressions(
@@ -1076,6 +1129,12 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<DocumentIngestResult> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
+        if (
+            request.pipeline?.mode !== undefined &&
+            request.pipeline.mode !== "content"
+        ) {
+            throw new Error("Pipeline mode must be 'content'");
+        }
         if (
             request.pipeline?.maxCharsPerChunk !== undefined &&
             (!Number.isInteger(request.pipeline.maxCharsPerChunk) ||
@@ -1182,7 +1241,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             if (source === undefined) {
                 throw new Error(`Unknown source '${sourceId}'`);
             }
-            await runtime.index.initialize();
+            await this.ensureDocumentIndex(corpusId, runtime);
             const graph = await runtime.index.getKnowledgeGraph(
                 new Set([sourceId]),
             );
@@ -1640,10 +1699,10 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             );
             this.setEventSuppressions(runtime, suppressions);
             if (deleted.length > 0) {
-                await rm(this.eventIndexRoot(request.corpusId), {
-                    recursive: true,
-                    force: true,
-                });
+                await this.removeDerivedIndexRoot(
+                    this.eventIndexRoot(request.corpusId),
+                    "conversation-events",
+                );
             }
             result = {
                 corpusId: request.corpusId,
@@ -1667,76 +1726,81 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (query.length === 0) {
             throw new Error("Search query cannot be empty");
         }
-        const runtime = await this.getCorpusRuntime(request.corpusId);
-        await runtime.index.initialize();
-        const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
-        const candidates = await runtime.index.search(query, limit * 4);
-        const sourceIds =
-            request.sourceIds === undefined
-                ? undefined
-                : new Set(request.sourceIds);
-        const sourceTypes =
-            request.sourceTypes === undefined
-                ? undefined
-                : new Set(request.sourceTypes);
-        const requestedTags = request.tags ?? [];
-        let usedCharacters = 0;
-        const maxCharacters = request.maxResponseChars ?? 50_000;
-        const matches: MemoryEvidence[] = [];
-        for (const candidate of candidates) {
-            const source = runtime.manifest.sources.find(
-                (item) => item.sourceId === candidate.sourceId,
-            );
-            const revision = source?.revisions.find(
-                (item) => item.revisionId === candidate.revisionId,
-            );
-            if (
-                source === undefined ||
-                revision === undefined ||
-                source.activeRevisionId !== revision.revisionId ||
-                (sourceIds !== undefined && !sourceIds.has(source.sourceId)) ||
-                (sourceTypes !== undefined &&
-                    !sourceTypes.has(source.sourceType)) ||
-                requestedTags.some((tag) => !source.tags?.includes(tag))
-            ) {
-                continue;
+        return this.enqueueWrite(request.corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(request.corpusId);
+            await this.ensureDocumentIndex(request.corpusId, runtime);
+            const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
+            const candidates = await runtime.index.search(query, limit * 4);
+            const sourceIds =
+                request.sourceIds === undefined
+                    ? undefined
+                    : new Set(request.sourceIds);
+            const sourceTypes =
+                request.sourceTypes === undefined
+                    ? undefined
+                    : new Set(request.sourceTypes);
+            const requestedTags = request.tags ?? [];
+            let usedCharacters = 0;
+            const maxCharacters = request.maxResponseChars ?? 50_000;
+            const matches: MemoryEvidence[] = [];
+            for (const candidate of candidates) {
+                const source = runtime.manifest.sources.find(
+                    (item) => item.sourceId === candidate.sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (item) => item.revisionId === candidate.revisionId,
+                );
+                if (
+                    source === undefined ||
+                    revision === undefined ||
+                    source.activeRevisionId !== revision.revisionId ||
+                    (sourceIds !== undefined &&
+                        !sourceIds.has(source.sourceId)) ||
+                    (sourceTypes !== undefined &&
+                        !sourceTypes.has(source.sourceType)) ||
+                    requestedTags.some((tag) => !source.tags?.includes(tag))
+                ) {
+                    continue;
+                }
+                if (usedCharacters + candidate.snippet.length > maxCharacters) {
+                    break;
+                }
+                usedCharacters += candidate.snippet.length;
+                matches.push({
+                    evidenceId: `${candidate.sourceId}:${candidate.revisionId}:${candidate.locator ?? matches.length}`,
+                    corpusId: request.corpusId,
+                    sourceId: candidate.sourceId,
+                    revisionId: candidate.revisionId,
+                    title: source.title,
+                    ...(source.canonicalUri === undefined
+                        ? {}
+                        : { canonicalUri: source.canonicalUri }),
+                    ...(candidate.locator === undefined
+                        ? {}
+                        : { locator: candidate.locator }),
+                    snippet: candidate.snippet,
+                    score: candidate.score,
+                    sourceType: source.sourceType,
+                    ...(revision.capturedAt === undefined
+                        ? {}
+                        : { capturedAt: revision.capturedAt }),
+                    indexedAt:
+                        revision.indexedAt ??
+                        revision.sourceModifiedAt ??
+                        now(),
+                });
+                if (matches.length === limit) {
+                    break;
+                }
             }
-            if (usedCharacters + candidate.snippet.length > maxCharacters) {
-                break;
-            }
-            usedCharacters += candidate.snippet.length;
-            matches.push({
-                evidenceId: `${candidate.sourceId}:${candidate.revisionId}:${candidate.locator ?? matches.length}`,
-                corpusId: request.corpusId,
-                sourceId: candidate.sourceId,
-                revisionId: candidate.revisionId,
-                title: source.title,
-                ...(source.canonicalUri === undefined
-                    ? {}
-                    : { canonicalUri: source.canonicalUri }),
-                ...(candidate.locator === undefined
-                    ? {}
-                    : { locator: candidate.locator }),
-                snippet: candidate.snippet,
-                score: candidate.score,
-                sourceType: source.sourceType,
-                ...(revision.capturedAt === undefined
-                    ? {}
-                    : { capturedAt: revision.capturedAt }),
-                indexedAt:
-                    revision.indexedAt ?? revision.sourceModifiedAt ?? now(),
-            });
-            if (matches.length === limit) {
-                break;
-            }
-        }
-        return {
-            query,
-            matches,
-            warnings: [...this.capabilities.warnings],
-            capabilitiesUsed: ["structured-search"],
-            indexVersion: this.indexVersion(runtime.manifest),
-        };
+            return {
+                query,
+                matches,
+                warnings: [...this.capabilities.warnings],
+                capabilitiesUsed: ["structured-search"],
+                indexVersion: this.indexVersion(runtime.manifest),
+            };
+        });
     }
 
     public async getCapabilities(): Promise<MemoryServiceCapabilities> {
@@ -1793,12 +1857,14 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<MemoryKnowledgeGraph> {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
-        const runtime = await this.getCorpusRuntime(corpusId);
-        await runtime.index.initialize();
-        return applyKnowledgeSuppressions(
-            await runtime.index.getKnowledgeGraph(),
-            runtime.manifest.knowledgeSuppressions ?? [],
-        );
+        return this.enqueueWrite(corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(corpusId);
+            await this.ensureDocumentIndex(corpusId, runtime);
+            return applyKnowledgeSuppressions(
+                await runtime.index.getKnowledgeGraph(),
+                runtime.manifest.knowledgeSuppressions ?? [],
+            );
+        });
     }
 
     private async updateSourceKnowledgeSuppression(
@@ -1964,22 +2030,13 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             );
             if (
                 generation === undefined ||
-                !(await access(
-                    path.join(
-                        this.procedureIndexDirectory(
-                            request.corpusId,
-                            generation,
-                        ),
-                        "ready",
-                    ),
-                ).then(
-                    () => true,
-                    (error: NodeJS.ErrnoException) => {
-                        if (error.code === "ENOENT") {
-                            return false;
-                        }
-                        throw error;
-                    },
+                (await classifyIndexSchema(
+                    this.procedureIndexDirectory(request.corpusId, generation),
+                    "procedures",
+                    true,
+                )) !== "current" ||
+                !(await this.hasReadyMarker(
+                    this.procedureIndexDirectory(request.corpusId, generation),
                 ))
             ) {
                 await this.personalHowToStore.rebuildIndex(request.corpusId);
@@ -2092,6 +2149,13 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         candidateManifest: CorpusManifest,
         signal: AbortSignal,
     ): Promise<void> {
+        if (runtime.manifest.indexGeneration !== undefined) {
+            await classifyIndexSchema(
+                this.indexDirectory(corpusId, runtime.manifest.indexGeneration),
+                "documents",
+                false,
+            );
+        }
         const indexGeneration = randomUUID();
         const candidateDirectory = this.indexDirectory(
             corpusId,
@@ -2109,6 +2173,11 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 signal,
             );
             this.throwIfAborted(signal);
+            await stampIndexSchema(
+                candidateDirectory,
+                "documents",
+                candidateManifest.sources.length > 0,
+            );
             candidateManifest.indexGeneration = indexGeneration;
             candidateManifest.corpus = {
                 ...candidateManifest.corpus,
@@ -2133,6 +2202,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         corpusId: string,
         activeGeneration: string,
     ): Promise<void> {
+        validateIndexGeneration(activeGeneration);
         const root = this.indexDirectory(corpusId);
         let entries;
         try {
@@ -2149,12 +2219,14 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                     (entry) =>
                         entry.isDirectory() && entry.name !== activeGeneration,
                 )
-                .map((entry) =>
-                    rm(path.join(root, entry.name), {
+                .map(async (entry) => {
+                    const directory = path.join(root, entry.name);
+                    await classifyIndexSchema(directory, "documents", false);
+                    await rm(directory, {
                         recursive: true,
                         force: true,
-                    }),
-                ),
+                    });
+                }),
         );
     }
 
@@ -2327,7 +2399,25 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 existing === undefined &&
                 runtime.manifest.sources.length > 0 &&
                 runtime.manifest.indexGeneration !== undefined &&
-                candidateIndex.append !== undefined;
+                candidateIndex.append !== undefined &&
+                (await classifyIndexSchema(
+                    this.indexDirectory(
+                        request.corpusId,
+                        runtime.manifest.indexGeneration,
+                    ),
+                    "documents",
+                    true,
+                )) === "current";
+            if (!canAppend && runtime.manifest.indexGeneration !== undefined) {
+                await classifyIndexSchema(
+                    this.indexDirectory(
+                        request.corpusId,
+                        runtime.manifest.indexGeneration,
+                    ),
+                    "documents",
+                    false,
+                );
+            }
             const reportProgress = async (progress: JobProgress) => {
                 if (!signal.aborted) {
                     await this.updateJob(
@@ -2346,6 +2436,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                     candidateIndexDirectory,
                     { recursive: true },
                 );
+                this.throwIfAborted(signal);
                 await raceWithAbort(
                     candidateIndex.append!(
                         [
@@ -2353,9 +2444,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                                 source,
                                 revision,
                                 content,
-                                pipeline: revision.pipeline ?? {
-                                    mode: "content",
-                                },
+                                pipeline: contentPipeline(revision.pipeline),
                             },
                         ],
                         signal,
@@ -2370,6 +2459,11 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 );
             }
             this.throwIfAborted(signal);
+            await stampIndexSchema(
+                candidateIndexDirectory,
+                "documents",
+                candidateManifest.sources.length > 0,
+            );
             revision.state = "ready";
             revision.indexedAt = now();
             candidateManifest.corpus.status = "ready";
@@ -2558,7 +2652,41 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         );
     }
 
+    private async ensureDocumentIndex(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<void> {
+        const generation = runtime.manifest.indexGeneration;
+        if (generation !== undefined) {
+            validateIdentifier("index generation", generation);
+            const directory = this.indexDirectory(corpusId, generation);
+            if (
+                (await classifyIndexSchema(
+                    directory,
+                    "documents",
+                    runtime.manifest.sources.length > 0,
+                )) === "current"
+            ) {
+                await runtime.index.initialize();
+                return;
+            }
+            await rm(directory, { recursive: true, force: true });
+        } else if (runtime.manifest.sources.length === 0) {
+            await runtime.index.initialize();
+            return;
+        }
+        await this.rebuildAndActivate(
+            corpusId,
+            runtime,
+            structuredClone(runtime.manifest),
+            new AbortController().signal,
+        );
+    }
+
     private indexDirectory(corpusId: string, indexGeneration?: string): string {
+        if (indexGeneration !== undefined) {
+            validateIndexGeneration(indexGeneration);
+        }
         return path.join(
             this.rootDirectory,
             corpusId,
@@ -2582,7 +2710,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 source,
                 revision,
                 content: revision.content,
-                pipeline: revision.pipeline ?? { mode: "content" },
+                pipeline: contentPipeline(revision.pipeline),
             };
         });
     }
@@ -2591,6 +2719,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         corpusId: string,
         generation: string,
     ): string {
+        validateIndexGeneration(generation);
         return path.join(
             this.rootDirectory,
             corpusId,
@@ -2600,12 +2729,50 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         );
     }
 
+    private async hasReadyMarker(directory: string): Promise<boolean> {
+        try {
+            await access(path.join(directory, "ready"));
+            return true;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                return false;
+            }
+            throw error;
+        }
+    }
+
     private eventIndexRoot(corpusId: string): string {
         return path.join(this.rootDirectory, corpusId, "event-search-index");
     }
 
     private eventIndexDirectory(corpusId: string, generation: string): string {
+        validateIndexGeneration(generation);
         return path.join(this.eventIndexRoot(corpusId), generation);
+    }
+
+    private async removeDerivedIndexRoot(
+        root: string,
+        indexKind: IndexKind,
+    ): Promise<void> {
+        let entries;
+        try {
+            entries = await readdir(root, { withFileTypes: true });
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                return;
+            }
+            throw error;
+        }
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                await classifyIndexSchema(
+                    path.join(root, entry.name),
+                    indexKind,
+                    false,
+                );
+            }
+        }
+        await rm(root, { recursive: true, force: true });
     }
 
     private async purgeObsoleteEventIndex(
@@ -2617,8 +2784,21 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         const state = await readJson<EventIndexState>(
             path.join(root, "state.json"),
         );
+        if (state !== undefined) {
+            validateIndexGeneration(state.generation);
+            if (
+                (await classifyIndexSchema(
+                    this.eventIndexDirectory(corpusId, state.generation),
+                    "conversation-events",
+                    state.watermark === watermark && runtime.events.length > 0,
+                )) === "reset"
+            ) {
+                await this.removeDerivedIndexRoot(root, "conversation-events");
+                return undefined;
+            }
+        }
         if (state?.watermark !== watermark) {
-            await rm(root, { recursive: true, force: true });
+            await this.removeDerivedIndexRoot(root, "conversation-events");
             return undefined;
         }
         return state;
@@ -2631,7 +2811,6 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         const root = this.eventIndexRoot(corpusId);
         const state = await this.purgeObsoleteEventIndex(corpusId, runtime);
         if (state !== undefined) {
-            validateIdentifier("event index generation", state.generation);
             try {
                 await access(
                     path.join(
@@ -2650,7 +2829,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                     throw error;
                 }
             }
-            await rm(root, { recursive: true, force: true });
+            await this.removeDerivedIndexRoot(root, "conversation-events");
         }
         await mkdir(root, { recursive: true });
         const generation = randomUUID();
@@ -2663,18 +2842,36 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 new AbortController().signal,
                 async () => {},
             );
+            await stampIndexSchema(
+                directory,
+                "conversation-events",
+                runtime.events.length > 0,
+            );
             await writeFile(path.join(directory, "ready"), "");
             await writeJsonAtomic(path.join(root, "state.json"), {
                 generation,
                 watermark: eventIndexWatermark(runtime.events),
             } satisfies EventIndexState);
-            for (const entry of await readdir(root)) {
-                if (entry !== generation && entry !== "state.json") {
-                    await rm(path.join(root, entry), {
-                        recursive: true,
-                        force: true,
-                    });
+            const obsolete = (
+                await readdir(root, { withFileTypes: true })
+            ).filter(
+                (entry) =>
+                    entry.name !== generation && entry.name !== "state.json",
+            );
+            for (const entry of obsolete) {
+                if (entry.isDirectory()) {
+                    await classifyIndexSchema(
+                        path.join(root, entry.name),
+                        "conversation-events",
+                        false,
+                    );
                 }
+            }
+            for (const entry of obsolete) {
+                await rm(path.join(root, entry.name), {
+                    recursive: true,
+                    force: true,
+                });
             }
             return index;
         } catch (error) {
@@ -2765,6 +2962,9 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<string> {
         const committed =
             await this.personalHowToStore.getIndexGeneration(corpusId);
+        if (committed !== undefined) {
+            validateIndexGeneration(committed);
+        }
         const root = path.join(
             this.rootDirectory,
             corpusId,
@@ -2772,13 +2972,19 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             "search-index",
         );
         await mkdir(root, { recursive: true });
-        for (const entry of await readdir(root)) {
-            if (entry !== committed) {
-                await rm(path.join(root, entry), {
-                    recursive: true,
-                    force: true,
-                });
-            }
+        const entries = await readdir(root);
+        for (const entry of entries) {
+            await classifyIndexSchema(
+                path.join(root, entry),
+                "procedures",
+                false,
+            );
+        }
+        for (const entry of entries) {
+            await rm(path.join(root, entry), {
+                recursive: true,
+                force: true,
+            });
         }
         const generation = randomUUID();
         const directory = this.procedureIndexDirectory(corpusId, generation);
@@ -2821,6 +3027,11 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 new AbortController().signal,
                 async () => {},
             );
+            await stampIndexSchema(
+                directory,
+                "procedures",
+                documents.length > 0,
+            );
             await writeFile(path.join(directory, "ready"), "");
             return generation;
         } catch (error) {
@@ -2833,9 +3044,12 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         const { revisions, ...document } = source;
         return {
             ...structuredClone(document),
-            revisions: revisions.map(({ content: _content, ...revision }) =>
-                structuredClone(revision),
-            ),
+            revisions: revisions.map(({ content: _content, ...revision }) => ({
+                ...structuredClone(revision),
+                ...(revision.pipeline === undefined
+                    ? {}
+                    : { pipeline: contentPipeline(revision.pipeline) }),
+            })),
         };
     }
 

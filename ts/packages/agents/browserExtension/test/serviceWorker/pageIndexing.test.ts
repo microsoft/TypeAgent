@@ -62,10 +62,25 @@ describe("indexPageContent", () => {
                 htmlFragments: expect.any(Array),
                 reportHowToStatus: true,
                 activityType: "captured",
+                mode: "content",
             }),
         });
         expect(result.howTo?.candidateCount).toBe(1);
+        expect(send.mock.calls[0][0].parameters).not.toHaveProperty("quality");
     });
+
+    it.each(["basic", "summary", "full"])(
+        "rejects obsolete indexing mode %s before capture",
+        async (mode) => {
+            const result = await indexPageContent(tab, false, {
+                mode: mode as "content",
+            });
+            expect(result.indexed).toBe(false);
+            expect(result.error).toContain("Only 'content' is supported");
+            expect(capture).not.toHaveBeenCalled();
+            expect(send).not.toHaveBeenCalled();
+        },
+    );
 
     it("reports a resolved indexing failure instead of showing success", async () => {
         send.mockResolvedValue({ indexed: false, error: "Unavailable" });

@@ -19,6 +19,7 @@ import {
     procedureToMarkdown,
 } from "../src/personalHowToStore.js";
 import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
+import { writeFakeSemanticIndex } from "./fakeSemanticIndex.js";
 import type {
     CorpusIndex,
     CorpusIndexMatch,
@@ -42,6 +43,10 @@ class FakeCorpusIndex implements CorpusIndex {
         topics: [],
         relationships: [],
     };
+
+    public constructor(directory?: string) {
+        this.indexDirectory = directory;
+    }
 
     public async initialize(): Promise<void> {
         this.initializeCalls++;
@@ -79,6 +84,7 @@ class FakeCorpusIndex implements CorpusIndex {
         });
         if (this.indexDirectory !== undefined) {
             await writeFile(path.join(this.indexDirectory, "index.marker"), "");
+            await writeFakeSemanticIndex(this.indexDirectory, documents);
         }
         this.documents = structuredClone(documents);
     }
@@ -114,6 +120,9 @@ class FakeCorpusIndex implements CorpusIndex {
             await writeFile(path.join(this.indexDirectory, "index.marker"), "");
         }
         this.documents.push(...structuredClone(documents));
+        if (this.indexDirectory !== undefined) {
+            await writeFakeSemanticIndex(this.indexDirectory, this.documents);
+        }
     }
 
     public async search(
@@ -202,7 +211,8 @@ describe("FileMemoryService", () => {
     test("locks the storage root until the service closes", async () => {
         await service.initialize();
         const competingService = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         await expect(competingService.initialize()).rejects.toThrow();
@@ -210,7 +220,8 @@ describe("FileMemoryService", () => {
         await service.close();
 
         const replacementService = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
         await expect(replacementService.initialize()).resolves.toBeUndefined();
         await replacementService.close();
@@ -218,13 +229,15 @@ describe("FileMemoryService", () => {
 
     test("releases a lock acquired concurrently with close", async () => {
         const racingService = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         await Promise.all([racingService.initialize(), racingService.close()]);
 
         const replacementService = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
         await expect(replacementService.initialize()).resolves.toBeUndefined();
         await replacementService.close();
@@ -263,7 +276,8 @@ describe("FileMemoryService", () => {
             } satisfies IngestionJobStatus),
         );
         const restarted = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         await restarted.initialize();
@@ -380,7 +394,8 @@ describe("FileMemoryService", () => {
 
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         await expect(service.appendEvent(request)).resolves.toEqual({
@@ -633,7 +648,8 @@ describe("FileMemoryService", () => {
 
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
         await expect(service.appendEvent(removed)).rejects.toMatchObject({
             code: "EVENT_FORGOTTEN",
@@ -683,7 +699,8 @@ describe("FileMemoryService", () => {
         ).toBe(1);
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
         await expect(append("conversation", "turn-1")).rejects.toMatchObject({
             code: "EVENT_FORGOTTEN",
@@ -702,7 +719,8 @@ describe("FileMemoryService", () => {
         ).resolves.toMatchObject({ deletedEventCount: 0 });
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
         await expect(
             service.appendEvent({
@@ -835,8 +853,8 @@ describe("FileMemoryService", () => {
         ).resolves.toBeUndefined();
     });
 
-    test("persists indexing mode and chunk size with the active revision", async () => {
-        const corpus = await service.createCorpus("Basic");
+    test("persists content indexing and chunk size with the active revision", async () => {
+        const corpus = await service.createCorpus("Content");
         const accepted = await service.ingestDocument({
             corpusId: corpus.corpusId,
             source: {
@@ -846,7 +864,7 @@ describe("FileMemoryService", () => {
                 text: "Model-free exact-search content",
             },
             pipeline: {
-                mode: "basic",
+                mode: "content",
                 maxCharsPerChunk: 256,
             },
         });
@@ -854,7 +872,7 @@ describe("FileMemoryService", () => {
         await waitForTerminalJob(service, accepted.jobId);
 
         expect(index.documents[0].pipeline).toEqual({
-            mode: "basic",
+            mode: "content",
             maxCharsPerChunk: 256,
         });
         await expect(
@@ -863,7 +881,7 @@ describe("FileMemoryService", () => {
             revisions: [
                 {
                     pipeline: {
-                        mode: "basic",
+                        mode: "content",
                         maxCharsPerChunk: 256,
                     },
                 },
@@ -962,7 +980,7 @@ describe("FileMemoryService", () => {
                 title: "Runbook",
                 markdown: "Version one.",
             },
-            pipeline: { mode: "basic", maxCharsPerChunk: 4_000 },
+            pipeline: { mode: "content", maxCharsPerChunk: 4_000 },
         });
         await waitForTerminalJob(service, accepted.jobId);
 
@@ -986,7 +1004,7 @@ describe("FileMemoryService", () => {
             (await service.getSource(corpus.corpusId, "runbook"))?.revisions.at(
                 -1,
             )?.pipeline,
-        ).toEqual({ mode: "basic", maxCharsPerChunk: 4_000 });
+        ).toEqual({ mode: "content", maxCharsPerChunk: 4_000 });
         await expect(
             service.getSourceContent({
                 corpusId: corpus.corpusId,
@@ -1295,7 +1313,10 @@ describe("FileMemoryService", () => {
         const restartedIndex = new FakeCorpusIndex();
         restartedIndex.graph = structuredClone(index.graph);
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => restartedIndex,
+            indexFactory: (_corpusId, directory) => {
+                restartedIndex.indexDirectory = directory;
+                return restartedIndex;
+            },
         });
         await expect(
             service.listSourceKnowledgeSuppressions(
@@ -1814,7 +1835,8 @@ describe("FileMemoryService", () => {
         ]);
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
         expect(
             await service.getProcedure(corpus.corpusId, saved.procedureId),
@@ -1883,7 +1905,8 @@ describe("FileMemoryService", () => {
         );
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         const replay = await service.ingestDocument(request);
@@ -2121,7 +2144,8 @@ describe("FileMemoryService", () => {
         ).toEqual(["Inspect logs for errors before restarting the service."]);
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
             procedureIndexFactory: (_corpusId, directory) =>
                 new FakeProcedureCorpusIndex(directory),
         });
@@ -2132,7 +2156,8 @@ describe("FileMemoryService", () => {
         await service.close();
         const createService = () =>
             new FileMemoryService(rootDirectory, {
-                indexFactory: () => new FakeCorpusIndex(),
+                indexFactory: (_corpusId, directory) =>
+                    new FakeCorpusIndex(directory),
                 procedureIndexFactory: (_corpusId, directory) =>
                     new FakeProcedureCorpusIndex(directory),
             });
@@ -2255,7 +2280,8 @@ describe("FileMemoryService", () => {
         let failRebuild = false;
         const createService = () =>
             new FileMemoryService(rootDirectory, {
-                indexFactory: () => new FakeCorpusIndex(),
+                indexFactory: (_corpusId, directory) =>
+                    new FakeCorpusIndex(directory),
                 procedureIndexFactory: (_corpusId, directory) => {
                     const index = new FakeProcedureCorpusIndex(directory);
                     if (failRebuild) {
@@ -2390,7 +2416,8 @@ describe("FileMemoryService", () => {
         );
         await rename(settingsPath, `${settingsPath}.interrupted.bak`);
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         expect(
