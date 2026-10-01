@@ -408,17 +408,6 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async mergeTopicHierarchies(): Promise<{
-        success: boolean;
-        mergeCount: number;
-        message?: string;
-        error?: string;
-    }> {
-        return this.sendMessage({
-            type: "mergeTopicHierarchies",
-        });
-    }
-
     async getGlobalGraphLayoutData(parameters: {
         maxNodes?: number;
         includeConnectivity?: boolean;

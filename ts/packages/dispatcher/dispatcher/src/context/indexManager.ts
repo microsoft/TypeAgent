@@ -9,7 +9,6 @@ import { ensureDirectory, getUniqueFileName } from "../utils/fsUtils.js";
 import path from "node:path";
 import { ensureDir, isDirectoryPath } from "@typeagent/agent-runtime";
 import { IndexData, IndexSource } from "@typeagent/image-memory";
-import { IndexData as WebsiteIndexData } from "@typeagent/website-memory";
 import { IndexingServiceRegistry } from "./indexingServiceRegistry.js";
 // import { searchConversationKnowledge } from "@typeagent/knowpro";
 
@@ -29,7 +28,6 @@ export class IndexManager {
     //private cacheRoot: string;
     private static imageRoot: string | undefined;
     private static emailRoot: string | undefined;
-    private static websiteRoot: string | undefined;
 
     public static getInstance = (): IndexManager => {
         if (!IndexManager.instance) {
@@ -62,9 +60,6 @@ export class IndexManager {
         IndexManager.emailRoot = path.join(IndexManager.rootPath, "email");
         ensureDirectory(IndexManager.emailRoot!);
 
-        IndexManager.websiteRoot = path.join(IndexManager.rootPath, "website");
-        ensureDirectory(IndexManager.websiteRoot!);
-
         indexesToLoad.forEach((value) => {
             this.getInstance().addIndex(value);
         });
@@ -87,7 +82,6 @@ export class IndexManager {
         name: string,
         source: IndexSource,
         location: string,
-        options?: { sourceType?: string; browserType?: string },
     ): Promise<boolean> {
         // spin up the correct indexer based on the request
         switch (source) {
@@ -95,8 +89,9 @@ export class IndexManager {
                 await this.createImageIndex(name, location);
                 break;
             case "website":
-                await this.createWebsiteIndex(name, location, options);
-                break;
+                throw new Error(
+                    "Website indexes are no longer created with @index. Use the browser extension or the @memory agent to add pages to durable memory.",
+                );
             case "email":
                 throw new Error("Email indexing is not implemented yet.");
             default:
@@ -134,44 +129,6 @@ export class IndexManager {
             state: "new",
             progress: 0,
             sizeOnDisk: 0,
-        };
-
-        // start indexing
-        this.addIndex(index);
-    }
-
-    /*
-     * Create the website index for the specified location
-     */
-    private async createWebsiteIndex(
-        name: string,
-        location: string,
-        options?: { sourceType?: string; browserType?: string },
-    ) {
-        // For website indexing, location can be "default" to use default browser paths
-        // or a specific file path to browser data
-        if (location !== "default" && !existsSync(location)) {
-            throw new Error(`Location '${location}' does not exist.`);
-        }
-
-        const dirName = getUniqueFileName(IndexManager.websiteRoot!, "index");
-        const folder = await ensureDir(
-            path.join(IndexManager.websiteRoot!, dirName),
-        );
-
-        const index: WebsiteIndexData = {
-            source: "website",
-            name,
-            location,
-            size: 0,
-            path: folder,
-            state: "new",
-            progress: 0,
-            sizeOnDisk: 0,
-            sourceType:
-                (options?.sourceType as "bookmarks" | "history") || "bookmarks",
-            browserType:
-                (options?.browserType as "chrome" | "edge") || "chrome",
         };
 
         // start indexing
@@ -274,14 +231,12 @@ export class IndexManager {
     private getDefaultServicePath(indexSource: IndexSource): string {
         // Legacy service discovery for backward compatibility
         if (indexSource === "website") {
-            return getPackageFilePath(
-                "./node_modules/website-memory/dist/indexingService.js",
-            );
-        } else {
-            // Default to image memory service
-            return getPackageFilePath(
-                "./node_modules/image-memory/dist/indexingService.js",
+            throw new Error(
+                "Website indexes are stored in durable memory and have no indexing service.",
             );
         }
+        return getPackageFilePath(
+            "./node_modules/image-memory/dist/indexingService.js",
+        );
     }
 }

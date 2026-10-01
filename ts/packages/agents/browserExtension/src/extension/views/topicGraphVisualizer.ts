@@ -36,12 +36,10 @@ export class TopicGraphVisualizer {
     private topicGraphData: TopicGraphLayoutData | null = null;
 
     // Level of detail management
-    private visibleLevels: Set<number> = new Set([0, 1, 2]); // Show first 3 levels by default
 
     private zoomHandlerSetup: boolean = false;
 
     // Graph data provider for API calls
-    private graphDataProvider: any = null;
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -132,13 +130,6 @@ export class TopicGraphVisualizer {
         }
 
         await this.loadData(data);
-    }
-
-    /**
-     * Set graph data provider for API calls
-     */
-    public setGraphDataProvider(provider: any): void {
-        this.graphDataProvider = provider;
     }
 
     /**
@@ -490,16 +481,6 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Set visible levels
-     */
-    public setVisibleLevels(levels: number[]): void {
-        this.visibleLevels = new Set(levels);
-        if (this.topicGraphData) {
-            this.loadData(this.topicGraphData);
-        }
-    }
-
-    /**
      * Set topic click callback
      */
     public onTopicClick(callback: (topic: TopicData) => void): void {
@@ -600,8 +581,7 @@ export class TopicGraphVisualizer {
         return {
             totalTopics: topicNodes.length,
             visibleTopics: topicNodes.length,
-            maxDepth: 0, // Server handles depth calculation
-            visibleLevels: Array.from(this.visibleLevels),
+            maxDepth: 0,
         };
     }
 

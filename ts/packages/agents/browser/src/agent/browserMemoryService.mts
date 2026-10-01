@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import type {
     IngestionMode,
     JobProgress,
+    MemoryAnswerResult,
     MemoryEvent,
     MemoryEventForgetResult,
     MemoryEvidence,
@@ -298,6 +299,19 @@ export class BrowserMemoryService {
                               : { latestActivity }),
                       },
                   ];
+        });
+    }
+
+    public async answer(
+        question: string,
+        sourceIds: string[],
+        limit?: number,
+    ): Promise<MemoryAnswerResult> {
+        return this.client.answer({
+            corpusId: await this.getCorpusId(),
+            question,
+            sourceIds,
+            ...(limit === undefined ? {} : { limit }),
         });
     }
 

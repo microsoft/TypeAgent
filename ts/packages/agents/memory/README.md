@@ -40,11 +40,13 @@ TypeAgent user -> native @memory agent -> injected MemoryService
 External client -> memory MCP server   -> the same MemoryService
 ```
 
-When the native agent is available, the dynamically generated MCP agent should
-not also be presented as a second user-facing memory agent by default. Doing so
-would create duplicate routing choices and inconsistent UX. The MCP endpoint
-should remain available for interoperability, while `@memory` is the preferred
-TypeAgent interaction surface.
+The dynamically generated `@memory-mcp` agent is intentionally registered next
+to native `@memory`. This is a design decision, not an oversight: together with
+the Copilot CLI memory plugin (which has its own store and is deliberately not
+connected to the durable service), it is one arm of an experiment to learn
+which path makes an externally consumable MCP package easier to build and
+support. Native `@memory` remains the preferred TypeAgent interaction surface;
+do not remove or hide either agent until the experiment concludes.
 
 The agent must not independently implement knowledge extraction, indexing,
 revision semantics, retrieval ranking, deletion cleanup, or durable job state.
@@ -99,8 +101,10 @@ states, so a batch remains running while accepted jobs are indexing. Restored
 batches reconstruct their current state from those jobs. `--wait` also waits
 for terminal service job states before the import command returns.
 
-`ask` calls `MemoryService.answer` and renders its grounded extractive answer
-with citation metadata. `explain` shows the answer and citations retained from
+`ask` calls `MemoryService.answer`, which by default synthesizes the answer with
+KnowPro's answer generator over the retrieved evidence, and renders it with
+citation metadata. `ask --extractive` returns the ranked evidence snippets
+verbatim. `explain` shows the answer and citations retained from
 the latest session answer.
 
 ## Host setup

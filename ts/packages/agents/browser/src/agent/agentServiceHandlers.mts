@@ -236,12 +236,8 @@ export function createAgentInvokeHandlers(
         searchByTopics: (params: any) =>
             websiteHandler("searchByTopics", params),
         hybridSearch: (params: any) => websiteHandler("hybridSearch", params),
-        getHierarchicalTopics: (params: any) =>
-            websiteHandler("getHierarchicalTopics", params),
         getTopicImportanceLayer: (params: any) =>
             knowledgeHandler("getTopicImportanceLayer", params),
-        getTopicViewportNeighborhood: (params: any) =>
-            knowledgeHandler("getTopicViewportNeighborhood", params),
         getTopicMetrics: (params: any) =>
             knowledgeHandler("getTopicMetrics", params),
         getTopicDetails: (params: any) =>
@@ -262,10 +258,6 @@ export function createAgentInvokeHandlers(
             knowledgeHandler("buildKnowledgeGraph", params),
         rebuildKnowledgeGraph: (params: any) =>
             knowledgeHandler("rebuildKnowledgeGraph", params),
-        testMergeTopicHierarchies: (params: any) =>
-            knowledgeHandler("testMergeTopicHierarchies", params),
-        mergeTopicHierarchies: (params: any) =>
-            knowledgeHandler("mergeTopicHierarchies", params),
         getGlobalGraphLayoutData: (params: any) =>
             knowledgeHandler("getGlobalGraphLayoutData", params),
         getEntityNeighborhood: (params: any) =>
