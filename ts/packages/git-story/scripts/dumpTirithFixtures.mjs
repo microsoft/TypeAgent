@@ -70,5 +70,5 @@ for (const [name, shell, command] of CASES) {
         path.join(outDir, `${name}.json`),
         JSON.stringify(fixture, null, 2) + "\n",
     );
-    console.log(`${name}: ${output.action}`);
+    process.stdout.write(`${name}: ${output.action}\n`);
 }

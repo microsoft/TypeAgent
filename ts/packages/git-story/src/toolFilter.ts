@@ -52,25 +52,25 @@ const TIRITH_TIMEOUT_MS = 2000;
 export function classifyTool(toolName: string, command: string): ToolClass {
     const shell = SHELLS.get(toolName);
     if (shell === undefined) return ToolClass.NotShell;
-    // --offline: no network on the hot path. Tirith exits 1 on block and
-    // 2 on warn, so read the JSON verdict, not the exit code.
-    const r = spawnSync(
-        process.execPath,
-        [
-            TIRITH_LAUNCHER,
-            "check",
-            "--format",
-            "json",
-            "--non-interactive",
-            "--offline",
-            "--shell",
-            shell,
-            "--",
-            command,
-        ],
-        { encoding: "utf8", timeout: TIRITH_TIMEOUT_MS },
-    );
     try {
+        // --offline: no network on the hot path. Tirith exits 1 on block and
+        // 2 on warn, so read the JSON verdict, not the exit code.
+        const r = spawnSync(
+            process.execPath,
+            [
+                TIRITH_LAUNCHER,
+                "check",
+                "--format",
+                "json",
+                "--non-interactive",
+                "--offline",
+                "--shell",
+                shell,
+                "--",
+                command,
+            ],
+            { encoding: "utf8", timeout: TIRITH_TIMEOUT_MS },
+        );
         return toToolClass(JSON.parse(r.stdout));
     } catch {
         return ToolClass.Unknown;
