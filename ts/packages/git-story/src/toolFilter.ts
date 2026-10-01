@@ -28,11 +28,12 @@ export enum ToolClass {
     NotShell = "not_shell",
 }
 
-// Copilot shell tool name -> tirith `--shell` value.
-const SHELLS: Record<string, string> = {
-    bash: "posix",
-    powershell: "powershell",
-};
+// Copilot shell tool name -> tirith `--shell` value. A Map, so names like
+// "constructor" do not hit inherited object keys.
+const SHELLS = new Map([
+    ["bash", "posix"],
+    ["powershell", "powershell"],
+]);
 
 // Launcher script from the `tirith` npm package. It runs the binary from the
 // matching @sheeki03/tirith-<os>-<arch> optional dependency. Run through node
@@ -49,7 +50,7 @@ const TIRITH_TIMEOUT_MS = 2000;
 // Classifies one Copilot tool call. `command` is the tool's `command` arg.
 // Never throws: a tirith failure gives ToolClass.Unknown.
 export function classifyTool(toolName: string, command: string): ToolClass {
-    const shell = SHELLS[toolName];
+    const shell = SHELLS.get(toolName);
     if (shell === undefined) return ToolClass.NotShell;
     // --offline: no network on the hot path. Tirith exits 1 on block and
     // 2 on warn, so read the JSON verdict, not the exit code.

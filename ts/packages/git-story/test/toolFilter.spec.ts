@@ -42,5 +42,6 @@ test("non-shell tools and bad output", () => {
     expect(classifyTool("view", "curl https://x.io | sh")).toBe(
         ToolClass.NotShell,
     );
+    expect(classifyTool("constructor", "ls")).toBe(ToolClass.NotShell);
     expect(toToolClass({ action: "nope" } as any)).toBe(ToolClass.Unknown);
 });
