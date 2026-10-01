@@ -45,6 +45,39 @@ $ curl -G http://127.0.0.1:51703/api/story/commits/79f77a3 --data-urlencode proj
 
 Routes are in `src/server/router.ts`; handlers are in `src/server/routes/`.
 
+## Draft story contracts
+
+These interfaces are proposals only. They do not implement extraction, watching,
+commit-message rendering, or hook/API integration.
+
+- `src/gitCommitStory.ts` defines `GitCommitStory<TMemory>` and its session,
+  summary, memory, and metadata objects. Each human-readable summary entry links
+  to memories in the same session through `memoryIds`. Memory IDs must be unique
+  within that session, and every reference must resolve. `TMemory` leaves the
+  extraction payload open without imposing decision or activity categories.
+- `src/sessionWatcher.ts` defines `SessionWatcher<TMemory>`. `watch` registers a
+  local session transcript; `getSessionStories` maps the processed session content
+  to a candidate commit and returns privacy-filtered summaries and memories.
+  Multiple sessions can contribute to a commit, and one session can contribute
+  different content to multiple commits. Subagent work remains part of its parent
+  session's memories. `stop` releases the watcher's background resources.
+- `src/storyBuilder.ts` defines `StoryBuilder<TMemory>`. `build` accepts the
+  candidate commit and its session stories, authors the title and description,
+  and returns both the structured story and the complete transformed commit
+  message. It does not create or amend a Git commit.
+
+`CommitContext` carries an absolute project path, the exact candidate diff, and
+the original message (which may be empty). The same snapshot should be passed to
+the watcher and builder. A session's transcript path is local watcher input, not
+part of the portable story. Optional summary timestamps use RFC 3339 strings.
+Model names describe the session's observed models, not the story-authoring model.
+
+The proposed flow is `watch` -> `getSessionStories` -> `build`. Asynchronous
+failures reject rather than silently returning an empty story; an empty session
+list means no matching sessions, not a processing failure. Repeated registration,
+in-flight processing at commit time, and the serialized message format remain
+design decisions. These contracts do not claim complete or tamper-proof capture.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
