@@ -53,9 +53,10 @@ function resultText(result: unknown): string {
 }
 
 async function withDispatcher(
+    sessionId: string,
     operation: (dispatcher: Dispatcher) => Promise<void>,
 ): Promise<void> {
-    const dispatcher = await connectToTypeAgent(createClientIO({}));
+    const dispatcher = await connectToTypeAgent(createClientIO({}), sessionId);
     try {
         await operation(dispatcher);
     } finally {
@@ -63,7 +64,10 @@ async function withDispatcher(
     }
 }
 
-async function insertToolHistory(event: ExtensionSessionEvent): Promise<void> {
+async function insertToolHistory(
+    event: ExtensionSessionEvent,
+    sessionId: string,
+): Promise<void> {
     if (event.data.success !== true) return;
     const toolName =
         typeof event.data.toolName === "string"
@@ -89,7 +93,7 @@ async function insertToolHistory(event: ExtensionSessionEvent): Promise<void> {
             source: "copilot-cli",
         },
     };
-    await withDispatcher(async (dispatcher) => {
+    await withDispatcher(sessionId, async (dispatcher) => {
         await awaitCommand(
             dispatcher,
             `@history insert ${JSON.stringify(message)}`,
@@ -99,6 +103,7 @@ async function insertToolHistory(event: ExtensionSessionEvent): Promise<void> {
 
 async function insertTurnHistory(
     trace: RecordedInteractionTrace,
+    sessionId: string,
 ): Promise<void> {
     if (
         trace.toolCalls.some((tool) =>
@@ -116,7 +121,7 @@ async function insertTurnHistory(
             source: "copilot-cli",
         },
     };
-    await withDispatcher(async (dispatcher) => {
+    await withDispatcher(sessionId, async (dispatcher) => {
         await awaitCommand(
             dispatcher,
             `@history insert ${JSON.stringify(message)}`,
@@ -200,10 +205,13 @@ export class SessionCapture {
             const metadata = this.toolMetadata.get(key);
             this.toolMetadata.delete(key);
             if (metadata) {
-                await this.dependencies.insertToolHistory({
-                    ...event,
-                    data: { ...event.data, ...metadata },
-                });
+                await this.dependencies.insertToolHistory(
+                    {
+                        ...event,
+                        data: { ...event.data, ...metadata },
+                    },
+                    this.sessionId,
+                );
             }
         }
         if (event.type === "session.idle") {
@@ -249,7 +257,10 @@ export class SessionCapture {
                 }
             }
             if (trace && !aborted) {
-                await this.dependencies.insertTurnHistory(trace);
+                await this.dependencies.insertTurnHistory(
+                    trace,
+                    this.sessionId,
+                );
                 writeDemoState({
                     event: "turnComplete",
                     turnId: makeTurnId(this.sessionId),

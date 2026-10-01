@@ -18,7 +18,7 @@ const server =
             : new TypeAgentMcpServer();
 
 if (server instanceof TypeAgentMcpServer) {
-    // Stdio has no intrinsic Copilot session identity. This process retains one
+    // The host session selects public context; this process alone retains the
     // private structured owner until shutdown, without cancelling pending work.
     process.once("SIGINT", () => void server.close());
     process.once("SIGTERM", () => void server.close());

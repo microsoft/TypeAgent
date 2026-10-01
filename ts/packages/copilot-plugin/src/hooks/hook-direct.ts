@@ -142,7 +142,10 @@ export async function handleDirect(
         dependencies.emitProgress("Connecting to TypeAgent...", {
             temporary: true,
         });
-        dispatcher = await dependencies.connectToTypeAgent(clientIO);
+        dispatcher = await dependencies.connectToTypeAgent(
+            clientIO,
+            input.sessionId,
+        );
         dependencies.emitProgress("Processing command...", {
             temporary: true,
         });

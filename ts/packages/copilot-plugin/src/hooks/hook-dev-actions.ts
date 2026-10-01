@@ -159,7 +159,10 @@ export async function handleDevActions(
 
     try {
         abortSignal?.throwIfAborted();
-        dispatcher = await dependencies.connectToTypeAgent(clientIO);
+        dispatcher = await dependencies.connectToTypeAgent(
+            clientIO,
+            input.sessionId,
+        );
         abortSignal?.throwIfAborted();
         submissionStarted = true;
         const submitResult = await dispatcher.submitCommand(

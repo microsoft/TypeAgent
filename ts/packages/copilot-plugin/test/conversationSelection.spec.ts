@@ -2,7 +2,15 @@
 // Licensed under the MIT License.
 
 import { jest } from "@jest/globals";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+    mkdir,
+    mkdtemp,
+    readdir,
+    readFile,
+    rm,
+    writeFile,
+} from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -19,7 +27,7 @@ import { writeConfig } from "../src/shared/plugin-config.js";
 const io = createClientIO({});
 const url = `ws://${process.env.TYPEAGENT_HOST || "localhost"}:${process.env.TYPEAGENT_PORT || "8999"}`;
 
-function connection(defaultId: string) {
+function connection(defaultId: string, resumeToken = "never-persist-this") {
     const searchActions = jest.fn(async () => ({
         protocolVersion: 1,
         scopeId: "scope",
@@ -36,7 +44,7 @@ function connection(defaultId: string) {
         ) => ({
             conversationId: options?.conversationId ?? defaultId,
             dispatcher: { searchActions, executeAction },
-            structuredActions: { resumeToken: "never-persist-this" },
+            structuredActions: { resumeToken },
         }),
     );
     const leaveConversation = jest.fn(async () => {});
@@ -61,10 +69,13 @@ describe("shared conversation selection across routes and processes", () => {
         TYPEAGENT_PLUGIN_DATA: process.env.TYPEAGENT_PLUGIN_DATA,
         TYPEAGENT_CONVERSATION_ID: process.env.TYPEAGENT_CONVERSATION_ID,
         TYPEAGENT_MODE: process.env.TYPEAGENT_MODE,
+        COPILOT_AGENT_SESSION_ID: process.env.COPILOT_AGENT_SESSION_ID,
+        CLAUDE_PLUGIN_DATA: process.env.CLAUDE_PLUGIN_DATA,
     };
     beforeEach(async () => {
         directory = await mkdtemp(join(tmpdir(), "conversation-selection-"));
         process.env.TYPEAGENT_PLUGIN_DATA = directory;
+        process.env.COPILOT_AGENT_SESSION_ID = "session-1";
         delete process.env.TYPEAGENT_CONVERSATION_ID;
         delete process.env.TYPEAGENT_MODE;
     });
@@ -85,12 +96,19 @@ describe("shared conversation selection across routes and processes", () => {
         ]);
         expect(selected[0]).toBe(selected[1]);
         expect(["first", "second"]).toContain(selected[0]);
-        const files = await readdir(join(directory, "conversation-bindings"));
+        const files = await readdir(
+            join(directory, "conversation-bindings", "sessions"),
+        );
         expect(files).toHaveLength(1);
         expect(
             JSON.parse(
                 await readFile(
-                    join(directory, "conversation-bindings", files[0]),
+                    join(
+                        directory,
+                        "conversation-bindings",
+                        "sessions",
+                        files[0],
+                    ),
                     "utf8",
                 ),
             ),
@@ -246,8 +264,13 @@ describe("shared conversation selection across routes and processes", () => {
     it("does not re-resolve or overwrite a corrupt persisted binding", async () => {
         const fake = connection("first");
         await selectConversationId(fake.connection, io, url);
-        const [file] = await readdir(join(directory, "conversation-bindings"));
-        await writeFile(join(directory, "conversation-bindings", file), "{}");
+        const [file] = await readdir(
+            join(directory, "conversation-bindings", "sessions"),
+        );
+        await writeFile(
+            join(directory, "conversation-bindings", "sessions", file),
+            "{}",
+        );
         await expect(
             selectConversationId(fake.connection, io, url),
         ).rejects.toThrow("Invalid TypeAgent conversation binding");
@@ -259,5 +282,251 @@ describe("shared conversation selection across routes and processes", () => {
         await expect(readSelectedConversationId(url)).rejects.toThrow(
             "non-empty string",
         );
+    });
+
+    it("resolves fresh sessions independently and preserves each selection on resume", async () => {
+        const first = connection("original");
+        const second = connection("current-default");
+        expect(
+            await selectConversationId(first.connection, io, url, "session-1"),
+        ).toBe("original");
+        expect(
+            await selectConversationId(second.connection, io, url, "session-2"),
+        ).toBe("current-default");
+        expect(
+            await selectConversationId(second.connection, io, url, "session-1"),
+        ).toBe("original");
+        expect(second.joinConversation).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores and preserves the legacy server-only binding, even when corrupt", async () => {
+        const legacy = join(
+            directory,
+            "conversation-bindings",
+            `${createHash("sha256").update(new URL(url).href).digest("hex")}.json`,
+        );
+        await mkdir(join(directory, "conversation-bindings"), {
+            recursive: true,
+        });
+        await writeFile(legacy, "{stale legacy data");
+        expect(
+            await selectConversationId(
+                connection("current-default").connection,
+                io,
+                url,
+            ),
+        ).toBe("current-default");
+        expect(await readFile(legacy, "utf8")).toBe("{stale legacy data");
+    });
+
+    it("uses hook input identity over inherited environment and ignores hook-only storage injection", async () => {
+        process.env.COPILOT_AGENT_SESSION_ID = "outer-session";
+        process.env.CLAUDE_PLUGIN_DATA = join(directory, "hook-only");
+        expect(
+            await selectConversationId(
+                connection("hook-context").connection,
+                io,
+                url,
+                "inner-session",
+            ),
+        ).toBe("hook-context");
+        delete process.env.CLAUDE_PLUGIN_DATA;
+        process.env.COPILOT_AGENT_SESSION_ID = "inner-session";
+        const mcp = connection("changed-default");
+        expect(await selectConversationId(mcp.connection, io, url)).toBe(
+            "hook-context",
+        );
+        expect(mcp.joinConversation).not.toHaveBeenCalled();
+        expect(
+            await readSelectedConversationId(url, "outer-session"),
+        ).toBeUndefined();
+    });
+
+    it("uses process-local automatic context without host identity and writes no binding", async () => {
+        delete process.env.COPILOT_AGENT_SESSION_ID;
+        const selected = await Promise.all([
+            selectConversationId(connection("first").connection, io, url),
+            selectConversationId(connection("second").connection, io, url),
+        ]);
+        expect(selected[0]).toBe(selected[1]);
+        expect(
+            await selectConversationId(
+                connection("changed").connection,
+                io,
+                url,
+            ),
+        ).toBe(selected[0]);
+        expect(await readdir(directory)).toEqual([]);
+    });
+
+    it("shares default storage across hook/MCP processes without hook-only plugin data", async () => {
+        const moduleUrl = new URL(
+            "../shared/conversation-selection.js",
+            import.meta.url,
+        ).href;
+        const child = async (hook: boolean) => {
+            const env: NodeJS.ProcessEnv = {
+                ...process.env,
+                USERPROFILE: directory,
+                HOME: directory,
+            };
+            delete env.TYPEAGENT_PLUGIN_DATA;
+            if (hook)
+                env.CLAUDE_PLUGIN_DATA = join(directory, "hook-injected-data");
+            else delete env.CLAUDE_PLUGIN_DATA;
+            const result = await promisify(execFile)(
+                process.execPath,
+                [
+                    "--input-type=module",
+                    "-e",
+                    `import { selectConversationId } from ${JSON.stringify(moduleUrl)};
+                import { homedir } from "node:os";
+                if (homedir() !== ${JSON.stringify(directory)}) throw new Error("Home isolation failed");
+                const connection = {
+                    joinConversation: async () => ({conversationId: ${JSON.stringify(hook ? "hook-default" : "new-default")}}),
+                    leaveConversation: async () => {}
+                };
+                console.log(await selectConversationId(connection, {}, ${JSON.stringify(url)}));`,
+                ],
+                { env, timeout: 15000 },
+            );
+            return result.stdout.trim();
+        };
+        expect(await child(true)).toBe("hook-default");
+        expect(await child(false)).toBe("hook-default");
+    });
+
+    it("shares public data but never transfers private owners to a new client in the same session", async () => {
+        const first = connection("shared", "owner-one");
+        const second = connection("changed-default", "owner-two");
+        const a = createStructuredActionClient(async () => first.connection);
+        const b = createStructuredActionClient(async () => second.connection);
+        try {
+            await a.searchActions({ query: "first" });
+            await b.searchActions({ query: "second" });
+            expect(a.binding.conversationId).toBe("shared");
+            expect(b.binding.conversationId).toBe("shared");
+            expect(second.joinConversation).toHaveBeenCalledWith(
+                expect.anything(),
+                {
+                    conversationId: "shared",
+                    structuredActions: {},
+                },
+            );
+            const [file] = await readdir(
+                join(directory, "conversation-bindings", "sessions"),
+            );
+            expect(
+                JSON.parse(
+                    await readFile(
+                        join(
+                            directory,
+                            "conversation-bindings",
+                            "sessions",
+                            file,
+                        ),
+                        "utf8",
+                    ),
+                ),
+            ).toEqual({ conversationId: "shared" });
+        } finally {
+            await a.close();
+            await b.close();
+        }
+    });
+
+    it("does not replace a missing automatic selection or dispatch through a fresh owner on reconnect", async () => {
+        const fake = connection("original");
+        let disconnect: (() => void) | undefined;
+        const client = createStructuredActionClient(async (onDisconnect) => {
+            disconnect = onDisconnect;
+            return fake.connection;
+        });
+        try {
+            await client.searchActions({ query: "first" });
+            disconnect!();
+            fake.joinConversation.mockRejectedValueOnce(
+                new Error("Conversation not found: original"),
+            );
+            await expect(
+                client.searchActions({ query: "after deletion" }),
+            ).rejects.toMatchObject({
+                dispatched: false,
+                reason: "conversation_not_found",
+            });
+            expect(fake.joinConversation).toHaveBeenCalledTimes(3);
+            expect(fake.joinConversation).toHaveBeenLastCalledWith(
+                expect.anything(),
+                {
+                    conversationId: "original",
+                    structuredActions: { resumeToken: "never-persist-this" },
+                },
+            );
+            expect(fake.searchActions).toHaveBeenCalledTimes(1);
+            expect(await readSelectedConversationId(url)).toBe("original");
+        } finally {
+            await client.close();
+        }
+    });
+
+    it.each(["denied", "cancelled", "uncertain"])(
+        "does not replay a %s structured execution",
+        async (outcome) => {
+            const fake = connection("original");
+            if (outcome === "uncertain")
+                fake.executeAction.mockRejectedValueOnce(
+                    new Error("Lost result"),
+                );
+            else fake.executeAction.mockResolvedValueOnce({ status: outcome });
+            const client = createStructuredActionClient(
+                async () => fake.connection,
+            );
+            try {
+                const request = client.executeAction({
+                    protocolVersion: 1,
+                    scopeId: "scope",
+                    schemaName: "list",
+                    actionName: "listLists",
+                    parameters: {},
+                });
+                if (outcome === "uncertain")
+                    await expect(request).rejects.toMatchObject({
+                        dispatched: true,
+                        reason: "delivery_uncertain",
+                    });
+                else expect(await request).toEqual({ status: outcome });
+                expect(fake.executeAction).toHaveBeenCalledTimes(1);
+                expect(fake.joinConversation).toHaveBeenCalledTimes(2);
+            } finally {
+                await client.close();
+            }
+        },
+    );
+
+    it("does not move an existing structured owner when another session selects a new default", async () => {
+        const original = connection("original");
+        const client = createStructuredActionClient(
+            async () => original.connection,
+        );
+        try {
+            await client.searchActions({ query: "initial" });
+            await selectConversationId(
+                connection("new-default").connection,
+                io,
+                url,
+                "other-session",
+            );
+            await client.executeAction({
+                protocolVersion: 1,
+                scopeId: "scope",
+                schemaName: "list",
+                actionName: "listLists",
+                parameters: {},
+            });
+            expect(client.binding.conversationId).toBe("original");
+            expect(original.executeAction).toHaveBeenCalledTimes(1);
+        } finally {
+            await client.close();
+        }
     });
 });

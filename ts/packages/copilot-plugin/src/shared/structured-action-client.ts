@@ -18,6 +18,7 @@ export function createStructuredActionClient(
     connect?: StructuredActionClientOptions["connect"],
 ): StructuredActionClient {
     const conversationId = getConversationId();
+    const sessionId = process.env.COPILOT_AGENT_SESSION_ID;
     const clientIO = createClientIO({});
     return new StructuredActionClient({
         url: TYPEAGENT_URL,
@@ -25,10 +26,15 @@ export function createStructuredActionClient(
         ...(connect === undefined ? {} : { connect }),
         ...(conversationId === undefined ? {} : { conversationId }),
         resolveConversationId: (connection) =>
-            selectConversationId(connection, clientIO, TYPEAGENT_URL),
+            selectConversationId(
+                connection,
+                clientIO,
+                TYPEAGENT_URL,
+                sessionId,
+            ),
         validateConversationId: async (conversationId) => {
             if (
-                (await readSelectedConversationId(TYPEAGENT_URL)) !==
+                (await readSelectedConversationId(TYPEAGENT_URL, sessionId)) !==
                 conversationId
             ) {
                 throw new StructuredActionClientError(

@@ -4,16 +4,36 @@
 import { createHash, randomUUID } from "node:crypto";
 import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 import type {
     AgentServerConnection,
     ClientIO,
 } from "@typeagent/agent-server-client";
-import { getConfigDir, getConversationId } from "./plugin-config.js";
+import { getConversationId } from "./plugin-config.js";
 
-function bindingPath(url: string): string {
+const processBindings = new Map<string, string>();
+
+function bindingKey(url: string, sessionId: string | undefined): string {
     const server = new URL(url).href;
-    const key = createHash("sha256").update(server).digest("hex");
-    return join(getConfigDir(), "conversation-bindings", `${key}.json`);
+    return createHash("sha256")
+        .update(JSON.stringify([server, sessionId]))
+        .digest("hex");
+}
+
+function bindingLocation(url: string, sessionId: string | undefined) {
+    // Copilot supplies CLAUDE_PLUGIN_DATA to hooks but not to MCP children.
+    const directory =
+        process.env.TYPEAGENT_PLUGIN_DATA ??
+        join(homedir(), ".typeagent-copilot");
+    if (sessionId !== undefined && !sessionId.trim()) {
+        throw new Error("TypeAgent conversation session ID must not be empty.");
+    }
+    return join(
+        directory,
+        "conversation-bindings",
+        "sessions",
+        `${bindingKey(url, sessionId)}.json`,
+    );
 }
 
 function hasCode(error: unknown, code: string): boolean {
@@ -51,22 +71,26 @@ async function readBinding(path: string): Promise<string | undefined> {
     return requireId(value.conversationId);
 }
 
-/** Public context only, shared by hook/MCP processes using this config and server. */
+/** Public context only; automatic selections belong to a host session, not a server. */
 export async function readSelectedConversationId(
     url: string,
+    sessionId: string | undefined = process.env.COPILOT_AGENT_SESSION_ID,
 ): Promise<string | undefined> {
     const configured = getConversationId();
-    return configured === undefined
-        ? readBinding(bindingPath(url))
-        : requireId(configured);
+    if (configured !== undefined) return requireId(configured);
+    const path = bindingLocation(url, sessionId);
+    return sessionId === undefined
+        ? processBindings.get(path)
+        : readBinding(path);
 }
 
 export async function selectConversationId(
     connection: AgentServerConnection,
     clientIO: ClientIO,
     url: string,
+    sessionId: string | undefined = process.env.COPILOT_AGENT_SESSION_ID,
 ): Promise<string> {
-    const selected = await readSelectedConversationId(url);
+    const selected = await readSelectedConversationId(url, sessionId);
     if (selected !== undefined) return selected;
 
     const joined = await connection.joinConversation(clientIO, {
@@ -75,7 +99,13 @@ export async function selectConversationId(
     });
     await connection.leaveConversation(joined.conversationId);
     const conversationId = requireId(joined.conversationId);
-    const path = bindingPath(url);
+    const path = bindingLocation(url, sessionId);
+    if (sessionId === undefined) {
+        // Unknown hosts share NL/structured context only inside this process.
+        const winner = processBindings.get(path) ?? conversationId;
+        processBindings.set(path, winner);
+        return winner;
+    }
     await mkdir(dirname(path), { recursive: true });
     const temporary = `${path}.${randomUUID()}.tmp`;
     await writeFile(temporary, JSON.stringify({ conversationId }), {
@@ -92,7 +122,7 @@ export async function selectConversationId(
     } finally {
         await unlink(temporary);
     }
-    const winner = await readSelectedConversationId(url);
+    const winner = await readSelectedConversationId(url, sessionId);
     if (winner === undefined) {
         throw new Error(
             "TypeAgent conversation binding disappeared during selection.",

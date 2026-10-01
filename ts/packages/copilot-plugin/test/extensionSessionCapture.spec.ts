@@ -72,14 +72,17 @@ describe("extension session capture", () => {
         await capture.flush();
 
         expect(mocks.insertToolHistory).toHaveBeenCalledTimes(1);
-        expect(mocks.insertToolHistory).toHaveBeenCalledWith({
-            ...completion,
-            data: {
-                ...completion.data,
-                toolName: "fetch_data",
-                mcpServerName: "sample",
+        expect(mocks.insertToolHistory).toHaveBeenCalledWith(
+            {
+                ...completion,
+                data: {
+                    ...completion.data,
+                    toolName: "fetch_data",
+                    mcpServerName: "sample",
+                },
             },
-        });
+            "session-1",
+        );
     });
 
     it.each(["session.idle", "session.shutdown"])(
