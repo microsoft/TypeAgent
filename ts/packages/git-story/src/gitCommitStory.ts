@@ -1,42 +1,36 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export interface GitCommitStory<TMemory> {
+export type GitCommitStory = {
     schemaVersion: number;
     title: string;
     description: string;
-    sessions: SessionStory<TMemory>[];
-}
+    sessions: SessionStory[];
+};
 
-export interface SessionStory<TMemory> {
+export type SessionStory = {
     sessionId: string;
     summary: SummaryEntry[];
     metadata: SessionMetadata;
-    memories: MemoryRecord<TMemory>[];
-}
+};
 
-export interface SummaryEntry {
+export type SummaryEntry = {
     id: string;
     text: string;
     timestamp?: string;
-    // References memories in the enclosing SessionStory.
+    // Memory payload types and reference resolution will be integrated separately.
     memoryIds: string[];
-}
+};
 
-export interface MemoryRecord<TMemory> {
-    id: string;
-    content: TMemory;
-}
-
-export interface SessionMetadata {
+export type SessionMetadata = {
     clientName: string;
     models: string[];
-}
+};
 
 // A proposed commit, before Git assigns its final object ID.
-export interface CommitContext {
+export type CommitContext = {
     projectPath: string;
     // The diff for the exact candidate commit, not all workspace changes.
     diff: string;
     message: string;
-}
+};

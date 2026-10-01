@@ -10,10 +10,12 @@ export interface SessionWatchRequest {
     metadata: SessionMetadata;
 }
 
-export interface SessionWatcher {
-    // Registers a local transcript for background processing.
-    watch(request: SessionWatchRequest): Promise<void>;
+export class SessionWatcher {
+    async watch(_request: SessionWatchRequest): Promise<void> {
+        throw new Error("SessionWatcher.watch is not implemented");
+    }
 
-    // Stops this watcher's background work and releases its resources.
-    stop(): Promise<void>;
+    async stop(): Promise<void> {
+        throw new Error("SessionWatcher.stop is not implemented");
+    }
 }

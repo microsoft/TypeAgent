@@ -7,19 +7,18 @@ import type {
     SessionStory,
 } from "./gitCommitStory.js";
 
-export interface StoryBuildRequest<TMemory> {
+export interface StoryBuildRequest {
     commit: CommitContext;
-    sessions: SessionStory<TMemory>[];
+    sessions: SessionStory[];
 }
 
-export interface StoryBuildResult<TMemory> {
-    story: GitCommitStory<TMemory>;
+export interface StoryBuildResult {
+    story: GitCommitStory;
     commitMessage: string;
 }
 
-export interface StoryBuilder<TMemory> {
-    // Authors and renders the story without writing a commit or changing Git state.
-    build(
-        request: StoryBuildRequest<TMemory>,
-    ): Promise<StoryBuildResult<TMemory>>;
+export class StoryBuilder {
+    async build(_request: StoryBuildRequest): Promise<StoryBuildResult> {
+        throw new Error("StoryBuilder.build is not implemented");
+    }
 }
