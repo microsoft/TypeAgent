@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import path from "node:path";
 
 // Classifies Copilot shell tool calls with tirith
 // (https://github.com/sheeki03/tirith, `tirith check --format json`) so
@@ -29,6 +31,15 @@ const SHELLS: Record<string, string> = {
     powershell: "powershell",
 };
 
+// Launcher script from the `tirith` npm package. It runs the binary from the
+// matching @sheeki03/tirith-<os>-<arch> optional dependency. Run through node
+// because Windows cannot spawn the script directly.
+const TIRITH_LAUNCHER = path.join(
+    path.dirname(createRequire(import.meta.url).resolve("tirith/package.json")),
+    "bin",
+    "tirith",
+);
+
 // Tirith takes ~40 ms per command; the hook must never stall the agent.
 const TIRITH_TIMEOUT_MS = 2000;
 
@@ -40,8 +51,9 @@ export function classifyTool(toolName: string, command: string): ToolClass {
     // --offline: no network on the hot path. Tirith exits 1 on block and
     // 2 on warn, so read the JSON verdict, not the exit code.
     const r = spawnSync(
-        "tirith",
+        process.execPath,
         [
+            TIRITH_LAUNCHER,
             "check",
             "--format",
             "json",
