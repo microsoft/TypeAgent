@@ -23,7 +23,10 @@ import { handleDevActions } from "./hook-dev-actions.js";
 import { makeTurnId, writeDemoState } from "./demo-state.js";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import type { HookInput, HookOutput } from "./types.js";
+import type {
+    UserPromptSubmittedInput,
+    UserPromptSubmittedOutput,
+} from "@typeagent/agent-harness-hooks/copilot-cli";
 import { connectToAgentServer } from "../shared/typeagent-client.js";
 import { redactTraceValue } from "@typeagent/copilot-macros";
 import { getMacroFeatures } from "../shared/macro-features.js";
@@ -42,9 +45,9 @@ import {
 import { cancelMacroWork, learningSetting } from "../shared/macro-learning.js";
 
 async function handleMacroCommand(
-    input: HookInput,
+    input: UserPromptSubmittedInput,
     lower: string,
-): Promise<HookOutput | undefined> {
+): Promise<UserPromptSubmittedOutput | undefined> {
     const learning = lower.match(/^@typeagent\s+macro\s+learning(?:\s+(.+))?$/);
     if (learning) {
         return {
@@ -108,9 +111,9 @@ async function handleMacroCommand(
 }
 
 export type DirectHandler = (
-    input: HookInput,
+    input: UserPromptSubmittedInput,
     options?: DirectHandlingOptions,
-) => Promise<HookOutput>;
+) => Promise<UserPromptSubmittedOutput>;
 
 export interface SlashCommandDependencies {
     direct: DirectHandler;
@@ -121,11 +124,11 @@ const slashCommandDefaults: SlashCommandDependencies = {
 };
 
 function directCommand(
-    input: HookInput,
+    input: UserPromptSubmittedInput,
     command: string,
     direct: DirectHandler,
     options?: DirectHandlingOptions,
-): Promise<HookOutput> {
+): Promise<UserPromptSubmittedOutput> {
     return direct(
         {
             prompt: command,
@@ -138,17 +141,19 @@ function directCommand(
 }
 
 function handleRunCommand(
-    input: HookInput,
+    input: UserPromptSubmittedInput,
     trimmed: string,
     direct: DirectHandler,
-): Promise<HookOutput> | undefined {
+): Promise<UserPromptSubmittedOutput> | undefined {
     const match = trimmed.match(/^@typeagent\s+run\s+(.+)$/i);
     return match
         ? directCommand(input, match[1], direct, { forceHandled: true })
         : undefined;
 }
 
-function handleModeCommand(lower: string): HookOutput | undefined {
+function handleModeCommand(
+    lower: string,
+): UserPromptSubmittedOutput | undefined {
     const match = lower.match(/^@typeagent\s+mode(?:\s+(.*))?$/s);
     if (!match) return undefined;
     return {
@@ -158,7 +163,9 @@ function handleModeCommand(lower: string): HookOutput | undefined {
     };
 }
 
-function handlePowerShellCommand(lower: string): HookOutput | undefined {
+function handlePowerShellCommand(
+    lower: string,
+): UserPromptSubmittedOutput | undefined {
     const match = lower.match(/^@typeagent\s+powershell(?:\s+(on|off))?\s*$/);
     if (!match) return undefined;
 
@@ -188,7 +195,9 @@ function handlePowerShellCommand(lower: string): HookOutput | undefined {
     };
 }
 
-function handleStatusCommand(lower: string): HookOutput | undefined {
+function handleStatusCommand(
+    lower: string,
+): UserPromptSubmittedOutput | undefined {
     if (lower !== "@typeagent status" && lower !== "@typeagent") {
         return undefined;
     }
@@ -228,23 +237,23 @@ function handleStatusCommand(lower: string): HookOutput | undefined {
 }
 
 function handleCatchAllCommand(
-    input: HookInput,
+    input: UserPromptSubmittedInput,
     trimmed: string,
     direct: DirectHandler,
-): Promise<HookOutput> | undefined {
+): Promise<UserPromptSubmittedOutput> | undefined {
     const match = trimmed.match(/^@typeagent\s+(.+)$/i);
     return match ? directCommand(input, match[1], direct) : undefined;
 }
 
 /**
- * Handle @typeagent slash commands. Returns a HookOutput if the command
+ * Handle @typeagent slash commands. Returns a UserPromptSubmittedOutput if the command
  * was handled, or undefined if the prompt is not a slash command.
  * Returns a Promise for commands that need async work (e.g., @typeagent run).
  */
 export async function handleSlashCommand(
-    input: HookInput,
+    input: UserPromptSubmittedInput,
     dependencies: SlashCommandDependencies = slashCommandDefaults,
-): Promise<HookOutput | undefined> {
+): Promise<UserPromptSubmittedOutput | undefined> {
     const trimmed = input.prompt.trim();
     const lower = trimmed.toLowerCase();
 
@@ -272,7 +281,7 @@ async function main(): Promise<void> {
             inputData += chunk;
         }
 
-        let input: HookInput;
+        let input: UserPromptSubmittedInput;
         try {
             input = JSON.parse(inputData);
         } catch {
@@ -300,10 +309,13 @@ async function main(): Promise<void> {
 }
 
 export interface RoutePromptDependencies {
-    claimRecording: (input: HookInput) => Promise<boolean>;
+    claimRecording: (input: UserPromptSubmittedInput) => Promise<boolean>;
     direct: DirectHandler;
-    mcp: (input: HookInput) => HookOutput;
-    dev: (input: HookInput, signal: AbortSignal) => Promise<HookOutput>;
+    mcp: (input: UserPromptSubmittedInput) => UserPromptSubmittedOutput;
+    dev: (
+        input: UserPromptSubmittedInput,
+        signal: AbortSignal,
+    ) => Promise<UserPromptSubmittedOutput>;
 }
 
 const routePromptDefaults: RoutePromptDependencies = {
@@ -314,11 +326,11 @@ const routePromptDefaults: RoutePromptDependencies = {
 };
 
 export async function routePrompt(
-    input: HookInput,
+    input: UserPromptSubmittedInput,
     mode: Mode,
     signal: AbortSignal,
     dependencies: RoutePromptDependencies = routePromptDefaults,
-): Promise<HookOutput> {
+): Promise<UserPromptSubmittedOutput> {
     if (mode === "bypass") return {};
     if (await dependencies.claimRecording(input)) return {};
     if (mode === "mcp") return dependencies.mcp(input);
@@ -326,7 +338,9 @@ export async function routePrompt(
     return dependencies.direct(input);
 }
 
-async function claimMacroRecording(input: HookInput): Promise<boolean> {
+async function claimMacroRecording(
+    input: UserPromptSubmittedInput,
+): Promise<boolean> {
     if (!getMacroFeatures().recording) return false;
     let connection;
     try {
@@ -356,8 +370,8 @@ async function claimMacroRecording(input: HookInput): Promise<boolean> {
  * hook-agent-stop, so we don't write state here for that case.
  */
 function emitDemoStateForOutput(
-    input: HookInput,
-    output: HookOutput,
+    input: UserPromptSubmittedInput,
+    output: UserPromptSubmittedOutput,
     mode: Mode,
 ): void {
     if (!output.handled) return;

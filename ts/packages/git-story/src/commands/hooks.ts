@@ -1,6 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type {
+    UserPromptSubmittedInput,
+    UserPromptSubmittedOutput,
+} from "@typeagent/agent-harness-hooks/copilot-cli";
 import { Command } from "commander";
 import { cliLogger } from "../logger.js";
 
@@ -24,9 +28,16 @@ hooksCommand
     .description("Copilot CLI hook handlers")
     .command("user-prompt-submitted")
     .description("Handle the Copilot userPromptSubmitted hook")
-    .action(() => {
-        process.stdout.write("Hello World\n");
-        cliLogger.info("Hello World");
+    .action(async () => {
+        // Placeholder: parse the payload, change nothing.
+        // Empty stdin (manual run) is treated as `{}`, as on main.
+        const input = JSON.parse(
+            (await readStdin()) || "{}",
+        ) as Partial<UserPromptSubmittedInput>;
+        const output: UserPromptSubmittedOutput = {};
+        process.stderr.write(`git-story prompt: session=${input.sessionId}\n`);
+        cliLogger.info(`prompt session=${input.sessionId}`);
+        process.stdout.write(`${JSON.stringify(output)}\n`);
     });
 
 // `hooks git <hook> [args...]`: called by the scripts `init` writes to the

@@ -1434,6 +1434,18 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
+  packages/agent-harness-hooks:
+    devDependencies:
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agentRpc:
     dependencies:
       '@opentelemetry/api':
@@ -4741,6 +4753,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@3.25.76)
+      '@typeagent/agent-harness-hooks':
+        specifier: workspace:*
+        version: link:../agent-harness-hooks
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
@@ -4784,6 +4799,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@3.25.76)
+      '@typeagent/agent-harness-hooks':
+        specifier: workspace:*
+        version: link:../agent-harness-hooks
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -5354,6 +5372,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.17
         version: 1.19.17(hono@4.13.5)
+      '@typeagent/agent-harness-hooks':
+        specifier: workspace:*
+        version: link:../agent-harness-hooks
       commander:
         specifier: ^12.1.0
         version: 12.1.0

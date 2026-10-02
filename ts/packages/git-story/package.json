@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.17",
+    "@typeagent/agent-harness-hooks": "workspace:*",
     "commander": "^12.1.0",
     "hono": "^4.13.5",
     "tirith": "0.4.2"
