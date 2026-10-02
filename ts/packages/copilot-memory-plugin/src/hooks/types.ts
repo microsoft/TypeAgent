@@ -1,24 +1,25 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type PromptHookInput = {
-    sessionId: string;
-    timestamp?: number;
-    cwd: string;
-    prompt: string;
-    transformedPrompt?: string;
-};
+import type {
+    AgentStopInput,
+    UserPromptSubmittedInput,
+    UserPromptSubmittedOutput,
+} from "@typeagent/agent-harness-hooks/copilot-cli";
 
-export type StopHookInput = {
-    sessionId: string;
-    timestamp?: number;
-    cwd: string;
-    transcriptPath?: string;
+// One router handles both prompt hooks; transformedPrompt marks the second.
+// userPromptTransformed adds the expanded prompt to the submitted payload.
+export type PromptHookInput =
+    | UserPromptSubmittedInput
+    | (UserPromptSubmittedInput & { transformedPrompt: string });
+
+// Non-Copilot hosts may also send the response text and knowledge.
+export type StopHookInput = AgentStopInput & {
     response?: string;
     knowledge?: unknown;
 };
 
-export type HookOutput = {
-    additionalContext?: string;
+// userPromptTransformed can also replace the expanded prompt.
+export type HookOutput = UserPromptSubmittedOutput & {
     modifiedTransformedPrompt?: string;
 };

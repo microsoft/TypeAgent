@@ -28,6 +28,7 @@ describe("agentStop capture", () => {
         await handleAgentStop(
             {
                 sessionId: "s1",
+                timestamp: 0,
                 cwd: "/repo",
                 response: "installed with pnpm",
                 knowledge: {
@@ -71,7 +72,12 @@ describe("agentStop capture", () => {
         );
         const client = fakeClient();
         await handleAgentStop(
-            { sessionId: "s1", cwd: "/repo", transcriptPath: transcript },
+            {
+                sessionId: "s1",
+                timestamp: 0,
+                cwd: "/repo",
+                transcriptPath: transcript,
+            },
             client,
         );
         expect(client.results).toEqual([{ text: "installed with pnpm" }]);

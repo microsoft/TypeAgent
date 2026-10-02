@@ -11,8 +11,9 @@ $ cd ts/packages/git-story
 $ pnpm build
 $ npm link            # puts git-story on PATH
 $ git story init   # registers Copilot CLI and git hooks for this repo
-$ git story hooks copilot user-prompt-submitted
-Hello World
+$ echo '{"sessionId":"s1","timestamp":0,"cwd":".","prompt":"hi"}' | git story hooks copilot user-prompt-submitted
+git-story prompt: session=s1
+{}
 $ echo input | git story hooks git pre-commit a b
 git-story pre-commit: args=["a","b"] stdin="input\n"
 ```
