@@ -411,6 +411,17 @@ export class KnowledgeAnalyticsPanel {
         if (!container || !this.analyticsData?.knowledge) return;
 
         const knowledgeStats = this.analyticsData.knowledge;
+        const entityProgress =
+            knowledgeStats.extractionProgress?.entityProgress || 0;
+        const topicProgress =
+            knowledgeStats.extractionProgress?.topicProgress || 0;
+        const actionProgress =
+            knowledgeStats.extractionProgress?.actionProgress || 0;
+        const highQuality =
+            knowledgeStats.qualityDistribution?.highQuality || 0;
+        const mediumQuality =
+            knowledgeStats.qualityDistribution?.mediumQuality || 0;
+        const lowQuality = knowledgeStats.qualityDistribution?.lowQuality || 0;
 
         container.innerHTML = `
             <div class="card">
@@ -424,15 +435,9 @@ export class KnowledgeAnalyticsPanel {
                             </div>
                             <div class="progress-bar-container">
                                 <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${
-                                        knowledgeStats.extractionProgress
-                                            ?.entityProgress || 0
-                                    }%; background: linear-gradient(90deg, #17a2b8, #20c997);"></div>
+                                    <div class="progress-fill" style="width: ${entityProgress}%; background: linear-gradient(90deg, #17a2b8, #20c997);"></div>
                                 </div>
-                                <span class="progress-percentage">${
-                                    knowledgeStats.extractionProgress
-                                        ?.entityProgress || 0
-                                }%</span>
+                                <span class="progress-percentage">${entityProgress}%</span>
                             </div>
                         </div>
                         
@@ -443,15 +448,9 @@ export class KnowledgeAnalyticsPanel {
                             </div>
                             <div class="progress-bar-container">
                                 <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${
-                                        knowledgeStats.extractionProgress
-                                            ?.topicProgress || 0
-                                    }%; background: linear-gradient(90deg, #6f42c1, #e83e8c);"></div>
+                                    <div class="progress-fill" style="width: ${topicProgress}%; background: linear-gradient(90deg, #6f42c1, #e83e8c);"></div>
                                 </div>
-                                <span class="progress-percentage">${
-                                    knowledgeStats.extractionProgress
-                                        ?.topicProgress || 0
-                                }%</span>
+                                <span class="progress-percentage">${topicProgress}%</span>
                             </div>
                         </div>
                         
@@ -462,15 +461,9 @@ export class KnowledgeAnalyticsPanel {
                             </div>
                             <div class="progress-bar-container">
                                 <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${
-                                        knowledgeStats.extractionProgress
-                                            ?.actionProgress || 0
-                                    }%; background: linear-gradient(90deg, #fd7e14, #ffc107);"></div>
+                                    <div class="progress-fill" style="width: ${actionProgress}%; background: linear-gradient(90deg, #fd7e14, #ffc107);"></div>
                                 </div>
-                                <span class="progress-percentage">${
-                                    knowledgeStats.extractionProgress
-                                        ?.actionProgress || 0
-                                }%</span>
+                                <span class="progress-percentage">${actionProgress}%</span>
                             </div>
                         </div>
                     </div>
@@ -481,20 +474,13 @@ export class KnowledgeAnalyticsPanel {
                 <div class="card-body">
                     <h6 class="card-title">Knowledge Quality Distribution</h6>
                     <div class="quality-distribution">
-                        <div class="quality-segment high" style="width: ${
-                            knowledgeStats.qualityDistribution?.highQuality || 0
-                        }%;" title="High Quality: ${knowledgeStats.qualityDistribution?.highQuality || 0}%">
+                        <div class="quality-segment high" style="width: ${highQuality}%;" title="High Quality: ${highQuality}%">
                             <span class="quality-label">High</span>
                         </div>
-                        <div class="quality-segment medium" style="width: ${
-                            knowledgeStats.qualityDistribution?.mediumQuality ||
-                            0
-                        }%;" title="Medium Quality: ${knowledgeStats.qualityDistribution?.mediumQuality || 0}%">
+                        <div class="quality-segment medium" style="width: ${mediumQuality}%;" title="Medium Quality: ${mediumQuality}%">
                             <span class="quality-label">Medium</span>
                         </div>
-                        <div class="quality-segment low" style="width: ${
-                            knowledgeStats.qualityDistribution?.lowQuality || 0
-                        }%;" title="Low Quality: ${knowledgeStats.qualityDistribution?.lowQuality || 0}%">
+                        <div class="quality-segment low" style="width: ${lowQuality}%;" title="Low Quality: ${lowQuality}%">
                             <span class="quality-label">Low</span>
                         </div>
                     </div>
