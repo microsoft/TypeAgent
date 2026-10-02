@@ -8,6 +8,7 @@ import {
 
 import WebSocket from "ws";
 import { discoverPort } from "@typeagent/agent-server-client/discovery";
+import { getDiscoveredViewHostUrl } from "@typeagent/browser-control-rpc/viewRoutes";
 import {
     createChannelProviderAdapter,
     type ChannelProviderAdapter,
@@ -76,6 +77,35 @@ export class BrowserAgentIpc {
      */
     public setAgentServerUrl(url: string | undefined) {
         agentServerDiscoveryUrlOverride = url;
+    }
+
+    public async getViewHostUrl(): Promise<string> {
+        const agentServerUrl =
+            agentServerDiscoveryUrlOverride ||
+            process.env["WEBSOCKET_HOST"] ||
+            AGENT_SERVER_DEFAULT_URL;
+        const deadline = Date.now() + 10_000;
+        do {
+            const result = await discoverPort("browser", "view", {
+                url: agentServerUrl,
+            });
+            if (result.kind === "found") {
+                return getDiscoveredViewHostUrl(
+                    agentServerUrl,
+                    result.port,
+                    result.url,
+                );
+            }
+            if (result.kind === "unreachable") {
+                throw new Error(
+                    `Browser view discovery failed: ${result.error.message}`,
+                );
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        } while (Date.now() < deadline);
+        throw new Error(
+            "Browser view host is not ready. Enable the browser agent and try again.",
+        );
     }
 
     public async ensureWebsocketConnected(): Promise<WebSocket | undefined> {
