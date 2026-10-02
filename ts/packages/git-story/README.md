@@ -47,8 +47,8 @@ Routes are in `src/server/router.ts`; handlers are in `src/server/routes/`.
 
 ## Session Watcher
 
-The Session Watcher gathers context from coding sessions for use in commit
-stories. Its responsibilities are to:
+The Session Watcher reads GitHub Copilot (GHCP) CLI transcripts to gather context
+for commit stories. Its responsibilities are to:
 
 - Capture new session activity, including conversations and tool use.
 - Normalize events into a common format, keeping the original event ID, session

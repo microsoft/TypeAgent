@@ -16,7 +16,7 @@ export type SessionCaptureCheckpoint = {
     transcriptPath: string;
     // Null until a complete event has been read.
     lastReadEventId: string | null;
-    // Adapter-specific resume position after the last complete event.
+    // Resume position in the GHCP transcript after the last complete event.
     sourcePosition: string;
 };
 
@@ -73,7 +73,7 @@ export type NormalizedSessionUpdate = {
 export class SessionWatcher {
     async watch(_request: SessionWatchRequest): Promise<void> {
         // Pseudocode:
-        // Validate the session/transcript identity and select its source adapter.
+        // Validate the GHCP session identity and transcript path.
         // Register one watch per project/session and load its last-read checkpoint.
         // Verify the checkpoint's session, transcript, and event before resuming.
         // Catch up existing records, then schedule processUpdates on source changes.
@@ -116,8 +116,7 @@ export class SessionWatcher {
         // Pseudocode:
         // Validate sessionId/transcriptPath and resume after lastReadEventId.
         // Use sourcePosition for efficient seeking, verifying it against the saved event.
-        // CLI: consume complete JSONL records; leave a partially written tail unread.
-        // VS Code: reconstruct transcript state from its source-specific update format.
+        // Read complete GHCP JSONL records; leave a partially written tail unread.
         // Detect replacement/truncation and reconcile stable IDs rather than skipping data.
         // Return the session, transcript path, last complete event ID, and resume position.
         // With no complete new events, retain the checkpoint (null event ID at the start).
@@ -131,7 +130,7 @@ export class SessionWatcher {
         _updates: CapturedSessionUpdates,
     ): NormalizedSessionEvent[] {
         // Pseudocode:
-        // Validate source payloads and map messages, tools, and session lifecycle records.
+        // Validate GHCP payloads and map messages, tools, and session lifecycle records.
         // Map the source's assistant message role to agent in the normalized format.
         // Normalize each source event independently, preserving its ID as sourceEventId.
         // All events belong to the parent update's sessionId.
@@ -140,7 +139,6 @@ export class SessionWatcher {
         // Preserve toolCallId to associate starts/results, including across update batches.
         // CLI apply_patch: retain the completion's reported diff and success separately.
         // Preserve script commands/results even when no diff is present.
-        // VS Code edit groups need adapter-specific handling; do not invent tool-call links.
         // Diagnose unsupported records; ignore only explicitly recognized non-content records.
         // Do not infer intent, extract memories, or assign events to commits.
         throw new Error("SessionWatcher.normalizeEvents is not implemented");
