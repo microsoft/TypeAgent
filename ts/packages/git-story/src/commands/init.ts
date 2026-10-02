@@ -17,10 +17,9 @@ const COPILOT_HOOKS = {
     agentStop: "git story hooks copilot agent-stop",
 };
 
-// Git hooks to register. Each gets a shell script that forwards git's args
-// and stdin to `git-story hooks git <hook>`. `exec` hands the script's stdin
-// to the command, so hooks that receive input (e.g. pre-push) keep it.
-const GIT_HOOKS = ["pre-commit"];
+// Each git hook gets a shell script that forwards git's args and stdin to
+// `git-story hooks git <hook>`. `exec` hands the script's stdin to the
+// command, so hooks that receive input (e.g. pre-push) keep it.
 // Marks scripts written by init, so init never overwrites a user's own hook.
 const GIT_HOOK_MARKER = "# git-story hook";
 const gitHookScript = (hook: string) =>
@@ -93,8 +92,9 @@ export const initCommand = new Command("init")
         process.stdout.write(`${copilotMessage}\n`);
         cliLogger.info(copilotMessage);
 
-        // `--git-path hooks/<hook>` honors `core.hooksPath` and worktrees.
-        for (const hook of GIT_HOOKS) {
+        // Writes one git hook script. `--git-path hooks/<hook>` honors
+        // `core.hooksPath` and worktrees.
+        const registerGitHook = (hook: string) => {
             const hookPath = path.resolve(
                 git("rev-parse", "--git-path", `hooks/${hook}`),
             );
@@ -106,12 +106,13 @@ export const initCommand = new Command("init")
                 process.stderr.write(`${message}\n`);
                 cliLogger.error(message);
                 process.exitCode = 1;
-                continue;
+                return;
             }
             fs.mkdirSync(path.dirname(hookPath), { recursive: true });
             fs.writeFileSync(hookPath, gitHookScript(hook), { mode: 0o755 });
             const message = `Registered git ${hook} hook in ${hookPath}`;
             process.stdout.write(`${message}\n`);
             cliLogger.info(message);
-        }
+        };
+        registerGitHook("pre-commit");
     });
