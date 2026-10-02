@@ -33,7 +33,9 @@ export function showNotification(
     }, duration);
 }
 
-export async function showConfirmationDialog(message: string): Promise<boolean> {
+export async function showConfirmationDialog(
+    message: string,
+): Promise<boolean> {
     return new Promise((resolve) => {
         const confirmed = confirm(message);
         resolve(confirmed);
