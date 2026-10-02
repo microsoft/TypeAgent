@@ -193,8 +193,8 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Action Library",
-        id: "manageMacros",
+        title: "Automations",
+        id: "showAutomations",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
@@ -242,8 +242,8 @@ export async function handleContextMenuClick(
             await openChatAndInjectCommand(tab.id!, "@browser actions infer");
             break;
         }
-        case "manageMacros": {
-            await openBrowserView("macrosLibrary", lookupViewHost);
+        case "showAutomations": {
+            await openBrowserView("automationsLibrary", lookupViewHost);
             break;
         }
         case "extractKnowledgeFromPage": {

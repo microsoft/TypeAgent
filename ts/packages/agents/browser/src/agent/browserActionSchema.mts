@@ -50,7 +50,7 @@ export type OpenWebPage = {
             | "turtleGraphics"
             | "annotationsLibrary"
             | "knowledgeLibrary"
-            | "macrosLibrary"
+            | "automationsLibrary"
             | "memoryCenter"
             | "entityGraph"
             | "topicGraph"

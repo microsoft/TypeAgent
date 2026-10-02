@@ -114,7 +114,7 @@ describe("Context Menu Module", () => {
         });
 
         it.each([
-            ["manageMacros", "macros/"],
+            ["showAutomations", "automations/"],
             ["showWebsiteLibrary", "knowledge/"],
             ["showAnnotationsLibrary", "annotations/"],
         ])(

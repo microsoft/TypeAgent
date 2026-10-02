@@ -33,7 +33,16 @@ const pendingViewHosts = new WeakMap<
 const cancelViewHosts = new WeakMap<BrowserActionContext, () => void>();
 
 export type BrowserViewDomainFunctions = BrowserAgentInvokeFunctions &
-    Pick<ViewInvokeFunctions, "getAutoIndexSetting">;
+    Pick<
+        ViewInvokeFunctions,
+        | "getAutoIndexSetting"
+        | "listAutomations"
+        | "getAutomation"
+        | "validateAutomation"
+        | "approveAutomation"
+        | "disableAutomation"
+        | "deleteAutomation"
+    >;
 
 export function startViewService(
     context: SessionContext<BrowserActionContext>,

@@ -17,9 +17,9 @@ export default defineConfig({
                     __dirname,
                     "src/views/client/library/knowledgeLibrary.html",
                 ),
-                macrosLibrary: resolve(
+                automationsLibrary: resolve(
                     __dirname,
-                    "src/views/client/library/macrosLibrary.html",
+                    "src/views/client/library/automationsLibrary.html",
                 ),
                 memoryCenter: resolve(
                     __dirname,

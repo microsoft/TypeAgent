@@ -30,6 +30,10 @@ import {
 } from "./conversationManager.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
 import { createLocalSkillServices } from "./skillCatalog.js";
+import {
+    createAutomationSources,
+    withAutomationSources,
+} from "./automationSources.js";
 import { createDurableMemoryService } from "./durableMemoryService.js";
 
 const debug = registerDebug("agent-server:in-process");
@@ -116,6 +120,10 @@ export async function createInProcessAgentServer(
         hostName,
         {
             ...dispatcherOptions,
+            agentInitOptions: withAutomationSources(
+                dispatcherOptions.agentInitOptions,
+                createAutomationSources(instanceDir, macroManager),
+            ),
             appAgentProviders: [
                 ...(dispatcherOptions.appAgentProviders ?? []),
                 createMacroAppAgentProvider(macroManager),

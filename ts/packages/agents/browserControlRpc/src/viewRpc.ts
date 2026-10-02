@@ -21,8 +21,6 @@ export type ViewInvokeFunctions = MemoryCenterInvokeFunctions &
         | "getTopicDetails"
         | "getEntityDetails"
         | "getViewportBasedNeighborhood"
-        | "getAllWebFlows"
-        | "deleteWebFlow"
         | "importWebsiteDataWithProgress"
         | "importHtmlFolder"
     > & {
@@ -50,6 +48,12 @@ export type ViewInvokeFunctions = MemoryCenterInvokeFunctions &
             includeConnectivity?: boolean;
         }): Promise<unknown>;
         getAutoIndexSetting(params: {}): Promise<boolean>;
+        listAutomations(params: {}): Promise<unknown>;
+        getAutomation(params: { id: string }): Promise<unknown>;
+        validateAutomation(params: { id: string }): Promise<unknown>;
+        approveAutomation(params: { id: string }): Promise<unknown>;
+        disableAutomation(params: { id: string }): Promise<unknown>;
+        deleteAutomation(params: { id: string }): Promise<unknown>;
         getFileImportProgress(params: { importId: string }): Promise<{
             importId: string;
             progress?: unknown;
@@ -115,11 +119,15 @@ export const viewMethods = [
     "getTopicDetails",
     "getEntityDetails",
     "getViewportBasedNeighborhood",
-    "getAllWebFlows",
-    "deleteWebFlow",
     "importWebsiteDataWithProgress",
     "importHtmlFolder",
     "getAutoIndexSetting",
+    "listAutomations",
+    "getAutomation",
+    "validateAutomation",
+    "approveAutomation",
+    "disableAutomation",
+    "deleteAutomation",
     "getFileImportProgress",
     "cancelImport",
     "cancelFileImport",

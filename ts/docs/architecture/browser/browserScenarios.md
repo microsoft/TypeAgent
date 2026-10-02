@@ -268,7 +268,7 @@ extracted knowledge. They no longer depend on extension runtime messaging:
 - **Topic Graph** (`topicGraphView.html`) — Visualize topic hierarchy
 - **Annotations** (`annotationsLibrary.html`) — View page annotations
 - **Memory Center** (`memoryCenter.html`) — Inspect memory sources, jobs, and candidates
-- **Macros Library** (`macrosLibrary.html`) — Browse and manage saved WebFlows
+- **Automations** (`automationsLibrary.html`) — Browse and manage web macros, PowerShell flows, TaskFlows, and tool macros, and review and approve macro drafts
 
 Open them from extension context menus or with commands such as
 `@browser open knowledgeLibrary` and `@browser open memoryCenter`. The live

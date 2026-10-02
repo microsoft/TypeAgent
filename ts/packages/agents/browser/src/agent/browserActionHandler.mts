@@ -148,6 +148,7 @@ import {
     type AiSearchConfig,
 } from "./lookup/aiSearchLookup.mjs";
 import { LookupCommandHandlerTable } from "./lookup/lookupCommandHandlers.mjs";
+import { createAutomationCatalogService } from "@typeagent/agent-flows/catalog";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import {
     createAgentInvokeHandlers,
@@ -520,8 +521,11 @@ export interface urlResolutionAction {
 async function initializeBrowserContext(
     settings?: AppAgentInitSettings,
 ): Promise<BrowserActionContext> {
-    const { browserControl: clientBrowserControl, memoryServiceClient } =
-        normalizeBrowserAgentInitOptions(settings?.options);
+    const {
+        browserControl: clientBrowserControl,
+        memoryServiceClient,
+        automations,
+    } = normalizeBrowserAgentInitOptions(settings?.options);
 
     const localHostPort = settings?.localHostPort;
     if (localHostPort === undefined) {
@@ -534,6 +538,12 @@ async function initializeBrowserContext(
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
         ...(memoryServiceClient === undefined ? {} : { memoryServiceClient }),
+        ...(automations === undefined
+            ? {}
+            : {
+                  automationCatalog:
+                      createAutomationCatalogService(automations),
+              }),
         ...(memoryServiceClient === undefined
             ? {}
             : {
