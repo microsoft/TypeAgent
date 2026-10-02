@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { TextEmbeddingModel } from "@typeagent/aiclient";
+import {
+    initRuntimeConfigFromProcessEnv,
+    type TextEmbeddingModel,
+} from "@typeagent/aiclient";
 import { createConversationNameIndex } from "../src/conversationNameIndex.js";
 
 // A tiny deterministic embedding space so tests can assert semantic matches
@@ -88,6 +91,7 @@ describe("conversationNameIndex", () => {
         try {
             process.env.TYPEAGENT_EMBEDDING_PROVIDER = "local";
             delete process.env.AZURE_OPENAI_ENDPOINT_EMBEDDING;
+            initRuntimeConfigFromProcessEnv();
             expect(() => createConversationNameIndex()).not.toThrow();
         } finally {
             if (previousProvider === undefined) {
@@ -101,6 +105,7 @@ describe("conversationNameIndex", () => {
                 process.env.AZURE_OPENAI_ENDPOINT_EMBEDDING =
                     previousAzureEndpoint;
             }
+            initRuntimeConfigFromProcessEnv();
         }
     });
 

@@ -4738,6 +4738,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@3.25.76)
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
