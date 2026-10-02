@@ -14,6 +14,36 @@ jest.mock("./memoryHubImports.css", () => ({}));
 jest.mock("./viewClient", () => ({
     checkViewHealth: jest.fn(),
     connectViewEvents: jest.fn(),
+    invokeView: jest.fn(),
+    onViewEvent: jest.fn(),
+}));
+
+const health = jest.mocked(checkViewHealth);
+const connect = jest.mocked(connectViewEvents);
+const invoke = jest.mocked(invokeView);
+const subscribe = jest.mocked(onViewEvent);
+const result: ImportResult = {
+    success: true,
+    importId: "done",
+    itemCount: 4,
+    duration: 2000,
+    errors: [],
+    summary: {
+        totalProcessed: 5,
+        successfullyImported: 4,
+        knowledgeExtracted: 3,
+        entitiesFound: 2,
+        topicsIdentified: 1,
+        actionsDetected: 0,
+    },
+};
+let host: HTMLElement;
+let mounted: ReturnType<typeof mountMemoryHubImports>;
+let onError: jest.Mock;
+let onComplete: jest.Mock;
+let progressListener: (payload: unknown) => void;
+let unsubscribe: jest.Mock;
+let consoleError: jest.SpyInstance;
 
 function input(name: string): HTMLInputElement {
     return host.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
