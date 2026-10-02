@@ -35,6 +35,95 @@ export function generateGrammarRuleText(
     return rules.join("\n");
 }
 
+const SPACING_MARKER = "[spacing=optional]";
+const ACTION_NAME_PROPERTY = "actionName:";
+
+function isWhitespace(character: string): boolean {
+    return character.trim().length === 0;
+}
+
+function skipWhitespace(text: string, offset: number): number {
+    while (offset < text.length && isWhitespace(text[offset])) {
+        offset++;
+    }
+    return offset;
+}
+
+function hasRuleNameCharacters(name: string): boolean {
+    if (name.length === 0) return false;
+    for (const character of name) {
+        const code = character.charCodeAt(0);
+        const isDigit = code >= 48 && code <= 57;
+        const isUppercase = code >= 65 && code <= 90;
+        const isLowercase = code >= 97 && code <= 122;
+        if (!isDigit && !isUppercase && !isLowercase && character !== "_") {
+            return false;
+        }
+    }
+    return true;
+}
+
+function extractRulePattern(line: string): string | undefined {
+    if (!line.startsWith("<")) return undefined;
+
+    const ruleNameEnd = line.indexOf(">", 1);
+    if (ruleNameEnd < 0 || !hasRuleNameCharacters(line.slice(1, ruleNameEnd))) {
+        return undefined;
+    }
+
+    let offset = ruleNameEnd + 1;
+    const spacingMarkerStart = skipWhitespace(line, offset);
+    if (
+        spacingMarkerStart === offset ||
+        !line.startsWith(SPACING_MARKER, spacingMarkerStart)
+    ) {
+        return undefined;
+    }
+
+    offset = spacingMarkerStart + SPACING_MARKER.length;
+    const equals = skipWhitespace(line, offset);
+    if (equals === offset || line[equals] !== "=") return undefined;
+
+    offset = equals + 1;
+    const patternStart = skipWhitespace(line, offset);
+    if (patternStart === offset) return undefined;
+
+    const arrow = line.lastIndexOf("->");
+    if (arrow <= patternStart) return undefined;
+
+    let patternEnd = arrow;
+    while (patternEnd > patternStart && isWhitespace(line[patternEnd - 1])) {
+        patternEnd--;
+    }
+    if (patternEnd === arrow || patternEnd === patternStart) return undefined;
+
+    offset = arrow + 2;
+    const openingBrace = skipWhitespace(line, offset);
+    if (openingBrace === offset || line[openingBrace] !== "{") return undefined;
+
+    offset = openingBrace + 1;
+    const actionName = skipWhitespace(line, offset);
+    if (
+        actionName === offset ||
+        !line.startsWith(ACTION_NAME_PROPERTY, actionName)
+    ) {
+        return undefined;
+    }
+
+    return line.slice(patternStart, patternEnd);
+}
+
+export function extractRulePatterns(
+    grammarRuleText: string | undefined,
+): string[] {
+    const patterns: string[] = [];
+    for (const line of (grammarRuleText ?? "").split("\n")) {
+        const pattern = extractRulePattern(line);
+        if (pattern !== undefined) patterns.push(pattern);
+    }
+    return patterns;
+}
+
 export function extractRuleNames(grammarRuleText: string): string[] {
     const names: string[] = [];
     for (const line of grammarRuleText.split("\n")) {

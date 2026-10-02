@@ -260,12 +260,23 @@ The knowledge index supports multiple search strategies:
 
 ### Knowledge UI
 
-The extension provides several views for browsing extracted knowledge:
+The browser agent's localhost view server provides these pages for browsing
+extracted knowledge. They no longer depend on extension runtime messaging:
 
 - **Knowledge Library** (`knowledgeLibrary.html`) — Browse and search indexed pages
 - **Entity Graph** (`entityGraphView.html`) — Visualize entity relationships
 - **Topic Graph** (`topicGraphView.html`) — Visualize topic hierarchy
 - **Annotations** (`annotationsLibrary.html`) — View page annotations
+- **Memory Center** (`memoryCenter.html`) — Inspect memory sources, jobs, and candidates
+- **Automations** (`automationsLibrary.html`) — Browse and manage web macros, PowerShell flows, TaskFlows, and tool macros, and review and approve macro drafts
+
+Open them from extension context menus or with commands such as
+`@browser open knowledgeLibrary` and `@browser open memoryCenter`. The live
+view host is resolved at navigation time. Graph links preserve entity/topic
+query parameters across the legacy custom-protocol resolver and local route
+redirects. Opening an agent-owned library does not trigger webpage knowledge
+extraction. Chat Panel, Options, and the PDF interception bridge remain in
+the extension.
 
 ### End-to-end trace: "what did I read about climate change?"
 

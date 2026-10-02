@@ -50,7 +50,10 @@ export type OpenWebPage = {
             | "turtleGraphics"
             | "annotationsLibrary"
             | "knowledgeLibrary"
-            | "macrosLibrary"
+            | "automationsLibrary"
+            | "memoryCenter"
+            | "entityGraph"
+            | "topicGraph"
             | "chatView" // the chat view (a.k.a. conversation history, chat tab, chat viewer, etc.))
             | WebPageMoniker;
         // Enum indicating if the page to open in the new tab or the current tab.

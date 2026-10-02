@@ -38,10 +38,17 @@ const platformAdapter: PlatformAdapter = {
         if (href.startsWith("typeagent-file:")) {
             return;
         }
-        // Rewrite typeagent-browser:// URLs to the actual extension URL
         if (href.startsWith("typeagent-browser://")) {
-            const path = href.replace("typeagent-browser://", "");
-            href = chrome.runtime.getURL(path);
+            rpc.invoke("createTab", { url: href, active: true }).catch(
+                (error) => {
+                    console.error("Failed to open browser view:", error);
+                    chatPanel.addAgentMessage(
+                        error instanceof Error ? error.message : String(error),
+                        "browser",
+                    );
+                },
+            );
+            return;
         }
         chrome.tabs.create({ url: href });
     },

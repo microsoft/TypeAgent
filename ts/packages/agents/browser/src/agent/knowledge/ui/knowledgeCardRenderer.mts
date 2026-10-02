@@ -7,6 +7,8 @@
  */
 
 // Types and interfaces for knowledge rendering
+import { getBrowserViewLink } from "@typeagent/browser-control-rpc/viewRoutes";
+
 export interface ProgressState {
     phase:
         | "initializing"
@@ -92,7 +94,10 @@ export function generateDetailedKnowledgeCards(
             const confidence = e.confidence
                 ? ` ${Math.round(e.confidence * 100)}%`
                 : "";
-            const entityUrl = `typeagent-browser://views/entityGraphView.html?entity=${encodeURIComponent(name)}`;
+            const entityUrl = getBrowserViewLink(
+                "entityGraph",
+                `?entity=${encodeURIComponent(name)}`,
+            );
             markdown += `- [${name}${type}${confidence}](${entityUrl})\n`;
         }
         if (entities.length > MAX_ENTITIES) {
@@ -108,7 +113,10 @@ export function generateDetailedKnowledgeCards(
         for (let i = 0; i < displayCount; i++) {
             const topic = topics[i];
             const name = topic.name || topic;
-            const topicUrl = `typeagent-browser://views/topicGraphView.html?topic=${encodeURIComponent(name)}`;
+            const topicUrl = getBrowserViewLink(
+                "topicGraph",
+                `?topic=${encodeURIComponent(name)}`,
+            );
             markdown += `- [${name}](${topicUrl})\n`;
         }
         if (topics.length > MAX_TOPICS) {
@@ -177,7 +185,10 @@ export function generateLiveKnowledgePreview(
                           .slice(0, 15)
                           .map((entity) => {
                               const name = entity.name || entity;
-                              const entityUrl = `typeagent-browser://views/entityGraphView.html?entity=${encodeURIComponent(name)}`;
+                              const entityUrl = getBrowserViewLink(
+                                  "entityGraph",
+                                  `?entity=${encodeURIComponent(name)}`,
+                              );
                               return `<a href="${entityUrl}"
                                            style="display: inline-block; background: #e3f2fd; color: #1976d2;
                                                   padding: 4px 8px; border-radius: 12px; font-size: 11px;
@@ -212,7 +223,10 @@ export function generateLiveKnowledgePreview(
                           .slice(0, 12)
                           .map((topic) => {
                               const name = topic.name || topic;
-                              const topicUrl = `typeagent-browser://views/topicGraphView.html?topic=${encodeURIComponent(name)}`;
+                              const topicUrl = getBrowserViewLink(
+                                  "topicGraph",
+                                  `?topic=${encodeURIComponent(name)}`,
+                              );
                               return `<a href="${topicUrl}"
                                            style="display: inline-block; background: #fff3cd; color: #856404;
                                                   border: 1px solid #ffeaa7; padding: 4px 8px; border-radius: 12px;

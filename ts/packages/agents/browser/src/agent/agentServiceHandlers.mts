@@ -14,6 +14,26 @@ import {
     handleWebsiteAction,
     handleWebsiteLibraryStats,
 } from "./browserActionHandler.mjs";
+import { createAutomationViewFunctions } from "./automationViewHandlers.mjs";
+import {
+    ensureBrowserViewHost,
+    type BrowserViewDomainFunctions,
+} from "./viewService.mjs";
+
+export function createViewServiceDomain(
+    context: SessionContext<BrowserActionContext>,
+): BrowserViewDomainFunctions {
+    const handlers = createAgentInvokeHandlers(context);
+    return {
+        ...handlers,
+        getAutoIndexSetting: () =>
+            getSessionBrowserControl(context).getAutoIndexSetting(),
+        ...createAutomationViewFunctions(
+            handlers,
+            () => context.agentContext.automationCatalog,
+        ),
+    };
+}
 
 /**
  * Creates the BrowserAgentInvokeFunctions handlers that will be registered
@@ -328,10 +348,12 @@ export function createAgentInvokeHandlers(
         },
 
         // View host
-        getViewHostUrl: (_params: any) =>
-            Promise.resolve({
-                url: `http://localhost:${context.agentContext.localHostPort}`,
-            }),
+        getViewHostUrl: async (_params: any) => ({
+            url: await ensureBrowserViewHost(
+                context,
+                createViewServiceDomain(context),
+            ),
+        }),
 
         // Tab index - use tabTitleIndex directly from context
         addTabIdToIndex: async (params: any) => {
