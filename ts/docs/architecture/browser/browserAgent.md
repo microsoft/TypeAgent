@@ -106,7 +106,7 @@ and served by the same forked Express server as the PDF reader:
 | ------------------- | -------------------- | ---------------------- |
 | Annotations Library | `annotationsLibrary` | `/annotations/`        |
 | Memory Center       | `memoryCenter`       | `/memory/`             |
-| Macros Library      | `macrosLibrary`      | `/macros/`             |
+| Automations         | `automationsLibrary` | `/automations/`        |
 | Knowledge Library   | `knowledgeLibrary`   | `/knowledge/`          |
 | Entity Graph        | `entityGraph`        | `/knowledge/entities/` |
 | Topic Graph         | `topicGraph`         | `/knowledge/topics/`   |

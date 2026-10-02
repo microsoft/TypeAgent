@@ -8,7 +8,6 @@ import {
     connectViewEvents,
 } from "./viewClient";
 import { ViewService } from "./knowledgeUtilities";
-import { getAllWebFlows, deleteWebFlow } from "./macroUtilities";
 
 class FakeEventSource extends EventTarget {
     static OPEN = 1;
@@ -78,13 +77,19 @@ test("HTTP and transport errors are explicit", async () => {
     );
 });
 
-test("macros use the HTTP API for listing and deleting", async () => {
-    respond({ actions: [{ name: "macro" }] });
-    await expect(getAllWebFlows()).resolves.toEqual([{ name: "macro" }]);
+test("automation operations use the HTTP API with typed parameters", async () => {
+    respond({ items: [], providers: [] });
+    await expect(invokeView("listAutomations")).resolves.toEqual({
+        items: [],
+        providers: [],
+    });
     respond({ success: true });
-    await expect(deleteWebFlow("macro")).resolves.toEqual({ success: true });
+    await invokeView("deleteAutomation", { id: "toolMacro:m1" });
     expect(fetchMock.mock.calls[1][1].body).toBe(
-        JSON.stringify({ method: "deleteWebFlow", params: { name: "macro" } }),
+        JSON.stringify({
+            method: "deleteAutomation",
+            params: { id: "toolMacro:m1" },
+        }),
     );
 });
 

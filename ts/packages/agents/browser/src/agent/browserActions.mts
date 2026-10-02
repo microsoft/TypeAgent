@@ -21,12 +21,19 @@ import {
 } from "./agentWebSocketServer.mjs";
 import { getClientType } from "@typeagent/agent-server-protocol";
 import type { MemoryService } from "@typeagent/memory-service";
+import type {
+    AutomationCatalogService,
+    AutomationCatalogSources,
+} from "@typeagent/agent-flows/catalog";
 import type { BrowserMemoryService } from "./browserMemoryService.mjs";
 import type { GraphCache } from "./knowledge/types/knowledgeTypes.mjs";
 
 export type BrowserAgentInitOptions = {
     browserControl?: BrowserControl;
     memoryServiceClient?: MemoryService;
+    // Where the Automations page finds flows and macros owned by other
+    // agents. Supplied by the agent server.
+    automations?: AutomationCatalogSources;
 };
 
 export type BrowserActionContext = {
@@ -35,6 +42,7 @@ export type BrowserActionContext = {
     externalBrowserControl?: ExternalBrowserClient | undefined;
     useExternalBrowserControl: boolean;
     memoryServiceClient?: MemoryService;
+    automationCatalog?: AutomationCatalogService;
     browserMemoryService?: BrowserMemoryService;
     preferredClientType?: "extension" | "electron" | undefined;
     // Runtime override for the internet-lookup backend (@browser lookup ...);
@@ -87,7 +95,9 @@ export function normalizeBrowserAgentInitOptions(
     if (
         typeof options === "object" &&
         options !== null &&
-        ("browserControl" in options || "memoryServiceClient" in options)
+        ("browserControl" in options ||
+            "memoryServiceClient" in options ||
+            "automations" in options)
     ) {
         return options as BrowserAgentInitOptions;
     }
