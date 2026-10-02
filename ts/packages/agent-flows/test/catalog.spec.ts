@@ -114,6 +114,30 @@ describe("flow summaries", () => {
         expect(extractRulePatterns(undefined)).toEqual([]);
     });
 
+    test("extracts multiple patterns and uses the final action delimiter", () => {
+        const grammar = [
+            '<first> [spacing=optional] = show "a -> b" -> { actionName: "first" };',
+            '<second_2>\t[spacing=optional]\t=\tsecond pattern\t->\t{\tactionName: "second" };',
+        ].join("\n");
+
+        expect(extractRulePatterns(grammar)).toEqual([
+            'show "a -> b"',
+            "second pattern",
+        ]);
+    });
+
+    test("rejects malformed grammar without backtracking", () => {
+        const malformed =
+            "<rule>\t[spacing=optional]\t=\t" + "\t\t".repeat(10_000);
+
+        expect(extractRulePatterns(malformed)).toEqual([]);
+        expect(
+            extractRulePatterns(
+                "<rule> [spacing=optional] = pattern -> { parameters: {} };",
+            ),
+        ).toEqual([]);
+    });
+
     test("PowerShell flow maps enabled to active and carries usage", () => {
         const summary = summarizePowerShellFlow(flowEntry);
         expect(summary).toMatchObject({

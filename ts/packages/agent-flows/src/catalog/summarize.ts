@@ -11,6 +11,9 @@ import {
     type AutomationSummary,
     type AutomationVerb,
 } from "./types.js";
+import { extractRulePatterns } from "../grammar/grammarBuilder.js";
+
+export { extractRulePatterns };
 
 // The inputs below describe only the fields the catalog reads. They match the
 // persisted shapes of each store without importing the owning agent package.
@@ -111,18 +114,6 @@ export interface MacroLike {
     warnings: string[];
     candidateProvenance?: unknown;
     learning?: { cwd: string; grammarRules: string[]; mode: string };
-}
-
-const RULE_PATTERN =
-    /^<\w+>\s+\[spacing=optional\]\s+=\s+(.+)\s+->\s+\{\s+actionName:/;
-
-export function extractRulePatterns(grammarRuleText: string | undefined) {
-    const patterns: string[] = [];
-    for (const line of (grammarRuleText ?? "").split("\n")) {
-        const match = line.match(RULE_PATTERN);
-        if (match?.[1]) patterns.push(match[1]);
-    }
-    return patterns;
 }
 
 function flowStatus(enabled: boolean): AutomationStatus {
