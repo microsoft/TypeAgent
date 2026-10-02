@@ -903,19 +903,20 @@ describe("durable macro learning", () => {
     it("bounds model work at the exact 30-second deadline and persists timeout failure", async () => {
         const { manager } = await setup("all");
         const learner = runtime();
-        const extract = jest.fn(async () => new Promise<never>(() => {}));
+        let extractionStarted!: () => void;
+        const started = new Promise<void>((resolve) => {
+            extractionStarted = resolve;
+        });
+        const extract = jest.fn(async () => {
+            extractionStarted();
+            return new Promise<never>(() => {});
+        });
         learner.extract = extract;
         jest.useFakeTimers({ doNotFake: ["setImmediate"] });
         try {
             await manager.configureLearning(learner);
             const summary = await capture(manager, { learning: true });
-            for (
-                let attempt = 0;
-                attempt < 1000 && extract.mock.calls.length === 0;
-                attempt++
-            ) {
-                await new Promise<void>((resolve) => setImmediate(resolve));
-            }
+            await started;
             expect(learner.extract).toHaveBeenCalledTimes(1);
             await jest.advanceTimersByTimeAsync(29_999);
             expect(

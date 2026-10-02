@@ -18,6 +18,7 @@ jest.mock("../../src/extension/serviceWorker/messageHandlers", () => ({
 }));
 
 import { indexPageContent } from "../../src/extension/serviceWorker/messageHandlers";
+import { sendActionToAgent } from "../../src/extension/serviceWorker/websocket";
 
 let contextMenuModule: any;
 const mockIndexPageContent = indexPageContent as jest.MockedFunction<
@@ -27,6 +28,9 @@ const mockIndexPageContent = indexPageContent as jest.MockedFunction<
 describe("Context Menu Module", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.mocked(sendActionToAgent).mockResolvedValue({
+            url: "http://localhost:49152",
+        });
 
         // Clear all mock implementations from Chrome API
         chrome.contextMenus.create.mockClear();
@@ -90,9 +94,6 @@ describe("Context Menu Module", () => {
 
         it("should open the Memory Center", async () => {
             const mockTab = { id: 123, url: "https://example.com" };
-            chrome.runtime.getURL.mockReturnValue(
-                "chrome-extension://abcdefgh/views/memoryCenter.html",
-            );
             chrome.tabs.query.mockResolvedValue([]);
 
             await contextMenuModule.handleContextMenuClick(
@@ -101,12 +102,66 @@ describe("Context Menu Module", () => {
             );
 
             expect(chrome.tabs.query).toHaveBeenCalledWith({
-                url: "chrome-extension://abcdefgh/views/memoryCenter.html",
+                url: [
+                    "http://localhost:49152/memory/",
+                    "http://localhost:49152/library/memoryCenter.html",
+                ],
             });
             expect(chrome.tabs.create).toHaveBeenCalledWith({
-                url: "chrome-extension://abcdefgh/views/memoryCenter.html",
+                url: "http://localhost:49152/memory/",
                 active: true,
             });
+        });
+
+        it.each([
+            ["manageMacros", "macros/"],
+            ["showWebsiteLibrary", "knowledge/"],
+            ["showAnnotationsLibrary", "annotations/"],
+        ])(
+            "opens %s on the live local view host",
+            async (menuItemId, route) => {
+                chrome.tabs.query.mockResolvedValue([]);
+                await contextMenuModule.handleContextMenuClick(
+                    { menuItemId },
+                    { id: 123, url: "https://example.com" },
+                );
+                expect(chrome.tabs.create).toHaveBeenCalledWith({
+                    url: `http://localhost:49152/${route}`,
+                    active: true,
+                });
+                expect(sendActionToAgent).toHaveBeenCalledWith({
+                    actionName: "getViewHostUrl",
+                    parameters: {},
+                });
+            },
+        );
+
+        it("focuses an existing local library tab", async () => {
+            chrome.tabs.query.mockResolvedValue([{ id: 456, windowId: 789 }]);
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "showMemoryCenter" },
+                { id: 123, url: "https://example.com" },
+            );
+            expect(chrome.tabs.update).toHaveBeenCalledWith(456, {
+                active: true,
+            });
+            expect(chrome.windows.update).toHaveBeenCalledWith(789, {
+                focused: true,
+            });
+            expect(chrome.tabs.create).not.toHaveBeenCalled();
+        });
+
+        it("fails rather than opening an invalid or unavailable view host", async () => {
+            jest.mocked(sendActionToAgent).mockResolvedValue({
+                error: "Unavailable",
+            });
+            await expect(
+                contextMenuModule.handleContextMenuClick(
+                    { menuItemId: "showMemoryCenter" },
+                    { id: 123, url: "https://example.com" },
+                ),
+            ).rejects.toThrow(/unavailable/);
+            expect(chrome.tabs.create).not.toHaveBeenCalled();
         });
 
         it("saves the clicked tab and reports discovered candidates", async () => {

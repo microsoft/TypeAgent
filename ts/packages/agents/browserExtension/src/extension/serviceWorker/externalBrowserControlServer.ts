@@ -20,6 +20,10 @@ import { ContentScriptRpc } from "@typeagent/browser-control-rpc/contentScriptRp
 import { getTabHTMLFragments, CompressionMode } from "./capture";
 import { screenshotCoordinator } from "./screenshotCoordinator";
 import { runBrowserAction } from "./browserActions";
+import {
+    resolveLocalBrowserViewUrl,
+    type ViewHostLookup,
+} from "./browserViewNavigation";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "@typeagent/aiclient";
 
@@ -124,7 +128,10 @@ function isNoReceiverError(error: unknown): boolean {
     );
 }
 
-export function createExternalBrowserServer(channel: RpcChannel) {
+export function createExternalBrowserServer(
+    channel: RpcChannel,
+    lookupViewHost: ViewHostLookup,
+) {
     const rpcMap = new Map<
         number,
         { channel: ChannelAdapter; contentScriptRpc: ContentScriptRpc }
@@ -255,35 +262,6 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         return getContentScriptRpc(targetTab.id!);
     }
 
-    function resolveCustomProtocolUrl(url: string): string {
-        // Handle typeagent-browser custom protocol
-        if (url.startsWith("typeagent-browser://")) {
-            const customUrl = new URL(url);
-            const customPath = customUrl.pathname;
-            const queryString = customUrl.search;
-
-            // Map custom protocol to actual extension URL
-            const libraryMapping: Record<string, string> = {
-                "/annotationsLibrary.html": "views/annotationsLibrary.html",
-                "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
-                "/memoryCenter.html": "views/memoryCenter.html",
-                "/macrosLibrary.html": "views/macrosLibrary.html",
-                "/entityGraphView.html": "views/entityGraphView.html",
-                "/topicGraphView.html": "views/topicGraphView.html",
-            };
-
-            const extensionPath = libraryMapping[customPath];
-            if (extensionPath) {
-                // Append query parameters to preserve entity/topic selection
-                return chrome.runtime.getURL(extensionPath) + queryString;
-            } else {
-                throw new Error(`Unknown library page: ${customPath}`);
-            }
-        }
-
-        return url;
-    }
-
     chrome.runtime.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender) => {
             if (message.type === "rpc") {
@@ -298,7 +276,10 @@ export function createExternalBrowserServer(channel: RpcChannel) {
     const invokeFunctions: BrowserControlInvokeFunctions = {
         openWebPage: async (url: string, options?: { newTab?: boolean }) => {
             // Resolve custom protocol URLs to actual extension URLs
-            const resolvedUrl = resolveCustomProtocolUrl(url);
+            const resolvedUrl = await resolveLocalBrowserViewUrl(
+                url,
+                lookupViewHost,
+            );
 
             const targetTab = await getActiveTab();
             // Register the load-complete listener BEFORE issuing the
@@ -453,7 +434,10 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             );
 
             if (url) {
-                const resolvedUrl = resolveCustomProtocolUrl(url);
+                const resolvedUrl = await resolveLocalBrowserViewUrl(
+                    url,
+                    lookupViewHost,
+                );
                 console.log(
                     `[followLinkByText] resolvedUrl="${resolvedUrl}" openInNewTab=${openInNewTab}`,
                 );
@@ -490,7 +474,10 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const url = await contentScriptRpc.getPageLinksByPosition(position);
 
             if (url) {
-                const resolvedUrl = resolveCustomProtocolUrl(url);
+                const resolvedUrl = await resolveLocalBrowserViewUrl(
+                    url,
+                    lookupViewHost,
+                );
                 if (openInNewTab) {
                     await chrome.tabs.create({
                         url: resolvedUrl,

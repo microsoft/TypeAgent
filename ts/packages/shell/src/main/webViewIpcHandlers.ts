@@ -114,15 +114,8 @@ export async function initializeBrowserExtension(_appPath: string) {
                     },
                 );
 
-            // Store extension info for later URL construction
+            // Retained extension pages and browser automation still use this ID.
             (global as any).browserExtensionId = extension.id;
-            (global as any).browserExtensionUrls = {
-                "/annotationsLibrary.html": `chrome-extension://${extension.id}/views/annotationsLibrary.html`,
-                "/knowledgeLibrary.html": `chrome-extension://${extension.id}/views/knowledgeLibrary.html`,
-                "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`,
-                "/entityGraphView.html": `chrome-extension://${extension.id}/views/entityGraphView.html`,
-                "/topicGraphView.html": `chrome-extension://${extension.id}/views/topicGraphView.html`,
-            };
         } catch (error) {
             debugShellError(
                 `Failed to load browser extension from ${browserExtensionPath}:`,

@@ -15,6 +15,8 @@
     "./types": "./dist/browserControl.js",
     "./webAgentMessageTypes": "./dist/webAgentMessageTypes.js",
     "./serviceTypes": "./dist/serviceTypes.js",
+    "./viewRpc": "./dist/viewRpc.js",
+    "./viewRoutes": "./dist/viewRoutes.js",
     "./extensionEvents": "./dist/extensionEvents.js",
     "./platformServices": "./dist/platformServices.js",
     "./htmlReducer": "./dist/crossContextHtmlReducer.js",

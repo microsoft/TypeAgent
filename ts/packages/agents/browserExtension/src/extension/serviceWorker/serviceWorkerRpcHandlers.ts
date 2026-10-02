@@ -10,6 +10,10 @@ import {
 } from "./websocket";
 import { screenshotCoordinator } from "./screenshotCoordinator";
 import {
+    getViewHostUrl,
+    resolveLocalBrowserViewUrl,
+} from "./browserViewNavigation";
+import {
     connectToDispatcher,
     isDispatcherConnected,
     manageConversation,
@@ -1124,7 +1128,9 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         async createTab(params: any) {
             try {
                 return await chrome.tabs.create({
-                    url: params.url,
+                    url: await resolveLocalBrowserViewUrl(params.url, () =>
+                        getViewHostUrl(sendActionToAgent),
+                    ),
                     active: params.active ?? true,
                 });
             } catch (error) {

@@ -57,7 +57,7 @@ export function createInlineBrowserControl(
                 let resolvedUrl = new URL(url);
                 if (resolvedUrl.protocol === "typeagent-browser:") {
                     resolvedUrl =
-                        shellWindow.resolveCustomProtocolUrl(resolvedUrl);
+                        await shellWindow.resolveCustomProtocolUrl(resolvedUrl);
                 }
                 activeTab.webContentsView.webContents.loadURL(
                     resolvedUrl.toString(),
