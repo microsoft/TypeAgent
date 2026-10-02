@@ -4,7 +4,7 @@
 import path from "node:path";
 import {
     SessionWatcher,
-    type ISessionWatchRequest,
+    type SessionWatchRequest,
     type NormalizedSessionUpdate,
 } from "../src/sessionWatcher.js";
 import { StoryBuilder } from "../src/storyBuilder.js";
@@ -35,7 +35,7 @@ test("session watcher rejects stopping until implemented", async () => {
     );
 });
 
-const watchRequest: ISessionWatchRequest = {
+const watchRequest: SessionWatchRequest = {
     projectPath: process.cwd(),
     sessionId: "session-1",
     transcriptPath: path.resolve("session.jsonl"),
@@ -45,7 +45,20 @@ const watchRequest: ISessionWatchRequest = {
 const sessionUpdate: NormalizedSessionUpdate = {
     projectPath: watchRequest.projectPath,
     sessionId: watchRequest.sessionId,
-    events: [],
+    events: [
+        {
+            sourceEventId: "event-1",
+            type: "message",
+            role: "user",
+            text: "Use a queue per repository.",
+        },
+        {
+            sourceEventId: "event-2",
+            type: "message",
+            role: "agent",
+            text: "I will update the queue selection.",
+        },
+    ],
     metadata: watchRequest.metadata,
 };
 
@@ -62,7 +75,12 @@ test("session watcher rejects normalization until implemented", () => {
     expect(() =>
         new SessionWatcher().normalizeEvents(watchRequest, {
             records: [],
-            nextCheckpoint: { sourceId: "transcript-1", position: "0" },
+            nextCheckpoint: {
+                sessionId: watchRequest.sessionId,
+                transcriptPath: watchRequest.transcriptPath,
+                lastReadEventId: null,
+                sourcePosition: "0",
+            },
         }),
     ).toThrow("SessionWatcher.normalizeEvents is not implemented");
 });

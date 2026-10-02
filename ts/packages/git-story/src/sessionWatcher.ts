@@ -3,17 +3,21 @@
 
 import type { SessionMetadata } from "./gitCommitStory.js";
 
-export interface ISessionWatchRequest {
+export type SessionWatchRequest = {
     projectPath: string;
     sessionId: string;
     transcriptPath: string;
     metadata: SessionMetadata;
-}
+};
 
-// Adapter-specific position and source identity, including transcript rotation.
+// Capture progress only, not acknowledgement of downstream processing.
 export type SessionCaptureCheckpoint = {
-    sourceId: string;
-    position: string;
+    sessionId: string;
+    transcriptPath: string;
+    // Null until a complete event has been read.
+    lastReadEventId: string | null;
+    // Adapter-specific resume position after the last complete event.
+    sourcePosition: string;
 };
 
 export type CapturedSessionUpdates = {
@@ -22,24 +26,23 @@ export type CapturedSessionUpdates = {
 };
 
 export type NormalizedSessionEvent = {
-    id: string;
-    sourceEventIds: string[];
+    sourceEventId: string;
     timestamp?: string;
     model?: string;
 } & (
     | {
-          kind: "message";
-          role: "user" | "assistant" | "system";
+          type: "message";
+          role: "user" | "agent" | "system";
           text: string;
       }
     | {
-          kind: "tool-start";
+          type: "tool-start";
           toolCallId: string;
           toolName: string;
           arguments: unknown;
       }
     | {
-          kind: "tool-complete";
+          type: "tool-complete";
           toolCallId: string;
           success: boolean;
           output?: string;
@@ -48,7 +51,7 @@ export type NormalizedSessionEvent = {
           diff?: string;
       }
     | {
-          kind: "session";
+          type: "session";
           eventType: string;
           details: Record<string, unknown>;
       }
@@ -68,10 +71,11 @@ export type NormalizedSessionUpdate = {
 };
 
 export class SessionWatcher {
-    async watch(_request: ISessionWatchRequest): Promise<void> {
+    async watch(_request: SessionWatchRequest): Promise<void> {
         // Pseudocode:
         // Validate the session/transcript identity and select its source adapter.
-        // Register one watch per project/session and load its acknowledged checkpoint.
+        // Register one watch per project/session and load its last-read checkpoint.
+        // Verify the checkpoint's session, transcript, and event before resuming.
         // Catch up existing records, then schedule processUpdates on source changes.
         // Serialize processing per session; coalesce notifications without losing updates.
         // Resolve when monitoring is established, not when the session ends.
@@ -83,48 +87,55 @@ export class SessionWatcher {
         // Pseudocode:
         // Stop accepting notifications for all sessions watched by this instance.
         // Dispose subscriptions/timers and await in-flight processing.
-        // Keep the last acknowledged checkpoints; release readers and session state.
+        // Keep the last-read checkpoints; release readers and session state.
         // Surface shutdown failures; repeated stops should be safe once implemented.
         throw new Error("SessionWatcher.stop is not implemented");
     }
 
     async processUpdates(
-        _request: ISessionWatchRequest,
+        _request: SessionWatchRequest,
         _checkpoint?: SessionCaptureCheckpoint,
     ): Promise<SessionCaptureCheckpoint> {
         // Pseudocode:
         // captured = await captureUpdates(request, checkpoint).
+        // Persist captured.nextCheckpoint as read progress, independently of ingestion.
         // events = normalizeEvents(request, captured).
         // metadata = collectMetadata(request, events, previous session metadata).
         // approved = await filterForPrivacy({ projectPath, sessionId, events, metadata }).
         // If approved is not null, await publishUpdate(approved).
-        // Persist/return captured.nextCheckpoint only after delivery or deliberate filtering.
-        // On any error, report it and retain the checkpoint for an idempotent retry.
+        // Return captured.nextCheckpoint; it does not certify downstream delivery.
+        // Surface processing/delivery errors; recovery after capture requires separate replay.
         // Do not log or publish raw records or pre-filter metadata.
         throw new Error("SessionWatcher.processUpdates is not implemented");
     }
 
     async captureUpdates(
-        _request: ISessionWatchRequest,
+        _request: SessionWatchRequest,
         _checkpoint?: SessionCaptureCheckpoint,
     ): Promise<CapturedSessionUpdates> {
         // Pseudocode:
-        // Read source records after the checkpoint using the selected adapter.
+        // Validate sessionId/transcriptPath and resume after lastReadEventId.
+        // Use sourcePosition for efficient seeking, verifying it against the saved event.
         // CLI: consume complete JSONL records; leave a partially written tail unread.
         // VS Code: reconstruct transcript state from its source-specific update format.
         // Detect replacement/truncation and reconcile stable IDs rather than skipping data.
-        // Return a proposed checkpoint; reading alone must not acknowledge delivery.
+        // Return the session, transcript path, last complete event ID, and resume position.
+        // With no complete new events, retain the checkpoint (null event ID at the start).
+        // The caller persists read progress; do not wait for downstream processing.
         // Surface malformed complete records and unsupported formats explicitly.
         throw new Error("SessionWatcher.captureUpdates is not implemented");
     }
 
     normalizeEvents(
-        _request: ISessionWatchRequest,
+        _request: SessionWatchRequest,
         _updates: CapturedSessionUpdates,
     ): NormalizedSessionEvent[] {
         // Pseudocode:
         // Validate source payloads and map messages, tools, and session lifecycle records.
-        // Preserve native event IDs in sourceEventIds; namespace normalized IDs by source/session.
+        // Map the source's assistant message role to agent in the normalized format.
+        // Normalize each source event independently, preserving its ID as sourceEventId.
+        // All events belong to the parent update's sessionId.
+        // Identify events by (update.sessionId, event.sourceEventId).
         // If native IDs are absent, persist a stable source-record identity for retries.
         // Preserve toolCallId to associate starts/results, including across update batches.
         // CLI apply_patch: retain the completion's reported diff and success separately.
@@ -136,7 +147,7 @@ export class SessionWatcher {
     }
 
     collectMetadata(
-        _request: ISessionWatchRequest,
+        _request: SessionWatchRequest,
         _events: NormalizedSessionEvent[],
         _previous?: CapturedSessionMetadata,
     ): CapturedSessionMetadata {
@@ -165,8 +176,8 @@ export class SessionWatcher {
         // Pseudocode:
         // Deliver only privacy-approved events and metadata to downstream memory ingestion.
         // Use stable session/event IDs for idempotent delivery, including metadata updates.
-        // Await durable acceptance before the capture checkpoint can advance.
-        // Surface delivery errors so processing can retry without losing source records.
+        // Hand off without waiting for memory extraction or story building.
+        // Surface delivery errors; this handoff does not control the read checkpoint.
         // Memory extraction, story preparation, and commit attribution happen downstream.
         throw new Error("SessionWatcher.publishUpdate is not implemented");
     }

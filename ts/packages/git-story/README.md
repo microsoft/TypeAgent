@@ -45,33 +45,25 @@ $ curl -G http://127.0.0.1:51703/api/story/commits/79f77a3 --data-urlencode proj
 
 Routes are in `src/server/router.ts`; handlers are in `src/server/routes/`.
 
-## Session Watcher scaffold
+## Session Watcher
 
-`src/sessionWatcher.ts` defines typed stubs with pseudocode for the proposed
-session-ingestion flow:
+The Session Watcher gathers context from coding sessions for use in commit
+stories. Its responsibilities are to:
 
-```text
-watch -> processUpdates -> captureUpdates -> normalizeEvents
-                        -> collectMetadata -> filterForPrivacy -> publishUpdate
-                        -> acknowledge capture checkpoint
-stop -> dispose watches and finish in-flight processing
-```
+- Capture new session activity, including conversations and tool use.
+- Normalize events into a common format, keeping the original event ID, session
+  ID, and any recorded edit diffs.
+- Pass events and metadata through a separate privacy filter before sharing them
+  with memory processing.
+- Collect session metadata, such as the client, models, timestamps, and related
+  sessions.
 
-Capture is incremental and source-specific. Normalization preserves stable event
-identities and tool-call references. Where Copilot reports an edit diff, the
-watcher retains it as activity evidence; script runs without recorded diffs are
-still retained, without inventing change attribution. Metadata is accumulated
-per session, including client, models, timestamps, and parent-session linkage.
+The watcher supplies this context; the Story Builder decides what belongs in
+each commit story.
 
-Privacy filtering is a separate implementation connected through
-`filterForPrivacy`. It must approve/redact both events and metadata before
-downstream delivery, or explicitly exclude the update. Missing or failed privacy
-filtering must not allow raw data through. Checkpoints advance only after durable
-delivery or deliberate exclusion; retries must not duplicate ingested events.
-
-All methods currently throw `not implemented`, including the privacy handoff.
-No watcher is connected to the daemon yet. Memory extraction, story compilation,
-and activity-to-commit attribution are outside this scaffold.
+To resume reading, the watcher saves the session ID, transcript file, last
+complete event ID, and position in the source. This tracks what it has read,
+not what downstream memory processing has finished.
 
 ## Trademarks
 
