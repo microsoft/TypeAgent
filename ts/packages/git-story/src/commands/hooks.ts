@@ -25,39 +25,49 @@ export const hooksCommand = new Command("hooks").description(
     "Agent and git hook handlers",
 );
 
-// Copilot CLI hooks. Each reads its JSON payload on stdin, logs the
-// session id, and writes `{}` (change nothing). Placeholder until story
-// capture exists. Example: `git story hooks copilot session-start`.
-const COPILOT_HOOKS = [
-    ["user-prompt-submitted", "userPromptSubmitted"],
-    ["session-start", "sessionStart"],
-    ["agent-stop", "agentStop"],
-] as const;
+// Reads a Copilot hook payload and logs its session id.
+// Empty stdin (manual run) is treated as `{}`.
+async function readCopilotInput(hook: string): Promise<Partial<BaseHookInput>> {
+    const input = JSON.parse(
+        (await readStdin()) || "{}",
+    ) as Partial<BaseHookInput>;
+    process.stderr.write(`git-story ${hook}: session=${input.sessionId}\n`);
+    cliLogger.info(`${hook} session=${input.sessionId}`);
+    return input;
+}
 
+// Copilot CLI hooks. Each writes `{}` (change nothing). Placeholder until
+// story capture exists. Example: `git story hooks copilot session-start`.
 const copilotCommand = hooksCommand
     .command("copilot")
     .description("Copilot CLI hook handlers");
 
-for (const [command, hook] of COPILOT_HOOKS) {
-    copilotCommand
-        .command(command)
-        .description(`Handle the Copilot ${hook} hook`)
-        .action(async () => {
-            // Empty stdin (manual run) is treated as `{}`.
-            const input = JSON.parse(
-                (await readStdin()) || "{}",
-            ) as Partial<BaseHookInput>;
-            const output:
-                | UserPromptSubmittedOutput
-                | SessionStartOutput
-                | AgentStopOutput = {};
-            process.stderr.write(
-                `git-story ${hook}: session=${input.sessionId}\n`,
-            );
-            cliLogger.info(`${hook} session=${input.sessionId}`);
-            process.stdout.write(`${JSON.stringify(output)}\n`);
-        });
-}
+copilotCommand
+    .command("user-prompt-submitted")
+    .description("Handle the Copilot userPromptSubmitted hook")
+    .action(async () => {
+        await readCopilotInput("userPromptSubmitted");
+        const output: UserPromptSubmittedOutput = {};
+        process.stdout.write(`${JSON.stringify(output)}\n`);
+    });
+
+copilotCommand
+    .command("session-start")
+    .description("Handle the Copilot sessionStart hook")
+    .action(async () => {
+        await readCopilotInput("sessionStart");
+        const output: SessionStartOutput = {};
+        process.stdout.write(`${JSON.stringify(output)}\n`);
+    });
+
+copilotCommand
+    .command("agent-stop")
+    .description("Handle the Copilot agentStop hook")
+    .action(async () => {
+        await readCopilotInput("agentStop");
+        const output: AgentStopOutput = {};
+        process.stdout.write(`${JSON.stringify(output)}\n`);
+    });
 
 // `hooks git <hook> [args...]`: called by the scripts `init` writes to the
 // git hooks directory. Git's hook args and stdin are forwarded as-is.
