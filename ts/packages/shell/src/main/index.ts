@@ -225,31 +225,25 @@ async function initialize() {
     if (standalone) {
         void warmupRuntimeConfig();
     }
-    protocol.handle("typeagent-browser", (request) => {
-        const url = new URL(request.url);
-        const pathname = url.pathname;
-        const queryString = url.search;
-
-        const browserExtensionUrls = (global as any).browserExtensionUrls;
-        if (browserExtensionUrls && browserExtensionUrls[pathname]) {
-            const resolvedUrl = browserExtensionUrls[pathname] + queryString;
-            debugShell(`Protocol handler: ${request.url} -> ${resolvedUrl}`);
-
+    protocol.handle("typeagent-browser", async (request) => {
+        try {
             const shellWindow = getShellWindow();
-            if (shellWindow) {
-                shellWindow.createBrowserTab(new URL(resolvedUrl), {
-                    background: false,
-                });
+            if (!shellWindow) {
+                throw new Error("Shell window is not available");
             }
-
-            // Return a redirect response
+            const resolvedUrl = await shellWindow.resolveCustomProtocolUrl(
+                new URL(request.url),
+            );
             return new Response("", {
                 status: 302,
-                headers: { Location: resolvedUrl },
+                headers: { Location: resolvedUrl.href },
             });
-        } else {
-            debugShell(`Protocol handler: Unknown library page: ${pathname}`);
-            return new Response("Not Found", { status: 404 });
+        } catch (error) {
+            debugShellError("Failed to resolve browser view:", error);
+            return new Response(
+                error instanceof Error ? error.message : String(error),
+                { status: 503 },
+            );
         }
     });
 
@@ -344,23 +338,18 @@ async function initialize() {
         const shellWindow = getShellWindowForChatViewIpcEvent(event);
         if (!shellWindow) return;
 
-        // Handle custom protocol URLs
-        if (url.startsWith("typeagent-browser://")) {
-            const parsedUrl = new URL(url);
-            const pathname = parsedUrl.pathname;
-            const queryString = parsedUrl.search;
-
-            const browserExtensionUrls = (global as any).browserExtensionUrls;
-            if (browserExtensionUrls && browserExtensionUrls[pathname]) {
-                const resolvedUrl =
-                    browserExtensionUrls[pathname] + queryString;
-                shellWindow.createBrowserTab(new URL(resolvedUrl), {
+        if (
+            url.startsWith("typeagent-browser://") ||
+            url.startsWith("http://") ||
+            url.startsWith("https://")
+        ) {
+            try {
+                await shellWindow.createBrowserTab(new URL(url), {
                     background: false,
                 });
+            } catch (error) {
+                debugShellError("Failed to open browser link:", error);
             }
-        } else if (url.startsWith("http://") || url.startsWith("https://")) {
-            // Handle HTTP/HTTPS URLs - open them in a new browser tab
-            shellWindow.createBrowserTab(new URL(url), { background: false });
         }
     });
 
