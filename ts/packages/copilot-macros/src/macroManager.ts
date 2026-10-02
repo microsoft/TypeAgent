@@ -396,17 +396,6 @@ export class MacroManager {
             const latest = (await this.readCatalog()).find(
                 (item) => item.macroId === macro.macroId,
             );
-            if (
-                macro.learning &&
-                macro.candidateProvenance &&
-                latest?.state === "approved" &&
-                latest.version < macro.version &&
-                !this.isPendingLearningAdaptation(macro, latest)
-            ) {
-                throw new Error(
-                    "Learning adaptation requires its source version to remain approved.",
-                );
-            }
             const existing = await this.readVersionIfPresent(
                 macro.macroId,
                 macro.version,
@@ -418,14 +407,14 @@ export class MacroManager {
                     );
                 }
                 if (
-                    (latest === undefined ||
-                        latest.version <= existing.version) &&
-                    !this.isPendingLearningAdaptation(existing, latest)
+                    !(existing.learning && existing.candidateProvenance) &&
+                    (latest === undefined || latest.version <= existing.version)
                 ) {
                     await this.upsertSummary(existing);
                 }
                 return this.versionRef(existing);
             }
+            this.assertLearningAdaptationSource(macro, latest);
             if (
                 latest &&
                 (await this.inspectMacro(latest)).learning &&
@@ -441,7 +430,7 @@ export class MacroManager {
                 );
             }
             await this.writeVersion(macro);
-            if (!this.isPendingLearningAdaptation(macro, latest)) {
+            if (!this.hasCurrentLearningSource(macro, latest)) {
                 await this.upsertSummary(macro);
             }
             return this.versionRef(macro);
@@ -588,10 +577,11 @@ export class MacroManager {
             if (
                 (latest.version !== current.version ||
                     latest.state !== "draft") &&
-                !this.isPendingLearningAdaptation(current, latest)
+                !this.hasCurrentLearningSource(current, latest)
             ) {
                 throw new Error("Only the current draft can be approved.");
             }
+            this.assertLearningAdaptationSource(current, latest);
             const learningPreference = await this.learning.assertApproval(
                 current,
                 automatic,
@@ -639,6 +629,12 @@ export class MacroManager {
                     "Learning recovery cannot resurrect a superseded or disabled version.",
                 );
             }
+            if (
+                latest?.state !== "approved" ||
+                latest.version !== macro.version
+            ) {
+                this.assertLearningAdaptationSource(macro, latest);
+            }
             this.learning.validateApprovalGrammar(
                 macro,
                 await this.getApprovedMacros(),
@@ -647,13 +643,27 @@ export class MacroManager {
         });
     }
 
-    private isPendingLearningAdaptation(
+    private assertLearningAdaptationSource(
+        macro: CopilotToolMacro,
+        latest: MacroSummary | undefined,
+    ): void {
+        if (
+            macro.learning &&
+            macro.candidateProvenance &&
+            !this.hasCurrentLearningSource(macro, latest)
+        ) {
+            throw new Error(
+                "Learning adaptation requires its source version to remain approved.",
+            );
+        }
+    }
+
+    private hasCurrentLearningSource(
         macro: CopilotToolMacro,
         latest: MacroSummary | undefined,
     ): boolean {
         return (
             macro.learning !== undefined &&
-            macro.state === "draft" &&
             latest?.state === "approved" &&
             latest.version < macro.version &&
             macro.candidateProvenance?.sourceMacroId === macro.macroId &&

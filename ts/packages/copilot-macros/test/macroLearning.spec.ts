@@ -196,6 +196,19 @@ async function recordRunnerAdaptation(
     };
 }
 
+async function nonLearningSource(manager: MacroManager) {
+    const original = await capture(manager);
+    return manager.inspectMacro(
+        await manager.approveMacro(
+            await manager.createMacroFromTrace({
+                traceId: original.traceId,
+                name: "Read package",
+                description: "Read the requested file.",
+            }),
+        ),
+    );
+}
+
 describe("durable macro learning", () => {
     it("prepares a verified historical trace through the same coordinator after restart", async () => {
         const { manager, directory, host } = await setup("all");
@@ -216,6 +229,153 @@ describe("durable macro learning", () => {
         expect(learner.generateGrammar).toHaveBeenCalledTimes(1);
         expect(host.callTool).not.toHaveBeenCalled();
     });
+
+    it.each([false, true])(
+        "requires the non-learning source of a historical adaptation to remain approved (disabled=%s)",
+        async (disabled) => {
+            const { manager, directory, host } = await setup("all");
+            await manager.configureLearning(adaptationRuntime());
+            const source = await nonLearningSource(manager);
+            expect(source.version).toBe(2);
+            expect(source.learning).toBeUndefined();
+            const submission = await recordRunnerAdaptation(manager, source);
+            expect(
+                (await manager.getRecordingState("runner-adaptation-session"))
+                    .learningJob,
+            ).toBeUndefined();
+            if (disabled) {
+                expect(
+                    await manager.disableMacro({ macroId: source.macroId }),
+                ).toMatchObject({ version: 3, state: "disabled" });
+            }
+            const queued = await manager.prepareMacroLearning({
+                traceId: submission.traceId,
+            });
+            const job = await terminal(manager, queued.jobId);
+            expect(job.status).toBe(disabled ? "failed" : "ready");
+            if (disabled) {
+                expect(job.error).toContain(
+                    "source version to remain approved",
+                );
+                expect(await manager.getApprovedMacros()).toEqual([]);
+            } else {
+                expect(job.error).toBeUndefined();
+                expect(job.macro).toMatchObject({
+                    version: 4,
+                    state: "approved",
+                });
+            }
+            const restarted = new MacroManager(directory, host);
+            await restarted.configureLearning(adaptationRuntime());
+            expect(await restarted.listMacros()).toMatchObject([
+                {
+                    macroId: source.macroId,
+                    version: disabled ? 3 : 4,
+                    state: disabled ? "disabled" : "approved",
+                },
+            ]);
+            expect(await restarted.getMacroLearningJob(job.jobId)).toEqual(job);
+            expect((await restarted.getApprovedMacros()).length).toBe(
+                disabled ? 0 : 1,
+            );
+            expect(host.callTool).not.toHaveBeenCalled();
+        },
+    );
+
+    it.each(["approved", "disabled"] as const)(
+        "keeps an idempotent adaptation save from changing its %s catalog entry",
+        async (state) => {
+            const { manager, directory, host } = await setup("prepare");
+            await manager.configureLearning(adaptationRuntime());
+            const source = await nonLearningSource(manager);
+            const submission = await recordRunnerAdaptation(manager, source);
+            const queued = await manager.prepareMacroLearning({
+                traceId: submission.traceId,
+            });
+            const job = await terminal(manager, queued.jobId);
+            expect(job.status).toBe("needsReview");
+            const draft = await manager.inspectMacro(job.macro!);
+            await expect(manager.saveDraft(draft)).resolves.toEqual(job.macro);
+            expect(await manager.listMacros()).toMatchObject([
+                { version: 2, state: "approved" },
+            ]);
+            if (state === "approved") {
+                await manager.approveMacro(job.macro!);
+            } else {
+                await manager.disableMacro({ macroId: source.macroId });
+            }
+            const catalog = await manager.listMacros();
+            expect(catalog).toMatchObject([{ version: 4, state }]);
+            const restarted = new MacroManager(directory, host);
+            await restarted.configureLearning(adaptationRuntime());
+            await expect(restarted.saveDraft(draft)).resolves.toEqual(
+                job.macro,
+            );
+            expect(await restarted.listMacros()).toEqual(catalog);
+            expect(await restarted.inspectMacro(job.macro!)).toEqual(draft);
+            if (state === "disabled") {
+                await expect(
+                    restarted.approveMacro(job.macro!),
+                ).rejects.toThrow("current draft");
+                expect(await restarted.getApprovedMacros()).toEqual([]);
+            }
+            expect(host.callTool).not.toHaveBeenCalled();
+        },
+    );
+
+    it.each([true, false])(
+        "requires an interrupted adaptation's source for recovery (present=%s)",
+        async (present) => {
+            const { manager, directory, host } = await setup("all");
+            await manager.configureLearning(adaptationRuntime());
+            const source = await nonLearningSource(manager);
+            const sourceCatalog = await manager.listMacros();
+            const submission = await recordRunnerAdaptation(manager, source);
+            const queued = await manager.prepareMacroLearning({
+                traceId: submission.traceId,
+            });
+            const job = await terminal(manager, queued.jobId);
+            expect(job.status).toBe("ready");
+            const stateFile = path.join(
+                directory,
+                "copilot-macros",
+                "learning.json",
+            );
+            const state = JSON.parse(await readFile(stateFile, "utf8")) as {
+                jobs: Array<{ status: string }>;
+            };
+            state.jobs[0].status = "building";
+            await writeFile(stateFile, JSON.stringify(state));
+            await writeFile(
+                path.join(directory, "copilot-macros", "index.json"),
+                JSON.stringify(present ? sourceCatalog : []),
+            );
+            const restarted = new MacroManager(directory, host);
+            const learner = adaptationRuntime();
+            await restarted.configureLearning(learner);
+            const recovered = await terminal(restarted, job.jobId);
+            expect(recovered.status).toBe(present ? "ready" : "failed");
+            if (present) {
+                expect(recovered.macro).toMatchObject({
+                    version: 4,
+                    state: "approved",
+                });
+                expect(await restarted.listMacros()).toMatchObject([
+                    { version: 4, state: "approved" },
+                ]);
+            } else {
+                expect(recovered.error).toContain(
+                    "source version to remain approved",
+                );
+                expect(await restarted.listMacros()).toEqual([]);
+                expect(await restarted.getApprovedMacros()).toEqual([]);
+            }
+            expect(learner.extract).not.toHaveBeenCalled();
+            expect(learner.build).not.toHaveBeenCalled();
+            expect(learner.generateGrammar).not.toHaveBeenCalled();
+            expect(host.callTool).not.toHaveBeenCalled();
+        },
+    );
 
     it("converges evidenced runner submissions on a new immutable version and grammar target", async () => {
         const { manager, host } = await setup("all");
@@ -432,13 +592,11 @@ describe("durable macro learning", () => {
             await expect(
                 manager.approveMacro(superseded.macro!),
             ).rejects.toThrow("current draft");
-            if (selection === 0) {
-                await expect(
-                    manager.saveDraft(
-                        await manager.inspectMacro(superseded.macro!),
-                    ),
-                ).rejects.toThrow("source version to remain approved");
-            }
+            await expect(
+                manager.saveDraft(
+                    await manager.inspectMacro(superseded.macro!),
+                ),
+            ).resolves.toEqual(superseded.macro);
             expect(
                 (await manager.getApprovedMacros()).map(
                     (macro) => macro.version,

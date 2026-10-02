@@ -276,6 +276,10 @@ New adaptations reserve distinct draft/approval version pairs, including when
 another draft is still pending. Lifecycle versions are allocated above persisted
 immutable versions, so disabling v2 with a hidden v3 draft writes disabled v4
 instead of overwriting v3. Prepared grammar targets are never renumbered.
+Adaptation publication requires the source to remain the current approved
+version, including for historical traces of non-learning macros. Re-saving an
+identical persisted adaptation draft never changes the catalog; approval and
+interrupted-publication recovery recheck the source under the catalog lock.
 The prior approved route stays active while a Prepare adaptation awaits review;
 publication replaces it with one current approved artifact, not a competing
 catalog entry. Disable/forget suppress every learned version of that macro,
