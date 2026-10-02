@@ -7,9 +7,14 @@ import {
     createEditedScriptSource,
     type ScriptRecipe,
 } from "../src/types/scriptRecipe.js";
+import {
+    canonicalPowerShellJson,
+    createPowerShellRevision,
+    validatePowerShellIdentifier,
+} from "@typeagent/agent-flows/powershell/integrity";
 
 class MockStorage implements Storage {
-    private data = new Map<string, string>();
+    private data = new Map<string, string | Uint8Array>();
     private writeFailure:
         | {
               path: string;
@@ -33,6 +38,10 @@ class MockStorage implements Storage {
         };
     }
 
+    setRawScriptBytes(path: string, bytes: Uint8Array): void {
+        this.data.set(path, bytes);
+    }
+
     async read(storagePath: string): Promise<Uint8Array>;
     async read(
         storagePath: string,
@@ -46,7 +55,9 @@ class MockStorage implements Storage {
         if (value === undefined) {
             throw new Error(`File not found: ${storagePath}`);
         }
-        return options ? value : new TextEncoder().encode(value);
+        const bytes =
+            typeof value === "string" ? new TextEncoder().encode(value) : value;
+        return options ? new TextDecoder().decode(bytes) : bytes;
     }
 
     async write(storagePath: string, data: string | Uint8Array): Promise<void> {
@@ -119,6 +130,239 @@ function createRecipe(actionName = "showPorts"): ScriptRecipe {
 }
 
 describe("PowerShellStore capability lifecycle", () => {
+    it("preserves UTF-8 BOM content and rejects invalid byte sequences", async () => {
+        const storage = new MockStorage();
+        const store = new PowerShellStore(storage);
+        await store.initialize();
+        const recipe = createRecipe();
+        recipe.script.body = "\ufeffWrite-Output 'candidate'";
+        await store.saveFlow(recipe);
+        expect(await store.getScript("showPorts")).toBe(recipe.script.body);
+        storage.setRawScriptBytes(
+            "scripts/showPorts.ps1",
+            new Uint8Array([0xc3, 0x28]),
+        );
+        await expect(store.getScript("showPorts")).rejects.toThrow(
+            "Cannot read exact UTF-8 PowerShell script",
+        );
+    });
+
+    it.each(["manual", "reasoning", "seed", "imported"] as const)(
+        "stores %s data as a candidate without execution approval",
+        async (source) => {
+            const storage = new MockStorage();
+            const store = new PowerShellStore(storage);
+            await store.initialize();
+            const recipe = createRecipe();
+            Object.assign(recipe, { approved: true, hash: "model-supplied" });
+            await store.saveFlow(recipe, source);
+            const revision = JSON.parse(
+                await storage.read("revisions/showPorts.json", "utf8"),
+            );
+            expect(revision.scriptHash).toMatch(/^[a-f0-9]{64}$/);
+            expect(revision).not.toHaveProperty("approved");
+            expect(revision).not.toHaveProperty("hash");
+        },
+    );
+
+    it("rejects a changed script reference before following it", async () => {
+        const storage = new MockStorage();
+        const store = new PowerShellStore(storage);
+        await store.initialize();
+        await store.saveFlow(createRecipe());
+        const flow = JSON.parse(
+            await storage.read("flows/showPorts.flow.json", "utf8"),
+        );
+        flow.scriptRef = "../outside.ps1";
+        await storage.write("flows/showPorts.flow.json", JSON.stringify(flow));
+        await expect(store.getFlow("showPorts")).rejects.toThrow(
+            "Invalid flow metadata",
+        );
+    });
+
+    it.each([
+        "../escape",
+        "..\\escape",
+        "C:\\escape",
+        "flow:stream",
+        "__proto__",
+        "constructor",
+        "NUL",
+        "bad/name",
+    ])(
+        "rejects unsafe identifier %s before any persistence or lookup",
+        async (name) => {
+            const storage = new MockStorage();
+            const store = new PowerShellStore(storage);
+            await store.initialize();
+            expect(() => validatePowerShellIdentifier(name)).toThrow(
+                "Invalid PowerShell flow identifier",
+            );
+            await expect(store.saveFlow(createRecipe(name))).rejects.toThrow(
+                "Invalid PowerShell flow identifier",
+            );
+            await expect(
+                store.savePending(createRecipe(name)),
+            ).rejects.toThrow("Invalid PowerShell flow identifier");
+            await expect(store.getFlow(name)).rejects.toThrow(
+                "Invalid PowerShell flow identifier",
+            );
+            await expect(store.deleteFlow(name)).rejects.toThrow(
+                "Invalid PowerShell flow identifier",
+            );
+            await expect(storage.list("flows")).resolves.toEqual([]);
+            await expect(storage.list("scripts")).resolves.toEqual([]);
+        },
+    );
+
+    it("rejects malicious indexes before following stored paths", async () => {
+        const storage = new MockStorage();
+        await storage.write(
+            "index.json",
+            JSON.stringify({
+                version: 1,
+                flows: {
+                    showPorts: {
+                        actionName: "showPorts",
+                        flowPath: "../outside.json",
+                        scriptPath: "scripts/showPorts.ps1",
+                    },
+                },
+                deletedSamples: [],
+            }),
+        );
+        await expect(
+            new PowerShellStore(storage).initialize(),
+        ).rejects.toThrow("Invalid PowerShell storage destination");
+    });
+
+    it("does not rebaseline same-command edits during load or registration", async () => {
+        const storage = new MockStorage();
+        const store = new PowerShellStore(storage);
+        await store.initialize();
+        await store.saveFlow(createRecipe());
+        const recorded = await storage.read("revisions/showPorts.json", "utf8");
+        await storage.write(
+            "scripts/showPorts.ps1",
+            "Get-NetTCPConnection -State Established",
+        );
+        await expect(store.getScript("showPorts")).rejects.toThrow(
+            "integrity check failed",
+        );
+        await expect(
+            store.updateFlowScript("showPorts", "Write-Output 1", [
+                "Write-Output",
+            ]),
+        ).rejects.toThrow("integrity check failed");
+        await expect(
+            new PowerShellStore(storage).initialize(),
+        ).rejects.toThrow("integrity check failed");
+        expect(await storage.read("revisions/showPorts.json", "utf8")).toBe(
+            recorded,
+        );
+    });
+
+    it("detects changed defaults and preserves old data without a host revision", async () => {
+        const storage = new MockStorage();
+        const store = new PowerShellStore(storage);
+        await store.initialize();
+        const recipe = createRecipe();
+        recipe.parameters = [
+            {
+                name: "Value",
+                type: "string",
+                required: false,
+                description: "",
+                default: "original",
+            },
+        ];
+        await store.saveFlow(recipe);
+        const flow = JSON.parse(
+            await storage.read("flows/showPorts.flow.json", "utf8"),
+        );
+        flow.parameters[0].default = "changed";
+        await storage.write("flows/showPorts.flow.json", JSON.stringify(flow));
+        await expect(store.getFlow("showPorts")).rejects.toThrow(
+            "integrity check failed",
+        );
+        await storage.delete("revisions/showPorts.json");
+        await expect(
+            new PowerShellStore(storage).initialize(),
+        ).rejects.toThrow("Missing host revision");
+        expect(await storage.exists("scripts/showPorts.ps1")).toBe(true);
+    });
+
+    it("keeps usage accounting out of execution revisions", async () => {
+        const store = new PowerShellStore(new MockStorage());
+        await store.initialize();
+        await store.saveFlow(createRecipe());
+        const before = await store.getExecutionSnapshot("showPorts");
+        await store.recordUsage("showPorts");
+        const after = await store.getExecutionSnapshot("showPorts");
+        expect(after?.revision).toEqual(before?.revision);
+        await expect(before?.assertCurrent()).resolves.toBeUndefined();
+    });
+
+    it("invalidates outstanding snapshots after a controlled edit", async () => {
+        const store = new PowerShellStore(new MockStorage());
+        await store.initialize();
+        await store.saveFlow(createRecipe());
+        const before = await store.getExecutionSnapshot("showPorts");
+        await store.updateFlowScript("showPorts", "Write-Output 'changed'", [
+            "Write-Output",
+        ]);
+        await expect(before?.assertCurrent()).rejects.toThrow(
+            "changed while approval was pending",
+        );
+        expect(before?.script).toBe("Get-NetTCPConnection -State Listen");
+        expect(
+            (await store.getExecutionSnapshot("showPorts"))?.revision,
+        ).not.toEqual(before?.revision);
+    });
+
+    it("rejects pending traversal and tampered promotion", async () => {
+        const storage = new MockStorage();
+        const store = new PowerShellStore(storage);
+        await store.initialize();
+        await expect(
+            store.getPending("../outside.recipe.json"),
+        ).rejects.toThrow("Invalid PowerShell flow identifier");
+        await expect(
+            store.deletePending("C:\\outside.recipe.json"),
+        ).rejects.toThrow("Invalid PowerShell flow identifier");
+        const id = await store.savePending(createRecipe());
+        const changed = createRecipe();
+        changed.script.body += " ";
+        await storage.write(
+            `pending/${id}.recipe.json`,
+            JSON.stringify(changed),
+        );
+        await expect(
+            store.promotePending(`${id}.recipe.json`),
+        ).rejects.toThrow("integrity check failed");
+        expect(store.hasFlow("showPorts")).toBe(false);
+    });
+
+    it("uses deterministic SHA-256 without trimming or normalizing scripts", () => {
+        expect(canonicalPowerShellJson({ b: 2, a: 1 })).toBe('{"a":1,"b":2}');
+        const recipe = createRecipe();
+        const metadata = {
+            ...recipe,
+            expectedOutputFormat: recipe.script.expectedOutputFormat,
+        };
+        const revision = createPowerShellRevision("Write-Output 1\r\n", metadata);
+        expect(revision.scriptHash).toMatch(/^[0-9a-f]{64}$/);
+        expect(
+            createPowerShellRevision("Write-Output 1\n", metadata),
+        ).not.toEqual(revision);
+        expect(
+            createPowerShellRevision("Write-Output 1\r\n ", metadata),
+        ).not.toEqual(revision);
+        expect(() => createPowerShellRevision("\ud800", metadata)).toThrow(
+            "not valid Unicode",
+        );
+    });
+
     it("does not overwrite an existing flow", async () => {
         const store = new PowerShellStore(new MockStorage());
         await store.initialize();

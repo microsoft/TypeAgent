@@ -13,6 +13,8 @@ import {
     hasCachedReasoningApproval,
     recordReasoningApprovalChoice,
     setReasoningPermissionSessionApproval,
+    recordPowerShellExecutionBlock,
+    getPowerShellExecutionBlock,
     type ReasoningPermissionPolicyRequest,
 } from "../src/reasoning/reasoningPermissionPolicy.js";
 
@@ -35,6 +37,58 @@ function req(
         ...overrides,
     };
 }
+
+describe("PowerShell terminal execution decisions", () => {
+    it.each([
+        "policyDenied",
+        "integrityFailure",
+        "approvalRequired",
+        "approvalDenied",
+        "stalePlan",
+        "cancelled",
+    ])("blocks further tools after %s only for that request", (kind) => {
+        const host = h();
+        setReasoningPermissionSessionApproval(host, true);
+        recordPowerShellExecutionBlock(host, "r1", {
+            error: "blocked",
+            errorCode: `powershell.${kind}`,
+        });
+        expect(getPowerShellExecutionBlock(host, "r1")).toContain(
+            "cannot retry, repair, or switch",
+        );
+        expect(hasCachedReasoningApproval(host, req())).toBe(false);
+        expect(
+            recordReasoningApprovalChoice(host, req(), REASONING_ALLOW_ONCE),
+        ).toBe(false);
+        expect(getPowerShellExecutionBlock(host, "r2")).toBeUndefined();
+        expect(
+            hasCachedReasoningApproval(host, req({ requestId: "r2" })),
+        ).toBe(true);
+        expect(getPowerShellExecutionBlock(h(), "r1")).toBeUndefined();
+    });
+
+    it("does not block reasoning for ordinary script failures", () => {
+        const host = h();
+        recordPowerShellExecutionBlock(host, "r1", {
+            error: "script failed",
+            errorCode: "powershell.scriptFailure",
+        });
+        expect(getPowerShellExecutionBlock(host, "r1")).toBeUndefined();
+    });
+
+    it("keeps concurrent denied requests independently blocked", () => {
+        const host = h();
+        for (const requestId of ["r1", "r2"]) {
+            recordPowerShellExecutionBlock(host, requestId, {
+                error: "blocked",
+                errorCode: "powershell.approvalDenied",
+            });
+        }
+        expect(getPowerShellExecutionBlock(host, "r1")).toBeDefined();
+        expect(getPowerShellExecutionBlock(host, "r2")).toBeDefined();
+        expect(getPowerShellExecutionBlock(host, "r3")).toBeUndefined();
+    });
+});
 
 describe("reasoningPermissionPolicy: session approval", () => {
     it("tracks blanket session approval per agent context", () => {

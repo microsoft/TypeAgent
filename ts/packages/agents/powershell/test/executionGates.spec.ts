@@ -208,7 +208,7 @@ describe("PowerShell execution gates", () => {
     });
 
     itOnWindows(
-        "allows direct dynamic runner calls with an explicit YAML opt-in",
+        "allows direct dynamic runner calls with YAML opt-in and invocation approval",
         async () => {
             await writeFile(
                 join(configDirectory, "config.local.yaml"),
@@ -217,6 +217,7 @@ describe("PowerShell execution gates", () => {
 
             const result = await executeScript({
                 script: "Write-Output 'ran'",
+                requestApproval: async () => 1,
                 parameters: {},
                 provenance: "generated",
                 sandbox: {

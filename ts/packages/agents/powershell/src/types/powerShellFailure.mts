@@ -9,6 +9,10 @@ export type PowerShellFailureKind =
     | "invalidParameters"
     | "scriptFailure"
     | "policyDenied"
+    | "integrityFailure"
+    | "approvalRequired"
+    | "approvalDenied"
+    | "stalePlan"
     | "cancelled"
     | "partialSideEffects";
 
@@ -41,6 +45,19 @@ export function createPowerShellFailure(
 export function createPowerShellExecutionFailure(
     result: ScriptExecutionResult,
 ): ActionResultError {
+    switch (result.errorCode) {
+        case "powershell.integrityFailure":
+        case "powershell.approvalRequired":
+        case "powershell.approvalDenied":
+        case "powershell.stalePlan":
+            return createPowerShellFailure(
+                result.errorCode.slice(
+                    "powershell.".length,
+                ) as PowerShellFailureKind,
+                result.stderr,
+                { retryable: false },
+            );
+    }
     if (result.cancelled) {
         return createPowerShellFailure(
             "cancelled",

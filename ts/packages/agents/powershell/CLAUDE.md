@@ -23,16 +23,25 @@ powershell/
 │   └── listFiles.flow.json     # Flow metadata + parameters + sandbox
 ├── scripts/
 │   └── listFiles.ps1           # Separated PowerShell script
-└── pending/
-    └── *.recipe.json           # Captured from reasoning, not yet promoted
+├── pending/
+│   └── *.recipe.json           # Captured from reasoning, not yet promoted
+└── revisions/
+    └── *.json                  # Host-computed candidate integrity records
 ```
 
 ## Lifecycle
 
 1. `updateAgentContext(enable=true)` → init store → seed samples → register grammars
 2. Grammar matcher routes to powershell agent on match
-3. `executeAction` looks up flow from store → reads `.ps1` → executes in sandbox
-4. Reasoning traces with PowerShell → `ScriptRecipeGenerator` → saved to `pending/`
+3. `executeAction` verifies host revision → snapshots script/metadata/arguments → asks default-Cancel approval → executes that snapshot through the broker
+4. Reasoning traces with PowerShell → `ScriptRecipeGenerator` → shared store creates active candidates without execution approval
+
+The PowerShell store and recipe types are shared through
+`@typeagent/agent-flows/powershell` so reasoning capture does not write active
+flows directly. Captures, imports, seeds, edits and promotions create candidates,
+not approval. Never rehash unexpected persisted edits on load. Missing legacy
+revision records require explicit archival/re-import; never silently delete data.
+See the package README for the restricted trust model and reset procedure.
 
 ## Script Recipe Format
 
