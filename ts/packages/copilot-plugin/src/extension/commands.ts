@@ -12,6 +12,7 @@ import {
     handleModeSetting,
 } from "../shared/mode-command.js";
 import { connectToAgentServer } from "../shared/typeagent-client.js";
+import { cancelMacroWork, learningSetting } from "../shared/macro-learning.js";
 
 function statusText(): string {
     const config = readConfig();
@@ -30,6 +31,7 @@ function statusText(): string {
 
 export function createExtensionCommands(
     log: (message: string) => Promise<void>,
+    sendTask?: (task: string) => Promise<void>,
 ): CommandDefinition[] {
     return [
         {
@@ -46,20 +48,58 @@ export function createExtensionCommands(
             },
         },
         {
-            name: "typeagent-macro-record",
-            description: "Record the next Copilot interaction as a macro trace",
+            name: "typeagent-macro-learning",
+            description:
+                "Show or set workspace macro learning: off, prepare, read-only, all",
+            handler: async ({ args }) =>
+                log(await learningSetting(process.cwd(), args)),
+        },
+        {
+            name: "typeagent-macro-status",
+            description: "Show recording and background macro learning status",
             handler: async ({ sessionId }) => {
+                const connection = await connectToAgentServer();
+                try {
+                    const state =
+                        await connection.getMacroRecordingState(sessionId);
+                    await log(JSON.stringify(state, null, 2));
+                } finally {
+                    await connection.close();
+                }
+            },
+        },
+        {
+            name: "typeagent-macro-cancel",
+            description:
+                "Cancel selected recording or unapproved background preparation",
+            handler: async ({ sessionId }) =>
+                log(await cancelMacroWork(sessionId)),
+        },
+        {
+            name: "typeagent-macro-record",
+            description:
+                "Execute and learn a task, or learn the next executed interaction",
+            handler: async ({ sessionId, args }) => {
+                const task = args.trim();
+                if (task && !sendTask) {
+                    throw new Error(
+                        "Task execution is unavailable in this extension session.",
+                    );
+                }
                 const connection = await connectToAgentServer();
                 try {
                     const token = await connection.armMacroRecording({
                         sessionId,
+                        cwd: process.cwd(),
+                        learning: true,
                     });
                     await log(
-                        `Macro recording armed for the next interaction. Recording token: ${token.id}`,
+                        `Macro learning armed for ${task ? "this task" : "the next interaction"}. Recording token: ${token.id}`,
                     );
                 } finally {
                     await connection.close();
                 }
+                if (task && sendTask) await sendTask(task);
             },
         },
     ];

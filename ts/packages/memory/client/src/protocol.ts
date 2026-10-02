@@ -444,11 +444,13 @@ export const answerRequestSchema = z.object({
     limit: z.number().int().positive().max(100).optional(),
     maxResponseChars: z.number().int().positive().optional(),
     sourceIds: z.array(identifierSchema).optional(),
+    answerMode: z.enum(["synthesized", "extractive"]).optional(),
 });
 
 export const answerResultSchema = z.object({
     question: z.string(),
     answer: z.string(),
+    mode: z.enum(["synthesized", "extractive"]),
     citations: searchResultSchema.shape.matches,
     grounded: z.literal(true),
     indexVersion: z.string(),

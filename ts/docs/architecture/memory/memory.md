@@ -1,19 +1,32 @@
 # Memory architecture
 
-TypeAgent currently has three cooperating memory paths. They share KnowPro
-building blocks, but they serve different scopes and have different lifecycle
-semantics.
+TypeAgent memory is built on **Structured RAG**, implemented in the
+[KnowPro](../../../packages/knowPro/README.md) library, and managed by a
+**durable memory service**. The service stores canonical content with
+provenance and builds KnowPro indexes from it. Conversation turns, saved web
+pages, imported documents and personal how-tos all use the same pipeline.
 
-| Path                       | Scope                                                  | Primary purpose                                                         | Runtime state                                                               |
-| -------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Per-conversation memory    | One conversation                                       | Structured recall and question answering within the active conversation | Enabled in connected mode; knowledge extraction is queued in the background |
-| Unified conversation index | All conversations in one profile                       | Find, summarize, and backfill conversations by content                  | Enabled in agent-server mode; unavailable when model initialization fails   |
-| Durable memory service     | Profile-level corpora, sources, events, and procedures | Managed document, browser, event, and procedural memory                 | Started by agent-server and exposed to native agents and MCP clients        |
+| Memory content               | Scope                          | Primary purpose                                      | Runtime state                                                             |
+| ---------------------------- | ------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------- |
+| Conversation events (ledger) | One profile, all conversations | Recall, cross-conversation search, verified outcomes | Enabled by agent-server and the in-process host; model required to search |
+| Documents and web pages      | Profile corpora                | Managed knowledge bases and saved pages              | Started by agent-server; exposed to native agents and MCP clients         |
+| Procedures                   | Profile corpora                | Reviewed, cited how-tos and guidance                 | Implemented; promotion to skills partially available                      |
 
-These paths are complementary. The per-conversation store preserves detailed
-conversation-local context. The unified index is a derived, rebuildable search
-surface. The durable service provides source revisions, provenance, jobs,
-correction, forgetting, and interfaces shared by several producers.
+In a host with a durable service there is no separate per-conversation memory
+and no separate unified conversation index: conversation memory _is_ the event
+ledger in the profile conversation corpus. A host without the service falls
+back to the older per-conversation `ConversationMemory`
+(`execution.memory.legacy`), and the Copilot CLI memory plugin keeps its own
+workspace-scoped store by design.
+
+Design rules that apply to every memory type:
+
+1. KnowPro is the only retrieval engine (structured first, KnowPro-owned
+   embedding fallback).
+2. There is one model-driven `content` pipeline; no basic, fast, balanced or
+   deep modes.
+3. Source revisions, event ledgers, procedure versions and forget tombstones
+   are canonical; indexes are derived and are rebuilt, not migrated.
 
 ## Views by audience
 
@@ -28,113 +41,111 @@ correction, forgetting, and interfaces shared by several producers.
 flowchart LR
     USER[User or external client]
     SERVER[agent-server]
-    DISPATCHER[Per-conversation dispatcher]
-    LOCAL[(ConversationMemory)]
-    UNIFIED[(Unified conversation index)]
+    DISPATCHER[Dispatcher]
     SERVICE[Durable memory service]
+    KP[KnowPro indexes]
     MCP[Authenticated MCP endpoint]
     MEMORY[Native @memory agent]
     BROWSER[Browser agent and Memory Center]
 
     USER --> SERVER
     SERVER --> DISPATCHER
-    DISPATCHER --> LOCAL
-    DISPATCHER --> UNIFIED
+    DISPATCHER -->|conversation events| SERVICE
     SERVER --> SERVICE
     USER --> MEMORY --> SERVICE
     BROWSER --> SERVICE
     USER --> MCP --> SERVICE
+    SERVICE --> KP
 ```
 
 ## Current capabilities
 
 ### Conversation recall and discovery
 
-- User and assistant turns can be indexed in a per-conversation
-  `ConversationMemory` with extracted entities, topics, relationships, and
-  message text.
-- The unified index tags content by conversation and supports
-  `@conversation search`, `@conversation summarize`, and historical backfill
-  through `@conversation index`.
-- Conversation names support hybrid lexical and embedding-based lookup through
-  `@conversation find`.
-- Connected-mode conversation turns and verified action outcomes also produce
-  durable events. Event search distinguishes user assertions and verified
-  observations from assistant prose.
+- The dispatcher records typed events for user turns, assistant evidence,
+  verified action results, explicit decisions and task outcomes. Each carries
+  an authority label, so assistant prose is never presented as verified fact.
+- `@conversation search` and `@conversation summarize` find and summarize
+  conversations by content; `@conversation index` backfills historical user
+  turns from display logs; `@conversation find` does hybrid lexical and
+  embedding lookup of conversation names.
+- Reasoning agents search conversation events, saved pages, documents and saved
+  procedures in parallel through `search_memory`.
+- Events can be inspected and forgotten by turn or conversation.
 
 ### Managed document memory
 
 - The native `@memory` agent creates and selects corpora, imports Markdown
-  files or folders, searches sources, returns extractive grounded answers, and
+  files or folders, searches sources, answers questions with citations, and
   manages jobs.
+- `ask` returns an answer synthesized by KnowPro's answer generator from the
+  retrieved evidence; `ask --extractive` returns the ranked evidence snippets.
 - Sources retain revisions, ingestion settings, bounded content, and derived
   entities, topics, and relationships.
 - Replacement uses optimistic revision checks. Forgetting and corpus clearing
   use preview-and-confirm tokens and rebuild the published index atomically.
-- Import profiles cover model-free exact indexing (`fast`), content indexing
-  (`balanced`), and deeper structured extraction (`deep`).
 
 ### Browser and web-activity memory
 
-- Browser capture, bookmark/history import, and HTML-folder import submit
-  normalized source content to the durable service.
+- Browser capture ("Save this page"), bookmark/history import, and HTML-folder
+  import submit normalized source content to the durable service.
 - Visited, bookmarked, captured, and imported activity is stored as events
   linked to page sources, with domain, page type, source, and time filters.
 - The browser Memory Center exposes corpus, source, revision, knowledge, job,
-  replacement, forgetting, and reindex operations.
+  replacement, forgetting, curation, and reindex operations.
 
 ### Procedural memory
 
 - The durable service stores immutable, versioned personal procedures with
   source-revision citations and stale-version tracking.
-- It supports candidate detection, drafting, rejection, saving, searching,
-  archiving, and optimistic personal-how-to settings.
-- Procedure retrieval is implemented as guidance. Automatic execution,
-  feedback-driven promotion, and workflow or macro approval remain future
-  product work.
+- It supports candidate detection, drafting, rejection, saving, KnowPro-backed
+  search, archiving, and optimistic personal-how-to settings.
+- Procedure retrieval is guidance. Preview and promotion to an Agent Skill or
+  macro draft exist as RPC and Copilot-plugin MCP tools; feedback-driven
+  promotion and automatic execution remain future work.
 
 ## Enablement and maturity
 
-| Capability                               | Availability            | Notes                                                                                    |
-| ---------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------- |
-| Per-conversation extraction              | Enabled by agent-server | Runs asynchronously and requires configured models                                       |
-| Unified live indexing                    | Enabled by agent-server | User and assistant turns are tagged with conversation and turn identifiers               |
-| Historical conversation backfill         | Command-driven          | `@conversation index` indexes historical user turns from display logs                    |
-| Native durable-memory agent              | Shipped provider        | `@memory` is the preferred TypeAgent UX                                                  |
-| Memory MCP endpoint                      | Enabled by agent-server | Authenticated loopback endpoint for external clients; not a second memory implementation |
-| Browser durable memory and Memory Center | Implemented             | Live browser acceptance and performance validation remain pending                        |
-| Durable conversation events              | Implemented             | Parity and end-to-end acceptance remain pending                                          |
-| Procedural service APIs                  | Implemented             | Grounded editing and approved execution are not complete                                 |
+| Capability                               | Availability                                 | Notes                                                               |
+| ---------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------- |
+| Conversation event ledger                | Enabled by agent-server and in-process hosts | Dispatcher is the only live producer; parity acceptance pending     |
+| Conversation search, summarize, backfill | Command-driven                               | Backfill indexes user turns only                                    |
+| Native durable-memory agent              | Shipped provider                             | `@memory` is the preferred TypeAgent UX                             |
+| Memory MCP endpoint                      | Enabled by agent-server                      | Authenticated loopback endpoint; not a second memory implementation |
+| Browser durable memory and Memory Center | Implemented                                  | Live browser acceptance and performance validation pending          |
+| Procedural service APIs                  | Implemented                                  | Grounded editing and approved execution are not complete            |
+| Copilot CLI memory plugin                | Milestone 0                                  | Separate store by design                                            |
 
 ## Storage and ownership
 
-In connected mode, memory is rooted under the active TypeAgent profile:
-
 ```text
 <instanceDir>/
-  memory/                         durable service corpora and event stores
+  memory/                           durable service
+    jobs/                           ingestion job records
+    <corpusId>/
+      manifest.json                 corpus, sources, revisions, suppressions
+      events.jsonl                  append-only event ledger and tombstones
+      index/<generation>/           documents index (index-schema.json)
+      event-search-index/<gen>/     KnowPro projection of events
+      personal-how-to/              settings, candidates, procedure versions
   conversations/
-    conversations.json           conversation registry
-    _unified/                     derived cross-conversation index
-    <conversationId>/
-      conversationMemory*        conversation-local KnowPro data
-      displayLog.json             source for historical backfill
+    conversations.json              conversation registry
+    _unified/conversationEventReplay.json   content-free replay identities
+    <conversationId>/displayLog.json        source for historical backfill
 ```
 
 The durable memory service owns extraction, chunking, indexing, revisions,
-jobs, search, correction, and forgetting for its corpora. Producers such as
-the browser and dispatcher capture source material and provenance; they do not
-maintain parallel durable extraction pipelines.
+jobs, search, answer generation, correction, and forgetting for its corpora.
+Producers such as the browser and dispatcher capture source material and
+provenance; they do not maintain parallel durable extraction pipelines.
 
 ## Known boundaries
 
-- The unified conversation index is append-only. Deleted conversations are
-  tombstoned and filtered immediately, but physical compaction is still
-  pending.
-- Historical backfill indexes user turns, while live indexing includes user
-  and assistant turns.
-- Durable grounded answers are extractive and citation-bearing; model-backed
-  synthesis is not currently part of the contract.
+- Search and answers need the configured models; there is no model-free
+  fallback.
+- Historical backfill indexes user turns, while live indexing records user and
+  assistant turns.
+- Physical compaction of projections after forgetting is not implemented.
 - The Memory Center and newer event paths have focused automated coverage, but
   their live end-to-end acceptance checklists are not complete.
 - Temporal claims, bitemporal validity, contradiction resolution, entity

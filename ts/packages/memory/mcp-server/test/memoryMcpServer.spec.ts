@@ -356,6 +356,7 @@ class FakeMemoryService implements MemoryService, PersonalHowToService {
         return {
             question: request.question,
             answer: "No supporting memory evidence was found.",
+            mode: request.answerMode ?? "extractive",
             citations: [],
             grounded: true,
             warnings: [],
@@ -769,6 +770,7 @@ describe("MemoryServiceHost", () => {
             ).toEqual({
                 question: "What is stored?",
                 answer: "No supporting memory evidence was found.",
+                mode: "extractive",
                 citations: [],
                 grounded: true,
                 warnings: [],

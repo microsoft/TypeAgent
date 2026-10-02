@@ -26,8 +26,10 @@ import {
     PersonalHowToStore,
 } from "./personalHowToStore.js";
 import type {
+    AnswerMode,
     CorpusIndex,
     CorpusIndexFactory,
+    CorpusIndexMatch,
     DocumentIngestRequest,
     DocumentIngestResult,
     IndexedDocument,
@@ -1731,68 +1733,13 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             await this.ensureDocumentIndex(request.corpusId, runtime);
             const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
             const candidates = await runtime.index.search(query, limit * 4);
-            const sourceIds =
-                request.sourceIds === undefined
-                    ? undefined
-                    : new Set(request.sourceIds);
-            const sourceTypes =
-                request.sourceTypes === undefined
-                    ? undefined
-                    : new Set(request.sourceTypes);
-            const requestedTags = request.tags ?? [];
-            let usedCharacters = 0;
-            const maxCharacters = request.maxResponseChars ?? 50_000;
-            const matches: MemoryEvidence[] = [];
-            for (const candidate of candidates) {
-                const source = runtime.manifest.sources.find(
-                    (item) => item.sourceId === candidate.sourceId,
-                );
-                const revision = source?.revisions.find(
-                    (item) => item.revisionId === candidate.revisionId,
-                );
-                if (
-                    source === undefined ||
-                    revision === undefined ||
-                    source.activeRevisionId !== revision.revisionId ||
-                    (sourceIds !== undefined &&
-                        !sourceIds.has(source.sourceId)) ||
-                    (sourceTypes !== undefined &&
-                        !sourceTypes.has(source.sourceType)) ||
-                    requestedTags.some((tag) => !source.tags?.includes(tag))
-                ) {
-                    continue;
-                }
-                if (usedCharacters + candidate.snippet.length > maxCharacters) {
-                    break;
-                }
-                usedCharacters += candidate.snippet.length;
-                matches.push({
-                    evidenceId: `${candidate.sourceId}:${candidate.revisionId}:${candidate.locator ?? matches.length}`,
-                    corpusId: request.corpusId,
-                    sourceId: candidate.sourceId,
-                    revisionId: candidate.revisionId,
-                    title: source.title,
-                    ...(source.canonicalUri === undefined
-                        ? {}
-                        : { canonicalUri: source.canonicalUri }),
-                    ...(candidate.locator === undefined
-                        ? {}
-                        : { locator: candidate.locator }),
-                    snippet: candidate.snippet,
-                    score: candidate.score,
-                    sourceType: source.sourceType,
-                    ...(revision.capturedAt === undefined
-                        ? {}
-                        : { capturedAt: revision.capturedAt }),
-                    indexedAt:
-                        revision.indexedAt ??
-                        revision.sourceModifiedAt ??
-                        now(),
-                });
-                if (matches.length === limit) {
-                    break;
-                }
-            }
+            const matches = this.toEvidence(
+                request.corpusId,
+                runtime,
+                candidates,
+                request,
+                limit,
+            );
             return {
                 query,
                 matches,
@@ -1801,6 +1748,78 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 indexVersion: this.indexVersion(runtime.manifest),
             };
         });
+    }
+
+    private toEvidence(
+        corpusId: string,
+        runtime: CorpusRuntime,
+        candidates: CorpusIndexMatch[],
+        request: Pick<
+            MemorySearchRequest,
+            "sourceIds" | "sourceTypes" | "tags" | "maxResponseChars"
+        >,
+        limit: number,
+    ): MemoryEvidence[] {
+        const sourceIds =
+            request.sourceIds === undefined
+                ? undefined
+                : new Set(request.sourceIds);
+        const sourceTypes =
+            request.sourceTypes === undefined
+                ? undefined
+                : new Set(request.sourceTypes);
+        const requestedTags = request.tags ?? [];
+        let usedCharacters = 0;
+        const maxCharacters = request.maxResponseChars ?? 50_000;
+        const matches: MemoryEvidence[] = [];
+        for (const candidate of candidates) {
+            const source = runtime.manifest.sources.find(
+                (item) => item.sourceId === candidate.sourceId,
+            );
+            const revision = source?.revisions.find(
+                (item) => item.revisionId === candidate.revisionId,
+            );
+            if (
+                source === undefined ||
+                revision === undefined ||
+                source.activeRevisionId !== revision.revisionId ||
+                (sourceIds !== undefined && !sourceIds.has(source.sourceId)) ||
+                (sourceTypes !== undefined &&
+                    !sourceTypes.has(source.sourceType)) ||
+                requestedTags.some((tag) => !source.tags?.includes(tag))
+            ) {
+                continue;
+            }
+            if (usedCharacters + candidate.snippet.length > maxCharacters) {
+                break;
+            }
+            usedCharacters += candidate.snippet.length;
+            matches.push({
+                evidenceId: `${candidate.sourceId}:${candidate.revisionId}:${candidate.locator ?? matches.length}`,
+                corpusId,
+                sourceId: candidate.sourceId,
+                revisionId: candidate.revisionId,
+                title: source.title,
+                ...(source.canonicalUri === undefined
+                    ? {}
+                    : { canonicalUri: source.canonicalUri }),
+                ...(candidate.locator === undefined
+                    ? {}
+                    : { locator: candidate.locator }),
+                snippet: candidate.snippet,
+                score: candidate.score,
+                sourceType: source.sourceType,
+                ...(revision.capturedAt === undefined
+                    ? {}
+                    : { capturedAt: revision.capturedAt }),
+                indexedAt:
+                    revision.indexedAt ?? revision.sourceModifiedAt ?? now(),
+            });
+            if (matches.length === limit) {
+                break;
+            }
+        }
+        return matches;
     }
 
     public async getCapabilities(): Promise<MemoryServiceCapabilities> {
@@ -1815,6 +1834,79 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (question.length === 0) {
             throw new Error("Memory question cannot be empty");
         }
+        if (request.answerMode !== "extractive") {
+            const synthesized = await this.synthesizeAnswer(request, question);
+            if (synthesized !== undefined) {
+                return synthesized;
+            }
+        }
+        return this.extractiveAnswer(request, question);
+    }
+
+    private async synthesizeAnswer(
+        request: MemoryAnswerRequest,
+        question: string,
+    ): Promise<MemoryAnswerResult | undefined> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        return this.enqueueWrite(request.corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(request.corpusId);
+            await this.ensureDocumentIndex(request.corpusId, runtime);
+            const index = runtime.index;
+            if (index.answer === undefined) {
+                if (request.answerMode === "synthesized") {
+                    throw new Error(
+                        "This corpus index does not support synthesized answers",
+                    );
+                }
+                return undefined;
+            }
+            const limit = Math.max(1, Math.min(request.limit ?? 5, 100));
+            const scope =
+                request.sourceIds === undefined
+                    ? undefined
+                    : new Set(request.sourceIds);
+            const result = await index.answer(question, limit * 4, scope);
+            const citations = this.toEvidence(
+                request.corpusId,
+                runtime,
+                result.matches,
+                request,
+                limit,
+            );
+            const mode: AnswerMode = "synthesized";
+            const indexVersion = this.indexVersion(runtime.manifest);
+            const warnings = [...this.capabilities.warnings];
+            if (result.answer === undefined) {
+                return {
+                    question,
+                    answer:
+                        citations.length === 0
+                            ? "No supporting memory evidence was found."
+                            : `No answer could be derived from the memory evidence. ${result.whyNoAnswer ?? ""}`.trim(),
+                    mode,
+                    citations,
+                    grounded: true,
+                    indexVersion,
+                    warnings,
+                };
+            }
+            return {
+                question,
+                answer: result.answer,
+                mode,
+                citations,
+                grounded: true,
+                indexVersion,
+                warnings,
+            };
+        });
+    }
+
+    private async extractiveAnswer(
+        request: MemoryAnswerRequest,
+        question: string,
+    ): Promise<MemoryAnswerResult> {
         const result = await this.search({
             corpusId: request.corpusId,
             query: question,
@@ -1830,6 +1922,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             return {
                 question,
                 answer: "No supporting memory evidence was found.",
+                mode: "extractive",
                 citations: [],
                 grounded: true,
                 indexVersion: result.indexVersion,
@@ -1845,6 +1938,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         return {
             question,
             answer,
+            mode: "extractive",
             citations: result.matches,
             grounded: true,
             indexVersion: result.indexVersion,

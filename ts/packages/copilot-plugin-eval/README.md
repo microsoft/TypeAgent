@@ -1,6 +1,6 @@
 # TypeAgent Copilot end-to-end evaluation
 
-Updated: 2026-09-25. This is the maintained version of the original GHCP
+Updated: 2026-09-28. This is the maintained version of the original GHCP
 evaluation methodology, alongside its harness, corpus, grading, and tests.
 
 ## Purpose and limitations
@@ -33,26 +33,38 @@ scope. Weather is removed and calendar is deferred.
 
 ## Implementation and protocol history
 
-**Current corpus: `common-files-v1`, protocol 5.** Nine list-dependent tasks
+**Current protocol: 7, with independent `common-files-v1` and `lists-v1` categories.**
+The default common category retains its exact twenty prompts, seven candidates,
+and 140 executions per repetition. The new lists category has twenty namespaced
+cases and only C1/C2 (NL fallback off/on) versus C3/C4 (discovery/earned reuse):
+80 executions, not 140 slots with mixed/native N/A entries. Never pool scores,
+latency populations or preparation between categories.
+
+In protocol 5, nine list-dependent tasks
 have been replaced with ordinary file tasks so every candidate has a comparable
 capability: 20 applicable cases per candidate, 140 executions per repetition,
 no native N/A slots. This is a new workload, not a rescore of old trials. Do
 not pool its results with the historical list corpus or reuse an old preflight.
-This base branch retains the strict failure gate; the separate #3077 layer
-preserves its positive-evidence recovery policy when integrated with this corpus.
+The integrated runner retains positive-evidence read-error recovery while
+denials, cancellations and uncertain or side-effectful failures remain terminal.
 
-| Version                      | Meaning                                                                                                                                                                                                                    |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Protocol 2                   | Historical measured implementation at `e847c7a00907a1f4e2c6c4426c935b964fd9997c`: completed 140 trials. An earlier partial pass had harness-invalid records, which were excluded rather than scored as candidate failures. |
-| Protocol 3                   | Strict native failure/no-replay correction at `4275a7ca7743b761b7a108971de34184ebf6e289`; tested offline, not live measured. This base runner still uses that policy.                                                      |
-| Portability                  | `b47f8bacd5073aa226392cc6ccb47a9a7e4caac7` accepts configured temp-parent aliases while retaining artifact provenance checks, and uses platform-native test paths.                                                         |
-| Protocol 4 follow-up (#3077) | Prospective positive-evidence safe-read recovery, frozen native applicability and replacement A4 oracle. Kept in its separate dependent PR; do not infer its runtime behavior from this base runner.                       |
-| Model and layout revision    | Eval-only scripts now reside here. Future Copilot sessions explicitly use Luna 5.6 (`gpt-5.6-luna`), not the historical `gpt-5.6-sol`. No Luna rerun or improved measured outcome is claimed.                              |
+| Version                      | Meaning                                                                                                                                                                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Protocol 2                   | Historical measured implementation at `e847c7a00907a1f4e2c6c4426c935b964fd9997c`: completed 140 trials. An earlier partial pass had harness-invalid records, which were excluded rather than scored as candidate failures.    |
+| Protocol 3                   | Strict native failure/no-replay correction at `4275a7ca7743b761b7a108971de34184ebf6e289`; tested offline, not live measured. Superseded by later protocols.                                                                   |
+| Portability                  | `b47f8bacd5073aa226392cc6ccb47a9a7e4caac7` accepts configured temp-parent aliases while retaining artifact provenance checks, and uses platform-native test paths.                                                            |
+| Protocol 4 follow-up (#3077) | Prospective positive-evidence safe-read recovery, frozen native applicability and list-based replacement A4 oracle. Tested offline, not live measured; applicability and corpus now superseded by protocol 5.                 |
+| Protocol 5                   | Historical `common-files-v1`, 140 Luna trials frozen at `96e904546acc389cf64284db9b6fbcbe57191344`. Raw evidence and independently reviewed reports remain unchanged; this revision does not rescore them.                    |
+| Protocol 6                   | Prospective category-specific readiness, permissions, list reset/oracles, discovery preparation, schedule and reporting. Common 20x7 remains unchanged; lists adds 20x4. Offline validated only; no new measured scores.      |
+| Protocol 7                   | Prospective measured-03 remediation: A5 filename clarification, closed outer tool boundary, pending-interaction guard, private consent evidence separation and sanitized denial diagnostics. No measured rescore or live run. |
+| Model and layout revision    | Eval-only scripts reside here. Copilot sessions explicitly use Luna 5.6 (`gpt-5.6-luna`), not historical `gpt-5.6-sol`. Translation/embedding identities are recorded separately.                                             |
 
 Preserve original results, grades, run specifications and safety audits.
 Retrospective reporting amendments do not rewrite observations or prove what
 a stopped trial would have done. Result-entity product fixes are separate
 from the evaluation harness and do not establish new measured success rates.
+The independent product PR #3073 is not a dependency of this evaluation stack;
+this layer depends on the evaluation harness in #3072.
 
 ## Running and package boundaries
 
@@ -83,6 +95,22 @@ node packages\copilot-plugin-eval\scripts\ghcp-eval.mjs <copilot.exe> <preflight
 node packages\copilot-plugin-eval\scripts\ghcp-credit-probe.mjs <copilot.exe> <ledger> <new-probe-dir>
 ```
 
+The optional final positional category defaults to `common-files`. For lists,
+use a **new category-specific preflight, output directory and oracle**:
+
+```text
+node packages\copilot-plugin-eval\scripts\ghcp-eval-preflight.mjs <new-list-preflight-dir> <model-config-dir> <ledger> --external-evidence lists
+node packages\copilot-plugin-eval\scripts\ghcp-eval.mjs <copilot.exe> <list-preflight-dir> <new-list-run-dir> <model-config-dir> <ledger> 1,2,3,4 pilot <list-oracle.json> list-S1 0 4 1 lists
+node packages\copilot-plugin-eval\scripts\ghcp-eval.mjs <copilot.exe> <list-preflight-dir> <list-run-dir> <model-config-dir> <ledger> 1,2,3,4 measured <list-oracle.json> list-S1 <batch-start> 4 1 lists
+```
+
+Measured batches are four paired trials for lists, seven for common. Specs and
+results include protocol, category and corpus version; readiness verifies the
+same category, and list readiness additionally verifies six list operations and
+an exact seed reset after server shutdown. Protocol-5 templates/specs/results
+cannot resume under this implementation. No command above is authorized merely
+by adding this category; no new allowance or live probe accompanies the change.
+
 Use nonsynchronized local directories for live databases and locks. Preserve
 sanitized results and specifications in durable storage afterwards. The oracle
 JSON pins issue/PR evidence and a relative `readinessFile` naming a successful
@@ -107,8 +135,11 @@ bounds and nested-request accounting; reconcile cumulative prior charges in a
 new run specification. An unavailable model is a blocker, not permission to
 substitute one. No live availability/pricing probe is part of this migration.
 
-The authorized ceiling is **50,000 cumulative Copilot AI credits**, superseding
-the original 20,000 and interim 40,000 limits, not a fresh allowance per run.
+The historical authorization was **50,000 cumulative Copilot AI credits**,
+superseding the original 20,000 and interim 40,000 limits. A new round requires
+explicit authorization rather than resetting that ledger. On 2026-09-25 the
+user separately authorized **40,000 additional Copilot AI credits** for the
+fresh common-file round; its ledger and reservations are separate.
 Include planning, implementation, preparation, pilots, failed/cancelled work,
 nested reasoning, grading and reporting. Reserve report headroom, retain
 unsettled maximum reservations and stop new admissions if accounting is unclear.
@@ -164,7 +195,7 @@ Only disposable fixture file writes are authorized. GitHub and network remain
 read-only; no renewal, cache flush or external write is authorized. Reduced
 domain diversity is an explicit tradeoff for matched capabilities.
 
-Historical list seed (retained only as inactive setup state):
+List seed (inactive preserved state in common; active isolated state in lists):
 
 | List    | Items                    |
 | ------- | ------------------------ |
@@ -219,15 +250,161 @@ can arrive through a callback or a final-text clarification within the original
 90-second deadline. Confirming a guessed referent is not clarification.
 Final state alone cannot excuse premature mutation.
 
-**Historical A4 follow-up:** protocol 4 replaced only the vague clean-up verb with
-an unresolved-item-removal request, then supplies the item after clarification.
-Its independent oracle rejects guessed/wrong-item confirmation and premature
-mutation even if the final state is correct, and preserves unrelated state.
-This avoids conflating verb interpretation with referent resolution; it does
-not claim the original product ambiguity is fixed. Original A4 evidence remains
-historical. Historical M1/M5/S3/A3 routing issues, timeouts and network
-presentation failures remain valid failures of that workload; this new corpus
-does not retroactively invalidate them.
+File writes can require two distinct consents: dispatcher confirmation and
+the PowerShell handler's exact `Run`/`Cancel` question. Handler consent requires
+an unambiguous admitted file action satisfying the case's independent oracle.
+The active tool's trace must establish that context; text alone cannot.
+Structured approvals are bound to the scope, operation and interaction,
+consumed once, and invalidated by unrelated work or terminal failure.
+Handler consent never supplies A1/A4's missing referent or permits replay.
+
+### Separate lists category (`lists-v1`)
+
+The initial nine-anchor request was expanded to twenty list examples, five per
+cohort. Each trial restores the seven lists above and all seven ordinary files
+before starting a fresh isolated server. `book` and `picnic` start absent.
+Only list primitives can mutate list state; native editing of the backing store
+is never permitted. Only list-R4 may read trip.txt; no list case may mutate files.
+Only list-M5/list-R5 may read the pinned issue in the pinned repository. No PR,
+network, GitHub write or unrelated list action is admitted. Outer tools are
+restricted to the active NL or structured route (plus `ask_user`).
+
+State oracles compare the complete independent list snapshot and the unchanged
+file snapshot, including extra/missing lists. Sequence guards require M2's
+additions before removal, M3's clear before additions, and M4's creation before
+additions. Ambiguity disables list actions until the scripted referent answer;
+pre-effect snapshots and sticky premature-mutation evidence remain necessary
+even when final state is correct. Confirmation is not referent clarification.
+Consent remains bound to current backend action context and single-use
+scope/operation/interaction approval; no list-handler question is auto-approved.
+The corpus deliberately uses supported create/clear/remove primitives rather
+than adding a deletion-handler consent path.
+
+| ID      | Request / independent final-answer requirement              | Independent state requirement                            |
+| ------- | ----------------------------------------------------------- | -------------------------------------------------------- |
+| list-S1 | Show all seven named lists                                  | All state unchanged                                      |
+| list-S2 | Show grocery: milk, eggs, rice                              | Unchanged                                                |
+| list-S3 | Remove milk from grocery                                    | Retain eggs/rice and every unrelated item                |
+| list-S4 | Add apples to grocery                                       | Preserve original items                                  |
+| list-S5 | Create empty book list                                      | Book exists empty; all old lists preserved               |
+| list-M1 | Show grocery and pantry, accurately labeled                 | Unchanged                                                |
+| list-M2 | Add tea/coffee to office, then remove notebook              | Office: pen, charger, tea, coffee                        |
+| list-M3 | Empty grocery, then add bread/oranges                       | Grocery: bread, oranges                                  |
+| list-M4 | Create picnic, then add blanket/water                       | Picnic: blanket, water                                   |
+| list-M5 | Show pinned issue, then add literal review reminder         | Exact reminder in errand; prior entries retained         |
+| list-R1 | Intersection of grocery/pantry: rice only, grounded in both | Unchanged                                                |
+| list-R2 | Packing has three, pantry two: difference one               | Unchanged                                                |
+| list-R3 | Add missing travel items to packing; identify adapter       | Packing gains adapter only                               |
+| list-R4 | Read trip.txt, apply jacket-required condition and explain  | Packing gains jacket only                                |
+| list-R5 | Read pinned issue and conditionally add exact title         | Exact independent title in errand, no duplicate          |
+| list-A1 | Ask which list; answer grocery; add apples                  | Grocery gains apples, only after clarification           |
+| list-A2 | Ask which list; answer pantry; show rice/beans              | Unchanged; no guessed read before clarification          |
+| list-A3 | Ask which list; answer travel; remove charger               | Travel retains adapter, office/packing chargers retained |
+| list-A4 | Ask which item; answer milk; remove it from grocery         | Eggs/rice retained; no premature mutation                |
+| list-A5 | Ask which list; answer office; empty but retain it          | Office still exists empty                                |
+
+S1/S4/M3/M5/R1/R4/R5/A1 preserve the historical measured-02 prompts (R4
+substitutes the current private fixture path). Provenance: measured-02
+`specification.json`, SHA256
+`b2f9a7837268111bf1633049e6365a52df5cf00dc09563a38c26b876ec33187b`.
+A4 uses the approved protocol-4 unresolved-item replacement documented below,
+not the old "Clean up" prompt. The other eleven examples are new list-domain
+coverage, not replacements/rescores of common-file examples. Source code freezes
+exact prompts and scripted answers; this table specifies independent semantic
+oracles, not a prescribed answer string or hidden prompt hint.
+
+C4 discovers list and cross-domain read contracts in the same binding before
+each task, without executing, reading fixture contents or learning future
+referents. Report preparation separately and amortized over the actual category
+trials; do not assume this per-task preparation was shared across a campaign.
+
+### Category-safe reporting
+
+The offline exporter accepts one complete protocol-7 category at a time:
+
+```text
+node packages\copilot-plugin-eval\scripts\ghcp-eval-report.mjs <specification.json> <results.json> <reviews.json> <new-summary.json>
+```
+
+Reviews are an array of `{category, caseId, candidate, repetition, outcome,
+reason, evidence}` with `outcome` one of `success`, `failed`, `unknown`;
+`evidence` is an array of sanitized source references. Repetition is zero-based.
+Success requires independent final-answer review with reason/evidence and cannot
+override terminal failure, route violations or state/pre-effect guard failures.
+Missing reviews remain unknown, never success. Transport completion alone
+is not success. Preserve raw evidence and review uncertainties.
+
+Exports include source hashes, per-candidate/cohort denominators, nearest-rank
+E2E P50/P90/P95 with measured/missing population counts, success-conditional
+latency, category-wide and pairwise common-success populations, preparation and amortized cost in
+milliseconds, and E2E including preparation. No cross-category total or winner
+is emitted. Missing latency is not zero; absent common successes have null
+percentiles. The exporter refuses existing output paths and historical/mixed
+protocols. Keep protocol-2 and protocol-5 reports and original evidence unchanged.
+
+### Bounded measured-03 remediation (protocol 7)
+
+This pass distinguishes confirmed harness defects from observed model/product
+failures. Original protocol-5 observations and judgments remain frozen.
+
+| Evidence                                                                                               | Prospective correction / limitation                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A5/C2,C4 asked legitimate questions containing "filename", rejected by standalone `file` regex         | Accept `file`, `filename`, and `file name` in A5 referent questions. Positive measured-pattern and negative approval/unrelated-question regressions; confirmations still cannot resolve ambiguity.                                                                                                                                                                                                                      |
+| Off-route web/GitHub calls appeared despite candidate declarations                                     | Previous `mcp:*` admitted any MCP origin, and the common-files pre-tool hook lacked a complete route check. Replace wildcard exposure with exact source-qualified candidate names and enforce the same closed list in the pre-tool hook for all seven candidates.                                                                                                                                                       |
+| Runtime tool names differ from raw MCP contract names                                                  | Before any prompt, initialize SDK tools and read `session.rpc.tools.getCurrentMetadata()`. Validate every source/name, required tool and alias; unknown/ambiguous/missing metadata or unavailable RPC is a harness failure, not a fallback route. Audit each completed call against its preceding hook decision; missing evidence or denied execution reporting success stops the batch.                                |
+| M1/C3 and similar traces started a second execute with unresolved confirmation; M3/C3 used wrong scope | Track actual `requires_interaction` handles. Deny new tools/actions while pending, except asking the user or exact continuation/cancellation. Reject mismatched scope/operation/interaction with explicit errors, reject overlapping domain calls, and reject final completion with an unsettled interaction. Never repair model arguments, auto-plan, auto-approve, or replay. Existing one-use consent still applies. |
+| Private network trials replaced every tool result with a redaction marker before consent lookup        | Keep transient consent evidence separate from sanitized persisted results. A deterministic regression shows the old marker erased structured pending-action context. Private output remains redacted in exports; no artifact filesystem permissions are widened.                                                                                                                                                        |
+| Typed-file denials omitted requested parameters                                                        | Persist category/case/candidate and hashed session/call/contract handles, path shape/hash/known fixture basename, canonical root hash, argument flags and concrete policy reason. No external path prose, contents, credentials or network values are recorded by this diagnostic. Correlation is written immediately before MCP calls; unknown handles stay null.                                                      |
+| Backend success but incomplete/empty final presentation                                                | Installed SDK offline event tests preserve the actual final assistant message; backend-only output and empty final text stay empty. No evidence establishes a general final-message delivery bug. Do not synthesize a successful answer from backend output or count temporary-only links as durable delivery.                                                                                                          |
+
+The installed SDK 1.0.13 exposes source-qualified `availableTools`, a blocking
+`onPreToolUse` decision, and initialized tool metadata. Its pre-MCP hook supports
+metadata injection, **not** a permission decision; it is used only for sanitized
+correlation. Offline tests invoke the installed SDK hook dispatcher with mocked
+effects and exercise all seven allowlists and presentation events. This is not
+a live CLI enforcement certification: a future separately authorized run must
+pass runtime metadata readiness and call audits. No live tools, model sessions or
+provider calls were executed for this remediation.
+
+Wrong action selection, malformed bound arguments, native denied shell writes,
+uncertain effects and timeouts remain failures, not "fixed" scores. Exact causes
+of historical typed-path denials without parameters remain unresolved; new
+diagnostics make future evidence actionable. Result-entity work remains in #3073.
+Fresh protocol-7 readiness/specifications are required; neither protocol-5
+measured runs nor prospective protocol-6 artifacts can resume or pool here.
+
+### Historical A4 replacement record (protocol 4)
+
+Protocol 4 replaced only A4. Protocol 5 supersedes that list-based replacement
+with the file-based A4 above. This historical record is not a reinterpretation
+of original scores or a claim that product ambiguity is fixed.
+
+| Field                          | Protocol-4 decision                                                                                                                                                                                                                                                                                            |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Original ID and prompt         | A4: "Clean up my grocery list."                                                                                                                                                                                                                                                                                |
+| Original scripted answer       | "Remove all items but keep the list itself."                                                                                                                                                                                                                                                                   |
+| Observed frozen failure        | Protocol-2 measured-02 A4/C1 executed `list.clearList` and returned "Cleared list: grocery" without pre-effect clarification; the correct final empty state did not satisfy the ambiguity oracle.                                                                                                              |
+| Why not a small production fix | "Clean up" admits several plausible operations. Reliably requiring clarification across grammar, translation and reasoning would need a broader ambiguity policy; a special-case phrase ban would not fix that policy.                                                                                         |
+| Replacement prompt             | "Remove the item from my grocery list."                                                                                                                                                                                                                                                                        |
+| Replacement scripted answer    | "Remove milk; keep everything else."                                                                                                                                                                                                                                                                           |
+| Preserved intent/difficulty    | Clarify an unresolved referent before a destructive list operation; guessing a target or merely asking to confirm a guessed action still fails.                                                                                                                                                                |
+| Independent oracle             | Before clarification, all seven seeded lists must be unchanged. Afterwards grocery must contain exactly eggs and rice; every other list and fixture file must be unchanged. Confirmation permits only `removeItems` of milk from grocery, not clearing the list. Final-answer faithfulness still needs review. |
+
+The frozen source was the 140-trial protocol-2 run at `e847c7a009`; protocols 3,
+4 and 5 have not been live measured. Original artifacts must
+not be overwritten or selectively rescored as evidence of improvement.
+
+Historical M1/M5 compound argument-binding errors, S3/A3 local-file misrouting despite the
+existing GitHub `prFiles` contract, and network final-answer omissions remain
+valid failures of that workload. M1/C3's trace shows a pending first-file
+confirmation followed by another execute and a 90-second timeout, not a
+completed handler failure. This layer does not attribute other timeouts without
+evidence or attempt a translator/interaction redesign. Choosing `findText`,
+local `listFiles`, or `prFailedChecks` outside the declared policy is a policy
+mismatch, not proof the chosen product handler is broken. The narrow policy
+and full-content/checks objectives remain; output-artifact provenance
+does not authorize broader file access or make a temp-file-only final answer
+faithful.
 
 ## Applicability and recovery amendments
 
@@ -265,16 +442,18 @@ rewritten; freeze a fresh run with the Luna model and reconciled ledger.
 
 Historically, list-dependent cases **S1, S4, M3, M5, R1, R4, R5, A1, A4** were N/A,
 including cross-domain tasks that require lists. Native's applicable denominator
-is 11; candidates 1-6 retain 20. Retain original twenty-case native observations
+was 11; candidates 1-6 retained 20. Retain original twenty-case native observations
 and safety findings as historical evidence. Different denominators are not a
 matched-workload ranking. Native receives no equivalent list adapter or hidden
 fixture-storage coaching.
 
 Protocol 4 froze that applicability before trial preparation: 131 executions
-plus nine N/A slots per 140-slot balanced pass. Pilot/repetition counts derive
-from the schedule; old or changed specifications/order cannot resume. The base
+plus nine N/A slots per 140-slot balanced pass. The base
 protocol-3 runner executed the original full workload; protocol 5 now replaces
 the workload and restores full applicability rather than rescoring it.
+Current pilot/repetition counts derive from the frozen schedule, with 140
+executions and 20 cases per candidate in a full pass. Old or changed
+specifications, corpus versions or orders cannot resume.
 
 An ordinary recoverable tool failure alone need not invalidate content-correct
 completion. Recovery must stay inside routes, permissions, fixture scope,
@@ -286,6 +465,18 @@ over apparently recoverable errors; mutation failures and unknown shell
 follow-ups remain terminal. Protocol 3 instead stops on native domain failure
 even without an error payload. Neither policy authorizes replay of uncertain
 effects or replaces the actual product failure with another action.
+
+Protocol 5 retains protocol 4's recovery safeguards: a native `view`, `glob`, `rg` or
+`web_fetch` failure can continue only when the SDK supplies an ordinary read
+I/O error (`ENOENT`, `ENOTDIR`, `EISDIR`, `ETIMEDOUT`, `ECONNRESET`, or
+`EAI_AGAIN`). Shell errors remain terminal because the shell can mutate state.
+TypeAgent read failures use the same positive error check plus a complete
+per-tool backend trace containing only known read actions. The isolated server
+also permits these read failures to recover internally. Missing errors,
+unclassified errors, incomplete traces, denied/cancelled work, mutation
+failures and uncertain side effects remain fail-closed. A later safe failure
+cannot clear an earlier stop. Recovery is recorded for review, not automatically
+graded as success; the harness adds no retry loop.
 
 Historical strict successes were 6/6/11/11/6/8/3 out of twenty for candidates
 1-7. Retrospective content scoring restores only six continuation-penalized

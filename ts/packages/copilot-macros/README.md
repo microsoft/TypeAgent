@@ -144,6 +144,170 @@ adapted procedure. It verifies handoff identity, source version, execution
 outcome, and budget use before writing a new draft. It never changes or
 approves the source macro.
 
+## Natural-language action integration
+
+Agent-server shares this manager with the dynamic `macros` provider in
+[`defaultAgentProvider`](../defaultAgentProvider/src/macroAgentProvider.ts).
+Current approved macros without secret inputs become typed, version-pinned
+actions. Existing dispatcher translation and learning can create grammar routes;
+legacy manual approval itself does not generate a grammar. Replay and runner-handoff flags
+filter the available actions and are rechecked at execution.
+
+## Durable learning
+
+Learning is opt-in and uses an injected `MacroLearningRuntime`; this package has
+no model or SDK dependency and never launches a learning agent or calls task
+tools. The service supplies factual `extract`, generalized `build`, and checked
+`generateGrammar` implementations. Each receives an abort signal. The injected
+runtime must not have task-execution capabilities. It must report unsupported
+selection, synthesis, or full-output requirements in
+`MacroLearningBuild.unsupportedOutputs`; a structurally valid, warning-free
+procedure is not proof that it reproduces the complete answer. Grammar syntax,
+action-version targeting, original-request coverage, and negative-intent checking
+belong to the injected grammar generator/compiler, not string validation here.
+
+`parseMacroExecutionRecipe(value: unknown)` and
+`parseMacroLearningBuild(value: unknown)` are exported for model JSON ingestion
+without caller casts. They reject malformed/unsupported fields, unsafe paths,
+invalid expression/guard types, secrets, and oversized values. Parsing preserves
+canonical request text and uncertainty/unsupported-output reports; it does not
+establish trace provenance or output support. The manager still performs grounded
+validation against the recorded interaction. Build requests must contain the
+exact original request plus 3-5 distinct variants (4-6 total); case/whitespace-only
+duplicates do not count as variants.
+
+```typescript
+await manager.configureLearning(runtime);
+await manager.setMacroLearningPreference({ cwd, mode: "prepare" });
+const token = manager.armRecording({ sessionId, cwd, learning: true });
+// Claim and finalize the selected actual interaction normally.
+// finalizeRecording returns learningJobId without waiting for model work.
+const job = await manager.getMacroLearningJob(summary.learningJobId!);
+```
+
+The public coordinator API is:
+
+- `configureLearning(runtime)`: load durable preferences/jobs and resume queued
+  or interrupted stages. Saved-but-refresh failures are retried on configuration
+  without repeating completed model stages.
+- `getMacroLearningPreference(cwd)` / `setMacroLearningPreference({cwd, mode})`:
+  durable workspace-scoped preferences with monotonically increasing revisions.
+  Working directories are resolved and case-normalized for Windows. Load or set
+  the preference before the synchronous selected `armRecording` call.
+- `prepareMacroLearning({traceId})`: enqueue a previously captured interaction
+  and return without waiting for extraction, building, or grammar generation.
+- `getMacroLearningJob(jobId)`: inspect persisted phase, macro reference, or error.
+- `cancelMacroLearningJob(jobId)`: persist cancellation and abort active work.
+  Already approved macros must instead be disabled or forgotten.
+
+The four modes are `off` (default, no selected recording or preparation),
+`prepare` (stage a draft for explicit approval), `read-only` (auto-approve only
+when every MCP step's inspected descriptor explicitly has `readOnly: true`), and
+`all` (auto-approve valid procedures regardless of effects). Native or unknown
+tools are not classified as read-only. Recording, induction, and live handoff
+feature flags must all be enabled for selected learning. Manual recording without
+`learning: true` retains its existing behavior. A preference change to Off
+cancels pending work; preference/flags are checked again before publication.
+Changing a learning preference does not revoke an already approved definition.
+
+Learning accepts only complete successful, non-secret traces, preserves the
+canonical request and all source call identities/order, and requires exact
+argument reconstruction from the example inputs and recorded results. Invented
+steps/tools, unknown expressions, unsafe paths, unused inputs, overlapping
+bindings, invalid result guards, and unresolved recipe uncertainties fail before
+publication. Inputs may generalize evidenced argument values; these checks do not
+prove semantic wildcard safety or goal-level synthesis.
+
+The runtime receives the anticipated approved artifact (`draft.version + 1`,
+initially version 2) for grammar generation. Rules, example inputs, requests,
+workspace, job, approval mode, and `requiresLivePermissions: true` are persisted
+in immutable learning metadata. Prepare mode stages the same rules for later
+explicit version-2 approval. `getApprovedMacros()` returns these complete
+artifacts so the service/provider can register schema and grammar together.
+Every learned macro uses the whole live runner even when technically replayable;
+explicit `preference: "replay"` is rejected centrally. Disabling live handoff
+blocks execution. Learning approval never grants future tool permissions.
+Learning metadata centrally forces the effective execution preference to `agent`;
+the handoff flag, not the replay flag or technical execution class, controls
+availability. The injected generator returns pre-approval rules, not an installer.
+The provider can return all approved stored rules as dynamic grammar; immutable
+artifact persistence supplies restart persistence.
+Legacy definitions without learning metadata retain their replay behavior.
+Adaptations of learned macros require a fresh grounded build and version-targeted
+grammar, rather than inheriting stale grammar from the previous version.
+
+### Converged historical and runner evidence
+
+`prepareMacroLearning({traceId})` accepts an existing, completed persisted trace,
+including verified historical recordings. It uses the same extraction, grounded
+build, policy checks, grammar generation, and durable job machinery as selected
+live recording; no historical task is rerun.
+
+Runner adaptations use the compatible overload
+`submitMacroCandidate(request: EvidencedMacroCandidateRequest): Promise<MacroLearningJob>`.
+The request extends the existing candidate payload with required `traceId` and
+`exampleInputs`. Capture must set `RecordedInteractionTrace.handoffRunId` to the
+actual runner launch run ID, preserve the canonical user request, and finalize
+the actual execution before submitting the candidate. The manager verifies the
+recorded handoff, workspace, timestamps, execution budgets, completed calls,
+exact tool identities/order, and example-input reconstruction. Each handoff is
+bound to one immutable recorded trace. Counters or proposed steps alone are not
+execution evidence; a source macro cannot stand in for the new run.
+
+Evidenced submissions enqueue and return without waiting for model work.
+The coordinator extracts/builds again from the new verified trace, not from a
+proposed procedure or fabricated results. Selected recording, later submission,
+and historical preparation of that runner trace converge on the same job.
+The adaptation retains the source macro ID and provenance, writes a new immutable
+draft/approved version pair, and generates grammar for that pair's anticipated
+approved version (for example, source v2 -> draft v3 -> approved v4).
+The prior approved route stays active while a Prepare adaptation awaits review;
+publication replaces it with one current approved artifact, not a competing
+catalog entry. Disable/forget suppress every learned version of that macro,
+including older pinned approvals. Legacy submissions without `traceId` retain
+their explicit draft-return behavior; learned sources require the evidenced
+overload rather than that compatibility producer.
+
+The factual recipe contains source trace/call IDs, the canonical request,
+description, and uncertainty, not copied raw result bodies. The injected runtime
+owns model-facing evidence selection; the manager retains the actual redacted
+trace locally for exact validation. Verified execution still does not prove
+goal-level selection, synthesis, or complete-answer generalization. Unsupported
+full outputs must be reported and rejected, never invented as observed evidence.
+
+Jobs and preferences are atomically persisted in the manager's learning state.
+One worker runs at a time, with at most 32 pending and 1,000 retained jobs,
+100 calls/inputs per artifact, 256 KiB validated JSON values, depth 30, 20,000
+JSON nodes, six grammar/request variants, 16 MiB durable learning storage, and
+two attempts per model stage across restarts. Model stages have a 30-second
+deadline; metadata inspection and catalog refresh have 10-second deadlines.
+Failures are inspectable and persisted; a saved catalog whose refresh fails is
+reported as saved-but-not-refreshed, not success. Storage failures are surfaced
+on status reads. The service should configure one manager per storage directory;
+cross-process worker leases are not provided.
+
+Idempotency is workspace + source trace, with equivalent observed operations
+deduplicated by canonical request and ordered tool identities/arguments before
+model work (result bodies, call IDs, and session timestamps do not create another
+job). Cancellation does not silently retry. Disable/forget persist suppression
+before catalog removal, so equivalent observations cannot resurrect a macro
+after restart. Forget removes a learned macro from the active catalog while
+retaining its immutable versions and suppression evidence; legacy forget keeps
+its existing deletion behavior. Capacity failures are explicit rather than
+evicting suppression history.
+
+`onCatalogChanged()` lets providers refresh active session schemas after
+successful mutations. A refresh failure is reported explicitly even though the
+catalog has already been saved. Schema source/action fingerprints reconcile
+learned rules when a route is removed or replaced.
+
+`runMacro(request, { requireLatestApproved: true, signal })` is used for routed
+execution. It rejects a superseded approved version and propagates cancellation
+to replay. Explicit calls without `requireLatestApproved` preserve existing
+approved pinned-version behavior. Agent-required runs validate inputs before
+returning a whole-procedure launch; the caller remains responsible for invoking
+Copilot's runner and observing its actual outcome.
+
 ## Persistence
 
 `MacroManager` stores data under the supplied agent-server instance directory:

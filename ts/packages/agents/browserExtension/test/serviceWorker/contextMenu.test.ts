@@ -59,10 +59,11 @@ describe("Context Menu Module", () => {
             );
             expect(
                 ids.slice(
-                    ids.indexOf("askAboutPage"),
+                    ids.indexOf("menuSeparator1"),
                     ids.indexOf("menuSeparator2"),
                 ),
-            ).toEqual(["askAboutPage", "saveThisPage"]);
+            ).toEqual(["menuSeparator1", "saveThisPage"]);
+            expect(ids).not.toContain("askAboutPage");
             expect(chrome.contextMenus.create).toHaveBeenCalledWith(
                 expect.objectContaining({
                     id: "saveThisPage",

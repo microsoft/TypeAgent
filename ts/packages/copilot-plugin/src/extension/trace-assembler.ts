@@ -7,6 +7,7 @@ import {
     type RecordedToolCall,
 } from "@typeagent/copilot-macros";
 import { createHash } from "node:crypto";
+import { isCopilotTelemetryTool } from "../shared/tool-identities.js";
 
 export interface ExtensionSessionEvent {
     type: string;
@@ -113,11 +114,7 @@ export class ExtensionTraceAssembler {
         }
 
         const prompt = redactTraceValue(turn.prompt) as string;
-        if (
-            expectedPromptHash &&
-            createHash("sha256").update(prompt).digest("hex") !==
-                expectedPromptHash
-        ) {
+        if (expectedPromptHash && this.getPromptHash() !== expectedPromptHash) {
             return undefined;
         }
 
@@ -131,6 +128,14 @@ export class ExtensionTraceAssembler {
             completedAt: turn.completedAt,
             toolCalls: [...turn.calls.values()],
         };
+    }
+
+    public getPromptHash(): string | undefined {
+        return this.turn
+            ? createHash("sha256")
+                  .update(redactTraceValue(this.turn.prompt) as string)
+                  .digest("hex")
+            : undefined;
     }
 
     public reset(): void {
@@ -149,11 +154,12 @@ export class ExtensionTraceAssembler {
         const toolCallId = getString(event.data, "toolCallId");
         const name = getString(event.data, "toolName");
         if (!turn || !toolCallId || !name) return;
+        const mcpServerName = getString(event.data, "mcpServerName");
+        if (isCopilotTelemetryTool(name, mcpServerName)) return;
 
         const key = callKey(event, toolCallId);
         if (turn.completedCalls.has(key)) return;
         const existing = turn.calls.get(key);
-        const mcpServerName = getString(event.data, "mcpServerName");
         turn.calls.set(key, {
             toolCallId,
             name,

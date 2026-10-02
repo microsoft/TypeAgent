@@ -1328,11 +1328,13 @@ async function ask(
     context: MemoryAgentContext,
     question: string,
     limit?: number,
+    extractive = false,
 ): Promise<ActionResult> {
     const result = await context.service.answer({
         corpusId: requireActiveCorpus(context),
         question,
         limit: limit ?? 5,
+        ...(extractive ? { answerMode: "extractive" as const } : {}),
     });
     context.lastAnswerEvidence = {
         question,
@@ -1341,7 +1343,7 @@ async function ask(
         indexVersion: result.indexVersion,
     };
     return markdown(
-        `## Grounded extractive answer\n\n${result.answer}\n\n## Citations\n\n${renderCitationMetadata(result.citations)}\n\nIndex: \`${result.indexVersion}\``,
+        `## Grounded ${result.mode} answer\n\n${result.answer}\n\n## Citations\n\n${renderCitationMetadata(result.citations)}\n\nIndex: \`${result.indexVersion}\``,
     );
 }
 
@@ -1415,6 +1417,11 @@ const handlers: CommandHandlerTable = {
                 },
                 flags: {
                     limit: { description: "Evidence limit", type: "number" },
+                    extractive: {
+                        description:
+                            "Return the ranked evidence verbatim instead of a synthesized answer",
+                        default: false,
+                    },
                 },
             },
             (context, params) =>
@@ -1422,6 +1429,7 @@ const handlers: CommandHandlerTable = {
                     context,
                     stringValue(args(params).question, "question"),
                     optionalNumber(flags(params).limit),
+                    booleanValue(flags(params).extractive),
                 ),
         ),
         explain: noParameters(
