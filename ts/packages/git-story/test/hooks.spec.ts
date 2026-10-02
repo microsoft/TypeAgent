@@ -49,6 +49,9 @@ test("pre-commit hook forwards args and stdin to git-story", () => {
     const commit = ["-c", "user.name=t", "-c", "user.email=t@t"];
     const out = run("git", [...commit, "commit", "--allow-empty", "-m", "x"]);
     expect(out).toContain('git-story pre-commit: args=[] stdin=""');
+    // prepare-commit-msg appends the trailer once, even on amend.
+    run("git", [...commit, "commit", "--amend", "--allow-empty", "--no-edit"]);
+    expect(run("git", ["log", "-1", "--format=%B"])).toBe("x\n\ntypeagent\n\n");
 
     const hook = path.join(repo, ".git/hooks/pre-commit");
     const direct = run("sh", [hook, "a"], "piped\n");
