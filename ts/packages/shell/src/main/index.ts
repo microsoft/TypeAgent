@@ -240,10 +240,9 @@ async function initialize() {
             });
         } catch (error) {
             debugShellError("Failed to resolve browser view:", error);
-            return new Response(
-                error instanceof Error ? error.message : String(error),
-                { status: 503 },
-            );
+            return new Response("Failed to resolve request.", {
+                status: 503,
+            });
         }
     });
 
