@@ -10,12 +10,16 @@ import { cliLogger } from "../logger.js";
 // Copilot CLI reads repo-level hooks from this file. The `.local` variant is
 // per-clone, so init also adds it to `.git/info/exclude`.
 const COPILOT_SETTINGS = ".github/copilot/settings.local.json";
-const PROMPT_HOOK = "git story hooks copilot user-prompt-submitted";
+// Copilot hook name -> command that handles it.
+const COPILOT_HOOKS = {
+    userPromptSubmitted: "git story hooks copilot user-prompt-submitted",
+    sessionStart: "git story hooks copilot session-start",
+    agentStop: "git story hooks copilot agent-stop",
+};
 
-// Git hooks to register. Each gets a shell script that forwards git's args
-// and stdin to `git-story hooks git <hook>`. `exec` hands the script's stdin
-// to the command, so hooks that receive input (e.g. pre-push) keep it.
-const GIT_HOOKS = ["pre-commit"];
+// Each git hook gets a shell script that forwards git's args and stdin to
+// `git-story hooks git <hook>`. `exec` hands the script's stdin to the
+// command, so hooks that receive input (e.g. pre-push) keep it.
 // Marks scripts written by init, so init never overwrites a user's own hook.
 const GIT_HOOK_MARKER = "# git-story hook";
 const gitHookScript = (hook: string) =>
@@ -42,7 +46,7 @@ export const initCommand = new Command("init")
         const root = git("rev-parse", "--show-toplevel");
         const settingsPath = path.join(root, COPILOT_SETTINGS);
         let settings: {
-            hooks?: { userPromptSubmitted?: { bash?: string }[] };
+            hooks?: Record<string, Record<string, unknown>[]>;
             [key: string]: unknown;
         } = {};
         if (fs.existsSync(settingsPath)) {
@@ -56,19 +60,16 @@ export const initCommand = new Command("init")
                 return;
             }
         }
-        // Update only our hook entry; keep other keys and hooks as they are.
-        const hook = {
-            type: "command",
-            bash: PROMPT_HOOK,
-            powershell: PROMPT_HOOK,
-        };
+        // Update only our hook entries; keep other keys and hooks as they are.
         settings.hooks ??= {};
-        settings.hooks.userPromptSubmitted = [
-            ...(settings.hooks.userPromptSubmitted ?? []).filter(
-                (h) => h.bash !== PROMPT_HOOK,
-            ),
-            hook,
-        ];
+        for (const [name, command] of Object.entries(COPILOT_HOOKS)) {
+            settings.hooks[name] = [
+                ...(settings.hooks[name] ?? []).filter(
+                    (h) => h.bash !== command,
+                ),
+                { type: "command", bash: command, powershell: command },
+            ];
+        }
         fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
         fs.writeFileSync(
             settingsPath,
@@ -91,8 +92,9 @@ export const initCommand = new Command("init")
         process.stdout.write(`${copilotMessage}\n`);
         cliLogger.info(copilotMessage);
 
-        // `--git-path hooks/<hook>` honors `core.hooksPath` and worktrees.
-        for (const hook of GIT_HOOKS) {
+        // Writes one git hook script. `--git-path hooks/<hook>` honors
+        // `core.hooksPath` and worktrees.
+        const registerGitHook = (hook: string) => {
             const hookPath = path.resolve(
                 git("rev-parse", "--git-path", `hooks/${hook}`),
             );
@@ -104,12 +106,13 @@ export const initCommand = new Command("init")
                 process.stderr.write(`${message}\n`);
                 cliLogger.error(message);
                 process.exitCode = 1;
-                continue;
+                return;
             }
             fs.mkdirSync(path.dirname(hookPath), { recursive: true });
             fs.writeFileSync(hookPath, gitHookScript(hook), { mode: 0o755 });
             const message = `Registered git ${hook} hook in ${hookPath}`;
             process.stdout.write(`${message}\n`);
             cliLogger.info(message);
-        }
+        };
+        registerGitHook("pre-commit");
     });

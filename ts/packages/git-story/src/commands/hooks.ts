@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 import type {
-    UserPromptSubmittedInput,
+    AgentStopOutput,
+    BaseHookInput,
+    SessionStartOutput,
     UserPromptSubmittedOutput,
 } from "@typeagent/agent-harness-hooks/copilot-cli";
 import { Command } from "commander";
@@ -23,20 +25,47 @@ export const hooksCommand = new Command("hooks").description(
     "Agent and git hook handlers",
 );
 
-hooksCommand
+// Reads a Copilot hook payload and logs its session id.
+// Empty stdin (manual run) is treated as `{}`.
+async function readCopilotInput(hook: string): Promise<Partial<BaseHookInput>> {
+    const input = JSON.parse(
+        (await readStdin()) || "{}",
+    ) as Partial<BaseHookInput>;
+    process.stderr.write(`git-story ${hook}: session=${input.sessionId}\n`);
+    cliLogger.info(`${hook} session=${input.sessionId}`);
+    return input;
+}
+
+// Copilot CLI hooks. Each writes `{}` (change nothing). Placeholder until
+// story capture exists. Example: `git story hooks copilot session-start`.
+const copilotCommand = hooksCommand
     .command("copilot")
-    .description("Copilot CLI hook handlers")
+    .description("Copilot CLI hook handlers");
+
+copilotCommand
     .command("user-prompt-submitted")
     .description("Handle the Copilot userPromptSubmitted hook")
     .action(async () => {
-        // Placeholder: parse the payload, change nothing.
-        // Empty stdin (manual run) is treated as `{}`, as on main.
-        const input = JSON.parse(
-            (await readStdin()) || "{}",
-        ) as Partial<UserPromptSubmittedInput>;
+        await readCopilotInput("userPromptSubmitted");
         const output: UserPromptSubmittedOutput = {};
-        process.stderr.write(`git-story prompt: session=${input.sessionId}\n`);
-        cliLogger.info(`prompt session=${input.sessionId}`);
+        process.stdout.write(`${JSON.stringify(output)}\n`);
+    });
+
+copilotCommand
+    .command("session-start")
+    .description("Handle the Copilot sessionStart hook")
+    .action(async () => {
+        await readCopilotInput("sessionStart");
+        const output: SessionStartOutput = {};
+        process.stdout.write(`${JSON.stringify(output)}\n`);
+    });
+
+copilotCommand
+    .command("agent-stop")
+    .description("Handle the Copilot agentStop hook")
+    .action(async () => {
+        await readCopilotInput("agentStop");
+        const output: AgentStopOutput = {};
         process.stdout.write(`${JSON.stringify(output)}\n`);
     });
 

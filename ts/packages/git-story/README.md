@@ -12,13 +12,14 @@ $ pnpm build
 $ npm link            # puts git-story on PATH
 $ git story init   # registers Copilot CLI and git hooks for this repo
 $ echo '{"sessionId":"s1","timestamp":0,"cwd":".","prompt":"hi"}' | git story hooks copilot user-prompt-submitted
-git-story prompt: session=s1
+git-story userPromptSubmitted: session=s1
 {}
 $ echo input | git story hooks git pre-commit a b
 git-story pre-commit: args=["a","b"] stdin="input\n"
 ```
 
-`init` writes the hooks to `.github/copilot/settings.local.json` and adds that
+`init` registers the `userPromptSubmitted`, `sessionStart`, and `agentStop`
+Copilot hooks in `.github/copilot/settings.local.json` and adds that
 file to `.git/info/exclude`, so it stays local to the clone.
 
 `init` also writes a `pre-commit` script to the git hooks directory (honors
