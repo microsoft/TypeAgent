@@ -61,9 +61,9 @@ describe("PowerShell terminal execution decisions", () => {
             recordReasoningApprovalChoice(host, req(), REASONING_ALLOW_ONCE),
         ).toBe(false);
         expect(getPowerShellExecutionBlock(host, "r2")).toBeUndefined();
-        expect(
-            hasCachedReasoningApproval(host, req({ requestId: "r2" })),
-        ).toBe(true);
+        expect(hasCachedReasoningApproval(host, req({ requestId: "r2" }))).toBe(
+            true,
+        );
         expect(getPowerShellExecutionBlock(h(), "r1")).toBeUndefined();
     });
 

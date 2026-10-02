@@ -19,7 +19,9 @@ export function validatePowerShellIdentifier(name: string): void {
         typeof name !== "string" ||
         !/^[a-zA-Z][a-zA-Z0-9_]{0,99}$/.test(name) ||
         Object.prototype.hasOwnProperty.call(Object.prototype, name) ||
-        /^(con|prn|aux|nul|com[0-9]|lpt[0-9]|constructor|prototype)$/i.test(name)
+        /^(con|prn|aux|nul|com[0-9]|lpt[0-9]|constructor|prototype)$/i.test(
+            name,
+        )
     ) {
         throw new PowerShellIntegrityError(
             "Invalid PowerShell flow identifier. Use 1-100 ASCII letters, digits or underscores, starting with a letter; reserved names are not allowed.",
@@ -102,7 +104,9 @@ export function createPowerShellRevision(
         typeof metadata.sandbox.networkAccess !== "boolean" ||
         !Number.isFinite(metadata.sandbox.maxExecutionTime)
     ) {
-        throw new PowerShellIntegrityError("Invalid PowerShell revision metadata.");
+        throw new PowerShellIntegrityError(
+            "Invalid PowerShell revision metadata.",
+        );
     }
     const parameterNames = new Set<string>();
     for (const parameter of metadata.parameters) {

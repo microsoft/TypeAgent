@@ -201,9 +201,9 @@ describe("PowerShellStore capability lifecycle", () => {
             await expect(store.saveFlow(createRecipe(name))).rejects.toThrow(
                 "Invalid PowerShell flow identifier",
             );
-            await expect(
-                store.savePending(createRecipe(name)),
-            ).rejects.toThrow("Invalid PowerShell flow identifier");
+            await expect(store.savePending(createRecipe(name))).rejects.toThrow(
+                "Invalid PowerShell flow identifier",
+            );
             await expect(store.getFlow(name)).rejects.toThrow(
                 "Invalid PowerShell flow identifier",
             );
@@ -231,9 +231,9 @@ describe("PowerShellStore capability lifecycle", () => {
                 deletedSamples: [],
             }),
         );
-        await expect(
-            new PowerShellStore(storage).initialize(),
-        ).rejects.toThrow("Invalid PowerShell storage destination");
+        await expect(new PowerShellStore(storage).initialize()).rejects.toThrow(
+            "Invalid PowerShell storage destination",
+        );
     });
 
     it("does not rebaseline same-command edits during load or registration", async () => {
@@ -254,9 +254,9 @@ describe("PowerShellStore capability lifecycle", () => {
                 "Write-Output",
             ]),
         ).rejects.toThrow("integrity check failed");
-        await expect(
-            new PowerShellStore(storage).initialize(),
-        ).rejects.toThrow("integrity check failed");
+        await expect(new PowerShellStore(storage).initialize()).rejects.toThrow(
+            "integrity check failed",
+        );
         expect(await storage.read("revisions/showPorts.json", "utf8")).toBe(
             recorded,
         );
@@ -286,9 +286,9 @@ describe("PowerShellStore capability lifecycle", () => {
             "integrity check failed",
         );
         await storage.delete("revisions/showPorts.json");
-        await expect(
-            new PowerShellStore(storage).initialize(),
-        ).rejects.toThrow("Missing host revision");
+        await expect(new PowerShellStore(storage).initialize()).rejects.toThrow(
+            "Missing host revision",
+        );
         expect(await storage.exists("scripts/showPorts.ps1")).toBe(true);
     });
 
@@ -337,9 +337,9 @@ describe("PowerShellStore capability lifecycle", () => {
             `pending/${id}.recipe.json`,
             JSON.stringify(changed),
         );
-        await expect(
-            store.promotePending(`${id}.recipe.json`),
-        ).rejects.toThrow("integrity check failed");
+        await expect(store.promotePending(`${id}.recipe.json`)).rejects.toThrow(
+            "integrity check failed",
+        );
         expect(store.hasFlow("showPorts")).toBe(false);
     });
 
@@ -350,7 +350,10 @@ describe("PowerShellStore capability lifecycle", () => {
             ...recipe,
             expectedOutputFormat: recipe.script.expectedOutputFormat,
         };
-        const revision = createPowerShellRevision("Write-Output 1\r\n", metadata);
+        const revision = createPowerShellRevision(
+            "Write-Output 1\r\n",
+            metadata,
+        );
         expect(revision.scriptHash).toMatch(/^[0-9a-f]{64}$/);
         expect(
             createPowerShellRevision("Write-Output 1\n", metadata),

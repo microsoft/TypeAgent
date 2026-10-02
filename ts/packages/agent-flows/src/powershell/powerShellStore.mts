@@ -290,7 +290,8 @@ export class PowerShellStore {
             newSource === undefined ? undefined : structuredClone(newSource);
         const snapshot = await this.getExecutionSnapshot(actionName);
         const entry = this.index.flows[actionName];
-        if (!entry || !snapshot) throw new Error(`Flow not found: ${actionName}`);
+        if (!entry || !snapshot)
+            throw new Error(`Flow not found: ${actionName}`);
         const previousScript = snapshot.script;
         const previousFlowJson = JSON.stringify(snapshot.flow, null, 2);
         const previousEntry = JSON.parse(
@@ -385,7 +386,8 @@ export class PowerShellStore {
         patterns = structuredClone(patterns);
         const snapshot = await this.getExecutionSnapshot(actionName);
         const entry = this.index.flows[actionName];
-        if (!entry || !snapshot) throw new Error(`Flow not found: ${actionName}`);
+        if (!entry || !snapshot)
+            throw new Error(`Flow not found: ${actionName}`);
         const previousFlowJson = JSON.stringify(snapshot.flow, null, 2);
         const previousEntry = { ...entry };
         const previousLastModified = this.index.lastModified;
@@ -486,9 +488,8 @@ export class PowerShellStore {
                     "PowerShell revision was removed while approval was pending.",
                 );
             }
-            const current = await this.readJson<PowerShellRevision>(
-                revisionPath,
-            );
+            const current =
+                await this.readJson<PowerShellRevision>(revisionPath);
             verifyPowerShellRevision(revision, current);
         };
         await assertCurrent();
@@ -508,7 +509,8 @@ export class PowerShellStore {
             entry.scriptPath,
             `revisions/${actionName}.json`,
         ]) {
-            if (await this.storage.exists(path)) await this.storage.delete(path);
+            if (await this.storage.exists(path))
+                await this.storage.delete(path);
         }
 
         delete this.index.flows[actionName];
@@ -531,7 +533,10 @@ export class PowerShellStore {
 
     hasFlow(actionName: string): boolean {
         validatePowerShellIdentifier(actionName);
-        return Object.prototype.hasOwnProperty.call(this.index.flows, actionName);
+        return Object.prototype.hasOwnProperty.call(
+            this.index.flows,
+            actionName,
+        );
     }
 
     isSampleDeleted(actionName: string): boolean {
@@ -553,7 +558,9 @@ export class PowerShellStore {
             expectedOutputFormat: recipe.script.expectedOutputFormat,
         });
         if (await this.storage.exists(pendingPath)) {
-            throw new PowerShellIntegrityError("Pending recipe already exists.");
+            throw new PowerShellIntegrityError(
+                "Pending recipe already exists.",
+            );
         }
         await this.storage.write(pendingPath, JSON.stringify(recipe, null, 2));
         await this.storage.write(
