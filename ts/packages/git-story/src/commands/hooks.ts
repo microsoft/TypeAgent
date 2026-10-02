@@ -30,7 +30,10 @@ hooksCommand
     .description("Handle the Copilot userPromptSubmitted hook")
     .action(async () => {
         // Placeholder: parse the payload, change nothing.
-        const input = JSON.parse(await readStdin()) as UserPromptSubmittedInput;
+        // Empty stdin (manual run) is treated as `{}`, as on main.
+        const input = JSON.parse(
+            (await readStdin()) || "{}",
+        ) as Partial<UserPromptSubmittedInput>;
         const output: UserPromptSubmittedOutput = {};
         process.stderr.write(`git-story prompt: session=${input.sessionId}\n`);
         cliLogger.info(`prompt session=${input.sessionId}`);
