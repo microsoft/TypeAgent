@@ -45,6 +45,34 @@ $ curl -G http://127.0.0.1:51703/api/story/commits/79f77a3 --data-urlencode proj
 
 Routes are in `src/server/router.ts`; handlers are in `src/server/routes/`.
 
+## Session Watcher scaffold
+
+`src/sessionWatcher.ts` defines typed stubs with pseudocode for the proposed
+session-ingestion flow:
+
+```text
+watch -> processUpdates -> captureUpdates -> normalizeEvents
+                        -> collectMetadata -> filterForPrivacy -> publishUpdate
+                        -> acknowledge capture checkpoint
+stop -> dispose watches and finish in-flight processing
+```
+
+Capture is incremental and source-specific. Normalization preserves stable event
+identities and tool-call references. Where Copilot reports an edit diff, the
+watcher retains it as activity evidence; script runs without recorded diffs are
+still retained, without inventing change attribution. Metadata is accumulated
+per session, including client, models, timestamps, and parent-session linkage.
+
+Privacy filtering is a separate implementation connected through
+`filterForPrivacy`. It must approve/redact both events and metadata before
+downstream delivery, or explicitly exclude the update. Missing or failed privacy
+filtering must not allow raw data through. Checkpoints advance only after durable
+delivery or deliberate exclusion; retries must not duplicate ingested events.
+
+All methods currently throw `not implemented`, including the privacy handoff.
+No watcher is connected to the daemon yet. Memory extraction, story compilation,
+and activity-to-commit attribution are outside this scaffold.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
