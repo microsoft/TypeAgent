@@ -1,0 +1,245 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+body[data-memory-hub] > .alert {
+  position: fixed;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px #0002;
+}
+body[data-memory-hub] > .alert .btn-close::after {
+  content: "Dismiss";
+}
+.hub-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  padding: 16px;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+.hub-top h1 {
+  margin: 0;
+}
+.hub-top form {
+  display: flex;
+  flex: 1;
+  min-width: 200px;
+  gap: 6px;
+}
+.hub-top form input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+}
+.hub-top form button,
+.hub-top > button {
+  flex-shrink: 0;
+}
+.hub-top h1,
+.hub-top > a {
+  align-self: center;
+}
+.hub-top > label {
+  min-width: 0;
+  max-width: 240px;
+}
+.hub-top select {
+  min-width: 0;
+  max-width: 100%;
+}
+.hub-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+}
+#hubRail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  background: #fff;
+  min-height: calc(100vh - 90px);
+}
+#hubRail a {
+  padding: 10px;
+  color: #353c50;
+  text-decoration: none;
+  border-radius: 6px;
+}
+#hubRail a[aria-current="page"] {
+  background: #eef0ff;
+  color: var(--primary-dark);
+  font-weight: 650;
+}
+#hubRail small {
+  margin: 12px 0;
+  color: var(--muted);
+}
+#hubRail .checkbox {
+  padding: 10px;
+  margin-top: 8px;
+}
+.hub-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hub-controls > .checkbox {
+  min-height: 36px;
+}
+.hub-controls > label {
+  min-width: 0;
+}
+.hub-controls select {
+  max-width: 100%;
+}
+.hub-page > .pager {
+  justify-content: flex-start;
+  gap: 12px;
+}
+.hub-page button[aria-pressed="true"] {
+  background: #eef0ff;
+  border-color: var(--primary);
+  color: var(--primary-dark);
+}
+.hub-page {
+  min-width: 0;
+}
+.hub-explore-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.hub-explore-nav a {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  color: inherit;
+  text-decoration: none;
+}
+.hub-explore-nav a[aria-current="page"] {
+  background: #eef0ff;
+  border-color: var(--primary);
+  color: var(--primary-dark);
+}
+.hub-page .list {
+  max-height: none;
+}
+#hubActivity {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+#hubRunbooks {
+  min-width: 0;
+}
+#hubRunbooks .runbook-list-heading {
+  display: none;
+}
+#hubSettings {
+  display: grid;
+  gap: 16px;
+}
+#hubSettings > button {
+  justify-self: start;
+}
+#hubSettings > form.card {
+  display: grid;
+  gap: 8px;
+}
+#hubSettings .hub-controls {
+  margin: 4px 0;
+}
+.hub-drawer {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: min(760px, 90vw);
+  overflow: auto;
+  padding: 16px;
+  background: #fff;
+  box-shadow: -8px 0 24px #0003;
+  z-index: 5;
+}
+.hub-drawer.expanded {
+  width: 100vw;
+}
+.hub-drawer .detail-panel {
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+body:not(.inspector) .inspector-detail {
+  display: none;
+}
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #5b69cf;
+  outline-offset: 2px;
+}
+.inbox-card {
+  padding: 16px;
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+}
+.inbox-card .hub-controls {
+  margin: 12px 0 0;
+}
+.hub-drawer [role="tab"][aria-selected="true"] {
+  background: #eef0ff;
+  border-color: var(--primary);
+}
+@media (max-width: 800px) {
+  .hub-layout {
+    grid-template-columns: 1fr;
+  }
+  #hubRail {
+    min-height: 0;
+    flex-direction: row;
+    overflow: auto;
+    align-items: center;
+    padding: 8px;
+  }
+  #hubRail a {
+    white-space: nowrap;
+  }
+  #hubRail small {
+    display: none;
+  }
+  #hubActivity,
+  #hubRunbooks {
+    grid-template-columns: 1fr;
+  }
+  .hub-drawer {
+    width: 100vw;
+  }
+  .hub-top label {
+    max-width: 100%;
+  }
+  .hub-top form {
+    flex-basis: 100%;
+  }
+  #hubRail .checkbox {
+    flex-shrink: 0;
+    margin-top: 0;
+    white-space: nowrap;
+  }
+}

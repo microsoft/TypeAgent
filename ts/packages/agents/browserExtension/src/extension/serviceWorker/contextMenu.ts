@@ -134,19 +134,20 @@ async function savePage(tab: chrome.tabs.Tab): Promise<void> {
     const status = !result.indexed
         ? `Could not save page: ${result.error ?? "Unknown error"}`
         : result.warnings?.length
-          ? `Page saved, but extraction needs attention: ${result.warnings.join("; ")}. See jobs in Memory Center.`
+          ? `Page saved, but extraction needs attention: ${result.warnings.join("; ")}. See jobs in Memory.`
           : result.howTo === undefined
-            ? "Page saved, but how-to status is unavailable. See jobs in Memory Center."
+            ? "Page saved, but how-to status is unavailable. See jobs in Memory."
             : !result.howTo.enabled
               ? "Page saved. How-to detection is disabled for the browser corpus."
-              : `Page saved. ${result.howTo.candidateCount} how-to candidate(s). Open Memory Center and select TypeAgent Browser Memory to review.`;
+              : `Page saved. ${result.howTo.candidateCount} how-to candidate(s). Open Memory and select TypeAgent Browser Memory to review.`;
     await chrome.action.setTitle({ tabId: tab.id, title: status });
 }
 
 /**
  * Initializes the context menu items
  */
-export function initializeContextMenu(): void {
+export async function initializeContextMenu(): Promise<void> {
+    await chrome.contextMenus.removeAll();
     chrome.contextMenus.create({
         title: "Open TypeAgent Chat",
         id: "openChatPanel",
@@ -199,16 +200,11 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Knowledge Library",
-        id: "showWebsiteLibrary",
+        title: "Memory",
+        id: "showMemoryHub",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
-    chrome.contextMenus.create({
-        title: "Memory Center",
-        id: "showMemoryCenter",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
     chrome.contextMenus.create({
         title: "Annotations Library",
         id: "showAnnotationsLibrary",
@@ -259,13 +255,8 @@ export async function handleContextMenuClick(
             break;
         }
 
-        case "showWebsiteLibrary": {
-            await openBrowserView("knowledgeLibrary", lookupViewHost);
-            break;
-        }
-
-        case "showMemoryCenter": {
-            await openBrowserView("memoryCenter", lookupViewHost);
+        case "showMemoryHub": {
+            await openBrowserView("memoryHub", lookupViewHost);
             break;
         }
 

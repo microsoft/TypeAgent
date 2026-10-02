@@ -14,6 +14,8 @@ export function createContentScriptRpcClient(
     );
 
     return {
+        capturePageSnapshot: (expectedUrl) =>
+            contentScriptRpcClient.invoke("capturePageSnapshot", expectedUrl),
         scrollUp: () => contentScriptRpcClient.invoke("scrollUp"),
         scrollDown: () => contentScriptRpcClient.invoke("scrollDown"),
         getPageLinksByQuery: (keywords: string) =>

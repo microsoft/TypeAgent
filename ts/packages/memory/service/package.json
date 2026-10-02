@@ -13,7 +13,10 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./rpc": "./dist/rpcFacade.js"
+    "./rpc": "./dist/rpcFacade.js",
+    "./agent-edition-validation": "./dist/agentEditionValidation.js",
+    "./procedure-markdown": "./dist/procedureMarkdown.js",
+    "./procedureMarkdown": "./dist/procedureMarkdown.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -27,6 +30,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/aiclient": "workspace:*",
+    "typechat": "^0.1.1",
     "@typeagent/conversation-memory": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
     "proper-lockfile": "^4.1.2"

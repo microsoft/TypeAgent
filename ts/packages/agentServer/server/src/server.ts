@@ -51,6 +51,10 @@ import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import { createDurableMemoryService } from "./durableMemoryService.js";
 import { createLocalSkillServices } from "./skillCatalog.js";
 import { createAutomationSources } from "./automationSources.js";
+import { createRunbookHostCapabilities } from "./runbookCapabilities.js";
+import { getCurrentMcpToolCatalogs } from "default-agent-provider";
+import type { RunbookBindingValidator } from "@typeagent/memory-service";
+import { createRunbookBindingValidator } from "./runbookBindingValidator.js";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -354,8 +358,17 @@ async function main() {
         debugStartup("developer mode enabled at startup (--dev)");
     }
     debugStartup("starting instance memory service");
+    let bindingValidator: RunbookBindingValidator | undefined;
     const memoryService = createDurableMemoryService(
         path.join(instanceDir, "memory"),
+        (...args: Parameters<RunbookBindingValidator>) => {
+            if (bindingValidator === undefined) {
+                throw new Error(
+                    "Runbook catalog binding validation is not ready.",
+                );
+            }
+            return bindingValidator(...args);
+        },
     );
     const memoryServiceHost = await MemoryServiceHost.start(memoryService, {
         onError: (error) =>
@@ -409,6 +422,16 @@ async function main() {
         instanceDir,
         new McpReplayHost(instanceDir),
     );
+    const { skillCatalog, skillAcquirer } =
+        await createLocalSkillServices(instanceDir);
+    const runbookCapabilities = createRunbookHostCapabilities({
+        skillCatalog,
+        macroManager,
+        procedureService: memoryService,
+        readMcpCatalogs: () =>
+            getCurrentMcpToolCatalogs(defaultAgentRuntime.appAgentSources),
+    });
+    bindingValidator = createRunbookBindingValidator(runbookCapabilities);
     await macroManager.configureLearning(
         createMacroLearningRuntime(undefined, () =>
             macroManager.getApprovedMacros(),
@@ -457,6 +480,7 @@ async function main() {
                 allowSharedLocalView: ["browser"],
                 agentInitOptions: {
                     browser: {
+                        runbookCapabilities,
                         memoryServiceClient:
                             createMemoryServiceRpcFacade(memoryService),
                         automations: createAutomationSources(
@@ -479,8 +503,6 @@ async function main() {
             await memoryServiceHost.close();
         }
     };
-    const { skillCatalog, skillAcquirer } =
-        await createLocalSkillServices(instanceDir);
 
     debugStartup("conversation manager ready; prewarming default conversation");
     // Pre-initialize the default conversation dispatcher before accepting clients,
@@ -624,6 +646,7 @@ async function main() {
             conversationManager,
             macroManager,
             skillCatalog,
+            runbookCapabilities,
             skillAcquirer,
             procedureService: memoryService,
             shutdown: shutdownServer,

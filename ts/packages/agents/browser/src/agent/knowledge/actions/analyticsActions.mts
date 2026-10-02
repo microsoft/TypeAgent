@@ -485,39 +485,10 @@ export async function getDetailedKnowledgeStats(
                 totalProcessedPages: sources.length,
             },
         };
-    } catch {
-        return {
-            totalPages: 0,
-            totalEntities: 0,
-            totalTopics: 0,
-            totalRelationships: 0,
-            uniqueDomains: 0,
-            topEntityTypes: [],
-            topDomains: [],
-            recentActivity: [],
-            storageSize: {
-                totalBytes: 0,
-                entitiesBytes: 0,
-                contentBytes: 0,
-                metadataBytes: 0,
-            },
-            extractionProgress: {
-                entityProgress: 0,
-                topicProgress: 0,
-                actionProgress: 0,
-            },
-            qualityDistribution: {
-                highQuality: 0,
-                mediumQuality: 0,
-                lowQuality: 0,
-            },
-            completionRates: {
-                pagesWithEntities: 0,
-                pagesWithTopics: 0,
-                pagesWithActions: 0,
-                totalProcessedPages: 0,
-            },
-        };
+    } catch (error) {
+        throw new Error(
+            `Browser knowledge statistics are unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        );
     }
 }
 
@@ -531,6 +502,8 @@ export async function getAnalyticsData(
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<AnalyticsDataResponse> {
+    const memory = context.agentContext.browserMemoryService;
+    if (!memory) throw new Error("Durable browser memory is not available");
     const [stats, domains, activity, extraction, recent, quality] =
         await Promise.all([
             getDetailedKnowledgeStats(
@@ -563,15 +536,26 @@ export async function getAnalyticsData(
             getRecentKnowledgeItems({ limit: 10, type: "all" }, context),
             generateQualityReport({}, context),
         ]);
-    const sources = await context.agentContext.browserMemoryService
-        ?.listSources()
-        .catch(() => []);
-    const totalBookmarks =
-        sources?.filter((source) => source.metadata?.source === "bookmark")
-            .length ?? 0;
-    const totalHistory =
-        sources?.filter((source) => source.metadata?.source === "history")
-            .length ?? 0;
+    const failed = [
+        ["top domains", domains.success],
+        ["activity trends", activity.success],
+        ["extraction metrics", extraction.success],
+        ["recent knowledge", recent.success],
+        ["quality report", quality.success],
+    ]
+        .filter(([, success]) => !success)
+        .map(([name]) => name);
+    if (failed.length)
+        throw new Error(
+            `Browser reading analytics unavailable: ${failed.join(", ")}`,
+        );
+    const sources = await memory.listSources();
+    const totalBookmarks = sources.filter(
+        (source) => source.metadata?.source === "bookmark",
+    ).length;
+    const totalHistory = sources.filter(
+        (source) => source.metadata?.source === "history",
+    ).length;
     return {
         overview: {
             totalSites: stats.totalPages,

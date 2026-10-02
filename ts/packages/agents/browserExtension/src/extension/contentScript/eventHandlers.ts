@@ -26,6 +26,7 @@ import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { ContentScriptRpc } from "@typeagent/browser-control-rpc/contentScriptRpc/types";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { sendMessageToBackground, sendMainWorldRequest } from "./messaging";
+import { captureDocumentSnapshot } from "./captureDocument";
 
 // Set up history interception for SPA navigation
 const interceptHistory = (method: "pushState" | "replaceState") => {
@@ -56,6 +57,11 @@ export function initializeEventHandlers(): void {
  * Sets up message listeners for communication with the extension
  */
 function setupMessageListeners(): void {
+    // Keep capture replies separate from active-tab RPC: each client has its
+    // own callId sequence, so broadcasting replies could resolve the wrong call.
+    const captureChannel = createChannelAdapter((message) => {
+        chrome.runtime?.sendMessage({ type: "captureRpc", message });
+    });
     const contentScriptExtensionChannel = createChannelAdapter((message) => {
         // Send messages to the background script
         chrome.runtime?.sendMessage({
@@ -67,6 +73,11 @@ function setupMessageListeners(): void {
     // Listen for messages from the background script
     chrome.runtime?.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+            if (message.type === "captureRpc") {
+                captureChannel.notifyMessage(message.message);
+                sendResponse({ captureRpcAccepted: true });
+                return false;
+            }
             if (message.type === "rpc") {
                 contentScriptExtensionChannel.notifyMessage(message.message);
                 return false;
@@ -139,6 +150,8 @@ function setupMessageListeners(): void {
     );
 
     const contentScriptRpc: ContentScriptRpc = {
+        capturePageSnapshot: async (expectedUrl) =>
+            captureDocumentSnapshot(document, expectedUrl),
         scrollUp: async () => {
             scrollPageUp();
         },
@@ -190,6 +203,9 @@ function setupMessageListeners(): void {
             return new Promise((resolve) => setTimeout(resolve, delay));
         },
     };
+    createRpc("browser:content-capture", captureChannel.channel, {
+        capturePageSnapshot: contentScriptRpc.capturePageSnapshot,
+    });
 
     createRpc(
         "browser:content",

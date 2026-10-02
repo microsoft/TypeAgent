@@ -6,12 +6,19 @@ import { createDocMemorySettings } from "@typeagent/conversation-memory";
 import {
     FileMemoryService,
     createKnowProCorpusIndex,
+    type RunbookBindingValidator,
 } from "@typeagent/memory-service";
+import { getConfiguredRunbookModelOptions } from "./runbookModelOptions.js";
 
 export function createDurableMemoryService(
     rootDirectory: string,
+    runbookBindingValidator?: RunbookBindingValidator,
 ): FileMemoryService {
     return new FileMemoryService(rootDirectory, {
+        ...getConfiguredRunbookModelOptions(),
+        ...(runbookBindingValidator === undefined
+            ? {}
+            : { runbookBindingValidator }),
         indexFactory: (corpusId, indexDirectory) =>
             createKnowProCorpusIndex(corpusId, indexDirectory, () => {
                 const settings = createDocMemorySettings(

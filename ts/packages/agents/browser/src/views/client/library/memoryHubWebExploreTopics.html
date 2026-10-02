@@ -1,0 +1,102 @@
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+<div class="topic-graph-container">
+  <header class="topic-graph-header">
+    <div class="header-left">
+      <div class="breadcrumbs">
+        <button id="topicGraphBreadcrumb" class="breadcrumb-link">
+          Topic Graph
+        </button>
+        <span id="topicNameBreadcrumb" class="breadcrumb-entity"></span>
+      </div>
+    </div>
+    <div class="header-center">
+      <div class="topic-search">
+        <div class="search-input-group">
+          <input
+            type="search"
+            id="topicSearch"
+            class="topic-search-input"
+            placeholder="Search topics..."
+            aria-label="Search topics"
+          />
+          <button id="searchButton" class="topic-search-btn">Search</button>
+        </div>
+      </div>
+    </div>
+    <label
+      >Filter level
+      <input
+        id="topicLevelFilter"
+        type="number"
+        min="0"
+        placeholder="All levels"
+    /></label>
+  </header>
+  <div class="topic-graph-main">
+    <aside class="topic-sidebar collapsed" id="topicSidebar">
+      <div class="sidebar-header">
+        <h3>Topic Details</h3>
+        <button
+          id="closeSidebar"
+          class="btn-close"
+          aria-label="Close topic details"
+        >
+          Close
+        </button>
+      </div>
+      <div class="sidebar-content" id="sidebarContent">
+        <div class="topic-placeholder">
+          <p>Select a topic to view details</p>
+        </div>
+      </div>
+      <div class="graph-stats">
+        <h4>Graph Statistics</h4>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Loaded Topics:</span
+            ><span class="stat-value" id="totalTopics">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Visible Topics:</span
+            ><span class="stat-value" id="visibleTopics">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Max Depth:</span
+            ><span class="stat-value" id="maxDepth">-</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="graph-container">
+      <div
+        id="topicGraphContainer"
+        class="cytoscape-container"
+        tabindex="0"
+        aria-label="Topic graph"
+      ></div>
+      <div id="loadingOverlay" class="loading-overlay" hidden>
+        <p role="status">Loading topic graph...</p>
+      </div>
+      <div id="errorOverlay" class="error-overlay" hidden>
+        <div class="error-content">
+          <h3>Error Loading Topic Graph</h3>
+          <p id="errorMessage"></p>
+          <button id="retryButton">Retry</button>
+        </div>
+      </div>
+      <div class="graph-controls">
+        <div class="graph-action-controls">
+          <button id="topicZoomIn" title="Zoom In">+</button
+          ><button id="topicZoomOut" title="Zoom Out">-</button>
+          <button id="fitButton" title="Fit to view">Fit</button
+          ><button id="centerButton" title="Center graph">Center</button>
+          <button id="exportButton" title="Export as image">Image</button
+          ><button id="exportJsonButton" title="Export cytoscape JSON">
+            JSON
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p id="notificationBody" role="status"></p>
+</div>

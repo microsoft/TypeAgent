@@ -32,17 +32,19 @@ describe("Local browser view navigation", () => {
                 lookupViewHost,
             ),
         ).resolves.toBe(
-            "http://localhost:49152/knowledge/entities/?entity=A%26B#detail",
+            "http://localhost:49152/memory/hub/?entity=A%26B#/explore/web/entities/A%26B",
         );
     });
 
     test("leaves external navigation alone without contacting the agent", async () => {
         await expect(
             resolveLocalBrowserViewUrl(
-                "https://example.test/?q=hello",
+                "https://example.test/?q=A%26B%20%2F%20C#detail%2Fpart",
                 lookupViewHost,
             ),
-        ).resolves.toBe("https://example.test/?q=hello");
+        ).resolves.toBe(
+            "https://example.test/?q=A%26B%20%2F%20C#detail%2Fpart",
+        );
         expect(sendActionToAgent).not.toHaveBeenCalled();
     });
 
@@ -56,20 +58,77 @@ describe("Local browser view navigation", () => {
         expect(sendActionToAgent).not.toHaveBeenCalled();
     });
 
+    test.each([
+        ["memoryHub.html", "#detail%2Fpart%20one"],
+        ["memoryCenter.html", "#/inbox"],
+        ["knowledgeLibrary.html", "#/search"],
+    ])(
+        "resolves %s to the Hub without losing query state",
+        async (page, hash) => {
+            const suffix = "?q=A%26B%20%2F%20C#detail%2Fpart%20one";
+            for (const prefix of [
+                "typeagent-browser://views/",
+                "typeagent-browser://",
+            ]) {
+                await expect(
+                    resolveLocalBrowserViewUrl(
+                        `${prefix}${page}${suffix}`,
+                        lookupViewHost,
+                    ),
+                ).resolves.toBe(
+                    `http://localhost:49152/memory/hub/?q=A%26B%20%2F%20C${hash}`,
+                );
+            }
+        },
+    );
+
+    test("opens the hub without reusing legacy memory or knowledge tabs", async () => {
+        await openBrowserView("memoryHub", lookupViewHost);
+        expect(chrome.tabs.query).toHaveBeenCalledWith({
+            url: [
+                "http://localhost:49152/memory/hub/",
+                "http://localhost:49152/library/memoryHub.html",
+            ],
+        });
+        expect(chrome.tabs.create).toHaveBeenCalledWith({
+            url: "http://localhost:49152/memory/hub/",
+            active: true,
+        });
+    });
+
     test("rediscovers the host after a view server restart", async () => {
-        await openBrowserView("knowledgeLibrary", lookupViewHost);
+        await openBrowserView("memoryHub", lookupViewHost);
         jest.mocked(sendActionToAgent).mockResolvedValue({
             url: "http://localhost:49153",
         });
-        await openBrowserView("knowledgeLibrary", lookupViewHost);
+
+        await openBrowserView("memoryHub", lookupViewHost);
         expect(chrome.tabs.create).toHaveBeenNthCalledWith(1, {
-            url: "http://localhost:49152/knowledge/",
+            url: "http://localhost:49152/memory/hub/",
             active: true,
         });
         expect(chrome.tabs.create).toHaveBeenNthCalledWith(2, {
-            url: "http://localhost:49153/knowledge/",
+            url: "http://localhost:49153/memory/hub/",
             active: true,
         });
+    });
+
+    test("retired graph navigation reuses the Hub and updates its selected section without fragment-bearing tab patterns", async () => {
+        chrome.tabs.query.mockResolvedValue([
+            { id: 42, windowId: 7 },
+        ] as chrome.tabs.Tab[]);
+        await openBrowserView("entityGraph", lookupViewHost);
+        expect(chrome.tabs.query).toHaveBeenCalledWith({
+            url: [
+                "http://localhost:49152/memory/hub/",
+                "http://localhost:49152/library/memoryHub.html",
+            ],
+        });
+        expect(chrome.tabs.update).toHaveBeenCalledWith(42, {
+            active: true,
+            url: "http://localhost:49152/memory/hub/#/explore/web/entities",
+        });
+        expect(chrome.tabs.create).not.toHaveBeenCalled();
     });
 
     test("does not open a port-zero view URL", async () => {

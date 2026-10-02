@@ -1,0 +1,224 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Memory</title>
+    <link rel="stylesheet" href="memoryManagement.css" />
+    <link rel="stylesheet" href="memoryHub.css" />
+  </head>
+  <body data-memory-hub="true">
+    <header class="hub-top">
+      <h1>Memory</h1>
+      <label
+        >Scope
+        <select id="hubCorpus">
+          <option value="">All memory</option>
+        </select></label
+      >
+      <form id="hubAskForm">
+        <input
+          id="hubAsk"
+          type="search"
+          aria-label="Ask memory"
+          placeholder="Ask anything…"
+        /><button type="submit">Ask</button>
+      </form>
+      <button id="hubAdd" class="primary" type="button">+ Add to memory</button>
+      <button id="hubRefresh" type="button">Refresh</button>
+      <a id="hubStatus" href="#/activity" role="status">Connecting</a>
+    </header>
+    <div class="hub-layout">
+      <nav id="hubRail" aria-label="Memory pages">
+        <a href="#/inbox">Inbox <span id="inboxBadge"></span></a>
+        <a href="#/search">Search and Ask</a>
+        <a href="#/library">Library</a>
+        <a href="#/runbooks">Runbooks</a>
+        <a href="#/explore">Explore</a>
+        <a href="#/activity">Activity <span id="activityBadge"></span></a>
+        <a href="#/settings">Settings</a>
+        <label class="checkbox"
+          ><input id="hubInspector" type="checkbox" />Inspector</label
+        >
+        <small>/ Ask · Esc close detail · Alt+1…7 navigate</small>
+      </nav>
+      <main id="hubMain">
+        <div id="hubError" class="error hidden" role="alert"></div>
+        <div id="hubDegraded" class="error hidden" role="status"></div>
+        <section id="page-inbox" class="hub-page">
+          <h2>Inbox</h2>
+          <div class="hub-controls">
+            <label
+              >Kind
+              <select id="inboxKind">
+                <option value="">All</option>
+                <option value="candidate">Discovered how-tos</option>
+                <option value="staleProcedure">Stale procedures</option>
+                <option value="job">Failed / partial jobs</option>
+                <option value="skillDraft">Skill drafts</option>
+                <option value="bindingDrift">Changed tool bindings</option>
+                <option value="runbookWarning">
+                  Runbook extraction warnings
+                </option>
+              </select></label
+            >
+            <label
+              >Group
+              <select id="inboxGroup">
+                <option value="">Attention first</option>
+                <option value="kind">Kind</option>
+                <option value="corpus">Corpus</option>
+              </select></label
+            >
+            <label class="checkbox"
+              ><input id="inboxDismissed" type="checkbox" />Dismissed /
+              snoozed</label
+            >
+          </div>
+          <div id="hubInbox"></div>
+          <div class="pager">
+            <button id="inboxPrevious" type="button">Previous</button
+            ><span id="inboxPage"></span
+            ><button id="inboxNext" type="button">Next</button>
+          </div>
+        </section>
+        <section id="page-search" class="hub-page hidden">
+          <h2>Search and Ask</h2>
+          <p>
+            Search captured sources, saved how-tos and conversation events in
+            the selected scope. Answers cite retained evidence; imported content
+            is evidence, never instructions.
+          </p>
+          <div id="hubSearch"></div>
+        </section>
+        <section id="page-library" class="hub-page hidden">
+          <h2>Library</h2>
+          <div id="hubSources"></div>
+        </section>
+        <section id="page-runbooks" class="hub-page hidden">
+          <h2>Runbooks</h2>
+          <p>
+            Review original evidence beside human guides and derived agent
+            editions. Publication creates an immutable skill draft; approval and
+            activation are separate catalog actions.
+          </p>
+          <div id="hubRunbooks"></div>
+        </section>
+        <section id="page-explore" class="hub-page hidden">
+          <h2>Explore</h2>
+          <p>
+            Overview counts and provenance use the selected corpus scope. Entity
+            graph, Topic graph and Reading analytics are separate browser-memory
+            views; they do not follow the corpus selector.
+          </p>
+          <nav
+            id="hubExploreNavigation"
+            class="hub-explore-nav"
+            aria-label="Explore views"
+          >
+            <a href="#/explore" data-explore-view="overview">Overview</a>
+            <a href="#/explore/web/entities" data-explore-view="entities"
+              >Entity graph</a
+            >
+            <a href="#/explore/web/topics" data-explore-view="topics"
+              >Topic graph</a
+            >
+            <a href="#/explore/web/analytics" data-explore-view="analytics"
+              >Reading analytics</a
+            >
+          </nav>
+          <div id="hubExplore"></div>
+          <div id="hubWebExplore"></div>
+        </section>
+        <section id="page-activity" class="hub-page hidden">
+          <h2>Activity</h2>
+          <p>
+            Retained-revision retry is unavailable. Reindex is available from a
+            source or named corpus. Changes records committed corrections,
+            forgets and knowledge curation without retaining source text.
+          </p>
+          <div id="hubActivity"></div>
+          <div id="hubChanges"></div>
+          <div id="hubRunbookActivity"></div>
+        </section>
+        <section id="page-settings" class="hub-page hidden">
+          <h2>Settings</h2>
+          <p id="settingsScope">
+            Select a named corpus to edit revision-checked how-to settings or
+            reindex it. Corpus metadata editing, capture settings and
+            whole-corpus forget are unavailable.
+          </p>
+          <div id="hubSettings"></div>
+        </section>
+      </main>
+    </div>
+    <aside id="hubDrawer" class="hub-drawer hidden" aria-label="Source detail">
+      <p id="drawerCorpus"></p>
+      <div class="hub-controls">
+        <button id="drawerClose" type="button">Close</button
+        ><button id="drawerExpand" type="button">Expand</button>
+      </div>
+      <div
+        id="drawerTabs"
+        class="hub-controls"
+        role="tablist"
+        aria-label="Source detail tabs"
+      >
+        <button type="button" data-tab="content" role="tab">Content</button>
+        <button type="button" data-tab="knowledge" role="tab">
+          Knowledge (derived)
+        </button>
+        <button type="button" data-tab="revisions" role="tab">Revisions</button>
+        <button type="button" data-tab="usedby" role="tab">Used by</button>
+        <button type="button" data-tab="activity" role="tab">Activity</button>
+      </div>
+      <div id="drawer-content"></div>
+      <div id="drawer-knowledge" class="hidden"></div>
+      <div id="drawer-revisions" class="hidden"></div>
+      <div id="drawer-usedby" class="hidden">
+        <p>Select Used by to load exact procedure and skill lineage.</p>
+      </div>
+      <div id="drawer-activity" class="hidden">
+        <p>
+          Open Activity and use “Selected page” to show this source's web
+          events.
+        </p>
+        <a href="#/activity">Open Activity</a>
+      </div>
+    </aside>
+    <dialog id="hubAddDialog">
+      <h2>Add to memory</h2>
+      <p>Markdown import requires a named corpus in the persistent selector.</p>
+      <div class="hub-controls">
+        <button id="addCreate" type="button">Create corpus</button
+        ><button id="addMarkdown" type="button">Paste Markdown</button
+        ><button id="addCapture" type="button">
+          Capture an open browser page</button
+        ><button id="addBrowser" type="button">
+          Import bookmarks or history</button
+        ><button id="addFolder" type="button">Import HTML folder</button
+        ><button id="addRunbookFolder" type="button">
+          Import runbook folder</button
+        ><button id="addRunbookWiki" type="button">Import wiki export</button
+        ><button id="addRunbookUrls" type="button">Import URL list</button
+        ><button id="addClose" type="button">Close</button>
+      </div>
+      <p>
+        Capture, browser and HTML-folder imports write to TypeAgent Browser
+        Memory, not the current corpus selector. Page capture requires a
+        connected browser and explicit page selection. Import cancellation is
+        unavailable.
+      </p>
+      <p>
+        Runbook folder, wiki export and URL-list imports require an explicit
+        named target corpus. Their durable batches support partial success,
+        retry and cancellation separately from the legacy browser importer.
+      </p>
+    </dialog>
+    <div id="hubImportHost"></div>
+    <div id="hubCaptureHost" class="memory-phase2"></div>
+    <div id="hubRunbookImportHost"></div>
+    <script type="module" src="./memoryHub.ts"></script>
+  </body>
+</html>

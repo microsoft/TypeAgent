@@ -52,6 +52,7 @@ export type OpenWebPage = {
             | "knowledgeLibrary"
             | "automationsLibrary"
             | "memoryCenter"
+            | "memoryHub" // Memory hub (also called Memory)
             | "entityGraph"
             | "topicGraph"
             | "chatView" // the chat view (a.k.a. conversation history, chat tab, chat viewer, etc.))

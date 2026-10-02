@@ -10,6 +10,7 @@ import { FeatureConfig, ServerConfig, SSEManager } from "./types.js";
 import { SSEManagerImpl } from "./sseManager.js";
 import { isAllowedViewOrigin } from "./originAllowlist.js";
 import registerDebug from "debug";
+import { registerBrowserNavigationRoutes } from "../features/views/viewNavigationRoutes.mjs";
 
 const debug = registerDebug("typeagent:views:server:core");
 
@@ -147,6 +148,7 @@ export class BaseServer {
         }
 
         // Static file serving
+        registerBrowserNavigationRoutes(this.app);
         this.app.use(
             express.static(path.join(__dirname, "..", "..", "public")),
         );

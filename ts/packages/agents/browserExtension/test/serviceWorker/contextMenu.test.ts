@@ -35,6 +35,7 @@ describe("Context Menu Module", () => {
         // Clear all mock implementations from Chrome API
         chrome.contextMenus.create.mockClear();
         chrome.contextMenus.remove.mockClear();
+        chrome.contextMenus.removeAll.mockResolvedValue(undefined);
         chrome.sidePanel.open.mockClear();
         chrome.tabs.sendMessage.mockClear();
         chrome.action.setTitle = jest.fn().mockResolvedValue(undefined);
@@ -51,9 +52,39 @@ describe("Context Menu Module", () => {
     });
 
     describe("initializeContextMenu", () => {
-        it("should create context menu items", () => {
-            contextMenuModule.initializeContextMenu();
+        it("reports menu cleanup failures without registering replacements", async () => {
+            chrome.contextMenus.removeAll.mockRejectedValueOnce(
+                new Error("Menu cleanup failed"),
+            );
+            await expect(
+                contextMenuModule.initializeContextMenu(),
+            ).rejects.toThrow("Menu cleanup failed");
+            expect(chrome.contextMenus.create).not.toHaveBeenCalled();
+        });
 
+        it("waits for stale entries to be removed before registering replacements", async () => {
+            let removed!: () => void;
+            chrome.contextMenus.removeAll.mockReturnValueOnce(
+                new Promise<void>((resolve) => {
+                    removed = resolve;
+                }),
+            );
+            const pending = contextMenuModule.initializeContextMenu();
+            expect(chrome.contextMenus.create).not.toHaveBeenCalled();
+            removed();
+            await pending;
+            expect(chrome.contextMenus.create).toHaveBeenCalled();
+        });
+
+        it("replaces existing menus and exposes Memory without retired duplicates", async () => {
+            await contextMenuModule.initializeContextMenu();
+
+            expect(chrome.contextMenus.removeAll).toHaveBeenCalledTimes(1);
+            expect(
+                chrome.contextMenus.removeAll.mock.invocationCallOrder[0],
+            ).toBeLessThan(
+                chrome.contextMenus.create.mock.invocationCallOrder[0],
+            );
             expect(chrome.contextMenus.create).toHaveBeenCalled();
             expect(
                 chrome.contextMenus.create.mock.calls.length,
@@ -68,6 +99,15 @@ describe("Context Menu Module", () => {
                 ),
             ).toEqual(["menuSeparator1", "saveThisPage"]);
             expect(ids).not.toContain("askAboutPage");
+            expect(ids).not.toContain("showMemoryCenter");
+            expect(ids).not.toContain("showWebsiteLibrary");
+            expect(ids.filter((id) => id === "showMemoryHub")).toHaveLength(1);
+            expect(chrome.contextMenus.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: "showMemoryHub",
+                    title: "Memory",
+                }),
+            );
             expect(chrome.contextMenus.create).toHaveBeenCalledWith(
                 expect.objectContaining({
                     id: "saveThisPage",
@@ -92,30 +132,9 @@ describe("Context Menu Module", () => {
             expect(chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 123 });
         });
 
-        it("should open the Memory Center", async () => {
-            const mockTab = { id: 123, url: "https://example.com" };
-            chrome.tabs.query.mockResolvedValue([]);
-
-            await contextMenuModule.handleContextMenuClick(
-                { menuItemId: "showMemoryCenter" },
-                mockTab,
-            );
-
-            expect(chrome.tabs.query).toHaveBeenCalledWith({
-                url: [
-                    "http://localhost:49152/memory/",
-                    "http://localhost:49152/library/memoryCenter.html",
-                ],
-            });
-            expect(chrome.tabs.create).toHaveBeenCalledWith({
-                url: "http://localhost:49152/memory/",
-                active: true,
-            });
-        });
-
         it.each([
+            ["showMemoryHub", "memory/hub/"],
             ["showAutomations", "automations/"],
-            ["showWebsiteLibrary", "knowledge/"],
             ["showAnnotationsLibrary", "annotations/"],
         ])(
             "opens %s on the live local view host",
@@ -139,7 +158,7 @@ describe("Context Menu Module", () => {
         it("focuses an existing local library tab", async () => {
             chrome.tabs.query.mockResolvedValue([{ id: 456, windowId: 789 }]);
             await contextMenuModule.handleContextMenuClick(
-                { menuItemId: "showMemoryCenter" },
+                { menuItemId: "showMemoryHub" },
                 { id: 123, url: "https://example.com" },
             );
             expect(chrome.tabs.update).toHaveBeenCalledWith(456, {
@@ -157,7 +176,7 @@ describe("Context Menu Module", () => {
             });
             await expect(
                 contextMenuModule.handleContextMenuClick(
-                    { menuItemId: "showMemoryCenter" },
+                    { menuItemId: "showMemoryHub" },
                     { id: 123, url: "https://example.com" },
                 ),
             ).rejects.toThrow(/unavailable/);

@@ -17,6 +17,7 @@ import {
     McpReplayHost,
     createMacroAppAgentProvider,
     createMacroLearningRuntime,
+    getCurrentMcpToolCatalogs,
 } from "default-agent-provider";
 import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
 import type {
@@ -35,6 +36,12 @@ import {
     withAutomationSources,
 } from "./automationSources.js";
 import { createDurableMemoryService } from "./durableMemoryService.js";
+import {
+    createRunbookHostCapabilities,
+    withRunbookHostCapabilities,
+} from "./runbookCapabilities.js";
+import { createRunbookBindingValidator } from "./runbookBindingValidator.js";
+import { createRunbookBindingCatalog } from "./runbookBindingCatalog.js";
 
 const debug = registerDebug("agent-server:in-process");
 
@@ -107,7 +114,16 @@ export async function createInProcessAgentServer(
         memoryAgentOptions?.memoryServiceClient;
     const ownedMemoryService =
         injectedMemoryService === undefined
-            ? createDurableMemoryService(path.join(instanceDir, "memory"))
+            ? createDurableMemoryService(
+                  path.join(instanceDir, "memory"),
+                  createRunbookBindingValidator(
+                      createRunbookBindingCatalog(macroManager, () =>
+                          getCurrentMcpToolCatalogs(
+                              dispatcherOptions.appAgentSources ?? [],
+                          ),
+                      ),
+                  ),
+              )
             : undefined;
     const memoryService = injectedMemoryService ?? ownedMemoryService!;
     const procedureService =
@@ -116,13 +132,27 @@ export async function createInProcessAgentServer(
             ? (memoryService as MemoryService &
                   Pick<PersonalHowToService, "getProcedure">)
             : undefined;
+    const { skillCatalog, skillAcquirer } = await createLocalSkillServices(
+        instanceDir,
+        options.skillAcquisition,
+    );
+    const runbookCapabilities = createRunbookHostCapabilities({
+        skillCatalog,
+        macroManager,
+        ...(procedureService === undefined ? {} : { procedureService }),
+        readMcpCatalogs: () =>
+            getCurrentMcpToolCatalogs(dispatcherOptions.appAgentSources ?? []),
+    });
     const conversationManager = await createConversationManager(
         hostName,
         {
             ...dispatcherOptions,
-            agentInitOptions: withAutomationSources(
-                dispatcherOptions.agentInitOptions,
-                createAutomationSources(instanceDir, macroManager),
+            agentInitOptions: withRunbookHostCapabilities(
+                withAutomationSources(
+                    dispatcherOptions.agentInitOptions,
+                    createAutomationSources(instanceDir, macroManager),
+                ),
+                runbookCapabilities,
             ),
             appAgentProviders: [
                 ...(dispatcherOptions.appAgentProviders ?? []),
@@ -141,14 +171,11 @@ export async function createInProcessAgentServer(
     // Pre-warm so the first join is fast and conversation metadata exists.
     await conversationManager.prewarmMostRecentConversation();
 
-    const { skillCatalog, skillAcquirer } = await createLocalSkillServices(
-        instanceDir,
-        options.skillAcquisition,
-    );
     const { handler } = createAgentServerConnectionHandler({
         conversationManager,
         macroManager,
         skillCatalog,
+        runbookCapabilities,
         skillAcquirer,
         ...(procedureService === undefined ? {} : { procedureService }),
         shutdown: options.shutdown,

@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 import type { ProcedureVersion } from "@typeagent/memory-service";
+import {
+    validateRunbookCatalogBindings,
+    type RunbookBindingValidator,
+} from "@typeagent/memory-service";
 import type { CatalogEntry } from "@typeagent/skill-catalog";
 import { createMacroDraft } from "./macroDraft.js";
 import { createSkillPackage } from "./skillPackage.js";
@@ -19,6 +23,7 @@ export class ProcedureArtifactCoordinator<TResult = unknown>
     public constructor(
         private readonly skillCatalog: SkillCatalogPublisher,
         private readonly macroPublisher: MacroArtifactPublisher<TResult>,
+        private readonly runbookBindingValidator?: RunbookBindingValidator,
     ) {}
 
     public createSkillPackage(
@@ -32,13 +37,18 @@ export class ProcedureArtifactCoordinator<TResult = unknown>
         return createMacroDraft(procedure);
     }
 
-    public publishSkill(
+    public async publishSkill(
         procedure: ProcedureVersion,
         options: ProcedureSkillOptions,
     ): Promise<CatalogEntry> {
-        return this.skillCatalog.publish(
-            this.createSkillPackage(procedure, options),
-        );
+        const input = this.createSkillPackage(procedure, options);
+        if (procedure.document.agentEdition !== undefined) {
+            await validateRunbookCatalogBindings(
+                procedure.document.agentEdition,
+                this.runbookBindingValidator,
+            );
+        }
+        return this.skillCatalog.publish(input);
     }
 
     public async publishMacro(

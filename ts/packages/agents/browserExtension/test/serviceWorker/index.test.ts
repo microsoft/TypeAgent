@@ -49,6 +49,7 @@ let ensureWebsocketConnected: jest.Mock;
 let reconnectWebSocket: jest.Mock;
 let showBadgeError: jest.Mock;
 let initializeContextMenu: jest.Mock;
+let initContextMenuSettings: jest.Mock;
 
 describe("Service Worker initialization", () => {
     beforeEach(() => {
@@ -68,10 +69,36 @@ describe("Service Worker initialization", () => {
             showBadgeError = uiModule.showBadgeError as jest.Mock;
             initializeContextMenu =
                 contextMenuModule.initializeContextMenu as jest.Mock;
+            initContextMenuSettings =
+                contextMenuModule.initContextMenuSettings as jest.Mock;
 
             const indexModule = require("../../src/extension/serviceWorker/index");
             initialize = indexModule.initialize;
         });
+    });
+
+    it("waits for menu replacement before configuring settings and listeners", async () => {
+        await initialize();
+        jest.clearAllMocks();
+        let finishMenus!: () => void;
+        initializeContextMenu.mockReturnValueOnce(
+            new Promise<void>((resolve) => {
+                finishMenus = resolve;
+            }),
+        );
+        const pending = initialize();
+        await Promise.resolve();
+        expect(initializeContextMenu).toHaveBeenCalledTimes(1);
+        expect(initContextMenuSettings).not.toHaveBeenCalled();
+        expect(
+            chrome.contextMenus.onClicked.addListener,
+        ).not.toHaveBeenCalled();
+        finishMenus();
+        await pending;
+        expect(initContextMenuSettings).toHaveBeenCalledTimes(1);
+        expect(chrome.contextMenus.onClicked.addListener).toHaveBeenCalledTimes(
+            1,
+        );
     });
 
     it("should successfully initialize when websocket connects", async () => {

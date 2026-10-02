@@ -39,7 +39,8 @@ export function withAutomationSources(
         browser !== null &&
         ("browserControl" in browser ||
             "memoryServiceClient" in browser ||
-            "automations" in browser);
+            "automations" in browser ||
+            "runbookCapabilities" in browser);
     return {
         ...agentInitOptions,
         browser:

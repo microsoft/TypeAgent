@@ -12,16 +12,20 @@ import type {
     ProcedureDocument,
     ProcedureVersion,
 } from "@typeagent/memory-service";
+import { PersonalHowToStore } from "@typeagent/memory-service";
 import {
     LiveSkillCatalog,
     type InstanceStorage,
 } from "@typeagent/skill-catalog";
 import { createHash, randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
+import type { McpToolSnapshot } from "default-agent-provider";
 import path from "node:path";
 import type { ConversationManager } from "../src/conversationManager.js";
 import { createAgentServerConnectionHandler } from "../src/connectionHandler.js";
 import { ProcedureArtifactRpcService } from "../src/procedureArtifacts.js";
+import { createRunbookBindingCatalog } from "../src/runbookBindingCatalog.js";
+import { createRunbookBindingValidator } from "../src/runbookBindingValidator.js";
 
 class MemoryStorage implements InstanceStorage {
     private readonly values = new Map<string, Uint8Array>();
@@ -166,6 +170,193 @@ describe("procedure artifact RPC", () => {
         await rm(root, { recursive: true, force: true });
     });
 
+    it("persists actual MCP components and symbolic arguments through review/publication, then rejects drift", async () => {
+        let schema: McpToolSnapshot["inputSchema"] = {
+            type: "object",
+            properties: { region: { type: "string", enum: ["west", "east"] } },
+            required: ["region"],
+        };
+        const fingerprint = () => hash(JSON.stringify(sortJson(schema)));
+        const bindingCatalog = createRunbookBindingCatalog(
+            { getApprovedMacros: async () => [], listMacros: async () => [] },
+            async () => [
+                {
+                    serverConfigId: "operations",
+                    name: "Operations",
+                    trust: "trusted",
+                    enabled: true,
+                    available: true,
+                    entries: [
+                        {
+                            id: '["operations","status"]',
+                            serverConfigId: "operations",
+                            name: "status",
+                            fingerprint: fingerprint(),
+                            inputSchema: schema,
+                            annotations: {
+                                readOnlyHint: true,
+                                destructiveHint: false,
+                            },
+                        },
+                    ],
+                },
+            ],
+        );
+        const validator = createRunbookBindingValidator(bindingCatalog);
+        const target = (await bindingCatalog.listBindingTargets()).targets[0];
+        const store = new PersonalHowToStore(
+            path.join(root, "mcp-review"),
+            async () => "offline-index",
+            validator,
+        );
+        const citation = {
+            sourceId: "guide",
+            revisionId: "1",
+            locator: "chars:0-27",
+            excerpt: "Inspect the service status.",
+        };
+        const document: ProcedureDocument = {
+            title: "Inspect service",
+            steps: ["Inspect the service status."],
+            citations: [citation],
+            agentEdition: {
+                schemaVersion: 1,
+                goal: "Inspect service",
+                applicability: [],
+                inputs: [
+                    {
+                        id: "region",
+                        description: "Service region",
+                        type: "enum",
+                        enumValues: ["west", "east"],
+                        required: true,
+                        secret: false,
+                    },
+                ],
+                preconditions: ["Read access"],
+                steps: [
+                    {
+                        id: "inspect",
+                        title: "Inspect",
+                        humanText: "Inspect the service status.",
+                        agentInstruction: "Read the service status.",
+                        binding: {
+                            kind: "mcp",
+                            accepted: true,
+                            serverId: "operations",
+                            targetId: target.name,
+                            version: target.version,
+                            fingerprint: target.fingerprint,
+                            arguments: { region: { $input: "region" } },
+                        },
+                        safety: "readOnly",
+                        citations: [citation],
+                    },
+                ],
+                verification: ["Report the observed status."],
+                rollback: [],
+                synthesis: { sourceReferences: [citation] },
+                review: { state: "draft" },
+            },
+        };
+        const draft = await store.save({
+            corpusId: "operations",
+            procedureId: "inspect",
+            document,
+        });
+        const skills = await LiveSkillCatalog.create(new MemoryStorage());
+        const artifacts = new ProcedureArtifactRpcService(
+            {
+                getProcedure: (corpusId, procedureId, version) =>
+                    store.get(corpusId, procedureId, version),
+            },
+            skills,
+            new MacroManager(path.join(root, "mcp-macros")),
+            validator,
+        );
+        const request = {
+            kind: "skill" as const,
+            corpusId: draft.corpusId,
+            procedureId: draft.procedureId,
+            version: draft.version,
+            skill: {
+                identity: {
+                    scope: "user" as const,
+                    origin: "memory",
+                    name: "inspect",
+                },
+            },
+        };
+        expect(draft.document.agentEdition?.review.state).toBe("draft");
+        await expect(artifacts.promote(request)).rejects.toThrow("reviewed");
+        await expect(
+            store.save({
+                corpusId: draft.corpusId,
+                procedureId: draft.procedureId,
+                document,
+                expectedVersion: 1,
+                reviewAgentEdition: true,
+                safetyConfirmed: false,
+            }),
+        ).rejects.toThrow("safety confirmation");
+        const reviewed = await store.save({
+            corpusId: draft.corpusId,
+            procedureId: draft.procedureId,
+            document,
+            expectedVersion: 1,
+            reviewAgentEdition: true,
+            safetyConfirmed: true,
+        });
+        expect(await store.get(draft.corpusId, draft.procedureId, 1)).toEqual(
+            draft,
+        );
+        expect(reviewed.document.agentEdition?.steps[0].binding).toEqual(
+            document.agentEdition?.steps[0].binding,
+        );
+        expect(reviewed.jsonHash).toBe(hash(reviewed.canonicalJson));
+        expect(reviewed.markdownHash).toBe(hash(reviewed.markdown));
+        const exact = { ...request, version: reviewed.version };
+        const preview = await artifacts.preview(exact);
+        const published = await artifacts.promote(exact);
+        if (published.kind !== "skill" || preview.kind !== "skill") {
+            throw new Error("Expected skill publication.");
+        }
+        expect(published.entry.state).toBe("draft");
+        expect(published.entry.active).toBe(false);
+        expect(published.lineage).toMatchObject({
+            version: reviewed.version,
+            jsonHash: reviewed.jsonHash,
+            markdownHash: reviewed.markdownHash,
+        });
+        for (const file of preview.skill.files) {
+            const bytes = await skills.readFile(
+                request.skill.identity,
+                published.entry.revision.revision,
+                file.path,
+            );
+            const expected =
+                file.encoding === "base64"
+                    ? Buffer.from(file.content, "base64")
+                    : Buffer.from(file.content, "utf8");
+            expect(Buffer.from(bytes)).toEqual(expected);
+        }
+        schema = { type: "object", properties: { region: { type: "string" } } };
+        await expect(artifacts.promote(exact)).rejects.toThrow("drifted");
+        await expect(
+            store.save({
+                corpusId: draft.corpusId,
+                procedureId: draft.procedureId,
+                document,
+                expectedVersion: 2,
+                reviewAgentEdition: true,
+                safetyConfirmed: true,
+            }),
+        ).rejects.toThrow("drifted");
+        expect(await store.get(draft.corpusId, draft.procedureId, 2)).toEqual(
+            reviewed,
+        );
+    });
+
     it("previews and idempotently promotes skills and macro drafts", async () => {
         let clientAdapter: ChannelProviderAdapter | undefined;
         const serverAdapter = createChannelProviderAdapter(
@@ -233,6 +424,29 @@ describe("procedure artifact RPC", () => {
         const secondSkill =
             await connection.promoteProcedureArtifact!(skillRequest);
         expect(firstSkill).toEqual(secondSkill);
+        if (firstSkill.kind !== "skill" || skillPreview.kind !== "skill") {
+            throw new Error("Expected skill artifacts.");
+        }
+        expect(firstSkill.entry.state).toBe("draft");
+        expect(firstSkill.entry.revision.schemaFingerprint).toBe(
+            saved.jsonHash,
+        );
+        expect(firstSkill.lineage).toMatchObject({
+            version: saved.version,
+            jsonHash: saved.jsonHash,
+            markdownHash: saved.markdownHash,
+        });
+        const publishedFile = await connection.readSkillFile!({
+            identity: skillRequest.skill.identity,
+            revision: firstSkill.entry.revision.revision,
+            path: "SKILL.md",
+        });
+        expect(
+            Buffer.from(publishedFile.content, "base64").toString("utf8"),
+        ).toBe(
+            skillPreview.skill.files.find((file) => file.path === "SKILL.md")
+                ?.content,
+        );
 
         const macroRequest = { ...reference, kind: "macro" as const };
         const macroPreview =
@@ -304,4 +518,42 @@ describe("procedure artifact RPC", () => {
             }),
         ).rejects.toThrow("Procedure not found: operations/missing@9");
     });
+
+    it.each([
+        "corpusId",
+        "procedureId",
+        "version",
+        "canonicalJson",
+        "jsonHash",
+        "markdownHash",
+    ] as const)(
+        "rejects publication when exact procedure %s differs",
+        async (field) => {
+            const saved = procedure();
+            const mismatched =
+                field === "version"
+                    ? { ...saved, version: 3 }
+                    : { ...saved, [field]: "different-reviewed-artifact" };
+            const service = new ProcedureArtifactRpcService(
+                { getProcedure: async () => mismatched },
+                await LiveSkillCatalog.create(new MemoryStorage()),
+                new MacroManager(path.join(root, field)),
+            );
+            await expect(
+                service.promote({
+                    kind: "skill",
+                    corpusId: saved.corpusId,
+                    procedureId: saved.procedureId,
+                    version: saved.version,
+                    skill: {
+                        identity: {
+                            scope: "user",
+                            origin: "memory",
+                            name: "deploy-service",
+                        },
+                    },
+                }),
+            ).rejects.toThrow();
+        },
+    );
 });

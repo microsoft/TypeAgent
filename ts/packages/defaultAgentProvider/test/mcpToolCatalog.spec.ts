@@ -5,6 +5,8 @@ import type { Tool } from "@modelcontextprotocol/client";
 import {
     buildMcpToolCatalog,
     getMcpToolIdentity,
+    snapshotMcpTools,
+    validateCatalogSchemaValues,
 } from "../src/mcp/mcpToolCatalog.js";
 
 function tool(
@@ -23,6 +25,49 @@ function tool(
 }
 
 describe("MCP tool catalog safety", () => {
+    it("validates retained argument metadata with the same safe compiler as the live catalog", () => {
+        const catalog = buildMcpToolCatalog(
+            "actual-server",
+            [
+                tool("recover", {
+                    type: "object",
+                    properties: { count: { type: "integer", minimum: 1 } },
+                    required: ["count"],
+                    additionalProperties: false,
+                }),
+            ],
+            "Actions",
+        );
+        const entry = [...catalog.entries.values()][0];
+        for (const args of [{ count: 2 }, { count: 0 }, { count: 1.5 }, {}]) {
+            expect(
+                validateCatalogSchemaValues(entry.inputSchema, [args]).valid,
+            ).toBe(entry.validateArguments(args).valid);
+        }
+    });
+    it("exposes detached read-only metadata without validator functions", () => {
+        const catalog = buildMcpToolCatalog(
+            "real-server",
+            [
+                tool("search", {
+                    type: "object",
+                    properties: { query: { type: "string" } },
+                }),
+            ],
+            "Actions",
+        );
+        const snapshot = snapshotMcpTools(catalog);
+        expect(snapshot[0].id).toBe(
+            getMcpToolIdentity("real-server", "search"),
+        );
+        expect(snapshot[0]).not.toHaveProperty("validateArguments");
+        expect(snapshot[0]).not.toHaveProperty("validateOutput");
+        snapshot[0].inputSchema.properties = {};
+        expect(
+            catalog.entries.get(snapshot[0].id)?.inputSchema.properties,
+        ).toHaveProperty("query");
+        expect(JSON.parse(JSON.stringify(snapshot))).toEqual(snapshot);
+    });
     it("uses server config id and tool name as durable identity", () => {
         const a = buildMcpToolCatalog("server-a", [tool("search")], "Actions");
         const b = buildMcpToolCatalog("server-b", [tool("search")], "Actions");

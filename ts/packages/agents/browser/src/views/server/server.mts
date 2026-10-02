@@ -12,7 +12,6 @@ import type {
     ViewCallFunctions,
 } from "@typeagent/browser-control-rpc/viewRpc";
 import { registerViewRoutes } from "./features/views/viewRoutes.mjs";
-import { browserViews } from "@typeagent/browser-control-rpc/viewRoutes";
 
 const debug = registerDebug("typeagent:views:server");
 
@@ -34,19 +33,6 @@ async function main() {
 
     // Create base server
     const server = new BaseServer(config);
-    for (const view of Object.values(browserViews)) {
-        server
-            .getApp()
-            .get(
-                [view.path, `/views/${view.page}`, `/${view.page}`],
-                (_req, res) => {
-                    const query = _req.originalUrl.includes("?")
-                        ? _req.originalUrl.slice(_req.originalUrl.indexOf("?"))
-                        : "";
-                    res.redirect(302, `/library/${view.page}${query}`);
-                },
-            );
-    }
     if (!process.send) {
         throw new Error("Views server requires a parent IPC channel");
     }

@@ -98,24 +98,40 @@ the extension build toolchain):
 
 ## Localhost views
 
-The browser agent owns the PDF reader and six agent-data pages. The
+The browser agent owns the PDF reader and three agent-data applications. The
 library pages are built from `agents/browser/src/views/client/library/`
 and served by the same forked Express server as the PDF reader:
 
-| View                | Logical name         | Canonical route        |
-| ------------------- | -------------------- | ---------------------- |
-| Annotations Library | `annotationsLibrary` | `/annotations/`        |
-| Memory Center       | `memoryCenter`       | `/memory/`             |
-| Automations         | `automationsLibrary` | `/automations/`        |
-| Knowledge Library   | `knowledgeLibrary`   | `/knowledge/`          |
-| Entity Graph        | `entityGraph`        | `/knowledge/entities/` |
-| Topic Graph         | `topicGraph`         | `/knowledge/topics/`   |
+| View                | Logical name         | Canonical route |
+| ------------------- | -------------------- | --------------- |
+| Annotations Library | `annotationsLibrary` | `/annotations/` |
+| Memory Hub          | `memoryHub`          | `/memory/hub/`  |
+| Automations         | `automationsLibrary` | `/automations/` |
 
 Canonical routes redirect to `/library/<page>.html`; query parameters and
 fragments survive navigation. Shared aliases and logical links are defined
 in `@typeagent/browser-control-rpc/viewRoutes`. Context menus, `@browser open`,
 Chrome navigation, and Electron navigation resolve the live host rather than
 embedding a port or extension ID. Electron uses agent-server `"view"` discovery.
+
+The retired `memoryCenter`, `knowledgeLibrary`, `entityGraph` and `topicGraph`
+names and URLs remain compatibility aliases to Hub Inbox, Search and fixed
+browser web Explore routes. Their standalone shells are no longer built.
+Management and advanced graph/analytics controllers are reusable Hub components;
+browser graph maintenance and local view preferences are in Settings.
+
+Explore's Overview follows the selected corpus scope and shows counts and
+knowledge/provenance cards. Overview and Reading analytics share bounded
+six-card previews and a filterable, sortable, 24-item View all browser.
+`memoryHubKnowledge` filters complete scoped collections before pagination;
+Reading analytics requests an explicit browser-only scope, not the selected
+corpus. Graph reads remain whole-corpus in the canonical memory API. The
+Activity trends histogram is not rendered.
+Entity graph and Topic graph are separate, explicitly
+browser-memory views using the existing Graphology layout endpoints and Cytoscape
+visualizers; Reading analytics is a fourth view. Overview does not plot mixed
+entity/topic nodes or automatically load the fixed-browser views. The canonical
+corpus graph DTO does not supply topic hierarchy or topic-to-topic edges.
 
 Chat Panel, Options, and the PDF interception bridge remain extension-owned.
 Auto-index settings stay in Options because extension storage owns them.

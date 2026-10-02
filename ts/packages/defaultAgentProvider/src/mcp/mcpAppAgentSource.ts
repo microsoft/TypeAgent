@@ -24,6 +24,7 @@ import registerDebug from "debug";
 import { enforceMcpPolicy } from "./mcpPolicy.js";
 import { defaultMcpPolicy } from "./mcpPolicy.js";
 import type { McpPolicy } from "./mcpPolicy.js";
+import type { RegisteredMcpToolCatalog } from "./mcpToolCatalog.js";
 import { McpOAuthProvider, getMcpAuthState } from "./mcpOAuth.js";
 import { SessionMcpCredentialStore } from "./mcpCredentialStore.js";
 import { nullMcpAuditSink } from "./mcpAudit.js";
@@ -41,6 +42,7 @@ const debug = registerDebug("typeagent:mcp:source");
 // to every connected session via its controller, applying to the issuing
 // session first (awaited) and the rest best-effort.
 export interface McpServerSourceApi {
+    getCurrentToolCatalogs?(): Promise<RegisteredMcpToolCatalog[]>;
     // Add or replace a user-managed MCP server: persist it, build the shared
     // single-name provider, and fan `addProvider` (or a remove-then-add swap
     // when the name already exists) out to every connected session.
@@ -99,6 +101,7 @@ export interface McpServerSourceApi {
 }
 
 export type McpAppAgentSourceForTest = AppAgentSource & {
+    getCurrentToolCatalogs(): Promise<RegisteredMcpToolCatalog[]>;
     /** @internal Test-only handle for driving mutations directly. */
     readonly testApi: McpServerSourceApi;
 };
@@ -159,7 +162,10 @@ export function createMcpAppAgentSource(
     discovery?: McpConfigDiscoveryResult,
 ): McpAppAgentSourceForTest {
     // One shared provider per active config id (seed + store).
-    const providers = new Map<string, AppAgentProvider>();
+    const providers = new Map<
+        string,
+        ReturnType<typeof createMcpServerAppAgentProvider>
+    >();
     const configs = new Map<string, NormalizedMcpServerConfig>();
     const seedIds = new Set<string>();
     // Connected sessions, for cross-session fan-out.
@@ -169,7 +175,7 @@ export function createMcpAppAgentSource(
 
     function buildProvider(
         config: NormalizedMcpServerConfig,
-    ): AppAgentProvider {
+    ): ReturnType<typeof createMcpServerAppAgentProvider> {
         return createMcpServerAppAgentProvider(
             config.name,
             config,
@@ -243,7 +249,16 @@ export function createMcpAppAgentSource(
         return config;
     }
 
+    const getCurrentToolCatalogs = () =>
+        limiter(() =>
+            Promise.all(
+                [...providers.values()].map((provider) =>
+                    provider.getCurrentToolCatalog(),
+                ),
+            ),
+        );
     const testApi: McpServerSourceApi = {
+        getCurrentToolCatalogs,
         async addServer(config, issuingController) {
             await limiter(async () => {
                 enforceMcpPolicy(services.policy, "install", config);
@@ -434,6 +449,7 @@ export function createMcpAppAgentSource(
 
     const source: McpAppAgentSourceForTest = {
         testApi,
+        getCurrentToolCatalogs,
         connect(controller: AppAgentProviderSetController): AppAgentConnection {
             let disposed = false;
             // Synchronously join the fan-out set and snapshot the active

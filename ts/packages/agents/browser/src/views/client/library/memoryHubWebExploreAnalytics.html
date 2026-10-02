@@ -1,0 +1,93 @@
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+<div class="web-analytics">
+  <div class="page-header">
+    <h3 class="page-title">Reading analytics</h3>
+    <p class="page-subtitle">
+      Detailed insights into your browsing patterns and content consumption
+    </p>
+    <button data-analytics-refresh>Refresh analytics</button>
+  </div>
+  <div class="content-section">
+    <div class="section-header"><h4 class="section-title">Quick Stats</h4></div>
+    <div class="quick-stats">
+      <div class="stat-item">
+        <div class="stat-number" id="totalWebsites">-</div>
+        <div class="stat-label">Total Sites</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number" id="totalBookmarks">-</div>
+        <div class="stat-label">Bookmarks</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number" id="totalHistory">-</div>
+        <div class="stat-label">History</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number" id="topDomains">-</div>
+        <div class="stat-label">Domains shown</div>
+      </div>
+    </div>
+  </div>
+  <div class="content-section">
+    <div class="section-header"><h4 class="section-title">Top Domains</h4></div>
+    <div class="top-domains">
+      <div id="topDomainsList" class="domain-list"></div>
+    </div>
+  </div>
+  <div class="content-section">
+    <h4>Advanced Knowledge Insights</h4>
+    <div class="discovery-grid" id="knowledgeInsights"></div>
+  </div>
+  <div class="content-section">
+    <div class="section-header">
+      <h4 class="section-title">Knowledge Visualization</h4>
+    </div>
+    <div class="knowledge-dashboard">
+      <div class="knowledge-overview-cards">
+        <div class="knowledge-card entities">
+          <div class="knowledge-card-header">
+            <h4>Entities</h4>
+            <button data-web-view="entities">Explore entity graph</button>
+          </div>
+          <div class="knowledge-card-body">
+            <div class="knowledge-metric" id="totalEntitiesMetric">-</div>
+            <div class="knowledge-label">Total Entities Extracted</div>
+            <div class="knowledge-breakdown">
+              <div id="recentEntitiesList" class="recent-items-list"></div>
+            </div>
+          </div>
+        </div>
+        <div class="knowledge-card topics">
+          <div class="knowledge-card-header">
+            <h4>Topics</h4>
+            <button data-web-view="topics">Explore topic graph</button>
+          </div>
+          <div class="knowledge-card-body">
+            <div class="knowledge-metric" id="totalTopicsMetric">-</div>
+            <div class="knowledge-label">Topics Identified</div>
+            <div class="topic-cloud">
+              <div id="recentTopicsList" class="recent-items-list"></div>
+            </div>
+          </div>
+        </div>
+        <div class="knowledge-card actions">
+          <div class="knowledge-card-header"><h4>Relationships</h4></div>
+          <div class="knowledge-card-body">
+            <div class="knowledge-metric" id="totalActionsMetric">-</div>
+            <div class="knowledge-label">Relationships Found</div>
+            <div class="action-breakdown">
+              <div id="recentActionsList" class="recent-items-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="empty-state" id="analyticsEmptyState" hidden>
+    <h4>No Analytics Data</h4>
+    <p>
+      TypeAgent Browser Memory returned no browsing activity or extracted
+      knowledge.
+    </p>
+  </div>
+</div>

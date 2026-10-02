@@ -1,0 +1,47 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.hub-import-dialog {
+  width: min(620px, 90vw);
+  max-height: 85vh;
+  overflow: auto;
+  padding: 24px;
+  color: #353c50;
+  background: #fff;
+  border: 1px solid var(--border, #dce0e8);
+  border-radius: 10px;
+  box-shadow: 0 12px 48px #0003;
+}
+.hub-import-dialog::backdrop {
+  background: #0005;
+}
+.hub-import-dialog fieldset {
+  border: 1px solid var(--border, #dce0e8);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.hub-import-dialog label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0;
+}
+.hub-import-dialog [hidden] {
+  display: none;
+}
+.hub-import-dialog input:not([type="checkbox"]),
+.hub-import-dialog select {
+  flex: 1;
+  min-width: 0;
+}
+.hub-import-dialog .hub-import-warning {
+  padding: 12px;
+  background: #fff5db;
+  border-radius: 6px;
+}
+.hub-import-dialog pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.hub-import-dialog [role="alert"] {
+  color: #a12b22;
+}

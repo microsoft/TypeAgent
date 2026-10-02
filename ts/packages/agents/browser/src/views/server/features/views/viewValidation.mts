@@ -2,6 +2,12 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
+import {
+    runbookProcedureDocumentSchema,
+    runbookSaveSchema,
+    runbookViewSchemas,
+} from "./runbookViewSchemas.mjs";
+import { runbookImportViewSchemas } from "./runbookImportSchemas.mjs";
 import type {
     ViewMethod,
     ViewRequest,
@@ -28,26 +34,7 @@ const suppression = {
 const procedureStates = z
     .array(z.enum(["saved", "stale", "archived"]))
     .optional();
-const document = z.strictObject({
-    title: text,
-    summary: optionalText,
-    steps: strings,
-    citations: z
-        .array(
-            z.strictObject({
-                sourceId: text,
-                revisionId: text,
-                locator: optionalText,
-                excerpt: optionalText,
-            }),
-        )
-        .max(10000),
-    additionalSections: z
-        .array(
-            z.strictObject({ heading: text, content: z.string().max(1000000) }),
-        )
-        .optional(),
-});
+const document = runbookProcedureDocumentSchema;
 const activity = {
     dateFrom: optionalText,
     dateTo: optionalText,
@@ -69,6 +56,96 @@ const importId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
 
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
+    ...runbookViewSchemas,
+    ...runbookImportViewSchemas,
+    memoryHubSearch: z.strictObject({
+        query: text,
+        corpusId: optionalText,
+        limit: z.number().int().min(1).max(100).optional(),
+        generateAnswer: boolean,
+        sourceTypes: z
+            .array(z.enum(["web", "markdown", "text", "html", "vtt"]))
+            .max(5)
+            .optional(),
+        tags: z.array(text).max(100).optional(),
+        dateFrom: z.iso.datetime({ offset: true }).optional(),
+        dateTo: z.iso.datetime({ offset: true }).optional(),
+        conversationScope: z.enum(["none", "current", "all"]).optional(),
+    }),
+    memoryHubEvidence: z.discriminatedUnion("kind", [
+        z.strictObject({
+            ...corpus,
+            kind: z.literal("source"),
+            objectId: text,
+            revisionId: optionalText,
+            offset: z
+                .number()
+                .int()
+                .nonnegative()
+                .max(Number.MAX_SAFE_INTEGER)
+                .optional(),
+        }),
+        z.strictObject({
+            ...corpus,
+            kind: z.literal("procedure"),
+            objectId: text,
+            procedureVersion: z.number().int().positive().optional(),
+            offset: z
+                .number()
+                .int()
+                .nonnegative()
+                .max(Number.MAX_SAFE_INTEGER)
+                .optional(),
+        }),
+        z.strictObject({
+            ...corpus,
+            kind: z.literal("conversation"),
+            objectId: text,
+            offset: z
+                .number()
+                .int()
+                .nonnegative()
+                .max(Number.MAX_SAFE_INTEGER)
+                .optional(),
+        }),
+    ]),
+    memoryHubExplore: z.strictObject({
+        corpusId: optionalText,
+        maxNodes: z.number().int().min(1).max(5000).optional(),
+    }),
+    memoryHubKnowledge: z
+        .strictObject({
+            corpusId: optionalText,
+            browserOnly: z.boolean().optional(),
+            kind: z.enum(["entities", "topics", "relationships", "sources"]),
+            query: z.string().max(512).optional(),
+            sort: z.enum(["name", "mentions"]).optional(),
+            offset: z
+                .number()
+                .int()
+                .min(0)
+                .max(Number.MAX_SAFE_INTEGER)
+                .optional(),
+            pageSize: z.number().int().min(1).max(100).optional(),
+        })
+        .refine((value) => !value.browserOnly || !value.corpusId, {
+            message: "Browser knowledge cannot use a selected corpus.",
+        }),
+    memoryHubChanges: z.strictObject({ corpusId: optionalText, ...page }),
+    memoryHubCapturePages: empty,
+    memoryHubCapturePage: z.strictObject({
+        pageId: text,
+        expectedUrl: z.url().max(8192),
+    }),
+    memoryHubSnapshot: z.strictObject({ corpusId: optionalText }),
+    memoryHubSources: z.strictObject({
+        corpusId: optionalText,
+        ...page,
+        query: optionalText,
+        sourceTypes: z
+            .array(z.enum(["web", "markdown", "text", "html", "vtt"]))
+            .optional(),
+    }),
     memoryCreateCorpus: z.strictObject({
         name: text,
         description: optionalText,
@@ -140,14 +217,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         ...corpus,
         candidateId: text,
     }),
-    memorySaveProcedure: z.strictObject({
-        ...corpus,
-        procedureId: optionalText,
-        candidateId: optionalText,
-        expectedVersion: optionalCount,
-        document: document.optional(),
-        markdown: z.string().max(10000000).optional(),
-    }),
+    memorySaveProcedure: runbookSaveSchema,
     memoryListProcedures: z.strictObject({
         ...corpus,
         states: procedureStates,
@@ -240,7 +310,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         folder: optionalText,
         mode: z.literal("content").optional(),
         maxConcurrent: z.number().int().min(1).max(50).optional(),
-        contentTimeout: optionalCount,
+        contentTimeout: z.number().int().min(5000).max(120000).optional(),
         importId,
         totalItems: optionalCount,
         progressCallback: boolean,
@@ -255,7 +325,12 @@ const schemas: Record<ViewMethod, z.ZodType> = {
                 recursive: boolean,
                 fileTypes: strings.optional(),
                 limit: optionalCount,
-                maxFileSize: optionalCount,
+                maxFileSize: z
+                    .number()
+                    .int()
+                    .min(1024)
+                    .max(500 * 1024 * 1024)
+                    .optional(),
                 skipHidden: boolean,
             })
             .optional(),

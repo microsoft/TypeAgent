@@ -57,7 +57,7 @@ export async function initialize(): Promise<void> {
     }
 
     // Initialize context menu
-    initializeContextMenu();
+    await initializeContextMenu();
     initContextMenuSettings();
 
     // Set up RPC server for typed view communication

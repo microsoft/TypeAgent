@@ -3,7 +3,7 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
-import { createExtractionInputsFromFragments } from "./extractionActions.mjs";
+import { createExtractionInputsFromFragments } from "./extractionInputs.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:knowledge");

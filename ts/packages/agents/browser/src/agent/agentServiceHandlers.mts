@@ -15,6 +15,15 @@ import {
     handleWebsiteLibraryStats,
 } from "./browserActionHandler.mjs";
 import { createAutomationViewFunctions } from "./automationViewHandlers.mjs";
+import { createMemoryHubFunctions } from "./memoryHub.mjs";
+import { createMemoryHubQueryFunctions } from "./memoryHubQuery.mjs";
+import { createMemoryHubExploreFunctions } from "./memoryHubExplore.mjs";
+import { createMemoryHubKnowledgeFunctions } from "./memoryHubKnowledge.mjs";
+import { createMemoryHubSynthesizer } from "./memoryHubAnswer.mjs";
+import { createMemoryHubCaptureFunctions } from "./memoryHubCapture.mjs";
+import { createMemoryHubRunbookFunctions } from "./memoryHubRunbooks.mjs";
+import { addRunbookInbox } from "./memoryHubRunbookInbox.mjs";
+import { createMemoryHubRunbookImportFunctions } from "./memoryHubRunbookImports.mjs";
 import {
     ensureBrowserViewHost,
     type BrowserViewDomainFunctions,
@@ -24,8 +33,43 @@ export function createViewServiceDomain(
     context: SessionContext<BrowserActionContext>,
 ): BrowserViewDomainFunctions {
     const handlers = createAgentInvokeHandlers(context);
+    const service = () => {
+        const memory = context.agentContext.memoryServiceClient;
+        if (!memory) throw new Error("Durable memory service is not available");
+        return memory;
+    };
+    const hub = createMemoryHubFunctions(handlers);
+    const runbooks = createMemoryHubRunbookFunctions(
+        service,
+        () => context.agentContext.runbookCapabilities,
+    );
     return {
         ...handlers,
+        ...hub,
+        ...createMemoryHubQueryFunctions(
+            service,
+            () => context.conversationId,
+            createMemoryHubSynthesizer(),
+        ),
+        ...createMemoryHubExploreFunctions(service),
+        ...createMemoryHubKnowledgeFunctions(service),
+        ...runbooks,
+        ...createMemoryHubRunbookImportFunctions(service),
+        async memoryHubSnapshot(request) {
+            const snapshot = await hub.memoryHubSnapshot(request);
+            await addRunbookInbox(
+                snapshot,
+                runbooks,
+                service(),
+                request.corpusId,
+            );
+            return snapshot;
+        },
+        ...createMemoryHubCaptureFunctions(
+            () => getSessionBrowserControl(context),
+            () => context.agentContext.browserMemoryService,
+            () => context.agentContext.localHostPort,
+        ),
         getAutoIndexSetting: () =>
             getSessionBrowserControl(context).getAutoIndexSetting(),
         ...createAutomationViewFunctions(
@@ -135,6 +179,7 @@ export function createAgentInvokeHandlers(
                     sourceType: "markdown",
                     title,
                     markdown,
+                    capturedAt: new Date().toISOString(),
                     ...(canonicalUri === undefined ? {} : { canonicalUri }),
                     ...(tags === undefined ? {} : { tags }),
                 },

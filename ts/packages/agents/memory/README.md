@@ -69,9 +69,37 @@ cancel those durable jobs explicitly.
 - `@memory corpus create|list|use|info|clear`
 - `@memory import file|folder|status|cancel`
 - `@memory sources list|show|knowledge|replace|forget`
+- `@memory runbooks list|show|save|review|synthesize`
 - `@memory search`, `@memory ask`, `@memory explain`
 - `@memory jobs list|show|cancel`
+- `@memory changes [--pageSize <1-200>] [--continuationToken <token>]`
 - `@memory reindex`, `@memory status`
+
+`changes` lists canonical committed metadata-only receipts for the active
+corpus, retained for 90 days. Unsupported services fail explicitly; history
+is not synthesized from session logs.
+
+Runbook commands require an injected service supporting personal how-tos.
+`runbooks show <procedureId> [--version <n>]` reads the latest or exact version.
+`runbooks save <path>` reads canonical local procedure JSON or Markdown; optional
+`--procedureId`, `--expectedVersion`, `--reviewAgentEdition`, and
+`--safetyConfirmed` are passed to the shared service. It never executes content.
+`runbooks review <procedureId> --safetyConfirmed [--expectedVersion <n>]`
+explicitly reviews the resulting procedure version, using an optimistic guard
+and the current saved document. It refuses stale/archived versions; missing
+catalog validation and unsupported services fail explicitly. The backend,
+not the command's JSON or model output, stamps reviewed status. Review grants
+no tool or command execution permission.
+
+`runbooks synthesize <sourceId> <revisionId>` explicitly requests a draft for
+that exact retained revision in the active corpus through the optional core
+`requestRunbookSynthesis` capability. Core preferences, limits, evidence
+validation, and durable job reuse apply; the command does not overwrite saved
+procedures, review an edition, or execute bindings. It displays the durable
+job result, including failed states and candidate IDs. Unsupported services
+and core rejections fail explicitly. The procedure-aware Memory Hub view
+additionally validates its procedure/version evidence before requesting this
+same core operation; this command is source-scoped, not a procedure update.
 
 Corpus clearing, source replacement, and source forgetting use a preview token.
 Run the command once, inspect the preview, then repeat it with `--confirm

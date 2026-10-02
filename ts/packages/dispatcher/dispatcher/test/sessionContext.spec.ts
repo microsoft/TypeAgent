@@ -49,6 +49,21 @@ function makeContext(overrides: {
 }
 
 describe("createSessionContext currentConnectionId", () => {
+    test("exposes the owning conversation without guessing from the context ID", () => {
+        const { context } = makeContext({});
+        const sc = createSessionContext(
+            "browser",
+            {},
+            context,
+            false,
+            "lifetime",
+        );
+        expect(sc.conversationId).toBeUndefined();
+        context.conversationId = "connected-conversation";
+        expect(sc.conversationId).toBe("connected-conversation");
+        context.conversationDurableMemory = { conversationId: "durable-owner" };
+        expect(sc.conversationId).toBe("durable-owner");
+    });
     test("tracks the request in flight and is undefined between requests", () => {
         const { context } = makeContext({ persistDir: "/session/persist" });
         const sc = createSessionContext("myAgent", {}, context, false, "cc-1");

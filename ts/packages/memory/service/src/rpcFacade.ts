@@ -7,11 +7,16 @@ import type {
     MemoryService,
     PersonalHowToService,
 } from "./types.js";
+import { validateProcedureSaveRequest } from "./agentEdition.js";
 
 export interface MemoryJobWaitOptions {
     signal?: AbortSignal;
     onProgress?: (progress: JobProgress) => void;
     pollIntervalMs?: number;
+}
+
+function unsupportedCapability(operation: string): Promise<never> {
+    return Promise.reject(new Error(`Memory ${operation} are not supported`));
 }
 
 export function createMemoryServiceRpcFacade(
@@ -28,6 +33,47 @@ export function createMemoryServiceRpcFacade(
         listCorpora: (...args) => service.listCorpora(...args),
         getCorpus: (...args) => service.getCorpus(...args),
         clearCorpus: (...args) => service.clearCorpus(...args),
+        listChanges: (request) => {
+            if (service.listChanges === undefined) {
+                return Promise.reject(
+                    new Error("Memory changes are not supported"),
+                );
+            }
+            return service.listChanges(request);
+        },
+        getRevisionAssets: (request) =>
+            service.getRevisionAssets?.(request) ??
+            unsupportedCapability("revision assets"),
+        readRevisionAsset: (request) =>
+            service.readRevisionAsset?.(request) ??
+            unsupportedCapability("revision assets"),
+        startBatchImport: (request) =>
+            service.startBatchImport?.(request) ??
+            unsupportedCapability("batch imports"),
+        getBatchImport: (batchId) =>
+            service.getBatchImport?.(batchId) ??
+            unsupportedCapability("batch imports"),
+        findBatchImport: (request) =>
+            service.findBatchImport?.(request) ??
+            unsupportedCapability("batch import lookup"),
+        listBatchImports: (corpusId) =>
+            service.listBatchImports?.(corpusId) ??
+            unsupportedCapability("batch imports"),
+        retryBatchImport: (batchId) =>
+            service.retryBatchImport?.(batchId) ??
+            unsupportedCapability("batch imports"),
+        cancelBatchImport: (batchId) =>
+            service.cancelBatchImport?.(batchId) ??
+            unsupportedCapability("batch imports"),
+        listRunbookJobs: (corpusId) =>
+            service.listRunbookJobs?.(corpusId) ??
+            unsupportedCapability("runbook jobs"),
+        getRunbookJob: (jobId) =>
+            service.getRunbookJob?.(jobId) ??
+            unsupportedCapability("runbook jobs"),
+        requestRunbookSynthesis: (request) =>
+            service.requestRunbookSynthesis?.(request) ??
+            unsupportedCapability("runbook synthesis"),
         listSources: (...args) => service.listSources(...args),
         listSourcesPage: (...args) => service.listSourcesPage(...args),
         getSource: (...args) => service.getSource(...args),
@@ -69,7 +115,10 @@ export function createMemoryServiceRpcFacade(
             service.listProcedureCandidates!(...args),
         rejectProcedureCandidate: (...args) =>
             service.rejectProcedureCandidate!(...args),
-        saveProcedure: (...args) => service.saveProcedure!(...args),
+        saveProcedure: async (request) => {
+            validateProcedureSaveRequest(request);
+            return service.saveProcedure!(request);
+        },
         listProcedures: (...args) => service.listProcedures!(...args),
         getProcedure: (...args) => service.getProcedure!(...args),
         searchProcedures: (...args) => service.searchProcedures!(...args),

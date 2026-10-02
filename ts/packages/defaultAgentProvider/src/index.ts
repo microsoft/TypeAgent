@@ -54,6 +54,12 @@ export {
 } from "./mcp/mcpReplayHost.js";
 export type { McpHostServices } from "./mcp/mcpServerProvider.js";
 export type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
+export { getCurrentMcpToolCatalogs } from "./mcp/mcpCatalogSnapshots.js";
+export type {
+    RegisteredMcpToolCatalog,
+    McpToolSnapshot,
+} from "./mcp/mcpToolCatalog.js";
+export { validateCatalogSchemaValues } from "./mcp/mcpToolCatalog.js";
 export {
     createOnboardingOnlyDispatcher,
     type OnboardingDispatcherHandle,

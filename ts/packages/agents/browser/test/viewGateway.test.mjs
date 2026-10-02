@@ -6,8 +6,12 @@ import { fork } from "node:child_process";
 import { once } from "node:events";
 import { test } from "node:test";
 import { request as httpRequest } from "node:http";
+import { createHash } from "node:crypto";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
-import { browserViews } from "@typeagent/browser-control-rpc/viewRoutes";
+import {
+    browserViews,
+    getBrowserViewDestination,
+} from "@typeagent/browser-control-rpc/viewRoutes";
 import { validateViewRequest } from "../dist/views/server/features/views/viewValidation.mjs";
 
 test("view validation rejects generic operations and malformed domain payloads", () => {
@@ -15,6 +19,56 @@ test("view validation rejects generic operations and malformed domain payloads",
         { method: "openTab", params: { url: "https://example.com" } },
         { method: "toString", params: {} },
         { method: "memoryGetCorpus", params: {} },
+        { method: "memoryHubSnapshot", params: { corpusId: 123 } },
+        { method: "memoryHubSources", params: { pageSize: 0 } },
+        { method: "memoryHubSources", params: { sourceTypes: ["pdf"] } },
+        {
+            method: "memoryHubSearch",
+            params: { query: "worker", conversationId: "spoofed" },
+        },
+        {
+            method: "memoryHubSearch",
+            params: { query: "worker", dateFrom: "not a date" },
+        },
+        { method: "memoryHubSearch", params: { query: "worker", limit: 101 } },
+        {
+            method: "memoryHubEvidence",
+            params: {
+                corpusId: "c",
+                kind: "conversation",
+                objectId: "e",
+                revisionId: "wrong-kind",
+            },
+        },
+        { method: "memoryHubExplore", params: { maxNodes: 5001 } },
+        { method: "memoryHubKnowledge", params: { kind: "unknown" } },
+        {
+            method: "memoryHubKnowledge",
+            params: { kind: "entities", pageSize: 101 },
+        },
+        {
+            method: "memoryHubKnowledge",
+            params: { kind: "topics", offset: -1 },
+        },
+        {
+            method: "memoryHubKnowledge",
+            params: { kind: "topics", query: "x".repeat(513) },
+        },
+        {
+            method: "memoryHubKnowledge",
+            params: { kind: "topics", browserOnly: true, corpusId: "a" },
+        },
+        { method: "memoryHubChanges", params: { pageSize: 0 } },
+        {
+            method: "memoryHubCapturePage",
+            params: { url: "https://arbitrary.invalid" },
+        },
+        { method: "memoryHubCapturePage", params: {} },
+        {
+            method: "memoryHubCapturePage",
+            params: { pageId: "tab:1", expectedUrl: "not a URL" },
+        },
+        { method: "memoryHubCapturePages", params: { corpusId: "spoofed" } },
         { method: "approveAutomation", params: { id: 123 } },
         { method: "listAutomations", params: { url: "https://example.com" } },
         { method: "getAllWebFlows", params: {} },
@@ -42,12 +96,45 @@ test("view validation rejects generic operations and malformed domain payloads",
         }),
         { method: "memoryGetCorpus", params: { corpusId: "c" } },
     );
+    assert.deepEqual(
+        validateViewRequest({
+            method: "memoryHubSnapshot",
+            params: {},
+        }),
+        { method: "memoryHubSnapshot", params: {} },
+    );
+    assert.doesNotThrow(() =>
+        validateViewRequest({
+            method: "importHtmlFolder",
+            params: {
+                folderPath: "C:\\fixtures\\html",
+                options: { mode: "content", maxFileSize: 50 * 1024 * 1024 },
+            },
+        }),
+    );
+    assert.doesNotThrow(() =>
+        validateViewRequest({
+            method: "importWebsiteDataWithProgress",
+            params: {
+                source: "chrome",
+                type: "history",
+                importId: "fixture",
+                contentTimeout: 120000,
+            },
+        }),
+    );
 });
 
 test(
     "localhost HTTP gateway invokes parent RPC and forwards progress SSE",
     { timeout: 20_000 },
     async (t) => {
+        const png = Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1cAAAAASUVORK5CYII=",
+            "base64",
+        );
+        const hash = createHash("sha256").update(png).digest("hex");
+        const runbookCalls = [];
         const child = fork(
             new URL("../dist/views/server/server.mjs", import.meta.url),
             ["0"],
@@ -64,6 +151,78 @@ test(
             memoryListCorpora: async () => [
                 { corpusId: "c", name: "Test corpus" },
             ],
+            memoryHubSnapshot: async () => ({
+                corpora: [{ corpusId: "c", name: "Test corpus" }],
+                inbox: [],
+                procedures: [],
+                errors: [],
+            }),
+            memoryHubSearch: async (params) => ({
+                query: params.query,
+                matches: [],
+                warnings: [],
+                ranking: "reciprocal-rank-fusion",
+                errors: [],
+            }),
+            memoryHubEvidence: async (params) => ({
+                title: "Retained evidence",
+                content: "Original",
+                offset: 0,
+                totalChars: 8,
+                provenance: params,
+            }),
+            memoryHubExplore: async () => ({
+                counts: { sources: 0 },
+                errors: [],
+            }),
+            memoryHubChanges: async () => ({ items: [], total: 0, errors: [] }),
+            memoryHubCapturePage: async () => ({
+                corpusId: "c",
+                sourceId: "s",
+                warnings: [],
+            }),
+            memoryHubCapturePages: async () => ({
+                pages: [
+                    {
+                        pageId: "tab:1",
+                        url: "https://example.invalid",
+                        title: "Example",
+                    },
+                ],
+            }),
+            memoryHubRunbooks: async (params) => {
+                runbookCalls.push(["list", params]);
+                return {
+                    items: [],
+                    total: 0,
+                    errors: [],
+                    warnings: ["Catalog fixture"],
+                };
+            },
+            memoryHubSkillAction: async (params) => {
+                runbookCalls.push(["skill", params]);
+                return {
+                    identity: params.identity,
+                    revisionId: params.revisionId,
+                    state: "validated",
+                    active: false,
+                };
+            },
+            memoryHubReadRunbookAsset: async (params) => {
+                if (
+                    params.variant !== "original" ||
+                    params.acknowledgeUnreviewed !== true
+                )
+                    throw new Error(
+                        "Original pixels require explicit acknowledgement; safe preview unavailable",
+                    );
+                if (params.hash !== hash)
+                    throw new Error("Asset hash mismatch");
+                return {
+                    asset: { mimeType: "image/png", size: png.length, hash },
+                    data: png.toString("base64"),
+                };
+            },
             memoryCreateCorpus: async () => {
                 throw new Error("Domain failure");
             },
@@ -89,22 +248,181 @@ test(
                 body: JSON.stringify(body),
             });
         await t.test(
+            "Runbook listing and exact guarded lifecycle cross HTTP and parent IPC",
+            async () => {
+                const list = await invoke({
+                    method: "memoryHubRunbooks",
+                    params: { corpusId: "c", needsReview: true, pageSize: 25 },
+                });
+                assert.equal(list.status, 200);
+                assert.equal(
+                    (await list.json()).data.warnings[0],
+                    "Catalog fixture",
+                );
+                const mutation = {
+                    identity: {
+                        scope: "user",
+                        origin: "fixture",
+                        name: "worker",
+                    },
+                    revisionId: "exact-revision",
+                    expectedState: "draft",
+                    expectedActive: false,
+                    action: "validate",
+                };
+                const response = await invoke({
+                    method: "memoryHubSkillAction",
+                    params: mutation,
+                });
+                assert.equal(response.status, 200);
+                assert.deepEqual(runbookCalls[1], ["skill", mutation]);
+                const rejected = await invoke({
+                    method: "memoryHubSkillAction",
+                    params: { ...mutation, expectedActive: undefined },
+                });
+                assert.equal(rejected.status, 400);
+                assert.equal(runbookCalls.length, 2);
+            },
+        );
+        await t.test(
+            "Controlled revision assets are acknowledged, immutable and never safe-preview fallbacks",
+            async () => {
+                const query = new URLSearchParams({
+                    corpusId: "c",
+                    sourceId: "s",
+                    revisionId: "r",
+                    assetId: "a",
+                    hash,
+                    variant: "original",
+                });
+                let response = await fetch(
+                    `${base}/api/views/runbook-asset?${query}`,
+                );
+                assert.equal(response.status, 500);
+                assert.match((await response.json()).error, /acknowledgement/);
+                query.set("acknowledgeUnreviewed", "true");
+                response = await fetch(
+                    `${base}/api/views/runbook-asset?${query}`,
+                );
+                assert.equal(response.status, 200);
+                assert.equal(response.headers.get("content-type"), "image/png");
+                assert.equal(response.headers.get("cache-control"), "no-store");
+                assert.equal(
+                    response.headers.get("cross-origin-resource-policy"),
+                    "same-origin",
+                );
+                assert.equal(
+                    response.headers.get("x-content-type-options"),
+                    "nosniff",
+                );
+                assert.match(
+                    response.headers.get("content-security-policy"),
+                    /sandbox/,
+                );
+                assert.deepEqual(
+                    Buffer.from(await response.arrayBuffer()),
+                    png,
+                );
+                query.set("variant", "preview");
+                response = await fetch(
+                    `${base}/api/views/runbook-asset?${query}`,
+                );
+                assert.equal(response.status, 500);
+                assert.match(
+                    (await response.json()).error,
+                    /safe preview unavailable/,
+                );
+                query.set("hash", "bad");
+                response = await fetch(
+                    `${base}/api/views/runbook-asset?${query}`,
+                );
+                assert.equal(response.status, 400);
+            },
+        );
+        await t.test(
+            "Memory Hub snapshot is exposed as a typed domain operation",
+            async () => {
+                const response = await invoke({
+                    method: "memoryHubSnapshot",
+                    params: {},
+                });
+                assert.equal(response.status, 200);
+                assert.deepEqual(await response.json(), {
+                    success: true,
+                    data: {
+                        corpora: [{ corpusId: "c", name: "Test corpus" }],
+                        inbox: [],
+                        procedures: [],
+                        errors: [],
+                    },
+                });
+            },
+        );
+        await t.test(
+            "Phase 2 typed reads and current-page capture cross HTTP and parent RPC",
+            async () => {
+                for (const [method, params] of [
+                    [
+                        "memoryHubSearch",
+                        { query: "worker", conversationScope: "current" },
+                    ],
+                    [
+                        "memoryHubEvidence",
+                        {
+                            corpusId: "c",
+                            kind: "source",
+                            objectId: "s",
+                            revisionId: "r1",
+                        },
+                    ],
+                    ["memoryHubExplore", { corpusId: "c", maxNodes: 200 }],
+                    ["memoryHubChanges", { corpusId: "c", pageSize: 25 }],
+                    ["memoryHubCapturePages", {}],
+                    [
+                        "memoryHubCapturePage",
+                        {
+                            pageId: "tab:1",
+                            expectedUrl: "https://example.invalid",
+                        },
+                    ],
+                ]) {
+                    const response = await invoke({ method, params });
+                    assert.equal(response.status, 200, method);
+                    const body = await response.json();
+                    assert.equal(body.success, true);
+                    if (method === "memoryHubEvidence")
+                        assert.equal(body.data.provenance.revisionId, "r1");
+                    if (method === "memoryHubSearch")
+                        assert.equal(body.data.query, "worker");
+                }
+            },
+        );
+        await t.test(
             "canonical and legacy view routes redirect without dropping the query",
             async () => {
-                for (const route of [
-                    "/knowledge/",
-                    "/views/knowledgeLibrary.html",
-                    "/knowledgeLibrary.html",
+                for (const name of [
+                    "memoryCenter",
+                    "knowledgeLibrary",
+                    "entityGraph",
+                    "topicGraph",
                 ]) {
-                    const response = await fetch(
-                        `${base}${route}?topic=one%20two`,
-                        { redirect: "manual" },
-                    );
-                    assert.equal(response.status, 302);
-                    assert.equal(
-                        response.headers.get("location"),
-                        "/library/knowledgeLibrary.html?topic=one%20two",
-                    );
+                    const view = browserViews[name];
+                    for (const route of [
+                        view.path,
+                        `/views/${view.page}`,
+                        `/${view.page}`,
+                        `/library/${view.page}`,
+                    ]) {
+                        const response = await fetch(
+                            `${base}${route}?topic=one%20two`,
+                            { redirect: "manual" },
+                        );
+                        assert.equal(response.status, 302);
+                        assert.equal(
+                            response.headers.get("location"),
+                            `/library/memoryHub.html?topic=one%20two&legacyView=${name}`,
+                        );
+                    }
                 }
             },
         );
@@ -131,14 +449,15 @@ test(
             },
         );
         await t.test(
-            "all six libraries and their built scripts/styles are served locally",
+            "all hosted libraries and their built scripts/styles are served locally",
             async () => {
-                for (const view of Object.values(browserViews)) {
+                const loadedAssets = new Set();
+                for (const [name, view] of Object.entries(browserViews)) {
                     const response = await fetch(`${base}${view.path}`);
                     assert.equal(response.status, 200, view.page);
                     assert.equal(
                         new URL(response.url).pathname,
-                        `/library/${view.page}`,
+                        `/library/${browserViews[getBrowserViewDestination(name)].page}`,
                     );
                     const html = await response.text();
                     assert.match(html, /<html/i);
@@ -151,8 +470,10 @@ test(
                             base,
                             `Remote asset in ${view.page}`,
                         );
+                        if (loadedAssets.has(assetUrl.href)) continue;
                         const asset = await fetch(assetUrl);
                         assert.equal(asset.status, 200, assetUrl.href);
+                        loadedAssets.add(assetUrl.href);
                     }
                 }
             },
