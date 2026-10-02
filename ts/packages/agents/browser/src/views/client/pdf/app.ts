@@ -28,6 +28,7 @@ import { AnnotationManager } from "./core/annotationManager";
 import { PDFJSHighlightManager } from "./core/pdfJSHighlightManager";
 
 import "./pdf-viewer.css";
+import "@fortawesome/fontawesome-free/css/all.min.css";
 import "./styles/contextual-toolbar.css";
 import "./styles/color-picker.css";
 import "./styles/note-editor.css";

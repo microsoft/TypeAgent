@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import type { ScriptRecipe } from "../types/recipe.js";
 import {
     generateGrammarRuleText,
+    extractRulePatterns,
     assembleDynamicGrammar,
     generateFlowActionTypes,
     buildUnionType,
@@ -106,19 +107,6 @@ function recipeToFlowDef(recipe: ScriptRecipe): TaskFlowDefinition {
         parameters,
         grammarPatterns: recipe.grammarPatterns,
     };
-}
-
-function extractGeneratedPatterns(grammarRuleText: string): string[] {
-    const patterns: string[] = [];
-    for (const line of grammarRuleText.split("\n")) {
-        const match = line.match(
-            /^<\w+>\s+\[spacing=optional\]\s+=\s+(.+)\s+->\s+\{\s+actionName:/,
-        );
-        if (match?.[1]) {
-            patterns.push(match[1]);
-        }
-    }
-    return patterns;
 }
 
 // ── Store ────────────────────────────────────────────────────────────────────
@@ -335,7 +323,7 @@ export class TaskFlowStore {
         const flow = JSON.parse(flowJson) as TaskFlowDefinition;
         return [
             ...(flow.grammarPatterns ??
-                extractGeneratedPatterns(entry.grammarRuleText)),
+                extractRulePatterns(entry.grammarRuleText)),
         ];
     }
 

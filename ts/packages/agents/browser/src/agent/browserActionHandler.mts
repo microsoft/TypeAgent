@@ -48,6 +48,11 @@ import { extractPageComponent } from "./componentExtractor.mjs";
 import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
+import {
+    cancelViewServiceStart,
+    createViewServiceHost,
+} from "./viewService.mjs";
+import { getSessionFolderPath } from "./browserSessionStorage.mjs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs, { readFileSync } from "node:fs";
@@ -143,8 +148,18 @@ import {
     type AiSearchConfig,
 } from "./lookup/aiSearchLookup.mjs";
 import { LookupCommandHandlerTable } from "./lookup/lookupCommandHandlers.mjs";
+import { createAutomationCatalogService } from "@typeagent/agent-flows/catalog";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
-import { createAgentInvokeHandlers } from "./agentServiceHandlers.mjs";
+import {
+    createAgentInvokeHandlers,
+    createViewServiceDomain,
+} from "./agentServiceHandlers.mjs";
+import {
+    getBrowserViewName,
+    getBrowserViewUrl,
+    parseBrowserViewUrl,
+    isHostedBrowserView,
+} from "@typeagent/browser-control-rpc/viewRoutes";
 import { hookModelTokenUsage, runWithTokenUsage } from "./tokenUsage.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
@@ -506,8 +521,11 @@ export interface urlResolutionAction {
 async function initializeBrowserContext(
     settings?: AppAgentInitSettings,
 ): Promise<BrowserActionContext> {
-    const { browserControl: clientBrowserControl, memoryServiceClient } =
-        normalizeBrowserAgentInitOptions(settings?.options);
+    const {
+        browserControl: clientBrowserControl,
+        memoryServiceClient,
+        automations,
+    } = normalizeBrowserAgentInitOptions(settings?.options);
 
     const localHostPort = settings?.localHostPort;
     if (localHostPort === undefined) {
@@ -520,6 +538,12 @@ async function initializeBrowserContext(
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
         ...(memoryServiceClient === undefined ? {} : { memoryServiceClient }),
+        ...(automations === undefined
+            ? {}
+            : {
+                  automationCatalog:
+                      createAutomationCatalogService(automations),
+              }),
         ...(memoryServiceClient === undefined
             ? {}
             : {
@@ -612,7 +636,10 @@ async function updateBrowserContext(
             // createViewServiceHost when the child reports ready. This keeps a
             // slow/cold view-service fork (up to the 10s timeout) off the
             // launch critical path.
-            void createViewServiceHost(context)
+            void createViewServiceHost(
+                context,
+                createViewServiceDomain(context),
+            )
                 .then((viewProcess) => {
                     if (!viewProcess) {
                         return;
@@ -846,6 +873,7 @@ async function closeBrowserContext(
 // still hold the old port briefly (SIGTERM is async on Windows), so
 // re-binding the same port would race with EADDRINUSE.
 function shutdownBrowserChildProcesses(agentContext: BrowserActionContext) {
+    cancelViewServiceStart(agentContext);
     if (agentContext.browserProcess) {
         agentContext.browserProcess.kill();
         agentContext.browserProcess = undefined;
@@ -1081,27 +1109,6 @@ export function sendWebFlowRefreshToClient(
     }
 }
 
-async function getSessionFolderPath(
-    context: SessionContext<BrowserActionContext>,
-) {
-    let sessionDir: string | undefined;
-
-    if (!(await context.sessionStorage?.exists("settings.json"))) {
-        await context.sessionStorage?.write("settings.json", "");
-    }
-
-    const existingFiles = await context.sessionStorage?.list("", {
-        fullPath: true,
-    });
-
-    if (existingFiles && existingFiles.length > 0) {
-        sessionDir = path.dirname(existingFiles[0]);
-        debug(`Discovered session directory from existing file: ${sessionDir}`);
-    }
-
-    return sessionDir;
-}
-
 async function resolveEntity(
     type: string,
     name: string,
@@ -1156,19 +1163,13 @@ async function resolveWebPage(
         );
     }
 
-    // Handle library pages with custom protocol
-    const libraryPages: Record<string, string> = {
-        annotationslibrary: "typeagent-browser://views/annotationsLibrary.html",
-        entityGraph: "typeagent-browser://views/entityGraphView.html",
-        knowledgelibrary: "typeagent-browser://views/knowledgeLibrary.html",
-        macroslibrary: "typeagent-browser://views/macrosLibrary.html",
-        topicGraph: "typeagent-browser://views/topicGraphView.html",
-    };
-
-    const libraryUrl = libraryPages[site.toLowerCase()];
-    if (libraryUrl) {
-        debug(`Resolved library page: ${site} -> ${libraryUrl}`);
-        return [libraryUrl];
+    const view = parseBrowserViewUrl(site);
+    const viewName = view?.name ?? getBrowserViewName(site);
+    if (viewName) {
+        const { url } = await createAgentInvokeHandlers(context).getViewHostUrl(
+            {},
+        );
+        return [getBrowserViewUrl(url, viewName, view?.search, view?.hash)];
     }
 
     switch (site.toLowerCase()) {
@@ -1353,6 +1354,15 @@ async function openWebPage(
         newTab: action.parameters.tab === "new",
     });
 
+    if (
+        isHostedBrowserView(
+            url,
+            `http://localhost:${context.sessionContext.agentContext.localHostPort}`,
+        )
+    ) {
+        return createOpenedWebPageResult(url);
+    }
+
     // Check for existing knowledge and display it
     const existingKnowledge = await checkKnowledgeInIndex(url, context);
     if (existingKnowledge) {
@@ -1425,8 +1435,11 @@ async function openWebPage(
     }
 
     // Fallback to basic result if autoIndex disabled or error occurred
-    const result = createActionResult("Web page opened successfully.");
+    return createOpenedWebPageResult(url);
+}
 
+function createOpenedWebPageResult(url: string): ActionResult {
+    const result = createActionResult("Web page opened successfully.");
     result.activityContext = {
         activityName: "browsingWebPage",
         description: "Browsing a web page",
@@ -2446,85 +2459,6 @@ async function lookup(
             `There was an error generating the answer: ${answerResult.message} `,
         );
     }
-}
-
-/**
- * Progress update helper function
- */
-
-async function createViewServiceHost(
-    context: SessionContext<BrowserActionContext>,
-) {
-    let timeoutHandle: NodeJS.Timeout;
-    const port = context.agentContext.localHostPort;
-    const sessionDir = await getSessionFolderPath(context);
-
-    if (!sessionDir) {
-        debug(
-            "Session directory not available, skipping view service host creation",
-        );
-        return undefined;
-    }
-
-    const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
-        timeoutHandle = setTimeout(
-            () => reject(new Error("Browser views service creation timed out")),
-            10000,
-        );
-    });
-
-    const viewServicePromise = new Promise<ChildProcess | undefined>(
-        (resolve, reject) => {
-            try {
-                const expressService = fileURLToPath(
-                    new URL(
-                        path.join("..", "./views/server/server.mjs"),
-                        import.meta.url,
-                    ),
-                );
-
-                const folderPath = path.join(sessionDir, "files");
-
-                fs.mkdirSync(folderPath, { recursive: true });
-
-                const childProcess = fork(expressService, [port.toString()], {
-                    env: {
-                        ...process.env,
-                        TYPEAGENT_BROWSER_FILES: folderPath,
-                    },
-                });
-
-                childProcess.on("message", function (message: any) {
-                    if (message?.type === "Success") {
-                        context.agentContext.localHostPort = message.port;
-                        context.agentContext.viewPortRegistration?.release();
-                        context.agentContext.viewPortRegistration =
-                            context.registerPort("view", message.port);
-                        resolve(childProcess);
-                    } else if (message === "Failure") {
-                        resolve(undefined);
-                    }
-                });
-
-                childProcess.on("exit", (code) => {
-                    debug("Browser views server exited with code:", code);
-                });
-            } catch (e: any) {
-                console.error(e);
-                // Synchronous fork failure (e.g. ENOENT for server.mjs,
-                // permissions error). Reset the cached port back to OS-
-                // assigned so a subsequent retry doesn't re-use a stale
-                // value — mirrors the disable/close paths.
-                context.agentContext.localHostPort = 0;
-                resolve(undefined);
-            }
-        },
-    );
-
-    return Promise.race([viewServicePromise, timeoutPromise]).then((result) => {
-        clearTimeout(timeoutHandle);
-        return result;
-    });
 }
 
 export async function createAutomationBrowser(isVisible?: boolean) {

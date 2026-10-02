@@ -13,6 +13,30 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 pdf: resolve(__dirname, "src/views/client/pdf/index.html"),
+                knowledgeLibrary: resolve(
+                    __dirname,
+                    "src/views/client/library/knowledgeLibrary.html",
+                ),
+                automationsLibrary: resolve(
+                    __dirname,
+                    "src/views/client/library/automationsLibrary.html",
+                ),
+                memoryCenter: resolve(
+                    __dirname,
+                    "src/views/client/library/memoryCenter.html",
+                ),
+                annotationsLibrary: resolve(
+                    __dirname,
+                    "src/views/client/library/annotationsLibrary.html",
+                ),
+                entityGraphView: resolve(
+                    __dirname,
+                    "src/views/client/library/entityGraphView.html",
+                ),
+                topicGraphView: resolve(
+                    __dirname,
+                    "src/views/client/library/topicGraphView.html",
+                ),
             },
             output: {
                 entryFileNames: (chunkInfo) => {
