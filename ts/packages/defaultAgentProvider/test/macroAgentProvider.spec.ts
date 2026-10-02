@@ -20,10 +20,12 @@ import type {
 } from "@typeagent/agent-sdk";
 import { MacroManager, type CopilotToolMacro } from "@typeagent/copilot-macros";
 import { createDispatcher } from "agent-dispatcher";
+import { parseToolsJsonSchema, validateAction } from "@typeagent/action-schema";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import {
     createMacroAppAgentProvider,
     getMacroActionName,
+    getMacroInputSchema,
 } from "../src/macroAgentProvider.js";
 import {
     createMacroLearningRuntime,
@@ -162,6 +164,7 @@ describe("approved macro action provider", () => {
             "Display file package.json now",
         ];
         await manager.configureLearning({
+            validateGrammar: createMacroLearningRuntime().validateGrammar,
             extract: async (_trace, traceId) => ({
                 schemaVersion: 1,
                 traceId,
@@ -484,6 +487,208 @@ describe("approved macro action provider", () => {
             ),
         ).rejects.toThrow("shared or unexpected declarations");
         expect(calls).toHaveLength(0);
+    });
+
+    it.each([
+        [
+            "object",
+            { owner: "contoso", repo: "demo", nested: { enabled: true } },
+        ],
+        ["array", [{ owner: "contoso", repo: "demo" }]],
+        ["string", "demo"],
+        ["number", 42],
+        ["boolean", true],
+    ] as const)(
+        "routes and validates %s macro inputs",
+        async (valueType, value) => {
+            const source = await approved();
+            const ref = await manager.saveDraft({
+                ...source,
+                state: "draft",
+                version: source.version + 1,
+                inputs: [
+                    {
+                        name: "options",
+                        description: "Tool options",
+                        required: true,
+                        secret: false,
+                        valueType,
+                    },
+                ],
+                steps: source.steps.map((step) => ({
+                    ...step,
+                    arguments: { kind: "input", name: "options" },
+                })),
+            });
+            const macro = await manager.inspectMacro(
+                await manager.approveMacro(ref),
+            );
+            const actionName = getMacroActionName(macro);
+            const schema = parseToolsJsonSchema([
+                { name: actionName, inputSchema: getMacroInputSchema(macro) },
+            ]).actionSchemas.get(actionName)!;
+            const action = { actionName, parameters: { options: value } };
+            expect(() => validateAction(schema, action)).not.toThrow();
+            expect(() =>
+                validateAction(schema, {
+                    ...action,
+                    parameters: { options: value, extra: true },
+                }),
+            ).toThrow("Extraneous property");
+            const agent =
+                await createMacroAppAgentProvider(manager).loadAppAgent(
+                    "macros",
+                );
+            const result = await execute(agent, action, context);
+            expect(result.error).toBeUndefined();
+            expect(calls).toEqual([value]);
+            const invalid = await execute(
+                agent,
+                { actionName, parameters: {} },
+                context,
+            );
+            expect(invalid.error).toBeDefined();
+            const wrongType = await execute(
+                agent,
+                {
+                    actionName,
+                    parameters: { options: valueType === "object" ? [] : {} },
+                },
+                context,
+            );
+            expect(wrongType.error).toBeDefined();
+            expect(calls).toHaveLength(1);
+        },
+    );
+
+    it("rejects a staged route that conflicts with a macro approved after generation", async () => {
+        const snapshots: number[] = [];
+        let queries = 0;
+        const runtime = createMacroLearningRuntime(
+            async () => {
+                queries++;
+                return grammarModelResponse({
+                    parameterMappings: [],
+                    fixedPhrases: ["my", "tasks"],
+                    grammarPattern: {
+                        matchPattern: "(show | list | display | get) my tasks",
+                        actionParameters: [],
+                    },
+                });
+            },
+            async () => {
+                const approved = await manager.getApprovedMacros();
+                snapshots.push(approved.length);
+                return approved;
+            },
+        );
+        const requests = [
+            "Show my tasks",
+            "List my tasks",
+            "Display my tasks",
+            "Get my tasks",
+        ];
+        await manager.configureLearning({
+            ...runtime,
+            extract: async (trace, traceId) => ({
+                schemaVersion: 1,
+                traceId,
+                request: trace.prompt,
+                toolCallIds: trace.toolCalls.map((call) => call.toolCallId),
+                description: "List tasks in the recorded account",
+                uncertainties: [],
+            }),
+            build: async (_recipe, _trace, baseline) => ({
+                name: baseline.name,
+                description: baseline.description,
+                inputs: baseline.inputs,
+                steps: baseline.steps,
+                exampleInputs: {},
+                requests,
+            }),
+        });
+        await manager.setMacroLearningPreference({
+            cwd: instanceDir,
+            mode: "prepare",
+        });
+        const drafts: CopilotToolMacro[] = [];
+        for (const account of ["personal", "work"]) {
+            const token = manager.armRecording({
+                sessionId: account,
+                cwd: instanceDir,
+                learning: true,
+            });
+            manager.claimRecording({
+                sessionId: account,
+                cwd: instanceDir,
+                promptHash: createHash("sha256")
+                    .update(requests[0])
+                    .digest("hex"),
+            });
+            const summary = await manager.finalizeRecording({
+                tokenId: token.id,
+                trace: {
+                    schemaVersion: 1,
+                    sessionId: account,
+                    cwd: instanceDir,
+                    prompt: requests[0],
+                    response: "Listed tasks",
+                    startedAt: "2026-09-30T10:00:00.000Z",
+                    completedAt: "2026-09-30T10:00:01.000Z",
+                    toolCalls: [
+                        {
+                            toolCallId: "tasks-1",
+                            name: "tasks",
+                            mcpServerName: "test-mcp",
+                            arguments: { account },
+                            result: {},
+                            status: "completed",
+                        },
+                    ],
+                },
+            });
+            let job = await manager.getMacroLearningJob(summary.learningJobId!);
+            for (
+                let attempt = 0;
+                attempt < 500 &&
+                ["queued", "extracting", "building"].includes(job.status);
+                attempt++
+            ) {
+                await new Promise((resolve) => setTimeout(resolve, 5));
+                job = await manager.getMacroLearningJob(job.jobId);
+            }
+            expect(job.error).toBeUndefined();
+            expect(job.status).toBe("needsReview");
+            drafts.push(await manager.inspectMacro(job.macro!));
+        }
+        expect(snapshots).toEqual([0, 0]);
+        const first = await manager.approveMacro(drafts[0]);
+        await expect(manager.approveMacro(drafts[1])).rejects.toThrow(
+            "conflicts with the approved catalog",
+        );
+        expect(
+            (await manager.getApprovedMacros()).map((macro) => macro.macroId),
+        ).toEqual([first.macroId]);
+        await expect(
+            manager.inspectMacro({ macroId: drafts[1].macroId, version: 2 }),
+        ).rejects.toThrow("not found");
+        expect(queries).toBe(8);
+        expect(calls).toHaveLength(0);
+        const replacement = {
+            ...(await manager.inspectMacro(first)),
+            version: 4,
+        };
+        replacement.learning!.grammarRules =
+            replacement.learning!.grammarRules.map((rule) =>
+                rule.replaceAll(
+                    getMacroActionName({ ...replacement, version: 2 }),
+                    getMacroActionName(replacement),
+                ),
+            );
+        const current = await manager.getApprovedMacros();
+        expect(() =>
+            runtime.validateGrammar(replacement, current),
+        ).not.toThrow();
     });
 
     it("rejects grammar that would shadow another approved learned macro", async () => {
