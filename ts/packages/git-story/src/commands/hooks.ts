@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 import type {
-    UserPromptSubmittedInput,
+    AgentStopOutput,
+    BaseHookInput,
+    SessionStartOutput,
     UserPromptSubmittedOutput,
 } from "@typeagent/agent-harness-hooks/copilot-cli";
 import { Command } from "commander";
@@ -23,22 +25,39 @@ export const hooksCommand = new Command("hooks").description(
     "Agent and git hook handlers",
 );
 
-hooksCommand
+// Copilot CLI hooks. Each reads its JSON payload on stdin, logs the
+// session id, and writes `{}` (change nothing). Placeholder until story
+// capture exists. Example: `git story hooks copilot session-start`.
+const COPILOT_HOOKS = [
+    ["user-prompt-submitted", "userPromptSubmitted"],
+    ["session-start", "sessionStart"],
+    ["agent-stop", "agentStop"],
+] as const;
+
+const copilotCommand = hooksCommand
     .command("copilot")
-    .description("Copilot CLI hook handlers")
-    .command("user-prompt-submitted")
-    .description("Handle the Copilot userPromptSubmitted hook")
-    .action(async () => {
-        // Placeholder: parse the payload, change nothing.
-        // Empty stdin (manual run) is treated as `{}`, as on main.
-        const input = JSON.parse(
-            (await readStdin()) || "{}",
-        ) as Partial<UserPromptSubmittedInput>;
-        const output: UserPromptSubmittedOutput = {};
-        process.stderr.write(`git-story prompt: session=${input.sessionId}\n`);
-        cliLogger.info(`prompt session=${input.sessionId}`);
-        process.stdout.write(`${JSON.stringify(output)}\n`);
-    });
+    .description("Copilot CLI hook handlers");
+
+for (const [command, hook] of COPILOT_HOOKS) {
+    copilotCommand
+        .command(command)
+        .description(`Handle the Copilot ${hook} hook`)
+        .action(async () => {
+            // Empty stdin (manual run) is treated as `{}`.
+            const input = JSON.parse(
+                (await readStdin()) || "{}",
+            ) as Partial<BaseHookInput>;
+            const output:
+                | UserPromptSubmittedOutput
+                | SessionStartOutput
+                | AgentStopOutput = {};
+            process.stderr.write(
+                `git-story ${hook}: session=${input.sessionId}\n`,
+            );
+            cliLogger.info(`${hook} session=${input.sessionId}`);
+            process.stdout.write(`${JSON.stringify(output)}\n`);
+        });
+}
 
 // `hooks git <hook> [args...]`: called by the scripts `init` writes to the
 // git hooks directory. Git's hook args and stdin are forwarded as-is.
