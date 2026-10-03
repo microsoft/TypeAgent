@@ -115,4 +115,5 @@ export const initCommand = new Command("init")
             cliLogger.info(message);
         };
         registerGitHook("pre-commit");
+        registerGitHook("prepare-commit-msg");
     });
