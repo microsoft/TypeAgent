@@ -36,6 +36,7 @@ describe("prompt hooks", () => {
         const output = await handleUserPromptSubmitted(
             {
                 sessionId: "s1",
+                timestamp: 0,
                 cwd: "/repo",
                 prompt: "how do I install dependencies?",
             },
@@ -52,6 +53,7 @@ describe("prompt hooks", () => {
         const output = await handleUserPromptTransformed(
             {
                 sessionId: "s1",
+                timestamp: 0,
                 cwd: "/repo",
                 prompt: "how do I install dependencies?",
                 transformedPrompt: "how do I install dependencies?",
@@ -72,6 +74,7 @@ describe("prompt hooks", () => {
         const output = await handleUserPromptTransformed(
             {
                 sessionId: "s1",
+                timestamp: 0,
                 cwd: "/repo",
                 prompt: "question",
                 transformedPrompt: transformed,
@@ -86,6 +89,7 @@ describe("prompt hooks", () => {
         const output = await routePromptHook(
             parsePromptInput({
                 sessionId: "s1",
+                timestamp: 0,
                 cwd: "/repo",
                 prompt: "question",
                 transformedPrompt: "question",

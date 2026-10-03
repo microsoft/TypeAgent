@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import type { HookOutput } from "../src/hooks/types.js";
+import type { UserPromptSubmittedOutput } from "@typeagent/agent-harness-hooks/copilot-cli";
 
 interface PluginMcpManifest {
     mcpServers: Record<
@@ -112,7 +112,9 @@ describe("staged plugin artifact", () => {
                 TYPEAGENT_MACRO_RECORDING_ENABLED: "false",
             };
             delete env.TYPEAGENT_MODE;
-            const runHook = async (prompt: string): Promise<HookOutput> => {
+            const runHook = async (
+                prompt: string,
+            ): Promise<UserPromptSubmittedOutput> => {
                 const child = spawn(
                     process.execPath,
                     [path.join(pluginRoot, "dist", "hooks", "hook-router.js")],
@@ -136,7 +138,7 @@ describe("staged plugin artifact", () => {
                 );
                 const [code] = await once(child, "close");
                 expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
-                return JSON.parse(stdout) as HookOutput;
+                return JSON.parse(stdout) as UserPromptSubmittedOutput;
             };
             for (const [args, response] of [
                 ["mcp mixed", "TypeAgent mode switched to mcp (mixed)."],

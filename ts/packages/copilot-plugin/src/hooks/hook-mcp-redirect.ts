@@ -10,7 +10,10 @@
  * to steer the LLM toward TypeAgent's PowerShell agent for system operations.
  */
 
-import type { HookInput, HookOutput } from "./types.js";
+import type {
+    UserPromptSubmittedInput,
+    UserPromptSubmittedOutput,
+} from "@typeagent/agent-harness-hooks/copilot-cli";
 import { parseRecordingDirective } from "@typeagent/dispatcher-types";
 import {
     getMcpRouting,
@@ -65,7 +68,9 @@ function getSpecialPrefixGuidance(prompt: string): string | undefined {
     ].join("\n");
 }
 
-export function handleMcpRedirect(input: HookInput): HookOutput {
+export function handleMcpRedirect(
+    input: UserPromptSubmittedInput,
+): UserPromptSubmittedOutput {
     const prefixGuidance = getSpecialPrefixGuidance(input.prompt) ?? "";
     if (getMcpRouting() === "mixed" && !prefixGuidance) {
         const psGuidance =

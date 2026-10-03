@@ -56,7 +56,8 @@ export async function handleUserPromptTransformed(
     client: MemoryClient,
 ): Promise<HookOutput> {
     const prompt = input.prompt.trim();
-    const transformed = input.transformedPrompt ?? prompt;
+    const transformed =
+        "transformedPrompt" in input ? input.transformedPrompt : prompt;
     if (!prompt) {
         return {};
     }

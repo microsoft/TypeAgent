@@ -11,7 +11,10 @@ export const browserViews = {
         page: "knowledgeLibrary.html",
     },
     memoryCenter: { path: "/memory/", page: "memoryCenter.html" },
-    macrosLibrary: { path: "/macros/", page: "macrosLibrary.html" },
+    automationsLibrary: {
+        path: "/automations/",
+        page: "automationsLibrary.html",
+    },
     entityGraph: {
         path: "/knowledge/entities/",
         page: "entityGraphView.html",
@@ -33,7 +36,10 @@ export function getBrowserViewName(value: string): BrowserViewName | undefined {
             name.toLowerCase() === normalized ||
             browserViews[name].page.replace(/\.html$/, "").toLowerCase() ===
                 normalized ||
-            (name === "macrosLibrary" && normalized === "actionlibrary"),
+            (name === "automationsLibrary" &&
+                ["automations", "actionlibrary", "macroslibrary"].includes(
+                    normalized,
+                )),
     );
 }
 

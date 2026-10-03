@@ -50,6 +50,7 @@ import { MemoryServiceHost } from "@typeagent/memory-mcp-server";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import { createDurableMemoryService } from "./durableMemoryService.js";
 import { createLocalSkillServices } from "./skillCatalog.js";
+import { createAutomationSources } from "./automationSources.js";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -458,6 +459,10 @@ async function main() {
                     browser: {
                         memoryServiceClient:
                             createMemoryServiceRpcFacade(memoryService),
+                        automations: createAutomationSources(
+                            instanceDir,
+                            macroManager,
+                        ),
                     },
                     memory: {
                         memoryServiceClient:

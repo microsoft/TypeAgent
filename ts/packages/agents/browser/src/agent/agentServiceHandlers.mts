@@ -14,6 +14,7 @@ import {
     handleWebsiteAction,
     handleWebsiteLibraryStats,
 } from "./browserActionHandler.mjs";
+import { createAutomationViewFunctions } from "./automationViewHandlers.mjs";
 import {
     ensureBrowserViewHost,
     type BrowserViewDomainFunctions,
@@ -22,10 +23,15 @@ import {
 export function createViewServiceDomain(
     context: SessionContext<BrowserActionContext>,
 ): BrowserViewDomainFunctions {
+    const handlers = createAgentInvokeHandlers(context);
     return {
-        ...createAgentInvokeHandlers(context),
+        ...handlers,
         getAutoIndexSetting: () =>
             getSessionBrowserControl(context).getAutoIndexSetting(),
+        ...createAutomationViewFunctions(
+            handlers,
+            () => context.agentContext.automationCatalog,
+        ),
     };
 }
 

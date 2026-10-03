@@ -23,7 +23,8 @@ describe("browser view routes", () => {
 
     test("supports friendly aliases without claiming ordinary sites", () => {
         expect(getBrowserViewName("Memory Center")).toBe("memoryCenter");
-        expect(getBrowserViewName("Action Library")).toBe("macrosLibrary");
+        expect(getBrowserViewName("Action Library")).toBe("automationsLibrary");
+        expect(getBrowserViewName("Automations")).toBe("automationsLibrary");
         expect(getBrowserViewName("entityGraphView")).toBe("entityGraph");
         expect(getBrowserViewName("example.com")).toBeUndefined();
     });

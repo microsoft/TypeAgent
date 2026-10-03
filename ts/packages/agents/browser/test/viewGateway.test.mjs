@@ -15,8 +15,9 @@ test("view validation rejects generic operations and malformed domain payloads",
         { method: "openTab", params: { url: "https://example.com" } },
         { method: "toString", params: {} },
         { method: "memoryGetCorpus", params: {} },
-        { method: "deleteWebFlow", params: { name: 123 } },
-        { method: "getAllWebFlows", params: { url: "https://example.com" } },
+        { method: "approveAutomation", params: { id: 123 } },
+        { method: "listAutomations", params: { url: "https://example.com" } },
+        { method: "getAllWebFlows", params: {} },
         {
             method: "memoryCreateProcedureCandidate",
             params: {
