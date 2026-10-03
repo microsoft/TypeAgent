@@ -3,6 +3,10 @@
 
 import registerDebug from "debug";
 import { createChromeRpcClient } from "./chromeRpcClient";
+import {
+    createPdfCorpusImport,
+    type PdfImportContent,
+} from "./pdfCorpusImport";
 
 const debug = registerDebug("typeagent:browser:pdfView");
 const debugError = registerDebug("typeagent:browser:pdfView:error");
@@ -17,15 +21,32 @@ function getChromeRpc() {
  * PDF View Page Controller
  * Manages the PDF viewer page that hosts the TypeAgent PDF reader in an iframe
  */
-class PDFViewPage {
+export class PDFViewPage {
+    private corpusToken = crypto.randomUUID();
+    private corpusImport = createPdfCorpusImport(undefined, getChromeRpc().rpc);
+    private disposed = false;
+    private corpusReady = false;
+    private handshakeTimer: number | undefined;
+    private pendingRequests = new Set<(error: Error) => void>();
+    private onCorpusMessage = (event: MessageEvent<unknown>) => {
+        if (!this.isViewerMessage(event)) return;
+        const message = event.data as { type?: string };
+        if (message.type === "pdf-corpus-initialized") {
+            this.corpusReady = true;
+            this.stopHandshake();
+        } else if (message.type === "pdf-corpus-open") {
+            void this.corpusImport.open((progress, signal) =>
+                this.extractForCorpus(progress, signal),
+            );
+        }
+    };
+    private onPageHide = () => this.dispose();
     private pdfFrame!: HTMLIFrameElement;
     private loadingContainer!: HTMLElement;
     private errorContainer!: HTMLElement;
     private errorMessage!: HTMLElement;
     private pdfUrlDisplay!: HTMLElement;
     private urlInfo!: HTMLElement;
-    private openOriginalBtn!: HTMLButtonElement;
-    private downloadBtn!: HTMLButtonElement;
     private retryBtn!: HTMLButtonElement;
     private openInNewTabBtn!: HTMLButtonElement;
 
@@ -60,12 +81,6 @@ class PDFViewPage {
             "pdfUrlDisplay",
         ) as HTMLElement;
         this.urlInfo = document.getElementById("urlInfo") as HTMLElement;
-        this.openOriginalBtn = document.getElementById(
-            "openOriginalBtn",
-        ) as HTMLButtonElement;
-        this.downloadBtn = document.getElementById(
-            "downloadBtn",
-        ) as HTMLButtonElement;
         this.retryBtn = document.getElementById(
             "retryBtn",
         ) as HTMLButtonElement;
@@ -78,14 +93,12 @@ class PDFViewPage {
      * Set up event listeners
      */
     private setupEventListeners(): void {
+        window.addEventListener("message", this.onCorpusMessage);
+        window.addEventListener("pagehide", this.onPageHide, { once: true });
         this.retryBtn.addEventListener("click", () => this.retry());
         this.openInNewTabBtn.addEventListener("click", () =>
             this.openInNewTab(),
         );
-        this.openOriginalBtn.addEventListener("click", () =>
-            this.openInNewTab(),
-        );
-        this.downloadBtn.addEventListener("click", () => this.downloadPDF());
 
         // Set up iframe error handling
         this.pdfFrame.addEventListener("error", () => {
@@ -102,6 +115,10 @@ class PDFViewPage {
      * Initialize the PDF viewer
      */
     async initialize(): Promise<void> {
+        await this.initializeViewer();
+    }
+
+    private async initializeViewer(): Promise<void> {
         debug("Initializing PDF view page");
 
         try {
@@ -110,13 +127,10 @@ class PDFViewPage {
 
             // Extract PDF URL from query parameters
             this.pdfUrl = this.extractPDFUrl();
-            if (!this.pdfUrl) {
-                throw new Error("No PDF URL provided in query parameters");
-            }
 
             // Update URL info in header
-            this.updateUrlInfo(this.pdfUrl);
-            this.updateActionButtons();
+            if (this.pdfUrl) this.updateUrlInfo(this.pdfUrl);
+            else this.urlInfo.style.display = "none";
 
             // Get view host URL and load PDF
             await this.loadPDFViewer();
@@ -169,24 +183,10 @@ class PDFViewPage {
     }
 
     /**
-     * Update action buttons visibility and functionality
-     */
-    private updateActionButtons(): void {
-        if (this.pdfUrl) {
-            this.openOriginalBtn.style.display = "flex";
-            this.downloadBtn.style.display = "flex";
-        }
-    }
-
-    /**
      * Load the PDF viewer
      */
     private async loadPDFViewer(): Promise<void> {
         debug("Loading PDF viewer for URL:", this.pdfUrl);
-
-        if (!this.pdfUrl) {
-            throw new Error("No PDF URL available");
-        }
 
         this.showLoading("Connecting to TypeAgent PDF reader...");
 
@@ -201,7 +201,9 @@ class PDFViewPage {
             }
 
             // Construct PDF reader URL
-            this.viewerUrl = `${response.url}/pdf/?url=${encodeURIComponent(this.pdfUrl)}`;
+            const viewer = new URL(`${response.url}/pdf/`);
+            if (this.pdfUrl) viewer.searchParams.set("url", this.pdfUrl);
+            this.viewerUrl = viewer.toString();
             debug("Constructed viewer URL:", this.viewerUrl);
 
             // Load in iframe with timeout
@@ -229,12 +231,180 @@ class PDFViewPage {
                     "UNKNOWN_ERROR",
                 );
             }
+            throw error;
         }
     }
 
     /**
      * Get view host URL from service worker
      */
+    private isViewerMessage(event: MessageEvent<unknown>): boolean {
+        return (
+            !this.disposed &&
+            !!this.viewerUrl &&
+            event.source === this.pdfFrame.contentWindow &&
+            event.origin === new URL(this.viewerUrl).origin &&
+            !!event.data &&
+            typeof event.data === "object" &&
+            "token" in event.data &&
+            event.data.token === this.corpusToken
+        );
+    }
+
+    private extractForCorpus(
+        progress: (completed: number, total: number) => void,
+        signal?: AbortSignal,
+    ): Promise<PdfImportContent> {
+        return this.requestViewer(
+            { type: "pdf-corpus-extract" },
+            (message) => {
+                const result = message.result as PdfImportContent | undefined;
+                if (message.type !== "pdf-corpus-result") return undefined;
+                if (
+                    !result ||
+                    typeof result.markdown !== "string" ||
+                    typeof result.title !== "string" ||
+                    typeof result.canonicalUri !== "string" ||
+                    typeof result.byteHash !== "string" ||
+                    !/^[a-f0-9]{64}$/.test(result.byteHash) ||
+                    !Number.isSafeInteger(result.pageCount) ||
+                    result.pageCount < 1 ||
+                    !Array.isArray(result.emptyPages) ||
+                    result.emptyPages.some(
+                        (page) =>
+                            !Number.isSafeInteger(page) ||
+                            page < 1 ||
+                            page > result.pageCount,
+                    )
+                )
+                    throw new Error("Invalid PDF extraction response.");
+                return {
+                    markdown: result.markdown,
+                    title: result.title,
+                    canonicalUri: result.canonicalUri,
+                    byteHash: result.byteHash,
+                    pageCount: result.pageCount,
+                    emptyPages: result.emptyPages,
+                };
+            },
+            signal,
+            progress,
+        );
+    }
+
+    private requestViewer<Result>(
+        payload: Record<string, unknown>,
+        readResult: (message: Record<string, unknown>) => Result | undefined,
+        signal?: AbortSignal,
+        progress?: (completed: number, total: number) => void,
+    ): Promise<Result> {
+        const frame = this.pdfFrame.contentWindow;
+        if (this.disposed || !this.corpusReady || !this.viewerUrl || !frame)
+            return Promise.reject(new Error("The PDF viewer is not ready."));
+        const origin = new URL(this.viewerUrl).origin;
+        const token = this.corpusToken;
+        const requestId = crypto.randomUUID();
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const timeout = window.setTimeout(
+                () =>
+                    finish(
+                        new Error(
+                            "PDF request timed out. Nothing was submitted.",
+                        ),
+                    ),
+                10 * 60 * 1000,
+            );
+            const finish = (error?: Error, result?: Result) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                window.removeEventListener("message", listener);
+                signal?.removeEventListener("abort", cancel);
+                this.pendingRequests.delete(fail);
+                if (error)
+                    frame.postMessage(
+                        { type: "pdf-corpus-cancel", requestId, token },
+                        origin,
+                    );
+                if (error) reject(error);
+                else resolve(result!);
+            };
+            const fail = (error: Error) => finish(error);
+            const cancel = () =>
+                finish(new DOMException("PDF request cancelled", "AbortError"));
+            const listener = (event: MessageEvent<unknown>) => {
+                if (!this.isViewerMessage(event)) return;
+                const message = event.data as Record<string, unknown>;
+                if (message.requestId !== requestId) return;
+                try {
+                    if (
+                        message.type === "pdf-corpus-progress" &&
+                        typeof message.completed === "number" &&
+                        typeof message.total === "number"
+                    )
+                        progress?.(message.completed, message.total);
+                    else if (message.type === "pdf-corpus-error")
+                        finish(
+                            new Error(
+                                typeof message.error === "string"
+                                    ? message.error
+                                    : "PDF request failed.",
+                            ),
+                        );
+                    else {
+                        const result = readResult(message);
+                        if (result !== undefined) finish(undefined, result);
+                    }
+                } catch (error) {
+                    finish(
+                        error instanceof Error
+                            ? error
+                            : new Error(String(error)),
+                    );
+                }
+            };
+            this.pendingRequests.add(fail);
+            window.addEventListener("message", listener);
+            signal?.addEventListener("abort", cancel, { once: true });
+            if (signal?.aborted) {
+                cancel();
+                return;
+            }
+            try {
+                frame.postMessage({ ...payload, requestId, token }, origin);
+            } catch (error) {
+                finish(
+                    error instanceof Error ? error : new Error(String(error)),
+                );
+            }
+        });
+    }
+
+    private stopHandshake(): void {
+        if (this.handshakeTimer !== undefined)
+            window.clearInterval(this.handshakeTimer);
+        this.handshakeTimer = undefined;
+    }
+
+    private resetCorpus(): void {
+        this.stopHandshake();
+        this.corpusReady = false;
+        for (const fail of this.pendingRequests)
+            fail(
+                new DOMException("PDF viewer changed or closed", "AbortError"),
+            );
+    }
+
+    public dispose(): void {
+        this.resetCorpus();
+        this.disposed = true;
+        if (this.loadingTimeout !== null)
+            window.clearTimeout(this.loadingTimeout);
+        window.removeEventListener("message", this.onCorpusMessage);
+        window.removeEventListener("pagehide", this.onPageHide);
+    }
+
     private async getViewHostUrl(): Promise<{ url: string } | null> {
         try {
             const { rpc } = getChromeRpc();
@@ -295,6 +465,27 @@ class PDFViewPage {
      * Handle iframe load success
      */
     private onIframeLoad(): void {
+        this.resetCorpus();
+        if (
+            this.disposed ||
+            !this.viewerUrl ||
+            this.pdfFrame.src === "about:blank"
+        )
+            return;
+        this.corpusToken = crypto.randomUUID();
+        let attempts = 0;
+        const initialize = () => {
+            if (++attempts > 40) {
+                this.stopHandshake();
+                return;
+            }
+            this.pdfFrame.contentWindow?.postMessage(
+                { type: "pdf-corpus-init", token: this.corpusToken },
+                new URL(this.viewerUrl!).origin,
+            );
+        };
+        this.handshakeTimer = window.setInterval(initialize, 250);
+        initialize();
         // Check if iframe actually loaded content (not an error page)
         try {
             const iframeSrc = this.pdfFrame.src;
@@ -421,6 +612,7 @@ class PDFViewPage {
         );
 
         // Reset iframe
+        this.resetCorpus();
         this.pdfFrame.src = "about:blank";
 
         // Wait a moment before retrying
@@ -436,40 +628,6 @@ class PDFViewPage {
         if (this.pdfUrl) {
             debug("Opening PDF in new tab:", this.pdfUrl);
             window.open(this.pdfUrl, "_blank");
-        }
-    }
-
-    /**
-     * Download PDF
-     */
-    private downloadPDF(): void {
-        if (this.pdfUrl) {
-            debug("Downloading PDF:", this.pdfUrl);
-            const link = document.createElement("a");
-            link.href = this.pdfUrl;
-            link.download = this.extractFilenameFromUrl(this.pdfUrl);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-    }
-
-    /**
-     * Extract filename from URL
-     */
-    private extractFilenameFromUrl(url: string): string {
-        try {
-            const urlObj = new URL(url);
-            const pathname = urlObj.pathname;
-            const filename = pathname.split("/").pop();
-
-            if (filename && filename.includes(".")) {
-                return filename;
-            } else {
-                return "document.pdf";
-            }
-        } catch (error) {
-            return "document.pdf";
         }
     }
 

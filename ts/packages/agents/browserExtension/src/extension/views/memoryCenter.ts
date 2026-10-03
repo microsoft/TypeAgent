@@ -22,6 +22,7 @@ import type {
 import { createChromeRpcClient } from "./chromeRpcClient";
 import { createElectronRpcClient } from "./electronRpcClient";
 import { renderMarkdown } from "./utils/markdownRenderer";
+import { createPdfCorpusImport } from "./pdfCorpusImport";
 
 const ACTIVE_CORPUS_KEY = "memoryCenter.activeCorpusId";
 const PAGE_SIZE = 25;
@@ -34,6 +35,9 @@ if (rpcClient === undefined) {
     throw new Error("Memory Center RPC transport is not available");
 }
 const rpc = rpcClient.rpc;
+const pdfImport = createPdfCorpusImport(async () => {
+    await refreshActiveCorpus();
+}, rpc);
 
 type MethodName = keyof MemoryCenterInvokeFunctions;
 type MethodParams<M extends MethodName> = Parameters<
@@ -1067,6 +1071,9 @@ element<HTMLFormElement>("createCorpusForm").addEventListener(
         });
     },
 );
+element<HTMLButtonElement>("importPdfButton").addEventListener("click", () => {
+    void pdfImport.open();
+});
 element<HTMLButtonElement>("importDocumentButton").addEventListener(
     "click",
     () => {

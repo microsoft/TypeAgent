@@ -2,11 +2,13 @@
   "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
+    "allowJs": true,
+    "checkJs": false,
     "rootDir": ".",
     "outDir": "../dist",
     "lib": ["DOM", "DOM.Iterable", "ES2021"]
   },
-  "include": ["./**/*"],
+  "include": ["./**/*.ts", "./converters/pdfToMarkdown/*.js"],
   "ts-node": {
     "esm": true
   }

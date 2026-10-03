@@ -66,6 +66,21 @@ describe("Context Menu Module", () => {
             expect(ids).not.toContain("askAboutPage");
             expect(chrome.contextMenus.create).toHaveBeenCalledWith(
                 expect.objectContaining({
+                    id: "openPdfReader",
+                    title: "Open TypeAgent Reader",
+                }),
+            );
+            expect(chrome.contextMenus.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: "openPdfLink",
+                    contexts: ["link"],
+                    targetUrlPatterns: expect.arrayContaining([
+                        "https://*/*.pdf*",
+                    ]),
+                }),
+            );
+            expect(chrome.contextMenus.create).toHaveBeenCalledWith(
+                expect.objectContaining({
                     id: "saveThisPage",
                     documentUrlPatterns: ["http://*/*", "https://*/*"],
                 }),
@@ -74,6 +89,51 @@ describe("Context Menu Module", () => {
     });
 
     describe("handleContextMenuClick", () => {
+        it("opens the reader without a hard-coded service port", async () => {
+            chrome.runtime.getURL.mockReturnValue(
+                "chrome-extension://abcdefgh/views/pdfView.html",
+            );
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "openPdfReader" },
+                { id: 123 },
+            );
+            expect(chrome.tabs.create).toHaveBeenCalledWith({
+                url: "chrome-extension://abcdefgh/views/pdfView.html",
+                active: true,
+            });
+        });
+
+        it("opens a PDF link with its query and fragment intact", async () => {
+            chrome.runtime.getURL.mockReturnValue(
+                "chrome-extension://abcdefgh/views/pdfView.html",
+            );
+            const target = "https://example.com/book.PDF?download=1#page=3";
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "openPdfLink", linkUrl: target },
+                { id: 123 },
+            );
+            const created = chrome.tabs.create.mock.calls[0][0];
+            expect(new URL(created.url!).searchParams.get("url")).toBe(target);
+            expect(created.active).toBe(true);
+        });
+
+        it.each([
+            "javascript:alert(1)",
+            "file:///book.pdf",
+            "https://example.com/not.pdf.exe",
+            "not a URL",
+            undefined,
+        ])("rejects an unsupported PDF link: %s", async (linkUrl) => {
+            chrome.runtime.getURL.mockReturnValue(
+                "chrome-extension://abcdefgh/views/pdfView.html",
+            );
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "openPdfLink", linkUrl },
+                { id: 123 },
+            );
+            expect(chrome.tabs.create).not.toHaveBeenCalled();
+        });
+
         it("should handle openChatPanel menu click", async () => {
             const mockTab = { id: 123, url: "https://example.com" };
             const mockInfo = { menuItemId: "openChatPanel" };

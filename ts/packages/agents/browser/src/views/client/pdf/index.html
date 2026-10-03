@@ -21,9 +21,43 @@
   <body>
     <div class="container">
       <div class="toolbar">
-        <div class="toolbar-left"></div>
+        <div class="toolbar-left">
+          <button
+            id="openLocalPdf"
+            type="button"
+            title="Open local PDF"
+            aria-label="Open local PDF"
+          >
+            <i class="fas fa-folder-open" aria-hidden="true"></i>
+          </button>
+          <input
+            id="localPdfFile"
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+          />
+          <button
+            id="inspectPdf"
+            type="button"
+            title="Inspect PDF"
+            aria-label="Inspect PDF"
+            aria-expanded="false"
+            aria-controls="pdfInspection"
+          >
+            <i class="fas fa-file-pen" aria-hidden="true"></i>
+          </button>
+          <button
+            id="saveToCorpus"
+            type="button"
+            title="Save to corpus"
+            aria-label="Save to corpus"
+            hidden
+          >
+            <i class="fas fa-file-import" aria-hidden="true"></i>
+          </button>
+        </div>
 
-        <div class="toolbar-center">
+        <div class="toolbar-center" hidden>
           <div class="page-controls">
             <button id="prevPage" title="Previous page">
               <i class="fas fa-chevron-left"></i>
@@ -43,7 +77,7 @@
           </div>
         </div>
 
-        <div class="toolbar-right">
+        <div class="toolbar-right" hidden>
           <button id="clippingTool" title="Take screenshot clipping">
             <i class="fas fa-crop"></i>
           </button>
@@ -60,6 +94,57 @@
       <div class="viewer-container" id="viewerContainer">
         <div class="loading">Loading PDF viewer...</div>
       </div>
+      <aside
+        id="pdfInspection"
+        class="pdf-inspection"
+        aria-label="PDF inspection"
+        hidden
+      >
+        <div class="inspection-actions">
+          <button
+            id="extractPdf"
+            title="Extract text"
+            aria-label="Extract text"
+          >
+            <i class="fas fa-file-lines" aria-hidden="true"></i>
+          </button>
+          <button
+            id="pauseInspection"
+            hidden
+            title="Pause or resume"
+            aria-label="Pause or resume"
+          >
+            <i class="fas fa-pause" aria-hidden="true"></i>
+          </button>
+          <button
+            id="cancelInspection"
+            hidden
+            title="Cancel extraction"
+            aria-label="Cancel extraction"
+          >
+            <i class="fas fa-stop" aria-hidden="true"></i>
+          </button>
+          <button
+            id="downloadPdfMarkdown"
+            hidden
+            title="Download Markdown"
+            aria-label="Download Markdown"
+          >
+            <i class="fab fa-markdown" aria-hidden="true"></i>
+          </button>
+        </div>
+        <p id="inspectionStatus" role="status" aria-live="polite">
+          No PDF loaded
+        </p>
+        <section id="inspectionWarningsGroup" hidden>
+          <h2>Warnings</h2>
+          <pre id="inspectionWarnings"></pre>
+        </section>
+        <section data-inspection-content hidden>
+          <h2>Markdown</h2>
+          <div id="inspectionPreview"></div>
+        </section>
+      </aside>
     </div>
 
     <!-- TypeAgent PDF Viewer Scripts -->

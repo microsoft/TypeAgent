@@ -97,7 +97,14 @@ export class BrowserAgentIpc {
         //create a new promise to establish the websocket connection
         this.webSocketPromise = new Promise<WebSocket | undefined>(
             async (resolve) => {
-                this.webSocket = await createInlineBrowserWebSocket();
+                try {
+                    this.webSocket = await createInlineBrowserWebSocket();
+                } catch {
+                    debugBrowserIPCError(
+                        "Inline browser connection unavailable",
+                    );
+                    this.webSocket = undefined;
+                }
                 if (!this.webSocket) {
                     this.webSocketPromise = null;
                     resolve(undefined);
@@ -152,7 +159,9 @@ export class BrowserAgentIpc {
                     } catch {}
                 };
 
+                const activeSocket = this.webSocket;
                 this.webSocket.onclose = () => {
+                    if (this.webSocket !== activeSocket) return;
                     debugBrowserIPC("websocket connection closed");
                     this.browserControlProvider?.notifyDisconnected();
                     this.browserControlProvider = undefined;
@@ -292,7 +301,7 @@ export class BrowserAgentIpc {
     }
 
     public isConnected(): boolean {
-        return this.webSocket && this.webSocket.readyState === WebSocket.OPEN;
+        return !!this.webSocket && this.webSocket.readyState === WebSocket.OPEN;
     }
 
     /**

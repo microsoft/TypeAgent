@@ -140,6 +140,28 @@ async function savePage(tab: chrome.tabs.Tab): Promise<void> {
     await chrome.action.setTitle({ tabId: tab.id, title: status });
 }
 
+async function openPdfReader(
+    info: chrome.contextMenus.OnClickData,
+): Promise<void> {
+    const reader = new URL(chrome.runtime.getURL("views/pdfView.html"));
+    if (info.menuItemId === "openPdfLink") {
+        if (!info.linkUrl) return;
+        let target: URL;
+        try {
+            target = new URL(info.linkUrl);
+        } catch {
+            return;
+        }
+        if (
+            !["http:", "https:"].includes(target.protocol) ||
+            !/\.pdf$/i.test(target.pathname)
+        )
+            return;
+        reader.searchParams.set("url", target.href);
+    }
+    await chrome.tabs.create({ url: reader.href, active: true });
+}
+
 /**
  * Initializes the context menu items
  */
@@ -206,6 +228,25 @@ export function initializeContextMenu(): void {
         id: "showMemoryCenter",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
+
+    chrome.contextMenus.create({
+        title: "Open TypeAgent Reader",
+        id: "openPdfReader",
+        contexts: ["page"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        title: "Open target in TypeAgent Reader",
+        id: "openPdfLink",
+        contexts: ["link"],
+        targetUrlPatterns: [
+            "http://*/*.pdf*",
+            "https://*/*.pdf*",
+            "http://*/*.PDF*",
+            "https://*/*.PDF*",
+        ],
+    });
 }
 
 /**
@@ -222,6 +263,11 @@ export async function handleContextMenuClick(
     }
 
     switch (info.menuItemId) {
+        case "openPdfReader":
+        case "openPdfLink": {
+            await openPdfReader(info);
+            break;
+        }
         case "matchKnownActions": {
             await openChatAndInjectCommand(tab.id!, "@browser actions match");
             break;

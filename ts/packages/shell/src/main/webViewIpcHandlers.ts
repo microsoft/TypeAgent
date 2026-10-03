@@ -9,6 +9,22 @@ import type { WebSocketMessageV2 } from "@typeagent/websocket-utils";
 import path from "path";
 import { existsSync } from "fs";
 import { getShellWindow, getShellWindowForIpcEvent } from "./instance.js";
+import {
+    isLegacyBrowserRelayMessage,
+    isTrustedBrowserRpcSender,
+} from "./browserRpcBoundary.js";
+
+function isTrustedRpcSender(event: Electron.IpcMainEvent): boolean {
+    const contents =
+        getShellWindow()
+            ?.getAllBrowserTabs()
+            .map((tab) => tab.webContentsView.webContents) ?? [];
+    return isTrustedBrowserRpcSender(
+        event,
+        contents,
+        (global as { browserExtensionId?: string }).browserExtensionId,
+    );
+}
 
 // If instanceDir is undefined, the external storage is "in memory" and will not persist across restarts
 export function initializeExternalStorageIpcHandlers(
@@ -151,6 +167,7 @@ export async function initializeBrowserExtension(_appPath: string) {
     });
 
     ipcMain.on("send-to-browser-ipc", async (_, data: WebSocketMessageV2) => {
+        if (!isLegacyBrowserRelayMessage(data)) return;
         await BrowserAgentIpc.getinstance().send(data);
     });
 
@@ -167,16 +184,31 @@ export async function initializeBrowserExtension(_appPath: string) {
 
     // RPC transport: forward channel-multiplexed messages between Electron views and agent backend
     ipcMain.on("browser-rpc-message", async (event, message) => {
+        if (!isTrustedRpcSender(event)) return;
+        const senderFrame = event.senderFrame;
+        const senderUrl = senderFrame?.url;
         try {
             const browserIpc = BrowserAgentIpc.getinstance();
 
             // Route RPC replies from agent back to the renderer
             browserIpc.onRpcReply = (reply: any) => {
-                event.sender.send("browser-rpc-reply", reply);
+                if (
+                    isTrustedRpcSender(event) &&
+                    event.senderFrame === senderFrame &&
+                    senderFrame?.url === senderUrl
+                ) {
+                    event.sender.send("browser-rpc-reply", reply);
+                }
             };
 
             const ws = await browserIpc.ensureWebsocketConnected();
-            if (ws && ws.readyState === 1 /* WebSocket.OPEN */) {
+            if (
+                ws &&
+                ws.readyState === 1 /* WebSocket.OPEN */ &&
+                isTrustedRpcSender(event) &&
+                event.senderFrame === senderFrame &&
+                senderFrame?.url === senderUrl
+            ) {
                 // Wrap in agentService channel envelope
                 ws.send(
                     JSON.stringify({

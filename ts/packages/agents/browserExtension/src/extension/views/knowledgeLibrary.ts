@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { WebsiteImportManager } from "./websiteImportManager";
+import { createPdfCorpusImport } from "./pdfCorpusImport";
 import { WebsiteImportUI } from "./websiteImportUI";
 import {
     ImportOptions,
@@ -16,6 +17,7 @@ import {
     FormatUtils,
     EventManager,
     ConnectionManager,
+    getKnowledgeViewRpc,
 } from "./knowledgeUtilities";
 
 // Import new panels
@@ -165,6 +167,16 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private setupImportFunctionality() {
+        const pdfImport = createPdfCorpusImport(
+            undefined,
+            getKnowledgeViewRpc(),
+        );
+        document
+            .getElementById("importPdfBtn")
+            ?.addEventListener("click", (event) => {
+                event.preventDefault();
+                void pdfImport.open();
+            });
         const importWebActivityBtn = document.getElementById(
             "importWebActivityBtn",
         );

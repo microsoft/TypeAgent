@@ -33,6 +33,15 @@ function getElectronRpc() {
     return electronRpcSingleton;
 }
 
+export function getKnowledgeViewRpc() {
+    return (
+        getElectronRpc()?.rpc ??
+        (typeof chrome !== "undefined" && chrome.runtime
+            ? getChromeRpc().rpc
+            : undefined)
+    );
+}
+
 // ===================================================================
 // INTERFACES AND TYPES
 // ===================================================================
