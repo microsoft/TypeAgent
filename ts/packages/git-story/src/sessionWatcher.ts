@@ -26,6 +26,7 @@ export type CapturedSessionUpdates = {
 export type NormalizedSessionEvent = {
     // Original source ID when present; otherwise a generated GUID.
     id: string;
+    // Native source ID only; omitted when the source event has no ID.
     sourceEventId?: string;
     timestamp?: string;
     model?: string;
@@ -136,9 +137,10 @@ export class SessionWatcher {
         // Pseudocode:
         // Validate GHCP payloads and map messages, tools, and session lifecycle records.
         // Map the source's assistant message role to agent in the normalized format.
-        // Normalize each source event independently; preserve an existing ID as sourceEventId.
-        // Set id = sourceEventId when present; do not require native IDs to be GUIDs.
-        // Otherwise reuse the GUID assigned during capture.
+        // Normalize each source event independently; preserve a native ID as sourceEventId.
+        // With a native ID, set id = sourceEventId; do not require GUID format.
+        // Without a native ID, omit sourceEventId and set id to the GUID assigned during capture.
+        // Keep the assigned GUID separate from the original record's native ID.
         // Distinct ID-less records get distinct GUIDs, even if their content is identical.
         // Reuse persisted assignments on retries/replay instead of generating new GUIDs.
         // All events belong to the parent update's sessionId.
