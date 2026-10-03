@@ -70,7 +70,7 @@ const sessionUpdate: NormalizedSessionUpdate = {
     metadata: watchRequest.metadata,
 };
 
-test.each(["processUpdates", "captureUpdates"] as const)(
+test.each(["processUpdates"] as const)(
     "session watcher rejects %s until implemented",
     async (method) => {
         await expect(
@@ -83,6 +83,8 @@ test("session watcher rejects normalization until implemented", () => {
     expect(() =>
         new SessionWatcher().normalizeEvents(watchRequest, {
             records: [],
+            diagnostics: [],
+            generation: "fixture-generation",
             nextCheckpoint: {
                 sessionId: watchRequest.sessionId,
                 transcriptPath: watchRequest.transcriptPath,
