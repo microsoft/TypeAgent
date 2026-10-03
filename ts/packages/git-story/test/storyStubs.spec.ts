@@ -79,27 +79,6 @@ test.each(["processUpdates"] as const)(
     },
 );
 
-test("session watcher rejects normalization until implemented", () => {
-    expect(() =>
-        new SessionWatcher().normalizeEvents(watchRequest, {
-            records: [],
-            diagnostics: [],
-            generation: "fixture-generation",
-            nextCheckpoint: {
-                sessionId: watchRequest.sessionId,
-                transcriptPath: watchRequest.transcriptPath,
-                sourceByteOffset: "0",
-            },
-        }),
-    ).toThrow("SessionWatcher.normalizeEvents is not implemented");
-});
-
-test("session watcher rejects metadata collection until implemented", () => {
-    expect(() =>
-        new SessionWatcher().collectMetadata(watchRequest, []),
-    ).toThrow("SessionWatcher.collectMetadata is not implemented");
-});
-
 test.each(["filterForPrivacy", "publishUpdate"] as const)(
     "session watcher rejects %s rather than passing data through",
     async (method) => {
