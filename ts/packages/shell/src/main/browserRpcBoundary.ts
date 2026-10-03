@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import type { IpcMainEvent, WebContents } from "electron";
 
 const trustedViewPaths = new Set([

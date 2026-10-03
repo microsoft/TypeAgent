@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { IpcMainEvent, WebContents } from "electron";
