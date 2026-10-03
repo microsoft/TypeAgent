@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
@@ -21,6 +22,7 @@ import {
 } from "./sessionNormalization.js";
 import {
     assertRecordBoundary,
+    fileIdentity,
     readCompleteRecords,
 } from "./sessionTranscript.js";
 import type {
@@ -156,14 +158,39 @@ async function replayRecordCount(
     const file = await fs.open(through.transcriptPath, "r");
     try {
         await assertRecordBoundary(file, end);
+        const stat = await file.stat({ bigint: true });
+        if (
+            fileIdentity(stat) !== saved.fileIdentity ||
+            stat.size < BigInt(saved.observedSize)
+        ) {
+            throw new Error(
+                "Metadata replay transcript generation does not match",
+            );
+        }
         let count = 0;
+        const digest = createHash("sha256");
+        // Count the same verified bytes as capture, not an unverified prefix
+        // that could change and change back before replay begins.
         await readCompleteRecords(
             file,
             0,
-            end,
+            byteOffset(saved.checkpoint.sourceByteOffset),
             Number.MAX_SAFE_INTEGER,
-            () => count++,
+            (line, offset) => {
+                digest.update(line);
+                if (offset < end) count++;
+            },
         );
+        const current = await fs.stat(through.transcriptPath, { bigint: true });
+        if (
+            digest.digest("hex") !== saved.prefixDigest ||
+            fileIdentity(current) !== saved.fileIdentity ||
+            current.size < stat.size
+        ) {
+            throw new Error(
+                "Metadata replay transcript generation does not match",
+            );
+        }
         return count;
     } finally {
         await file.close();

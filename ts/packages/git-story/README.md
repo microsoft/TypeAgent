@@ -227,8 +227,9 @@ ID assignments, returning `{ state, nextCheckpoint, diagnostics }`. It returns
 metadata only, not events for publication or delivery acknowledgement.
 
 The boundary must belong to that session/transcript, be a complete-record
-boundary, and not exceed the saved capture high-water. A bounded prefix pass
-counts source records (including malformed ones), then capture replays in
+boundary, and not exceed the saved capture high-water. A prefix pass verifies
+the saved generation's identity and digest while counting source records
+(including malformed ones) only through the chosen boundary. Capture then replays in
 batches limited to that count. Appends during restoration remain unread beyond
 the chosen boundary, and replay never moves the saved cursor backwards.
 Each nonempty replay batch revalidates the generation; replacement, truncation,

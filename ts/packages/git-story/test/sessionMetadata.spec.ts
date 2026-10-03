@@ -339,6 +339,39 @@ test("fixed replay boundary excludes appends made during replay", async () => {
     );
 });
 
+test("counting rejects rewritten bytes before they can advance replay past its boundary", async () => {
+    await append({ type: "user.message", data: { content: "x   y" } });
+    const captured = await capture();
+    await append({ type: "user.message", data: { content: "unread" } });
+    const original = await fs.readFile(request.transcriptPath, "utf8");
+    await beforeTranscriptOpen(1, () =>
+        fs.writeFile(
+            request.transcriptPath,
+            original.replace("x   y", "x\n\n y"),
+        ),
+    );
+    await expect(restore(captured)).rejects.toThrow(
+        "Metadata replay transcript generation does not match",
+    );
+    jest.restoreAllMocks();
+    await fs.writeFile(request.transcriptPath, original);
+    const next = await capture();
+    expect(next.generation).toBe(captured.generation);
+    expect(next.records).toHaveLength(1);
+    expect(next.records[0]!.source.sourceByteOffset).toBe(
+        captured.nextCheckpoint.sourceByteOffset,
+    );
+});
+
+test("zero-boundary restoration rejects a replaced source generation", async () => {
+    const empty = await capture();
+    await fs.rename(request.transcriptPath, path.join(directory, "old.jsonl"));
+    await fs.writeFile(request.transcriptPath, "");
+    await expect(restore(empty)).rejects.toThrow(
+        "Metadata replay transcript generation does not match",
+    );
+});
+
 test.each(["replacement", "truncation"] as const)(
     "rejects %s between counting and replay",
     async (change) => {
