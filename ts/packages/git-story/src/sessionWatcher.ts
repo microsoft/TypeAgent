@@ -144,7 +144,7 @@ export class SessionWatcher {
         // Map the source's assistant message role to agent in the normalized format.
         // Normalize each source event independently; preserve an existing ID as sourceEventId.
         // Set id = sourceEventId when present; do not require native IDs to be GUIDs.
-        // Otherwise reuse the GUID assigned during capture; do not hash event content.
+        // Otherwise reuse the GUID assigned during capture.
         // Distinct ID-less records get distinct GUIDs, even if their content is identical.
         // Reuse persisted assignments on retries/replay instead of generating new GUIDs.
         // All events belong to the parent update's sessionId.
