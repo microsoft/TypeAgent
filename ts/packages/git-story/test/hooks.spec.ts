@@ -54,3 +54,43 @@ test("pre-commit hook forwards args and stdin to git-story", () => {
     const direct = run("sh", [hook, "a"], "piped\n");
     expect(direct).toContain('args=["a"] stdin="piped\\n"');
 });
+
+// `init` registers each Copilot hook, and each command answers `{}`.
+test("Copilot session and prompt hooks are registered and answer {}", () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-story-"));
+    // Isolate from the user's git config (e.g. a global core.hooksPath).
+    const env = {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: path.join(repo, "gitconfig"),
+        GIT_CONFIG_NOSYSTEM: "1",
+    };
+    spawnSync("git", ["init", "-q"], { cwd: repo, env });
+    expect(spawnSync("node", [CLI, "init"], { cwd: repo, env }).status).toBe(0);
+    const settings = JSON.parse(
+        fs.readFileSync(
+            path.join(repo, ".github/copilot/settings.local.json"),
+            "utf8",
+        ),
+    );
+    const payload = JSON.stringify({
+        sessionId: "s1",
+        timestamp: 0,
+        cwd: repo,
+    });
+    for (const [hook, command] of [
+        ["userPromptSubmitted", "user-prompt-submitted"],
+        ["sessionStart", "session-start"],
+        ["agentStop", "agent-stop"],
+    ]) {
+        expect(settings.hooks[hook][0].bash).toBe(
+            `git story hooks copilot ${command}`,
+        );
+        const r = spawnSync("node", [CLI, "hooks", "copilot", command], {
+            cwd: repo,
+            input: payload,
+            encoding: "utf8",
+        });
+        expect(r.stdout).toBe("{}\n");
+        expect(r.stderr).toContain(`git-story ${hook}: session=s1`);
+    }
+});
