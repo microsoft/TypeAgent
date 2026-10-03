@@ -52,10 +52,6 @@ Markdown uses ordinary memory source content, search, job and forget operations.
 See [PDF Markdown import boundaries](docs/pdf-markdown-import.md) for the
 remaining WebSocket and native renderer routing boundaries.
 
-The [implementation status and remaining WP0-WP5 gates](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-01_pdf-document-understanding-proposal/implementation-status.md)
-in the sibling codeDocs checkout records the offline checks separately from
-mandatory live acceptance, scoped authorization, staged transfer and code gates.
-
 ### Memory imports and page capture
 
 Browser history, bookmark, HTML-folder imports, and saved pages use the shared
