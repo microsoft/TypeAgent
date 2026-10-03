@@ -390,6 +390,33 @@ and snapshot; omitting page size on continuation preserves it. Pruning,
 forgetting, or clearing that changes the snapshot expires its tokens explicitly,
 requiring a fresh listing. Tokens are pagination cursors, not authorization.
 
+## Markdown Sources
+
+PDF producers submit ordinary `markdown` sources with source identity, title,
+canonical URI, tags, and producer metadata. The service uses its normal Markdown
+importer and retains the exact submitted content and content-addressed revision
+ID. Search excerpts and answer citations identify the source and revision; they
+do not project PDF pages, blocks, bounding boxes, or canonical character ranges.
+Producer provenance belongs in source metadata rather than embedded Markdown
+that needs special stripping. PDF extraction and viewer navigation remain
+producer responsibilities.
+
+Retired `locationMap` fields in saved revisions are tolerated as opaque legacy
+data and retained when manifests are saved or indexes are rebuilt. They are not
+validated, used for chunking, or returned in source responses. Client schemas
+ignore retired optional request/response fields. New imports do not store maps.
+
+The former mapped-chunk index used the same `index-schema.json` version as
+ordinary document indexes, so its `document-projection.json` marker triggers a
+document-only derived-index reset on the next search or ingestion. Marker
+presence is sufficient, including a malformed obsolete marker. The replacement
+generation is rebuilt from retained content with normal ingestion and has no
+projection marker. Raw revisions, histories, metadata, event ledgers, and
+procedure versions are not rewritten by this reset. The existing checks for
+malformed, incompatible, or future `index-schema.json` descriptors still fail
+explicitly before reset. Event and procedure indexes ignore the retired document
+marker.
+
 Phase 0 management APIs provide corpus status and revision/job counts,
 deterministically paged source and job listings, bounded revision content reads,
 source-scoped derived knowledge, optimistic source replacement, and atomic

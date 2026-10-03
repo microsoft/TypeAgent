@@ -370,6 +370,7 @@ export class AgentWebSocketServer {
             } catch {
                 return;
             }
+            if (!data || typeof data !== "object") return;
 
             // Filter keepalive messages
             if (
@@ -395,6 +396,11 @@ export class AgentWebSocketServer {
         ws.on("close", () => {
             debug(`Client disconnected: ${clientId}`);
 
+            if (this.clients.get(sessionId)?.get(clientId) !== client) {
+                client.channelProvider?.notifyDisconnected();
+                return;
+            }
+
             const s = this.sessionHandlers.get(client.sessionId);
             if (s?.onClientDisconnected) {
                 s.onClientDisconnected(client);
@@ -406,7 +412,7 @@ export class AgentWebSocketServer {
 
             const sm = this.clients.get(client.sessionId);
             let postCount = 0;
-            if (sm) {
+            if (sm?.get(clientId) === client) {
                 sm.delete(clientId);
                 postCount = sm.size;
                 if (sm.size === 0) this.clients.delete(client.sessionId);

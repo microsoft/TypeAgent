@@ -185,10 +185,13 @@ function isRootReferenced(
 export function getDefaultAppAgentProviders(
     instanceDirOrConfigProvider: string | InstanceConfigProvider | undefined,
     configName?: string,
+    executionModeOverrides: Parameters<
+        typeof createBundledAppAgentProvider
+    >[1] = {},
 ): AppAgentProvider[] {
     // The bundled agents are always present as their own static provider.
     const providers: AppAgentProvider[] = [
-        createBundledAppAgentProvider(configName),
+        createBundledAppAgentProvider(configName, executionModeOverrides),
     ];
     const instanceConfigs =
         typeof instanceDirOrConfigProvider === "string"

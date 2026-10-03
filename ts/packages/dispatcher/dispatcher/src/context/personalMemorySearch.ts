@@ -27,15 +27,47 @@ function distinctEvidence(
 ): { name: string; evidence: MemoryEvidence }[] {
     const seen = new Set<string>();
     return matches.filter(({ evidence }) => {
-        const key =
-            evidence.canonicalUri?.toLowerCase().replace(/\/$/, "") ??
-            `${evidence.corpusId}:${evidence.sourceId}`;
+        const key = JSON.stringify([
+            evidence.corpusId,
+            evidence.sourceId,
+            evidence.revisionId,
+            evidence.canonicalUri ?? null,
+            evidence.locator ?? null,
+            evidence.snippet,
+        ]);
         if (seen.has(key)) {
             return false;
         }
         seen.add(key);
         return true;
     });
+}
+
+function boundedText(text: string, limit: number): string {
+    const notice = "\n[Truncated: character limit reached.]";
+    return text.length <= limit
+        ? text
+        : text.slice(0, limit - notice.length) + notice;
+}
+
+function interleave<T>(groups: T[][], limit: number): T[] {
+    const selected: T[] = [];
+    for (let rank = 0; selected.length < limit; rank++) {
+        let added = false;
+        for (const group of groups) {
+            if (rank < group.length) {
+                selected.push(group[rank]);
+                added = true;
+                if (selected.length === limit) {
+                    break;
+                }
+            }
+        }
+        if (!added) {
+            break;
+        }
+    }
+    return selected;
 }
 
 export async function rememberConversation(
@@ -120,13 +152,18 @@ export async function searchPersonalMemory(
     ]);
     const sections: string[] = [];
     if (conversation.status === "fulfilled" && conversation.value) {
-        sections.push(`## Conversation memory\n${conversation.value}`);
+        sections.push(
+            `## Conversation memory\n${boundedText(conversation.value, 8_000)}`,
+        );
     } else if (conversation.status === "rejected") {
         debug(
             `Conversation memory search failed: ${String(conversation.reason)}`,
         );
         sections.push(
-            `Conversation memory search failed: ${String(conversation.reason)}`,
+            boundedText(
+                `Conversation memory search failed: ${String(conversation.reason)}`,
+                1_000,
+            ),
         );
     }
     if (documents.status === "fulfilled" && documents.value) {
@@ -136,14 +173,18 @@ export async function searchPersonalMemory(
     } else if (documents.status === "rejected") {
         debug(`Saved document search failed: ${String(documents.reason)}`);
         sections.push(
-            `Saved document search failed: ${String(documents.reason)}`,
+            boundedText(
+                `Saved document search failed: ${String(documents.reason)}`,
+                1_000,
+            ),
         );
     } else if (service === undefined) {
         sections.push("Saved document search is unavailable in this host.");
     }
-    return (
+    return boundedText(
         sections.join("\n\n") ||
-        "No matching conversation or saved documents found."
+            "No matching conversation or saved documents found.",
+        24_000,
     );
 }
 
@@ -166,7 +207,10 @@ async function searchDocuments(
             .then((result) => ({
                 kind: "document" as const,
                 name: corpus.name,
-                matches: result.matches,
+                matches: result.matches.filter(
+                    (evidence) => evidence.corpusId === corpus.corpusId,
+                ),
+                warnings: result.warnings,
             })),
         ...(searchProcedures === undefined
             ? []
@@ -184,8 +228,8 @@ async function searchDocuments(
               ]),
     ]);
     const results = await Promise.allSettled(requests);
-    const matches: { name: string; evidence: MemoryEvidence }[] = [];
-    const procedures: { name: string; match: ProcedureSearchMatch }[] = [];
+    const matches: { name: string; evidence: MemoryEvidence }[][] = [];
+    const procedures: { name: string; match: ProcedureSearchMatch }[][] = [];
     const errors: string[] = [];
     results.forEach((result, index) => {
         if (result.status === "rejected") {
@@ -195,23 +239,48 @@ async function searchDocuments(
             errors.push(message);
         } else if (result.value.kind === "document") {
             matches.push(
-                ...result.value.matches.map((evidence) => ({
-                    name: result.value.name,
-                    evidence,
-                })),
+                distinctEvidence(
+                    result.value.matches.map((evidence) => ({
+                        name: result.value.name,
+                        evidence,
+                    })),
+                ),
+            );
+            errors.push(
+                ...result.value.warnings.map(
+                    (warning) =>
+                        `Document search warning in ${result.value.name}: ${warning}`,
+                ),
             );
         } else {
             procedures.push(
-                ...result.value.matches.map((match) => ({
+                result.value.matches.map((match) => ({
                     name: result.value.name,
                     match,
                 })),
             );
         }
     });
-    const lines = distinctEvidence(matches)
-        .slice(0, 8)
-        .map(({ name, evidence }) =>
+    const selectedMatches = interleave(matches, 8);
+    const selectedProcedures = interleave(procedures, 5);
+    const omittedMatches =
+        matches.reduce((total, group) => total + group.length, 0) -
+        selectedMatches.length;
+    const omittedProcedures =
+        procedures.reduce((total, group) => total + group.length, 0) -
+        selectedProcedures.length;
+    if (omittedMatches > 0) {
+        errors.unshift(
+            `Document results truncated: ${omittedMatches} additional evidence matches omitted (limit: 8; corpus order breaks ties).`,
+        );
+    }
+    if (omittedProcedures > 0) {
+        errors.unshift(
+            `Procedure results truncated: ${omittedProcedures} additional matches omitted (limit: 5; corpus order breaks ties).`,
+        );
+    }
+    const lines = selectedMatches.map(({ name, evidence }) =>
+        boundedText(
             [
                 `- **${evidence.title}** (corpus: ${name}; source: ${evidence.sourceId}; revision: ${evidence.revisionId}${evidence.locator === undefined ? "" : `; location: ${evidence.locator}`})`,
                 ...(evidence.canonicalUri === undefined
@@ -219,10 +288,11 @@ async function searchDocuments(
                     : [`  URL: ${evidence.canonicalUri}`]),
                 `  Excerpt: ${evidence.snippet}`,
             ].join("\n"),
-        );
-    const procedureLines = procedures
-        .slice(0, 5)
-        .map(({ name, match }) =>
+            1_000,
+        ),
+    );
+    const procedureLines = selectedProcedures.map(({ name, match }) =>
+        boundedText(
             [
                 `- **Saved procedure: ${match.version.document.title}** (corpus: ${name}; procedure: ${match.procedure.procedureId}; version: ${match.procedure.latestVersion})`,
                 ...(match.version.document.summary === undefined
@@ -231,11 +301,20 @@ async function searchDocuments(
                 ...match.version.document.steps
                     .slice(0, 5)
                     .map((step, index) => `  ${index + 1}. ${step}`),
+                ...(match.version.document.steps.length > 5
+                    ? ["  [Truncated: additional procedure steps omitted.]"]
+                    : []),
                 `  Sources: ${match.version.document.citations.map((citation) => `${citation.sourceId}@${citation.revisionId}`).join(", ") || "manually created"}`,
             ].join("\n"),
-        );
+            800,
+        ),
+    );
     if (searchProcedures === undefined) {
         errors.push("Saved procedure search is unavailable in this host.");
     }
-    return [...lines, ...procedureLines, ...errors].join("\n") || undefined;
+    return (
+        [...lines, ...procedureLines, boundedText(errors.join("\n"), 2_000)]
+            .filter(Boolean)
+            .join("\n") || undefined
+    );
 }

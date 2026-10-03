@@ -2,10 +2,14 @@
 // Licensed under the MIT License.
 
 import { mountMemoryHubImports } from "./memoryHubImports";
+import { TextEncoder } from "node:util";
+import { webcrypto } from "node:crypto";
+import { extractPdfMarkdown } from "@typeagent/browser-control-rpc/pdfMarkdown";
 import {
     checkViewHealth,
     connectViewEvents,
     invokeView,
+    invokeMemory,
     onViewEvent,
 } from "./viewClient";
 import type { ImportResult } from "./importTypes/websiteImport.types";
@@ -15,7 +19,20 @@ jest.mock("./viewClient", () => ({
     checkViewHealth: jest.fn(),
     connectViewEvents: jest.fn(),
     invokeView: jest.fn(),
+    invokeMemory: jest.fn(),
     onViewEvent: jest.fn(),
+}));
+jest.mock("@typeagent/browser-control-rpc/pdfMarkdown", () => ({
+    extractPdfMarkdown: jest.fn(),
+}));
+const mockGetDocument = jest.fn();
+const mockWorkerDestroy = jest.fn();
+const mockDocumentDestroy = jest.fn(async () => {});
+jest.mock("pdfjs-dist", () => ({
+    version: "5.3.31",
+    GlobalWorkerOptions: {},
+    PDFWorker: jest.fn(() => ({ destroy: mockWorkerDestroy })),
+    getDocument: (...args: unknown[]) => mockGetDocument(...args),
 }));
 
 const health = jest.mocked(checkViewHealth);
@@ -77,6 +94,8 @@ function pendingResult(): (value: ImportResult) => void {
 
 beforeEach(() => {
     jest.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
     document.body.innerHTML = "";
     host = document.createElement("div");
     document.body.append(host);
@@ -107,6 +126,98 @@ beforeEach(() => {
 afterEach(() => {
     mounted.dispose();
     consoleError.mockRestore();
+});
+
+test("Memory Hub extracts a selected local PDF and submits only ordinary Markdown through its gateway", async () => {
+    Object.defineProperty(globalThis, "TextEncoder", {
+        value: TextEncoder,
+        configurable: true,
+    });
+    Object.defineProperty(globalThis, "crypto", {
+        value: webcrypto,
+        configurable: true,
+    });
+    const memory = jest.mocked(invokeMemory);
+    memory.mockImplementation(async (method) => {
+        if (method === "memoryListCorpora")
+            return [{ corpusId: "selected", name: "Documents" }] as never;
+        if (method === "memoryImportDocument")
+            return {
+                jobId: "local-job",
+                sourceId: "local-source",
+                revisionId: "local-revision",
+                state: "accepted",
+            } as never;
+        throw new Error(`Unexpected memory method ${method}`);
+    });
+    mockGetDocument.mockReturnValue({
+        promise: Promise.resolve({ numPages: 1 }),
+        destroy: mockDocumentDestroy,
+    });
+    jest.mocked(extractPdfMarkdown).mockResolvedValue({
+        markdown: "# Manual\n\nLocal text",
+        pageCount: 1,
+        emptyPages: [],
+    } as Awaited<ReturnType<typeof extractPdfMarkdown>>);
+    mounted.dispose();
+    mounted = mountMemoryHubImports(host, {
+        targetLabel: "Browser",
+        scope: () => "selected",
+        onError,
+        onComplete,
+    });
+    await mounted.openPdfImport();
+    const dialog = host.querySelector<HTMLDialogElement>("dialog:last-child")!;
+    const file = new File(["private original PDF bytes"], "manual.pdf", {
+        type: "application/pdf",
+    });
+    Object.defineProperty(file, "arrayBuffer", {
+        value: async () =>
+            new TextEncoder().encode("private original PDF bytes").buffer,
+    });
+    Object.defineProperty(dialog.querySelector('[name="file"]'), "files", {
+        value: [file],
+    });
+    dialog
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await settle();
+    expect(memory).toHaveBeenCalledWith("memoryImportDocument", {
+        corpusId: "selected",
+        title: "manual",
+        markdown: "# Manual\n\nLocal text",
+        canonicalUri: expect.stringMatching(/^urn:pdf:sha256:[a-f0-9]{64}$/),
+    });
+    expect(JSON.stringify(memory.mock.calls)).not.toContain(
+        "private original PDF bytes",
+    );
+    expect(invoke).not.toHaveBeenCalled();
+    expect(mockWorkerDestroy).toHaveBeenCalledTimes(1);
+    expect(mockDocumentDestroy).toHaveBeenCalledTimes(1);
+    expect(mockGetDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+            standardFontDataUrl:
+                "http://localhost/pdf/vendor/pdfjs/standard_fonts/",
+        }),
+    );
+});
+
+test("PDF import requires a selected named corpus before contacting the gateway", async () => {
+    mounted.dispose();
+    mounted = mountMemoryHubImports(host, {
+        targetLabel: "Browser",
+        scope: () => undefined,
+        onError,
+        onComplete,
+    });
+    await mounted.openPdfImport();
+    expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+            message: "Select a named corpus before importing a PDF.",
+        }),
+    );
+    expect(invokeMemory).not.toHaveBeenCalled();
 });
 
 test("shows the fixed target, warning and unavailable cancellation without a cancel control", () => {

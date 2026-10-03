@@ -238,6 +238,7 @@ function mountPhaseTwo(): void {
     });
     importsPanel = mountMemoryHubImports(el("hubImportHost"), {
         targetLabel: "TypeAgent Browser Memory (fixed)",
+        scope: selectedScope,
         onError,
         onOpenJobs: () => {
             void hubAction(async () => {
@@ -281,6 +282,7 @@ function mountPhaseTwo(): void {
     for (const [id, launch] of [
         ["addBrowser", () => importsPanel.openBrowserImport()],
         ["addFolder", () => importsPanel.openFolderImport()],
+        ["addPdf", () => void importsPanel.openPdfImport()],
     ] as const) {
         el(id).addEventListener("click", () => {
             if (!discardChanges()) return;
