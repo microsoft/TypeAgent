@@ -31,12 +31,6 @@ function text<K extends keyof HTMLElementTagNameMap>(
     if (className) value.className = className;
     return value;
 }
-function button(label: string, action: () => void) {
-    const value = text("button", label);
-    value.type = "button";
-    value.addEventListener("click", action);
-    return value;
-}
 export function mountMemoryHubExplore(
     host: HTMLElement,
     options: MemoryHubExploreOptions,
