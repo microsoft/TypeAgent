@@ -14,35 +14,35 @@
       "upstreamPath": "web/assets/engine.js",
       "localPath": "engine.js",
       "originalSha256": "7c2b334913bd04e8c2544f907b974c43a1032a9452499ce1724bab1f7479ff1e",
-      "vendoredSha256": "9a5e716adc102a0999d2786bffb625251c445c0853ce937a81274dfa0638faa4",
+      "vendoredSha256": "172e819a5f0f8d187df3cae3b147a8e93fe885bf6852c833214f09b4044f6139",
       "patch": "patches/engine.js.patch"
     },
     {
       "upstreamPath": "web/assets/columns.js",
       "localPath": "columns.js",
       "originalSha256": "306e4edf04fdc82d0fc2bb4ca5500a2e14101d35e92362b3a8cd4b86ae8ee3d4",
-      "vendoredSha256": "77cf71b750e63949819ab443359af938b46ac56fe8d789470c67ad9deb93caf7",
+      "vendoredSha256": "006cc0c5dc33d7be0b8b5eebff68c8ad9d25896b57f408a291b62cbc0c961f23",
       "patch": "patches/columns.js.patch"
     },
     {
       "upstreamPath": "web/assets/symbols.js",
       "localPath": "symbols.js",
       "originalSha256": "916cce32f3a427e9649d3ae78076115c13d1eaec1fd8bdcf9e7eac728ed5e430",
-      "vendoredSha256": "9421d8a72f76ef2b69ef43d88b270645db0fc2d02f2d28cfa85e58186e62f665",
+      "vendoredSha256": "9a1471aa46783187482a83f519501df990f5c1142b94188cc26051a9818f0330",
       "patch": "patches/symbols.js.patch"
     },
     {
       "upstreamPath": "web/assets/texfonts.js",
       "localPath": "texfonts.js",
       "originalSha256": "d5fdacc5d2114db0dbb9a545272c11f52e0c7dd7dfbdfcc6fc0f8b94e882e851",
-      "vendoredSha256": "ad70c1e65b4bf76bad0bbd796678b6631de1436cffb1059f8a373764a77b5710",
+      "vendoredSha256": "f4bcd637d64b95c7954e8d03c47de013c8788f10a1630d50ac3a6f1e889a14a0",
       "patch": "patches/texfonts.js.patch"
     },
     {
       "upstreamPath": "web/assets/mathtext.js",
       "localPath": "mathtext.js",
       "originalSha256": "523faff05ff29340b542f9b4ca7001375c14b71c33d75cdd9ef6ff3c975d9451",
-      "vendoredSha256": "7d3070d274bce8ae7061c6a7e0493b963b357a608ebb57620524f8fb7bcb0b44",
+      "vendoredSha256": "ab8733b08ada79f4f9f459d4ee88f2a563d4a880dfb09ef50a41ddd7ce0eebbf",
       "patch": "patches/mathtext.js.patch"
     },
     {

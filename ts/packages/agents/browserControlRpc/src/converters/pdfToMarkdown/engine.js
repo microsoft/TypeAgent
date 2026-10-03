@@ -1,3 +1,8 @@
+// Copyright (c) 2026 Beatriz Almeida.
+// Licensed under the MIT License; see LICENSE.
+// Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/engine.js
+// TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
+// Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -176,6 +181,7 @@ const plainMath = (text) => text.replaceAll(FRACTION_SLASH, "/")
   .replace(new RegExp(`${FRACTION_END}(?=[\\p{L}\\d])`, "gu"), " ").replaceAll(FRACTION_END, "");
 const GROUPING = new Set([..."+-−–±·×÷=<>,;"]);
 const mathGroup = (group) => group.length > 1 && group.slice(1).some((c) => GROUPING.has(c.c) || c.space);
+// code-complexity-allow: pinned Papero math typesetting algorithm
 function typesetMath(chars, g) {
   const seen = new Set();
   const rules = [];
@@ -274,7 +280,7 @@ const bare = (group) => (group.startsWith("(") && group.endsWith(")") ? group.sl
 function mathLatex(text) {
   return text
     .replace(/\\sqrt\s*(\([^()]*\)|\d+|[\p{L}\d])/gu, (_, a) => `\\sqrt{${bare(a)}}`)
-    .replace(/(\([^()]*\)|[^\s()⁄⁤]+)⁄(\([^()]*\)|[^\s()⁄⁤]+)⁤?/g, (_, a, b) => `\\frac{${bare(a)}}{${bare(b)}}`);
+    .replace(/(\([^()]*\)|[^\s()⁄\u2064]+)⁄(\([^()]*\)|[^\s()⁄\u2064]+)\u2064?/g, (_, a, b) => `\\frac{${bare(a)}}{${bare(b)}}`);
 }
 // "x²+ y²= 4": an operator spaced on one side only gets its other space.
 const operatorGaps = (t) => t
@@ -359,6 +365,7 @@ function dropCaps(chars) {
   return out;
 }
 
+// code-complexity-allow: pinned Papero span construction algorithm
 function buildSpans(chars, fonts, guttersOut = []) {
   chars = dropCaps(chars);
   const raw = [];
@@ -494,6 +501,7 @@ function orderLine(fragments) {
   return keyed.map(([, c]) => c);
 }
 
+// code-complexity-allow: pinned Papero fragment merging algorithm
 function mergeFragments(lines) {
   if (lines.length < 2) return lines.map((ln) => orderLine([ln]));
   const boxes = lines.map((ln) => [
@@ -1362,6 +1370,7 @@ function linesToBlocks(lines) {
     group = [];
     kind = "paragraph";
   };
+  // code-complexity-allow: pinned Papero block assembly algorithm
   lines.forEach((ln, idx) => {
     const text = ln.text;
     if (!text.trim()) return;
@@ -1407,6 +1416,7 @@ function linesToBlocks(lines) {
   return blocks;
 }
 // Alignment, indents and line spacing of each text block against the page's text area.
+// code-complexity-allow: pinned Papero layout formatting algorithm
 function layoutFormat(page) {
   const text = page.blocks.filter((b) => b.line_boxes && !FURNITURE.has(b.type));
   if (!text.length) return;
@@ -1473,6 +1483,7 @@ async function fontInfo(page, fontName, style) {
 // text on white paper can be told apart from what the reader sees. Mirrors read_chars() in
 // layout.py, which gets the same from PDFium.
 // `tex`: the PDF was written by TeX, so raw codes of its math fonts can be decoded.
+// code-complexity-allow: pinned Papero PDF glyph state machine
 function readGlyphs(page, viewport, ops, tex = false) {
   const O = pdfjsLib.OPS;
   const fonts = [];
@@ -1510,6 +1521,7 @@ function readGlyphs(page, viewport, ops, tex = false) {
     tm = tlm.slice();
     if (ty) newline = true;
   };
+  // code-complexity-allow: pinned Papero PDF glyph decoding algorithm
   const show = (items) => {
     const fi = font();
     const f = fonts[fi].obj;
@@ -1665,6 +1677,7 @@ async function readChars(page, viewport, textContent) {
   return { chars, rotated, fonts };
 }
 
+// code-complexity-allow: pinned Papero PDF graphics state machine
 async function readGraphics(page, viewport, width, height, ops) {
   const g = { hrules: [], vrules: [], ink: [], images: [], fills: [] };
   ops = ops || (await page.getOperatorList());
@@ -1776,6 +1789,7 @@ async function readGraphics(page, viewport, width, height, ops) {
 }
 
 // ---------------------------------------------------------------- page & document
+// code-complexity-allow: pinned Papero page analysis pipeline
 async function analyzePage(pdf, number, opts) {
   opts._checkCancelled();
   const page = await pdf.getPage(number);
@@ -1890,6 +1904,7 @@ function groupRotated(chars) {
 
 const FURNITURE = new Set(["header", "footer", "page_number"]);
 
+// code-complexity-allow: pinned Papero page furniture classifier
 function markFurniture(pages) {
   const key = (b) => b.type === "figure"
     ? `fig:${b.bbox.map((v, i) => Math.round((i < 2 ? v : v - b.bbox[i - 2]) / 6)).join(",")}`
@@ -1944,6 +1959,7 @@ function normalizeSizes(pages, body) {
   for (const p of pages) for (const b of p.blocks) if (b.pt && b.font_size) b.font_size = (b.pt / bodyPt) * body;
 }
 
+// code-complexity-allow: pinned Papero heading classification algorithm
 function classifyHeadings(pages, body) {
   const candidates = [];
   // Between the title and the abstract of the first page: authors and affiliations, often
@@ -1967,6 +1983,7 @@ function classifyHeadings(pages, body) {
   const titles = new Set();
   const tableTitle = (prev) => !!prev && (titles.has(prev) || /^(table|tabela|quadro)\s+[ivxlc\d]+\.?$/i.test((prev.text || "").trim()));
   for (const p of pages) {
+    // code-complexity-allow: pinned Papero heading block classifier
     p.blocks.forEach((b, i) => {
       // A one-line "list item" set bold or bigger than the body is a numbered section heading.
       const neighbours = [p.blocks[i - 1], p.blocks[i + 1]].filter(Boolean).map((x) => x.type);
