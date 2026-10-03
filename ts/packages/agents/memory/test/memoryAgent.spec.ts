@@ -15,6 +15,7 @@ import type {
     DocumentIngestRequest,
     MemoryEvidence,
     MemoryService,
+    RunbookJobResult,
 } from "@typeagent/memory-service";
 import {
     createStableSourceId,
@@ -720,6 +721,177 @@ test("commands retain corpus and answer evidence", async () => {
     expect(displayText(answer)).toContain("source-1");
     expect(displayText(answer)).toContain("revision-1");
     expect(displayText(explanation)).toContain('"sourceId": "source-1"');
+});
+
+test("changes command uses canonical paging and rejects unsupported services", async () => {
+    const service = createFakeService();
+    const agent = instantiate();
+    const state = (await agent.initializeAgentContext?.({
+        options: service,
+    })) as MemoryAgentContext;
+    const context = actionContext(state);
+    await agent.executeCommand?.(
+        ["corpus", "use"],
+        commandParams({ corpusId: "corpus-1" }),
+        context,
+    );
+    await expect(
+        agent.executeCommand?.(["changes"], commandParams(), context),
+    ).rejects.toThrow("not supported");
+    const listChanges = jest.fn(async () => ({ items: [], total: 0 }));
+    service.listChanges = listChanges;
+    await agent.executeCommand?.(
+        ["changes"],
+        commandParams({}, { pageSize: 2, continuationToken: "opaque-token" }),
+        context,
+    );
+    expect(listChanges).toHaveBeenCalledWith({
+        corpusId: "corpus-1",
+        pageSize: 2,
+        continuationToken: "opaque-token",
+    });
+});
+
+test("runbook commands inspect exact versions and require explicit version-specific safety review", async () => {
+    const service = createFakeService();
+    const agent = instantiate();
+    const state = (await agent.initializeAgentContext?.({
+        options: service,
+    })) as MemoryAgentContext;
+    const context = actionContext(state);
+    state.activeCorpusId = "corpus-1";
+    await expect(
+        agent.executeCommand?.(["runbooks", "list"], undefined, context),
+    ).rejects.toThrow("not supported");
+    const document = { title: "Guide", steps: ["Inspect"], citations: [] };
+    const getProcedure = jest.fn(async () => ({
+        corpusId: "corpus-1",
+        procedureId: "guide",
+        version: 4,
+        state: "saved" as const,
+        document,
+        canonicalJson: "{}",
+        markdown: "# Guide",
+        createdAt: "2026-10-02T00:00:00.000Z",
+        jsonHash: "json",
+        markdownHash: "markdown",
+    }));
+    const saveProcedure = jest.fn(async () => getProcedure());
+    Object.assign(service, {
+        getProcedure,
+        saveProcedure,
+        listProcedures: async () => [],
+    });
+    await agent.executeCommand?.(
+        ["runbooks", "show"],
+        commandParams({ procedureId: "guide" }, { version: 2 }),
+        context,
+    );
+    expect(getProcedure).toHaveBeenCalledWith("corpus-1", "guide", 2);
+    await expect(
+        agent.executeCommand?.(
+            ["runbooks", "review"],
+            commandParams({ procedureId: "guide" }),
+            context,
+        ),
+    ).rejects.toThrow("safetyConfirmed");
+    expect(saveProcedure).not.toHaveBeenCalled();
+    await agent.executeCommand?.(
+        ["runbooks", "review"],
+        commandParams(
+            { procedureId: "guide" },
+            { safetyConfirmed: true, expectedVersion: 4 },
+        ),
+        context,
+    );
+    expect(saveProcedure).toHaveBeenCalledWith({
+        corpusId: "corpus-1",
+        procedureId: "guide",
+        expectedVersion: 4,
+        document,
+        reviewAgentEdition: true,
+        safetyConfirmed: true,
+    });
+});
+
+test.each(["running", "complete", "failed"] as const)(
+    "runbook synthesis forwards exact evidence to core and displays durable %s results",
+    async (jobState) => {
+        const service = createFakeService();
+        const agent = instantiate();
+        const state = (await agent.initializeAgentContext?.({
+            options: service,
+        })) as MemoryAgentContext;
+        const context = actionContext(state);
+        const params = commandParams({
+            sourceId: "source-1",
+            revisionId: "revision-2",
+        });
+        await expect(
+            agent.executeCommand?.(["runbooks", "synthesize"], params, context),
+        ).rejects.toThrow("not supported");
+        const job: RunbookJobResult = {
+            jobId: "runbook-job-1",
+            corpusId: "corpus-1",
+            sourceId: "source-1",
+            revisionId: "revision-2",
+            state: jobState,
+            createdAt: "2026-10-02T00:00:00.000Z",
+            updatedAt: "2026-10-02T00:00:00.000Z",
+            candidateIds: jobState === "complete" ? ["candidate-1"] : [],
+            warnings: jobState === "failed" ? ["Model unavailable"] : [],
+        };
+        const requestRunbookSynthesis = jest.fn(async () => job);
+        service.requestRunbookSynthesis = requestRunbookSynthesis;
+        await expect(
+            agent.executeCommand?.(["runbooks", "synthesize"], params, context),
+        ).rejects.toThrow("corpus");
+        expect(requestRunbookSynthesis).not.toHaveBeenCalled();
+        state.activeCorpusId = "corpus-1";
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const result = await agent.executeCommand?.(
+                ["runbooks", "synthesize"],
+                params,
+                context,
+            );
+            expect(displayText(result)).toContain(job.jobId);
+            expect(displayText(result)).toContain(jobState);
+        }
+        expect(requestRunbookSynthesis).toHaveBeenCalledTimes(2);
+        expect(requestRunbookSynthesis).toHaveBeenLastCalledWith({
+            corpusId: "corpus-1",
+            sourceId: "source-1",
+            revisionId: "revision-2",
+        });
+    },
+);
+
+test("runbook synthesis propagates core rejection without invoking procedure saves", async () => {
+    const service = createFakeService();
+    const saveProcedure = jest.fn();
+    Object.assign(service, { saveProcedure });
+    const requestRunbookSynthesis = jest.fn(async () => {
+        throw new Error("Revision is no longer active");
+    });
+    service.requestRunbookSynthesis = requestRunbookSynthesis;
+    const agent = instantiate();
+    const state = (await agent.initializeAgentContext?.({
+        options: service,
+    })) as MemoryAgentContext;
+    state.activeCorpusId = "corpus-1";
+    await expect(
+        agent.executeCommand?.(
+            ["runbooks", "synthesize"],
+            commandParams({ sourceId: "source-1", revisionId: "old-revision" }),
+            actionContext(state),
+        ),
+    ).rejects.toThrow("Revision is no longer active");
+    expect(saveProcedure).not.toHaveBeenCalled();
+    expect(requestRunbookSynthesis).toHaveBeenCalledWith({
+        corpusId: "corpus-1",
+        sourceId: "source-1",
+        revisionId: "old-revision",
+    });
 });
 
 test("ask --extractive requests extractive answers", async () => {

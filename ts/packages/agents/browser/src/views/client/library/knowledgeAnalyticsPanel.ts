@@ -2,99 +2,108 @@
 // Licensed under the MIT License.
 
 import { AnalyticsServices } from "./knowledgeUtilities";
-import { CachedAnalyticsService } from "./services/cachedAnalyticsService";
-import { CacheStatus, CacheIndicatorType } from "./interfaces/cacheTypes";
+import type {
+    MemoryHubKnowledgeItem,
+    MemoryHubKnowledgeKind,
+} from "@typeagent/browser-control-rpc/viewRpc";
+import { invokeView } from "./viewClient";
+import {
+    mountKnowledgeCollection,
+    KNOWLEDGE_PREVIEW_SIZE,
+} from "./memoryKnowledgeCollection";
+import {
+    WebExploreRoot,
+    renderSources,
+    validateAnalyticsResponse,
+    type WebExploreCallbacks,
+} from "./memoryHubWebExploreRoot";
+
+type RecentKnowledgeItem = {
+    name?: string;
+    topic?: string;
+    type?: string;
+    category?: string;
+    from?: string;
+    to?: string;
+    relationship?: string;
+    fromPage?: string;
+};
 
 export class KnowledgeAnalyticsPanel {
     private container: HTMLElement;
     private services: AnalyticsServices;
-    private cachedService: CachedAnalyticsService;
     private analyticsData: any = null;
     private isConnected: boolean = true;
-    private currentCacheStatus: CacheStatus | null = null;
+    private owner: WebExploreRoot;
+    private collections: ReturnType<typeof mountKnowledgeCollection>[] = [];
 
-    constructor(container: HTMLElement, services: AnalyticsServices) {
+    constructor(
+        container: HTMLElement,
+        services: AnalyticsServices,
+        private callbacks?: WebExploreCallbacks,
+    ) {
         this.container = container;
         this.services = services;
-        // Wrap the original service with caching
-        this.cachedService = new CachedAnalyticsService(services);
+        this.owner = new WebExploreRoot(
+            container,
+            callbacks ?? { onError: (error) => console.error(error) },
+        );
         this.setupEventListeners();
     }
 
     private setupEventListeners(): void {
-        // No UI event listeners needed for cache indicators
-        return;
+        this.owner.listen(this.container, "click", (event) => {
+            const target = (event.target as Element).closest<HTMLElement>(
+                "[data-web-view], [data-analytics-refresh]",
+            );
+            if (target?.hasAttribute("data-analytics-refresh"))
+                void this.owner.run(() => this.refreshData());
+            if (target?.dataset.webView === "entities")
+                this.callbacks?.onNavigate({ view: "entities" });
+            if (target?.dataset.webView === "topics")
+                this.callbacks?.onNavigate({ view: "topics" });
+        });
     }
 
     async initialize(): Promise<void> {
         // Initially hide the empty state while loading
-        const emptyState = document.getElementById("analyticsEmptyState");
+        const emptyState = this.find("analyticsEmptyState");
         if (emptyState) {
+            emptyState.hidden = true;
             emptyState.style.display = "none";
         }
 
-        await this.loadAnalyticsDataWithCache();
+        await this.loadAnalyticsData();
     }
 
-    async loadAnalyticsDataWithCache(): Promise<void> {
+    async loadAnalyticsData(): Promise<void> {
         if (!this.isConnected) {
-            return;
+            throw new Error("TypeAgent Browser Memory is disconnected");
         }
-
+        const ticket = this.owner.begin();
+        this.owner.clearError();
         try {
-            const result = await this.cachedService.loadAnalyticsData();
-
-            // Always render cached data immediately if available (regardless of age)
-            if (result.cachedData) {
-                this.analyticsData = this.transformAnalyticsData(
-                    result.cachedData,
+            const response = await this.services.loadAnalyticsData();
+            if (!this.owner.current(ticket)) return;
+            if (!response.success || !response.analytics?.overview)
+                throw new Error(
+                    response.error ?? "Analytics response is unavailable",
                 );
-                await this.renderContent({
-                    fromCache: true,
-                    isStale: result.isStale,
-                });
-
-                // Log cache status for debugging (no UI indicator)
-                this.currentCacheStatus = this.cachedService.getCacheStatus();
-            }
-
-            // Wait for fresh data in background
-            try {
-                let freshResponse = await result.freshDataPromise;
-
-                if (freshResponse.freshDataPromise !== undefined) {
-                    freshResponse = await freshResponse.freshDataPromise;
-                }
-
-                if (freshResponse && freshResponse.success) {
-                    this.analyticsData = this.transformAnalyticsData(
-                        freshResponse.analytics,
-                    );
-                    await this.renderContent({ fromCache: false });
-                } else {
-                    throw new Error(
-                        freshResponse?.error ||
-                            "Failed to get fresh analytics data",
-                    );
-                }
-            } catch (error) {
-                console.error("Fresh data fetch failed:", error);
-                this.handleFreshDataError(
-                    error,
-                    !!result.cachedData,
-                    result.isStale,
-                );
-            }
+            validateAnalyticsResponse(response.analytics);
+            this.analyticsData = this.transformAnalyticsData(
+                response.analytics,
+            );
+            await this.renderContent();
+            if (!this.owner.current(ticket)) return;
+            this.bindDrilldown();
         } catch (error) {
-            console.error("Failed to initialize analytics cache:", error);
-            this.handleAnalyticsDataError(error);
+            if (this.owner.current(ticket)) throw error;
         }
     }
 
     private transformAnalyticsData(data: any): any {
         return {
             overview: data?.overview || {},
-            trends: data?.activity?.trends || [],
             insights: this.transformKnowledgeInsights(data?.knowledge || {}),
             domains: data?.domains || {},
             knowledge: data?.knowledge || {},
@@ -102,83 +111,51 @@ export class KnowledgeAnalyticsPanel {
         };
     }
 
-    async renderContent(options?: {
-        fromCache?: boolean;
-        isStale?: boolean;
-    }): Promise<void> {
+    async renderContent(): Promise<void> {
         if (!this.analyticsData) return;
 
         const hasData =
             this.analyticsData.overview.totalSites > 0 ||
             this.analyticsData.overview.knowledgeExtracted > 0 ||
-            this.analyticsData.insights.some(
-                (insight: any) => insight.value > 0,
-            );
+            this.analyticsData.knowledge.totalEntities > 0 ||
+            this.analyticsData.knowledge.totalTopics > 0 ||
+            this.analyticsData.knowledge.totalActions > 0 ||
+            this.analyticsData.knowledge.totalRelationships > 0;
 
-        const emptyState = document.getElementById("analyticsEmptyState");
+        const emptyState = this.find("analyticsEmptyState");
         if (emptyState) {
+            emptyState.hidden = hasData;
             emptyState.style.display = hasData ? "none" : "block";
         }
 
-        if (hasData) {
-            this.renderActivityCharts();
-            await this.renderKnowledgeInsights();
-            this.renderTopDomains();
-            this.updateKnowledgeVisualizationData(this.analyticsData.knowledge);
-        }
+        this.renderKnowledgeInsights();
+        this.renderTopDomains();
+        this.updateKnowledgeVisualizationData(this.analyticsData.knowledge);
     }
 
     async refreshData(): Promise<void> {
-        await this.loadAnalyticsDataWithCache();
-    }
-
-    private handleFreshDataError(
-        error: any,
-        hasCachedData: boolean,
-        isStale: boolean,
-    ): void {
-        console.error("Fresh data fetch failed:", error);
-
-        if (hasCachedData) {
-            // Continue showing cached data - log error status for debugging
-            this.currentCacheStatus = this.cachedService.getCacheErrorStatus();
-        } else {
-            // No cached data available, show error state
-            this.handleAnalyticsDataError(error);
-        }
-    }
-
-    private retryRefresh(): void {
-        console.log("Retrying analytics refresh...");
-        this.refreshData().catch(console.error);
+        await this.loadAnalyticsData();
     }
 
     destroy(): void {
-        // Cleanup any event listeners or timers if needed
+        this.clearCollections();
+        this.owner.destroy();
+        this.analyticsData = null;
     }
 
-    private handleAnalyticsDataError(error: any): void {
-        this.analyticsData = {
-            overview: {
-                totalSites: 0,
-                totalBookmarks: 0,
-                totalHistory: 0,
-                knowledgeExtracted: 0,
-            },
-            trends: [],
-            insights: [],
-            domains: { topDomains: [] },
-            knowledge: {},
-            activity: { trends: [], summary: {} },
-        };
+    private find(id: string): HTMLElement | null {
+        return this.container.querySelector(`#${id}`);
+    }
 
-        const emptyState = document.getElementById("analyticsEmptyState");
-        if (emptyState) {
-            emptyState.style.display = "block";
-        }
-
-        // Update metric displays with zeros
-        this.updateMetricDisplaysWithZeros();
+    private bindDrilldown(): void {
+        const overview = this.analyticsData.overview;
+        for (const [id, value] of Object.entries({
+            totalWebsites: overview.totalSites,
+            totalBookmarks: overview.totalBookmarks,
+            totalHistory: overview.totalHistory,
+            topDomains: overview.topDomains ?? "-",
+        }))
+            if (this.find(id)) this.find(id)!.textContent = String(value);
     }
 
     private transformKnowledgeInsights(knowledge: any): any[] {
@@ -218,11 +195,10 @@ export class KnowledgeAnalyticsPanel {
 
     private updateKnowledgeVisualizationData(knowledge: any): void {
         // Update AI Insights section with real data
-        const knowledgeExtractedElement =
-            document.getElementById("knowledgeExtracted");
-        const totalEntitiesElement = document.getElementById("totalEntities");
-        const totalTopicsElement = document.getElementById("totalTopics");
-        const totalActionsElement = document.getElementById("totalActions");
+        const knowledgeExtractedElement = this.find("knowledgeExtracted");
+        const totalEntitiesElement = this.find("totalEntities");
+        const totalTopicsElement = this.find("totalTopics");
+        const totalActionsElement = this.find("totalActions");
 
         if (knowledgeExtractedElement) {
             knowledgeExtractedElement.textContent = (
@@ -249,38 +225,49 @@ export class KnowledgeAnalyticsPanel {
         this.updateKnowledgeVisualizationCards(knowledge);
 
         // Update recent items displays with real data
-        this.updateRecentEntitiesDisplay(
+        this.clearCollections();
+        this.renderRecentCollection(
+            "recentEntitiesList",
+            "Entities",
+            "entities",
             knowledge.recentEntities || knowledge.recentItems?.entities || [],
+            knowledge.totalEntities,
         );
-        this.updateRecentTopicsDisplay(
+        this.renderRecentCollection(
+            "recentTopicsList",
+            "Topics",
+            "topics",
             knowledge.recentTopics || knowledge.recentItems?.topics || [],
+            knowledge.totalTopics,
         );
-        // Use recentRelationships instead of transforming recentActions
-        this.updateRecentActionsDisplay(knowledge.recentRelationships || []);
+        this.renderRecentCollection(
+            "recentActionsList",
+            "Relationships",
+            "relationships",
+            knowledge.recentRelationships || [],
+            knowledge.totalRelationships,
+        );
     }
 
     private updateKnowledgeVisualizationCards(knowledge: any): void {
-        const totalEntitiesMetric = document.getElementById(
-            "totalEntitiesMetric",
-        );
+        const totalEntitiesMetric = this.find("totalEntitiesMetric");
         if (totalEntitiesMetric) {
             totalEntitiesMetric.textContent = (
                 knowledge.totalEntities || 0
             ).toString();
         }
 
-        const totalTopicsMetric = document.getElementById("totalTopicsMetric");
+        const totalTopicsMetric = this.find("totalTopicsMetric");
         if (totalTopicsMetric) {
             totalTopicsMetric.textContent = (
                 knowledge.totalTopics || 0
             ).toString();
         }
 
-        const totalActionsMetric =
-            document.getElementById("totalActionsMetric");
+        const totalActionsMetric = this.find("totalActionsMetric");
         if (totalActionsMetric) {
             totalActionsMetric.textContent = (
-                knowledge.totalActions || 0
+                knowledge.totalRelationships || 0
             ).toString();
         }
     }
@@ -297,117 +284,15 @@ export class KnowledgeAnalyticsPanel {
         ];
 
         elements.forEach((elementId) => {
-            const element = document.getElementById(elementId);
+            const element = this.find(elementId);
             if (element) {
                 element.textContent = "0";
             }
         });
     }
 
-    private renderActivityCharts(): void {
-        const container = document.getElementById("activityCharts");
-        if (!container || !this.analyticsData?.activity) return;
-
-        const activityData = this.analyticsData.activity;
-
-        if (!activityData.trends || activityData.trends.length === 0) {
-            container.innerHTML = `
-                <div class="card">
-                    <div class="card-body">
-                        <h6 class="card-title">Activity Trends</h6>
-                        <div class="empty-message">
-                            <i class="bi bi-bar-chart"></i>
-                            <span>No activity data available</span>
-                            <small>Import bookmarks or browse websites to see trends</small>
-                        </div>
-                    </div>
-                </div>
-            `;
-            return;
-        }
-
-        const trends = activityData.trends;
-        const maxActivity = Math.max(
-            ...trends.map((t: any) => t.visits + t.bookmarks),
-        );
-        const recentTrends = trends.slice(-14);
-
-        const chartBars = recentTrends
-            .map((trend: any) => {
-                const totalActivity = trend.visits + trend.bookmarks;
-                const date = new Date(trend.date).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                });
-
-                const visitsHeight =
-                    maxActivity > 0 ? (trend.visits / maxActivity) * 100 : 0;
-                const bookmarksHeight =
-                    maxActivity > 0 ? (trend.bookmarks / maxActivity) * 100 : 0;
-
-                return `
-                    <div class="chart-bar" title="${date}: ${totalActivity} activities">
-                        <div class="bar-segment visits" style="height: ${visitsHeight}%" title="Visits: ${trend.visits}"></div>
-                        <div class="bar-segment bookmarks" style="height: ${bookmarksHeight}%" title="Bookmarks: ${trend.bookmarks}"></div>
-                        <div class="bar-label">${date}</div>
-                    </div>
-                `;
-            })
-            .join("");
-
-        const summary = activityData.summary || {};
-
-        container.innerHTML = `
-            <div class="card">
-                <div class="card-body">
-                    <h6 class="card-title">Activity Trends</h6>
-                    
-                    <div class="activity-summary mb-3">
-                        <div class="summary-stat">
-                            <span class="stat-label">Total Activity</span>
-                            <span class="stat-value">${summary.totalActivity || 0}</span>
-                        </div>
-                        <div class="summary-stat">
-                            <span class="stat-label">Daily Average</span>
-                            <span class="stat-value">${Math.round(summary.averagePerDay || 0)}</span>
-                        </div>
-                        <div class="summary-stat">
-                            <span class="stat-label">Peak Day</span>
-                            <span class="stat-value">${
-                                summary.peakDay
-                                    ? new Date(
-                                          summary.peakDay,
-                                      ).toLocaleDateString("en-US", {
-                                          month: "short",
-                                          day: "numeric",
-                                      })
-                                    : "N/A"
-                            }</span>
-                        </div>
-                    </div>
-                    
-                    <div class="activity-chart">
-                        <div class="chart-container">
-                            ${chartBars}
-                        </div>
-                        <div class="chart-legend">
-                            <div class="legend-item">
-                                <div class="legend-color visits"></div>
-                                <span>Visits</span>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-color bookmarks"></div>
-                                <span>Bookmarks</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    private async renderKnowledgeInsights(): Promise<void> {
-        const container = document.getElementById("knowledgeInsights");
+    private renderKnowledgeInsights(): void {
+        const container = this.find("knowledgeInsights");
         if (!container || !this.analyticsData?.knowledge) return;
 
         const knowledgeStats = this.analyticsData.knowledge;
@@ -504,7 +389,7 @@ export class KnowledgeAnalyticsPanel {
     }
 
     private renderTopDomains(): void {
-        const container = document.getElementById("topDomainsList");
+        const container = this.find("topDomainsList");
         if (!container || !this.analyticsData?.domains) return;
 
         const domainsData = this.analyticsData.domains;
@@ -526,7 +411,7 @@ export class KnowledgeAnalyticsPanel {
                         <div class="domain-info">
                             <i class="bi bi-globe domain-favicon" aria-hidden="true"></i>
                             <div class="domain-details">
-                                <div class="domain-name">${domain.domain}</div>
+                                <div class="domain-name">${this.escapeHtml(domain.domain)}</div>
                                 <div class="domain-stats">
                                     <span class="site-count">${domain.count} sites</span>
                                     <span class="percentage">${domain.percentage}%</span>
@@ -548,131 +433,126 @@ export class KnowledgeAnalyticsPanel {
         this.isConnected = isConnected;
     }
 
-    private updateRecentEntitiesDisplay(recentEntities: any[]): void {
-        const container = document.getElementById("recentEntitiesList");
-        if (!container) return;
-
-        if (!recentEntities || recentEntities.length === 0) {
-            container.innerHTML = `
-                <div class="empty-message">
-                    <i class="bi bi-tags"></i>
-                    <span>No recent entities extracted</span>
-                </div>
-            `;
-            return;
-        }
-
-        const entitiesHtml = recentEntities
-            .slice(0, 10)
-            .map(
-                (entity) => `
-            <div class="entity-pill clickable" data-entity-name="${this.escapeHtml(entity.name || "Unknown Entity")}" title="Click to view in Entity Graph">
-                <div class="pill-icon">
-                    <i class="bi bi-tags"></i>
-                </div>
-                <div class="pill-content">
-                    <div class="pill-name">${this.escapeHtml(entity.name || "Unknown Entity")}</div>
-                    <div class="pill-type">${this.escapeHtml(entity.type || "Unknown")}</div>
-                </div>
-            </div>
-        `,
-            )
-            .join("");
-
-        container.innerHTML = entitiesHtml;
-
-        // Add click handlers for entity navigation
-        container.querySelectorAll(".entity-pill.clickable").forEach((pill) => {
-            pill.addEventListener("click", (e) => {
-                const entityName = (
-                    e.currentTarget as HTMLElement
-                ).getAttribute("data-entity-name");
-                if (entityName) {
-                    // Navigate to entity graph view with the selected entity
-                    window.location.href = `entityGraphView.html?entity=${encodeURIComponent(entityName)}`;
-                }
-            });
-        });
+    private clearCollections(): void {
+        this.collections.forEach((collection) => collection.dispose());
+        this.collections = [];
     }
 
-    private updateRecentTopicsDisplay(recentTopics: any[]): void {
-        const container = document.getElementById("recentTopicsList");
+    private renderRecentCollection(
+        id: string,
+        title: string,
+        kind: MemoryHubKnowledgeKind,
+        recent: readonly RecentKnowledgeItem[],
+        total: number,
+    ): void {
+        const container = this.find(id);
         if (!container) return;
-
-        if (!recentTopics || recentTopics.length === 0) {
-            container.innerHTML = `
-                <div class="empty-message">
-                    <i class="bi bi-bookmark"></i>
-                    <span>No recent topics identified</span>
-                </div>
-            `;
-            return;
-        }
-
-        const topicsHtml = recentTopics
-            .slice(0, 10)
-            .map(
-                (topic) => `
-            <div class="topic-pill clickable" data-topic-name="${this.escapeHtml(topic.name || topic.topic || "Unknown Topic")}" title="Click to view in Topic Graph">
-                <div class="pill-icon">
-                    <i class="bi bi-bookmark"></i>
-                </div>
-                <div class="pill-content">
-                    <div class="pill-name">${this.escapeHtml(topic.name || topic.topic || "Unknown Topic")}</div>
-                    ${topic.category ? `<div class="pill-type">${this.escapeHtml(topic.category)}</div>` : ""}
-                </div>
-            </div>
-        `,
-            )
-            .join("");
-
-        container.innerHTML = topicsHtml;
-
-        // Add click handlers for topic navigation
-        container.querySelectorAll(".topic-pill.clickable").forEach((pill) => {
-            pill.addEventListener("click", (e) => {
-                const topicName = (e.currentTarget as HTMLElement).getAttribute(
-                    "data-topic-name",
-                );
-                if (topicName) {
-                    // Navigate to topic graph view for hierarchical topic exploration
-                    window.location.href = `topicGraphView.html?topic=${encodeURIComponent(topicName)}`;
-                }
-            });
-        });
-    }
-
-    private updateRecentActionsDisplay(recentRelationships: any[]): void {
-        const container = document.getElementById("recentActionsList");
-        if (!container) return;
-
-        if (!recentRelationships || recentRelationships.length === 0) {
-            container.innerHTML = `
-                <div class="empty-message">
-                    <i class="bi bi-diagram-3"></i>
-                    <span>No recent entity actions identified</span>
-                </div>
-            `;
-            return;
-        }
-
-        // Use the relationship data directly (no transformation needed)
-        const relationshipsHtml = recentRelationships
-            .slice(0, 10)
-            .map(
-                (rel) => `
-                <div class="relationship-item rounded">
-                    <span class="fw-semibold">${this.escapeHtml(rel.from)}</span>
-                    <i class="bi bi-arrow-right mx-2 text-muted"></i>
-                    <span class="text-muted">${this.escapeHtml(rel.relationship)}</span>
-                    <i class="bi bi-arrow-right mx-2 text-muted"></i>
-                    <span class="fw-semibold">${this.escapeHtml(rel.to)}</span>
-                </div>
-            `,
-            )
-            .join("");
-
-        container.innerHTML = relationshipsHtml;
+        container.replaceChildren();
+        const preview = recent.slice(0, KNOWLEDGE_PREVIEW_SIZE);
+        const items: MemoryHubKnowledgeItem[] = preview.map((item, index) => ({
+            id: `${kind}:${index}`,
+            title:
+                kind === "relationships"
+                    ? `${item.from ?? "Unknown entity"} → ${item.relationship ?? "related"} → ${item.to ?? "Unknown entity"}`
+                    : (item.name ?? item.topic ?? "Unnamed knowledge"),
+            subtitle: item.type ?? item.category,
+            sources: [],
+        }));
+        this.collections.push(
+            mountKnowledgeCollection(container, {
+                title,
+                items,
+                total,
+                itemClass:
+                    kind === "entities"
+                        ? "entity-pill"
+                        : kind === "topics"
+                          ? "topic-pill"
+                          : undefined,
+                onError: (error) => this.owner.error(error),
+                loadPage: (request) => {
+                    this.owner.clearError();
+                    return invokeView("memoryHubKnowledge", {
+                        ...request,
+                        kind,
+                        browserOnly: true,
+                    });
+                },
+                onSelect:
+                    kind === "entities" || kind === "topics"
+                        ? (item) =>
+                              this.callbacks?.onNavigate({
+                                  view: kind,
+                                  ...(kind === "entities"
+                                      ? { entity: item.title }
+                                      : { topic: item.title }),
+                              })
+                        : undefined,
+                renderSources: (card, item, signal) => {
+                    const fromPage =
+                        preview[
+                            items.findIndex((value) => value.id === item.id)
+                        ]?.fromPage;
+                    if (fromPage) {
+                        const sources = document.createElement("div");
+                        sources.className = "analytics-source";
+                        renderSources(
+                            sources,
+                            [fromPage],
+                            this.callbacks ?? {
+                                onError: (error) => this.owner.error(error),
+                            },
+                            signal,
+                        );
+                        card.append(sources);
+                    }
+                    if (!item.sources.length) return;
+                    const details = document.createElement("details");
+                    const summary = document.createElement("summary");
+                    summary.textContent = "Browse contributing sources";
+                    details.append(summary);
+                    let mounted:
+                        | ReturnType<typeof mountKnowledgeCollection>
+                        | undefined;
+                    details.addEventListener(
+                        "toggle",
+                        () => {
+                            if (!details.open || mounted) return;
+                            mounted = mountKnowledgeCollection(details, {
+                                title: "Contributing sources",
+                                items: item.sources.map((source) => ({
+                                    id: JSON.stringify([
+                                        source.corpusId,
+                                        source.sourceId,
+                                    ]),
+                                    title: source.sourceId,
+                                    subtitle: source.corpusId,
+                                    sources: [source],
+                                })),
+                                onError: (error) => this.owner.error(error),
+                                renderSources: (host, value, sourceSignal) => {
+                                    const source = value.sources[0];
+                                    const link = document.createElement("a");
+                                    link.textContent = "Open source";
+                                    link.href = `#/library/${encodeURIComponent(source.corpusId)}/${encodeURIComponent(source.sourceId)}`;
+                                    link.addEventListener("click", (event) => {
+                                        if (
+                                            sourceSignal.aborted ||
+                                            !host.isConnected
+                                        )
+                                            event.preventDefault();
+                                    });
+                                    host.append(link);
+                                },
+                            });
+                        },
+                        { signal },
+                    );
+                    card.append(details);
+                    return () => mounted?.dispose();
+                },
+            }),
+        );
     }
 
     private formatRelativeDate(dateString?: string): string {
@@ -699,8 +579,16 @@ export class KnowledgeAnalyticsPanel {
     }
 
     private escapeHtml(text: string): string {
-        const div = document.createElement("div");
-        div.textContent = text;
-        return div.innerHTML;
+        return String(text).replace(
+            /[&<>"']/g,
+            (character) =>
+                ({
+                    "&": "&amp;",
+                    "<": "&lt;",
+                    ">": "&gt;",
+                    '"': "&quot;",
+                    "'": "&#39;",
+                })[character]!,
+        );
     }
 }

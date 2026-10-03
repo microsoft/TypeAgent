@@ -33,6 +33,9 @@ import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
 import { getSpeechToken } from "./speechToken.js";
 import { validateStructuredActionJoin } from "./structuredActionBindings.js";
 import { ProcedureArtifactRpcService } from "./procedureArtifacts.js";
+import { createRunbookHostCapabilities } from "./runbookCapabilities.js";
+import { createRunbookBindingValidator } from "./runbookBindingValidator.js";
+import type { RunbookHostCapabilities } from "@typeagent/agent-server-protocol";
 import registerDebug from "debug";
 
 // Disconnect cleanup is best effort, so a failure cannot be surfaced to anyone:
@@ -117,6 +120,7 @@ export type ConnectionHandlerDeps = {
     skillCatalog: LiveSkillCatalog;
     skillAcquirer?: SkillAcquirer;
     procedureService?: Pick<PersonalHowToService, "getProcedure">;
+    runbookCapabilities?: RunbookHostCapabilities;
     /**
      * Invoked when the dispatcher (or an RPC client) requests a server
      * shutdown. For the standalone agent-server this kills the process; for an
@@ -262,6 +266,8 @@ export function createAgentServerConnectionHandler(
         onConnect,
         onDisconnect,
     } = deps;
+    const runbooks =
+        deps.runbookCapabilities ?? createRunbookHostCapabilities(deps);
     const procedureArtifacts =
         deps.procedureService === undefined
             ? undefined
@@ -269,6 +275,7 @@ export function createAgentServerConnectionHandler(
                   deps.procedureService,
                   skillCatalog,
                   macroManager,
+                  createRunbookBindingValidator(runbooks),
               );
     const requireProcedureArtifacts = () => {
         if (procedureArtifacts === undefined) {
@@ -365,6 +372,14 @@ export function createAgentServerConnectionHandler(
         const invokeFunctions: AgentServerInvokeFunctions = {
             getMacroLearningPreference: (cwd) =>
                 macroManager.getMacroLearningPreference(cwd),
+            getSkillLifecycle: (request) => runbooks.getSkillLifecycle(request),
+            changeSkillLifecycle: (request) =>
+                runbooks.changeSkillLifecycle(request),
+            listBindingTargets: (request) =>
+                runbooks.listBindingTargets(request),
+            checkBindingTargets: (request) =>
+                runbooks.checkBindingTargets(request),
+            suggestBindings: (request) => runbooks.suggestBindings(request),
             setMacroLearningPreference: (request) =>
                 macroManager.setMacroLearningPreference(request),
             prepareMacroLearning: (request) =>

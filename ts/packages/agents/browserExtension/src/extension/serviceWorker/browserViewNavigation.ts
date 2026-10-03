@@ -6,6 +6,8 @@ import {
     browserViews,
     parseBrowserViewUrl,
     type BrowserViewName,
+    getBrowserViewDestination,
+    isRetiredBrowserView,
 } from "@typeagent/browser-control-rpc/viewRoutes";
 
 export type ViewHostLookup = () => Promise<string>;
@@ -48,11 +50,19 @@ export async function openBrowserView(
     lookup: ViewHostLookup,
 ): Promise<void> {
     const url = getBrowserViewUrl(await lookup(), name);
-    const pageUrl = new URL(`/library/${browserViews[name].page}`, url).href;
-    const tabs = await chrome.tabs.query({ url: [url, pageUrl] });
+    const destination = getBrowserViewDestination(name);
+    const canonical = new URL(url);
+    canonical.search = "";
+    canonical.hash = "";
+    const pageUrl = new URL(`/library/${browserViews[destination].page}`, url)
+        .href;
+    const tabs = await chrome.tabs.query({ url: [canonical.href, pageUrl] });
     const existing = tabs[0];
     if (existing?.id !== undefined) {
-        await chrome.tabs.update(existing.id, { active: true });
+        await chrome.tabs.update(existing.id, {
+            active: true,
+            ...(isRetiredBrowserView(name) ? { url } : {}),
+        });
         await chrome.windows.update(existing.windowId, { focused: true });
     } else {
         await chrome.tabs.create({ url, active: true });

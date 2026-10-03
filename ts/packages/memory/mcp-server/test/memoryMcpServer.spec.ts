@@ -6,13 +6,16 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import {
     McpMemoryServiceClient,
+    InProcessMemoryServiceClient,
     memoryToolNames,
+    changeReceiptSchema,
 } from "@typeagent/memory-client";
 import type {
     DocumentIngestRequest,
     DocumentIngestResult,
     IngestionJobStatus,
     MemoryCorpus,
+    MemoryChangeReceipt,
     MemoryEvent,
     MemoryEventAppendRequest,
     MemoryAnswerRequest,
@@ -33,7 +36,16 @@ import type {
     ProcedureSearchRequest,
     ProcedureVersion,
     SourceReplaceRequest,
+    MemoryBatchImport,
+    MemoryBatchImportRequest,
+    MemoryBatchImportLookup,
+    RunbookJobResult,
+    RunbookSynthesisRequest,
+    RevisionAssetDescriptor,
+    RevisionAssetReadRequest,
+    RevisionAssetRequest,
 } from "@typeagent/memory-service";
+import { createMemoryServiceRpcFacade } from "@typeagent/memory-service";
 import { MemoryMcpServer } from "../src/memoryMcpServer.js";
 import { MemoryServiceHost } from "../src/memoryServiceHost.js";
 
@@ -188,6 +200,23 @@ class FakeMemoryService implements MemoryService, PersonalHowToService {
 
     public async clearCorpus(): Promise<number> {
         return 1;
+    }
+
+    public async listChanges() {
+        return {
+            items: [
+                {
+                    changeId: "00000000-0000-4000-8000-000000000001",
+                    corpusId: this.corpus.corpusId,
+                    operation: "suppress",
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    outcome: "committed",
+                    sourceId: "a".repeat(64),
+                    counts: { sources: 1, revisions: 0, knowledge: 1 },
+                } satisfies MemoryChangeReceipt,
+            ],
+            total: 1,
+        };
     }
 
     public async listSources(): Promise<MemorySource[]> {
@@ -520,6 +549,342 @@ class WaitingMemoryService extends FakeMemoryService {
     }
 }
 
+describe("host-only memory capability forwarding", () => {
+    test("forwards immutable asset, batch and postcommit job calls through facade and in-process client", async () => {
+        const asset: RevisionAssetDescriptor = {
+            sourceId: "source-1",
+            revisionId: "revision-1",
+            assetId: "asset-1",
+            mimeType: "image/png",
+            name: "Panel",
+            size: 2,
+            hash: "sha256",
+        };
+        const batch: MemoryBatchImport = {
+            batchId: "batch-1",
+            corpusId: "corpus-1",
+            acquisitionFingerprint: "a".repeat(64),
+            state: "partial",
+            createdAt: "2026-10-02T00:00:00.000Z",
+            updatedAt: "2026-10-02T00:00:00.000Z",
+            warnings: ["An orphan image was skipped"],
+            members: [
+                {
+                    memberId: "member-1",
+                    contentIdentity: "identity-1",
+                    clientKey: "opaque-guide",
+                    title: "Guide",
+                    displayName: "guide.md",
+                    stage: "ingestion",
+                    state: "complete",
+                    warnings: ["An unreferenced image was omitted"],
+                },
+                {
+                    memberId: "member-2",
+                    contentIdentity: "identity-2",
+                    clientKey: "opaque-rejected",
+                    displayName: "rejected.md",
+                    stage: "acquisition",
+                    state: "failed",
+                    reason: "Unsupported document type",
+                    warnings: [],
+                },
+            ],
+        };
+        const job: RunbookJobResult = {
+            jobId: "runbook-1",
+            corpusId: "corpus-1",
+            sourceId: "source-1",
+            revisionId: "revision-1",
+            state: "complete",
+            createdAt: "2026-10-02T00:00:00.000Z",
+            updatedAt: "2026-10-02T00:00:00.000Z",
+            candidateIds: ["candidate-1"],
+            warnings: [],
+        };
+        const getRevisionAssets = import.meta.jest.fn(
+            async (_request: RevisionAssetRequest) => [asset],
+        );
+        const readRevisionAsset = import.meta.jest.fn(
+            async (_request: RevisionAssetReadRequest) => ({
+                descriptor: asset,
+                bytes: new Uint8Array([137, 80]),
+            }),
+        );
+        const startBatchImport = import.meta.jest.fn(
+            async (_request: MemoryBatchImportRequest) => batch,
+        );
+        const getBatchImport = import.meta.jest.fn(
+            async (_batchId: string) => batch,
+        );
+        const findBatchImport = import.meta.jest.fn(
+            async (request: MemoryBatchImportLookup) =>
+                request.idempotencyKey === "missing" ? undefined : batch,
+        );
+        const listBatchImports = import.meta.jest.fn(
+            async (_corpusId: string) => [batch],
+        );
+        const retryBatchImport = import.meta.jest.fn(
+            async (_batchId: string) => batch,
+        );
+        const cancelBatchImport = import.meta.jest.fn(
+            async (_batchId: string) => batch,
+        );
+        const listRunbookJobs = import.meta.jest.fn(
+            async (_corpusId: string) => [job],
+        );
+        const getRunbookJob = import.meta.jest.fn(
+            async (_jobId: string) => job,
+        );
+        const requestRunbookSynthesis = import.meta.jest.fn(
+            async (_request: RunbookSynthesisRequest) => job,
+        );
+        const service = Object.assign(new FakeMemoryService(), {
+            getRevisionAssets,
+            readRevisionAsset,
+            startBatchImport,
+            getBatchImport,
+            findBatchImport,
+            listBatchImports,
+            retryBatchImport,
+            cancelBatchImport,
+            listRunbookJobs,
+            getRunbookJob,
+            requestRunbookSynthesis,
+        });
+        const client = new InProcessMemoryServiceClient(
+            createMemoryServiceRpcFacade(service),
+        );
+        const assetRequest = {
+            corpusId: "corpus-1",
+            sourceId: "source-1",
+            revisionId: "revision-1",
+        };
+        const readRequest: RevisionAssetReadRequest = {
+            ...assetRequest,
+            assetId: "asset-1",
+            hash: "sha256",
+            variant: "original",
+        };
+        const batchRequest: MemoryBatchImportRequest = {
+            corpusId: "corpus-1",
+            idempotencyKey: "batch-key",
+            acquisitionFingerprint: "a".repeat(64),
+            documentKeys: ["opaque-guide"],
+            documentWarnings: [["An unreferenced image was omitted"]],
+            warnings: ["An orphan image was skipped"],
+            rejectedMembers: [
+                {
+                    memberKey: "opaque-rejected",
+                    displayName: "rejected.md",
+                    reason: "Unsupported document type",
+                },
+            ],
+            documents: [
+                {
+                    source: {
+                        sourceType: "markdown",
+                        title: "Guide",
+                        markdown: "Steps",
+                    },
+                },
+            ],
+        };
+        await expect(client.getRevisionAssets(assetRequest)).resolves.toEqual([
+            asset,
+        ]);
+        await expect(client.readRevisionAsset(readRequest)).resolves.toEqual({
+            descriptor: asset,
+            bytes: new Uint8Array([137, 80]),
+        });
+        await expect(client.startBatchImport(batchRequest)).resolves.toEqual(
+            batch,
+        );
+        await expect(client.getBatchImport("batch-1")).resolves.toEqual(batch);
+        const lookup = { corpusId: "corpus-1", idempotencyKey: "existing" };
+        await expect(client.findBatchImport(lookup)).resolves.toEqual(batch);
+        await expect(
+            client.findBatchImport({ ...lookup, idempotencyKey: "missing" }),
+        ).resolves.toBeUndefined();
+        await expect(client.listBatchImports("corpus-1")).resolves.toEqual([
+            batch,
+        ]);
+        await expect(client.retryBatchImport("batch-1")).resolves.toEqual(
+            batch,
+        );
+        await expect(client.cancelBatchImport("batch-1")).resolves.toEqual(
+            batch,
+        );
+        await expect(client.listRunbookJobs("corpus-1")).resolves.toEqual([
+            job,
+        ]);
+        await expect(client.getRunbookJob("runbook-1")).resolves.toEqual(job);
+        const synthesis = {
+            corpusId: "corpus-1",
+            sourceId: "source-1",
+            revisionId: "revision-1",
+        };
+        await expect(
+            client.requestRunbookSynthesis(synthesis),
+        ).resolves.toEqual(job);
+        expect(getRevisionAssets).toHaveBeenCalledWith(assetRequest);
+        expect(readRevisionAsset).toHaveBeenCalledWith(readRequest);
+        expect(startBatchImport).toHaveBeenCalledWith(batchRequest);
+        expect(getBatchImport).toHaveBeenCalledWith("batch-1");
+        expect(findBatchImport).toHaveBeenCalledWith(lookup);
+        expect(listBatchImports).toHaveBeenCalledWith("corpus-1");
+        expect(retryBatchImport).toHaveBeenCalledWith("batch-1");
+        expect(cancelBatchImport).toHaveBeenCalledWith("batch-1");
+        expect(listRunbookJobs).toHaveBeenCalledWith("corpus-1");
+        expect(getRunbookJob).toHaveBeenCalledWith("runbook-1");
+        expect(requestRunbookSynthesis).toHaveBeenCalledWith(synthesis);
+    });
+
+    test("reports missing host-only implementations explicitly instead of pretending success", async () => {
+        const client = new InProcessMemoryServiceClient(
+            createMemoryServiceRpcFacade(new FakeMemoryService()),
+        );
+        const request = {
+            corpusId: "corpus-1",
+            sourceId: "source-1",
+            revisionId: "revision-1",
+        };
+        await expect(client.getRevisionAssets(request)).rejects.toThrow(
+            "not supported",
+        );
+        await expect(
+            client.readRevisionAsset({
+                ...request,
+                assetId: "asset-1",
+                hash: "sha256",
+                variant: "original",
+            }),
+        ).rejects.toThrow("not supported");
+        await expect(
+            client.startBatchImport({
+                corpusId: "corpus-1",
+                idempotencyKey: "key",
+                documents: [],
+            }),
+        ).rejects.toThrow("not supported");
+        await expect(client.getBatchImport("batch-1")).rejects.toThrow(
+            "not supported",
+        );
+        await expect(
+            client.findBatchImport({
+                corpusId: "corpus-1",
+                idempotencyKey: "key",
+            }),
+        ).rejects.toThrow("not supported");
+        await expect(client.listBatchImports("corpus-1")).rejects.toThrow(
+            "not supported",
+        );
+        await expect(client.retryBatchImport("batch-1")).rejects.toThrow(
+            "not supported",
+        );
+        await expect(client.cancelBatchImport("batch-1")).rejects.toThrow(
+            "not supported",
+        );
+        await expect(client.listRunbookJobs("corpus-1")).rejects.toThrow(
+            "not supported",
+        );
+        await expect(client.getRunbookJob("runbook-1")).rejects.toThrow(
+            "not supported",
+        );
+        await expect(
+            client.requestRunbookSynthesis({
+                corpusId: "corpus-1",
+                sourceId: "source-1",
+                revisionId: "revision-1",
+            }),
+        ).rejects.toThrow("not supported");
+    });
+});
+
+describe("explicit durable runbook synthesis transport", () => {
+    test("returns real reused candidate IDs and separate failed job outcomes over typed MCP", async () => {
+        const job: RunbookJobResult = {
+            jobId: "runbook-1",
+            corpusId: "corpus-1",
+            sourceId: "source-1",
+            revisionId: "revision-1",
+            state: "complete",
+            createdAt: "2026-10-02T00:00:00.000Z",
+            updatedAt: "2026-10-02T00:00:00.000Z",
+            candidateIds: ["actual-candidate"],
+            warnings: [],
+        };
+        const requestRunbookSynthesis = import.meta.jest.fn(
+            async (_request: RunbookSynthesisRequest) => structuredClone(job),
+        );
+        const service = Object.assign(new FakeMemoryService(), {
+            requestRunbookSynthesis,
+            getRunbookJob: async (id: string) =>
+                id === job.jobId ? structuredClone(job) : undefined,
+            listRunbookJobs: async (_corpusId: string) => [
+                structuredClone(job),
+            ],
+        });
+        const host = await MemoryServiceHost.start(service);
+        const typed = await McpMemoryServiceClient.create({
+            kind: "http",
+            url: host.endpoint,
+            headers: { authorization: `Bearer ${host.bearerToken}` },
+        });
+        try {
+            const request = {
+                corpusId: job.corpusId,
+                sourceId: job.sourceId,
+                revisionId: job.revisionId,
+            };
+            expect(await typed.requestRunbookSynthesis(request)).toEqual(job);
+            expect(await typed.requestRunbookSynthesis(request)).toEqual(job);
+            expect(requestRunbookSynthesis).toHaveBeenLastCalledWith(request);
+            expect(await typed.getRunbookJob(job.jobId)).toEqual(job);
+            expect(await typed.getRunbookJob("missing")).toBeUndefined();
+            expect(await typed.listRunbookJobs(job.corpusId)).toEqual([job]);
+            job.state = "failed";
+            job.reason = "Offline fixture model unavailable";
+            job.candidateIds = [];
+            expect(await typed.getRunbookJob(job.jobId)).toMatchObject({
+                state: "failed",
+                reason: job.reason,
+                candidateIds: [],
+            });
+        } finally {
+            await typed.close();
+            await host.close();
+        }
+    });
+
+    test("rejects synthesis and job polling explicitly when the injected service lacks capabilities", async () => {
+        const host = await MemoryServiceHost.start(new FakeMemoryService());
+        const typed = await McpMemoryServiceClient.create({
+            kind: "http",
+            url: host.endpoint,
+            headers: { authorization: `Bearer ${host.bearerToken}` },
+        });
+        try {
+            await expect(
+                typed.requestRunbookSynthesis({
+                    corpusId: "corpus-1",
+                    sourceId: "source-1",
+                    revisionId: "revision-1",
+                }),
+            ).rejects.toThrow("not supported");
+            await expect(typed.getRunbookJob("runbook-1")).rejects.toThrow(
+                "not supported",
+            );
+            await expect(typed.listRunbookJobs("corpus-1")).rejects.toThrow(
+                "not supported",
+            );
+        } finally {
+            await typed.close();
+            await host.close();
+        }
+    });
+});
+
 describe("MemoryMcpServer", () => {
     let server: MemoryMcpServer;
     let client: Client;
@@ -568,6 +933,99 @@ describe("MemoryMcpServer", () => {
             arguments: { corpusId: "invalid id", query: "test" },
         });
         expect(response.isError).toBe(true);
+    });
+
+    test("serves strict metadata-only receipt pages", async () => {
+        const response = await client.callTool({
+            name: memoryToolNames.changesList,
+            arguments: { corpusId: "corpus-1", pageSize: 1 },
+        });
+        expect(response.isError).not.toBe(true);
+        expect(response.structuredContent).toEqual({
+            result: await new FakeMemoryService().listChanges(),
+        });
+        const invalid = await client.callTool({
+            name: memoryToolNames.changesList,
+            arguments: { corpusId: "corpus-1", pageSize: 0 },
+        });
+        expect(invalid.isError).toBe(true);
+        const receipt = (await new FakeMemoryService().listChanges()).items[0];
+        expect(
+            changeReceiptSchema.safeParse({
+                ...receipt,
+                metadata: { secret: "Private metadata" },
+            }).success,
+        ).toBe(false);
+        expect(
+            changeReceiptSchema.safeParse({
+                ...receipt,
+                counts: {
+                    sources: Number.MAX_SAFE_INTEGER + 1,
+                    revisions: 0,
+                    knowledge: 1,
+                },
+            }).success,
+        ).toBe(false);
+        expect(
+            changeReceiptSchema.safeParse({
+                ...receipt,
+                sourceId: "Private-source-name",
+            }).success,
+        ).toBe(false);
+    });
+
+    test("reports unsupported receipts explicitly over MCP and in-process clients", async () => {
+        const service = new FakeMemoryService();
+        Object.defineProperty(service, "listChanges", { value: undefined });
+        const host = await MemoryServiceHost.start(service);
+        const typed = await McpMemoryServiceClient.create({
+            kind: "http",
+            url: host.endpoint,
+            headers: { authorization: `Bearer ${host.bearerToken}` },
+        });
+        try {
+            await expect(
+                typed.listChanges({ corpusId: "corpus-1" }),
+            ).rejects.toThrow("not supported");
+            await expect(
+                new InProcessMemoryServiceClient(service).listChanges({
+                    corpusId: "corpus-1",
+                }),
+            ).rejects.toThrow("not supported");
+        } finally {
+            await typed.close();
+            await host.close();
+        }
+    });
+
+    test("forwards capture-date search predicates through both typed clients", async () => {
+        const service = new FakeMemoryService();
+        const requests: MemorySearchRequest[] = [];
+        const search = service.search.bind(service);
+        service.search = async (request) => {
+            requests.push(request);
+            return search(request);
+        };
+        const request: MemorySearchRequest = {
+            corpusId: "corpus-1",
+            query: "target",
+            dateFrom: "2026-01-01T00:00:00.000Z",
+            dateTo: "2026-12-31T23:59:59.999Z",
+        };
+        await new InProcessMemoryServiceClient(service).search(request);
+        const host = await MemoryServiceHost.start(service);
+        const typed = await McpMemoryServiceClient.create({
+            kind: "http",
+            url: host.endpoint,
+            headers: { authorization: `Bearer ${host.bearerToken}` },
+        });
+        try {
+            await typed.search(request);
+            expect(requests).toEqual([request, request]);
+        } finally {
+            await typed.close();
+            await host.close();
+        }
     });
 
     test("reads durable job and source resources", async () => {
@@ -682,6 +1140,14 @@ describe("MemoryServiceHost", () => {
                 sourceCount: 1,
                 revisionCount: 1,
             });
+            expect(await client.listChanges({ corpusId: "corpus-1" })).toEqual(
+                await new FakeMemoryService().listChanges(),
+            );
+            expect(
+                await new InProcessMemoryServiceClient(
+                    new FakeMemoryService(),
+                ).listChanges({ corpusId: "corpus-1" }),
+            ).toEqual(await client.listChanges({ corpusId: "corpus-1" }));
             expect(
                 await client.listSourcesPage({
                     corpusId: "corpus-1",

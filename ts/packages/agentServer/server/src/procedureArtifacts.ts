@@ -12,7 +12,9 @@ import type { MacroManager } from "@typeagent/copilot-macros";
 import type {
     PersonalHowToService,
     ProcedureVersion,
+    RunbookBindingValidator,
 } from "@typeagent/memory-service";
+import { validateRunbookCatalogBindings } from "@typeagent/memory-service";
 import {
     getProcedureLineage,
     ProcedureArtifactCoordinator,
@@ -102,10 +104,13 @@ export class ProcedureArtifactRpcService {
         private readonly procedures: ProcedureResolver,
         skillCatalog: LiveSkillCatalog,
         macroManager: MacroManager,
+        private readonly bindingValidator?: RunbookBindingValidator,
     ) {
-        this.coordinator = new ProcedureArtifactCoordinator(skillCatalog, {
-            publishMacro: (macro) => macroManager.saveDraft(macro),
-        });
+        this.coordinator = new ProcedureArtifactCoordinator(
+            skillCatalog,
+            { publishMacro: (macro) => macroManager.saveDraft(macro) },
+            bindingValidator,
+        );
     }
 
     public async preview(
@@ -171,6 +176,14 @@ export class ProcedureArtifactRpcService {
                 `Procedure not found: ${request.corpusId}/${request.procedureId}@${request.version}`,
             );
         }
+        if (
+            procedure.corpusId !== request.corpusId ||
+            procedure.procedureId !== request.procedureId
+        ) {
+            throw new Error(
+                "Resolved procedure identity does not match the requested artifact source.",
+            );
+        }
         if (procedure.version !== request.version) {
             throw new Error(
                 `Resolved procedure version ${procedure.version} does not match requested version ${request.version}.`,
@@ -179,6 +192,12 @@ export class ProcedureArtifactRpcService {
         if (procedure.state !== "saved") {
             throw new Error(
                 `Procedure '${procedure.procedureId}' version ${procedure.version} cannot be promoted from ${procedure.state} state.`,
+            );
+        }
+        if (procedure.document.agentEdition !== undefined) {
+            await validateRunbookCatalogBindings(
+                procedure.document.agentEdition,
+                this.bindingValidator,
             );
         }
         return procedure;

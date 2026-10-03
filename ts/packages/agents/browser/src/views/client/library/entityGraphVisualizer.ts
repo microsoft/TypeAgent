@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 // Entity Graph Visualizer - Cytoscape.js integration for entity visualization
-declare let cytoscape: any;
+import cytoscape from "cytoscape";
+import { escapeWebText } from "./memoryHubWebExploreRoot";
 
 interface EntityData {
     name: string;
@@ -49,6 +50,10 @@ export class EntityGraphVisualizer {
     private zoomTimer: any = null;
     private selectedNodes: Set<string> = new Set();
     private contextMenu: HTMLElement | null = null;
+    private listeners = new AbortController();
+    private timers = new Set<ReturnType<typeof setTimeout>>();
+    private tooltip: HTMLElement | null = null;
+    private resizeFrame: number | undefined;
 
     // Investigation tracking
     private zoomEventCount: number = 0;
@@ -168,13 +173,13 @@ export class EntityGraphVisualizer {
         );
 
         // Create single instance directly on the container
-        this.cy = cytoscape({
+        const options: cytoscape.CytoscapeOptions & { renderer: unknown } = {
             container: this.container,
             elements: [],
             style: this.getOptimizedStyles(),
             layout: { name: "preset" }, // Use preset layout from graphology
             renderer: rendererConfig,
-            minZoom: 0.1,
+            minZoom: 0.05,
             maxZoom: 5.0,
             wheelSensitivity: 0.15,
             zoomingEnabled: true,
@@ -184,7 +189,8 @@ export class EntityGraphVisualizer {
             boxSelectionEnabled: false,
             selectionType: "single",
             autoungrabify: false,
-        });
+        };
+        this.cy = cytoscape(options);
 
         console.log("[Prototype] Single instance created successfully");
     }
@@ -223,7 +229,7 @@ export class EntityGraphVisualizer {
         );
 
         // STEP 2: Log global view node positions after transition back
-        setTimeout(() => {
+        this.schedule(() => {
             this.logGlobalNodePositions("AFTER_TRANSITION", []);
         }, 100); // Delay to ensure view is fully switched
 
@@ -898,7 +904,7 @@ export class EntityGraphVisualizer {
 
         // Multi-selection with Ctrl/Cmd
         this.cy.on("tap", "node", (evt: any) => {
-            if (evt.originalEvent.ctrlKey || evt.originalEvent.metaKey) {
+            if (evt.originalEvent?.ctrlKey || evt.originalEvent?.metaKey) {
                 const node = evt.target;
                 this.toggleNodeSelection(node);
                 evt.stopPropagation();
@@ -940,11 +946,15 @@ export class EntityGraphVisualizer {
     private setupKeyboardShortcuts(): void {
         if (!this.cy) return;
 
-        document.addEventListener("keydown", (evt: KeyboardEvent) => {
-            if (this.isGraphFocused()) {
-                this.handleKeyboardShortcut(evt);
-            }
-        });
+        this.container.addEventListener(
+            "keydown",
+            (evt: KeyboardEvent) => {
+                if (this.isGraphFocused()) {
+                    this.handleKeyboardShortcut(evt);
+                }
+            },
+            { signal: this.listeners.signal },
+        );
     }
 
     private setupGestureHandling(): void {
@@ -1092,7 +1102,7 @@ export class EntityGraphVisualizer {
                     renderedPosition: { x: event.offsetX, y: event.offsetY },
                 });
             },
-            { passive: false },
+            { passive: false, signal: this.listeners.signal },
         ); // Must be non-passive to preventDefault
 
         // Custom wheel event handling for delta normalization
@@ -1114,7 +1124,7 @@ export class EntityGraphVisualizer {
                     // and manually applying zoom, but this might interfere with Cytoscape's handling
                 }
             },
-            { passive: true },
+            { passive: true, signal: this.listeners.signal },
         );
     }
 
@@ -1496,7 +1506,7 @@ export class EntityGraphVisualizer {
                 this.switchToGlobalView();
 
                 // Delay viewport restoration to ensure all LoD updates are complete
-                setTimeout(() => {
+                this.schedule(() => {
                     // Force resize to recalculate container dimensions, then restore viewport
                     this.globalInstance.resize();
 
@@ -1581,7 +1591,7 @@ export class EntityGraphVisualizer {
      * Hide node tooltip
      */
     private hideNodeTooltip(): void {
-        const tooltip = document.getElementById("graph-tooltip");
+        const tooltip = this.tooltip;
         if (tooltip) {
             tooltip.style.display = "none";
         }
@@ -1591,10 +1601,9 @@ export class EntityGraphVisualizer {
      * Get or create tooltip element
      */
     private getOrCreateTooltip(): HTMLElement {
-        let tooltip = document.getElementById("graph-tooltip");
+        let tooltip = this.tooltip;
         if (!tooltip) {
             tooltip = document.createElement("div");
-            tooltip.id = "graph-tooltip";
             tooltip.className = "graph-tooltip";
             tooltip.style.cssText = `
                 position: absolute;
@@ -1607,7 +1616,8 @@ export class EntityGraphVisualizer {
                 pointer-events: none;
                 display: none;
             `;
-            document.body.appendChild(tooltip);
+            this.container.appendChild(tooltip);
+            this.tooltip = tooltip;
         }
         return tooltip;
     }
@@ -1683,7 +1693,10 @@ export class EntityGraphVisualizer {
     resize(): void {
         if (this.cy) {
             // Force DOM to update before resize
-            requestAnimationFrame(() => {
+            if (this.resizeFrame !== undefined)
+                cancelAnimationFrame(this.resizeFrame);
+            this.resizeFrame = requestAnimationFrame(() => {
+                this.resizeFrame = undefined;
                 if (this.cy) {
                     this.cy.resize();
                     // Force coordinate system recalculation
@@ -1852,13 +1865,13 @@ export class EntityGraphVisualizer {
             : "";
 
         tooltip.innerHTML = `
-            <div class="tooltip-header">${data.name}</div>
-            <div class="tooltip-type">${data.type || "entity"}</div>
+            <div class="tooltip-header">${escapeWebText(data.name)}</div>
+            <div class="tooltip-type">${escapeWebText(data.type || "entity")}</div>
             <div class="tooltip-connections">Connections: ${connections}</div>
             ${importance > 0 ? `<div class="tooltip-importance">Importance: ${(importance * 100).toFixed(1)}%</div>` : ""}
             ${centralityInfo ? `<div class="tooltip-centrality">${centralityInfo}</div>` : ""}
-            ${degreeInfo ? `<div class="tooltip-degree">${degreeInfo}</div>` : ""}
-            ${communityInfo ? `<div class="tooltip-community">${communityInfo}</div>` : ""}
+            ${degreeInfo ? `<div class="tooltip-degree">${escapeWebText(degreeInfo)}</div>` : ""}
+            ${communityInfo ? `<div class="tooltip-community">${escapeWebText(communityInfo)}</div>` : ""}
         `;
 
         tooltip.style.left = `${position.x + 10}px`;
@@ -1900,8 +1913,8 @@ export class EntityGraphVisualizer {
         const type = data.type || "related";
 
         tooltip.innerHTML = `
-            <div class="tooltip-header">${data.source} → ${data.target}</div>
-            <div class="tooltip-type">Type: ${type}</div>
+            <div class="tooltip-header">${escapeWebText(data.source)} → ${escapeWebText(data.target)}</div>
+            <div class="tooltip-type">Type: ${escapeWebText(type)}</div>
             <div class="tooltip-strength">Strength: ${Math.round(strength * 100)}%</div>
         `;
 
@@ -2002,15 +2015,15 @@ export class EntityGraphVisualizer {
             menu.appendChild(menuItem);
         });
 
-        document.body.appendChild(menu);
+        this.container.appendChild(menu);
         this.contextMenu = menu;
 
         // Hide menu when clicking elsewhere
-        setTimeout(() => {
-            document.addEventListener(
+        this.schedule(() => {
+            this.container.addEventListener(
                 "click",
                 this.hideContextMenu.bind(this),
-                { once: true },
+                { once: true, signal: this.listeners.signal },
             );
         }, 100);
     }
@@ -2052,14 +2065,14 @@ export class EntityGraphVisualizer {
             menu.appendChild(menuItem);
         });
 
-        document.body.appendChild(menu);
+        this.container.appendChild(menu);
         this.contextMenu = menu;
 
-        setTimeout(() => {
-            document.addEventListener(
+        this.schedule(() => {
+            this.container.addEventListener(
                 "click",
                 this.hideContextMenu.bind(this),
-                { once: true },
+                { once: true, signal: this.listeners.signal },
             );
         }, 100);
     }
@@ -2106,14 +2119,14 @@ export class EntityGraphVisualizer {
             menu.appendChild(menuItem);
         });
 
-        document.body.appendChild(menu);
+        this.container.appendChild(menu);
         this.contextMenu = menu;
 
-        setTimeout(() => {
-            document.addEventListener(
+        this.schedule(() => {
+            this.container.addEventListener(
                 "click",
                 this.hideContextMenu.bind(this),
-                { once: true },
+                { once: true, signal: this.listeners.signal },
             );
         }, 100);
     }
@@ -2277,16 +2290,78 @@ export class EntityGraphVisualizer {
      * Destroy the visualizer
      */
     destroy(): void {
+        this.listeners.abort();
+        for (const timer of this.timers) clearTimeout(timer);
+        this.timers.clear();
+        if (this.resizeFrame !== undefined)
+            cancelAnimationFrame(this.resizeFrame);
+        this.hideContextMenu();
+        this.entityClickCallback = null;
+        this.onInstanceChangeCallback = undefined;
         if (this.cy) {
             this.cy.destroy();
             this.cy = null;
         }
 
         // Remove tooltip
-        const tooltip = document.getElementById("graph-tooltip");
+        const tooltip = this.tooltip;
         if (tooltip) {
             tooltip.remove();
         }
+        this.tooltip = null;
+    }
+
+    private schedule(action: () => void, delay: number): void {
+        const timer = setTimeout(() => {
+            this.timers.delete(timer);
+            action();
+        }, delay);
+        this.timers.add(timer);
+    }
+
+    filterByType(type: string): void {
+        if (!this.cy) return;
+        this.cy.nodes().forEach((node: cytoscape.NodeSingular) => {
+            node.style(
+                "display",
+                !type || String(node.data("type")).toLowerCase() === type
+                    ? "element"
+                    : "none",
+            );
+        });
+        this.cy.edges().forEach((edge: cytoscape.EdgeSingular) => {
+            edge.style(
+                "display",
+                edge.source().visible() && edge.target().visible()
+                    ? "element"
+                    : "none",
+            );
+        });
+    }
+
+    searchEntities(query: string): EntityData[] {
+        if (!this.cy) return [];
+        const results: EntityData[] = [];
+        this.cy.nodes().forEach((node: cytoscape.NodeSingular) => {
+            const name: unknown = node.data("name");
+            if (
+                typeof name === "string" &&
+                name.toLowerCase().includes(query.toLowerCase())
+            )
+                results.push({
+                    name,
+                    type: String(node.data("type")),
+                    confidence: Number(node.data("confidence")),
+                });
+        });
+        return results;
+    }
+
+    clearGraph(): void {
+        this.cy?.elements().remove();
+        this.globalGraphData = null;
+        this.hideNodeTooltip();
+        this.hideContextMenu();
     }
 
     // Anchor node position tracking for global->neighborhood transitions

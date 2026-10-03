@@ -142,6 +142,34 @@ present, rejects cross-site fetches and opaque origins, and does not enable
 cross-origin API access. Local assets use a self-only script/connect CSP.
 Browser controls needed by extension options remain in the extension.
 
+### Explicit-page capture
+
+`BrowserControl` exposes `getCapturePages(): Promise<BrowserCapturePage[]>`
+and `capturePageSnapshot(pageId: string): Promise<BrowserCaptureSnapshot>`.
+A capture page contains `{ pageId, url, title }`; a snapshot adds
+`htmlFragments: { frameId: string, content: string }[]` and `warnings: string[]`.
+Handles are opaque and provider-local, expire on navigation/removal or a fresh
+listing, and must not be constructed from URLs or tab IDs.
+
+Chrome lists actual HTTP(S) tabs, excluding incognito and loading/restricted
+pages. The handle binds the tab and Chrome-supplied root `documentId`.
+Capture never switches the active tab: document-targeted content-script RPC
+reads URL, title, and HTML synchronously from that one document, rejecting
+navigation or vanished documents. A separate `captureRpc` message envelope
+prevents call-ID collisions with active-tab RPC. The Puppeteer launcher uses
+this same extension provider; it is not a separate active-Page capture backend.
+
+Electron inline capture pins the listed `WebContents` and root `WebFrameMain`,
+uses one synchronous object-bound evaluation, and rejects navigation, destruction,
+or frame replacement. Non-persistent (private) sessions are excluded. Both
+providers capture only root-document HTML and explicitly warn when embedded
+frames are omitted. Providers lacking a safe document-bound implementation
+reject with an explicit unavailable error; neither the facade nor an older
+external provider falls back to `getPageUrl` plus `getHtmlFragments`.
+
+These are browser-provider methods, not generic browser operations exposed to
+the localhost view gateway.
+
 All RPC communication in the browser agent is built on `@typeagent/agent-rpc`,
 which provides four layers of abstraction.
 
@@ -689,7 +717,7 @@ resolveBrowserViewUrl(
   "typeagent-browser://views/entityGraphView.html?entity=Alice#details",
   "http://localhost:49152",
 );
-// -> http://localhost:49152/knowledge/entities/?entity=Alice#details
+// -> http://localhost:49152/memory/hub/?entity=Alice#/explore/web/entities/Alice
 ```
 
 Context menus call the agent's `getViewHostUrl` before opening/focusing a tab;
@@ -697,6 +725,15 @@ the Electron shell discovers the registered `"view"` port. Unknown custom
 routes and unavailable hosts fail explicitly rather than opening stale
 extension pages or a port-zero URL. Knowledge-card links use shared logical
 link generation so saved links remain valid across port changes.
+
+Memory Center, Knowledge Library and standalone entity/topic graph names are
+compatibility aliases for Memory Hub, not separately built shells. Navigation
+and old `/library/<filename>.html` aliases redirect before static middleware,
+so stale build output cannot serve the retired application. HTTP cannot read
+fragments: its redirect preserves the query and adds `legacyView`; the Hub
+translates the inherited fragment and graph selection, then removes the marker.
+Extension tab matching uses fragment-free Hub paths; retired-name navigation
+updates the reused Hub tab to the requested section.
 
 ## Localhost view RPC
 

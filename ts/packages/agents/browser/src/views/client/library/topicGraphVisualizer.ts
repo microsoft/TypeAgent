@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Topic Graph Visualizer - Cytoscape.js integration for global importance and neighborhood topic visualization
-declare let cytoscape: any;
+import cytoscape from "cytoscape";
 
 interface TopicData {
     id: string;
@@ -34,6 +34,7 @@ export class TopicGraphVisualizer {
 
     private currentTopic: string | null = null;
     private topicGraphData: TopicGraphLayoutData | null = null;
+    private resizeFrame: number | undefined;
 
     // Level of detail management
 
@@ -110,22 +111,24 @@ export class TopicGraphVisualizer {
 
         if (!this.cy) {
             const rendererConfig = this.getOptimalRendererConfig();
-            this.cy = cytoscape({
-                container: this.container,
-                style: this.getOptimizedTopicGraphStyles(),
-                layout: { name: "preset" },
-                elements: [],
-                renderer: rendererConfig,
-                minZoom: 0.25,
-                maxZoom: 4.0,
-                wheelSensitivity: 0.15,
-                zoomingEnabled: true,
-                userZoomingEnabled: true,
-                panningEnabled: true,
-                userPanningEnabled: true,
-                boxSelectionEnabled: false,
-                autoungrabify: false,
-            });
+            const options: cytoscape.CytoscapeOptions & { renderer: unknown } =
+                {
+                    container: this.container,
+                    style: this.getOptimizedTopicGraphStyles(),
+                    layout: { name: "preset" },
+                    elements: [],
+                    renderer: rendererConfig,
+                    minZoom: 0.05,
+                    maxZoom: 4.0,
+                    wheelSensitivity: 0.15,
+                    zoomingEnabled: true,
+                    userZoomingEnabled: true,
+                    panningEnabled: true,
+                    userPanningEnabled: true,
+                    boxSelectionEnabled: false,
+                    autoungrabify: false,
+                };
+            this.cy = cytoscape(options);
             this.setupEventHandlers();
         }
 
@@ -561,7 +564,10 @@ export class TopicGraphVisualizer {
     public resize(): void {
         if (this.cy) {
             // Force DOM to update before resize
-            requestAnimationFrame(() => {
+            if (this.resizeFrame !== undefined)
+                cancelAnimationFrame(this.resizeFrame);
+            this.resizeFrame = requestAnimationFrame(() => {
+                this.resizeFrame = undefined;
                 if (this.cy) {
                     this.cy.resize();
                     // Force coordinate system recalculation
@@ -580,8 +586,15 @@ export class TopicGraphVisualizer {
         const topicNodes = this.cy.nodes('[nodeType="topic"]');
         return {
             totalTopics: topicNodes.length,
-            visibleTopics: topicNodes.length,
-            maxDepth: 0,
+            visibleTopics: topicNodes.filter((node: cytoscape.NodeSingular) =>
+                node.visible(),
+            ).length,
+            maxDepth: Math.max(
+                0,
+                ...topicNodes.map((node: cytoscape.NodeSingular) =>
+                    Number(node.data("level") ?? 0),
+                ),
+            ),
         };
     }
 
@@ -600,6 +613,9 @@ export class TopicGraphVisualizer {
      * Cleanup and dispose
      */
     public dispose(): void {
+        if (this.resizeFrame !== undefined)
+            cancelAnimationFrame(this.resizeFrame);
+        this.topicClickCallback = null;
         // Destroy Cytoscape instance
         if (this.cy) {
             this.cy.destroy();
@@ -608,5 +624,35 @@ export class TopicGraphVisualizer {
 
         // Reset flags
         this.zoomHandlerSetup = false;
+    }
+
+    public zoomBy(factor: number): void {
+        if (this.cy)
+            this.cy.zoom(
+                Math.min(
+                    this.cy.maxZoom(),
+                    Math.max(this.cy.minZoom(), this.cy.zoom() * factor),
+                ),
+            );
+    }
+
+    public filterByLevel(level?: number): void {
+        if (!this.cy) return;
+        this.cy.nodes().forEach((node: cytoscape.NodeSingular) => {
+            node.style(
+                "display",
+                level === undefined || Number(node.data("level")) === level
+                    ? "element"
+                    : "none",
+            );
+        });
+        this.cy.edges().forEach((edge: cytoscape.EdgeSingular) => {
+            edge.style(
+                "display",
+                edge.source().visible() && edge.target().visible()
+                    ? "element"
+                    : "none",
+            );
+        });
     }
 }

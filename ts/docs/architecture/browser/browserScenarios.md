@@ -263,18 +263,18 @@ The knowledge index supports multiple search strategies:
 The browser agent's localhost view server provides these pages for browsing
 extracted knowledge. They no longer depend on extension runtime messaging:
 
-- **Knowledge Library** (`knowledgeLibrary.html`) — Browse and search indexed pages
-- **Entity Graph** (`entityGraphView.html`) — Visualize entity relationships
-- **Topic Graph** (`topicGraphView.html`) — Visualize topic hierarchy
+- **Memory Hub** (`memoryHub.html`) — Search all memory, manage retained sources,
+  review Runbooks and browse derived knowledge. Its fixed browser web lens
+  includes reading analytics, advanced entity relationships and topic hierarchy.
 - **Annotations** (`annotationsLibrary.html`) — View page annotations
-- **Memory Center** (`memoryCenter.html`) — Inspect memory sources, jobs, and candidates
 - **Automations** (`automationsLibrary.html`) — Browse and manage web macros, PowerShell flows, TaskFlows, and tool macros, and review and approve macro drafts
 
 Open them from extension context menus or with commands such as
 `@browser open knowledgeLibrary` and `@browser open memoryCenter`. The live
 view host is resolved at navigation time. Graph links preserve entity/topic
 query parameters across the legacy custom-protocol resolver and local route
-redirects. Opening an agent-owned library does not trigger webpage knowledge
+redirects into the Hub. These historical names no longer have separate shells.
+Opening an agent-owned library does not trigger webpage knowledge
 extraction. Chat Panel, Options, and the PDF interception bridge remain in
 the extension.
 

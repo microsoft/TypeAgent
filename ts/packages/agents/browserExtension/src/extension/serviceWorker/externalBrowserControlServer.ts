@@ -24,6 +24,7 @@ import {
     resolveLocalBrowserViewUrl,
     type ViewHostLookup,
 } from "./browserViewNavigation";
+import { createPageCapture } from "./pageCapture";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "@typeagent/aiclient";
 
@@ -136,12 +137,35 @@ export function createExternalBrowserServer(
         number,
         { channel: ChannelAdapter; contentScriptRpc: ContentScriptRpc }
     >();
+    const documentRpcMap = new Map<
+        string,
+        {
+            tabId: number;
+            channel: ChannelAdapter;
+            contentScriptRpc: ContentScriptRpc;
+        }
+    >();
+
+    function disconnectDocumentRpcs(tabId: number) {
+        for (const [key, entry] of documentRpcMap) {
+            if (entry.tabId === tabId) {
+                entry.channel.notifyDisconnected();
+                documentRpcMap.delete(key);
+            }
+        }
+    }
 
     chrome.tabs.onRemoved.addListener((tabId) => {
+        disconnectDocumentRpcs(tabId);
         const entry = rpcMap.get(tabId);
         if (entry) {
             entry.channel.notifyDisconnected();
             rpcMap.delete(tabId);
+        }
+    });
+    chrome.tabs.onUpdated.addListener((tabId, change) => {
+        if (change.status === "loading" || change.url !== undefined) {
+            disconnectDocumentRpcs(tabId);
         }
     });
 
@@ -257,6 +281,38 @@ export function createExternalBrowserServer(
         return contentScriptRpc;
     }
 
+    function getDocumentRpc(tabId: number, documentId: string) {
+        const key = `${tabId}:${documentId}`;
+        const existing = documentRpcMap.get(key);
+        if (existing) return existing.contentScriptRpc;
+        const channel = createChannelAdapter(async (message, cb) => {
+            try {
+                // Retrying injection cannot target a replacement document.
+                const response: unknown = await sendTabMessageWithInjection(
+                    tabId,
+                    { type: "captureRpc", message },
+                    { documentId },
+                );
+                if (
+                    !response ||
+                    typeof response !== "object" ||
+                    !("captureRpcAccepted" in response) ||
+                    response.captureRpcAccepted !== true
+                ) {
+                    throw new Error(
+                        "Explicit-page capture is unavailable in this document.",
+                    );
+                }
+            } catch (error) {
+                cb?.(error as Error);
+            }
+        });
+        const contentScriptRpc = createContentScriptRpcClient(channel.channel);
+        documentRpcMap.set(key, { tabId, channel, contentScriptRpc });
+        return contentScriptRpc;
+    }
+    const pageCapture = createPageCapture(getDocumentRpc);
+
     async function getActiveTabRpc() {
         const targetTab = await ensureActiveTab();
         return getContentScriptRpc(targetTab.id!);
@@ -264,6 +320,19 @@ export function createExternalBrowserServer(
 
     chrome.runtime.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender) => {
+            if (message.type === "captureRpc") {
+                const tabId = sender.tab?.id;
+                if (
+                    tabId !== undefined &&
+                    sender.frameId === 0 &&
+                    sender.documentId
+                ) {
+                    documentRpcMap
+                        .get(`${tabId}:${sender.documentId}`)
+                        ?.channel.notifyMessage(message.message);
+                }
+                return;
+            }
             if (message.type === "rpc") {
                 const tabId = sender.tab?.id;
                 if (tabId) {
@@ -274,6 +343,9 @@ export function createExternalBrowserServer(
     );
 
     const invokeFunctions: BrowserControlInvokeFunctions = {
+        getCapturePages: () => pageCapture.getCapturePages(),
+        capturePageSnapshot: (pageId) =>
+            pageCapture.capturePageSnapshot(pageId),
         openWebPage: async (url: string, options?: { newTab?: boolean }) => {
             // Resolve custom protocol URLs to actual extension URLs
             const resolvedUrl = await resolveLocalBrowserViewUrl(

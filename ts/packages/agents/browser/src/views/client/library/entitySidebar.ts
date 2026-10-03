@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { escapeWebText } from "./memoryHubWebExploreRoot";
+
 // EntitySidebar types and interfaces
 
 interface EntityFacet {
@@ -52,7 +54,7 @@ export class EntitySidebar {
      */
     private clearStaleData(): void {
         // Clear topics list
-        const topicsSection = document.getElementById("entityTopics");
+        const topicsSection = this.container.querySelector("#entityTopics");
         if (topicsSection) {
             const topicsList = topicsSection.querySelector(".topics-list");
             if (topicsList) {
@@ -62,7 +64,7 @@ export class EntitySidebar {
         }
 
         // Clear facets list
-        const facetsSection = document.getElementById("entityFacets");
+        const facetsSection = this.container.querySelector("#entityFacets");
         if (facetsSection) {
             const facetsList = facetsSection.querySelector(".facets-list");
             if (facetsList) {
@@ -72,8 +74,8 @@ export class EntitySidebar {
         }
 
         // Clear timeline
-        const firstSeenEl = document.getElementById("entityFirstSeen");
-        const lastSeenEl = document.getElementById("entityLastSeen");
+        const firstSeenEl = this.container.querySelector("#entityFirstSeen");
+        const lastSeenEl = this.container.querySelector("#entityLastSeen");
         if (firstSeenEl) firstSeenEl.textContent = "Loading...";
         if (lastSeenEl) lastSeenEl.textContent = "Loading...";
     }
@@ -89,8 +91,8 @@ export class EntitySidebar {
     private renderEntityHeader(): void {
         if (!this.currentEntity) return;
 
-        const nameEl = document.getElementById("entityName");
-        const typeEl = document.getElementById("entityType");
+        const nameEl = this.container.querySelector("#entityName");
+        const typeEl = this.container.querySelector("#entityType");
 
         // Handle entity name - could be name or entityName
         const entityName =
@@ -115,8 +117,10 @@ export class EntitySidebar {
     private renderEntityMetrics(): void {
         if (!this.currentEntity) return;
 
-        const mentionsEl = document.getElementById("entityMentions");
-        const relationshipsEl = document.getElementById("entityRelationships");
+        const mentionsEl = this.container.querySelector("#entityMentions");
+        const relationshipsEl = this.container.querySelector(
+            "#entityRelationships",
+        );
 
         if (mentionsEl) {
             // Handle both mock structure and real entity structure
@@ -160,7 +164,7 @@ export class EntitySidebar {
     }
 
     private renderFacets(): void {
-        const facetsSection = document.getElementById("entityFacets");
+        const facetsSection = this.container.querySelector("#entityFacets");
         if (!facetsSection) return;
 
         const facetsList = facetsSection.querySelector(".facets-list");
@@ -216,7 +220,7 @@ export class EntitySidebar {
 
         // Handle different value types
         if (this.isUrl(value)) {
-            return `<a href="${value}" target="_blank" class="facet-link">${this.truncateText(value, 30)}</a>`;
+            return `<a href="${this.escapeHtml(value)}" target="_blank" rel="noopener noreferrer" class="facet-link">${this.escapeHtml(this.truncateText(value, 30))}</a>`;
         }
 
         if (this.isDate(value)) {
@@ -233,8 +237,8 @@ export class EntitySidebar {
 
     private isUrl(value: string): boolean {
         try {
-            new URL(value);
-            return true;
+            const url = new URL(value);
+            return url.protocol === "https:" || url.protocol === "http:";
         } catch {
             return false;
         }
@@ -266,7 +270,7 @@ export class EntitySidebar {
     }
 
     private renderTopics(): void {
-        const topicsSection = document.getElementById("entityTopics");
+        const topicsSection = this.container.querySelector("#entityTopics");
         if (!topicsSection || !this.currentEntity.topicAffinity) return;
 
         const topicsList = topicsSection.querySelector(".topics-list");
@@ -291,8 +295,8 @@ export class EntitySidebar {
     private renderEntityTimeline(): void {
         if (!this.currentEntity) return;
 
-        const firstSeenEl = document.getElementById("entityFirstSeen");
-        const lastSeenEl = document.getElementById("entityLastSeen");
+        const firstSeenEl = this.container.querySelector("#entityFirstSeen");
+        const lastSeenEl = this.container.querySelector("#entityLastSeen");
 
         if (firstSeenEl) {
             // Handle various possible date field names from real entity data
@@ -326,12 +330,14 @@ export class EntitySidebar {
     }
 
     private renderEmptyState(): void {
-        const nameEl = document.getElementById("entityName");
-        const typeEl = document.getElementById("entityType");
-        const mentionsEl = document.getElementById("entityMentions");
-        const relationshipsEl = document.getElementById("entityRelationships");
-        const firstSeenEl = document.getElementById("entityFirstSeen");
-        const lastSeenEl = document.getElementById("entityLastSeen");
+        const nameEl = this.container.querySelector("#entityName");
+        const typeEl = this.container.querySelector("#entityType");
+        const mentionsEl = this.container.querySelector("#entityMentions");
+        const relationshipsEl = this.container.querySelector(
+            "#entityRelationships",
+        );
+        const firstSeenEl = this.container.querySelector("#entityFirstSeen");
+        const lastSeenEl = this.container.querySelector("#entityLastSeen");
 
         if (nameEl) nameEl.textContent = "Select an Entity";
         if (typeEl) typeEl.textContent = "";
@@ -341,8 +347,8 @@ export class EntitySidebar {
         if (lastSeenEl) lastSeenEl.textContent = "-";
 
         // Clear details sections
-        const facetsSection = document.getElementById("entityFacets");
-        const topicsSection = document.getElementById("entityTopics");
+        const facetsSection = this.container.querySelector("#entityFacets");
+        const topicsSection = this.container.querySelector("#entityTopics");
 
         if (facetsSection) {
             const facetsList = facetsSection.querySelector(".facets-list");
@@ -407,8 +413,6 @@ export class EntitySidebar {
     }
 
     private escapeHtml(text: string): string {
-        const div = document.createElement("div");
-        div.textContent = text;
-        return div.innerHTML;
+        return escapeWebText(text);
     }
 }

@@ -1,6 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type {
+    ProcedureCandidate,
+    ProcedureDocument,
+    ProcedureSaveRequest,
+    ProcedureSourceCitation,
+    ProcedureSummary,
+    ProcedureVersion,
+} from "@typeagent/memory-service";
+
 // =============================================
 // Agent-side operations (forwarded via WebSocket)
 // =============================================
@@ -152,52 +161,11 @@ export type MemoryCenterHowToSettings = {
     preferences?: Record<string, unknown>;
 };
 
-export type MemoryCenterProcedureCitation = {
-    sourceId: string;
-    revisionId: string;
-    locator?: string;
-    excerpt?: string;
-};
-
-export type MemoryCenterProcedureDocument = {
-    title: string;
-    summary?: string;
-    steps: string[];
-    citations: MemoryCenterProcedureCitation[];
-    additionalSections?: Array<{ heading: string; content: string }>;
-};
-
-export type MemoryCenterProcedureCandidate = MemoryCenterProcedureDocument & {
-    candidateId: string;
-    corpusId: string;
-    state: "detected" | "draft" | "rejected" | "saved";
-    createdAt: string;
-    updatedAt: string;
-};
-
-export type MemoryCenterProcedureSummary = {
-    corpusId: string;
-    procedureId: string;
-    title: string;
-    state: "saved" | "stale" | "archived";
-    latestVersion: number;
-    updatedAt: string;
-};
-
-export type MemoryCenterProcedureVersion = {
-    corpusId: string;
-    procedureId: string;
-    version: number;
-    state: "saved" | "stale" | "archived";
-    document: MemoryCenterProcedureDocument;
-    canonicalJson: string;
-    markdown: string;
-    createdAt: string;
-    jsonHash: string;
-    markdownHash: string;
-    basedOnCandidateId?: string;
-    previousVersion?: number;
-};
+export type MemoryCenterProcedureCitation = ProcedureSourceCitation;
+export type MemoryCenterProcedureDocument = ProcedureDocument;
+export type MemoryCenterProcedureCandidate = ProcedureCandidate;
+export type MemoryCenterProcedureSummary = ProcedureSummary;
+export type MemoryCenterProcedureVersion = ProcedureVersion;
 
 export type MemoryCenterProcedureSearchMatch = {
     procedure: MemoryCenterProcedureSummary;
@@ -362,14 +330,9 @@ export type MemoryCenterInvokeFunctions = {
         corpusId: string;
         candidateId: string;
     }): Promise<MemoryCenterProcedureCandidate>;
-    memorySaveProcedure(params: {
-        corpusId: string;
-        procedureId?: string;
-        candidateId?: string;
-        expectedVersion?: number;
-        document?: MemoryCenterProcedureDocument;
-        markdown?: string;
-    }): Promise<MemoryCenterProcedureVersion>;
+    memorySaveProcedure(
+        params: ProcedureSaveRequest,
+    ): Promise<MemoryCenterProcedureVersion>;
     memoryListProcedures(params: {
         corpusId: string;
         states?: MemoryCenterProcedureSummary["state"][];

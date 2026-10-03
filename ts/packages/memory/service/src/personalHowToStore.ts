@@ -12,6 +12,21 @@ import {
     writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import {
+    canonicalizeProcedure as canonicalize,
+    draftAgentEdition,
+    getProcedureEvidenceReferences,
+    normalizeAgentEditionDocument,
+    prepareAgentEditionSave,
+    type RunbookBindingValidator,
+} from "./agentEdition.js";
+import {
+    procedureFromMarkdown,
+    procedureToMarkdown,
+    validateProcedureDocument as validateDocument,
+} from "./procedureMarkdown.js";
+import { retryProcedurePublication } from "./procedurePublication.js";
+export * from "./procedureMarkdown.js";
 import type {
     PersonalHowToSettings,
     PersonalHowToSettingsUpdate,
@@ -20,7 +35,6 @@ import type {
     ProcedureDocument,
     ProcedureListRequest,
     ProcedureSaveRequest,
-    ProcedureSourceCitation,
     ProcedureSummary,
     ProcedureVersion,
 } from "./types.js";
@@ -58,28 +72,10 @@ function hash(value: string): string {
     return createHash("sha256").update(value).digest("hex");
 }
 
-function sortJson(item: unknown): unknown {
-    if (Array.isArray(item)) {
-        return item.map(sortJson);
-    }
-    if (item !== null && typeof item === "object") {
-        return Object.fromEntries(
-            Object.entries(item as Record<string, unknown>)
-                .sort(([left], [right]) => left.localeCompare(right))
-                .map(([key, child]) => [key, sortJson(child)]),
-        );
-    }
-    return item;
-}
-
 function validateIdentifier(kind: string, value: string): void {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) {
         throw new Error(`Invalid ${kind} '${value}'`);
     }
-}
-
-function canonicalize(value: unknown): string {
-    return `${JSON.stringify(sortJson(value), undefined, 2)}\n`;
 }
 
 async function readJson<T>(filePath: string): Promise<T | undefined> {
@@ -152,146 +148,6 @@ async function writeAtomic(filePath: string, value: string): Promise<void> {
         }
         throw error;
     }
-}
-
-function validateDocument(document: ProcedureDocument): void {
-    if (document.title.trim().length === 0) {
-        throw new Error("Procedure title cannot be empty");
-    }
-    if (
-        document.steps.length === 0 ||
-        document.steps.some((step) => step.trim().length === 0)
-    ) {
-        throw new Error("A procedure requires at least one non-empty step");
-    }
-    const headings = new Set<string>();
-    for (const section of document.additionalSections ?? []) {
-        const heading = section.heading.trim().toLowerCase();
-        if (
-            heading.length === 0 ||
-            heading === "steps" ||
-            heading === "sources" ||
-            headings.has(heading)
-        ) {
-            throw new Error(
-                `Invalid or duplicate section '${section.heading}'`,
-            );
-        }
-        headings.add(heading);
-    }
-    for (const citation of document.citations) {
-        validateIdentifier("source ID", citation.sourceId);
-        validateIdentifier("revision ID", citation.revisionId);
-    }
-}
-
-export function procedureToMarkdown(document: ProcedureDocument): string {
-    validateDocument(document);
-    const lines = [`# ${document.title.trim()}`, ""];
-    if (document.summary !== undefined) {
-        lines.push(document.summary.trim(), "");
-    }
-    lines.push("## Steps", "");
-    document.steps.forEach((step, index) =>
-        lines.push(`${index + 1}. ${step.trim()}`),
-    );
-    lines.push("", "## Sources", "");
-    for (const citation of document.citations) {
-        lines.push(`- ${JSON.stringify(sortJson(citation))}`);
-    }
-    if (document.citations.length === 0) {
-        lines.push("_None_");
-    }
-    for (const section of document.additionalSections ?? []) {
-        lines.push(
-            "",
-            `## ${section.heading.trim()}`,
-            "",
-            section.content.trim(),
-        );
-    }
-    return `${lines.join("\n").trimEnd()}\n`;
-}
-
-export function procedureFromMarkdown(markdown: string): ProcedureDocument {
-    const normalized = markdown.replace(/\r\n/g, "\n");
-    const titleMatch = /^# ([^\n]+)\n/.exec(normalized);
-    if (titleMatch === null) {
-        throw new Error("Procedure Markdown must start with a level-one title");
-    }
-    const body = normalized.slice(titleMatch[0].length);
-    const headingPattern = /^## ([^\n]+)$/gm;
-    const headings = [...body.matchAll(headingPattern)];
-    if (headings.length === 0) {
-        throw new Error(
-            "Procedure Markdown requires Steps and Sources sections",
-        );
-    }
-    const preamble = body.slice(0, headings[0].index).trim();
-    const sections = headings.map((match, index) => {
-        const contentStart = (match.index ?? 0) + match[0].length;
-        const contentEnd =
-            index + 1 < headings.length
-                ? (headings[index + 1].index ?? body.length)
-                : body.length;
-        return {
-            heading: match[1].trim(),
-            content: body.slice(contentStart, contentEnd).trim(),
-        };
-    });
-    const stepsSection = sections.find(
-        (section) => section.heading.toLowerCase() === "steps",
-    );
-    const sourcesSection = sections.find(
-        (section) => section.heading.toLowerCase() === "sources",
-    );
-    if (stepsSection === undefined || sourcesSection === undefined) {
-        throw new Error(
-            "Procedure Markdown requires Steps and Sources sections",
-        );
-    }
-    const steps = stepsSection.content
-        .split("\n")
-        .filter((line) => line.trim().length > 0)
-        .map((line) => {
-            const match = /^\d+[.)]\s+(.+)$/.exec(line);
-            if (match === null) {
-                throw new Error(`Invalid procedure step '${line}'`);
-            }
-            return match[1].trim();
-        });
-    const citations: ProcedureSourceCitation[] =
-        sourcesSection.content === "_None_"
-            ? []
-            : sourcesSection.content
-                  .split("\n")
-                  .filter((line) => line.trim().length > 0)
-                  .map((line) => {
-                      if (!line.startsWith("- ")) {
-                          throw new Error(`Invalid source citation '${line}'`);
-                      }
-                      return JSON.parse(
-                          line.slice(2),
-                      ) as ProcedureSourceCitation;
-                  });
-    const additionalSections = sections
-        .filter(
-            (section) =>
-                !["steps", "sources"].includes(section.heading.toLowerCase()),
-        )
-        .map((section) => ({
-            heading: section.heading,
-            content: section.content,
-        }));
-    const document: ProcedureDocument = {
-        title: titleMatch[1].trim(),
-        ...(preamble.length === 0 ? {} : { summary: preamble }),
-        steps,
-        citations,
-        ...(additionalSections.length === 0 ? {} : { additionalSections }),
-    };
-    validateDocument(document);
-    return document;
 }
 
 function procedureHeading(title: string): boolean {
@@ -387,6 +243,7 @@ export class PersonalHowToStore {
     public constructor(
         private readonly rootDirectory: string,
         private readonly publishIndex: ProcedureIndexPublisher,
+        private readonly runbookBindingValidator?: RunbookBindingValidator,
     ) {}
 
     public async getIndexGeneration(
@@ -457,6 +314,9 @@ export class PersonalHowToStore {
     public async createCandidate(
         request: ProcedureCandidateCreateRequest,
     ): Promise<ProcedureCandidate> {
+        request = normalizeAgentEditionDocument(
+            request,
+        ) as ProcedureCandidateCreateRequest;
         validateDocument(request);
         const index = await this.readIndex(request.corpusId);
         const candidateId = request.candidateId ?? randomUUID();
@@ -476,6 +336,14 @@ export class PersonalHowToStore {
             corpusId: request.corpusId,
             state: request.state ?? "detected",
             title: request.title.trim(),
+            ...(request.agentEdition === undefined
+                ? {}
+                : {
+                      agentEdition: draftAgentEdition(
+                          request.agentEdition,
+                          "Synthesized edition requires review",
+                      ),
+                  }),
             ...(request.summary === undefined
                 ? {}
                 : { summary: request.summary }),
@@ -532,6 +400,15 @@ export class PersonalHowToStore {
                     : { summary: request.summary }),
                 steps: structuredClone(request.steps),
                 citations: structuredClone(request.citations),
+                ...(request.agentEdition === undefined
+                    ? {}
+                    : {
+                          agentEdition: draftAgentEdition(
+                              normalizeAgentEditionDocument(request)
+                                  .agentEdition!,
+                              "Synthesized edition requires review",
+                          ),
+                      }),
                 ...(request.additionalSections === undefined
                     ? {}
                     : {
@@ -631,6 +508,11 @@ export class PersonalHowToStore {
                           : { summary: candidate.summary }),
                       steps: candidate.steps,
                       citations: candidate.citations,
+                      ...(candidate.agentEdition === undefined
+                          ? {}
+                          : {
+                                agentEdition: candidate.agentEdition,
+                            }),
                       ...(candidate.additionalSections === undefined
                           ? {}
                           : {
@@ -638,7 +520,7 @@ export class PersonalHowToStore {
                                     candidate.additionalSections,
                             }),
                   };
-        const document =
+        let document =
             request.markdown !== undefined
                 ? procedureFromMarkdown(request.markdown)
                 : structuredClone(request.document ?? candidateDocument);
@@ -663,6 +545,27 @@ export class PersonalHowToStore {
                 `Procedure version conflict: expected ${request.expectedVersion}, actual ${currentVersion}`,
             );
         }
+        const previous =
+            currentVersion === 0
+                ? undefined
+                : await this.readVersion(
+                      request.corpusId,
+                      procedureId,
+                      currentVersion,
+                  );
+        if (request.markdown !== undefined && previous !== undefined) {
+            document = procedureFromMarkdown(
+                request.markdown,
+                previous.document,
+            );
+        }
+        document = await prepareAgentEditionSave(
+            document,
+            request,
+            currentVersion + 1,
+            previous,
+            this.runbookBindingValidator,
+        );
         const version = await this.writeVersion(
             request.corpusId,
             procedureId,
@@ -744,7 +647,9 @@ export class PersonalHowToStore {
                 summary.procedureId,
                 summary.latestVersion,
             );
-            const dependsOnChangedRevision = current.document.citations.some(
+            const references = getProcedureEvidenceReferences(current.document);
+            const citations = [...references.citations, ...references.assets];
+            const dependsOnChangedRevision = citations.some(
                 (citation) =>
                     citation.sourceId === sourceId &&
                     citation.revisionId !== activeRevisionId,
@@ -818,6 +723,15 @@ export class PersonalHowToStore {
         basedOnCandidateId?: string,
         previousVersion?: number,
     ): Promise<ProcedureVersion> {
+        if (state !== "saved" && document.agentEdition !== undefined) {
+            document = {
+                ...document,
+                agentEdition: draftAgentEdition(
+                    document.agentEdition,
+                    `Procedure is ${state}`,
+                ),
+            };
+        }
         const canonicalJson = canonicalize(document);
         const markdown = procedureToMarkdown(document);
         const createdAt = timestamp();
@@ -859,7 +773,9 @@ export class PersonalHowToStore {
                 ),
             ]);
             await mkdir(path.dirname(versionDirectory), { recursive: true });
-            await rename(stagingDirectory, versionDirectory);
+            await retryProcedurePublication(() =>
+                rename(stagingDirectory, versionDirectory),
+            );
         } catch (error) {
             await rm(stagingDirectory, { recursive: true, force: true });
             throw error;

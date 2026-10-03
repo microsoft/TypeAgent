@@ -511,6 +511,7 @@ export function createAgentRpcServer(
         hasSessionStorage: boolean,
         sessionContextId: string,
         currentConnectionId: string | undefined,
+        conversationId: string | undefined,
         context: any,
     ): SessionContext<any> {
         const dynamicAgentRpcServer = new Map<string, () => void>();
@@ -524,6 +525,7 @@ export function createAgentRpcServer(
                 ? getStorage(contextId, false)
                 : undefined,
             sessionContextId,
+            conversationId,
             currentConnectionId,
             notify: (
                 event: AppAgentEvent,
@@ -758,6 +760,7 @@ export function createAgentRpcServer(
             sessionContextId,
             agentContextId,
             currentConnectionId,
+            conversationId,
         } = param;
         if (contextId === undefined) {
             throw new Error("Invalid context param: missing contextId");
@@ -785,6 +788,7 @@ export function createAgentRpcServer(
             hasSessionStorage,
             sessionContextId,
             currentConnectionId,
+            conversationId,
             agentContext,
         );
     }

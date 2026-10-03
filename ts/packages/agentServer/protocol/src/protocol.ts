@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
+import type { RunbookHostCapabilities } from "./runbookCapabilities.js";
 import type { QueueSnapshot } from "@typeagent/dispatcher-types";
 import type { AppAgentManifest } from "@typeagent/agent-sdk";
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
@@ -338,6 +339,11 @@ export type ProcedureArtifactPromotion =
       };
 
 export type AgentServerInvokeFunctions = {
+    getSkillLifecycle: RunbookHostCapabilities["getSkillLifecycle"];
+    changeSkillLifecycle: RunbookHostCapabilities["changeSkillLifecycle"];
+    listBindingTargets: RunbookHostCapabilities["listBindingTargets"];
+    checkBindingTargets: RunbookHostCapabilities["checkBindingTargets"];
+    suggestBindings: RunbookHostCapabilities["suggestBindings"];
     getMacroLearningPreference: (
         cwd: string,
     ) => Promise<MacroLearningPreference>;

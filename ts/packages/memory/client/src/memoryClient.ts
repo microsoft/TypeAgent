@@ -19,6 +19,10 @@ import type {
     JobProgress,
     MemoryCorpus,
     MemoryCorpusStatus,
+    MemoryChangeListRequest,
+    MemoryChangeReceipt,
+    MemoryBatchImportRequest,
+    MemoryBatchImportLookup,
     MemoryEvent,
     MemoryEventAppendRequest,
     MemoryEventAppendResult,
@@ -55,11 +59,17 @@ import type {
     SourceForgetResult,
     SourceListRequest,
     SourceReplaceRequest,
+    RevisionAssetRequest,
+    RevisionAssetReadRequest,
+    RunbookJobResult,
+    RunbookSynthesisRequest,
 } from "@typeagent/memory-service";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
+import { validateProcedureSaveRequest } from "@typeagent/memory-service/agent-edition-validation";
 import type { z } from "zod";
 import {
     capabilitiesSchema,
+    changePageSchema,
     answerResultSchema,
     clearedCountSchema,
     corpusSchema,
@@ -90,7 +100,12 @@ import {
     sourceForgetResultSchema,
     sourcePageSchema,
     reindexResultSchema,
+    runbookJobResultSchema,
 } from "./protocol.js";
+
+function unsupportedCapability(operation: string): Promise<never> {
+    return Promise.reject(new Error(`Memory ${operation} are not supported`));
+}
 
 export interface MemoryClientCallOptions {
     signal?: AbortSignal;
@@ -130,6 +145,92 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
 
     public clearCorpus(corpusId: string) {
         return this.service.clearCorpus(corpusId);
+    }
+
+    public listChanges(request: MemoryChangeListRequest) {
+        if (this.service.listChanges === undefined) {
+            return Promise.reject(
+                new Error("Memory changes are not supported"),
+            );
+        }
+        return this.service.listChanges(request);
+    }
+
+    public getRevisionAssets(request: RevisionAssetRequest) {
+        return (
+            this.service.getRevisionAssets?.(request) ??
+            unsupportedCapability("revision assets")
+        );
+    }
+
+    public readRevisionAsset(request: RevisionAssetReadRequest) {
+        return (
+            this.service.readRevisionAsset?.(request) ??
+            unsupportedCapability("revision assets")
+        );
+    }
+
+    public startBatchImport(request: MemoryBatchImportRequest) {
+        return (
+            this.service.startBatchImport?.(request) ??
+            unsupportedCapability("batch imports")
+        );
+    }
+
+    public getBatchImport(batchId: string) {
+        return (
+            this.service.getBatchImport?.(batchId) ??
+            unsupportedCapability("batch imports")
+        );
+    }
+
+    public findBatchImport(request: MemoryBatchImportLookup) {
+        return (
+            this.service.findBatchImport?.(request) ??
+            unsupportedCapability("batch import lookup")
+        );
+    }
+
+    public listBatchImports(corpusId: string) {
+        return (
+            this.service.listBatchImports?.(corpusId) ??
+            unsupportedCapability("batch imports")
+        );
+    }
+
+    public retryBatchImport(batchId: string) {
+        return (
+            this.service.retryBatchImport?.(batchId) ??
+            unsupportedCapability("batch imports")
+        );
+    }
+
+    public cancelBatchImport(batchId: string) {
+        return (
+            this.service.cancelBatchImport?.(batchId) ??
+            unsupportedCapability("batch imports")
+        );
+    }
+
+    public listRunbookJobs(corpusId: string) {
+        return (
+            this.service.listRunbookJobs?.(corpusId) ??
+            unsupportedCapability("runbook jobs")
+        );
+    }
+
+    public getRunbookJob(jobId: string) {
+        return (
+            this.service.getRunbookJob?.(jobId) ??
+            unsupportedCapability("runbook jobs")
+        );
+    }
+
+    public requestRunbookSynthesis(request: RunbookSynthesisRequest) {
+        return (
+            this.service.requestRunbookSynthesis?.(request) ??
+            unsupportedCapability("runbook synthesis")
+        );
     }
 
     public listSources(corpusId: string) {
@@ -262,6 +363,7 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
     }
 
     public saveProcedure(request: ProcedureSaveRequest) {
+        validateProcedureSaveRequest(request);
         return this.service.saveProcedure(request);
     }
 
@@ -393,6 +495,16 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             memoryToolNames.sourceList,
             { corpusId },
             sourceSchema.array(),
+        );
+    }
+
+    public listChanges(
+        request: MemoryChangeListRequest,
+    ): Promise<MemoryPage<MemoryChangeReceipt>> {
+        return this.invoke(
+            memoryToolNames.changesList,
+            request,
+            changePageSchema,
         );
     }
 
@@ -601,6 +713,32 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
+    public requestRunbookSynthesis(
+        request: RunbookSynthesisRequest,
+    ): Promise<RunbookJobResult> {
+        return this.invoke(
+            memoryToolNames.runbookSynthesisRequest,
+            request,
+            runbookJobResultSchema,
+        );
+    }
+
+    public getRunbookJob(jobId: string): Promise<RunbookJobResult | undefined> {
+        return this.invoke<RunbookJobResult | null>(
+            memoryToolNames.runbookJobGet,
+            { jobId },
+            runbookJobResultSchema.nullable(),
+        ).then((job) => job ?? undefined);
+    }
+
+    public listRunbookJobs(corpusId: string): Promise<RunbookJobResult[]> {
+        return this.invoke(
+            memoryToolNames.runbookJobsList,
+            { corpusId },
+            runbookJobResultSchema.array().max(100),
+        );
+    }
+
     public getPersonalHowToSettings(
         corpusId: string,
     ): Promise<PersonalHowToSettings> {
@@ -668,6 +806,7 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
     public saveProcedure(
         request: ProcedureSaveRequest,
     ): Promise<ProcedureVersion> {
+        validateProcedureSaveRequest(request);
         return this.invoke(
             memoryToolNames.procedureSave,
             request,

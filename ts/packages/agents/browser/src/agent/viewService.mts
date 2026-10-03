@@ -11,6 +11,9 @@ import type {
     ViewInvokeFunctions,
     ViewCallFunctions,
     ViewCancelResult,
+    MemoryHubFunctions,
+    MemoryHubRunbookFunctions,
+    MemoryHubRunbookImportFunctions,
 } from "@typeagent/browser-control-rpc/viewRpc";
 import { viewMethods } from "@typeagent/browser-control-rpc/viewRpc";
 import type { BrowserAgentInvokeFunctions } from "@typeagent/browser-control-rpc/serviceTypes";
@@ -33,7 +36,10 @@ const pendingViewHosts = new WeakMap<
 const cancelViewHosts = new WeakMap<BrowserActionContext, () => void>();
 
 export type BrowserViewDomainFunctions = BrowserAgentInvokeFunctions &
-    Pick<
+    MemoryHubFunctions &
+    MemoryHubRunbookFunctions & {
+        [M in keyof MemoryHubRunbookImportFunctions]: MemoryHubRunbookImportFunctions[M];
+    } & Pick<
         ViewInvokeFunctions,
         | "getAutoIndexSetting"
         | "listAutomations"

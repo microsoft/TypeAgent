@@ -1,0 +1,109 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.knowledge-collection {
+  min-width: 0;
+}
+.knowledge-collection [hidden] {
+  display: none !important;
+}
+.knowledge-collection-header,
+.knowledge-pagination,
+.knowledge-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.knowledge-collection-header h3 {
+  margin: 0;
+}
+.knowledge-collection-header {
+  flex-direction: column;
+  align-items: start;
+  justify-content: start;
+  min-height: 4.5rem;
+}
+.knowledge-collection[data-expanded="true"] > .knowledge-collection-header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 0;
+}
+.knowledge-collection-header button {
+  font-size: 0.8rem;
+}
+.knowledge-collection-status,
+.knowledge-item-meta {
+  color: var(--muted, #596579);
+  font-size: 0.8rem;
+}
+.knowledge-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  align-content: start;
+  gap: 8px;
+  max-height: 20rem;
+  overflow: auto;
+  padding: 3px;
+}
+.knowledge-collection[data-expanded="true"] .knowledge-cards {
+  max-height: 30rem;
+}
+.knowledge-collection .knowledge-item {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border, #dce1ed);
+  border-radius: 10px;
+  background: #f5f6ff;
+  overflow-wrap: anywhere;
+}
+.knowledge-collection .knowledge-item .knowledge-item-title {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.knowledge-item p {
+  margin: 6px 0 0;
+}
+.knowledge-item button:focus-visible,
+.knowledge-collection a:focus-visible,
+.knowledge-cards:focus-visible {
+  outline: 3px solid #5b69cf;
+  outline-offset: 2px;
+}
+.knowledge-filters {
+  justify-content: start;
+  margin: 12px 0;
+  align-items: end;
+}
+.knowledge-filters label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.knowledge-filters input {
+  width: min(22rem, 100%);
+}
+.knowledge-pagination {
+  margin-top: 12px;
+  justify-content: center;
+}
+.knowledge-collection-warning {
+  padding: 8px;
+  background: #fff3cd;
+  overflow-wrap: anywhere;
+}
+.phase2-lists > .knowledge-collection[data-expanded="true"],
+.knowledge-card:has(.knowledge-collection[data-expanded="true"]) {
+  grid-column: 1 / -1;
+  flex-basis: 100%;
+}

@@ -26,6 +26,7 @@ global.chrome = {
     contextMenus: {
         create: jest.fn(),
         remove: jest.fn(),
+        removeAll: jest.fn().mockResolvedValue(undefined),
         onClicked: {
             addListener: jest.fn(),
             hasListeners: jest.fn(),
