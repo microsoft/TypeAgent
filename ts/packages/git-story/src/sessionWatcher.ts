@@ -14,9 +14,6 @@ export type SessionWatchRequest = {
 export type SessionCaptureCheckpoint = {
     sessionId: string;
     transcriptPath: string;
-    // Internal reference matching NormalizedSessionEvent.id, not a seek position.
-    // May be a generated GUID absent from the transcript; null before the first event.
-    lastReadEventId: string | null;
     // Decimal byte offset after the last complete JSONL record, not a line number.
     sourceByteOffset: string;
 };
@@ -79,7 +76,7 @@ export class SessionWatcher {
         // Validate the GHCP session identity and transcript path.
         // Register one watch per project/session and load its last-read checkpoint.
         // Validate the checkpoint's session/transcript and resume byte offset.
-        // Restore generated-ID assignments separately; the checkpoint holds only the last ID.
+        // Restore generated-ID assignments separately from the read checkpoint.
         // Catch up existing records, then schedule processUpdates on source changes.
         // Serialize processing per session; coalesce notifications without losing updates.
         // Resolve when monitoring is established, not when the session ends.
@@ -120,16 +117,13 @@ export class SessionWatcher {
         // Pseudocode:
         // Validate sessionId/transcriptPath; seek to sourceByteOffset.
         // Detect transcript replacement/truncation before trusting the saved offset.
-        // lastReadEventId is a correlation reference, not a lookup key into the transcript.
-        // Never try to verify a generated GUID against the original ID-less record.
         // Read complete GHCP JSONL records; leave a partially written tail unread.
         // For ID-less records, assign a GUID once and retain it with the captured record.
         // Persist mappings for all assigned GUIDs, keyed by session/transcript generation/record offset.
         // Save assignments before advancing the checkpoint; reuse them when rereading records.
-        // Use that same assigned ID in lastReadEventId and the normalized event.
         // Reconcile replaced/truncated transcripts separately; generated IDs cannot detect changes.
-        // Return the session, transcript path, last complete event ID, and resume position.
-        // With no complete new events, retain the checkpoint (null event ID at the start).
+        // Return the session, transcript path, and byte offset after the last complete record.
+        // With no complete new events, retain the checkpoint (byte offset zero at the start).
         // The caller persists read progress; do not wait for downstream processing.
         // Surface malformed complete records and unsupported formats explicitly.
         throw new Error("SessionWatcher.captureUpdates is not implemented");

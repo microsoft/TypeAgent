@@ -62,11 +62,10 @@ for commit stories. Its responsibilities are to:
 The watcher supplies this context; the Story Builder decides what belongs in
 each commit story.
 
-To resume reading, the watcher saves the session ID, transcript file, last
-complete event ID, and byte offset in the transcript. This tracks what it has read,
-not what downstream memory processing has finished.
-The byte offset determines where reading resumes; the event ID references the
-last captured event. Generated IDs are saved separately with their transcript
+To resume reading, the watcher saves the session ID, transcript file, and byte
+offset after the last complete record. This tracks what it has read, not what
+downstream memory processing has finished.
+Generated IDs are saved separately with their transcript
 locations so rereading an event reuses its assigned ID.
 
 ## Trademarks

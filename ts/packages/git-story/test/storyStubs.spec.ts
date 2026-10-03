@@ -86,7 +86,6 @@ test("session watcher rejects normalization until implemented", () => {
             nextCheckpoint: {
                 sessionId: watchRequest.sessionId,
                 transcriptPath: watchRequest.transcriptPath,
-                lastReadEventId: null,
                 sourceByteOffset: "0",
             },
         }),
