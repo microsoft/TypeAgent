@@ -51,6 +51,29 @@ $ curl -G http://127.0.0.1:51703/api/story/commits/79f77a3 --data-urlencode proj
 
 Routes are in `src/server/router.ts`; handlers are in `src/server/routes/`.
 
+## Session Watcher
+
+The Session Watcher reads GitHub Copilot (GHCP) CLI transcripts to gather context
+for commit stories. Its responsibilities are to:
+
+- Capture new session activity, including conversations and tool use.
+- Normalize events into a common format, keeping the original event ID when
+  available or assigning a GUID when it is missing.
+  Keep the session context and any recorded edit diffs.
+- Pass events and metadata through a separate privacy filter before sharing them
+  with memory processing.
+- Collect session metadata, such as the client, models, timestamps, and related
+  sessions.
+
+The watcher supplies this context; the Story Builder decides what belongs in
+each commit story.
+
+To resume reading, the watcher saves the session ID, transcript file, and byte
+offset after the last complete record. This tracks what it has read, not what
+downstream memory processing has finished.
+Generated IDs are saved separately with their transcript
+locations so rereading an event reuses its assigned ID.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
