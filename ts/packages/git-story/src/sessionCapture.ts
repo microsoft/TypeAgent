@@ -117,6 +117,32 @@ function captureRecord(
     });
 }
 
+function replayOffset(
+    checkpoint: SessionCaptureCheckpoint | undefined,
+    saved: CaptureState | undefined,
+    reset: boolean,
+    expectedGeneration: string | undefined,
+): number | undefined {
+    if (
+        expectedGeneration !== undefined &&
+        (expectedGeneration !== saved?.generation || reset)
+    ) {
+        throw new Error("Capture transcript generation does not match");
+    }
+    const offset = checkpoint
+        ? byteOffset(checkpoint.sourceByteOffset)
+        : undefined;
+    if (
+        offset &&
+        (!saved ||
+            reset ||
+            offset > byteOffset(saved.checkpoint.sourceByteOffset))
+    ) {
+        throw new Error("Cannot apply an unverified capture checkpoint");
+    }
+    return offset;
+}
+
 async function capture(
     request: SessionWatchRequest,
     checkpoint: SessionCaptureCheckpoint | undefined,
@@ -146,18 +172,12 @@ async function capture(
             (saved.fileIdentity !== identity ||
                 size < saved.observedSize ||
                 prefix.copy().digest("hex") !== saved.prefixDigest);
-        if (
-            options.expectedGeneration !== undefined &&
-            (options.expectedGeneration !== saved?.generation || reset)
-        ) {
-            throw new Error("Capture transcript generation does not match");
-        }
-        const explicitOffset = checkpoint
-            ? byteOffset(checkpoint.sourceByteOffset)
-            : undefined;
-        if (explicitOffset && (!saved || reset || explicitOffset > savedEnd)) {
-            throw new Error("Cannot apply an unverified capture checkpoint");
-        }
+        const explicitOffset = replayOffset(
+            checkpoint,
+            saved,
+            reset,
+            options.expectedGeneration,
+        );
         const previous = reset ? undefined : saved;
         const start = explicitOffset ?? (previous ? savedEnd : 0);
         await assertRecordBoundary(file, start);
