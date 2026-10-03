@@ -39,6 +39,9 @@ const previous = JSON.parse(
 );
 const sourceHeader = (name) =>
     [
+        "// Copyright (c) Microsoft Corporation.",
+        "// Licensed under the MIT License.",
+        "",
         "// Copyright (c) 2026 Beatriz Almeida.",
         "// Licensed under the MIT License; see LICENSE.",
         `// Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/${revision}/web/assets/${name}`,
@@ -158,7 +161,7 @@ for (const name of filenames.filter(
     const localPath = path.join(directory, name);
     const text = await readFile(localPath, "utf8");
     const header = sourceHeader(name);
-    if (!text.startsWith(header)) await writeFile(localPath, header + text);
+    if (!text.includes(header)) await writeFile(localPath, header + text);
 }
 const exporter = await import(pathToFileURL(exportPath).href);
 const document = JSON.parse(
@@ -219,6 +222,7 @@ for (const name of filenames) {
                     return `diff --git a/${name} b/${name}`;
                 if (line.startsWith("--- ")) return `--- a/${name}`;
                 if (line.startsWith("+++ ")) return `+++ b/${name}`;
+                if (line === " ") return "";
                 return line;
             })
             .join("\n");

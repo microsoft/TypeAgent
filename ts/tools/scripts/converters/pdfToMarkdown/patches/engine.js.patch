@@ -1,13 +1,8 @@
 diff --git a/engine.js b/engine.js
-index 4fa097429..d10b846ea 100644
+index 4fa097429..35ddd393a 100644
 --- a/engine.js
 +++ b/engine.js
-@@ -1,12 +1,24 @@
-+// Copyright (c) 2026 Beatriz Almeida.
-+// Licensed under the MIT License; see LICENSE.
-+// Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/engine.js
-+// TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
-+// Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
+@@ -1,14 +1,21 @@
 +// Copyright (c) Microsoft Corporation.
 +// Licensed under the MIT License.
 +
@@ -20,7 +15,7 @@ index 4fa097429..d10b846ea 100644
  // Emits the same JSON as the Python library (schema "pdf-text-api/document@1"),
  // so the viewer and the exporters work the same with either engine.
  // Thresholds share their names with layout.py: keep both files in sync.
- 
+
 -import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
 -
 -pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -29,9 +24,12 @@ index 4fa097429..d10b846ea 100644
 +import { createLifecycle } from "./lifecycle.js";
 +import { normalizeOperatorList } from "./pdfjs5.js";
  import { areaOf, columns, gutters as pageGutters } from "./columns.js";
- import { GREEK, LATEX, OPERATORS, SUB_FROM, SUB_TO, SUP_FROM, SUP_TO, latexEscape } from "./symbols.js";
+-import { GREEK, LATEX, OPERATORS, SUB_FROM, SUB_TO, SUP_FROM, SUP_TO, latexEscape } from "./symbols.js";
++import { GREEK, OPERATORS, SUB_FROM, SUB_TO, SUP_FROM, SUP_TO, latexEscape } from "./symbols.js";
  import { NEGATED, NOT, isTexProducer, texChar, texEncoding, texGlyph } from "./texfonts.js";
-@@ -169,6 +181,7 @@ const plainMath = (text) => text.replaceAll(FRACTION_SLASH, "/")
+
+ export { pdfjsLib };
+@@ -169,6 +176,7 @@ const plainMath = (text) => text.replaceAll(FRACTION_SLASH, "/")
    .replace(new RegExp(`${FRACTION_END}(?=[\\p{L}\\d])`, "gu"), " ").replaceAll(FRACTION_END, "");
  const GROUPING = new Set([..."+-−–±·×÷=<>,;"]);
  const mathGroup = (group) => group.length > 1 && group.slice(1).some((c) => GROUPING.has(c.c) || c.space);
@@ -39,7 +37,7 @@ index 4fa097429..d10b846ea 100644
  function typesetMath(chars, g) {
    const seen = new Set();
    const rules = [];
-@@ -267,7 +280,7 @@ const bare = (group) => (group.startsWith("(") && group.endsWith(")") ? group.sl
+@@ -267,7 +275,7 @@ const bare = (group) => (group.startsWith("(") && group.endsWith(")") ? group.sl
  function mathLatex(text) {
    return text
      .replace(/\\sqrt\s*(\([^()]*\)|\d+|[\p{L}\d])/gu, (_, a) => `\\sqrt{${bare(a)}}`)
@@ -48,23 +46,57 @@ index 4fa097429..d10b846ea 100644
  }
  // "x²+ y²= 4": an operator spaced on one side only gets its other space.
  const operatorGaps = (t) => t
-@@ -352,6 +365,7 @@ function dropCaps(chars) {
+@@ -352,6 +360,7 @@ function dropCaps(chars) {
    return out;
  }
- 
+
 +// code-complexity-allow: pinned Papero span construction algorithm
  function buildSpans(chars, fonts, guttersOut = []) {
    chars = dropCaps(chars);
    const raw = [];
-@@ -487,6 +501,7 @@ function orderLine(fragments) {
+@@ -487,6 +496,7 @@ function orderLine(fragments) {
    return keyed.map(([, c]) => c);
  }
- 
+
 +// code-complexity-allow: pinned Papero fragment merging algorithm
  function mergeFragments(lines) {
    if (lines.length < 2) return lines.map((ln) => orderLine([ln]));
    const boxes = lines.map((ln) => [
-@@ -1355,6 +1370,7 @@ function linesToBlocks(lines) {
+@@ -856,23 +866,6 @@ function tableBlock(bbox, rows) {
+   if (sum(rows.map((r) => r.filter(Boolean).length)) < 3) return null;
+   return newBlock("table", bbox, { text: rows.map((r) => r.map((c) => c.replace(/\n/g, " ")).join(" | ")).join("\n"), rows });
+ }
+-function bandRows(spans) {
+-  const bands = bandsOf(spans.map((s) => atom("span", s.x0, s.y0, s.x1, s.y1, { span: s })));
+-  const edges = [Math.min(...bands[0].map((a) => a.y0))];
+-  for (let i = 1; i < bands.length; i++)
+-    edges.push((Math.max(...bands[i - 1].map((a) => a.y1)) + Math.min(...bands[i].map((a) => a.y0))) / 2);
+-  edges.push(Math.max(...bands[bands.length - 1].map((a) => a.y1)));
+-  return edges;
+-}
+-// A rule row holding 3+ text lines that each have 2+ cells is really several rows.
+-function looksUnruledRows(spans, ys) {
+-  for (let k = 0; k < ys.length - 1; k++) {
+-    const ins = spans.filter((s) => ys[k] <= (s.y0 + s.y1) / 2 && (s.y0 + s.y1) / 2 <= ys[k + 1]);
+-    const bands = bandsOf(ins.map((s) => atom("span", s.x0, s.y0, s.x1, s.y1, { span: s })));
+-    if (bands.length >= 3 && bands.filter((b) => b.length >= 2).length >= 3) return true;
+-  }
+-  return false;
+-}
+ // Row edges when rules don't separate every row (booktabs): decided inside each interval
+ // between rules — gaps of two sizes: only the big ones split rows; a line filling far fewer
+ // columns than the one above, set tight under it, continues its cells.
+@@ -901,7 +894,8 @@ function detectRuledTables(spans, g) {
+   const tables = [];
+   const used = new Set();
+   for (const region of ruledRegions(g, spans)) {
+-    let { bbox, xs, ys, realV } = region;
++    const { bbox, realV } = region;
++    let { xs, ys } = region;
+     const [x0, y0, x1, y1] = bbox;
+     const idx = spans
+       .map((s, i) => i)
+@@ -1355,6 +1349,7 @@ function linesToBlocks(lines) {
      group = [];
      kind = "paragraph";
    };
@@ -72,7 +104,7 @@ index 4fa097429..d10b846ea 100644
    lines.forEach((ln, idx) => {
      const text = ln.text;
      if (!text.trim()) return;
-@@ -1400,6 +1416,7 @@ function linesToBlocks(lines) {
+@@ -1400,6 +1395,7 @@ function linesToBlocks(lines) {
    return blocks;
  }
  // Alignment, indents and line spacing of each text block against the page's text area.
@@ -80,7 +112,7 @@ index 4fa097429..d10b846ea 100644
  function layoutFormat(page) {
    const text = page.blocks.filter((b) => b.line_boxes && !FURNITURE.has(b.type));
    if (!text.length) return;
-@@ -1466,6 +1483,7 @@ async function fontInfo(page, fontName, style) {
+@@ -1466,6 +1462,7 @@ async function fontInfo(page, fontName, style) {
  // text on white paper can be told apart from what the reader sees. Mirrors read_chars() in
  // layout.py, which gets the same from PDFium.
  // `tex`: the PDF was written by TeX, so raw codes of its math fonts can be decoded.
@@ -88,7 +120,7 @@ index 4fa097429..d10b846ea 100644
  function readGlyphs(page, viewport, ops, tex = false) {
    const O = pdfjsLib.OPS;
    const fonts = [];
-@@ -1503,6 +1521,7 @@ function readGlyphs(page, viewport, ops, tex = false) {
+@@ -1503,6 +1500,7 @@ function readGlyphs(page, viewport, ops, tex = false) {
      tm = tlm.slice();
      if (ty) newline = true;
    };
@@ -96,17 +128,17 @@ index 4fa097429..d10b846ea 100644
    const show = (items) => {
      const fi = font();
      const f = fonts[fi].obj;
-@@ -1658,6 +1677,7 @@ async function readChars(page, viewport, textContent) {
+@@ -1658,6 +1656,7 @@ async function readChars(page, viewport, textContent) {
    return { chars, rotated, fonts };
  }
- 
+
 +// code-complexity-allow: pinned Papero PDF graphics state machine
  async function readGraphics(page, viewport, width, height, ops) {
    const g = { hrules: [], vrules: [], ink: [], images: [], fills: [] };
    ops = ops || (await page.getOperatorList());
-@@ -1769,20 +1789,40 @@ async function readGraphics(page, viewport, width, height, ops) {
+@@ -1769,20 +1768,40 @@ async function readGraphics(page, viewport, width, height, ops) {
  }
- 
+
  // ---------------------------------------------------------------- page & document
 +// code-complexity-allow: pinned Papero page analysis pipeline
  async function analyzePage(pdf, number, opts) {
@@ -148,7 +180,19 @@ index 4fa097429..d10b846ea 100644
    }
    chars = visibleOnly(chars, g);
    rotated = visibleOnly(rotated, g);
-@@ -1845,6 +1885,9 @@ async function analyzePage(pdf, number, opts) {
+@@ -1799,8 +1818,9 @@ async function analyzePage(pdf, number, opts) {
+   const charts = chartRegions(g, width, height, spans);
+   let tables = [];
+   if (opts.tables) [tables, spans] = detectRuledTables(spans, withoutRulesIn(g, charts));
+-  let figures;
+-  [figures, spans] = detectFigures(g, [...spans, ...rotSpans], tables, width, height, charts, body);
++  const detected = detectFigures(g, [...spans, ...rotSpans], tables, width, height, charts, body);
++  const figures = detected[0];
++  spans = detected[1];
+
+   const atoms = spans.map((s) => atom("span", s.x0, s.y0, s.x1, s.y1, { span: s }));
+   for (const b of [...tables, ...figures]) atoms.push(atom(b.type, ...b.bbox, { block: b }));
+@@ -1845,6 +1865,9 @@ async function analyzePage(pdf, number, opts) {
      drawn.canvas.width = drawn.canvas.height = 0; // free memory early
    }
    return { page: result, pdfPage: page, sizes, chars: chars.length, crops };
@@ -156,25 +200,25 @@ index 4fa097429..d10b846ea 100644
 +    if (drawn) drawn.canvas.width = drawn.canvas.height = 0;
 +  }
  }
- 
+
  function groupRotated(chars) {
-@@ -1861,6 +1904,7 @@ function groupRotated(chars) {
- 
+@@ -1861,6 +1884,7 @@ function groupRotated(chars) {
+
  const FURNITURE = new Set(["header", "footer", "page_number"]);
- 
+
 +// code-complexity-allow: pinned Papero page furniture classifier
  function markFurniture(pages) {
    const key = (b) => b.type === "figure"
      ? `fig:${b.bbox.map((v, i) => Math.round((i < 2 ? v : v - b.bbox[i - 2]) / 6)).join(",")}`
-@@ -1915,6 +1959,7 @@ function normalizeSizes(pages, body) {
+@@ -1915,6 +1939,7 @@ function normalizeSizes(pages, body) {
    for (const p of pages) for (const b of p.blocks) if (b.pt && b.font_size) b.font_size = (b.pt / bodyPt) * body;
  }
- 
+
 +// code-complexity-allow: pinned Papero heading classification algorithm
  function classifyHeadings(pages, body) {
    const candidates = [];
    // Between the title and the abstract of the first page: authors and affiliations, often
-@@ -1938,6 +1983,7 @@ function classifyHeadings(pages, body) {
+@@ -1938,6 +1963,7 @@ function classifyHeadings(pages, body) {
    const titles = new Set();
    const tableTitle = (prev) => !!prev && (titles.has(prev) || /^(table|tabela|quadro)\s+[ivxlc\d]+\.?$/i.test((prev.text || "").trim()));
    for (const p of pages) {
@@ -182,10 +226,10 @@ index 4fa097429..d10b846ea 100644
      p.blocks.forEach((b, i) => {
        // A one-line "list item" set bold or bigger than the body is a numbered section heading.
        const neighbours = [p.blocks[i - 1], p.blocks[i + 1]].filter(Boolean).map((x) => x.type);
-@@ -2142,17 +2188,27 @@ function linkCaptions(page) {
+@@ -2142,17 +2168,27 @@ function linkCaptions(page) {
    }
  }
- 
+
 -async function drawPage(pdfPage, scale) {
 +async function drawPage(pdfPage, scale, opts) {
 +  opts._checkCancelled();
@@ -217,7 +261,7 @@ index 4fa097429..d10b846ea 100644
  }
  const cropTargets = (page) => page.blocks.filter((b) => (b.type === "figure" || b.type === "table" || b.type === "formula") && b.bbox);
  // The region of a block (and 3 pt around it) as PNG, or null when there is nothing to show.
-@@ -2164,8 +2220,12 @@ function cropOf(canvas, b, scale) {
+@@ -2164,8 +2200,12 @@ function cropOf(canvas, b, scale) {
    if (w < 4 || h < 4) return null;
    const c = document.createElement("canvas");
    c.width = w; c.height = h;
@@ -232,7 +276,7 @@ index 4fa097429..d10b846ea 100644
  }
  // `ready`: the crops cut while the page was analysed (region -> crop), used when every block
  // to show has its region among them; otherwise the page is drawn again.
-@@ -2174,15 +2234,19 @@ async function cropImages(pdfPage, page, opts, ready = null) {
+@@ -2174,15 +2214,19 @@ async function cropImages(pdfPage, page, opts, ready = null) {
    if (!targets.length) return;
    const scale = opts.imageScale || 2;
    const reuse = !!ready && targets.every((b) => ready.has(b.bbox.join()));
@@ -252,9 +296,9 @@ index 4fa097429..d10b846ea 100644
 +    if (canvas) canvas.width = canvas.height = 0;
 +  }
  }
- 
+
  export function parsePageSpec(spec, count) {
-@@ -2221,44 +2285,62 @@ async function readMetadata(pdf) {
+@@ -2221,44 +2265,62 @@ async function readMetadata(pdf) {
   *          imageScale?: number, onProgress?: (done:number, total:number) => void}} opts
   * @returns {Promise<{doc: object, pdf: any}>}
   */
@@ -333,7 +377,7 @@ index 4fa097429..d10b846ea 100644
    const layoutMs = performance.now() - started;
    const total = new Map();
    for (const r of results) for (const [k, n] of r.sizes) total.set(k, (total.get(k) || 0) + n);
-@@ -2270,6 +2352,7 @@ export async function extractDocument(data, opts = {}) {
+@@ -2270,6 +2332,7 @@ export async function extractDocument(data, opts = {}) {
    normalizeSizes(pages, body);
    classifyHeadings(pages, body);
    for (const p of pages) {
@@ -341,7 +385,7 @@ index 4fa097429..d10b846ea 100644
      absorbFormulaBits(p);
      composeFigures(p, body);
      linkCaptions(p);
-@@ -2286,8 +2369,12 @@ export async function extractDocument(data, opts = {}) {
+@@ -2286,8 +2349,12 @@ export async function extractDocument(data, opts = {}) {
        if (b.number === null) delete b.number;
      });
    }
@@ -353,12 +397,12 @@ index 4fa097429..d10b846ea 100644
 +    r.pdfPage.cleanup();
 +  }
 +  lifecycle.check();
- 
+
    const lowText = results.filter((r) => r.chars < SCANNED_CHARS_PER_PAGE).length;
    const elapsed = performance.now() - started;
-@@ -2308,5 +2395,8 @@ export async function extractDocument(data, opts = {}) {
+@@ -2308,5 +2375,8 @@ export async function extractDocument(data, opts = {}) {
  }
- 
+
  export async function openPdf(data, password) {
 -  return pdfjsLib.getDocument({ data: new Uint8Array(data), password: password || undefined, isEvalSupported: false, fontExtraProperties: true }).promise;
 +  const opts = typeof password === "object" && password !== null ? password : { password };

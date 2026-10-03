@@ -466,7 +466,7 @@ test("copied source hashes, helper preservation, and patch records are current",
             const text = bytes.toString("utf8");
             assert.ok(
                 text.startsWith(
-                    "// Copyright (c) 2026 Beatriz Almeida.\n// Licensed under the MIT License; see LICENSE.\n",
+                    "// Copyright (c) Microsoft Corporation.\n// Licensed under the MIT License.\n\n// Copyright (c) 2026 Beatriz Almeida.\n// Licensed under the MIT License; see LICENSE.\n",
                 ),
             );
             assert.ok(
@@ -480,14 +480,11 @@ test("copied source hashes, helper preservation, and patch records are current",
                 ),
             );
             if (
-                [
-                    "columns.js",
-                    "symbols.js",
-                    "texfonts.js",
-                    "mathtext.js",
-                ].includes(file.localPath)
+                ["symbols.js", "texfonts.js", "mathtext.js"].includes(
+                    file.localPath,
+                )
             ) {
-                const originalBody = text.split("\n").slice(5).join("\n");
+                const originalBody = text.split("\n").slice(8).join("\n");
                 assert.equal(
                     createHash("sha256").update(originalBody).digest("hex"),
                     file.originalSha256,

@@ -1,31 +1,34 @@
 diff --git a/export.js b/export.js
-index c475e28bd..e34d3a6cc 100644
+index c475e28bd..d4a96df3b 100644
 --- a/export.js
 +++ b/export.js
-@@ -1,38 +1,22 @@
+@@ -1,38 +1,25 @@
 -// Renderers and file exporters for the document JSON — a port of src/papero_extract/render.py
 -// plus XLSX/DOCX writers (plain OOXML zipped with JSZip, no heavy dependencies).
 -
 -import { bands } from "./columns.js";
++// Copyright (c) Microsoft Corporation.
++// Licensed under the MIT License.
++
 +// Copyright (c) 2026 Beatriz Almeida.
 +// Licensed under the MIT License; see LICENSE.
 +// Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/export.js
 +// TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
 +// Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
  import { inlineLatex, latexify, mathSpans, scriptText } from "./mathtext.js";
- 
+
 +
  const FURNITURE = new Set(["header", "footer", "page_number"]);
 -const BOM = String.fromCharCode(0xfeff); // lets Notepad/Excel detect UTF-8 (accents)
 + // lets Notepad/Excel detect UTF-8 (accents)
  const BULLET_CHARS = "•◦▪▫‣⁃●○■□–—*✓✔➢➤►▶·-";
- 
+
 +
  export const contentBlocks = (page) => page.blocks.filter((b) => !FURNITURE.has(b.type));
 -export const allBlocks = (doc) => doc.pages.flatMap((p) => p.blocks);
 -export const tablesOf = (doc) => allBlocks(doc).filter((b) => b.type === "table" && b.rows);
 -export const imagesOf = (doc) => allBlocks(doc).filter((b) => b.image && b.image.data);
- 
+
 -// ---------------------------------------------------------------- text
 -// `math`: "unicode" (as it reads: "x² + 1 = 0") or "latex" ("$x^{2} + 1 = 0$").
 -export function blocksToText(blocks, math = "unicode") {
@@ -43,14 +46,14 @@ index c475e28bd..e34d3a6cc 100644
 -}
 -export const toText = (doc, { math = "unicode" } = {}) =>
 -  doc.pages.map((p) => blocksToText(contentBlocks(p), math)).filter((t) => t.trim()).join("\n\n");
- 
+
  // ---------------------------------------------------------------- markdown
  const mdCell = (t) => String(t).replace(/\|/g, "\\|").replace(/\n/g, "<br>").trim();
 +
  export function mdTable(rows) {
    const width = Math.max(...rows.map((r) => r.length));
    const full = rows.map((r) => [...r, ...Array(width - r.length).fill("")]);
-@@ -42,11 +26,13 @@ export function mdTable(rows) {
+@@ -42,11 +29,13 @@ export function mdTable(rows) {
      ...full.slice(1).map((r) => "| " + r.map(mdCell).join(" | ") + " |"),
    ].join("\n");
  }
@@ -64,7 +67,7 @@ index c475e28bd..e34d3a6cc 100644
  // Words printed inside a figure (legend, axis titles) help search; bare tick values don't.
  export function figureWords(text) {
    return text
-@@ -54,6 +40,7 @@ export function figureWords(text) {
+@@ -54,6 +43,7 @@ export function figureWords(text) {
      .map((ln) => ln.split(/\s+/).filter((t) => t && !/^[-+−]?[\d.,%]+$/.test(t)).join(" "))
      .filter((ln) => /\p{L}/u.test(ln));
  }
@@ -72,7 +75,7 @@ index c475e28bd..e34d3a6cc 100644
  // Inline formatting as Markdown: **bold**, *italic*, <sup>/<sub>; markers hug the words.
  // **bold** / *italic* around the words, the spaces at either end left outside.
  function emphasis(text, bold, italic) {
-@@ -64,6 +51,7 @@ function emphasis(text, bold, italic) {
+@@ -64,6 +54,7 @@ function emphasis(text, bold, italic) {
    if (bold) t = `**${t}**`;
    return lead + t + trail;
  }
@@ -80,7 +83,7 @@ index c475e28bd..e34d3a6cc 100644
  function mdInline(b, math = "unicode") {
    if (math === "latex") return mdInlineLatex(b);
    if (!b.runs?.length) return (b.text || "").replace(/\n/g, "  \n");
-@@ -75,6 +63,7 @@ function mdInline(b, math = "unicode") {
+@@ -75,6 +66,7 @@ function mdInline(b, math = "unicode") {
      return lead + emphasis(t, r.bold, r.italic) + trail;
    }).join("").replace(/\n/g, "  \n");
  }
@@ -88,7 +91,7 @@ index c475e28bd..e34d3a6cc 100644
  // The block with its math as `$…$` (exponents and indices inside it), bold and italic kept on
  // the words around.
  function mdInlineLatex(b) {
-@@ -106,25 +95,7 @@ function mdInlineLatex(b) {
+@@ -106,25 +98,7 @@ function mdInlineLatex(b) {
    }
    return (out + plain(at, text.length)).replace(/\n/g, "  \n");
  }
@@ -115,7 +118,7 @@ index c475e28bd..e34d3a6cc 100644
  export function blockMarkdown(b, images = "ref", math = "unicode") {
    const text = math === "latex" ? inlineLatex(b.text || "") : b.text;
    switch (b.type) {
-@@ -156,6 +127,7 @@ export function blockMarkdown(b, images = "ref", math = "unicode") {
+@@ -156,6 +130,7 @@ export function blockMarkdown(b, images = "ref", math = "unicode") {
        return mdInline(b, math);
    }
  }
@@ -123,7 +126,7 @@ index c475e28bd..e34d3a6cc 100644
  export function toMarkdown(doc, { images = "ref", pageBreaks = false, math = "unicode" } = {}) {
    const out = [];
    doc.pages.forEach((page) => {
-@@ -173,416 +145,3 @@ export function toMarkdown(doc, { images = "ref", pageBreaks = false, math = "un
+@@ -173,416 +148,3 @@ export function toMarkdown(doc, { images = "ref", pageBreaks = false, math = "un
    });
    return out.join("\n\n").trim() + "\n";
  }

@@ -1,13 +1,8 @@
 diff --git a/symbols.js b/symbols.js
-index 652f270cc..b9d8351a2 100644
+index 652f270cc..e23f93c15 100644
 --- a/symbols.js
 +++ b/symbols.js
-@@ -1,3 +1,16 @@
-+// Copyright (c) 2026 Beatriz Almeida.
-+// Licensed under the MIT License; see LICENSE.
-+// Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/symbols.js
-+// TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
-+// Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
+@@ -1,3 +1,11 @@
 +// Copyright (c) Microsoft Corporation.
 +// Licensed under the MIT License.
 +
@@ -18,4 +13,4 @@ index 652f270cc..b9d8351a2 100644
 +// Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
  // Symbol tables shared by the layout engine and the inline-math writer — the browser side of
  // src/papero_extract/symbols.py. Keep both in sync.
- 
+

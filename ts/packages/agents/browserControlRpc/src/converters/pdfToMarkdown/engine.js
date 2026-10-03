@@ -6,14 +6,6 @@
 // Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/engine.js
 // TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
 // Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Copyright (c) 2026 Beatriz Almeida.
-// Licensed under the MIT License; see LICENSE.
-// Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/engine.js
-// TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
-// Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
 // Browser layout engine — a port of src/papero_extract/layout.py on top of pdf.js.
 // Emits the same JSON as the Python library (schema "pdf-text-api/document@1"),
 // so the viewer and the exporters work the same with either engine.
@@ -23,7 +15,7 @@ import * as pdfjsLib from "pdfjs-dist/build/pdf.mjs";
 import { createLifecycle } from "./lifecycle.js";
 import { normalizeOperatorList } from "./pdfjs5.js";
 import { areaOf, columns, gutters as pageGutters } from "./columns.js";
-import { GREEK, LATEX, OPERATORS, SUB_FROM, SUB_TO, SUP_FROM, SUP_TO, latexEscape } from "./symbols.js";
+import { GREEK, OPERATORS, SUB_FROM, SUB_TO, SUP_FROM, SUP_TO, latexEscape } from "./symbols.js";
 import { NEGATED, NOT, isTexProducer, texChar, texEncoding, texGlyph } from "./texfonts.js";
 
 export { pdfjsLib };
@@ -874,23 +866,6 @@ function tableBlock(bbox, rows) {
   if (sum(rows.map((r) => r.filter(Boolean).length)) < 3) return null;
   return newBlock("table", bbox, { text: rows.map((r) => r.map((c) => c.replace(/\n/g, " ")).join(" | ")).join("\n"), rows });
 }
-function bandRows(spans) {
-  const bands = bandsOf(spans.map((s) => atom("span", s.x0, s.y0, s.x1, s.y1, { span: s })));
-  const edges = [Math.min(...bands[0].map((a) => a.y0))];
-  for (let i = 1; i < bands.length; i++)
-    edges.push((Math.max(...bands[i - 1].map((a) => a.y1)) + Math.min(...bands[i].map((a) => a.y0))) / 2);
-  edges.push(Math.max(...bands[bands.length - 1].map((a) => a.y1)));
-  return edges;
-}
-// A rule row holding 3+ text lines that each have 2+ cells is really several rows.
-function looksUnruledRows(spans, ys) {
-  for (let k = 0; k < ys.length - 1; k++) {
-    const ins = spans.filter((s) => ys[k] <= (s.y0 + s.y1) / 2 && (s.y0 + s.y1) / 2 <= ys[k + 1]);
-    const bands = bandsOf(ins.map((s) => atom("span", s.x0, s.y0, s.x1, s.y1, { span: s })));
-    if (bands.length >= 3 && bands.filter((b) => b.length >= 2).length >= 3) return true;
-  }
-  return false;
-}
 // Row edges when rules don't separate every row (booktabs): decided inside each interval
 // between rules — gaps of two sizes: only the big ones split rows; a line filling far fewer
 // columns than the one above, set tight under it, continues its cells.
@@ -919,7 +894,8 @@ function detectRuledTables(spans, g) {
   const tables = [];
   const used = new Set();
   for (const region of ruledRegions(g, spans)) {
-    let { bbox, xs, ys, realV } = region;
+    const { bbox, realV } = region;
+    let { xs, ys } = region;
     const [x0, y0, x1, y1] = bbox;
     const idx = spans
       .map((s, i) => i)
@@ -1842,8 +1818,9 @@ async function analyzePage(pdf, number, opts) {
   const charts = chartRegions(g, width, height, spans);
   let tables = [];
   if (opts.tables) [tables, spans] = detectRuledTables(spans, withoutRulesIn(g, charts));
-  let figures;
-  [figures, spans] = detectFigures(g, [...spans, ...rotSpans], tables, width, height, charts, body);
+  const detected = detectFigures(g, [...spans, ...rotSpans], tables, width, height, charts, body);
+  const figures = detected[0];
+  spans = detected[1];
 
   const atoms = spans.map((s) => atom("span", s.x0, s.y0, s.x1, s.y1, { span: s }));
   for (const b of [...tables, ...figures]) atoms.push(atom(b.type, ...b.bbox, { block: b }));

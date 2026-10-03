@@ -6,14 +6,6 @@
 // Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/columns.js
 // TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
 // Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Copyright (c) 2026 Beatriz Almeida.
-// Licensed under the MIT License; see LICENSE.
-// Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/columns.js
-// TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
-// Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
 // Text columns of a page, from block boxes alone — a port of src/papero_extract/columns.py.
 // A gutter is a vertical strip that (almost) no text crosses, with text on both sides; a
 // title or figure spanning the columns may cross it. The layout pass measures alignment

@@ -6,14 +6,6 @@
 // Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/mathtext.js
 // TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
 // Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Copyright (c) 2026 Beatriz Almeida.
-// Licensed under the MIT License; see LICENSE.
-// Upstream source: https://github.com/beatrizalmeidaf/papero-pdf-text-extractor/blob/f9e92cbc0224d1413c11dda15b284ee41b9fc48f/web/assets/mathtext.js
-// TypeAgent modifications: Copyright (c) Microsoft Corporation. Licensed under the MIT License.
-// Adapted source and provenance header; reversible patch recorded in ts/tools/scripts/converters/pdfToMarkdown/patches.
 // Math inside running text, as LaTeX: "Se tg x − cotg x = 1, então…" ->
 // "Se $\operatorname{tg} x - \operatorname{cotg} x = 1$, então…".
 // The browser side of src/papero_extract/mathtext.py (the reasoning is there): keep both in
