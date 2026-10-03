@@ -2,6 +2,19 @@
 // Licensed under the MIT License.
 
 import type { SessionMetadata } from "./gitCommitStory.js";
+import {
+    captureSessionUpdates,
+    type CapturedSessionUpdates,
+    type SessionCaptureOptions,
+} from "./sessionCapture.js";
+
+export type {
+    CapturedSessionRecord,
+    CapturedSessionUpdates,
+    SessionCaptureDiagnostic,
+    SessionCaptureOptions,
+    SessionCaptureSource,
+} from "./sessionCapture.js";
 
 export type SessionWatchRequest = {
     projectPath: string;
@@ -16,11 +29,6 @@ export type SessionCaptureCheckpoint = {
     transcriptPath: string;
     // Decimal byte offset after the last complete JSONL record, not a line number.
     sourceByteOffset: string;
-};
-
-export type CapturedSessionUpdates = {
-    records: unknown[];
-    nextCheckpoint: SessionCaptureCheckpoint;
 };
 
 export type NormalizedSessionEvent = {
@@ -100,7 +108,7 @@ export class SessionWatcher {
     ): Promise<SessionCaptureCheckpoint> {
         // Pseudocode:
         // captured = await captureUpdates(request, checkpoint).
-        // Persist captured.nextCheckpoint as read progress, independently of ingestion.
+        // Capture has persisted read progress, independently of ingestion.
         // events = normalizeEvents(request, captured).
         // metadata = collectMetadata(request, events, previous session metadata).
         // approved = await filterForPrivacy({ projectPath, sessionId, events, metadata }).
@@ -112,22 +120,11 @@ export class SessionWatcher {
     }
 
     async captureUpdates(
-        _request: SessionWatchRequest,
-        _checkpoint?: SessionCaptureCheckpoint,
+        request: SessionWatchRequest,
+        checkpoint?: SessionCaptureCheckpoint,
+        options?: SessionCaptureOptions,
     ): Promise<CapturedSessionUpdates> {
-        // Pseudocode:
-        // Validate sessionId/transcriptPath; seek to sourceByteOffset.
-        // Detect transcript replacement/truncation before trusting the saved offset.
-        // Read complete GHCP JSONL records; leave a partially written tail unread.
-        // For ID-less records, assign a GUID once and retain it with the captured record.
-        // Persist mappings for all assigned GUIDs, keyed by session/transcript generation/record offset.
-        // Save assignments before advancing the checkpoint; reuse them when rereading records.
-        // Reconcile replaced/truncated transcripts separately; generated IDs cannot detect changes.
-        // Return the session, transcript path, and byte offset after the last complete record.
-        // With no complete new events, retain the checkpoint (byte offset zero at the start).
-        // The caller persists read progress; do not wait for downstream processing.
-        // Surface malformed complete records and unsupported formats explicitly.
-        throw new Error("SessionWatcher.captureUpdates is not implemented");
+        return captureSessionUpdates(request, checkpoint, options);
     }
 
     normalizeEvents(

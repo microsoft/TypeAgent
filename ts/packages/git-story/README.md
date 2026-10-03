@@ -68,6 +68,71 @@ downstream memory processing has finished.
 Generated IDs are saved separately with their transcript
 locations so rereading an event reuses its assigned ID.
 
+### Batch capture
+
+`SessionWatcher.captureUpdates(request, checkpoint?, options?)` delegates to
+`captureSessionUpdates` in `src/sessionCapture.ts`. Capture is implemented;
+watch/stop, processing, normalization, privacy filtering, and delivery remain
+separate work. Nothing starts a watcher, daemon, hook, or VS Code adapter.
+
+With no checkpoint, capture loads the saved cursor. `options.stateDirectory`
+defaults to `~/.typeagent/git-story/capture`. `options.maxRecords` defaults to
+1000 and limits complete source records examined, including malformed lines.
+Only LF-terminated records are consumed; CRLF is supported. An unfinished tail,
+including an incomplete UTF-8 character, stays unread until its LF arrives.
+Offsets count UTF-8 bytes, not characters.
+
+The exported `CapturedSessionUpdates` contains:
+
+- `records: CapturedSessionRecord[]`: each envelope has the assigned `id`,
+  optional native `sourceEventId`, `source`, and unchanged parsed JSON `payload`.
+  Native string IDs are preserved verbatim; otherwise capture assigns a random
+  GUID. Generated IDs are never inserted into `payload` or `sourceEventId`.
+- `source: SessionCaptureSource` on records and diagnostics: `sessionId`,
+  `transcriptPath`, `generation`, and decimal `sourceByteOffset` at the **start**
+  of the record.
+- `nextCheckpoint: SessionCaptureCheckpoint`: `sessionId`, `transcriptPath`, and
+  decimal `sourceByteOffset` immediately **after** the last complete record
+  consumed in this batch.
+- `generation: string` and `diagnostics: SessionCaptureDiagnostic[]`. Diagnostics
+  contain only a code and source location, never raw text or parser errors.
+  `invalid-json` and `invalid-utf8` records advance the cursor but are not returned
+  as events. Callers must surface these diagnostics; valid JSON of an unsupported
+  event shape is preserved for normalization to diagnose. `source-reset` reports
+  a new transcript generation.
+
+The atomic state file saves both generated IDs (keyed by generation and record
+offset) and the read high-water checkpoint **before capture returns**. This is
+read progress, not downstream ingestion acknowledgement. Delivery recovery must
+explicitly replay: pass a zero checkpoint to reread the current generation, or
+pass a previously read nonzero checkpoint together with
+`options.expectedGeneration` from its batch. A checkpoint alone has no generation
+and cannot safely authenticate a nonzero replay cursor. Replay does not regress
+the saved high-water checkpoint. Keep the original transcript and capture state
+for as long as replay is needed; deleting state loses generated-ID assignments.
+
+File identity, observed length, and a SHA-256 digest of the consumed prefix
+detect replacement, truncation, and rewritten/regrown content. Hashes identify
+source changes, **not event IDs**. Automatic resume starts at zero with a new
+generation and a `source-reset` diagnostic when the source changed. An explicitly
+generation-bound replay fails instead. The reader seeks to the requested byte
+offset but also rereads the consumed prefix to verify its digest; this deliberate
+I/O cost detects in-place changes that file identity and length alone miss.
+Observed changes during capture reject the batch without saving progress.
+An identical in-place truncate-and-regrow completed between captures is not
+distinguishable from the original file if both its identity and bytes are
+unchanged.
+
+State is private local capture data, not privacy-approved output; do not log or
+publish raw envelopes. Files use exclusive creation and restrictive modes where
+supported, then flush and rename a same-directory temporary file over the prior
+state. Write/flush/rename failures reject capture and leave the previous state
+intact. This is atomic file publication, not a cross-platform power-loss durability
+guarantee. A per-state exclusive `.lock` rejects concurrent writers. Serialize
+captures; after a writer crashes, remove its abandoned `.lock` only after
+confirming it has stopped. Corrupt or unreadable state fails closed rather than
+silently discarding identity assignments.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
