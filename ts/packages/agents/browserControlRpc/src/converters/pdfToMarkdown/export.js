@@ -18,7 +18,7 @@ export const contentBlocks = (page) => page.blocks.filter((b) => !FURNITURE.has(
 
 
 // ---------------------------------------------------------------- markdown
-const mdCell = (t) => String(t).replace(/\|/g, "\\|").replace(/\n/g, "<br>").trim();
+const mdCell = (t) => String(t).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, "<br>").trim();
 
 export function mdTable(rows) {
   const width = Math.max(...rows.map((r) => r.length));
@@ -69,7 +69,7 @@ function mdInline(b, math = "unicode") {
   return b.runs.map((r) => {
     const [lead, core, trail] = splitOuterWhitespace(r.text);
     if (!core) return r.text;
-    let t = core.replace(/\*/g, "\\*");
+    let t = core.replace(/\\/g, "\\\\").replace(/\*/g, "\\*");
     if (r.script) t = r.script === "super" ? `<sup>${t}</sup>` : `<sub>${t}</sub>`;
     return lead + emphasis(t, r.bold, r.italic) + trail;
   }).join("").replace(/\n/g, "  \n");
