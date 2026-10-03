@@ -18,7 +18,7 @@ export type SessionCaptureCheckpoint = {
     // May be a generated GUID absent from the transcript; null before the first event.
     lastReadEventId: string | null;
     // Decimal byte offset after the last complete JSONL record, not a line number.
-    sourcePosition: string;
+    sourceByteOffset: string;
 };
 
 export type CapturedSessionUpdates = {
@@ -118,7 +118,7 @@ export class SessionWatcher {
         _checkpoint?: SessionCaptureCheckpoint,
     ): Promise<CapturedSessionUpdates> {
         // Pseudocode:
-        // Validate sessionId/transcriptPath; seek to the byte offset in sourcePosition.
+        // Validate sessionId/transcriptPath; seek to sourceByteOffset.
         // Detect transcript replacement/truncation before trusting the saved offset.
         // lastReadEventId is a correlation reference, not a lookup key into the transcript.
         // Never try to verify a generated GUID against the original ID-less record.

@@ -87,7 +87,7 @@ test("session watcher rejects normalization until implemented", () => {
                 sessionId: watchRequest.sessionId,
                 transcriptPath: watchRequest.transcriptPath,
                 lastReadEventId: null,
-                sourcePosition: "0",
+                sourceByteOffset: "0",
             },
         }),
     ).toThrow("SessionWatcher.normalizeEvents is not implemented");
