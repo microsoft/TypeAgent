@@ -16,7 +16,10 @@ jest.mock(
     "./memoryHubWebExploreAnalytics.html?raw",
     () =>
         require("node:fs").readFileSync(
-            `${__dirname}\\memoryHubWebExploreAnalytics.html`,
+            require("node:path").resolve(
+                __dirname,
+                "memoryHubWebExploreAnalytics.html",
+            ),
             "utf8",
         ),
     { virtual: true },
@@ -25,7 +28,10 @@ jest.mock(
     "./memoryHubWebExploreEntities.html?raw",
     () =>
         require("node:fs").readFileSync(
-            `${__dirname}\\memoryHubWebExploreEntities.html`,
+            require("node:path").resolve(
+                __dirname,
+                "memoryHubWebExploreEntities.html",
+            ),
             "utf8",
         ),
     { virtual: true },
@@ -34,7 +40,10 @@ jest.mock(
     "./memoryHubWebExploreTopics.html?raw",
     () =>
         require("node:fs").readFileSync(
-            `${__dirname}\\memoryHubWebExploreTopics.html`,
+            require("node:path").resolve(
+                __dirname,
+                "memoryHubWebExploreTopics.html",
+            ),
             "utf8",
         ),
     { virtual: true },
