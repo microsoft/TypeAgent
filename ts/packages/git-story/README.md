@@ -71,9 +71,10 @@ locations so rereading an event reuses its assigned ID.
 ### Batch capture
 
 `SessionWatcher.captureUpdates(request, checkpoint?, options?)` delegates to
-`captureSessionUpdates` in `src/sessionCapture.ts`. Capture is implemented;
-watch/stop, processing, normalization, privacy filtering, and delivery remain
-separate work. Nothing starts a watcher, daemon, hook, or VS Code adapter.
+`captureSessionUpdates` in `src/sessionCapture.ts`. Batch capture, normalization,
+and metadata collection/restoration are implemented. Watch/stop, processing,
+privacy filtering, and delivery remain separate work. Nothing starts a watcher,
+daemon, hook, or VS Code adapter.
 
 With no checkpoint, capture loads the saved cursor. `options.stateDirectory`
 defaults to `~/.typeagent/git-story/capture`. `options.maxRecords` defaults to
@@ -132,6 +133,129 @@ guarantee. A per-state exclusive `.lock` rejects concurrent writers. Serialize
 captures; after a writer crashes, remove its abandoned `.lock` only after
 confirming it has stopped. Corrupt or unreadable state fails closed rather than
 silently discarding identity assignments.
+
+### Normalization
+
+`SessionWatcher.normalizeEvents(request, captured)` returns a
+`NormalizedSessionBatch`: `events`, `diagnostics`, `generation`,
+`nextCheckpoint`, and optional `lastEventTimestamp`. It consumes capture
+envelopes, not raw JSONL or native VS Code records. It never generates IDs:
+`id` is copied from capture, including an empty native string ID.
+`sourceEventId` is copied only when capture supplied it.
+
+Supported messages are `user.message`, `assistant.message`, and
+`system.message`, with text in `data.content`. Assistant maps to role `agent`.
+Optional source timestamps, models (`data.model` or top-level `model`), and
+`agentId` are retained. Session identity belongs to the enclosing update.
+
+`tool.execution_start` retains `data.toolCallId`, `toolName`, and `arguments`.
+`tool.execution_complete` retains the same exact `toolCallId`, `success`,
+`result.content` as `output`, `result.detailedContent` as `detailedContent`,
+and any error object. A completion does not need its start in the same batch.
+Consumers correlate by session, generation, optional agent ID, and tool-call ID;
+they must not assume every start has already arrived.
+
+`diff` is source-reported evidence only. Explicit string `result.diff` or
+`result.detailedContent.diff` is retained. A literal unified diff in
+`detailedContent` is also recognized when it begins with `diff --git` or `---`
+and contains adjacent `---`/`+++` file headers and a numbered `@@` hunk header.
+The original detail is always retained, including structured detail, extra
+warnings, or text that does not match this supported diff shape. Arbitrary UI
+text is not labeled a diff. Script commands and output need no diff; no
+filesystem changes are inferred, no Git diff is constructed, and neither
+success nor a reported patch assigns work to a commit.
+
+Session events retain their data as `details`: `session.start`, `resume`,
+`model_change`, `info`, `warning`, `error`, `idle`, `shutdown`, `context_changed`,
+`title_changed`, `task_complete`, `handoff`, `truncation`, and
+`compaction_complete`. `assistant.usage` and `subagent.started`, `completed`,
+and `failed` are also retained as session events. Unconsumed session details
+are preserved without interpreting user intent.
+
+Disposition is explicit:
+
+- Streaming/progress records are ignored: `assistant.message_delta`,
+  `message_start`, `reasoning_delta`, `streaming_delta`, `tool_call_delta`,
+  `turn_start`, `turn_end`, `idle`, and `tool.execution_partial_result`/
+  `execution_progress`. These are not authoritative completed content.
+- Other event types yield `unsupported-event`; they do not block usable
+  records. This includes formats outside the CLI adapter.
+- Missing/invalid supported content fields, non-object data, and malformed
+  optional fields used by this adapter yield `malformed-event`. Timestamps,
+  when supplied, must be parseable date-times with a timezone. The adapter
+  validates the fields it uses, not every field in the upstream schema.
+- Capture diagnostics are forwarded. Diagnostics contain only a code and
+  capture source location, not payloads, arbitrary event types, or parser text.
+  Invalid capture identity or mixed-generation envelopes throw an error.
+
+Callers must surface all diagnostics rather than treating partial output as
+complete. The latest valid source timestamp is observed even on ignored or
+unsupported records. Normalized data is still private, **not privacy-approved**;
+all messages, arguments, output, detail, diffs, errors, and metadata must pass
+the separate privacy filter before publication.
+
+### Cumulative metadata and recovery
+
+`collectMetadata(request, normalizedBatch, previousState?)` returns
+`SessionMetadataState` containing `sessionId`, `transcriptPath`, `generation`,
+and `metadata`. Keep that state between batches and use `state.metadata` in
+the `NormalizedSessionUpdate`. The registration's metadata is a seed, not a
+replacement for restored history. It may include `parentSessionId`, `startedAt`,
+and `lastEventTimestamp` in addition to `clientName` and `models`.
+
+Collection unions seed/previous/observed models, including selected models on
+start/resume and previous/new models on model changes. Explicit start/resume
+`clientName` (or `producer`) and `parentSessionId` (or
+`detachedFromSpawningParentSessionId`) supplement the seed. `startTime` or a
+start event's timestamp establishes the earliest start; resuming never restarts
+that clock. Latest event time is compared chronologically, not lexically.
+Subagent lifecycle details do not change the containing session's parent.
+Empty and metadata-only batches preserve cumulative metadata. Collection does
+not mutate prior state or replay history on each incremental call.
+
+State from another registration is rejected. A different capture generation
+discards previous history and starts from the registration seed, so callers
+must not put old-generation observations back into that seed.
+
+Metadata is not saved inside the capture checkpoint or in a second state file.
+After a restart, or whenever in-memory metadata might lag capture, use
+`restoreMetadata(request, throughCheckpoint, generation, options?)`. Supply a
+checkpoint and generation from an already captured batch; after automatic
+resume, even an empty batch provides these. Restoration replays **from zero**
+through that fixed boundary using the original transcript and durable capture
+ID assignments, returning `{ state, nextCheckpoint, diagnostics }`. It returns
+metadata only, not events for publication or delivery acknowledgement.
+
+The boundary must belong to that session/transcript, be a complete-record
+boundary, and not exceed the saved capture high-water. A prefix pass verifies
+the saved generation's identity and digest while counting source records
+(including malformed ones) only through the chosen boundary. Capture then replays in
+batches limited to that count. Appends during restoration remain unread beyond
+the chosen boundary, and replay never moves the saved cursor backwards.
+Each nonempty replay batch revalidates the generation; replacement, truncation,
+or rewriting between counting and replay rejects restoration. A zero boundary
+returns only registration seed metadata and consumes no records.
+`options.stateDirectory` selects the original capture state, and `maxRecords`
+defaults to 1000. As with capture, serialize operations and retain both the
+transcript and capture state. Diagnostics must be surfaced even when metadata
+reconstruction succeeds. Capture's prefix verification still runs per replay
+batch; restoration is an explicit recovery operation, not incremental polling.
+
+For example, after capture has resumed:
+
+```typescript
+const captured = await watcher.captureUpdates(request, undefined, options);
+// Surface captured.diagnostics, including any source-reset.
+const restored = await watcher.restoreMetadata(
+  request,
+  captured.nextCheckpoint,
+  captured.generation,
+  options,
+);
+// Surface restored.diagnostics, then retain restored.state.
+// Future batches use collectMetadata(request, normalizedBatch, state).
+// Recovery of downstream event delivery is separate from metadata recovery.
+```
 
 ## Trademarks
 
