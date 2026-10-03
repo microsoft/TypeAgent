@@ -19,7 +19,10 @@ import {
     formatPendingNaturalLanguageInteraction,
 } from "../shared/typeagent-client.js";
 import { emitProgress } from "../shared/hook-progress.js";
-import type { HookInput, HookOutput } from "./types.js";
+import type {
+    UserPromptSubmittedInput,
+    UserPromptSubmittedOutput,
+} from "@typeagent/agent-harness-hooks/copilot-cli";
 import { macroHandoffContext } from "../shared/macro-handoff.js";
 
 export interface DirectHandlingOptions {
@@ -39,7 +42,7 @@ const defaultDependencies: DirectDependencies = {
 function toForcedCommandOutput(
     result: CommandResult | undefined,
     messages: string[],
-): HookOutput {
+): UserPromptSubmittedOutput {
     let responseContent: string;
 
     if (result === undefined) {
@@ -78,15 +81,15 @@ function hasSuccessfulAgentHandoff(
 }
 
 export async function handleDirect(
-    input: HookInput,
+    input: UserPromptSubmittedInput,
     options: DirectHandlingOptions = {},
     dependencies: DirectDependencies = defaultDependencies,
-): Promise<HookOutput> {
+): Promise<UserPromptSubmittedOutput> {
     dependencies.emitProgress("Routing to TypeAgent...", { temporary: true });
 
     const responseCollector = { messages: [] as string[] };
     const pendingPrompts: unknown[] = [];
-    const pendingResult = (): HookOutput => ({
+    const pendingResult = (): UserPromptSubmittedOutput => ({
         handled: true,
         responseContent:
             formatPendingNaturalLanguageInteraction(pendingPrompts),

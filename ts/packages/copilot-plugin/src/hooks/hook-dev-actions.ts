@@ -17,7 +17,10 @@ import {
     connectToTypeAgent,
 } from "../shared/typeagent-client.js";
 import { emitProgress } from "../shared/hook-progress.js";
-import type { HookInput, HookOutput } from "./types.js";
+import type {
+    UserPromptSubmittedInput,
+    UserPromptSubmittedOutput,
+} from "@typeagent/agent-harness-hooks/copilot-cli";
 
 export type DevActionDependencies = {
     connectToTypeAgent: typeof connectToTypeAgent;
@@ -56,7 +59,7 @@ export function getDevActionCommandOptions(
 function toHandledOutput(
     result: CommandResult,
     messages: string[],
-): HookOutput {
+): UserPromptSubmittedOutput {
     const responseContent =
         messages.join("\n\n") ||
         result.lastError ||
@@ -71,10 +74,10 @@ function toHandledOutput(
 }
 
 export async function handleDevActions(
-    input: HookInput,
+    input: UserPromptSubmittedInput,
     dependencies: DevActionDependencies = defaultDependencies,
     abortSignal?: AbortSignal,
-): Promise<HookOutput> {
+): Promise<UserPromptSubmittedOutput> {
     const isRecordingDirective =
         parseRecordingDirective(input.prompt) !== undefined;
     if ((dependencies.platform ?? process.platform) !== "win32") {
