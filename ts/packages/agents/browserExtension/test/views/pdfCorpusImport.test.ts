@@ -191,11 +191,13 @@ describe("PDF Markdown corpus import", () => {
         expect(invoke).toHaveBeenCalledWith("memoryListCorpora", {});
         expect(mockInvoke).not.toHaveBeenCalled();
     });
-    it("keeps Import/Cancel in the same row and restores Import after completion", async () => {
+    it("shows progress, hides setup, and leaves only Close after success", async () => {
         let finish!: (content: PdfImportContent) => void;
+        let report!: (completed: number, total: number) => void;
         await createPdfCorpusImport().open(
-            () =>
+            (progress) =>
                 new Promise((resolve) => {
+                    report = progress;
                     finish = resolve;
                 }),
         );
@@ -206,17 +208,44 @@ describe("PDF Markdown corpus import", () => {
         );
         submit();
         expect(button("[type=submit]").hidden).toBe(true);
+        expect(document.querySelector("[name=alias]")).toBeNull();
+        expect(
+            document.querySelector("[name=corpus]")!.closest("p")!.hidden,
+        ).toBe(true);
+        expect(document.querySelector("progress")!.hidden).toBe(false);
+        expect(document.querySelector("progress")!.hasAttribute("value")).toBe(
+            false,
+        );
+        report(1, 2);
+        expect(document.querySelector("progress")!.value).toBe(1);
+        expect(document.querySelector("progress")!.max).toBe(2);
         expect(button("[name=cancel]").disabled).toBe(false);
         finish(fixture);
         await settle();
+        expect(document.querySelector("progress")!.hasAttribute("value")).toBe(
+            false,
+        );
         expect(button("[name=close]").textContent).toBe(
             "Close (keep indexing)",
         );
+        await jest.advanceTimersByTimeAsync(1000);
+        expect(document.querySelector("progress")!.value).toBe(2);
+        expect(document.querySelector("progress")!.max).toBe(8);
+        expect(text()).not.toMatch(/job-one|source-one|revision-one/);
         mockInvoke.mockResolvedValueOnce({ items: [job("complete")] });
         await jest.advanceTimersByTimeAsync(1000);
-        expect(button("[type=submit]").hidden).toBe(false);
-        expect(button("[type=submit]").disabled).toBe(false);
+        expect(button("[type=submit]").hidden).toBe(true);
+        expect(button("[type=submit]").disabled).toBe(true);
         expect(button("[name=cancel]").hidden).toBe(true);
+        expect(document.querySelector("progress")!.hidden).toBe(true);
+        expect(
+            document.querySelector<HTMLElement>("[data-import-success]")!
+                .hidden,
+        ).toBe(false);
+        expect(text()).not.toMatch(/job-one|source-one|revision-one/);
+        submit();
+        await settle();
+        expect(imports()).toHaveLength(1);
     });
     it.each(["complete", "partial", "failed", "cancelled"] as const)(
         "stops polling on %s and refreshes only successful imports",
@@ -320,14 +349,14 @@ describe("PDF Markdown corpus import", () => {
         "https://example.com/a?secret=yes",
         "https://example.com/a#private",
         "file:///private.pdf",
-    ])("rejects unsafe alias %s", async (alias) => {
-        await createPdfCorpusImport().open(async () => fixture);
-        document.querySelector<HTMLInputElement>("[name=alias]")!.value = alias;
-        submit();
-        await settle();
-        expect(imports()).toHaveLength(0);
-        expect(text()).toContain("Durable URI");
-    });
+    ])(
+        "does not submit unsafe source URI %s without consent",
+        async (canonicalUri) => {
+            jest.spyOn(window, "confirm").mockReturnValue(false);
+            await start({ ...fixture, canonicalUri });
+            expect(imports()).toHaveLength(0);
+        },
+    );
     it.each([
         { ...fixture, markdown: " " },
         { ...fixture, markdown: "x".repeat(16 * 1024 * 1024) },
@@ -424,7 +453,8 @@ describe("PDF Markdown corpus import", () => {
             pageSize: 100,
         });
         expect(imports()).toHaveLength(1);
-        expect(text()).toContain(identity.sourceId);
+        expect(text()).toContain("embedding");
+        expect(text()).not.toMatch(/job-one|source-one|revision-one/);
     });
     it("reconnects a fresh controller using session job/source/revision identity", async () => {
         sessionStorage.setItem(pendingKey, JSON.stringify(identity));

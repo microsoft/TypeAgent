@@ -127,42 +127,32 @@ function readPending(): PendingImport | undefined {
     } catch {}
     return undefined;
 }
-function canonicalUri(result: PdfImportContent, alias: string): string {
+function canonicalUri(result: PdfImportContent): string {
     if (!/^[a-f0-9]{64}$/.test(result.byteHash))
         throw new Error("PDF extraction did not return a valid byte hash.");
     const fallback = `urn:pdf:sha256:${result.byteHash}`;
-    const uri = new URL(alias.trim() || result.canonicalUri || fallback);
+    const uri = new URL(result.canonicalUri || fallback);
     if (uri.username || uri.password || uri.search || uri.hash) {
-        if (alias.trim())
-            throw new Error(
-                "Durable URI must not contain credentials, a query, or a fragment.",
-            );
         if (
             !window.confirm(
-                "This PDF URL may contain secrets. Import using a local byte-hash URI instead? Cancel to enter a durable URI alias.",
+                "This PDF URL may contain secrets. Import using a local byte-hash URI instead?",
             )
         )
-            throw new Error(
-                "Import cancelled; enter a durable URI alias. Nothing submitted.",
-            );
+            throw new Error("Import cancelled; nothing submitted.");
         return fallback;
     }
     if (!["https:", "http:", "urn:"].includes(uri.protocol))
         throw new Error("Durable URI must use HTTP, HTTPS, or URN.");
     return uri.toString();
 }
-function importRequest(
-    result: PdfImportContent,
-    corpusId: string,
-    alias: string,
-) {
+function importRequest(result: PdfImportContent, corpusId: string) {
     if (!result.markdown.trim())
         throw new Error("PDF has no extractable text. Nothing submitted.");
     const request = {
         corpusId,
         title: result.title,
         markdown: result.markdown,
-        canonicalUri: canonicalUri(result, alias),
+        canonicalUri: canonicalUri(result),
     };
     if (
         new TextEncoder().encode(JSON.stringify(request)).byteLength +
@@ -205,7 +195,8 @@ export function createPdfCorpusImport(
     dialog.innerHTML = `<form><h2 style="font-size:20px;margin:0 0 16px">Import PDF to corpus</h2>
         <p><label style="display:block">Corpus <select class="form-select" style="max-width:100%" name="corpus" required></select></label></p>
         <p><label style="display:block">PDF file <input class="form-control" style="max-width:100%" name="file" type="file" accept="application/pdf,.pdf" required></label></p>
-        <p><label style="display:block">Durable URI alias (optional) <input class="form-control" style="max-width:100%" name="alias" type="text"></label></p>
+        <progress aria-label="PDF import progress" style="width:100%;height:16px" hidden></progress>
+        <p data-import-success style="color:#18733c;font-weight:600" hidden>PDF imported successfully</p>
         <p role="status" aria-live="polite" style="overflow-wrap:anywhere"></p>
         <div data-import-actions style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
         <button class="btn btn-primary" style="width:auto;margin:0" type="submit">Import PDF</button>
@@ -215,13 +206,15 @@ export function createPdfCorpusImport(
     const form = dialog.querySelector("form")!;
     const select = dialog.querySelector<HTMLSelectElement>("select")!;
     const fileInput = dialog.querySelector<HTMLInputElement>("[name=file]")!;
-    const aliasInput = dialog.querySelector<HTMLInputElement>("[name=alias]")!;
+    const progressBar = dialog.querySelector("progress")!;
+    const success = dialog.querySelector<HTMLElement>("[data-import-success]")!;
     const status = dialog.querySelector<HTMLParagraphElement>("[role=status]")!;
     const submit = dialog.querySelector<HTMLButtonElement>("[type=submit]")!;
     const close = dialog.querySelector<HTMLButtonElement>("[name=close]")!;
     const cancel = dialog.querySelector<HTMLButtonElement>("[name=cancel]")!;
     let provider: PdfProvider | undefined;
     let busy = false;
+    let succeeded = false;
     let extraction: AbortController | undefined;
     let pending = readPending();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -237,20 +230,37 @@ export function createPdfCorpusImport(
     }
     function controls(): void {
         const running = busy || Boolean(pending);
-        submit.hidden = running;
-        submit.style.display = running ? "none" : "inline-flex";
+        submit.hidden = running || succeeded;
+        submit.style.display = running || succeeded ? "none" : "inline-flex";
         cancel.hidden = !running;
         cancel.style.display = running ? "inline-flex" : "none";
-        submit.disabled = running || !select.value;
+        submit.disabled = running || succeeded || !select.value;
         select.disabled = running || !!targetCorpusId;
-        fileInput.disabled = aliasInput.disabled = running;
+        select.closest("p")!.hidden = running || succeeded;
+        fileInput.closest("p")!.hidden = running || succeeded || !!provider;
+        fileInput.disabled = running;
+        progressBar.hidden = !running;
+        success.hidden = !succeeded;
         cancel.disabled = cancelling || (!extraction && !pending);
         close.disabled = busy && !extraction;
         close.textContent = pending ? "Close (keep indexing)" : "Close";
     }
     function jobText(job: MemoryCenterJob): string {
-        const progress = job.progress;
-        return `Job ${job.jobId}: ${job.state}. Source ${job.sourceId} | Revision ${job.revisionId}. Service parts: ${progress.completed}${progress.total === undefined ? "" : ` of ${progress.total}`}${progress.message ? `. ${progress.message}` : ""}${job.error ? `. ${job.error}` : ""}${job.warnings.length ? `. ${job.warnings.join(". ")}` : ""}`;
+        const message =
+            job.state === "complete"
+                ? "Import complete."
+                : job.state === "partial"
+                  ? "Import partial: some content could not be indexed."
+                  : `Import ${job.state}...`;
+        return `${message}${job.error ? ` ${job.error}` : ""}${job.warnings.length ? ` ${job.warnings.join(". ")}` : ""}`;
+    }
+    function updateProgress(completed?: number, total?: number): void {
+        if (total !== undefined && total > 0 && completed !== undefined) {
+            progressBar.max = total;
+            progressBar.value = Math.min(total, Math.max(0, completed));
+        } else {
+            progressBar.removeAttribute("value");
+        }
     }
     function verifyJob(job: MemoryCenterJob, expected: PendingImport): void {
         if (
@@ -270,6 +280,8 @@ export function createPdfCorpusImport(
     ): Promise<boolean> {
         verifyJob(job, expected);
         status.textContent = jobText(job);
+        updateProgress(job.progress.completed, job.progress.total);
+        succeeded = job.state === "complete";
         const terminal = terminalStates.has(job.state);
         if (terminal) {
             pending = undefined;
@@ -326,7 +338,7 @@ export function createPdfCorpusImport(
             terminal = await showJob(value, expected);
         } catch (error) {
             if (epoch !== generation || !dialog.open) return;
-            status.textContent = `Job ${expected.jobId}: status unavailable. ${errorText(error)}. Reconnecting...`;
+            status.textContent = `Import status unavailable. ${errorText(error)}. Reconnecting...`;
         }
         if (terminal || epoch !== generation || !dialog.open) return;
         if (attempts >= 600) {
@@ -389,7 +401,8 @@ export function createPdfCorpusImport(
                 if (epoch !== generation || !dialog.open) return;
                 if (job) await showJob(job, expected);
                 else
-                    status.textContent = `Job ${expected.jobId}: cancellation not confirmed; checking job status.`;
+                    status.textContent =
+                        "Import cancellation not confirmed; checking status.";
             } catch (error) {
                 if (epoch === generation && dialog.open)
                     status.textContent = `Cancellation failed: ${errorText(error)}. Import remains accepted.`;
@@ -407,12 +420,15 @@ export function createPdfCorpusImport(
         const controller = new AbortController();
         extraction = controller;
         busy = true;
+        updateProgress();
         controls();
         status.textContent = "Loading PDF...";
         try {
             const result = await source((completed, total) => {
-                if (!controller.signal.aborted)
+                if (!controller.signal.aborted) {
+                    updateProgress(completed, total);
                     status.textContent = `Extracting layout: page ${completed} of ${total}`;
+                }
             }, controller.signal);
             checkAbort(controller.signal);
             if (
@@ -424,9 +440,10 @@ export function createPdfCorpusImport(
                 status.textContent = "Import cancelled; nothing submitted.";
                 return;
             }
-            const request = importRequest(result, corpusId, aliasInput.value);
+            const request = importRequest(result, corpusId);
             checkAbort(controller.signal);
             extraction = undefined;
+            updateProgress();
             controls();
             status.textContent = "Submitting PDF Markdown...";
             const value = await invoke("memoryImportDocument", request);
@@ -436,7 +453,7 @@ export function createPdfCorpusImport(
                 sourceId: value.sourceId,
                 revisionId: value.revisionId,
             };
-            status.textContent = `Job ${value.jobId}: ${value.state}. Source ${value.sourceId} | Revision ${value.revisionId}.`;
+            status.textContent = "Import accepted. Indexing PDF...";
             try {
                 sessionStorage.setItem(pendingKey, JSON.stringify(pending));
                 if (!options?.corpusId)
@@ -460,7 +477,8 @@ export function createPdfCorpusImport(
     }
     form.onsubmit = (event) => {
         event.preventDefault();
-        if (disposed || busy || pending || !rpc || !select.value) return;
+        if (disposed || busy || pending || succeeded || !rpc || !select.value)
+            return;
         if (options?.corpusId && options.corpusId() !== select.value) {
             status.textContent =
                 "Select the named target corpus before importing.";
@@ -487,6 +505,8 @@ export function createPdfCorpusImport(
             const epoch = generation;
             pending = readPending() ?? pending;
             provider = source;
+            succeeded = false;
+            updateProgress();
             form.reset();
             fileInput.required = !source;
             fileInput.closest("p")!.hidden = !!source;
@@ -514,7 +534,7 @@ export function createPdfCorpusImport(
                     : "Create or select a corpus in Memory Hub first.";
                 controls();
                 if (pending) {
-                    status.textContent = `Reconnecting to job ${pending.jobId}...`;
+                    status.textContent = "Reconnecting to import...";
                     startPolling(true);
                 }
             } catch (error) {
