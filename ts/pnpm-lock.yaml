@@ -1947,12 +1947,27 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
+      '@codemirror/state':
+        specifier: ^6.7.1
+        version: 6.7.1
+      '@codemirror/view':
+        specifier: ^6.43.8
+        version: 6.43.8
       '@fortawesome/fontawesome-free':
         specifier: ^6.7.2
         version: 6.7.2
       '@github/copilot-sdk':
         specifier: 1.0.13
         version: 1.0.13
+      '@milkdown/crepe':
+        specifier: ^7.3.6
+        version: 7.13.1(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(typescript@5.4.5)
+      '@lezer/common':
+        specifier: ^1.5.2
+        version: 1.5.2
+      '@lezer/highlight':
+        specifier: ^1.2.3
+        version: 1.2.3
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@4.3.6)
@@ -2091,6 +2106,9 @@ importers:
       markdown-it:
         specifier: ^14.2.0
         version: 14.3.0
+      mermaid:
+        specifier: ^11.16.1
+        version: 11.16.1
       pdfjs-dist:
         specifier: ^5.3.31
         version: 5.3.31

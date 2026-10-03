@@ -1204,6 +1204,7 @@ function updateExploreScope(
 function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     if (visiblePage !== "settings") webMaintenancePanel.hide();
     if (visiblePage !== "explore" || !route.webView) webExplorePanel.hide();
+    if (visiblePage !== "explore" || route.webView) explorePanel.hide();
     el("hubExplore").hidden = !!route.webView;
     updateExploreNavigation(route.webView);
     if (visiblePage === "activity") runbookImportsPanel.showActivity();

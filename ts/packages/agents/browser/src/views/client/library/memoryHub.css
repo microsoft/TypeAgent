@@ -762,3 +762,154 @@ textarea:focus-visible {
   margin-left: 4px;
   padding: 0 8px;
 }
+
+/* Flyouts reuse the drawer panel */
+.hub-flyout {
+  z-index: 6;
+}
+.hub-flyout .hub-drawer-head h2 {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hub-flyout .knowledge-cards {
+  grid-template-columns: 1fr;
+  max-height: none;
+}
+.hub-flyout .knowledge-collection-header {
+  min-height: 0;
+}
+.hub-flyout .knowledge-collection-header h3 {
+  display: none;
+}
+
+/* Rendered Markdown: tables, code, diagrams */
+.markdown-preview table,
+.hub-wysiwyg table {
+  width: 100%;
+  margin: 8px 0;
+  border-collapse: collapse;
+}
+.markdown-preview th,
+.markdown-preview td {
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  text-align: left;
+}
+.markdown-preview th {
+  background: var(--surface-alt);
+}
+.markdown-preview pre {
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-alt);
+}
+.markdown-preview code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12.5px;
+}
+.markdown-preview :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-alt);
+}
+.markdown-preview blockquote {
+  margin: 8px 0;
+  padding: 2px 12px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--muted);
+}
+.markdown-preview hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.markdown-preview li.task-list-item {
+  list-style: none;
+  margin-left: -1.2em;
+}
+.md-image-omitted {
+  color: var(--muted);
+  font-style: italic;
+}
+.hub-mermaid {
+  margin: 8px 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  text-align: center;
+}
+.hub-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+.hub-mermaid-error {
+  color: var(--danger);
+  font-size: 12.5px;
+}
+/* Prism tokens follow the hub theme */
+.markdown-preview .token.comment,
+.markdown-preview .token.prolog,
+.markdown-preview .token.doctype {
+  color: var(--muted);
+}
+.markdown-preview .token.keyword,
+.markdown-preview .token.operator,
+.markdown-preview .token.atrule {
+  color: var(--primary-dark);
+}
+.markdown-preview .token.string,
+.markdown-preview .token.attr-value,
+.markdown-preview .token.char,
+.markdown-preview .token.inserted {
+  color: var(--success);
+}
+.markdown-preview .token.number,
+.markdown-preview .token.boolean,
+.markdown-preview .token.constant {
+  color: var(--warn-text);
+}
+.markdown-preview .token.function,
+.markdown-preview .token.class-name,
+.markdown-preview .token.tag,
+.markdown-preview .token.deleted {
+  color: var(--danger);
+}
+
+/* Visual (WYSIWYG) Markdown editor */
+.hub-wysiwyg {
+  min-height: 270px;
+  border: 1px solid var(--border-strong);
+  border-top: 0;
+  background: var(--surface);
+}
+.hub-wysiwyg .milkdown {
+  --crepe-color-background: var(--surface);
+  --crepe-color-on-background: var(--text);
+  --crepe-color-surface: var(--surface-alt);
+  --crepe-color-surface-low: var(--background);
+  --crepe-color-on-surface: var(--text);
+  --crepe-color-on-surface-variant: var(--text-strong);
+  --crepe-color-outline: var(--border-strong);
+  --crepe-color-primary: var(--primary-dark);
+  --crepe-color-secondary: var(--accent-soft);
+  --crepe-color-on-secondary: var(--text);
+  --crepe-color-inverse: var(--text);
+  --crepe-color-on-inverse: var(--surface);
+  --crepe-color-inline-code: var(--primary-dark);
+  --crepe-color-error: var(--danger);
+  --crepe-color-hover: var(--accent-soft);
+  --crepe-color-selected: var(--accent-soft);
+  --crepe-color-inline-area: var(--surface-alt);
+  --crepe-font-default: inherit;
+  --crepe-font-title: inherit;
+}
+.hub-wysiwyg .milkdown .ProseMirror {
+  padding: 16px 24px;
+}

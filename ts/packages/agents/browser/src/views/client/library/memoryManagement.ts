@@ -20,6 +20,8 @@ import type {
 } from "@typeagent/browser-control-rpc/serviceTypes";
 import { invokeMemory } from "./viewClient";
 import { renderMarkdown } from "./utils/markdownRenderer";
+import { renderMermaidIn } from "./utils/mermaidView";
+import { canEditWysiwyg } from "./utils/wysiwygEligibility";
 import { iconButton } from "./memoryHubUi";
 
 const PAGE_SIZE = 25;
@@ -113,6 +115,9 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     const relationshipList = element<HTMLDivElement>("relationshipList");
     const suppressionList = element<HTMLDivElement>("suppressionList");
     const contentPreview = element<HTMLDivElement>("contentPreview");
+    const contentWysiwyg = element<HTMLDivElement>("contentWysiwyg");
+    let wysiwyg: { destroy(): Promise<void> } | undefined;
+    let wysiwygTicket = 0;
     const jobList = element<HTMLDivElement>("jobList");
     const activityList = element<HTMLDivElement>("activityList");
     const errorBanner = element<HTMLDivElement>("errorBanner");
@@ -498,6 +503,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         originalPageContent = contentPage.content;
         contentEditor.value = contentPage.content;
         contentPreview.innerHTML = renderMarkdown(contentPage.content);
+        void renderMermaidIn(contentPreview);
         const end = contentPage.offset + contentPage.content.length;
         contentRange.textContent = `${contentPage.offset + 1}-${end} of ${contentPage.totalChars} characters`;
         element<HTMLButtonElement>("contentPrevious").disabled =
@@ -507,15 +513,76 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         showContentMode("preview");
     }
 
+    function stopWysiwyg(): void {
+        wysiwygTicket++;
+        const current = wysiwyg;
+        wysiwyg = undefined;
+        contentWysiwyg.classList.add("hidden");
+        void current?.destroy().then(() => {
+            if (!wysiwyg) contentWysiwyg.replaceChildren();
+        });
+    }
+
+    // Only a single-page Markdown source can be edited visually, because the
+    // editor serializes the whole document and replacement text is page-based.
+    function wysiwygEligible(): boolean {
+        return (
+            selectedSource?.sourceType === "markdown" &&
+            contentPage !== undefined &&
+            contentPage.offset === 0 &&
+            contentPage.nextOffset === undefined &&
+            !contentEditor.disabled
+        );
+    }
+
+    async function startWysiwyg(): Promise<void> {
+        const ticket = ++wysiwygTicket;
+        try {
+            const { mountWysiwyg } = await import("./memoryHubWysiwyg");
+            if (ticket !== wysiwygTicket) return;
+            if (!canEditWysiwyg(contentEditor.value)) {
+                contentWysiwyg.classList.add("hidden");
+                contentEditor.classList.remove("hidden");
+                return;
+            }
+            contentWysiwyg.replaceChildren();
+            contentWysiwyg.classList.remove("hidden");
+            contentEditor.classList.add("hidden");
+            const instance = await mountWysiwyg(
+                contentWysiwyg,
+                contentEditor.value,
+                (markdown) => {
+                    if (markdown === contentEditor.value) return;
+                    contentEditor.value = markdown;
+                    contentEditor.dispatchEvent(new Event("input"));
+                },
+            );
+            if (ticket !== wysiwygTicket) {
+                await instance.destroy();
+                return;
+            }
+            wysiwyg = instance;
+        } catch (error) {
+            console.warn("Visual Markdown editor unavailable.", error);
+            if (ticket !== wysiwygTicket) return;
+            contentWysiwyg.classList.add("hidden");
+            contentEditor.classList.remove("hidden");
+        }
+    }
+
     function showContentMode(mode: "write" | "preview"): void {
         const preview = mode === "preview";
         contentEditor
             .closest(".detail-panel")
             ?.classList.toggle("mode-preview", preview);
-        if (preview)
+        stopWysiwyg();
+        if (preview) {
             contentPreview.innerHTML = renderMarkdown(contentEditor.value);
+            void renderMermaidIn(contentPreview);
+        }
         contentEditor.classList.toggle("hidden", preview);
         contentPreview.classList.toggle("hidden", !preview);
+        if (!preview && wysiwygEligible()) void startWysiwyg();
         for (const [id, active] of [
             ["writeTab", !preview],
             ["previewTab", preview],

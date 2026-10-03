@@ -81,6 +81,14 @@ export default defineConfig({
     },
     resolve: {
         extensions: [".ts", ".js"],
+        // Milkdown and the other CodeMirror packages resolve different copies
+        // of these, and mixing copies breaks editor extensions.
+        dedupe: [
+            "@codemirror/state",
+            "@codemirror/view",
+            "@lezer/common",
+            "@lezer/highlight",
+        ],
         alias: {
             "@": resolve(__dirname, "src/views/client"),
         },

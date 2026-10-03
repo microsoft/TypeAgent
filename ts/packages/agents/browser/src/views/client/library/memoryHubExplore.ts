@@ -13,6 +13,7 @@ import {
     mountKnowledgeCollection,
     KNOWLEDGE_PREVIEW_SIZE,
 } from "./memoryKnowledgeCollection";
+import { mountFlyout, type FlyoutView } from "./memoryHubFlyout";
 import "./memoryHubPhase2.css";
 
 export type MemoryHubExploreOptions = {
@@ -53,19 +54,16 @@ export function mountMemoryHubExplore(
     warning.hidden = true;
     warning.setAttribute("role", "status");
     const counts = text("div", undefined, "phase2-counts");
-    const selected = text("section");
-    selected.setAttribute("aria-label", "Selected knowledge item sources");
+    const note = text("div");
+    const flyout = mountFlyout(host, "Knowledge detail");
     const lists = text("div", undefined, "phase2-lists");
-    root.append(controls, status, warning, counts, selected, lists);
+    root.append(controls, status, warning, counts, note, lists);
     host.append(root);
     let cached: MemoryHubExploreResult | undefined;
     let version = 0;
     let disposed = false;
     let loading = false;
     let collections: ReturnType<typeof mountKnowledgeCollection>[] = [];
-    let selectedCollection:
-        | ReturnType<typeof mountKnowledgeCollection>
-        | undefined;
 
     function sourceItems(
         sources: MemoryHubGraphSource[],
@@ -93,16 +91,66 @@ export function mountMemoryHubExplore(
         const source = item.sources[0];
         if (!source)
             throw new Error("Contributing source identity is unavailable.");
+        flyout.close();
         options.onOpenSource(source.corpusId, source.sourceId);
     }
     function selectKnowledgeItem(value: MemoryHubKnowledgeItem) {
-        selectedCollection?.dispose();
-        selected.replaceChildren(text("h3", value.title));
-        selectedCollection = mountKnowledgeCollection(selected, {
-            title: "Selected item contributing sources",
-            items: sourceItems(value.sources),
-            onSelect: openSource,
-            onError: options.onError,
+        flyout.push(itemView(value));
+    }
+    function itemView(value: MemoryHubKnowledgeItem): FlyoutView {
+        return {
+            title: value.title,
+            render(body) {
+                const details = [
+                    value.subtitle,
+                    value.mentions === undefined
+                        ? undefined
+                        : `${value.mentions} mention${value.mentions === 1 ? "" : "s"}`,
+                ].filter(Boolean);
+                if (details.length)
+                    body.append(text("p", details.join(" · "), "phase2-text"));
+                const section = text("section");
+                section.setAttribute(
+                    "aria-label",
+                    "Selected knowledge item sources",
+                );
+                body.append(section);
+                const sources = mountKnowledgeCollection(section, {
+                    title: "Contributing sources",
+                    items: sourceItems(value.sources),
+                    onSelect: openSource,
+                    onError: options.onError,
+                });
+                return () => sources.dispose();
+            },
+        };
+    }
+    function viewAll(
+        title: string,
+        items: MemoryHubKnowledgeItem[],
+        total: number,
+        kind: MemoryHubKnowledgeKind,
+    ) {
+        flyout.open({
+            title,
+            render(body) {
+                const all = mountKnowledgeCollection(body, {
+                    title,
+                    items,
+                    total,
+                    loadPage: (request) =>
+                        invokeView("memoryHubKnowledge", {
+                            ...request,
+                            corpusId: options.scope(),
+                            kind,
+                        }),
+                    onSelect:
+                        kind === "sources" ? openSource : selectKnowledgeItem,
+                    startExpanded: true,
+                    onError: options.onError,
+                });
+                return () => all.dispose();
+            },
         });
     }
     function collection(
@@ -123,15 +171,15 @@ export function mountMemoryHubExplore(
                         kind,
                     }),
                 onSelect: kind === "sources" ? openSource : selectKnowledgeItem,
+                onViewAll: () => viewAll(title, items, total, kind),
                 onError: options.onError,
             }),
         );
     }
     function clearCollections() {
+        flyout.close();
         collections.forEach((value) => value.dispose());
         collections = [];
-        selectedCollection?.dispose();
-        selectedCollection = undefined;
     }
     function renderControls() {
         const refresh = iconButton("fa-rotate", "Refresh overview", () => {
@@ -207,9 +255,9 @@ export function mountMemoryHubExplore(
             data.contributingSourceCount ?? contributors.length,
             "sources",
         );
-        selected.replaceChildren();
+        note.replaceChildren();
         if (!data.entities.length && !data.topics.length)
-            selected.append(
+            note.append(
                 text(
                     "p",
                     errors.length
@@ -274,16 +322,20 @@ export function mountMemoryHubExplore(
             loading = false;
             counts.replaceChildren();
             lists.replaceChildren();
-            selected.replaceChildren();
+            note.replaceChildren();
             warning.hidden = true;
             status.textContent =
                 "Scope changed. Open Overview to load this corpus.";
             renderControls();
         },
+        hide() {
+            flyout.close();
+        },
         dispose() {
             disposed = true;
             version++;
             clearCollections();
+            flyout.dispose();
             root.remove();
         },
     };
