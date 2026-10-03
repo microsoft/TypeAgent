@@ -14,6 +14,10 @@ import { TextEncoder } from "node:util";
 jest.mock("../../src/extension/views/chromeRpcClient", () => ({
     createChromeRpcClient: jest.fn(),
 }));
+const mockElectronClient = jest.fn();
+jest.mock("../../src/extension/views/electronRpcClient", () => ({
+    createElectronRpcClient: () => mockElectronClient(),
+}));
 const mockOpen = jest.fn();
 jest.mock("../../src/extension/views/pdfCorpusImport", () => ({
     createPdfCorpusImport: jest.fn(() => ({ open: mockOpen })),
@@ -72,6 +76,7 @@ describe("PDF Markdown parent viewer", () => {
             configurable: true,
         });
         invoke.mockReset();
+        mockElectronClient.mockReturnValue(undefined);
         mockOpen.mockReset();
         jest.mocked(createPdfCorpusImport).mockClear();
         jest.mocked(createChromeRpcClient).mockReturnValue({
@@ -129,6 +134,25 @@ describe("PDF Markdown parent viewer", () => {
         expect(document.getElementById("urlInfo")!.style.display).toBe("none");
         expect(invoke).not.toHaveBeenCalled();
         expect(chrome.runtime.onMessage.addListener).not.toHaveBeenCalled();
+    });
+    it("reuses Electron preload RPC for viewer imports instead of Chrome runtime", () => {
+        const nativeInvoke = jest.fn();
+        const nativeRpc = { invoke: nativeInvoke };
+        mockElectronClient.mockReturnValue({ rpc: nativeRpc });
+        jest.mocked(createChromeRpcClient).mockClear();
+        let nativePage: PDFViewPage | undefined;
+        jest.isolateModules(() => {
+            const {
+                PDFViewPage: NativePage,
+            } = require("../../src/extension/views/pdfView");
+            nativePage = new NativePage();
+        });
+        expect(createPdfCorpusImport).toHaveBeenLastCalledWith(
+            undefined,
+            nativeRpc,
+        );
+        expect(createChromeRpcClient).not.toHaveBeenCalled();
+        nativePage?.dispose();
     });
     it("ignores obsolete capture launch parameters without reading binaries", async () => {
         window.history.replaceState(

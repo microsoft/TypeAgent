@@ -106,35 +106,33 @@ test("workspace lockfile records consolidated converter dependencies", async () 
     );
 });
 
-test("root and workspace formatting ignores exclude vendor bodies but not authored tooling", async () => {
+test("workspace formatting ignores exclude vendor bodies but not authored tooling without a root ignore", async () => {
     const prettier = require("prettier");
-    for (const ignorePath of [
-        new URL(".prettierignore", repository),
-        new URL("ts/.prettierignore", repository),
-    ]) {
-        const options = {
-            ignorePath: fileURLToPath(ignorePath),
-            withNodeModules: false,
-        };
-        assert.equal(
-            (
-                await prettier.getFileInfo(
-                    fileURLToPath(new URL("engine.js", runtime)),
-                    options,
-                )
-            ).ignored,
-            true,
-        );
-        assert.equal(
-            (
-                await prettier.getFileInfo(
-                    fileURLToPath(new URL("vendor-source.mjs", tooling)),
-                    options,
-                )
-            ).ignored,
-            false,
-        );
-    }
+    await assert.rejects(stat(new URL(".prettierignore", repository)), {
+        code: "ENOENT",
+    });
+    const options = {
+        ignorePath: fileURLToPath(new URL("ts/.prettierignore", repository)),
+        withNodeModules: false,
+    };
+    assert.equal(
+        (
+            await prettier.getFileInfo(
+                fileURLToPath(new URL("engine.js", runtime)),
+                options,
+            )
+        ).ignored,
+        true,
+    );
+    assert.equal(
+        (
+            await prettier.getFileInfo(
+                fileURLToPath(new URL("vendor-source.mjs", tooling)),
+                options,
+            )
+        ).ignored,
+        false,
+    );
     const readme = await readFile(new URL("README.md", tooling), "utf8");
     assert.equal([...readme.matchAll(/^# /gm)].length, 1);
     assert.doesNotMatch(readme, /src\/papero|dist\/papero|# Papero Vendor/);

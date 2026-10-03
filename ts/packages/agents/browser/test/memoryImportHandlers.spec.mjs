@@ -30,7 +30,7 @@ test("PDF-derived Markdown uses the ordinary content memory pipeline", async () 
     );
     assert.equal(typeof calls[0].source.capturedAt, "string");
     assert(Number.isFinite(Date.parse(calls[0].source.capturedAt)));
-    const { capturedAt, ...source } = calls[0].source;
+    const { capturedAt: _capturedAt, ...source } = calls[0].source;
     assert.deepEqual(
         [{ ...calls[0], source }],
         [
