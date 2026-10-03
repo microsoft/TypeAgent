@@ -14,9 +14,9 @@ export type SessionWatchRequest = {
 export type SessionCaptureCheckpoint = {
     sessionId: string;
     transcriptPath: string;
-    // Null until a complete event has been read.
+    // Original or generated event ID; null until a complete event has been read.
     lastReadEventId: string | null;
-    // Resume position in the GHCP transcript after the last complete event.
+    // Decimal byte offset after the last complete JSONL record, not a line number.
     sourcePosition: string;
 };
 
@@ -26,7 +26,9 @@ export type CapturedSessionUpdates = {
 };
 
 export type NormalizedSessionEvent = {
-    sourceEventId: string;
+    // Original source ID when present; otherwise a generated GUID.
+    id: string;
+    sourceEventId?: string;
     timestamp?: string;
     model?: string;
 } & (
@@ -117,6 +119,9 @@ export class SessionWatcher {
         // Validate sessionId/transcriptPath and resume after lastReadEventId.
         // Use sourcePosition for efficient seeking, verifying it against the saved event.
         // Read complete GHCP JSONL records; leave a partially written tail unread.
+        // For ID-less records, assign a GUID once and retain it with the captured record.
+        // Persist its mapping to session/transcript generation/record position for replay.
+        // Use that same assigned ID in lastReadEventId and the normalized event.
         // Detect replacement/truncation and reconcile stable IDs rather than skipping data.
         // Return the session, transcript path, last complete event ID, and resume position.
         // With no complete new events, retain the checkpoint (null event ID at the start).
@@ -132,10 +137,13 @@ export class SessionWatcher {
         // Pseudocode:
         // Validate GHCP payloads and map messages, tools, and session lifecycle records.
         // Map the source's assistant message role to agent in the normalized format.
-        // Normalize each source event independently, preserving its ID as sourceEventId.
+        // Normalize each source event independently; preserve an existing ID as sourceEventId.
+        // Set id = sourceEventId when present; do not require native IDs to be GUIDs.
+        // Otherwise reuse the GUID assigned during capture; do not hash event content.
+        // Distinct ID-less records get distinct GUIDs, even if their content is identical.
+        // Reuse persisted assignments on retries/replay instead of generating new GUIDs.
         // All events belong to the parent update's sessionId.
-        // Identify events by (update.sessionId, event.sourceEventId).
-        // If native IDs are absent, persist a stable source-record identity for retries.
+        // Scope event IDs by update.sessionId.
         // Preserve toolCallId to associate starts/results, including across update batches.
         // CLI apply_patch: retain the completion's reported diff and success separately.
         // Preserve script commands/results even when no diff is present.

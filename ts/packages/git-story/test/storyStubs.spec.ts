@@ -47,16 +47,24 @@ const sessionUpdate: NormalizedSessionUpdate = {
     sessionId: watchRequest.sessionId,
     events: [
         {
+            id: "event-1",
             sourceEventId: "event-1",
             type: "message",
             role: "user",
             text: "Use a queue per repository.",
         },
         {
+            id: "event-2",
             sourceEventId: "event-2",
             type: "message",
             role: "agent",
             text: "I will update the queue selection.",
+        },
+        {
+            id: "f497080c-849a-4ab9-a686-5022d6559931",
+            type: "session",
+            eventType: "internal",
+            details: {},
         },
     ],
     metadata: watchRequest.metadata,

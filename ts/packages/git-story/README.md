@@ -51,8 +51,9 @@ The Session Watcher reads GitHub Copilot (GHCP) CLI transcripts to gather contex
 for commit stories. Its responsibilities are to:
 
 - Capture new session activity, including conversations and tool use.
-- Normalize events into a common format, keeping the original event ID, session
-  ID, and any recorded edit diffs.
+- Normalize events into a common format, keeping the original event ID when
+  available or assigning a GUID when it is missing.
+  Keep the session context and any recorded edit diffs.
 - Pass events and metadata through a separate privacy filter before sharing them
   with memory processing.
 - Collect session metadata, such as the client, models, timestamps, and related
@@ -62,7 +63,7 @@ The watcher supplies this context; the Story Builder decides what belongs in
 each commit story.
 
 To resume reading, the watcher saves the session ID, transcript file, last
-complete event ID, and position in the source. This tracks what it has read,
+complete event ID, and byte offset in the transcript. This tracks what it has read,
 not what downstream memory processing has finished.
 
 ## Trademarks
