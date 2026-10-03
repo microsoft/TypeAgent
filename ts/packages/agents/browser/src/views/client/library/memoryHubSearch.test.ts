@@ -104,7 +104,9 @@ test("empty search hides recent and result controls, and source-type disclosure 
     types.options[0].selected = true;
     types.options[1].selected = true;
     types.dispatchEvent(new Event("change"));
-    expect(host.querySelector("summary")!.textContent).toBe("web, markdown");
+    expect(
+        host.querySelector(".phase2-source-types summary")!.textContent,
+    ).toBe("web, markdown");
     await mounted.show("worker");
     expect(invoke).toHaveBeenCalledWith(
         "memoryHubSearch",
@@ -449,7 +451,7 @@ test.each(["{bad JSON", '{"not":"an array"}', '["valid",7]'])(
     },
 );
 
-test("source revisions use a document-level preview and keep unresolved locators Inspector-only", async () => {
+test("source revisions use a document-level preview and do not show unresolved locators", async () => {
     invoke.mockResolvedValueOnce(
         result([{ ...source, locator: "message:12" }]),
     );
@@ -465,9 +467,7 @@ test("source revisions use a document-level preview and keep unresolved locators
     });
 
     const dialog = host.querySelector("dialog")!;
-    const visibleParagraphs = Array.from(
-        dialog.querySelectorAll("p:not(.phase2-inspector)"),
-    )
+    const visibleParagraphs = Array.from(dialog.querySelectorAll("p"))
         .map((value) => value.textContent)
         .join("\n");
     expect(visibleParagraphs).toContain(
@@ -479,12 +479,6 @@ test("source revisions use a document-level preview and keep unresolved locators
     expect(visibleParagraphs).toContain("No snippet guessing");
     expect(visibleParagraphs).not.toContain("message:12");
     expect(visibleParagraphs).not.toContain("lines 3–8");
-    expect(dialog.querySelector(".phase2-inspector")!.textContent).toContain(
-        "message:12",
-    );
-    expect(dialog.querySelector(".phase2-inspector")!.textContent).toContain(
-        "lines 3–8",
-    );
 });
 
 const web: MemoryHubEvidence = {

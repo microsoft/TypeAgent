@@ -4,9 +4,9 @@
   max-height: 85vh;
   overflow: auto;
   padding: 24px;
-  color: #353c50;
-  background: #fff;
-  border: 1px solid var(--border, #dce0e8);
+  color: var(--text-strong);
+  background: var(--surface);
+  border: 1px solid var(--border, var(--border));
   border-radius: 10px;
   box-shadow: 0 12px 48px #0003;
 }
@@ -14,7 +14,7 @@
   background: #0005;
 }
 .hub-import-dialog fieldset {
-  border: 1px solid var(--border, #dce0e8);
+  border: 1px solid var(--border, var(--border));
   border-radius: 6px;
   margin-bottom: 12px;
 }
@@ -34,7 +34,7 @@
 }
 .hub-import-dialog .hub-import-warning {
   padding: 12px;
-  background: #fff5db;
+  background: var(--warn-soft);
   border-radius: 6px;
 }
 .hub-import-dialog pre {
@@ -43,5 +43,5 @@
   font: inherit;
 }
 .hub-import-dialog [role="alert"] {
-  color: #a12b22;
+  color: var(--danger-text);
 }

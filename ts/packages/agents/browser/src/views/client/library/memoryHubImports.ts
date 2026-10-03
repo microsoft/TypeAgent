@@ -103,12 +103,15 @@ export function mountMemoryHubImports(
     dialog.className = "hub-import-dialog";
     dialog.setAttribute("aria-label", "Import browser memories");
     dialog.innerHTML = `
-        <h2>Import browser memories</h2>
+        <div class="hub-dialog-head"><h2>Import browser memories</h2>
+        <button name="close" class="icon-btn" type="button" aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>
         <p><strong name="target"></strong></p>
+        <details class="hub-help-block"><summary>How this import works</summary>
         <p class="hub-import-warning">These imports always write to the fixed browser-owned corpus.
         The current Memory Hub corpus selector does not change that target.</p>
         <p>Cancellation unavailable: the import API does not support cancellation.
         Closing this dialog does not cancel an import. Reopen it to view progress.</p>
+        <p>Individual import job IDs are not returned by these adapters. The jobs link opens the fixed browser corpus, not an import-specific job.</p></details>
         <form>
             <fieldset name="browserFields">
                 <legend>Bookmarks or history from the agent host</legend>
@@ -135,13 +138,11 @@ export function mountMemoryHubImports(
                 <label><input name="fileType" type="checkbox" value=".htm" checked> .htm</label>
                 <label><input name="fileType" type="checkbox" value=".mhtml" checked> .mhtml</label>
             </fieldset>
-            <button name="start" type="submit">Start import</button>
+            <button name="start" class="primary" type="submit">Start import</button>
         </form>
         <pre name="status" role="status" aria-live="polite"></pre>
         <p name="connection" role="alert"></p>
-        <p>Individual import job IDs are not returned by these adapters. The jobs link opens the fixed browser corpus, not an import-specific job.</p>
-        <button name="jobs" type="button">View browser-corpus ingestion jobs</button>
-        <button name="close" type="button">Close dialog</button>`;
+        <button name="jobs" type="button">View browser-corpus ingestion jobs</button>`;
     host.append(dialog);
     field(dialog, "target").textContent =
         `Import target: ${options.targetLabel}`;

@@ -123,7 +123,7 @@ test("shows the fixed target, warning and unavailable cancellation without a can
         Array.from(host.querySelectorAll("button"))
             .filter((button) => !button.hidden)
             .map((button) => button.textContent),
-    ).toEqual(["Start import", "Close dialog"]);
+    ).toEqual(["", "Start import"]);
     expect(host.querySelector("not")).toBeNull();
 });
 

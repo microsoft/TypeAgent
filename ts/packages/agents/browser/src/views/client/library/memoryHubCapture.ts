@@ -19,15 +19,16 @@ export function mountMemoryHubCapture(
     const dialog = document.createElement("dialog");
     dialog.setAttribute("aria-label", "Capture an open browser page");
     dialog.innerHTML = `
-        <h2>Capture an open browser page</h2>
+        <div class="hub-dialog-head"><h2>Capture an open browser page</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>
         <p>Target corpus: TypeAgent Browser Memory (fixed). Choose the source page explicitly; capture does not switch the active tab.</p>
         <div class="phase2-controls"><label>Source page<select aria-label="Source page"></select></label></div>
         <p class="phase2-text" data-target></p>
         <p role="status" class="phase2-status"></p>
-        <p>Capture cannot be cancelled once started. Embedded frame omissions are reported in the result.</p>
-        <button type="button" data-capture>Capture selected page</button>
-        <button type="button" data-refresh>Refresh page list</button>
-        <button type="button" data-close>Close</button>`;
+        <details class="hub-help-block"><summary>How capture works</summary>
+        <p>Capture cannot be cancelled once started. Embedded frame omissions are reported in the result.</p></details>
+        <button type="button" class="primary" data-capture>Capture selected page</button>
+        <button type="button" class="icon-btn" data-refresh aria-label="Refresh page list" title="Refresh page list"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>`;
     host.append(dialog);
     const selector = dialog.querySelector<HTMLSelectElement>("select")!;
     const target = dialog.querySelector<HTMLElement>("[data-target]")!;

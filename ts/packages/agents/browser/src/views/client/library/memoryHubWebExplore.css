@@ -1,6 +1,6 @@
 /* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
 .memory-web-explore {
-  color: #212529;
+  color: var(--text);
   min-width: 0;
 }
 .memory-web-explore [hidden] {
@@ -37,7 +37,7 @@
 .memory-web-explore .cytoscape-container {
   width: 100%;
   height: 34rem;
-  background: #f8f9fa;
+  background: var(--surface-alt);
 }
 .memory-web-explore .entity-sidebar,
 .memory-web-explore .topic-sidebar,
@@ -48,7 +48,7 @@
   overflow: auto;
   overflow-wrap: anywhere;
   max-height: 34rem;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--border);
 }
 .memory-web-explore .topic-sidebar.collapsed {
   display: none;
@@ -71,12 +71,12 @@
   place-items: center;
   padding: 1rem;
   text-align: center;
-  background: #fffffff0;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
 }
 .memory-web-explore [data-web-error] {
   padding: 1rem;
-  border: 1px solid #b02a37;
-  background: #f8d7da;
+  border: 1px solid var(--danger-border);
+  background: var(--danger-soft);
 }
 .memory-web-explore .quick-stats,
 .memory-web-explore .knowledge-overview-cards,
@@ -91,7 +91,7 @@
 .memory-web-explore .stat-item {
   flex: 1;
   padding: 0.75rem;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
   min-width: min(10rem, 100%);
   overflow-wrap: anywhere;
@@ -129,7 +129,7 @@
   height: 8px;
   overflow: hidden;
   border-radius: 4px;
-  background: #edf0f5;
+  background: var(--surface-alt);
 }
 .memory-web-explore .progress-fill {
   height: 100%;
@@ -149,15 +149,15 @@
 }
 .memory-web-explore .quality-segment.high,
 .memory-web-explore .legend-color.high {
-  background: #c9e9d5;
+  background: var(--success-soft);
 }
 .memory-web-explore .quality-segment.medium,
 .memory-web-explore .legend-color.medium {
-  background: #f8e2a3;
+  background: var(--warn-soft);
 }
 .memory-web-explore .quality-segment.low,
 .memory-web-explore .legend-color.low {
-  background: #f2c6c9;
+  background: var(--danger-border);
 }
 .memory-web-explore .quality-legend {
   display: flex;
@@ -248,7 +248,7 @@
   margin: 0.25rem;
   padding: 10px;
   border-radius: 6px;
-  background: #f0f2ff;
+  background: var(--accent-soft);
 }
 .memory-web-explore .related-websites a,
 .memory-web-explore .topic-sources a {

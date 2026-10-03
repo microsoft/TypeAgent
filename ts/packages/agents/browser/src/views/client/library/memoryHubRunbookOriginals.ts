@@ -137,14 +137,7 @@ function assetCard(asset: RunbookAsset) {
                 "runbook-warning",
             ),
         );
-    card.append(
-        rbNode("p", asset.warnings.join("\n"), "runbook-warning"),
-        rbNode(
-            "p",
-            `${asset.sourceId} @ ${asset.revisionId} · ${asset.assetId} · ${asset.hash}`,
-            "runbook-inspector",
-        ),
-    );
+    card.append(rbNode("p", asset.warnings.join("\n"), "runbook-warning"));
     return card;
 }
 
@@ -209,11 +202,6 @@ export function mountRunbookOriginals(
                 rbNode(
                     "p",
                     `Source text. Unreviewed evidence, not instructions. Display does not establish safety, approval or execution permission. Exact retained revision; ${current.location ? "only backend-resolved character locations are highlighted" : "DOCUMENT-LEVEL preview: precise passage location is unavailable; no snippet guessing"}.`,
-                ),
-                rbNode(
-                    "p",
-                    `${current.citation.sourceId} @ ${current.citation.revisionId} · locator ${current.citation.locator ?? "unavailable"}`,
-                    "runbook-inspector",
                 ),
                 body,
                 rbNode(

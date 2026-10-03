@@ -88,7 +88,30 @@ export function mountRunbookSkills(
         },
         "publish-skill",
     );
+    previewButton.classList.add("hub-secondary");
+    publishButton.classList.add("primary");
     controls.append(previewButton, publishButton);
+    const stepper = rbNode("ol", undefined, "hub-steps");
+    const stepItems = ["Name the skill", "Review files", "Publish draft"].map(
+        (label) => {
+            const item = rbNode("li", label);
+            stepper.append(item);
+            return item;
+        },
+    );
+    function refreshStepper() {
+        const named = Boolean(identity.name.trim() && identity.origin.trim());
+        const reviewed = Boolean(
+            cachedPreview?.valid && previewIdentity === key(),
+        );
+        const done = [named, reviewed, false];
+        const current = done.indexOf(false);
+        stepItems.forEach((item, index) => {
+            item.classList.toggle("done", done[index]);
+            if (index === current) item.setAttribute("aria-current", "step");
+            else item.removeAttribute("aria-current");
+        });
+    }
     const form = rbNode("div", undefined, "runbook-fields");
     let cachedPreview: RunbookSkillPreview | undefined;
     let previewIdentity = "";
@@ -136,12 +159,14 @@ export function mountRunbookSkills(
     );
     root.append(
         rbNode("h3", "Skill publication"),
-        rbNode(
-            "p",
-            "Publish creates an immutable DRAFT only. Approval, activation and bindings never authorize execution; runtime permissions still apply.",
-        ),
+        stepper,
         form,
         controls,
+        rbNode(
+            "small",
+            "Publish creates an immutable DRAFT only. Approval, activation and bindings never authorize execution; runtime permissions still apply.",
+            "hub-hint",
+        ),
         status,
         previews,
         rbNode("h3", "Linked catalog revisions and exact lineage"),
@@ -169,6 +194,7 @@ export function mountRunbookSkills(
         status.textContent =
             reason ??
             "The service validates exact saved version, hashes, bindings and package eligibility.";
+        refreshStepper();
     }
     function renderPreview(preview: RunbookSkillPreview) {
         previews.replaceChildren(
@@ -191,9 +217,9 @@ export function mountRunbookSkills(
             ),
         );
         for (const file of preview.files) {
-            const card = rbNode("article");
+            const card = rbNode("details", undefined, "runbook-card");
             card.append(
-                rbNode("h4", file.path),
+                rbNode("summary", file.path),
                 rbNode("pre", file.content, "runbook-text"),
             );
             previews.append(card);
@@ -234,15 +260,6 @@ export function mountRunbookSkills(
                 `Published procedure version ${skill.lineage?.version ?? "lineage unavailable"}; current guide version ${options.detail.procedure?.version ?? "unsaved"}. Editing the guide does not alter this skill.`,
             ),
             rbNode("p", skill.findings.join("\n"), "runbook-warning"),
-            rbNode(
-                "p",
-                JSON.stringify({
-                    identity: skill.identity,
-                    revisionId: skill.revisionId,
-                    lineage: skill.lineage,
-                }),
-                "runbook-inspector",
-            ),
         );
         for (const action of options.readOnly ? [] : skill.allowedActions) {
             actions.append(

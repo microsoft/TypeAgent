@@ -5,6 +5,7 @@ import type {
     MemoryHubKnowledgeItem,
     MemoryHubKnowledgePage,
 } from "@typeagent/browser-control-rpc/viewRpc";
+import { setIconButton } from "./memoryHubUi";
 import "./memoryKnowledgeCollection.css";
 
 export const KNOWLEDGE_PREVIEW_SIZE = 6;
@@ -93,11 +94,17 @@ export function mountKnowledgeCollection(
     grid.setAttribute("aria-label", options.title);
     toggle.setAttribute("aria-controls", grid.id);
     const pagination = element("div", undefined, "knowledge-pagination");
-    const previous = button("Previous");
-    const next = button("Next");
+    const previous = setIconButton(
+        button("Previous"),
+        "fa-chevron-left",
+        `${options.title} previous page`,
+    );
+    const next = setIconButton(
+        button("Next"),
+        "fa-chevron-right",
+        `${options.title} next page`,
+    );
     const pageLabel = element("span");
-    previous.setAttribute("aria-label", `${options.title} previous page`);
-    next.setAttribute("aria-label", `${options.title} next page`);
     pagination.append(previous, pageLabel, next);
     root.append(header, form, status, warning, grid, pagination);
     host.append(root);

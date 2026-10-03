@@ -68,9 +68,7 @@ test("committed receipts display metadata only and opaque references never becom
     expect(host.querySelectorAll("a")).toHaveLength(0);
     expect(host.textContent).not.toContain("PRIVATE SOURCE");
     expect(host.textContent).not.toContain("SECRET TOKEN");
-    expect(host.querySelector(".phase2-inspector")!.textContent).toContain(
-        "Opaque source reference: source-hash",
-    );
+    expect(host.textContent).not.toContain("source-hash");
 });
 
 test("paging carries continuation tokens and refresh resets to first page", async () => {

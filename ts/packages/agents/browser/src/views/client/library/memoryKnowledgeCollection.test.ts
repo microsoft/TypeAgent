@@ -21,7 +21,11 @@ let mounted: ReturnType<typeof mountKnowledgeCollection>;
 let onError: jest.Mock;
 function click(label: string) {
     const node = [...host.querySelectorAll("button")].find(
-        (button) => button.textContent === label,
+        (button) =>
+            button.textContent === label ||
+            button
+                .getAttribute("aria-label")
+                ?.endsWith(`${label.toLowerCase()} page`),
     );
     if (!node) throw new Error(`Missing button ${label}`);
     node.click();

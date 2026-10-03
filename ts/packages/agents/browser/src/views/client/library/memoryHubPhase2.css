@@ -37,9 +37,9 @@
 .memory-phase2 .phase2-source-types summary {
   min-height: 36px;
   padding: 7px 9px;
-  border: 1px solid #cbd0d8;
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
-  background: white;
+  background: var(--surface);
   cursor: pointer;
   font-weight: normal;
   overflow-wrap: anywhere;
@@ -54,7 +54,7 @@
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 4px 16px #0002;
   font-weight: normal;
 }
@@ -83,15 +83,15 @@
 .memory-phase2 article,
 .memory-phase2 .phase2-answer {
   padding: 16px;
-  border: 1px solid var(--border, #ddd);
+  border: 1px solid var(--border, var(--border));
   border-radius: 8px;
-  background: white;
+  background: var(--surface);
   overflow-wrap: anywhere;
 }
 .memory-phase2 .phase2-warning {
   padding: 12px;
   margin: 12px 0;
-  background: #fff7df;
+  background: var(--warn-soft);
   white-space: pre-wrap;
 }
 .memory-phase2 .phase2-status {
@@ -110,12 +110,6 @@
 .memory-phase2 dialog pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.memory-phase2 .phase2-inspector {
-  display: none;
-}
-body.inspector .memory-phase2 .phase2-inspector {
-  display: block;
 }
 .memory-phase2 .phase2-counts {
   display: flex;
@@ -136,4 +130,10 @@ body.inspector .memory-phase2 .phase2-inspector {
 .memory-phase2 [tabindex]:focus-visible {
   outline: 3px solid #5b69cf;
   outline-offset: 2px;
+}
+.memory-search > form > .phase2-query {
+  flex: 1 1 320px;
+}
+.memory-search > form > button[type="submit"] {
+  align-self: end;
 }

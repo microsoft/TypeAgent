@@ -7,6 +7,7 @@ import type {
     MemoryHubKnowledgeItem,
     MemoryHubKnowledgeKind,
 } from "@typeagent/browser-control-rpc/viewRpc";
+import { iconButton, watchSlowRequest } from "./memoryHubUi";
 import { invokeView } from "./viewClient";
 import {
     mountKnowledgeCollection,
@@ -55,31 +56,7 @@ export function mountMemoryHubExplore(
     const selected = text("section");
     selected.setAttribute("aria-label", "Selected knowledge item sources");
     const lists = text("div", undefined, "phase2-lists");
-    const lens = text("section");
-    const link = text("a", "Open browser reading analytics");
-    link.href = "#/explore/web/analytics";
-    lens.append(
-        text("h3", "Browser web lens"),
-        text(
-            "p",
-            "Entity graph, Topic graph and Reading analytics are separate views fixed to TypeAgent Browser Memory. They do not use the corpus selector.",
-        ),
-        link,
-    );
-    root.append(
-        text("h3", "Corpus overview"),
-        text(
-            "p",
-            "Counts cover responding corpora in the selected scope. Cards preview derived knowledge and contributing sources. View all to browse, filter and page the full collection.",
-        ),
-        controls,
-        status,
-        warning,
-        counts,
-        selected,
-        lists,
-        lens,
-    );
+    root.append(controls, status, warning, counts, selected, lists);
     host.append(root);
     let cached: MemoryHubExploreResult | undefined;
     let version = 0;
@@ -157,7 +134,7 @@ export function mountMemoryHubExplore(
         selectedCollection = undefined;
     }
     function renderControls() {
-        const refresh = button("Refresh overview", () => {
+        const refresh = iconButton("fa-rotate", "Refresh overview", () => {
             void load();
         });
         refresh.disabled = loading;
@@ -248,6 +225,12 @@ export function mountMemoryHubExplore(
         loading = true;
         status.textContent = "Loading corpus overview…";
         renderControls();
+        const stopWatching = watchSlowRequest(status, () => {
+            version++;
+            loading = false;
+            status.textContent = "Overview loading cancelled.";
+            renderControls();
+        });
         try {
             const data = await invokeView("memoryHubExplore", {
                 corpusId: scope,
@@ -273,6 +256,8 @@ export function mountMemoryHubExplore(
             status.textContent = `Explore unavailable: ${error instanceof Error ? error.message : String(error)}`;
             options.onError(error);
             renderControls();
+        } finally {
+            stopWatching();
         }
     }
     renderControls();

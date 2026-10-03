@@ -4,9 +4,9 @@
   max-height: 85vh;
   overflow: auto;
   padding: 24px;
-  color: #353c50;
-  background: #fff;
-  border: 1px solid var(--border, #dce0e8);
+  color: var(--text-strong);
+  background: var(--surface);
+  border: 1px solid var(--border, var(--border));
   border-radius: 10px;
   box-shadow: 0 12px 48px #0003;
 }
@@ -29,7 +29,7 @@
 .hub-runbook-imports article {
   margin: 12px 0;
   padding: 16px;
-  border: 1px solid var(--border, #dce0e8);
+  border: 1px solid var(--border, var(--border));
   border-radius: 6px;
   overflow-wrap: anywhere;
 }

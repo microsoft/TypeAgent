@@ -20,6 +20,7 @@ import type {
 } from "@typeagent/browser-control-rpc/serviceTypes";
 import { invokeMemory } from "./viewClient";
 import { renderMarkdown } from "./utils/markdownRenderer";
+import { iconButton } from "./memoryHubUi";
 
 const PAGE_SIZE = 25;
 const CONTENT_PAGE_SIZE = 12_000;
@@ -194,10 +195,6 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         term.textContent = label;
         const description = document.createElement("dd");
         description.textContent = value;
-        if (["Source ID", "Active revision", "Metadata"].includes(label)) {
-            term.className = "inspector-detail";
-            description.className = "inspector-detail";
-        }
         sourceMetadata.append(term, description);
     }
 
@@ -358,7 +355,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
             appendTextItem(
                 revisionList,
                 `${revision.revisionId} · ${revision.contentHash}${pipeline}`,
-                "revision inspector-detail",
+                "revision",
             );
         }
     }
@@ -387,34 +384,37 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
                 "item-subtitle",
             );
             const actions = document.createElement("div");
-            actions.className = "item-actions";
+            actions.className = "item-actions hub-row-actions";
+            card.classList.add("hub-hover-actions");
             const sourceId = activity.linkedSourceIds?.[0];
             if (sourceId) {
-                const open = document.createElement("button");
-                open.type = "button";
-                open.textContent = "Linked page";
-                open.addEventListener("click", () => {
-                    host.openSource(activity.corpusId, sourceId);
-                });
-                actions.appendChild(open);
+                actions.appendChild(
+                    iconButton(
+                        "fa-arrow-up-right-from-square",
+                        "Open linked page",
+                        () => host.openSource(activity.corpusId, sourceId),
+                    ),
+                );
             }
-            const forget = document.createElement("button");
-            forget.type = "button";
-            forget.textContent = "Delete event";
-            forget.addEventListener("click", () => {
-                void run(async () => {
-                    if (
-                        !confirm(
-                            "Delete this web activity event? Source content is not deleted.",
+            const forget = iconButton(
+                "fa-regular fa-trash-can",
+                "Delete event",
+                () => {
+                    void run(async () => {
+                        if (
+                            !confirm(
+                                "Delete this web activity event? Source content is not deleted.",
+                            )
                         )
-                    )
-                        return;
-                    await invoke("memoryForgetActivity", {
-                        eventIds: [activity.eventId],
+                            return;
+                        await invoke("memoryForgetActivity", {
+                            eventIds: [activity.eventId],
+                        });
+                        await loadActivity();
                     });
-                    await loadActivity();
-                });
-            });
+                },
+                "danger",
+            );
             actions.appendChild(forget);
             card.appendChild(actions);
             activityList.appendChild(card);
@@ -500,18 +500,18 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         contentPreview.innerHTML = renderMarkdown(contentPage.content);
         const end = contentPage.offset + contentPage.content.length;
         contentRange.textContent = `${contentPage.offset + 1}-${end} of ${contentPage.totalChars} characters`;
-        const revision = document.createElement("span");
-        revision.className = "inspector-detail";
-        revision.textContent = ` · revision ${contentPage.revisionId}`;
-        contentRange.append(revision);
         element<HTMLButtonElement>("contentPrevious").disabled =
             contentPageIndex === 0;
         element<HTMLButtonElement>("contentNext").disabled =
             contentPage.nextOffset === undefined;
+        showContentMode("preview");
     }
 
     function showContentMode(mode: "write" | "preview"): void {
         const preview = mode === "preview";
+        contentEditor
+            .closest(".detail-panel")
+            ?.classList.toggle("mode-preview", preview);
         if (preview)
             contentPreview.innerHTML = renderMarkdown(contentEditor.value);
         contentEditor.classList.toggle("hidden", preview);
@@ -693,17 +693,10 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
                 `${job.state} · ${job.progress.completed}/${job.progress.total ?? "?"}`,
                 "job-state",
             );
-            appendTextItem(card, job.jobId, "item-subtitle");
-            card.lastElementChild?.classList.add("inspector-detail");
             appendTextItem(
                 card,
                 `${host.corpusName?.(job.corpusId) ?? job.corpusId} · ${job.progress.stage ?? job.state}`,
                 "item-subtitle",
-            );
-            appendTextItem(
-                card,
-                `Source ${job.sourceId} · revision ${job.revisionId}`,
-                "inspector-detail item-subtitle",
             );
             if (job.progress.message) {
                 appendTextItem(card, job.progress.message, "item-subtitle");
@@ -713,16 +706,16 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
                 appendTextItem(card, warning, "job-warning");
             }
             if (canCancel(job)) {
-                const cancel = document.createElement("button");
-                cancel.type = "button";
-                cancel.textContent = "Cancel";
-                cancel.addEventListener("click", () => {
-                    void run(async () => {
-                        await invoke("memoryCancelJob", { jobId: job.jobId });
-                        await loadJobs();
-                    });
-                });
-                card.appendChild(cancel);
+                card.appendChild(
+                    iconButton("fa-ban", "Cancel job", () => {
+                        void run(async () => {
+                            await invoke("memoryCancelJob", {
+                                jobId: job.jobId,
+                            });
+                            await loadJobs();
+                        });
+                    }),
+                );
             }
             jobList.appendChild(card);
         }

@@ -114,9 +114,7 @@ test("overview retains counts and corpus-qualified provenance without plotting a
     click("Queue · 5 mentions");
     selected.querySelector<HTMLButtonElement>(".knowledge-item-title")!.click();
     expect(onSource).toHaveBeenLastCalledWith("b", "same");
-    expect(host.textContent).toContain("They do not use the corpus selector");
-    expect(host.textContent).toContain("TypeAgent Browser Memory");
-    expect(host.querySelector("a")!.hash).toBe("#/explore/web/analytics");
+    expect(host.querySelector("a")).toBeNull();
 });
 
 test("bounded previews retain real totals and cached navigation avoids refetch", async () => {

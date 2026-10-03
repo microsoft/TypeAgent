@@ -50,7 +50,7 @@
       </div>
     </section>
 
-    <section class="card detail-panel">
+    <section class="card detail-panel mode-preview">
       <div class="section-heading">
         <h2 id="sourceTitle">Select a source</h2>
         <div>
@@ -76,35 +76,32 @@
       </div>
       <div class="editor-tabs" role="tablist" aria-label="Content view">
         <button
-          id="writeTab"
+          id="previewTab"
           class="editor-tab active"
           type="button"
           role="tab"
           aria-selected="true"
         >
-          Write
+          Preview
         </button>
         <button
-          id="previewTab"
+          id="writeTab"
           class="editor-tab"
           type="button"
           role="tab"
           aria-selected="false"
         >
-          Preview
+          Edit
         </button>
       </div>
       <textarea
         id="contentEditor"
+        class="hidden"
         aria-label="Source content"
         spellcheck="false"
         disabled
       ></textarea>
-      <div
-        id="contentPreview"
-        class="markdown-preview hidden"
-        role="tabpanel"
-      ></div>
+      <div id="contentPreview" class="markdown-preview" role="tabpanel"></div>
       <div class="content-actions">
         <button id="contentPrevious" type="button" disabled>
           Previous content

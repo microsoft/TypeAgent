@@ -516,17 +516,15 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         value("hubSettings").querySelector("#saveHowToSettings"),
     ).not.toBeNull();
     expect(value("createCorpusDialog").parentElement).toBe(document.body);
-    const dismiss = Array.from(
-        value("hubInbox").querySelectorAll("button"),
-    ).find((node) => node.textContent === "Dismiss")!;
-    dismiss.click();
+    value("hubInbox")
+        .querySelector<HTMLButtonElement>('[aria-label="Dismiss"]')!
+        .click();
     expect(value("inboxBadge").textContent).toBe("0");
     value<HTMLInputElement>("inboxDismissed").checked = true;
     value("inboxDismissed").dispatchEvent(new Event("change"));
-    const restore = Array.from(
-        value("hubInbox").querySelectorAll("button"),
-    ).find((node) => node.textContent === "Restore")!;
-    restore.click();
+    value("hubInbox")
+        .querySelector<HTMLButtonElement>('[aria-label="Restore"]')!
+        .click();
     expect(value("inboxBadge").textContent).toBe("1");
     history.replaceState({}, "", "#/library/a/source");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
@@ -536,6 +534,21 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         error: value("hubError").textContent,
     }).toEqual({ visible: true, error: "" });
     expect(value("drawerCorpus").textContent).toBe("Source corpus: Alpha");
+    expect(value("contentPreview").classList.contains("hidden")).toBe(false);
+    expect(value("contentEditor").classList.contains("hidden")).toBe(true);
+    expect(document.getElementById("hubInspector")).toBeNull();
+    expect(value("page-activity").dataset.activityTab).toBe("jobs");
+    expect(value("page-settings").dataset.settingsTab).toBe("corpus");
+    const settingsBar =
+        value("page-settings").querySelector<HTMLElement>(".hub-savebar")!;
+    expect(settingsBar.hidden).toBe(false);
+    expect(settingsBar.querySelector("button")!.textContent).toBe(
+        "Save changes",
+    );
+    value("page-activity")
+        .querySelector<HTMLButtonElement>('[data-page-tab="web"]')!
+        .click();
+    expect(value("page-activity").dataset.activityTab).toBe("web");
     history.replaceState({}, "", location.href);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     jest.advanceTimersByTime(1);
@@ -611,7 +624,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     ).toHaveLength(searches);
     value("hubAdd").click();
     expect(value<HTMLDialogElement>("hubAddDialog").open).toBe(true);
-    expect(value<HTMLButtonElement>("addMarkdown").disabled).toBe(true);
+    expect(value<HTMLButtonElement>("addMarkdown").disabled).toBe(false);
     value("addBrowser").click();
     const browserImport =
         document.querySelector<HTMLDialogElement>(".hub-import-dialog")!;
@@ -677,7 +690,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     expect(value("hubDegraded").textContent).toContain(
         "not been broadened to All memory",
     );
-    expect(value<HTMLButtonElement>("addMarkdown").disabled).toBe(true);
+    expect(value<HTMLSelectElement>("addTarget").value).toBe("");
     selector.value = "";
     selector.dispatchEvent(new Event("change"));
     await settle();
