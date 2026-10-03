@@ -17,6 +17,7 @@ const reverse = (from, to) => new Map([...to].map((c, i) => [c, from[i]]));
 const SUP = reverse(SUP_FROM, SUP_TO); // "²" -> "2"
 const SUB = reverse(SUB_FROM, SUB_TO);
 const STRONG_OPS = new Set("=+−<>≤≥≠≈±×÷·⋅→⇒⇔∈∉⊂⊆∪∩∝≡∼");
+const TRAILING_PUNCTUATION = new Set(",.;:!?");
 const FUNCS = new Set(["sen", "sin", "cos", "tg", "tan", "cotg", "cot", "cossec", "csc", "arcsen", "arcsin", "arccos", "arctg", "arctan", "log", "ln", "lim", "mdc", "mmc"]);
 const LATEX_FUNCS = new Set(["sin", "cos", "tan", "cot", "csc", "arcsin", "arccos", "arctan", "log", "ln", "lim"]);
 const STOP = new Set("aeoAEOI"); // one-letter words: a variable only next to an operator
@@ -78,7 +79,9 @@ function kindOf(inner) {
 export function mathSpans(text) {
   const tokens = []; // { start, end: without the punctuation that follows, kind, inner }
   for (const m of text.matchAll(/[^ \n]+/g)) {
-    const core = m[0].replace(/[,.;:!?]+$/, "");
+    let coreEnd = m[0].length;
+    while (coreEnd > 0 && TRAILING_PUNCTUATION.has(m[0][coreEnd - 1])) coreEnd--;
+    const core = m[0].slice(0, coreEnd);
     const inner = innerOf(core);
     tokens.push({ start: m.index, end: m.index + core.length, kind: kindOf(inner), inner });
   }

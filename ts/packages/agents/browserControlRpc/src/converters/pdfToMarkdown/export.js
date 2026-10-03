@@ -44,10 +44,18 @@ export function figureWords(text) {
     .filter((ln) => /\p{L}/u.test(ln));
 }
 
+function splitOuterWhitespace(text) {
+  let start = 0;
+  while (start < text.length && /\s/.test(text[start])) start++;
+  let end = text.length;
+  while (end > start && /\s/.test(text[end - 1])) end--;
+  return [text.slice(0, start), text.slice(start, end), text.slice(end)];
+}
+
 // Inline formatting as Markdown: **bold**, *italic*, <sup>/<sub>; markers hug the words.
 // **bold** / *italic* around the words, the spaces at either end left outside.
 function emphasis(text, bold, italic) {
-  const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(text);
+  const [lead, core, trail] = splitOuterWhitespace(text);
   if (!core) return text;
   let t = core;
   if (italic) t = `*${t}*`;
@@ -59,7 +67,7 @@ function mdInline(b, math = "unicode") {
   if (math === "latex") return mdInlineLatex(b);
   if (!b.runs?.length) return (b.text || "").replace(/\n/g, "  \n");
   return b.runs.map((r) => {
-    const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(r.text);
+    const [lead, core, trail] = splitOuterWhitespace(r.text);
     if (!core) return r.text;
     let t = core.replace(/\*/g, "\\*");
     if (r.script) t = r.script === "super" ? `<sup>${t}</sup>` : `<sub>${t}</sub>`;
@@ -83,7 +91,7 @@ function mdInlineLatex(b) {
     for (let k = start; k <= end; k++) {
       if (k === end || looks[k] !== looks[at]) {
         if (at < k) {
-          const piece = text.slice(at, k).replace(/\*/g, "\\*").replace(/\$/g, "\\$");
+          const piece = text.slice(at, k).replace(/\\/g, "\\\\").replace(/\*/g, "\\*").replace(/\$/g, "\\$");
           out += emphasis(piece, looks[at].startsWith("true"), looks[at].endsWith("true"));
         }
         at = k;
