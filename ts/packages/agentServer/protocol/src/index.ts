@@ -27,6 +27,9 @@ export {
     SpeechToken,
     ApproveMacroRequest,
     ArmRecordingRequest,
+    MacroLearningMode,
+    MacroLearningPreference,
+    MacroLearningJob,
     ClaimRecordingRequest,
     CopilotToolMacro,
     CreateMacroFromTraceRequest,
@@ -100,3 +103,4 @@ export type {
     CancelResult,
 } from "./queue.js";
 export { QueueFullError, ServerStoppingError } from "./queue.js";
+export type * from "./runbookCapabilities.js";

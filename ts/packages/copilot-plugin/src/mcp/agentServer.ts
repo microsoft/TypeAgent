@@ -32,6 +32,7 @@ import { getMode } from "../shared/plugin-config.js";
 import type { StructuredActionClient } from "@typeagent/agent-server-client";
 import { createStructuredActionClient } from "../shared/structured-action-client.js";
 import { registerStructuredActionTools } from "./structuredActionTools.js";
+import { macroHandoffContext } from "../shared/macro-handoff.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -323,6 +324,20 @@ export class TypeAgentMcpServer {
                 return toolResult(
                     "TypeAgent request was cancelled; effects may already have occurred.",
                 );
+            }
+            if (result?.agentHandoff) {
+                return {
+                    structuredContent: {
+                        status: "agentRequired",
+                        launch: result.agentHandoff.payload,
+                    },
+                    content: [
+                        {
+                            type: "text",
+                            text: macroHandoffContext(result.agentHandoff),
+                        },
+                    ],
+                };
             }
             if (responseCollector.messages.length > 0) {
                 const response = responseCollector.messages.join("\n\n");

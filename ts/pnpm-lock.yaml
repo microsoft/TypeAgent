@@ -1434,6 +1434,18 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
+  packages/agent-harness-hooks:
+    devDependencies:
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agentRpc:
     dependencies:
       '@opentelemetry/api':
@@ -1723,6 +1735,9 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@typeagent/agent-flows':
+        specifier: workspace:*
+        version: link:../../agent-flows
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
@@ -1932,6 +1947,9 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
+      '@fortawesome/fontawesome-free':
+        specifier: ^6.7.2
+        version: 6.7.2
       '@github/copilot-sdk':
         specifier: 1.0.13
         version: 1.0.13
@@ -2010,12 +2028,27 @@ importers:
       '@typeagent/websocket-utils':
         specifier: workspace:*
         version: link:../../utils/webSocketUtils
+      bootstrap:
+        specifier: ^5.3.3
+        version: 5.3.6(@popperjs/core@2.11.8)
+      bootstrap-icons:
+        specifier: ^1.13.1
+        version: 1.13.1
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
       cheerio:
         specifier: ^1.1.0
         version: 1.1.0
+      cytoscape:
+        specifier: ^3.32.0
+        version: 3.34.1
+      cytoscape-dagre:
+        specifier: ^2.5.0
+        version: 2.5.0(cytoscape@3.34.1)
+      dagre:
+        specifier: ^0.8.5
+        version: 0.8.5
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -2055,9 +2088,15 @@ importers:
       jsonpath:
         specifier: ^1.2.0
         version: 1.3.0
+      markdown-it:
+        specifier: ^14.2.0
+        version: 14.3.0
       pdfjs-dist:
         specifier: ^5.3.31
         version: 5.3.31
+      prismjs:
+        specifier: ^1.30.0
+        version: 1.30.0
       puppeteer:
         specifier: ^24.15.0
         version: 24.37.5(typescript@5.4.5)
@@ -2107,6 +2146,15 @@ importers:
       '@typeagent/browser-extension':
         specifier: workspace:*
         version: link:../browserExtension
+      '@types/bootstrap':
+        specifier: ^5.2.10
+        version: 5.2.11
+      '@types/cytoscape':
+        specifier: ^3.21.9
+        version: 3.21.9
+      '@types/cytoscape-dagre':
+        specifier: ^2.3.3
+        version: 2.3.3
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -2128,9 +2176,15 @@ importers:
       '@types/jsonpath':
         specifier: 0.2.4
         version: 0.2.4
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.1.2
       '@types/node':
         specifier: ^22.0.0
         version: 22.15.18
+      '@types/prismjs':
+        specifier: ^1.26.3
+        version: 1.26.5
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
@@ -2155,6 +2209,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../../memory/service
       dompurify:
         specifier: ^3.4.13
         version: 3.4.13
@@ -4699,6 +4756,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@3.25.76)
+      '@typeagent/agent-harness-hooks':
+        specifier: workspace:*
+        version: link:../agent-harness-hooks
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
@@ -4742,6 +4802,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@3.25.76)
+      '@typeagent/agent-harness-hooks':
+        specifier: workspace:*
+        version: link:../agent-harness-hooks
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -5131,9 +5194,6 @@ importers:
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../../utils/typechatUtils
-      '@typeagent/website-memory':
-        specifier: workspace:*
-        version: link:../../memory/website
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -5312,13 +5372,31 @@ importers:
 
   packages/git-story:
     dependencies:
+      '@hono/node-server':
+        specifier: ^1.19.17
+        version: 1.19.17(hono@4.13.5)
+      '@typeagent/agent-harness-hooks':
+        specifier: workspace:*
+        version: link:../agent-harness-hooks
       commander:
         specifier: ^12.1.0
         version: 12.1.0
+      hono:
+        specifier: '>=4.12.8 <5.0.0'
+        version: 4.13.5
+      tirith:
+        specifier: 0.4.2
+        version: 0.4.2
     devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.43
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@20.19.43)(ts-node@10.9.2(@types/node@20.19.43)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -5888,6 +5966,9 @@ importers:
 
   packages/memory/service:
     dependencies:
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/conversation-memory':
         specifier: workspace:*
         version: link:../conversation
@@ -5897,6 +5978,9 @@ importers:
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/jest':
         specifier: ^29.5.7
@@ -5974,63 +6058,18 @@ importers:
 
   packages/memory/website:
     dependencies:
-      '@typeagent/agent-runtime':
-        specifier: workspace:*
-        version: link:../../typeagent
-      '@typeagent/aiclient':
-        specifier: workspace:*
-        version: link:../../aiclient
-      '@typeagent/common-utils':
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
-      '@typeagent/conversation-memory':
-        specifier: workspace:*
-        version: link:../conversation
       '@typeagent/knowledge-processor':
         specifier: workspace:*
         version: link:../../knowledgeProcessor
       '@typeagent/knowpro':
         specifier: workspace:*
         version: link:../../knowPro
-      '@typeagent/memory-storage':
-        specifier: workspace:*
-        version: link:../storage
-      '@typeagent/telemetry':
-        specifier: workspace:*
-        version: link:../../telemetry
       better-sqlite3:
         specifier: 12.8.0
         version: 12.8.0
-      cheerio:
-        specifier: ^1.0.0
-        version: 1.1.0
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      dompurify:
-        specifier: ^3.4.13
-        version: 3.4.13
-      get-folder-size:
-        specifier: ^5.0.0
-        version: 5.0.0
-      graphology:
-        specifier: ^0.25.4
-        version: 0.25.4(graphology-types@0.24.8)
-      graphology-communities-louvain:
-        specifier: ^2.0.1
-        version: 2.0.2(graphology-types@0.24.8)
-      graphology-metrics:
-        specifier: ^2.1.0
-        version: 2.4.0(graphology-types@0.24.8)
-      graphology-types:
-        specifier: ^0.24.7
-        version: 0.24.8
-      jsdom:
-        specifier: ^28.1.0
-        version: 28.1.0
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/better-sqlite3':
         specifier: 7.6.13
@@ -6041,9 +6080,6 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      '@types/jsdom':
-        specifier: ^28.0.0
-        version: 28.0.0
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -6059,9 +6095,6 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
-      test-lib:
-        specifier: workspace:*
-        version: link:../../testLib
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -8830,6 +8863,10 @@ packages:
   '@fontsource/lato@5.2.5':
     resolution: {integrity: sha1-z1UvE6Vpr/KGJdnTfbNcomvn1ZQ=}
 
+  '@fortawesome/fontawesome-free@6.7.2':
+    resolution: {integrity: sha512-JUOtgFW6k9u4Y+xeIaEiLr3+cjoUPiAuLXoyKOJSia6Duzb7pq+A76P9ZdPDoAoxHdHzq6gE9/jKBGXlZT8FbA==}
+    engines: {node: '>=6'}
+
   '@github/copilot-sdk-darwin-arm64@1.0.13':
     resolution: {integrity: sha512-AvBV5dzjNWpGwgoCnttrETnt7rLI4pTFQsRSM7GU5TK+YqShauffdMU06Bn/d+IDX2fj1Z4ThH7yl/gHCDvoNQ==}
     cpu: [arm64]
@@ -10828,6 +10865,31 @@ packages:
   '@selderee/plugin-htmlparser2@0.11.0':
     resolution: {integrity: sha1-1bXimnum05WKGXLHvhb0ssGIxRc=}
 
+  '@sheeki03/tirith-darwin-arm64@0.4.2':
+    resolution: {integrity: sha512-L9GDpcYqT1wP0QmY1E8ATC7JE6oyenGyFbug85TC8vRzMvkDGDzzPG+ne4vx1Iw0QL7DbNL+4gebjV+E8RDy8Q==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@sheeki03/tirith-darwin-x64@0.4.2':
+    resolution: {integrity: sha512-EmHlZvkwSxTnJAWXRpEeN6U+f5QXnxt23RlJhgK89CcOgHUPH2guJUxyacHzKCg78oIiWRne70e0gnCiAtFmrw==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@sheeki03/tirith-linux-arm64@0.4.2':
+    resolution: {integrity: sha512-7Y/lmw5H6EErauzALkLAaHxzc+CAHJIts5qbF3OjHQjjbKJbsxx5612x76SBTzhvh+UB6ugutybo69EXiiivUg==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@sheeki03/tirith-linux-x64@0.4.2':
+    resolution: {integrity: sha512-EVxMj7b2hL1REprfC8IIRJ56rTNKBm+rJc92oY6vijEubUW8medNS+dOgux1qywD2kMWCkDRx/uWTI91PSU8ew==}
+    cpu: [x64]
+    os: [linux]
+
+  '@sheeki03/tirith-win32-x64@0.4.2':
+    resolution: {integrity: sha512-aQ4xhEPMCZWHvq4JN52M04SRy+TbInwH0f2eUFJBrlEKQPGZq8Lith2YD7la+fIWseqJRbNVsanEzDDsRjqrSA==}
+    cpu: [x64]
+    os: [win32]
+
   '@sinclair/typebox@0.27.12':
     resolution: {integrity: sha1-DKzTz/BHoyk2sazkfqfIbqq2Cn8=}
 
@@ -11173,6 +11235,9 @@ packages:
 
   '@types/bonjour@3.5.13':
     resolution: {integrity: sha1-rfkM4aEF6B3R+cYf3Fr9ob+5KVY=}
+
+  '@types/bootstrap@5.2.11':
+    resolution: {integrity: sha512-69ykbLiNzQxi6Q/y/aYJLrlzI5QkLQjhIYW2U+cxujBxAmaBtmXKtxnFes59Ttfpt936as6xJU0dYnmVpcwIwg==}
 
   '@types/cacheable-request@6.0.3':
     resolution: {integrity: sha1-pDCzJgRmyntcpb/XNWk7Nuep0YM=}
@@ -12443,15 +12508,6 @@ packages:
       bare-abort-controller:
         optional: true
 
-  bare-fs@4.1.5:
-    resolution: {integrity: sha1-HQbAduaMyL+XAQ0pr546w4CM3Pc=}
-    engines: {bare: '>=1.16.0'}
-    peerDependencies:
-      bare-buffer: '*'
-    peerDependenciesMeta:
-      bare-buffer:
-        optional: true
-
   bare-fs@4.8.0:
     resolution: {integrity: sha1-jA+RaDOuEebZ00f54Kf0b3N1u48=}
     engines: {bare: '>=1.28.0'}
@@ -12460,13 +12516,6 @@ packages:
     peerDependenciesMeta:
       bare-buffer:
         optional: true
-
-  bare-os@3.6.1:
-    resolution: {integrity: sha1-mSH29Z7b6Br6n1aRBlhCLA9IWNQ=}
-    engines: {bare: '>=1.14.0'}
-
-  bare-path@3.0.0:
-    resolution: {integrity: sha1-tZ0YEwulKmr5J22z6WouPT6lIXg=}
 
   bare-path@3.1.1:
     resolution: {integrity: sha1-1KIHwIhgm0Zjp1VqRqlzQjmL9+I=}
@@ -12480,17 +12529,6 @@ packages:
     peerDependenciesMeta:
       bare-abort-controller:
         optional: true
-      bare-buffer:
-        optional: true
-      bare-events:
-        optional: true
-
-  bare-stream@2.6.5:
-    resolution: {integrity: sha1-u6joeWdMTCf34ngF3wBcFdeiygc=}
-    peerDependencies:
-      bare-buffer: '*'
-      bare-events: '*'
-    peerDependenciesMeta:
       bare-buffer:
         optional: true
       bare-events:
@@ -12562,6 +12600,9 @@ packages:
   boolean@3.2.0:
     resolution: {integrity: sha1-nlKUr06YMUSUy7F5efpUyhWfEWs=}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+
+  bootstrap-icons@1.13.1:
+    resolution: {integrity: sha512-ijombt4v6bv5CLeXvRWKy7CuM3TRTuPEuGaGKvTV5cz65rQSY8RQ2JcHt6b90cBBAC7s8fsf2EkQDldzCoXUjw==}
 
   bootstrap@5.3.6:
     resolution: {integrity: sha1-+9keuv8JP1sZGhwBqMhm0k+fpuE=}
@@ -18273,9 +18314,6 @@ packages:
   tar-fs@2.1.4:
     resolution: {integrity: sha1-gAgk2/TvBt7Zr+pKyv5xxnx2uTA=}
 
-  tar-fs@3.1.1:
-    resolution: {integrity: sha1-TxZOWftg8QPUcjYHMejGu0p/6e8=}
-
   tar-fs@3.1.3:
     resolution: {integrity: sha1-BWaMxoowdBw4E/nBZZO43sfcvNE=}
 
@@ -18428,6 +18466,10 @@ packages:
   tinyglobby@0.2.17:
     resolution: {integrity: sha1-ViqabJ6ys7Ej05cZ+a9btE/NdjE=}
     engines: {node: '>=12.0.0'}
+
+  tirith@0.4.2:
+    resolution: {integrity: sha512-GO5750dIc9YYepPEYT6QTL4J0vl4gbf/UBb2njHE5grmBejR7wd8MQFcAvTs9zk9hkG8Ye1TGxhmmuKFd+Hilw==}
+    hasBin: true
 
   tlds@1.261.0:
     resolution: {integrity: sha1-BV5BLpLwH4SpyKwFBNNHLWizxMk=}
@@ -21784,6 +21826,8 @@ snapshots:
 
   '@fontsource/lato@5.2.5': {}
 
+  '@fortawesome/fontawesome-free@6.7.2': {}
+
   '@github/copilot-sdk-darwin-arm64@1.0.13':
     optional: true
 
@@ -24123,7 +24167,7 @@ snapshots:
       progress: 2.0.3
       proxy-agent: 6.5.0
       semver: 7.8.5
-      tar-fs: 3.1.1
+      tar-fs: 3.1.3
       yargs: 17.7.3
     transitivePeerDependencies:
       - bare-abort-controller
@@ -24410,6 +24454,21 @@ snapshots:
     dependencies:
       domhandler: 5.0.3
       selderee: 0.11.0
+
+  '@sheeki03/tirith-darwin-arm64@0.4.2':
+    optional: true
+
+  '@sheeki03/tirith-darwin-x64@0.4.2':
+    optional: true
+
+  '@sheeki03/tirith-linux-arm64@0.4.2':
+    optional: true
+
+  '@sheeki03/tirith-linux-x64@0.4.2':
+    optional: true
+
+  '@sheeki03/tirith-win32-x64@0.4.2':
+    optional: true
 
   '@sinclair/typebox@0.27.12': {}
 
@@ -24901,6 +24960,10 @@ snapshots:
   '@types/bonjour@3.5.13':
     dependencies:
       '@types/node': 22.20.1
+
+  '@types/bootstrap@5.2.11':
+    dependencies:
+      '@popperjs/core': 2.11.8
 
   '@types/cacheable-request@6.0.3':
     dependencies:
@@ -26625,16 +26688,6 @@ snapshots:
 
   bare-events@2.9.1: {}
 
-  bare-fs@4.1.5:
-    dependencies:
-      bare-events: 2.9.1
-      bare-path: 3.1.1
-      bare-stream: 2.6.5(bare-events@2.9.1)
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - react-native-b4a
-    optional: true
-
   bare-fs@4.8.0:
     dependencies:
       bare-events: 2.9.1
@@ -26645,14 +26698,6 @@ snapshots:
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a
-
-  bare-os@3.6.1:
-    optional: true
-
-  bare-path@3.0.0:
-    dependencies:
-      bare-os: 3.6.1
-    optional: true
 
   bare-path@3.1.1: {}
 
@@ -26665,16 +26710,6 @@ snapshots:
       bare-events: 2.9.1
     transitivePeerDependencies:
       - react-native-b4a
-
-  bare-stream@2.6.5(bare-events@2.9.1):
-    dependencies:
-      streamx: 2.28.0
-    optionalDependencies:
-      bare-events: 2.9.1
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - react-native-b4a
-    optional: true
 
   bare-url@2.4.5:
     dependencies:
@@ -26763,6 +26798,8 @@ snapshots:
   boolbase@1.0.0: {}
 
   boolean@3.2.0: {}
+
+  bootstrap-icons@1.13.1: {}
 
   bootstrap@5.3.6(@popperjs/core@2.11.8):
     dependencies:
@@ -27604,6 +27641,11 @@ snapshots:
   cytoscape-dagre@2.5.0(cytoscape@3.33.3):
     dependencies:
       cytoscape: 3.33.3
+      dagre: 0.8.5
+
+  cytoscape-dagre@2.5.0(cytoscape@3.34.1):
+    dependencies:
+      cytoscape: 3.34.1
       dagre: 0.8.5
 
   cytoscape-fcose@2.2.0(cytoscape@3.34.1):
@@ -34757,18 +34799,6 @@ snapshots:
       pump: 3.0.4
       tar-stream: 2.2.0
 
-  tar-fs@3.1.1:
-    dependencies:
-      pump: 3.0.2
-      tar-stream: 3.2.0
-    optionalDependencies:
-      bare-fs: 4.1.5
-      bare-path: 3.0.0
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-      - react-native-b4a
-
   tar-fs@3.1.3:
     dependencies:
       pump: 3.0.4
@@ -34946,6 +34976,14 @@ snapshots:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
+
+  tirith@0.4.2:
+    optionalDependencies:
+      '@sheeki03/tirith-darwin-arm64': 0.4.2
+      '@sheeki03/tirith-darwin-x64': 0.4.2
+      '@sheeki03/tirith-linux-arm64': 0.4.2
+      '@sheeki03/tirith-linux-x64': 0.4.2
+      '@sheeki03/tirith-win32-x64': 0.4.2
 
   tlds@1.261.0: {}
 

@@ -40,11 +40,13 @@ TypeAgent user -> native @memory agent -> injected MemoryService
 External client -> memory MCP server   -> the same MemoryService
 ```
 
-When the native agent is available, the dynamically generated MCP agent should
-not also be presented as a second user-facing memory agent by default. Doing so
-would create duplicate routing choices and inconsistent UX. The MCP endpoint
-should remain available for interoperability, while `@memory` is the preferred
-TypeAgent interaction surface.
+The dynamically generated `@memory-mcp` agent is intentionally registered next
+to native `@memory`. This is a design decision, not an oversight: together with
+the Copilot CLI memory plugin (which has its own store and is deliberately not
+connected to the durable service), it is one arm of an experiment to learn
+which path makes an externally consumable MCP package easier to build and
+support. Native `@memory` remains the preferred TypeAgent interaction surface;
+do not remove or hide either agent until the experiment concludes.
 
 The agent must not independently implement knowledge extraction, indexing,
 revision semantics, retrieval ranking, deletion cleanup, or durable job state.
@@ -67,9 +69,37 @@ cancel those durable jobs explicitly.
 - `@memory corpus create|list|use|info|clear`
 - `@memory import file|folder|status|cancel`
 - `@memory sources list|show|knowledge|replace|forget`
+- `@memory runbooks list|show|save|review|synthesize`
 - `@memory search`, `@memory ask`, `@memory explain`
 - `@memory jobs list|show|cancel`
+- `@memory changes [--pageSize <1-200>] [--continuationToken <token>]`
 - `@memory reindex`, `@memory status`
+
+`changes` lists canonical committed metadata-only receipts for the active
+corpus, retained for 90 days. Unsupported services fail explicitly; history
+is not synthesized from session logs.
+
+Runbook commands require an injected service supporting personal how-tos.
+`runbooks show <procedureId> [--version <n>]` reads the latest or exact version.
+`runbooks save <path>` reads canonical local procedure JSON or Markdown; optional
+`--procedureId`, `--expectedVersion`, `--reviewAgentEdition`, and
+`--safetyConfirmed` are passed to the shared service. It never executes content.
+`runbooks review <procedureId> --safetyConfirmed [--expectedVersion <n>]`
+explicitly reviews the resulting procedure version, using an optimistic guard
+and the current saved document. It refuses stale/archived versions; missing
+catalog validation and unsupported services fail explicitly. The backend,
+not the command's JSON or model output, stamps reviewed status. Review grants
+no tool or command execution permission.
+
+`runbooks synthesize <sourceId> <revisionId>` explicitly requests a draft for
+that exact retained revision in the active corpus through the optional core
+`requestRunbookSynthesis` capability. Core preferences, limits, evidence
+validation, and durable job reuse apply; the command does not overwrite saved
+procedures, review an edition, or execute bindings. It displays the durable
+job result, including failed states and candidate IDs. Unsupported services
+and core rejections fail explicitly. The procedure-aware Memory Hub view
+additionally validates its procedure/version evidence before requesting this
+same core operation; this command is source-scoped, not a procedure update.
 
 Corpus clearing, source replacement, and source forgetting use a preview token.
 Run the command once, inspect the preview, then repeat it with `--confirm
@@ -84,17 +114,11 @@ and `--exclude` are repeatable globs over root-relative paths. Defaults are
 1,000 files, 50 MiB total, and four concurrent ingestion requests; lower limits
 can be supplied with `--maxFiles`, `--maxBytes`, and `--concurrency`.
 
-`--profile` selects a public ingestion preset:
-
-- `fast`: basic indexing with 8,000-character chunks
-- `balanced`: content indexing with 4,000-character chunks
-- `deep`: full indexing with 2,000-character chunks
-
-Without `--profile`, imports use the service-equivalent default of content
-indexing with 8,000-character chunks. The selected profile and effective
-pipeline are stored with the batch and included in status output after
-restoration. Profile names are available through command completion for both
-file and folder import.
+Imports use the model-driven `content` pipeline with 8,000-character chunks.
+The effective pipeline is stored with the batch and included in restored status
+output. There are no import profiles or alternate processing modes.
+Pre-release version 1 batch state is rejected explicitly rather than migrated;
+new batches use version 2. Accepted service jobs remain managed by the service.
 
 Every candidate is checked after `realpath`. A symlink or junction that resolves
 outside the import root is reported as a per-file error, and linked directories
@@ -105,8 +129,10 @@ states, so a batch remains running while accepted jobs are indexing. Restored
 batches reconstruct their current state from those jobs. `--wait` also waits
 for terminal service job states before the import command returns.
 
-`ask` calls `MemoryService.answer` and renders its grounded extractive answer
-with citation metadata. `explain` shows the answer and citations retained from
+`ask` calls `MemoryService.answer`, which by default synthesizes the answer with
+KnowPro's answer generator over the retrieved evidence, and renders it with
+citation metadata. `ask --extractive` returns the ranked evidence snippets
+verbatim. `explain` shows the answer and citations retained from
 the latest session answer.
 
 ## Host setup

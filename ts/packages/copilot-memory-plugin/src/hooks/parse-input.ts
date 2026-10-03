@@ -12,17 +12,13 @@ export function parsePromptInput(value: unknown): PromptHookInput {
     const prompt = readString(input, "prompt") ?? "";
     const transformed = readString(input, "transformedPrompt");
     const parsed: PromptHookInput = {
+        timestamp:
+            typeof input.timestamp === "number" ? input.timestamp : Date.now(),
         sessionId: readString(input, "sessionId") ?? "default",
         cwd: readString(input, "cwd") ?? process.cwd(),
         prompt,
     };
-    if (typeof input.timestamp === "number") {
-        parsed.timestamp = input.timestamp;
-    }
-    if (transformed) {
-        parsed.transformedPrompt = transformed;
-    }
-    return parsed;
+    return transformed ? { ...parsed, transformedPrompt: transformed } : parsed;
 }
 
 export function parseStopInput(value: unknown): StopHookInput {
@@ -31,12 +27,11 @@ export function parseStopInput(value: unknown): StopHookInput {
         throw new Error("Hook input must be a JSON object.");
     }
     const parsed: StopHookInput = {
+        timestamp:
+            typeof input.timestamp === "number" ? input.timestamp : Date.now(),
         sessionId: readString(input, "sessionId") ?? "default",
         cwd: readString(input, "cwd") ?? process.cwd(),
     };
-    if (typeof input.timestamp === "number") {
-        parsed.timestamp = input.timestamp;
-    }
     const transcriptPath = readString(input, "transcriptPath");
     if (transcriptPath) {
         parsed.transcriptPath = transcriptPath;
@@ -52,5 +47,5 @@ export function parseStopInput(value: unknown): StopHookInput {
 }
 
 export function isTransformInput(input: PromptHookInput): boolean {
-    return input.transformedPrompt !== undefined;
+    return "transformedPrompt" in input;
 }

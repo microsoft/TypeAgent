@@ -3,7 +3,7 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
-import { createExtractionInputsFromFragments } from "./extractionActions.mjs";
+import { createExtractionInputsFromFragments } from "./extractionInputs.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:knowledge");
@@ -16,7 +16,7 @@ export async function indexWebPageContent(
         extractKnowledge: boolean;
         timestamp: string;
         textOnly?: boolean;
-        mode?: "basic" | "content" | "full";
+        mode?: "content";
         extractedKnowledge?: any;
         activityType?: "visited" | "captured";
         reportHowToStatus?: boolean;
@@ -31,6 +31,11 @@ export async function indexWebPageContent(
     error?: string;
 }> {
     try {
+        if (parameters.mode !== undefined && parameters.mode !== "content") {
+            throw new Error(
+                "Unsupported indexing mode. Only 'content' is supported.",
+            );
+        }
         if (parameters.extractedKnowledge) {
             throw new Error(
                 "Generated knowledge cannot be indexed without original page content",

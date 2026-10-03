@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import type {
     IngestionMode,
     JobProgress,
+    MemoryAnswerResult,
     MemoryEvent,
     MemoryEventForgetResult,
     MemoryEvidence,
@@ -16,7 +17,7 @@ import type {
 } from "@typeagent/memory-service";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
 
-const browserCorpusName = "TypeAgent Browser Memory";
+export const browserCorpusName = "TypeAgent Browser Memory";
 const browserActivityProducer = {
     producerId: "typeagent-browser",
     producerType: "browser",
@@ -117,6 +118,11 @@ export class BrowserMemoryService {
             reportHowToStatus?: boolean;
         } = {},
     ): Promise<BrowserIngestResult> {
+        if (mode !== "content") {
+            throw new Error(
+                "Unsupported ingestion mode. Only 'content' is supported.",
+            );
+        }
         const corpusId = await this.getCorpusId();
         const result = await this.client.ingestDocument({
             corpusId,
@@ -293,6 +299,19 @@ export class BrowserMemoryService {
                               : { latestActivity }),
                       },
                   ];
+        });
+    }
+
+    public async answer(
+        question: string,
+        sourceIds: string[],
+        limit?: number,
+    ): Promise<MemoryAnswerResult> {
+        return this.client.answer({
+            corpusId: await this.getCorpusId(),
+            question,
+            sourceIds,
+            ...(limit === undefined ? {} : { limit }),
         });
     }
 

@@ -3,7 +3,7 @@
 
 import { describe, expect, it, jest } from "@jest/globals";
 import { randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
+import { readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createDocMemorySettings } from "@typeagent/conversation-memory";
@@ -18,8 +18,13 @@ import type {
     MemoryService,
     PersonalHowToService,
     ProcedureSearchMatch,
+    CorpusIndexFactory,
 } from "@typeagent/memory-service";
-import { searchPersonalMemory } from "../src/context/personalMemorySearch.js";
+import { ConversationDurableMemory } from "../src/context/conversationDurableMemory.js";
+import {
+    searchPersonalMemory,
+    searchReasoningConversationMemory,
+} from "../src/context/personalMemorySearch.js";
 
 const corpus = (corpusId: string, name: string): MemoryCorpus => ({
     corpusId,
@@ -55,13 +60,106 @@ const noProcedures = async (): Promise<ProcedureSearchMatch[]> => [];
 type SearchService = Pick<MemoryService, "listCorpora" | "search"> &
     Pick<PersonalHowToService, "searchProcedures">;
 
+function createStructuredIndexFactory(
+    queryEntity: string,
+    entityFor: (text: string) => string,
+    onExtract?: (text: string) => void,
+): CorpusIndexFactory {
+    const languageModel = {
+        completionSettings: {},
+        complete: async () => ({
+            success: true as const,
+            data: JSON.stringify({
+                searchExpressions: [
+                    {
+                        rewrittenQuery: queryEntity,
+                        filters: [
+                            {
+                                entitySearchTerms: [
+                                    { name: queryEntity, isNamePronoun: false },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            }),
+        }),
+    };
+    const knowledgeFor = (text: string) => {
+        onExtract?.(text);
+        return {
+            entities: [{ name: entityFor(text), type: ["service"] }],
+            actions: [],
+            inverseActions: [],
+            topics: [entityFor(text)],
+        };
+    };
+    return (corpusId, directory) =>
+        createKnowProCorpusIndex(corpusId, directory, () => {
+            const settings = createDocMemorySettings(
+                64,
+                undefined,
+                languageModel,
+            );
+            settings.embeddingSize = 0;
+            settings.conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
+                {
+                    settings: { maxContextLength: 1000 },
+                    extract: async (text) => knowledgeFor(text),
+                    extractWithRetry: async (text) => ({
+                        success: true,
+                        data: knowledgeFor(text),
+                    }),
+                };
+            return settings;
+        });
+}
+
+async function waitForIngestion(
+    service: FileMemoryService,
+    jobId: string,
+): Promise<void> {
+    for (let attempt = 0; attempt < 200; attempt++) {
+        const state = (await service.getJob(jobId))?.state;
+        if (
+            state !== undefined &&
+            ["complete", "partial", "failed", "cancelled"].includes(state)
+        ) {
+            expect(state).toBe("complete");
+            return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`Ingestion ${jobId} did not finish`);
+}
+
+async function findIndexSchemas(directory: string): Promise<string[]> {
+    const files: string[] = [];
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const filename = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+            files.push(...(await findIndexSchemas(filename)));
+        } else if (entry.name === "index-schema.json") {
+            files.push(filename);
+        }
+    }
+    return files;
+}
+
 describe("searchPersonalMemory", () => {
     it("retrieves a saved troubleshooting page after real ingestion completes", async () => {
         const root = path.join(
             os.tmpdir(),
             `dispatcher-memory-${randomUUID()}`,
         );
-        const service = new FileMemoryService(root);
+        const previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+        process.env.TYPEAGENT_EMBEDDING_PROVIDER = "none";
+        const service = new FileMemoryService(root, {
+            indexFactory: createStructuredIndexFactory(
+                "Service X",
+                () => "Service X",
+            ),
+        });
         try {
             const { corpusId } = await service.createCorpus(
                 "TypeAgent Browser Memory",
@@ -77,17 +175,9 @@ describe("searchPersonalMemory", () => {
                         "1. Inspect Service X logs for startup errors.\n" +
                         "2. Check the database connection before restarting.\n",
                 },
-                pipeline: { mode: "basic" },
+                pipeline: { mode: "content" },
             });
-            let state: string | undefined;
-            for (let attempt = 0; attempt < 200; attempt++) {
-                state = (await service.getJob(job.jobId))?.state;
-                if (["complete", "partial", "failed"].includes(state ?? "")) {
-                    break;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-            expect(state).toBe("complete");
+            await waitForIngestion(service, job.jobId);
             const text = await searchPersonalMemory(
                 "How do I debug a failing service X?",
                 async () => undefined,
@@ -97,8 +187,163 @@ describe("searchPersonalMemory", () => {
             expect(text).toContain("https://example.com/runbooks/service-x");
             expect(text).toContain("Inspect Service X logs");
         } finally {
+            try {
+                await service.close();
+            } finally {
+                if (previousProvider === undefined) {
+                    delete process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+                } else {
+                    process.env.TYPEAGENT_EMBEDDING_PROVIDER = previousProvider;
+                }
+                await rm(root, { recursive: true, force: true });
+            }
+        }
+    });
+
+    it("rebuilds unversioned indexes and recalls the page, approved how-to, and incident after restart", async () => {
+        const root = path.join(
+            os.tmpdir(),
+            `dispatcher-memory-${randomUUID()}`,
+        );
+        const previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+        process.env.TYPEAGENT_EMBEDDING_PROVIDER = "none";
+        const extractionCalls: string[] = [];
+        const factory = createStructuredIndexFactory(
+            "Service X",
+            () => "Service X",
+            (text) => extractionCalls.push(text),
+        );
+        const options = {
+            indexFactory: factory,
+            procedureIndexFactory: factory,
+        };
+        let service = new FileMemoryService(root, options);
+        try {
+            const { corpusId } = await service.createCorpus(
+                "TypeAgent Browser Memory",
+            );
+            const job = await service.ingestDocument({
+                corpusId,
+                source: {
+                    sourceType: "web",
+                    title: "Service X incident runbook",
+                    canonicalUri: "https://example.com/runbooks/service-x",
+                    markdown:
+                        "# Service X incident runbook\n\nInspect Service X traces before restarting.",
+                },
+            });
+            await waitForIngestion(service, job.jobId);
+            const procedure = await service.saveProcedure({
+                corpusId,
+                procedureId: "restore-service-x",
+                document: {
+                    title: "Restore availability to Service X",
+                    steps: ["Reduce concurrency before restarting Service X."],
+                    citations: [
+                        {
+                            sourceId: job.sourceId,
+                            revisionId: job.revisionId,
+                        },
+                    ],
+                },
+            });
+            let memory = new ConversationDurableMemory({
+                service: createMemoryServiceRpcFacade(service),
+                conversationId: "incident-service-x",
+                runId: "diagnosis",
+            });
+            memory.recordActionResult(
+                "Service X diagnostic probe: connection pool exhausted.",
+                "turn-1",
+                "diagnose",
+                false,
+            );
+            memory.recordDecision(
+                "For Service X, roll back release 42.",
+                "turn-1",
+            );
+            const events = await memory.inspectTurn("turn-1");
+            expect(events).toHaveLength(2);
+            const recall = async () => {
+                const text = await searchPersonalMemory(
+                    "How do I restore Service X, and what did our diagnostic show?",
+                    () =>
+                        searchReasoningConversationMemory(
+                            { conversationDurableMemory: memory },
+                            "How do I restore Service X, and what did our diagnostic show?",
+                        ),
+                    createMemoryServiceRpcFacade(service),
+                );
+                expect(text).toContain("Inspect Service X traces");
+                expect(text).toContain(
+                    "https://example.com/runbooks/service-x",
+                );
+                expect(text).toContain("Reduce concurrency");
+                expect(text).toContain("connection pool exhausted");
+                expect(text).toContain("roll back release 42");
+                expect(text).not.toContain("search failed");
+            };
+            await recall();
+            const extractionsBeforeReset = extractionCalls.length;
+            const schemas = await findIndexSchemas(root);
+            const descriptors: unknown[] = await Promise.all(
+                schemas.map(async (file) =>
+                    JSON.parse(await readFile(file, "utf8")),
+                ),
+            );
+            expect(descriptors).toEqual(
+                expect.arrayContaining(
+                    ["documents", "conversation-events", "procedures"].map(
+                        (indexKind) => ({
+                            indexSchemaVersion: 1,
+                            engine: "knowpro",
+                            indexKind,
+                        }),
+                    ),
+                ),
+            );
             await service.close();
-            await rm(root, { recursive: true, force: true });
+            for (const schema of schemas) {
+                await rm(schema);
+            }
+            service = new FileMemoryService(root, options);
+            memory = new ConversationDurableMemory({
+                service: createMemoryServiceRpcFacade(service),
+                conversationId: "incident-service-x",
+                runId: "follow-up",
+            });
+            await recall();
+            expect(extractionCalls.slice(extractionsBeforeReset)).toEqual(
+                expect.arrayContaining(
+                    [
+                        "Inspect Service X traces",
+                        "Reduce concurrency",
+                        "connection pool exhausted",
+                        "roll back release 42",
+                    ].map((text) => expect.stringContaining(text)),
+                ),
+            );
+            expect(await memory.inspectTurn("turn-1")).toEqual(events);
+            expect(
+                await service.getProcedure(corpusId, procedure.procedureId, 1),
+            ).toEqual(procedure);
+            expect(
+                await service.getSource(corpusId, job.sourceId),
+            ).toMatchObject({ activeRevisionId: job.revisionId });
+            expect(
+                (await findIndexSchemas(root)).length,
+            ).toBeGreaterThanOrEqual(3);
+        } finally {
+            try {
+                await service.close();
+            } finally {
+                if (previousProvider === undefined) {
+                    delete process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+                } else {
+                    process.env.TYPEAGENT_EMBEDDING_PROVIDER = previousProvider;
+                }
+                await rm(root, { recursive: true, force: true });
+            }
         }
     });
 
@@ -109,66 +354,14 @@ describe("searchPersonalMemory", () => {
         );
         const previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
         process.env.TYPEAGENT_EMBEDDING_PROVIDER = "none";
-        const languageModel = {
-            completionSettings: {},
-            complete: async () => ({
-                success: true as const,
-                data: JSON.stringify({
-                    searchExpressions: [
-                        {
-                            rewrittenQuery: "Zephyr recovery",
-                            filters: [
-                                {
-                                    entitySearchTerms: [
-                                        {
-                                            name: "Zephyr",
-                                            isNamePronoun: false,
-                                        },
-                                    ],
-                                },
-                            ],
-                        },
-                    ],
-                }),
-            }),
-        };
-        const knowledgeFor = (text: string) => ({
-            entities: [
-                {
-                    name: text.includes("Restore availability")
+        const service = new FileMemoryService(root, {
+            procedureIndexFactory: createStructuredIndexFactory(
+                "Zephyr",
+                (text) =>
+                    text.includes("Restore availability")
                         ? "Zephyr"
                         : "Credentials",
-                    type: ["service"],
-                },
-            ],
-            actions: [],
-            inverseActions: [],
-            topics: [
-                text.includes("Restore availability")
-                    ? "Zephyr recovery"
-                    : "credential rotation",
-            ],
-        });
-        const service = new FileMemoryService(root, {
-            procedureIndexFactory: (corpusId, directory) =>
-                createKnowProCorpusIndex(corpusId, directory, () => {
-                    const settings = createDocMemorySettings(
-                        64,
-                        undefined,
-                        languageModel,
-                    );
-                    settings.embeddingSize = 0;
-                    settings.conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
-                        {
-                            settings: { maxContextLength: 1000 },
-                            extract: async (text) => knowledgeFor(text),
-                            extractWithRetry: async (text) => ({
-                                success: true,
-                                data: knowledgeFor(text),
-                            }),
-                        };
-                    return settings;
-                }),
+            ),
         });
         try {
             const { corpusId } = await service.createCorpus(

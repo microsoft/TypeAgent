@@ -62,6 +62,15 @@ function createDependencies(
 }
 
 describe("Copilot dev actions hook", () => {
+    it("passes the hook session ID to the shared connector", async () => {
+        const { dependencies } = createDependencies({});
+        await handleDevActions(input, dependencies);
+        expect(dependencies.connectToTypeAgent).toHaveBeenCalledWith(
+            expect.anything(),
+            input.sessionId,
+        );
+    });
+
     it("uses the PowerShell schema family for ordinary prompts", () => {
         expect(getDevActionCommandOptions("show running processes")).toEqual({
             activeSchemaFamilies: ["powershell"],

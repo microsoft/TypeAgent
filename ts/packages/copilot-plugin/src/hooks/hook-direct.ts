@@ -19,7 +19,11 @@ import {
     formatPendingNaturalLanguageInteraction,
 } from "../shared/typeagent-client.js";
 import { emitProgress } from "../shared/hook-progress.js";
-import type { HookInput, HookOutput } from "./types.js";
+import type {
+    UserPromptSubmittedInput,
+    UserPromptSubmittedOutput,
+} from "@typeagent/agent-harness-hooks/copilot-cli";
+import { macroHandoffContext } from "../shared/macro-handoff.js";
 
 export interface DirectHandlingOptions {
     forceHandled?: boolean;
@@ -38,7 +42,7 @@ const defaultDependencies: DirectDependencies = {
 function toForcedCommandOutput(
     result: CommandResult | undefined,
     messages: string[],
-): HookOutput {
+): UserPromptSubmittedOutput {
     let responseContent: string;
 
     if (result === undefined) {
@@ -68,16 +72,24 @@ function toForcedCommandOutput(
     };
 }
 
+function hasSuccessfulAgentHandoff(
+    result: CommandResult | undefined,
+): result is CommandResult & {
+    agentHandoff: NonNullable<CommandResult["agentHandoff"]>;
+} {
+    return !!result?.agentHandoff && !result.lastError && !result.cancelled;
+}
+
 export async function handleDirect(
-    input: HookInput,
+    input: UserPromptSubmittedInput,
     options: DirectHandlingOptions = {},
     dependencies: DirectDependencies = defaultDependencies,
-): Promise<HookOutput> {
+): Promise<UserPromptSubmittedOutput> {
     dependencies.emitProgress("Routing to TypeAgent...", { temporary: true });
 
     const responseCollector = { messages: [] as string[] };
     const pendingPrompts: unknown[] = [];
-    const pendingResult = (): HookOutput => ({
+    const pendingResult = (): UserPromptSubmittedOutput => ({
         handled: true,
         responseContent:
             formatPendingNaturalLanguageInteraction(pendingPrompts),
@@ -138,18 +150,32 @@ export async function handleDirect(
     });
 
     let dispatcher: Dispatcher | null = null;
+    let acceptedMacro = false;
     try {
         dependencies.emitProgress("Connecting to TypeAgent...", {
             temporary: true,
         });
-        dispatcher = await dependencies.connectToTypeAgent(clientIO);
+        dispatcher = await dependencies.connectToTypeAgent(
+            clientIO,
+            input.sessionId,
+        );
         dependencies.emitProgress("Processing command...", {
             temporary: true,
         });
         const result = await awaitCommand(dispatcher, input.prompt);
+        acceptedMacro =
+            result?.actions?.some((action) => action.schemaName === "macros") ??
+            false;
 
         if (pendingPrompts.length > 0) return pendingResult();
-        if (options.forceHandled) {
+        if (hasSuccessfulAgentHandoff(result)) {
+            acceptedMacro = true;
+            return {
+                modifiedPrompt: input.prompt,
+                additionalContext: macroHandoffContext(result.agentHandoff),
+            };
+        }
+        if (options.forceHandled || acceptedMacro) {
             return toForcedCommandOutput(result, responseCollector.messages);
         }
 
@@ -182,7 +208,7 @@ export async function handleDirect(
     } catch (error) {
         if (pendingPrompts.length > 0) return pendingResult();
         console.error("TypeAgent error:", error);
-        if (options.forceHandled) {
+        if (options.forceHandled || acceptedMacro) {
             return {
                 handled: true,
                 responseContent: `TypeAgent could not execute the command: ${

@@ -4,7 +4,13 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { FileMemoryService, type IngestionJobStatus } from "../src/index.js";
+import { createDocMemorySettings } from "@typeagent/conversation-memory";
+import {
+    createKnowProCorpusIndex,
+    FileMemoryService,
+    type FileMemoryServiceOptions,
+    type IngestionJobStatus,
+} from "../src/index.js";
 import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
 
 const fixtureDirectory = path.resolve("test", "data", "memory-validation");
@@ -73,6 +79,70 @@ const terminalJobStates = new Set([
     "cancelled",
 ]);
 
+const knowledgeForText = (text: string) => ({
+    entities: [
+        ...[
+            "Aurora-7",
+            "cobalt-orchid-731",
+            "quartz-harbor-284",
+            "indigo-summit-946",
+        ]
+            .filter((name) => text.includes(name))
+            .map((name) => ({ name, type: ["document"] })),
+    ],
+    actions: [],
+    inverseActions: [],
+    topics: [],
+});
+
+const indexFactory: NonNullable<FileMemoryServiceOptions["indexFactory"]> = (
+    corpusId,
+    directory,
+) =>
+    createKnowProCorpusIndex(corpusId, directory, () => {
+        const languageModel = {
+            completionSettings: {},
+            complete: async (prompt: unknown) => {
+                const input = JSON.stringify(prompt);
+                const name =
+                    [
+                        "indigo-summit-946",
+                        "quartz-harbor-284",
+                        "cobalt-orchid-731",
+                    ].find((value) => input.includes(value)) ?? "Aurora-7";
+                return {
+                    success: true as const,
+                    data: JSON.stringify({
+                        searchExpressions: [
+                            {
+                                rewrittenQuery: name,
+                                filters: [
+                                    {
+                                        entitySearchTerms: [
+                                            { name, isNamePronoun: false },
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    }),
+                };
+            },
+        };
+        const settings = createDocMemorySettings(64, undefined, languageModel);
+        settings.embeddingSize = 0;
+        settings.conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
+            {
+                settings: { maxContextLength: 1000 },
+                extract: async (text: string) => knowledgeForText(text),
+                extractWithRetry: async (text: string) => ({
+                    success: true as const,
+                    data: knowledgeForText(text),
+                }),
+            };
+        return settings;
+    });
+
 async function waitForTerminalJob(
     service: FileMemoryService,
     jobId: string,
@@ -117,7 +187,7 @@ async function ingestFixture(
             markdown,
         },
         pipeline: {
-            mode: "basic",
+            mode: "content",
             updatePolicy: "skipIfUnchanged",
             maxCharsPerChunk: 8_000,
         },
@@ -130,7 +200,10 @@ describe("memory validation acceptance", () => {
         const rootDirectory = await mkdtemp(
             path.join(os.tmpdir(), "typeagent-memory-validation-"),
         );
+        const previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+        process.env.TYPEAGENT_EMBEDDING_PROVIDER = "none";
         let service = new FileMemoryService(rootDirectory, {
+            indexFactory,
             procedureIndexFactory: (_corpusId, directory) =>
                 new FakeProcedureCorpusIndex(directory),
         });
@@ -165,14 +238,22 @@ describe("memory validation acceptance", () => {
                 canonicalUri: "https://memory.test/incidents/AR-204",
                 sourceType: "markdown",
                 capturedAt: "2026-09-14T02:25:00.000Z",
-                score: 1,
+                score: expect.any(Number),
             });
             expect(alphaSearch.matches[0].snippet).toContain(
                 "cobalt-orchid-731",
             );
-            expect(alphaSearch.matches.map((match) => match.sourceId)).toEqual(
-                expect.arrayContaining(["smoke-alpha", "smoke-beta"]),
-            );
+            expect(alphaSearch.matches.map((match) => match.sourceId)).toEqual([
+                "smoke-alpha",
+            ]);
+            expect(
+                (
+                    await service.search({
+                        corpusId: corpus.corpusId,
+                        query: "Meridian quartz-harbor-284",
+                    })
+                ).matches[0].sourceId,
+            ).toBe("smoke-beta");
             expect(alphaSearch.capabilitiesUsed).toContain("structured-search");
             const incidentOnly = await service.search({
                 corpusId: corpus.corpusId,
@@ -218,6 +299,7 @@ describe("memory validation acceptance", () => {
                 corpusId: corpus.corpusId,
                 question: "Aurora-7 telemetry dropout Valparaiso",
                 sourceIds: ["smoke-beta"],
+                answerMode: "extractive",
             });
             expect(answer).toMatchObject({
                 grounded: true,
@@ -450,6 +532,7 @@ describe("memory validation acceptance", () => {
 
             await service.close();
             service = new FileMemoryService(rootDirectory, {
+                indexFactory,
                 procedureIndexFactory: (_corpusId, directory) =>
                     new FakeProcedureCorpusIndex(directory),
             });
@@ -477,6 +560,11 @@ describe("memory validation acceptance", () => {
         } finally {
             await service.close();
             await rm(rootDirectory, { recursive: true, force: true });
+            if (previousProvider === undefined) {
+                delete process.env.TYPEAGENT_EMBEDDING_PROVIDER;
+            } else {
+                process.env.TYPEAGENT_EMBEDDING_PROVIDER = previousProvider;
+            }
         }
     }, 60_000);
 });

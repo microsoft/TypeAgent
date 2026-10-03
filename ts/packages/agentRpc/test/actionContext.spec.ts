@@ -181,10 +181,12 @@ describe("agent action context RPC", () => {
         );
 
         let receivedWorkingDirectory: string | undefined;
+        let receivedConversationId: string | undefined;
         const serverAgent: AppAgent = {
             initializeAgentContext: async () => ({}),
             executeAction: async (_action, context) => {
                 receivedWorkingDirectory = context.workingDirectory;
+                receivedConversationId = context.sessionContext.conversationId;
                 return undefined;
             },
         };
@@ -206,6 +208,7 @@ describe("agent action context RPC", () => {
             const sessionContext = {
                 agentContext,
                 sessionContextId: "rpc-working-directory-test",
+                conversationId: "owning-conversation",
             } as SessionContext<unknown>;
             const actionContext = {
                 sessionContext,
@@ -225,6 +228,7 @@ describe("agent action context RPC", () => {
             expect(receivedWorkingDirectory).toBe(
                 "C:\\host-authorized-workspace",
             );
+            expect(receivedConversationId).toBe("owning-conversation");
         } finally {
             server.closeFn();
             clientProvider.notifyDisconnected();

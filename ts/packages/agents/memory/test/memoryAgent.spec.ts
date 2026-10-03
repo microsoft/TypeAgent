@@ -15,6 +15,7 @@ import type {
     DocumentIngestRequest,
     MemoryEvidence,
     MemoryService,
+    RunbookJobResult,
 } from "@typeagent/memory-service";
 import {
     createStableSourceId,
@@ -218,9 +219,10 @@ function createFakeService(
             capabilitiesUsed: ["exactSearch"],
             indexVersion: "1",
         }),
-        answer: async ({ question }) => ({
+        answer: async ({ question, answerMode }) => ({
             question,
             answer: "The launch date is Tuesday.",
+            mode: answerMode ?? "synthesized",
             citations: [createEvidence()],
             grounded: true,
             indexVersion: "1",
@@ -445,7 +447,7 @@ test("folder import enforces file and byte limits", async () => {
     ).rejects.toThrow("exceeds the 9 byte limit");
 });
 
-test("import profiles map to service pipeline options and complete", async () => {
+test("imports use the canonical content pipeline and restore without profiles", async () => {
     await writeFile(resolve(scratch, "profile.md"), "# Profile", "utf8");
     const requests: DocumentIngestRequest[] = [];
     const service = createFakeService(async (request) => {
@@ -472,10 +474,7 @@ test("import profiles map to service pipeline options and complete", async () =>
 
     await agent.executeCommand?.(
         ["import", "file"],
-        commandParams(
-            { path: resolve(scratch, "profile.md") },
-            { profile: "deep" },
-        ),
+        commandParams({ path: resolve(scratch, "profile.md") }),
         actionContext(state, storage),
     );
     await [...state.imports.values()][0].promise;
@@ -488,14 +487,10 @@ test("import profiles map to service pipeline options and complete", async () =>
 
     expect(requests[0].pipeline).toEqual({
         updatePolicy: "skipIfUnchanged",
-        mode: "full",
-        maxCharsPerChunk: 2_000,
+        mode: "content",
+        maxCharsPerChunk: 8_000,
     });
-    expect(completions?.groups[0].completions).toEqual([
-        "fast",
-        "balanced",
-        "deep",
-    ]);
+    expect(completions?.groups ?? []).toEqual([]);
 
     const restored = (await agent.initializeAgentContext?.({
         options: service,
@@ -510,9 +505,9 @@ test("import profiles map to service pipeline options and complete", async () =>
         commandParams(),
         actionContext(restored, storage),
     );
-    expect(displayText(status)).toContain('"profile": "deep"');
-    expect(displayText(status)).toContain('"mode": "full"');
-    expect(displayText(status)).toContain('"maxCharsPerChunk": 2000');
+    expect(displayText(status)).not.toContain('"profile"');
+    expect(displayText(status)).toContain('"mode": "content"');
+    expect(displayText(status)).toContain('"maxCharsPerChunk": 8000');
 });
 
 test("restoration rejects malformed JSON with its parse cause", async () => {
@@ -546,7 +541,7 @@ test("restoration rejects malformed JSON with its parse cause", async () => {
 
 test("restoration rejects an unsupported schema", async () => {
     const { storage, values } = memoryStorage();
-    values.set(importStoragePath, JSON.stringify({ version: 2, batches: [] }));
+    values.set(importStoragePath, JSON.stringify({ version: 3, batches: [] }));
     const agent = instantiate();
     const state = (await agent.initializeAgentContext?.({
         options: createFakeService(),
@@ -558,7 +553,7 @@ test("restoration rejects an unsupported schema", async () => {
             sessionContext(state, storage),
             "memory",
         ),
-    ).rejects.toThrow("Unsupported memory import storage version '2'");
+    ).rejects.toThrow("Unsupported memory import storage version '3'");
     expect(state.imports.size).toBe(0);
 });
 
@@ -567,12 +562,11 @@ test("restoration rejects invalid entries before merging valid ones", async () =
     values.set(
         importStoragePath,
         JSON.stringify({
-            version: 1,
+            version: 2,
             batches: [
                 {
                     batchId: "valid",
                     corpusId: "corpus-1",
-                    profile: null,
                     pipeline: {
                         mode: "content",
                         maxCharsPerChunk: 8_000,
@@ -597,6 +591,67 @@ test("restoration rejects invalid entries before merging valid ones", async () =
     ).rejects.toThrow("batch entry 1 is invalid");
     expect(state.imports.size).toBe(0);
 });
+
+test.each([1, 0])(
+    "restoration rejects pre-release batch version %s without changing storage",
+    async (version) => {
+        const { storage, values } = memoryStorage();
+        const serialized = JSON.stringify({ version, batches: [] });
+        values.set(importStoragePath, serialized);
+        const agent = instantiate();
+        const state = (await agent.initializeAgentContext?.({
+            options: createFakeService(),
+        })) as MemoryAgentContext;
+        await expect(
+            agent.updateAgentContext?.(
+                true,
+                sessionContext(state, storage),
+                "memory",
+            ),
+        ).rejects.toThrow(
+            `Unsupported memory import storage version '${version}'`,
+        );
+        expect(values.get(importStoragePath)).toBe(serialized);
+    },
+);
+
+test.each([
+    { profile: "fast", pipeline: { mode: "content", maxCharsPerChunk: 8000 } },
+    { pipeline: { mode: "basic", maxCharsPerChunk: 8000 } },
+    { pipeline: { mode: "summary", maxCharsPerChunk: 8000 } },
+    { pipeline: { mode: "full", maxCharsPerChunk: 8000 } },
+])(
+    "restoration rejects obsolete profile or pipeline state %j",
+    async (obsolete) => {
+        const { storage, values } = memoryStorage();
+        values.set(
+            importStoragePath,
+            JSON.stringify({
+                version: 2,
+                batches: [
+                    {
+                        batchId: "old",
+                        corpusId: "corpus-1",
+                        jobIds: [],
+                        ...obsolete,
+                    },
+                ],
+            }),
+        );
+        const agent = instantiate();
+        const state = (await agent.initializeAgentContext?.({
+            options: createFakeService(),
+        })) as MemoryAgentContext;
+        await expect(
+            agent.updateAgentContext?.(
+                true,
+                sessionContext(state, storage),
+                "memory",
+            ),
+        ).rejects.toThrow("batch entry 0 is invalid");
+        expect(state.imports.size).toBe(0);
+    },
+);
 
 test("accepted jobs are cancelled when durable tracking cannot be persisted", async () => {
     await writeFile(resolve(scratch, "persistence.md"), "# Persist", "utf8");
@@ -629,7 +684,7 @@ test("accepted jobs are cancelled when durable tracking cannot be persisted", as
     expect(cancelJob).toHaveBeenCalledWith("job-persistence.md");
 });
 
-test("commands retain corpus and extractive answer evidence", async () => {
+test("commands retain corpus and answer evidence", async () => {
     const service = createFakeService();
     const answerSpy = jest.spyOn(service, "answer");
     const agent = instantiate();
@@ -661,11 +716,206 @@ test("commands retain corpus and extractive answer evidence", async () => {
             question: "When is launch?",
         }),
     );
-    expect(displayText(answer)).toContain("Grounded extractive answer");
+    expect(displayText(answer)).toContain("Grounded synthesized answer");
     expect(displayText(answer)).toContain("The launch date is Tuesday.");
     expect(displayText(answer)).toContain("source-1");
     expect(displayText(answer)).toContain("revision-1");
     expect(displayText(explanation)).toContain('"sourceId": "source-1"');
+});
+
+test("changes command uses canonical paging and rejects unsupported services", async () => {
+    const service = createFakeService();
+    const agent = instantiate();
+    const state = (await agent.initializeAgentContext?.({
+        options: service,
+    })) as MemoryAgentContext;
+    const context = actionContext(state);
+    await agent.executeCommand?.(
+        ["corpus", "use"],
+        commandParams({ corpusId: "corpus-1" }),
+        context,
+    );
+    await expect(
+        agent.executeCommand?.(["changes"], commandParams(), context),
+    ).rejects.toThrow("not supported");
+    const listChanges = jest.fn(async () => ({ items: [], total: 0 }));
+    service.listChanges = listChanges;
+    await agent.executeCommand?.(
+        ["changes"],
+        commandParams({}, { pageSize: 2, continuationToken: "opaque-token" }),
+        context,
+    );
+    expect(listChanges).toHaveBeenCalledWith({
+        corpusId: "corpus-1",
+        pageSize: 2,
+        continuationToken: "opaque-token",
+    });
+});
+
+test("runbook commands inspect exact versions and require explicit version-specific safety review", async () => {
+    const service = createFakeService();
+    const agent = instantiate();
+    const state = (await agent.initializeAgentContext?.({
+        options: service,
+    })) as MemoryAgentContext;
+    const context = actionContext(state);
+    state.activeCorpusId = "corpus-1";
+    await expect(
+        agent.executeCommand?.(["runbooks", "list"], undefined, context),
+    ).rejects.toThrow("not supported");
+    const document = { title: "Guide", steps: ["Inspect"], citations: [] };
+    const getProcedure = jest.fn(async () => ({
+        corpusId: "corpus-1",
+        procedureId: "guide",
+        version: 4,
+        state: "saved" as const,
+        document,
+        canonicalJson: "{}",
+        markdown: "# Guide",
+        createdAt: "2026-10-02T00:00:00.000Z",
+        jsonHash: "json",
+        markdownHash: "markdown",
+    }));
+    const saveProcedure = jest.fn(async () => getProcedure());
+    Object.assign(service, {
+        getProcedure,
+        saveProcedure,
+        listProcedures: async () => [],
+    });
+    await agent.executeCommand?.(
+        ["runbooks", "show"],
+        commandParams({ procedureId: "guide" }, { version: 2 }),
+        context,
+    );
+    expect(getProcedure).toHaveBeenCalledWith("corpus-1", "guide", 2);
+    await expect(
+        agent.executeCommand?.(
+            ["runbooks", "review"],
+            commandParams({ procedureId: "guide" }),
+            context,
+        ),
+    ).rejects.toThrow("safetyConfirmed");
+    expect(saveProcedure).not.toHaveBeenCalled();
+    await agent.executeCommand?.(
+        ["runbooks", "review"],
+        commandParams(
+            { procedureId: "guide" },
+            { safetyConfirmed: true, expectedVersion: 4 },
+        ),
+        context,
+    );
+    expect(saveProcedure).toHaveBeenCalledWith({
+        corpusId: "corpus-1",
+        procedureId: "guide",
+        expectedVersion: 4,
+        document,
+        reviewAgentEdition: true,
+        safetyConfirmed: true,
+    });
+});
+
+test.each(["running", "complete", "failed"] as const)(
+    "runbook synthesis forwards exact evidence to core and displays durable %s results",
+    async (jobState) => {
+        const service = createFakeService();
+        const agent = instantiate();
+        const state = (await agent.initializeAgentContext?.({
+            options: service,
+        })) as MemoryAgentContext;
+        const context = actionContext(state);
+        const params = commandParams({
+            sourceId: "source-1",
+            revisionId: "revision-2",
+        });
+        await expect(
+            agent.executeCommand?.(["runbooks", "synthesize"], params, context),
+        ).rejects.toThrow("not supported");
+        const job: RunbookJobResult = {
+            jobId: "runbook-job-1",
+            corpusId: "corpus-1",
+            sourceId: "source-1",
+            revisionId: "revision-2",
+            state: jobState,
+            createdAt: "2026-10-02T00:00:00.000Z",
+            updatedAt: "2026-10-02T00:00:00.000Z",
+            candidateIds: jobState === "complete" ? ["candidate-1"] : [],
+            warnings: jobState === "failed" ? ["Model unavailable"] : [],
+        };
+        const requestRunbookSynthesis = jest.fn(async () => job);
+        service.requestRunbookSynthesis = requestRunbookSynthesis;
+        await expect(
+            agent.executeCommand?.(["runbooks", "synthesize"], params, context),
+        ).rejects.toThrow("corpus");
+        expect(requestRunbookSynthesis).not.toHaveBeenCalled();
+        state.activeCorpusId = "corpus-1";
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const result = await agent.executeCommand?.(
+                ["runbooks", "synthesize"],
+                params,
+                context,
+            );
+            expect(displayText(result)).toContain(job.jobId);
+            expect(displayText(result)).toContain(jobState);
+        }
+        expect(requestRunbookSynthesis).toHaveBeenCalledTimes(2);
+        expect(requestRunbookSynthesis).toHaveBeenLastCalledWith({
+            corpusId: "corpus-1",
+            sourceId: "source-1",
+            revisionId: "revision-2",
+        });
+    },
+);
+
+test("runbook synthesis propagates core rejection without invoking procedure saves", async () => {
+    const service = createFakeService();
+    const saveProcedure = jest.fn();
+    Object.assign(service, { saveProcedure });
+    const requestRunbookSynthesis = jest.fn(async () => {
+        throw new Error("Revision is no longer active");
+    });
+    service.requestRunbookSynthesis = requestRunbookSynthesis;
+    const agent = instantiate();
+    const state = (await agent.initializeAgentContext?.({
+        options: service,
+    })) as MemoryAgentContext;
+    state.activeCorpusId = "corpus-1";
+    await expect(
+        agent.executeCommand?.(
+            ["runbooks", "synthesize"],
+            commandParams({ sourceId: "source-1", revisionId: "old-revision" }),
+            actionContext(state),
+        ),
+    ).rejects.toThrow("Revision is no longer active");
+    expect(saveProcedure).not.toHaveBeenCalled();
+    expect(requestRunbookSynthesis).toHaveBeenCalledWith({
+        corpusId: "corpus-1",
+        sourceId: "source-1",
+        revisionId: "old-revision",
+    });
+});
+
+test("ask --extractive requests extractive answers", async () => {
+    const service = createFakeService();
+    const answerSpy = jest.spyOn(service, "answer");
+    const agent = instantiate();
+    const state = (await agent.initializeAgentContext?.({
+        options: service,
+    })) as MemoryAgentContext;
+    const context = actionContext(state);
+    await agent.executeCommand?.(
+        ["corpus", "use"],
+        commandParams({ corpusId: "corpus-1" }),
+        context,
+    );
+    const answer = await agent.executeCommand?.(
+        ["ask"],
+        commandParams({ question: "When is launch?" }, { extractive: true }),
+        context,
+    );
+    expect(answerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ answerMode: "extractive" }),
+    );
+    expect(displayText(answer)).toContain("Grounded extractive answer");
 });
 
 test("accepts agent-server options and completes service identifiers", async () => {

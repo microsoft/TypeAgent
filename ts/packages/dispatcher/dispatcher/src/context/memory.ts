@@ -43,12 +43,15 @@ import {
     AnswerResponse,
     ConversationSearchResult,
     SearchSelectExpr,
+    removeConversationData,
 } from "@typeagent/knowpro";
 import {
     ConversationDurableMemory,
+    formatConversationEvidence,
     searchDurableConversationMemory,
 } from "./conversationDurableMemory.js";
 import path from "node:path";
+import { toConcreteEntity } from "./conversationEntityMemory.js";
 
 const debug = registerDebug("typeagent:dispatcher:memory");
 
@@ -56,10 +59,24 @@ export async function initializeMemory(
     context: CommandHandlerContext,
     sessionDirPath: string | undefined,
 ) {
+    await context.conversationDurableMemory?.flush();
+    await context.conversationMemory?.waitForPendingTasks();
     context.conversationDurableMemory = undefined;
     if (sessionDirPath === undefined) {
         context.conversationManager = undefined;
         context.conversationMemory = undefined;
+        return;
+    }
+    if (context.durableMemoryService !== undefined) {
+        await removeConversationData(sessionDirPath, "conversationMemory");
+        context.conversationManager = undefined;
+        context.conversationMemory = undefined;
+        context.conversationDurableMemory = new ConversationDurableMemory({
+            service: context.durableMemoryService,
+            conversationId:
+                context.conversationId ?? path.basename(sessionDirPath),
+            runId: context.activationId,
+        });
         return;
     }
     context.conversationManager = await conversation.createConversationManager(
@@ -75,39 +92,6 @@ export async function initializeMemory(
         },
         false,
     );
-    if (context.durableMemoryService !== undefined) {
-        context.conversationDurableMemory = new ConversationDurableMemory({
-            service: context.durableMemoryService,
-            conversationId:
-                context.conversationId ?? path.basename(sessionDirPath),
-            runId: context.activationId,
-        });
-    }
-}
-
-function toConcreteEntity(
-    appAgentName: string,
-    entities: Entity[],
-): conversation.ConcreteEntity[] {
-    return entities.map((e) => {
-        const concreteEntity: conversation.ConcreteEntity = {
-            name: e.name,
-            type: e.type,
-        };
-        if (e.uniqueId) {
-            concreteEntity.facets = [
-                {
-                    name: `typeagent.appAgentName`,
-                    value: appAgentName,
-                },
-                {
-                    name: `typeagent.uniqueId`,
-                    value: e.uniqueId,
-                },
-            ];
-        }
-        return concreteEntity;
-    });
 }
 
 // Record the user's own turn in the in-session transcript (chat history).
@@ -123,11 +107,13 @@ export function addUserMessageToHistory(
     // Fires regardless of the knowledge-extraction flags (which connected mode
     // disables), so the unified index still populates there. The request id
     // keys the turn so a later history backfill won't index it a second time.
-    context.conversationContentSink?.(
-        request,
-        "user",
-        context.currentRequestId?.requestId,
-    );
+    if (context.conversationDurableMemory === undefined) {
+        context.conversationContentSink?.(
+            request,
+            "user",
+            context.currentRequestId?.requestId,
+        );
+    }
     const turnId = context.currentRequestId?.requestId;
     if (turnId !== undefined) {
         context.conversationDurableMemory?.recordUserTurn(request, turnId);
@@ -175,11 +161,13 @@ export function addResultToMemory(
 
     // Mirror the assistant turn into the host's cross-conversation content
     // index (ungated by knowledge extraction, like the user turn).
-    context.conversationContentSink?.(
-        message,
-        "assistant",
-        context.currentRequestId?.requestId,
-    );
+    if (context.conversationDurableMemory === undefined) {
+        context.conversationContentSink?.(
+            message,
+            "assistant",
+            context.currentRequestId?.requestId,
+        );
+    }
     const turnId = context.currentRequestId?.requestId;
     if (turnId !== undefined) {
         context.conversationDurableMemory?.recordAssistantEvidence(
@@ -188,6 +176,9 @@ export function addResultToMemory(
             action === undefined
                 ? undefined
                 : `${getAppAgentName(schemaName)}.${action.actionName}`,
+            entities === undefined
+                ? undefined
+                : { appAgentName: getAppAgentName(schemaName), entities },
         );
     }
 
@@ -295,33 +286,21 @@ export async function lookupAndAnswerFromMemory(
     question: string,
 ): Promise<{ historyText: string[]; answered: boolean }> {
     const systemContext = context.sessionContext.agentContext;
-    const durableAnswer = await searchDurableConversationMemory(
-        systemContext,
-        question,
-        "current",
-    );
-    if (durableAnswer !== undefined) {
-        const text = durableAnswer;
+    if (systemContext.conversationDurableMemory !== undefined) {
+        const text = await searchDurableConversationMemory(
+            systemContext,
+            question,
+        );
+        if (text === undefined) {
+            return {
+                historyText: ["No matching conversation evidence found."],
+                answered: false,
+            };
+        }
         displayResult(text, context);
         return { historyText: [text], answered: true };
     }
-
     const conversationMemory = systemContext.conversationMemory;
-    if (
-        conversationMemory === undefined &&
-        systemContext.conversationDurableMemory !== undefined
-    ) {
-        const crossConversationEvidence = await searchDurableConversationMemory(
-            systemContext,
-            question,
-            "all",
-        );
-        if (crossConversationEvidence !== undefined) {
-            const text = crossConversationEvidence;
-            displayResult(text, context);
-            return { historyText: [text], answered: true };
-        }
-    }
     if (conversationMemory === undefined) {
         throw new Error("Conversation memory is undefined!");
     }
@@ -348,19 +327,6 @@ export async function lookupAndAnswerFromMemory(
     // The current conversation had no answer. Fall back to the unified
     // cross-conversation content index (host-injected in connected mode) so a
     // question whose answer lives in another conversation still gets one.
-    if (!answered) {
-        const durableFallback = await searchDurableConversationMemory(
-            systemContext,
-            question,
-            "all",
-        );
-        if (durableFallback !== undefined) {
-            historyText.length = 0;
-            historyText.push(durableFallback);
-            displayResult(durableFallback, context);
-            answered = true;
-        }
-    }
     if (!answered) {
         const fallback = await lookupAnswerFromOtherConversations(
             systemContext,
@@ -463,6 +429,17 @@ class MemorySearchCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { args, flags } = params;
+        const durable =
+            context.sessionContext.agentContext.conversationDurableMemory;
+        if (durable !== undefined) {
+            const matches = await durable.search(
+                args.terms.join(" "),
+                "current",
+                flags.count,
+            );
+            displayResult(formatConversationEvidence(matches), context);
+            return;
+        }
         const memory = ensureMemory(context);
 
         const selectExpr: SearchSelectExpr = {
@@ -582,6 +559,21 @@ class MemoryAnswerCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { args, flags } = params;
+        if (
+            context.sessionContext.agentContext.conversationDurableMemory !==
+            undefined
+        ) {
+            const text = await searchDurableConversationMemory(
+                context.sessionContext.agentContext,
+                args.question,
+                "current",
+            );
+            displayResult(
+                text ?? "No matching conversation evidence found.",
+                context,
+            );
+            return;
+        }
         const memory = ensureMemory(context);
 
         const result = await this.getResult(memory, args.question);

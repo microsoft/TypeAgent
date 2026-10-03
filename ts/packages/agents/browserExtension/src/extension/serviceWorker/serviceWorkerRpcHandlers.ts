@@ -10,6 +10,10 @@ import {
 } from "./websocket";
 import { screenshotCoordinator } from "./screenshotCoordinator";
 import {
+    getViewHostUrl,
+    resolveLocalBrowserViewUrl,
+} from "./browserViewNavigation";
+import {
     connectToDispatcher,
     isDispatcherConnected,
     manageConversation,
@@ -35,7 +39,6 @@ import {
     handleSearchByEntities,
     handleSearchByTopics,
     handleHybridSearch,
-    handleGetHierarchicalTopics,
     handleGetTopicMetrics,
     handleGetSearchSuggestions,
     handleSaveSearchHistory,
@@ -502,7 +505,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             const targetTab = await getActiveTab();
             if (targetTab && (await shouldIndexPage(targetTab.url!))) {
                 const result = await indexPageContent(targetTab, false, {
-                    quality: params.quality,
                     textOnly: params.textOnly,
                     activityType: "visited",
                 });
@@ -830,32 +832,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
-        async testMergeTopicHierarchies() {
-            try {
-                return await forward("testMergeTopicHierarchies", {});
-            } catch (error) {
-                console.error("Error testing topic merge:", error);
-                return {
-                    success: false,
-                    mergeCount: 0,
-                    error: "Failed to test topic merge",
-                };
-            }
-        },
-
-        async mergeTopicHierarchies() {
-            try {
-                return await forward("mergeTopicHierarchies", {});
-            } catch (error) {
-                console.error("Error merging topic hierarchies:", error);
-                return {
-                    success: false,
-                    mergeCount: 0,
-                    error: "Failed to merge topic hierarchies",
-                };
-            }
-        },
-
         async getGlobalGraphLayoutData(params: any) {
             try {
                 return await forward(
@@ -1012,32 +988,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
-        async getTopicViewportNeighborhood(params: any) {
-            try {
-                return await forward("getTopicViewportNeighborhood", {
-                    centerTopic: params.centerTopic,
-                    viewportTopicIds: params.viewportTopicIds,
-                    maxNodes: params.maxNodes,
-                    maxDepth: params.maxDepth,
-                });
-            } catch (error) {
-                console.error(
-                    "Error getting topic viewport neighborhood:",
-                    error,
-                );
-                return {
-                    topics: [],
-                    relationships: [],
-                    metadata: {
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : "Unknown error",
-                    },
-                };
-            }
-        },
-
         async getTopicMetrics(params: any) {
             return handleGetTopicMetrics(params);
         },
@@ -1111,10 +1061,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
-        async getHierarchicalTopics(params: any) {
-            return handleGetHierarchicalTopics(params);
-        },
-
         // =============================================================
         // Delegations to existing helpers (search, import, etc.)
         // =============================================================
@@ -1182,7 +1128,9 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         async createTab(params: any) {
             try {
                 return await chrome.tabs.create({
-                    url: params.url,
+                    url: await resolveLocalBrowserViewUrl(params.url, () =>
+                        getViewHostUrl(sendActionToAgent),
+                    ),
                     active: params.active ?? true,
                 });
             } catch (error) {
@@ -1240,8 +1188,14 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
 
         async saveExtractionSettings(params: any) {
             try {
+                const mode = params.settings?.mode ?? params.mode ?? "content";
+                if (mode !== "content") {
+                    throw new Error(
+                        "Unsupported extraction mode. Only 'content' is supported.",
+                    );
+                }
                 await chrome.storage.sync.set({
-                    extractionMode: params.settings?.mode || params.mode,
+                    extractionMode: mode,
                     suggestQuestions:
                         params.settings?.suggestQuestions ??
                         params.suggestQuestions,

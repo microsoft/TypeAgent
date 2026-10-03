@@ -14,6 +14,11 @@ The plugin keeps one store per git workspace under
 | Explicit save            | MCP `remember` → `addMessage`                                |
 | Recall                   | MCP `recall`, and prompt injection → `getAnswerFromLanguage` |
 
+This plugin keeps its own store and is intentionally not connected to the
+TypeAgent durable memory service. It is one arm of an experiment comparing a
+self-contained plugin with the service-backed MCP path as an externally
+consumable package.
+
 Recall is single-conversation. The host cross-conversation index is not part of
 this milestone.
 

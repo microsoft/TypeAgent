@@ -49,6 +49,27 @@ describe("macro recording RPC", () => {
         handler(serverAdapter, () => {});
         const connection = createAgentServerConnection(clientAdapter, () => {});
 
+        const preference = await connection.setMacroLearningPreference({
+            cwd: instanceDir,
+            mode: "prepare",
+        });
+        expect(preference).toMatchObject({
+            mode: "prepare",
+            revision: expect.any(Number),
+        });
+        await expect(
+            connection.getMacroLearningPreference(instanceDir),
+        ).resolves.toEqual(preference);
+        await expect(
+            connection.prepareMacroLearning({ traceId: "missing-source" }),
+        ).rejects.toThrow();
+        await expect(
+            connection.getMacroLearningJob("missing-job"),
+        ).rejects.toThrow();
+        await expect(
+            connection.cancelMacroLearningJob("missing-job"),
+        ).rejects.toThrow();
+
         const token = await connection.armMacroRecording({
             sessionId: "session-1",
         });

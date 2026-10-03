@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=9a632d8aab739dcf42534ec63a8c6bb12b8b61777f38bba74c23d061a6ead9f6 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=58fd28d7d5b9f231da434e1d322f97c4615ba55077a53e410aabe070b295cf78 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # git-story — AI-generated documentation
@@ -24,16 +24,18 @@ _No public exports declared in `package.json`._
 
 ### Dependencies
 
-Workspace: _None._
+Workspace:
 
-External: `commander`
+- [@typeagent/agent-harness-hooks](../../packages/agent-harness-hooks/README.md)
+
+External: `@hono/node-server`, `commander`, `hono`, `tirith`
 
 ### Files of interest
 
-`./src/cli.ts`, `./src/commands/hooks.ts`, `./src/commands/init.ts`, …and 1 more under `./src/`.
+`./src/server/routes/daemonApiHandler.ts`, `./src/server/routes/storyCommitsApiHandler.ts`, `./src/cli.ts`, …and 13 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `031e5113b09df01a0f6392d858d93badc14699c7` on `2026-09-29T06:06:07.744Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter git-story docs:verify-links` to spot-check._
+_Auto-generated against commit `b705d07577da10f5438b417fd4dedb8a0a58ac9c` on `2026-10-02T02:45:42.886Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter git-story docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

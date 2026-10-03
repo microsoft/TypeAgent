@@ -47,6 +47,7 @@ import {
     type CompletedAction,
 } from "../translation/pendingRequest.js";
 import { getStructuredExecution } from "../structuredAction/executionHooks.js";
+import { getConversationEntityMemory } from "../context/conversationEntityMemory.js";
 
 const debugEntities = registerDebug("typeagent:dispatcher:actions:entities");
 
@@ -804,10 +805,6 @@ function createParameterEntityResolver(
 ): ParameterEntityResolver {
     const agentContext = context.sessionContext.agentContext;
     const agents = agentContext.agents;
-    const conversationMemory =
-        getStructuredExecution(agentContext) === undefined
-            ? agentContext.conversationMemory
-            : undefined;
     const resultEntityMap = new Set<string>();
     const clarifyEntities: ClarifyResolvedEntity[] = [];
     const promptEntityMap = toPromptEntityMap(entities);
@@ -874,6 +871,10 @@ function createParameterEntityResolver(
                 isEntityType(agents, action.schemaName, fieldType.name)
             ) {
                 let resolveEntityResult: ResolveEntityResult | undefined;
+                const conversationMemory =
+                    getStructuredExecution(agentContext) === undefined
+                        ? await getConversationEntityMemory(agentContext)
+                        : undefined;
                 if (conversationMemory) {
                     resolveEntityResult = await resolveEntityWithMemory(
                         conversationMemory,

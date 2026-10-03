@@ -19,6 +19,7 @@ import {
     procedureToMarkdown,
 } from "../src/personalHowToStore.js";
 import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
+import { writeFakeSemanticIndex } from "./fakeSemanticIndex.js";
 import type {
     CorpusIndex,
     CorpusIndexMatch,
@@ -37,11 +38,16 @@ class FakeCorpusIndex implements CorpusIndex {
     public blockNextRebuild = false;
     public blockNextAppend = false;
     public ignoreNextAbort = false;
+    public answer?: NonNullable<CorpusIndex["answer"]>;
     public graph: MemoryKnowledgeGraph = {
         entities: [],
         topics: [],
         relationships: [],
     };
+
+    public constructor(directory?: string) {
+        this.indexDirectory = directory;
+    }
 
     public async initialize(): Promise<void> {
         this.initializeCalls++;
@@ -79,6 +85,7 @@ class FakeCorpusIndex implements CorpusIndex {
         });
         if (this.indexDirectory !== undefined) {
             await writeFile(path.join(this.indexDirectory, "index.marker"), "");
+            await writeFakeSemanticIndex(this.indexDirectory, documents);
         }
         this.documents = structuredClone(documents);
     }
@@ -114,6 +121,9 @@ class FakeCorpusIndex implements CorpusIndex {
             await writeFile(path.join(this.indexDirectory, "index.marker"), "");
         }
         this.documents.push(...structuredClone(documents));
+        if (this.indexDirectory !== undefined) {
+            await writeFakeSemanticIndex(this.indexDirectory, this.documents);
+        }
     }
 
     public async search(
@@ -185,6 +195,8 @@ describe("FileMemoryService", () => {
         service = new FileMemoryService(rootDirectory, {
             procedureIndexFactory: (_corpusId, directory) =>
                 new FakeProcedureCorpusIndex(directory),
+            eventIndexFactory: (_corpusId, directory) =>
+                new FakeProcedureCorpusIndex(directory),
             indexFactory: (_corpusId, indexDirectory) => {
                 index.indexDirectory = indexDirectory;
                 return index;
@@ -200,7 +212,8 @@ describe("FileMemoryService", () => {
     test("locks the storage root until the service closes", async () => {
         await service.initialize();
         const competingService = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         await expect(competingService.initialize()).rejects.toThrow();
@@ -208,7 +221,8 @@ describe("FileMemoryService", () => {
         await service.close();
 
         const replacementService = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
         await expect(replacementService.initialize()).resolves.toBeUndefined();
         await replacementService.close();
@@ -216,13 +230,15 @@ describe("FileMemoryService", () => {
 
     test("releases a lock acquired concurrently with close", async () => {
         const racingService = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         await Promise.all([racingService.initialize(), racingService.close()]);
 
         const replacementService = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
         await expect(replacementService.initialize()).resolves.toBeUndefined();
         await replacementService.close();
@@ -261,7 +277,8 @@ describe("FileMemoryService", () => {
             } satisfies IngestionJobStatus),
         );
         const restarted = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         await restarted.initialize();
@@ -344,6 +361,105 @@ describe("FileMemoryService", () => {
         expect(result.answer).toContain("Restart the failed indexing worker.");
     });
 
+    test("synthesizes answers through the index when supported", async () => {
+        const corpus = await service.createCorpus("Synthesized");
+        for (const [sourceId, text] of [
+            ["book-a", "Guest one recommended Dune."],
+            ["book-b", "Guest two recommended Emma."],
+        ]) {
+            const accepted = await service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceId,
+                    sourceType: "markdown",
+                    title: sourceId,
+                    markdown: text,
+                },
+            });
+            await waitForTerminalJob(service, accepted.jobId);
+        }
+        const calls: Array<ReadonlySet<string> | undefined> = [];
+        index.answer = async (_query, _limit, sourceIds) => {
+            calls.push(sourceIds);
+            return {
+                answer: "Dune and Emma were recommended.",
+                matches: await index.search("recommended", 10),
+            };
+        };
+
+        const defaulted = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "Which books were recommended?",
+        });
+        expect(defaulted.mode).toBe("synthesized");
+        expect(defaulted.answer).toBe("Dune and Emma were recommended.");
+        expect(defaulted.citations.map((item) => item.sourceId).sort()).toEqual(
+            ["book-a", "book-b"],
+        );
+
+        const scoped = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "Which books were recommended?",
+            sourceIds: ["book-a"],
+        });
+        expect(scoped.citations.map((item) => item.sourceId)).toEqual([
+            "book-a",
+        ]);
+        expect(calls[1]).toEqual(new Set(["book-a"]));
+
+        const extractive = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "recommended",
+            answerMode: "extractive",
+        });
+        expect(extractive.mode).toBe("extractive");
+        expect(extractive.answer).toContain("[1]");
+        expect(calls).toHaveLength(2);
+    });
+
+    test("reports no answer and rejects unsupported synthesis", async () => {
+        const corpus = await service.createCorpus("NoAnswer");
+        const accepted = await service.ingestDocument({
+            corpusId: corpus.corpusId,
+            source: {
+                sourceId: "doc",
+                sourceType: "markdown",
+                title: "Doc",
+                markdown: "Unrelated text.",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+        await expect(
+            service.answer({
+                corpusId: corpus.corpusId,
+                question: "anything",
+                answerMode: "synthesized",
+            }),
+        ).rejects.toThrow("does not support synthesized answers");
+
+        index.answer = async () => ({
+            matches: [],
+            whyNoAnswer: "Nothing relevant.",
+        });
+        const result = await service.answer({
+            corpusId: corpus.corpusId,
+            question: "anything",
+        });
+        expect(result.mode).toBe("synthesized");
+        expect(result.answer).toBe("No supporting memory evidence was found.");
+        expect(result.citations).toEqual([]);
+
+        index.answer = async () => {
+            throw new Error("model unavailable");
+        };
+        await expect(
+            service.answer({
+                corpusId: corpus.corpusId,
+                question: "anything",
+            }),
+        ).rejects.toThrow("model unavailable");
+    });
+
     test("appends events idempotently across service restarts", async () => {
         const corpus = await service.createCorpus("Episodes");
         const request = {
@@ -378,7 +494,8 @@ describe("FileMemoryService", () => {
 
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         await expect(service.appendEvent(request)).resolves.toEqual({
@@ -403,6 +520,7 @@ describe("FileMemoryService", () => {
             eventType: "page.visited",
             observedAt: "2026-09-21T10:00:00.000Z",
             content: "TypeAgent memory architecture",
+            metadata: { authority: "producer-reported" },
         });
         await service.appendEvent({
             ...shared,
@@ -424,6 +542,10 @@ describe("FileMemoryService", () => {
             conversationId: "conversation-1",
             runId: "run-1",
             content: "Discussed memory architecture",
+            metadata: {
+                authority: "verified-observation",
+                outcome: "failed",
+            },
         });
 
         await expect(
@@ -443,22 +565,293 @@ describe("FileMemoryService", () => {
                 corpusId: corpus.corpusId,
                 conversationIds: ["conversation-1"],
                 runIds: ["run-1"],
+                authorities: ["verified-observation"],
             }),
         ).resolves.toMatchObject({
             total: 1,
             items: [{ eventType: "turn.completed" }],
         });
+        const found = await service.searchEvents({
+            corpusId: corpus.corpusId,
+            query: "architecture",
+        });
+        expect(found.matches).toHaveLength(2);
+        expect(found.matches.map((match) => match.event.eventType)).toEqual(
+            expect.arrayContaining(["turn.completed", "page.visited"]),
+        );
         await expect(
             service.searchEvents({
                 corpusId: corpus.corpusId,
                 query: "architecture",
+                authorities: ["verified-observation"],
+                limit: 1,
             }),
         ).resolves.toMatchObject({
             matches: [
-                { event: { eventType: "turn.completed" } },
-                { event: { eventType: "page.visited" } },
+                {
+                    event: {
+                        eventType: "turn.completed",
+                        metadata: {
+                            authority: "verified-observation",
+                            outcome: "failed",
+                        },
+                    },
+                },
             ],
         });
+        const eventIndexRoot = path.join(
+            rootDirectory,
+            corpus.corpusId,
+            "event-search-index",
+        );
+        const generation = (await readdir(eventIndexRoot)).find(
+            (entry) => entry !== "state.json",
+        );
+        expect(generation).toBeDefined();
+        const documents = JSON.parse(
+            await readFile(
+                path.join(eventIndexRoot, generation!, "documents.json"),
+                "utf8",
+            ),
+        ) as IndexedDocument[];
+        expect(
+            documents.find(
+                (document) => document.source.title === "turn.completed",
+            )?.indexTags,
+        ).toContain("event-authority:verified-observation");
+        await expect(
+            service.appendEvent({
+                ...shared,
+                idempotencyKey: "unknown-authority",
+                eventType: "page.visited",
+                metadata: { authority: "unsupported-authority" },
+            }),
+        ).rejects.toThrow("Invalid event authority");
+        await expect(
+            service.appendEvent({
+                ...shared,
+                idempotencyKey: "bad-authority",
+                eventType: "page.visited",
+                metadata: { authority: 5 },
+            }),
+        ).rejects.toThrow("Event authority must be a string");
+    });
+
+    test("persists forgotten event keys and conversation/turn scopes without replay", async () => {
+        const { corpusId } = await service.createCorpus("Suppressed activity");
+        const event = (
+            idempotencyKey: string,
+            conversationId?: string,
+            turnId?: string,
+            producerId = "agent",
+        ) => ({
+            corpusId,
+            idempotencyKey,
+            producer: { producerId, producerType: "test" },
+            eventType: "turn.completed",
+            sourceKind: "conversation" as const,
+            content: `Private ${idempotencyKey} content`,
+            ...(conversationId === undefined ? {} : { conversationId }),
+            ...(turnId === undefined ? {} : { turnId }),
+        });
+        const removed = event("removed", "conversation-1", "turn-1");
+        const retained = event("retained", "conversation-1", "turn-2");
+        const other = event("other", "conversation-2", "turn-1");
+        const removedId = (await service.appendEvent(removed)).event.eventId;
+        await service.appendEvent(retained);
+        await service.appendEvent(other);
+        await service.forgetEvents({
+            corpusId,
+            eventIds: [removedId],
+            conversationIds: ["conversation-1"],
+        });
+        await expect(service.appendEvent(removed)).rejects.toMatchObject({
+            code: "EVENT_FORGOTTEN",
+        });
+        await expect(
+            service.appendEvent(
+                event("changed-key", "conversation-1", "turn-1"),
+            ),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await expect(service.appendEvent(other)).resolves.toMatchObject({
+            replayed: true,
+        });
+        await expect(
+            service.forgetEvents({
+                corpusId,
+                conversationIds: ["conversation-1"],
+            }),
+        ).resolves.toMatchObject({ deletedEventCount: 1 });
+        await expect(
+            service.forgetEvents({
+                corpusId,
+                conversationIds: ["empty-conversation"],
+            }),
+        ).resolves.toMatchObject({ deletedEventCount: 0 });
+        await expect(
+            service.forgetEvents({
+                corpusId,
+                conversationIds: ["conversation-2"],
+                turnIds: ["future-turn"],
+            }),
+        ).resolves.toMatchObject({ deletedEventCount: 0 });
+        await expect(
+            service.appendEvent(event("new", "conversation-1", "turn-3")),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await expect(
+            service.appendEvent(event("new", "empty-conversation", "turn-1")),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await expect(
+            service.appendEvent(event("new", "conversation-2", "future-turn")),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await service.appendEvent(event("allowed", "conversation-2", "turn-2"));
+        const keyOnly = event("key-only");
+        const keyOnlyId = (await service.appendEvent(keyOnly)).event.eventId;
+        await service.forgetEvents({ corpusId, eventIds: [keyOnlyId] });
+        await expect(service.appendEvent(keyOnly)).rejects.toMatchObject({
+            code: "EVENT_FORGOTTEN",
+        });
+        await service.appendEvent(
+            event("key-only", undefined, undefined, "independent"),
+        );
+        await service.forgetEvents({ corpusId, turnIds: ["global-turn"] });
+        await expect(
+            service.appendEvent(
+                event("blocked-globally", "conversation-2", "global-turn"),
+            ),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await service.forgetEvents({
+            corpusId,
+            sourceKinds: ["conversation"],
+            conversationIds: ["conversation-2"],
+            turnIds: ["authority-turn"],
+            authorities: ["evidence-only"],
+        });
+        await expect(
+            service.appendEvent({
+                ...event("reasoning", "conversation-2", "authority-turn"),
+                metadata: { authority: "evidence-only" },
+            }),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await service.appendEvent({
+            ...event("verified", "conversation-2", "authority-turn"),
+            metadata: { authority: "verified-observation" },
+        });
+        const ledger = await readFile(
+            path.join(rootDirectory, corpusId, "events.jsonl"),
+            "utf8",
+        );
+        expect(ledger).toContain('"recordType":"event-suppression"');
+        expect(ledger).not.toContain("Private removed content");
+        expect(ledger).not.toContain("Private retained content");
+        expect((await service.listEvents({ corpusId })).total).toBe(4);
+
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
+        });
+        await expect(service.appendEvent(removed)).rejects.toMatchObject({
+            code: "EVENT_FORGOTTEN",
+        });
+        await expect(
+            service.appendEvent(event("newer", "conversation-1", "turn-5")),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await expect(
+            service.appendEvent(
+                event("newer", "conversation-2", "future-turn"),
+            ),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        expect((await service.listEvents({ corpusId })).total).toBe(4);
+    });
+
+    test("suppresses an unindexed conversation turn using dispatcher forget selectors", async () => {
+        const { corpusId } = await service.createCorpus("Future turn");
+        await expect(
+            service.forgetEvents({
+                corpusId,
+                sourceKinds: ["conversation"],
+                conversationIds: ["conversation-1"],
+                turnIds: ["turn-1"],
+            }),
+        ).resolves.toMatchObject({ deletedEventCount: 0 });
+        const append = (
+            sourceKind: "conversation" | "web-activity",
+            turnId: string,
+        ) =>
+            service.appendEvent({
+                corpusId,
+                idempotencyKey: `${sourceKind}-${turnId}`,
+                producer: { producerId: "agent", producerType: "test" },
+                eventType: "turn.completed",
+                sourceKind,
+                conversationId: "conversation-1",
+                turnId,
+                content: "Turn content",
+            });
+        await expect(append("conversation", "turn-1")).rejects.toMatchObject({
+            code: "EVENT_FORGOTTEN",
+        });
+        await append("web-activity", "turn-1");
+        await append("conversation", "turn-2");
+        expect(
+            (await service.listEvents({ corpusId, turnIds: ["turn-1"] })).total,
+        ).toBe(1);
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
+        });
+        await expect(append("conversation", "turn-1")).rejects.toMatchObject({
+            code: "EVENT_FORGOTTEN",
+        });
+        expect((await service.listEvents({ corpusId })).total).toBe(2);
+    });
+
+    test("suppresses an empty conversation using the server migration selector", async () => {
+        const { corpusId } = await service.createCorpus("Deleted conversation");
+        await expect(
+            service.forgetEvents({
+                corpusId,
+                sourceKinds: ["conversation"],
+                conversationIds: ["deleted-conversation"],
+            }),
+        ).resolves.toMatchObject({ deletedEventCount: 0 });
+        await service.close();
+        service = new FileMemoryService(rootDirectory, {
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
+        });
+        await expect(
+            service.appendEvent({
+                corpusId,
+                idempotencyKey: JSON.stringify([
+                    "deleted-conversation",
+                    "server-turn",
+                    "user-turn",
+                ]),
+                producer: {
+                    producerId: "typeagent.agent-server.conversation-history",
+                    producerType: "conversation-history",
+                },
+                eventType: "user-turn",
+                sourceKind: "conversation",
+                conversationId: "deleted-conversation",
+                turnId: "server-turn",
+                content: "Retained transcript must not return",
+                metadata: { authority: "user-assertion" },
+            }),
+        ).rejects.toMatchObject({ code: "EVENT_FORGOTTEN" });
+        await service.appendEvent({
+            corpusId,
+            idempotencyKey: "independent-activity",
+            producer: { producerId: "browser", producerType: "extension" },
+            eventType: "page.visited",
+            sourceKind: "web-activity",
+            conversationId: "deleted-conversation",
+            content: "Unrelated web activity",
+        });
+        expect((await service.listEvents({ corpusId })).total).toBe(1);
     });
 
     test("forgets events independently from linked documents", async () => {
@@ -560,8 +953,8 @@ describe("FileMemoryService", () => {
         ).resolves.toBeUndefined();
     });
 
-    test("persists indexing mode and chunk size with the active revision", async () => {
-        const corpus = await service.createCorpus("Basic");
+    test("persists content indexing and chunk size with the active revision", async () => {
+        const corpus = await service.createCorpus("Content");
         const accepted = await service.ingestDocument({
             corpusId: corpus.corpusId,
             source: {
@@ -571,7 +964,7 @@ describe("FileMemoryService", () => {
                 text: "Model-free exact-search content",
             },
             pipeline: {
-                mode: "basic",
+                mode: "content",
                 maxCharsPerChunk: 256,
             },
         });
@@ -579,7 +972,7 @@ describe("FileMemoryService", () => {
         await waitForTerminalJob(service, accepted.jobId);
 
         expect(index.documents[0].pipeline).toEqual({
-            mode: "basic",
+            mode: "content",
             maxCharsPerChunk: 256,
         });
         await expect(
@@ -588,7 +981,7 @@ describe("FileMemoryService", () => {
             revisions: [
                 {
                     pipeline: {
-                        mode: "basic",
+                        mode: "content",
                         maxCharsPerChunk: 256,
                     },
                 },
@@ -687,7 +1080,7 @@ describe("FileMemoryService", () => {
                 title: "Runbook",
                 markdown: "Version one.",
             },
-            pipeline: { mode: "basic", maxCharsPerChunk: 4_000 },
+            pipeline: { mode: "content", maxCharsPerChunk: 4_000 },
         });
         await waitForTerminalJob(service, accepted.jobId);
 
@@ -711,7 +1104,7 @@ describe("FileMemoryService", () => {
             (await service.getSource(corpus.corpusId, "runbook"))?.revisions.at(
                 -1,
             )?.pipeline,
-        ).toEqual({ mode: "basic", maxCharsPerChunk: 4_000 });
+        ).toEqual({ mode: "content", maxCharsPerChunk: 4_000 });
         await expect(
             service.getSourceContent({
                 corpusId: corpus.corpusId,
@@ -1020,7 +1413,10 @@ describe("FileMemoryService", () => {
         const restartedIndex = new FakeCorpusIndex();
         restartedIndex.graph = structuredClone(index.graph);
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => restartedIndex,
+            indexFactory: (_corpusId, directory) => {
+                restartedIndex.indexDirectory = directory;
+                return restartedIndex;
+            },
         });
         await expect(
             service.listSourceKnowledgeSuppressions(
@@ -1539,7 +1935,8 @@ describe("FileMemoryService", () => {
         ]);
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
         expect(
             await service.getProcedure(corpus.corpusId, saved.procedureId),
@@ -1608,7 +2005,8 @@ describe("FileMemoryService", () => {
         );
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         const replay = await service.ingestDocument(request);
@@ -1846,7 +2244,8 @@ describe("FileMemoryService", () => {
         ).toEqual(["Inspect logs for errors before restarting the service."]);
         await service.close();
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
             procedureIndexFactory: (_corpusId, directory) =>
                 new FakeProcedureCorpusIndex(directory),
         });
@@ -1857,7 +2256,8 @@ describe("FileMemoryService", () => {
         await service.close();
         const createService = () =>
             new FileMemoryService(rootDirectory, {
-                indexFactory: () => new FakeCorpusIndex(),
+                indexFactory: (_corpusId, directory) =>
+                    new FakeCorpusIndex(directory),
                 procedureIndexFactory: (_corpusId, directory) =>
                     new FakeProcedureCorpusIndex(directory),
             });
@@ -1980,7 +2380,8 @@ describe("FileMemoryService", () => {
         let failRebuild = false;
         const createService = () =>
             new FileMemoryService(rootDirectory, {
-                indexFactory: () => new FakeCorpusIndex(),
+                indexFactory: (_corpusId, directory) =>
+                    new FakeCorpusIndex(directory),
                 procedureIndexFactory: (_corpusId, directory) => {
                     const index = new FakeProcedureCorpusIndex(directory);
                     if (failRebuild) {
@@ -2115,7 +2516,8 @@ describe("FileMemoryService", () => {
         );
         await rename(settingsPath, `${settingsPath}.interrupted.bak`);
         service = new FileMemoryService(rootDirectory, {
-            indexFactory: () => new FakeCorpusIndex(),
+            indexFactory: (_corpusId, directory) =>
+                new FakeCorpusIndex(directory),
         });
 
         expect(

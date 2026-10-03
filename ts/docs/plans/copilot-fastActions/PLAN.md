@@ -16,8 +16,9 @@ mechanisms:
 | Tool-composed macros | `typeagent-macros` MCP tools                   | An approved replayable macro invokes its MCP steps in order                 | An explicit trace creates a draft; agent-guided execution may submit a new draft |
 
 Both mechanisms store reusable procedures, but they have different routing,
-approval, execution, and platform rules. Macros are tools available alongside
-prompt routing; they are not a fourth plugin mode.
+approval, execution, and platform rules. Approved macros are also published as
+typed actions by the `macros` agent in agent-server. They can use normal
+translation and learned grammar routing; macros are not a fourth plugin mode.
 
 For the common TypeAgent workflow lifecycle, dynamic schema and grammar API,
 and provider-specific flow formats, see
@@ -70,8 +71,39 @@ User prompt
         +-> agent-required macro -> bounded Copilot runner handoff
 ```
 
-Dev actions can intercept the root prompt. Tool-composed macros are invoked
-through MCP tools after Copilot selects or is asked to use them.
+Dev actions can intercept the root prompt. Tool-composed macros can be invoked through MCP tools after Copilot selects them,
+or through the dispatcher when a request selects an approved macro action.
+
+### Approved macro action routing
+
+Agent-server and its in-process host share their `MacroManager` with a dynamic
+`macros` AppAgent provider. Each current approved macro without secret inputs
+becomes a typed action named `run_<macroId>_v<version>`. Its parameters are the
+macro inputs; macro identity and version are fixed by the action, not supplied
+as user-editable parameters. `listApprovedMacros` lists the routable catalog.
+
+The first request may use translation and the normal learning path. In NFA
+mode, a successfully selected action can acquire a persisted grammar rule.
+Covered repeats match the rule and invoke the same macro without translation.
+Approval does not automatically create grammar or guarantee every paraphrase.
+
+Approval, disable, and deletion refresh active sessions. Learned routes carry
+the macro source identity and immutable-definition fingerprint, so removed or
+replaced actions are suspended through ordinary schema reconciliation.
+Execution also rechecks the current approved version, preventing a stale action
+from running an older version. Replay still preflights every step.
+
+Agent-required actions return a structured whole-macro handoff. The Direct hook
+continues Copilot with the complete launch payload; MCP delegation returns it to
+Copilot. The existing runner uses live permissions. No replay prefix executes,
+and accepted macro failures remain handled in Direct mode to prevent duplicate
+execution. Handoffs must be standalone actions: queued trailing actions stop
+with an explicit error and are not resumed automatically.
+
+Replay and handoff feature flags apply to the routed catalog and execution.
+Set them consistently in agent-server and plugin processes. Macros with secret
+inputs stay on the explicit macro tool surface instead of accepting secrets
+through learned utterances.
 
 ## Dev-action routing
 

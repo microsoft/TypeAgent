@@ -33,6 +33,8 @@ import {
     getMcpToolIdentity,
     type McpToolCatalog,
     type McpToolCatalogEntry,
+    snapshotMcpTools,
+    type RegisteredMcpToolCatalog,
 } from "./mcpToolCatalog.js";
 
 const debug = registerDebug("typeagent:mcp:server");
@@ -90,6 +92,7 @@ type McpServerAgent = {
     readonly agent: AppAgent;
     readonly connection: McpConnectionLike | undefined;
     getManifest(): AppAgentManifest;
+    getCatalog?(): McpToolCatalog;
     dispose(): Promise<void>;
 };
 
@@ -189,13 +192,26 @@ function getConfiguredToolDecision(
 
 function shouldPromptForTool(
     config: NormalizedMcpServerConfig,
-    tool: McpToolCatalogEntry,
+    tool: Pick<McpToolCatalogEntry, "name" | "annotations">,
 ): boolean {
     return (
         config.toolApproval?.prompt?.includes(tool.name) === true ||
         tool.annotations?.destructiveHint === true ||
         tool.annotations?.readOnlyHint !== true
     );
+}
+
+function toolPermissionSnapshot(
+    config: NormalizedMcpServerConfig,
+    tool: Pick<McpToolCatalogEntry, "name" | "annotations">,
+) {
+    const configuredDecision = getConfiguredToolDecision(config, tool.name);
+    return {
+        configuredDecision: configuredDecision ?? ("unset" as const),
+        promptWithoutSessionGrant:
+            configuredDecision === undefined &&
+            shouldPromptForTool(config, tool),
+    };
 }
 
 async function requestToolDecision(
@@ -628,6 +644,7 @@ async function connectServerAgent(
             agent,
             connection: connected,
             getManifest: () => snapshot!.manifest,
+            getCatalog: () => snapshot!.catalog,
             async dispose() {
                 if (disposed) {
                     return;
@@ -693,18 +710,52 @@ export function createMcpServerAppAgentProvider(
     config: NormalizedMcpServerConfig,
     clientInfo: McpClientInfo,
     services: McpHostServices,
-): AppAgentProvider {
+): AppAgentProvider & {
+    getCurrentToolCatalog(): Promise<RegisteredMcpToolCatalog>;
+} {
     let agentP: Promise<McpServerAgent> | undefined;
+    let currentAgent: McpServerAgent | undefined;
     let count = 0;
 
     function ensureAgent(): Promise<McpServerAgent> {
         if (agentP === undefined) {
-            agentP = connectServerAgent(name, config, clientInfo, services);
+            const pending = connectServerAgent(
+                name,
+                config,
+                clientInfo,
+                services,
+            ).then((agent) => {
+                if (agentP === pending) currentAgent = agent;
+                return agent;
+            });
+            agentP = pending;
         }
         return agentP;
     }
 
     return {
+        async getCurrentToolCatalog() {
+            const catalog = currentAgent?.getCatalog?.();
+            return {
+                serverConfigId: config.id,
+                name,
+                trust: config.trust,
+                enabled: config.enabled,
+                available: catalog !== undefined,
+                entries:
+                    catalog === undefined
+                        ? []
+                        : snapshotMcpTools(catalog).map((tool) => ({
+                              ...tool,
+                              permission: toolPermissionSnapshot(config, tool),
+                          })),
+                notices:
+                    catalog?.skipped.map(
+                        (tool) =>
+                            `Unsupported MCP tool excluded: ${tool.id}; its schema or definition cannot be safely cataloged.`,
+                    ) ?? [],
+            };
+        },
         getAppAgentNames: () => [name],
         getLoadingAgentNames: () => [],
         isLoaded: (n: string) => n === name && count > 0,
@@ -716,6 +767,7 @@ export function createMcpServerAppAgentProvider(
             const manifest = agentData.getManifest();
             if (count === 0 && agentP !== undefined) {
                 agentP = undefined;
+                currentAgent = undefined;
                 await agentData.dispose().catch(() => {});
             }
             return manifest;
@@ -737,6 +789,7 @@ export function createMcpServerAppAgentProvider(
             if (--count === 0 && agentP !== undefined) {
                 const agentData = await agentP;
                 agentP = undefined;
+                currentAgent = undefined;
                 await agentData.dispose().catch(() => {});
             }
         },

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=16206da41d7fb9120a0340f35b053cb0bd664f2017074e41242800035994d747 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c726cf5867786519ba68ff0d9a94a574f8770b46d34671d91774cbfa9d2b95aa -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-memory-plugin — AI-generated documentation
@@ -26,6 +26,7 @@ _No public exports declared in `package.json`._
 
 Workspace:
 
+- [@typeagent/agent-harness-hooks](../../packages/agent-harness-hooks/README.md)
 - [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/conversation-memory](../../packages/memory/conversation/README.md)
 
@@ -45,6 +46,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `e6466ea5a66a5b1e3dc1ee6ee99b7068ab8b547c` on `2026-09-24T04:21:03.480Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-memory-plugin docs:verify-links` to spot-check._
+_Auto-generated against commit `b705d07577da10f5438b417fd4dedb8a0a58ac9c` on `2026-10-02T02:45:42.886Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-memory-plugin docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

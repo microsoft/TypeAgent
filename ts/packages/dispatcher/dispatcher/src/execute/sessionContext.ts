@@ -109,6 +109,12 @@ export function createSessionContext<T = unknown>(
         get sessionContextId() {
             return sessionContextId;
         },
+        get conversationId() {
+            return (
+                context.conversationDurableMemory?.conversationId ??
+                context.conversationId
+            );
+        },
         get currentConnectionId() {
             return context.currentRequestId?.connectionId;
         },

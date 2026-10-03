@@ -535,6 +535,12 @@ export function selectCopilotModel(
     const requestedModel = byId.get(requested);
     if (requestedModel !== undefined) return requestedModel;
 
+    const previousTier = /^gpt-6-(luna|sol)$/.exec(requested)?.[1];
+    if (previousTier !== undefined) {
+        const previousModel = byId.get(`gpt-5.6-${previousTier}`);
+        if (previousModel !== undefined) return previousModel;
+    }
+
     for (const fallback of fallbackModels) {
         const fallbackModel = byId.get(fallback);
         if (fallbackModel !== undefined) return fallbackModel;

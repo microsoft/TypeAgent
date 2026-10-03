@@ -1,0 +1,418 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { escapeWebText } from "./memoryHubWebExploreRoot";
+
+// EntitySidebar types and interfaces
+
+interface EntityFacet {
+    name: string;
+    value: string;
+}
+
+interface EntityData {
+    name: string;
+    type: string;
+    confidence: number;
+    importance?: number;
+    clusterGroup?: string;
+}
+
+/**
+ * Entity Sidebar Component
+ *
+ * Displays detailed information about selected entities including
+ * metrics, relationships, timeline, and related content.
+ */
+export class EntitySidebar {
+    private container: HTMLElement;
+    private currentEntity: any | null = null;
+
+    constructor(container: HTMLElement) {
+        this.container = container;
+    }
+
+    /**
+     * Load and display entity information
+     */
+    async loadEntity(
+        entityData: EntityData | string,
+        fullEntityData?: any,
+    ): Promise<void> {
+        // Clear existing data first to prevent stale data issues
+        this.clearStaleData();
+
+        this.currentEntity = fullEntityData || entityData;
+        this.renderEntityHeader();
+        this.renderEntityMetrics();
+        this.renderEntityDetails();
+        this.renderEntityTimeline();
+    }
+
+    /**
+     * Clear stale data from sidebar before loading new entity
+     */
+    private clearStaleData(): void {
+        // Clear topics list
+        const topicsSection = this.container.querySelector("#entityTopics");
+        if (topicsSection) {
+            const topicsList = topicsSection.querySelector(".topics-list");
+            if (topicsList) {
+                topicsList.innerHTML =
+                    '<span class="empty-message">Loading...</span>';
+            }
+        }
+
+        // Clear facets list
+        const facetsSection = this.container.querySelector("#entityFacets");
+        if (facetsSection) {
+            const facetsList = facetsSection.querySelector(".facets-list");
+            if (facetsList) {
+                facetsList.innerHTML =
+                    '<span class="empty-message">Loading...</span>';
+            }
+        }
+
+        // Clear timeline
+        const firstSeenEl = this.container.querySelector("#entityFirstSeen");
+        const lastSeenEl = this.container.querySelector("#entityLastSeen");
+        if (firstSeenEl) firstSeenEl.textContent = "Loading...";
+        if (lastSeenEl) lastSeenEl.textContent = "Loading...";
+    }
+
+    /**
+     * Clear the sidebar
+     */
+    clear(): void {
+        this.currentEntity = null;
+        this.renderEmptyState();
+    }
+
+    private renderEntityHeader(): void {
+        if (!this.currentEntity) return;
+
+        const nameEl = this.container.querySelector("#entityName");
+        const typeEl = this.container.querySelector("#entityType");
+
+        // Handle entity name - could be name or entityName
+        const entityName =
+            this.currentEntity.name ||
+            this.currentEntity.entityName ||
+            "Unknown Entity";
+        const entityType =
+            this.currentEntity.type ||
+            this.currentEntity.entityType ||
+            "unknown";
+
+        if (nameEl) {
+            nameEl.textContent = entityName;
+        }
+
+        if (typeEl) {
+            typeEl.textContent = entityType;
+            typeEl.className = `entity-type-badge entity-type-${entityType}`;
+        }
+    }
+
+    private renderEntityMetrics(): void {
+        if (!this.currentEntity) return;
+
+        const mentionsEl = this.container.querySelector("#entityMentions");
+        const relationshipsEl = this.container.querySelector(
+            "#entityRelationships",
+        );
+
+        if (mentionsEl) {
+            // Handle both mock structure and real entity structure
+            const mentionCount =
+                this.currentEntity.mentionCount ||
+                this.currentEntity.frequency ||
+                this.currentEntity.visitCount ||
+                0;
+            const mentionValue =
+                mentionCount != null ? Number(mentionCount) : 0;
+            mentionsEl.textContent = isNaN(mentionValue)
+                ? "0"
+                : mentionValue.toString();
+        }
+
+        if (relationshipsEl) {
+            // Handle both mock structure and real entity structure
+            let relationshipCount = 0;
+            if (this.currentEntity.strongRelationships?.length) {
+                relationshipCount =
+                    this.currentEntity.strongRelationships.length;
+            } else if (this.currentEntity.relationships?.length) {
+                relationshipCount = this.currentEntity.relationships.length;
+            } else if (Array.isArray(this.currentEntity.relationships)) {
+                relationshipCount = this.currentEntity.relationships.length;
+            }
+
+            const relationshipValue =
+                relationshipCount != null ? Number(relationshipCount) : 0;
+            relationshipsEl.textContent = isNaN(relationshipValue)
+                ? "0"
+                : relationshipValue.toString();
+        }
+    }
+
+    private renderEntityDetails(): void {
+        if (!this.currentEntity) return;
+
+        this.renderFacets();
+        this.renderTopics();
+    }
+
+    private renderFacets(): void {
+        const facetsSection = this.container.querySelector("#entityFacets");
+        if (!facetsSection) return;
+
+        const facetsList = facetsSection.querySelector(".facets-list");
+        if (!facetsList) return;
+
+        const facets = this.currentEntity.facets || [];
+
+        // Fallback: if no facets but aliases exist, convert aliases to facets
+        if (facets.length === 0 && this.currentEntity.aliases?.length > 0) {
+            const aliasesAsFacets = this.currentEntity.aliases.map(
+                (alias: string, index: number) => ({
+                    name: index === 0 ? "Primary Alias" : `Alias ${index + 1}`,
+                    value: alias,
+                }),
+            );
+
+            const facetsHtml = aliasesAsFacets
+                .map((facet: EntityFacet) => this.renderFacetItem(facet))
+                .join("");
+
+            facetsList.innerHTML = facetsHtml;
+            return;
+        }
+
+        if (facets.length === 0) {
+            facetsList.innerHTML =
+                '<span class="empty-message">No facets</span>';
+            return;
+        }
+
+        const facetsHtml = facets
+            .map((facet: EntityFacet) => this.renderFacetItem(facet))
+            .join("");
+
+        facetsList.innerHTML = facetsHtml;
+    }
+
+    private renderFacetItem(facet: EntityFacet): string {
+        const escapedName = this.escapeHtml(facet.name);
+        const escapedValue = this.escapeHtml(facet.value);
+        const formattedValue = this.formatFacetValue(facet);
+
+        return `
+            <div class="facet-item">
+                <span class="facet-name">${escapedName}:</span>
+                <span class="facet-value" title="${escapedValue}">${formattedValue}</span>
+            </div>
+        `;
+    }
+
+    private formatFacetValue(facet: EntityFacet): string {
+        const value = facet.value;
+
+        // Handle different value types
+        if (this.isUrl(value)) {
+            return `<a href="${this.escapeHtml(value)}" target="_blank" rel="noopener noreferrer" class="facet-link">${this.escapeHtml(this.truncateText(value, 30))}</a>`;
+        }
+
+        if (this.isDate(value)) {
+            return this.formatDate(value);
+        }
+
+        if (this.isNumber(value)) {
+            return this.formatNumber(value);
+        }
+
+        // Default: truncate long text values
+        return this.truncateText(this.escapeHtml(value), 50);
+    }
+
+    private isUrl(value: string): boolean {
+        try {
+            const url = new URL(value);
+            return url.protocol === "https:" || url.protocol === "http:";
+        } catch {
+            return false;
+        }
+    }
+
+    private isDate(value: string): boolean {
+        const date = new Date(value);
+        return (
+            !isNaN(date.getTime()) && value.match(/^\d{4}-\d{2}-\d{2}/) !== null
+        );
+    }
+
+    private isNumber(value: string): boolean {
+        return (
+            !isNaN(Number(value)) &&
+            !isNaN(parseFloat(value)) &&
+            isFinite(Number(value))
+        );
+    }
+
+    private formatNumber(value: string): string {
+        const num = parseFloat(value);
+        return num.toLocaleString();
+    }
+
+    private truncateText(text: string, maxLength: number): string {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength - 3) + "...";
+    }
+
+    private renderTopics(): void {
+        const topicsSection = this.container.querySelector("#entityTopics");
+        if (!topicsSection || !this.currentEntity.topicAffinity) return;
+
+        const topicsList = topicsSection.querySelector(".topics-list");
+        if (!topicsList) return;
+
+        if (this.currentEntity.topicAffinity.length === 0) {
+            topicsList.innerHTML =
+                '<span class="empty-message">No topics</span>';
+            return;
+        }
+
+        const topicsHtml = this.currentEntity.topicAffinity
+            .map(
+                (topic: string) =>
+                    `<span class="topic-tag">${this.escapeHtml(topic)}</span>`,
+            )
+            .join("");
+
+        topicsList.innerHTML = topicsHtml;
+    }
+
+    private renderEntityTimeline(): void {
+        if (!this.currentEntity) return;
+
+        const firstSeenEl = this.container.querySelector("#entityFirstSeen");
+        const lastSeenEl = this.container.querySelector("#entityLastSeen");
+
+        if (firstSeenEl) {
+            // Handle various possible date field names from real entity data
+            const firstSeen =
+                this.currentEntity.firstSeen ||
+                this.currentEntity.firstVisit ||
+                this.currentEntity.dateAdded ||
+                this.currentEntity.createdAt;
+
+            if (firstSeen) {
+                firstSeenEl.textContent = this.formatDate(firstSeen);
+            } else {
+                firstSeenEl.textContent = "-";
+            }
+        }
+
+        if (lastSeenEl) {
+            // Handle various possible date field names from real entity data
+            const lastSeen =
+                this.currentEntity.lastSeen ||
+                this.currentEntity.lastVisit ||
+                this.currentEntity.lastVisited ||
+                this.currentEntity.updatedAt;
+
+            if (lastSeen) {
+                lastSeenEl.textContent = this.formatDate(lastSeen);
+            } else {
+                lastSeenEl.textContent = "-";
+            }
+        }
+    }
+
+    private renderEmptyState(): void {
+        const nameEl = this.container.querySelector("#entityName");
+        const typeEl = this.container.querySelector("#entityType");
+        const mentionsEl = this.container.querySelector("#entityMentions");
+        const relationshipsEl = this.container.querySelector(
+            "#entityRelationships",
+        );
+        const firstSeenEl = this.container.querySelector("#entityFirstSeen");
+        const lastSeenEl = this.container.querySelector("#entityLastSeen");
+
+        if (nameEl) nameEl.textContent = "Select an Entity";
+        if (typeEl) typeEl.textContent = "";
+        if (mentionsEl) mentionsEl.textContent = "-";
+        if (relationshipsEl) relationshipsEl.textContent = "-";
+        if (firstSeenEl) firstSeenEl.textContent = "-";
+        if (lastSeenEl) lastSeenEl.textContent = "-";
+
+        // Clear details sections
+        const facetsSection = this.container.querySelector("#entityFacets");
+        const topicsSection = this.container.querySelector("#entityTopics");
+
+        if (facetsSection) {
+            const facetsList = facetsSection.querySelector(".facets-list");
+            if (facetsList)
+                facetsList.innerHTML =
+                    '<span class="empty-message">No facets</span>';
+        }
+
+        if (topicsSection) {
+            const topicsList = topicsSection.querySelector(".topics-list");
+            if (topicsList)
+                topicsList.innerHTML =
+                    '<span class="empty-message">No topics</span>';
+        }
+    }
+
+    private getEntityIcon(type: string): string {
+        const iconMap: { [key: string]: string } = {
+            person: '<i class="bi bi-person"></i>',
+            organization: '<i class="bi bi-building"></i>',
+            product: '<i class="bi bi-box"></i>',
+            concept: '<i class="bi bi-lightbulb"></i>',
+            location: '<i class="bi bi-geo"></i>',
+            technology: '<i class="bi bi-cpu"></i>',
+            event: '<i class="bi bi-calendar-event"></i>',
+            document: '<i class="bi bi-file-text"></i>',
+            website: '<i class="bi bi-globe"></i>',
+            topic: '<i class="bi bi-tag"></i>',
+            related_entity: '<i class="bi bi-link-45deg"></i>',
+        };
+
+        return iconMap[type] || '<i class="bi bi-diagram-2"></i>';
+    }
+
+    private getRelationshipStrengthClass(strength: number): string {
+        if (strength >= 0.7) return "relationship-strength-high";
+        if (strength >= 0.4) return "relationship-strength-medium";
+        return "relationship-strength-low";
+    }
+
+    private formatRelationshipType(type: string): string {
+        return type.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+    }
+
+    private formatDate(dateString: string | undefined | null): string {
+        if (!dateString) {
+            return "-";
+        }
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+                return "-";
+            }
+            return date.toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+            });
+        } catch {
+            return "-";
+        }
+    }
+
+    private escapeHtml(text: string): string {
+        return escapeWebText(text);
+    }
+}

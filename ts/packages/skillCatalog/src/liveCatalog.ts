@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { GrammarJson } from "@typeagent/action-grammar";
-import { SkillCatalog } from "./catalog.js";
+import { SkillCatalog, type ExpectedSkillState } from "./catalog.js";
 import { SkillCorrectionStore } from "./corrections.js";
 import { SkillGrammarIndex, type SkillGrammarRuntime } from "./grammarIndex.js";
 import type {
@@ -156,24 +156,59 @@ export class LiveSkillCatalog {
         identity: SkillIdentity,
         revision: string,
         state: CatalogState,
+        expected?: ExpectedSkillState,
     ): Promise<CatalogEntry> {
         return this.mutate(() =>
-            this.catalog.transition(identity, revision, state),
+            this.catalog.transition(identity, revision, state, expected),
         );
+    }
+
+    public validateRevision(
+        identity: SkillIdentity,
+        revision: string,
+        expected?: ExpectedSkillState,
+    ): Promise<CatalogEntry> {
+        return this.mutate(async () => {
+            const entry = await this.catalog.get(identity, revision);
+            if (entry === undefined) throw new Error("Unknown skill revision.");
+            for (const file of entry.revision.manifest) {
+                await this.catalog.readFile(identity, revision, file.path);
+            }
+            const diagnostics: SkillGrammarDiagnostic[] = [];
+            const rules = await this.loadPackageRules(entry, diagnostics);
+            this.grammarIndex.buildSnapshot(rules);
+            if (diagnostics.length !== 0) {
+                throw new Error(
+                    diagnostics.map((item) => item.message).join("; "),
+                );
+            }
+            return this.catalog.transition(
+                identity,
+                revision,
+                "validated",
+                expected,
+            );
+        });
     }
 
     public activate(
         identity: SkillIdentity,
         revision: string,
+        expected?: ExpectedSkillState,
     ): Promise<CatalogEntry> {
-        return this.mutate(() => this.catalog.activate(identity, revision));
+        return this.mutate(() =>
+            this.catalog.activate(identity, revision, expected),
+        );
     }
 
     public rollback(
         identity: SkillIdentity,
         revision: string,
+        expected?: ExpectedSkillState,
     ): Promise<CatalogEntry> {
-        return this.mutate(() => this.catalog.rollback(identity, revision));
+        return this.mutate(() =>
+            this.catalog.rollback(identity, revision, expected),
+        );
     }
 
     public addCorrection(

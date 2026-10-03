@@ -3,28 +3,15 @@
 
 import { createHash } from "node:crypto";
 import type { ProcedureVersion } from "@typeagent/memory-service";
+import {
+    canonicalizeProcedure as canonicalize,
+    procedureToMarkdown,
+    validateAgentEdition,
+} from "@typeagent/memory-service";
 import type { ProcedureLineage } from "./types.js";
 
 function hash(value: string): string {
     return createHash("sha256").update(value).digest("hex");
-}
-
-function sortJson(value: unknown): unknown {
-    if (Array.isArray(value)) {
-        return value.map(sortJson);
-    }
-    if (value !== null && typeof value === "object") {
-        return Object.fromEntries(
-            Object.entries(value as Record<string, unknown>)
-                .sort(([left], [right]) => left.localeCompare(right))
-                .map(([key, child]) => [key, sortJson(child)]),
-        );
-    }
-    return value;
-}
-
-function canonicalize(value: unknown): string {
-    return `${JSON.stringify(sortJson(value), undefined, 2)}\n`;
 }
 
 export function validateProcedure(procedure: ProcedureVersion): void {
@@ -43,6 +30,14 @@ export function validateProcedure(procedure: ProcedureVersion): void {
     }
     if (procedure.document.steps.length === 0) {
         throw new Error("A reviewed procedure must contain at least one step.");
+    }
+    if (procedure.document.agentEdition !== undefined) {
+        validateAgentEdition(procedure.document.agentEdition);
+        if (procedureToMarkdown(procedure.document) !== procedure.markdown) {
+            throw new Error(
+                "Agent-edition Markdown does not match its canonical document.",
+            );
+        }
     }
     if (canonicalize(procedure.document) !== procedure.canonicalJson) {
         throw new Error(

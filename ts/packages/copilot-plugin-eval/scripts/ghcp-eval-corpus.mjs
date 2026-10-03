@@ -3,7 +3,38 @@
 
 import path from "node:path";
 
+export const protocolVersion = 7;
 export const corpusVersion = "common-files-v1";
+
+export function buildTrialSchedule(cases, candidateIds, repetitions) {
+    const order = balancedOrder(cases, candidateIds, repetitions).map(
+        (entry) => ({
+            ...entry,
+            applicable: true,
+        }),
+    );
+    return {
+        order,
+        totalSlots: order.length,
+        scheduledTrials: order.filter(({ applicable }) => applicable).length,
+        applicableCounts: Object.fromEntries(
+            candidateIds.map((candidate) => [
+                candidate,
+                order.filter(
+                    (entry) =>
+                        entry.candidate === candidate && entry.applicable,
+                ).length,
+            ]),
+        ),
+    };
+}
+
+export function assertFrozenSpecification(previous, next) {
+    if (previous !== undefined && previous !== next)
+        throw new Error(
+            "Frozen run specification changed; start a distinct run",
+        );
+}
 
 export function assertCorpusReadiness(readiness) {
     if (
@@ -294,6 +325,95 @@ export function logicalFileContent(content) {
         .replace(/\n+$/, "");
 }
 
+export function fileHandlerConfirmation(prompt, action) {
+    if (
+        action?.schemaName !== "powershell.powershell-files" ||
+        prompt?.type !== "question" ||
+        JSON.stringify(prompt.choices) !== JSON.stringify(["Run", "Cancel"]) ||
+        (prompt.defaultId !== undefined && prompt.defaultId !== 1)
+    )
+        return undefined;
+    const message = {
+        copyFile: "Copy the requested file or directory?",
+        writeFile: "Write content to the requested file?",
+    }[action.actionName];
+    return message && prompt.message === message
+        ? { type: "question", selected: 0 }
+        : undefined;
+}
+
+export function pendingFileAction(events) {
+    const pending = [];
+    for (const { event, detail } of events) {
+        if (event === "action.admitted") pending.push(detail);
+        else if (event === "action.completed") {
+            if (
+                pending.length !== 1 ||
+                pending[0].schemaName !== detail?.schemaName ||
+                pending[0].actionName !== detail?.actionName
+            )
+                return undefined;
+            pending.pop();
+        } else if (event === "action.denied" || event === "action.failed")
+            return undefined;
+    }
+    return pending.length === 1 &&
+        pending[0]?.schemaName === "powershell.powershell-files"
+        ? pending[0]
+        : undefined;
+}
+
+export function consumeFixtureContinuation(approvals, args, stopped) {
+    const approval = approvals.get(args?.interactionId);
+    approvals.delete(args?.interactionId);
+    return (
+        !stopped &&
+        approval !== undefined &&
+        approval.operationId === args.operationId &&
+        approval.scopeId === args.scopeId &&
+        args.response !== null &&
+        typeof args.response === "object" &&
+        Object.keys(approval.response).length ===
+            Object.keys(args.response).length &&
+        Object.entries(approval.response).every(
+            ([key, value]) => args.response[key] === value,
+        )
+    );
+}
+
+export function fileConsentContext(tools, toolResults, events, request) {
+    const domainTools = tools.filter((tool) => !tool.name.includes("ask_user"));
+    const current = domainTools.at(-1);
+    const live = domainTools.filter((tool) => tool.endMs === undefined);
+    const currentResult = toolResults.findLast(
+        (tool) => tool.toolCallId === current?.toolCallId,
+    )?.result?.structuredContent;
+    const pending =
+        currentResult?.status === "requires_interaction"
+            ? currentResult
+            : undefined;
+    if (
+        !current ||
+        !/processCommand|executeAction|continueAction/.test(current.name) ||
+        live.length > 1 ||
+        (live.length === 1 && live[0] !== current) ||
+        (!pending && live.length === 0)
+    )
+        return {};
+    const action =
+        pending?.prompt?.action ??
+        pendingFileAction(events.slice(current.backendEventOffset));
+    const handlerAnswer = fileHandlerConfirmation(
+        pending?.prompt ?? {
+            type: "question",
+            message: request.question,
+            choices: request.choices,
+        },
+        action,
+    );
+    return { action, pending, handlerAnswer };
+}
+
 export function isClarificationQuestion(id, question) {
     if (/\b(confirm|approve|proceed|allow)\b/i.test(question)) return false;
     const subject = {
@@ -301,7 +421,7 @@ export function isClarificationQuestion(id, question) {
         A2: /\b(report|file)\b/i,
         A3: /\b(pull request|PR|number)\b/i,
         A4: /\b(item|entry|line)\b/i,
-        A5: /\bfile\b/i,
+        A5: /\b(file|filename|file name)\b/i,
     }[id];
     return Boolean(
         subject?.test(question) &&
@@ -316,6 +436,7 @@ export async function sendWithClarification({
     testCase,
     canClarify,
     clarify,
+    isClarification = isClarificationQuestion,
 }) {
     const start = performance.now();
     const first = await session.sendAndWait({ prompt }, timeoutMs);
@@ -323,7 +444,7 @@ export async function sendWithClarification({
     if (
         canClarify() &&
         testCase.clarification &&
-        isClarificationQuestion(testCase.id, text)
+        isClarification(testCase.id, text)
     ) {
         const remaining = timeoutMs - (performance.now() - start);
         if (remaining <= 0)

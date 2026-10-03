@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
+import {
+    validateAgentEdition,
+    validateRunbookBindingArguments,
+    validateRunbookCatalogIdentity,
+} from "@typeagent/memory-service/agent-edition-validation";
 
 export const memoryToolNames = {
     corpusCreate: "memory_corpus_create",
@@ -9,6 +14,7 @@ export const memoryToolNames = {
     corpusGet: "memory_corpus_get",
     corpusClear: "memory_corpus_clear",
     corpusReindex: "memory_corpus_reindex",
+    changesList: "memory_changes_list",
     sourceList: "memory_source_list",
     sourceListPage: "memory_source_list_page",
     sourceGet: "memory_source_get",
@@ -34,6 +40,9 @@ export const memoryToolNames = {
     capabilities: "memory_capabilities",
     howToSettingsGet: "memory_how_to_settings_get",
     howToSettingsUpdate: "memory_how_to_settings_update",
+    runbookSynthesisRequest: "memory_runbook_synthesis_request",
+    runbookJobGet: "memory_runbook_job_get",
+    runbookJobsList: "memory_runbook_jobs_list",
     procedureCandidateCreate: "memory_procedure_candidate_create",
     procedureCandidateGet: "memory_procedure_candidate_get",
     procedureCandidateList: "memory_procedure_candidate_list",
@@ -48,6 +57,56 @@ export const memoryToolNames = {
 export const identifierSchema = z
     .string()
     .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/);
+export const changeListRequestSchema = z.object({
+    corpusId: identifierSchema,
+    pageSize: z.number().int().min(1).max(200).optional(),
+    continuationToken: z.string().min(1).max(2048).optional(),
+});
+export const changeReceiptSchema = z
+    .object({
+        changeId: z.string().uuid(),
+        corpusId: identifierSchema,
+        operation: z.enum(["replace", "forget", "suppress", "restore"]),
+        createdAt: z.string().datetime(),
+        outcome: z.literal("committed"),
+        sourceId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        previousRevisionId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        revisionId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        counts: z
+            .object({
+                sources: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .max(Number.MAX_SAFE_INTEGER),
+                revisions: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .max(Number.MAX_SAFE_INTEGER),
+                knowledge: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .max(Number.MAX_SAFE_INTEGER),
+            })
+            .strict(),
+    })
+    .strict();
+export const changePageSchema = z.object({
+    items: changeReceiptSchema.array(),
+    total: z.number().int().nonnegative(),
+    nextContinuationToken: z.string().optional(),
+});
 export const sourceTypeSchema = z.enum([
     "web",
     "markdown",
@@ -96,6 +155,21 @@ export const corpusStatusSchema = corpusSchema.extend({
     indexVersion: z.string(),
 });
 
+export const revisionAssetDescriptorSchema = z
+    .object({
+        sourceId: identifierSchema,
+        revisionId: identifierSchema,
+        assetId: identifierSchema,
+        mimeType: z.string(),
+        name: z.string(),
+        size: z.number().int().nonnegative(),
+        hash: z.string(),
+        description: z.string().optional(),
+        instructionBearing: z.boolean().optional(),
+        warnings: z.array(z.string()).optional(),
+    })
+    .strict();
+
 export const revisionSchema = z.object({
     revisionId: identifierSchema,
     sourceId: identifierSchema,
@@ -107,11 +181,12 @@ export const revisionSchema = z.object({
     pipelineVersion: z.string(),
     pipeline: z
         .object({
-            mode: z.enum(["basic", "summary", "content", "full"]),
+            mode: z.literal("content"),
             maxCharsPerChunk: z.number().int().positive().optional(),
         })
         .optional(),
     embeddingIdentity: z.string().optional(),
+    assets: z.array(revisionAssetDescriptorSchema).optional(),
     state: z.enum(["accepted", "processing", "ready", "failed", "deleted"]),
 });
 
@@ -142,10 +217,11 @@ export const ingestRequestSchema = z.object({
         capturedAt: z.string().optional(),
         sourceModifiedAt: z.string().optional(),
         contentHash: z.string().optional(),
+        assets: z.never().optional(),
     }),
     pipeline: z
         .object({
-            mode: z.enum(["basic", "summary", "content", "full"]).optional(),
+            mode: z.literal("content").optional(),
             maxCharsPerChunk: z.number().int().positive().optional(),
             updatePolicy: z
                 .enum([
@@ -197,6 +273,37 @@ export const jobStatusSchema = z.object({
     warnings: z.array(z.string()),
     trace: z.array(ingestionTraceEventSchema).optional(),
 });
+
+export const runbookSynthesisRequestSchema = z
+    .object({
+        corpusId: identifierSchema,
+        sourceId: identifierSchema,
+        revisionId: identifierSchema,
+    })
+    .strict();
+
+export const runbookJobResultSchema = z
+    .object({
+        jobId: identifierSchema,
+        corpusId: identifierSchema,
+        sourceId: identifierSchema,
+        revisionId: identifierSchema,
+        state: z.enum([
+            "running",
+            "complete",
+            "failed",
+            "interrupted",
+            "cancelled",
+        ]),
+        createdAt: z.string(),
+        updatedAt: z.string(),
+        classification: z.enum(["runbook", "reference", "other"]).optional(),
+        confidence: z.number().min(0).max(1).optional(),
+        reason: z.string().optional(),
+        candidateIds: z.array(identifierSchema),
+        warnings: z.array(z.string()),
+    })
+    .strict();
 
 export const pageRequestSchema = z.object({
     pageSize: z.number().int().positive().max(200).optional(),
@@ -413,6 +520,8 @@ export const searchRequestSchema = z.object({
     sourceTypes: z.array(sourceTypeSchema).optional(),
     tags: z.array(z.string()).optional(),
     sourceIds: z.array(identifierSchema).optional(),
+    dateFrom: z.string().datetime({ offset: true }).optional(),
+    dateTo: z.string().datetime({ offset: true }).optional(),
 });
 
 export const searchResultSchema = z.object({
@@ -444,11 +553,13 @@ export const answerRequestSchema = z.object({
     limit: z.number().int().positive().max(100).optional(),
     maxResponseChars: z.number().int().positive().optional(),
     sourceIds: z.array(identifierSchema).optional(),
+    answerMode: z.enum(["synthesized", "extractive"]).optional(),
 });
 
 export const answerResultSchema = z.object({
     question: z.string(),
     answer: z.string(),
+    mode: z.enum(["synthesized", "extractive"]),
     citations: searchResultSchema.shape.matches,
     grounded: z.literal(true),
     indexVersion: z.string(),
@@ -529,10 +640,202 @@ export const procedureCitationSchema = z.object({
     excerpt: z.string().optional(),
 });
 
-export const procedureSectionSchema = z.object({
-    heading: z.string().min(1),
-    content: z.string(),
-});
+export const procedureSectionSchema = z
+    .object({
+        heading: z.string().min(1),
+        content: z.string(),
+    })
+    .passthrough();
+
+export const runbookAssetReferenceSchema = z
+    .object({
+        sourceId: identifierSchema,
+        revisionId: identifierSchema,
+        assetId: identifierSchema,
+        description: z.string().optional(),
+    })
+    .strict();
+
+export const runbookBindingArgumentsSchema = z
+    .unknown()
+    .superRefine((value, context) => {
+        try {
+            validateRunbookBindingArguments(value);
+        } catch (error) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Invalid binding arguments",
+            });
+        }
+    })
+    .pipe(z.record(z.string(), z.json()))
+    .meta({
+        type: "object",
+        description:
+            "Bounded JSON argument map. Nested {$input: declaredInputId} references and {$literal: JSON} escapes; no execution.",
+    });
+
+export const runbookCatalogIdentitySchema = z
+    .string()
+    .superRefine((value, context) => {
+        try {
+            validateRunbookCatalogIdentity(value);
+        } catch (error) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Invalid catalog identity",
+            });
+        }
+    });
+
+const catalogBindingFields = {
+    accepted: z.boolean(),
+    targetId: identifierSchema,
+    fingerprint: z.string().min(1),
+    arguments: runbookBindingArgumentsSchema.optional(),
+};
+
+export const runbookBindingSchema = z.discriminatedUnion("kind", [
+    z
+        .object({
+            ...catalogBindingFields,
+            kind: z.literal("mcp"),
+            serverId: identifierSchema,
+            version: z.string().min(1),
+        })
+        .strict(),
+    z
+        .object({
+            ...catalogBindingFields,
+            kind: z.literal("macro"),
+            version: z.number().int().positive(),
+        })
+        .strict(),
+    z
+        .object({
+            ...catalogBindingFields,
+            kind: z.literal("flow"),
+            version: z.string().min(1),
+        })
+        .strict(),
+    z
+        .object({
+            kind: z.literal("command"),
+            accepted: z.boolean(),
+            text: z.string().min(1),
+        })
+        .strict(),
+    z
+        .object({
+            kind: z.literal("manual"),
+            accepted: z.boolean(),
+            reason: z.string().min(1),
+        })
+        .strict(),
+]);
+
+export const agentEditionInputSchema = z
+    .object({
+        id: identifierSchema,
+        description: z.string().min(1),
+        type: z.enum(["string", "number", "boolean", "enum"]),
+        required: z.boolean(),
+        secret: z.boolean(),
+        enumValues: z.array(z.string()).optional(),
+        defaultValue: z.union([z.string(), z.number(), z.boolean()]).optional(),
+        examples: z
+            .array(z.union([z.string(), z.number(), z.boolean()]))
+            .optional(),
+    })
+    .strict();
+
+export const agentEditionStepSchema = z
+    .object({
+        id: identifierSchema,
+        title: z.string().min(1),
+        humanText: z.string().min(1),
+        agentInstruction: z.string().min(1),
+        binding: runbookBindingSchema.optional(),
+        safety: z.enum(["readOnly", "changesData", "unknown"]),
+        needsAttention: z.boolean().optional(),
+        attentionReasons: z.array(z.string()).optional(),
+        manualReason: z.string().optional(),
+        condition: z.string().optional(),
+        alternatives: z
+            .array(
+                z
+                    .object({
+                        condition: z.string().min(1),
+                        stepId: identifierSchema,
+                    })
+                    .strict(),
+            )
+            .optional(),
+        verification: z.string().optional(),
+        rollback: z.string().optional(),
+        citations: z.array(procedureCitationSchema),
+        assets: z.array(runbookAssetReferenceSchema).optional(),
+    })
+    .strict();
+
+export const agentEditionReviewSchema = z.discriminatedUnion("state", [
+    z
+        .object({ state: z.literal("draft"), reason: z.string().optional() })
+        .strict(),
+    z
+        .object({
+            state: z.literal("reviewed"),
+            procedureVersion: z.number().int().positive(),
+            contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+            reviewedAt: z.string(),
+            safetyConfirmed: z.literal(true),
+            bindingValidation: z.literal("accepted"),
+            argumentsValidation: z.literal("accepted").optional(),
+        })
+        .strict(),
+]);
+
+export const agentEditionSchema = z
+    .object({
+        schemaVersion: z.literal(1),
+        goal: z.string().min(1),
+        applicability: z.array(z.string()),
+        inputs: z.array(agentEditionInputSchema),
+        preconditions: z.array(z.string()),
+        steps: z.array(agentEditionStepSchema).min(1),
+        verification: z.array(z.string()),
+        rollback: z.array(z.string()),
+        synthesis: z
+            .object({
+                sourceReferences: z.array(procedureCitationSchema),
+                linkedDocuments: z.array(procedureCitationSchema).optional(),
+                synthesizedAt: z.string().optional(),
+                model: z.string().optional(),
+                promptVersion: z.string().optional(),
+            })
+            .strict(),
+        review: agentEditionReviewSchema,
+    })
+    .strict()
+    .superRefine((value, context) => {
+        try {
+            validateAgentEdition(value);
+        } catch (error) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Invalid agent edition",
+            });
+        }
+    });
 
 export const procedureDocumentSchema = z.object({
     title: z.string().min(1),
@@ -540,6 +843,7 @@ export const procedureDocumentSchema = z.object({
     steps: z.array(z.string().min(1)).min(1),
     citations: z.array(procedureCitationSchema),
     additionalSections: z.array(procedureSectionSchema).optional(),
+    agentEdition: agentEditionSchema.optional(),
 });
 
 export const procedureCandidateSchema = procedureDocumentSchema.extend({
@@ -600,6 +904,8 @@ export const procedureSaveRequestSchema = z.object({
     expectedVersion: z.number().int().nonnegative().optional(),
     document: procedureDocumentSchema.optional(),
     markdown: z.string().optional(),
+    reviewAgentEdition: z.boolean().optional(),
+    safetyConfirmed: z.boolean().optional(),
 });
 
 export const procedureGetRequestSchema = z.object({

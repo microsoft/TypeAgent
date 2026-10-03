@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@azure/identity": "^4.10.0",
+    "@typeagent/agent-flows": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",

@@ -11,28 +11,53 @@ import { execFileSync } from "node:child_process";
 import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
 import { evalModel, validateEvalLedger } from "./ghcp-eval-config.mjs";
 import {
+    candidateToolBoundary,
+    pendingInteractionGate,
+    callCorrelation,
+    toolEvidenceViews,
+    executionRouteViolation,
+} from "./ghcp-eval-boundary.mjs";
+import {
     snapshotFiles,
     fileStateMatches,
     gradeFileState,
     restoreFiles,
 } from "./ghcp-eval-files.mjs";
 import { ghcpEvalNativeFilePermission } from "../../dispatcher/dispatcher/dist/execute/ghcpEvalFiles.js";
+import { ghcpEvalListActionAllowed } from "../../dispatcher/dispatcher/dist/execute/ghcpEvalLists.js";
+import {
+    evaluationCategory,
+    categoryCorpus,
+    categorySchedule,
+    assertCategoryReadiness,
+    assertCategoryResults,
+} from "./ghcp-eval-categories.mjs";
+import {
+    listPolicy,
+    listFilePolicy,
+    listClarificationQuestion,
+    readLists,
+    resetLists,
+    listsUnchanged,
+    gradeListTrial,
+} from "./ghcp-eval-lists.mjs";
 import { CopilotCreditBudget } from "../../dispatcher/dispatcher/dist/reasoning/copilotCreditBudget.js";
 import {
     registerGhcpEvalArtifact,
     isGhcpEvalArtifact,
 } from "../../dispatcher/dispatcher/dist/execute/ghcpEvalArtifacts.js";
 import {
-    balancedOrder,
-    buildCorpus,
-    corpusVersion,
+    assertFrozenSpecification,
     assertCorpusReadiness,
     filePolicy,
+    fileConsentContext,
+    consumeFixtureContinuation,
     fileFixture,
     fixtureConfirmationAllowed,
     isClarificationQuestion,
     listFixture,
     normalizeLists,
+    protocolVersion,
     shuffled,
     sendWithClarification,
 } from "./ghcp-eval-corpus.mjs";
@@ -61,14 +86,20 @@ const [
     outputDirectory,
     configDirectory,
     ledgerPath,
-    selection = "1,2,3,4,5,6,7",
+    selectionText,
     phase = "pilot",
     evidencePath,
-    pilotCases = "S1",
+    pilotCasesText,
     batchStartText = "0",
-    batchSizeText = "7",
+    batchSizeText,
     repetitionsText = "1",
+    categoryName = "common-files",
 ] = process.argv.slice(2);
+const category = evaluationCategory(categoryName);
+const corpusVersion = category.corpusVersion;
+const listCategory = category.name === "lists";
+const selection = selectionText ?? category.candidates.join(",");
+const pilotCases = pilotCasesText ?? (listCategory ? "list-S1" : "S1");
 if (
     !cliPath ||
     !template ||
@@ -83,7 +114,11 @@ if (
 const fixtures = listFixture;
 const creditLedger = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
 validateEvalLedger(creditLedger);
-assertCorpusReadiness(
+function assertReadiness(readiness) {
+    assertCategoryReadiness(readiness, category);
+    if (!listCategory) assertCorpusReadiness(readiness);
+}
+assertReadiness(
     JSON.parse(fs.readFileSync(path.join(template, "result.json"), "utf8")),
 );
 const { getCopilotPermissionDefault } = await import(
@@ -93,6 +128,12 @@ const seededLists = Object.entries(fixtures).map(([name, items]) => ({
     name,
     items,
 }));
+const caseFilePolicy = (id, clarified = false) =>
+    listCategory ? listFilePolicy(id) : filePolicy(id, clarified);
+const clarificationQuestion = (id, question) =>
+    listCategory
+        ? listClarificationQuestion(id, question)
+        : isClarificationQuestion(id, question);
 const port = 19024;
 const excludedSchemas = Object.keys(
     JSON.parse(
@@ -148,6 +189,46 @@ const candidates = [
     { id: 7, policy: "Native only" },
 ];
 
+function caseConsentAllowed(
+    action,
+    testCase,
+    store,
+    workspace,
+    clarified,
+    evidence,
+    env,
+) {
+    if (
+        action?.schemaName === "powershell.powershell-files" &&
+        action.actionName === "readFile" &&
+        typeof action.parameters?.path === "string" &&
+        isGhcpEvalArtifact(
+            action.parameters.path,
+            env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
+        )
+    )
+        return true;
+    if (!listCategory)
+        return fixtureConfirmationAllowed(
+            testCase.id,
+            action,
+            workspace,
+            evidence?.issueTitle,
+        );
+    if (action?.schemaName === "list")
+        return ghcpEvalListActionAllowed(
+            action.actionName,
+            action.parameters,
+            listPolicy(testCase.id, store, clarified, evidence?.issueTitle),
+        );
+    return (
+        testCase.id === "list-R4" &&
+        action?.schemaName === "powershell.powershell-files" &&
+        action.actionName === "readFile" &&
+        action.parameters?.path === path.join(workspace, "trip.txt")
+    );
+}
+
 function findListStores(directory) {
     return fs
         .readdirSync(directory, { recursive: true })
@@ -155,16 +236,20 @@ function findListStores(directory) {
         .map((name) => path.join(directory, name));
 }
 
-function collectObservations(result, tracePath) {
+function readBackendEvents(tracePath) {
     const trace = fs.existsSync(tracePath)
         ? fs.readFileSync(tracePath, "utf8")
         : "";
-    result.typeagentEvents = trace.trim()
+    return trace.trim()
         ? trace
               .trim()
               .split("\n")
               .map((line) => JSON.parse(line))
         : [];
+}
+
+function collectObservations(result, tracePath) {
+    result.typeagentEvents = readBackendEvents(tracePath);
     result.fallback =
         result.candidate === 7
             ? null
@@ -251,20 +336,24 @@ function gradeCompletedTrial({
 }) {
     const after = JSON.parse(fs.readFileSync(store, "utf8"));
     const finalFiles = snapshotFiles(workspace);
-    const correctNames = Object.keys(fileFixture).every((name) =>
-        result.answer.includes(name),
-    );
+    const correctNames = Object.keys(
+        listCategory ? listFixture : fileFixture,
+    ).every((name) => result.answer.includes(name));
     result.grade = {
-        fileStateMatchesOracle: gradeFileState(
-            testCase.id,
-            finalFiles,
-            2617,
-            evidence?.issueTitle,
-        ),
+        fileStateMatchesOracle: listCategory
+            ? fileStateMatches(finalFiles, fileFixture)
+            : gradeFileState(
+                  testCase.id,
+                  finalFiles,
+                  2617,
+                  evidence?.issueTitle,
+              ),
         listStateUnchanged:
             JSON.stringify(normalizeLists(after)) ===
             JSON.stringify(normalizeLists(seededLists)),
-        containsAllNames: testCase.id === "S1" ? correctNames : null,
+        containsAllNames: ["S1", "list-S1"].includes(testCase.id)
+            ? correctNames
+            : null,
         clarificationRequested: testCase.clarification
             ? clarificationGiven
             : null,
@@ -274,6 +363,9 @@ function gradeCompletedTrial({
               fileStateMatches(result.stateAtClarification, fileFixture)
             : null,
         requiresManualFaithfulnessCheck: true,
+        ...(listCategory
+            ? gradeListTrial(result, store, finalFiles, evidence?.issueTitle)
+            : {}),
     };
     result.finalLists = normalizeLists(after);
     result.finalFiles = finalFiles;
@@ -281,14 +373,16 @@ function gradeCompletedTrial({
     if (
         phase === "pilot" &&
         result.candidate !== 7 &&
-        ((testCase.id === "S1" && !correctNames) ||
+        ((["S1", "list-S1"].includes(testCase.id) && !correctNames) ||
             !result.grade.fileStateMatchesOracle ||
-            !result.grade.listStateUnchanged)
+            !(listCategory
+                ? result.grade.listStateMatchesOracle
+                : result.grade.listStateUnchanged))
     )
         result.status = "pilot_needs_review";
 }
 
-function prepareTrial(candidate, directory, workspace, testCase) {
+function prepareTrial(candidate, directory, workspace, testCase, evidence) {
     fs.mkdirSync(directory);
     const { env, mcp } = makeConfiguration(
         directory,
@@ -305,17 +399,24 @@ function prepareTrial(candidate, directory, workspace, testCase) {
     env.TYPEAGENT_REASONING_TIMEOUT_MS = "90000";
     env.DEBUG = "typeagent:request";
     env.TYPEAGENT_GHCP_EVAL_FIXTURES = workspace;
+    env.TYPEAGENT_GHCP_EVAL_CATEGORY = category.name;
+    delete env.TYPEAGENT_GHCP_EVAL_LIST_POLICY;
     env.TYPEAGENT_GHCP_EVAL_FILE_POLICY = path.resolve(
         directory,
         "file-policy.json",
     );
     fs.writeFileSync(
         env.TYPEAGENT_GHCP_EVAL_FILE_POLICY,
-        JSON.stringify(filePolicy(testCase.id)),
+        JSON.stringify(caseFilePolicy(testCase.id)),
     );
     const sessionId = randomUUID();
     env.TYPEAGENT_COPILOT_CREDIT_SESSION_SCOPE = sessionId;
     env.TYPEAGENT_GHCP_EVAL_TRACE = path.join(directory, "events.jsonl");
+    env.TYPEAGENT_GHCP_EVAL_CORRELATION = path.join(
+        directory,
+        "call-correlation.json",
+    );
+    fs.writeFileSync(env.TYPEAGENT_GHCP_EVAL_CORRELATION, "{}");
     const temporaryRoot = path.resolve(directory, "sdk-temp");
     fs.mkdirSync(temporaryRoot);
     env.TEMP = env.TMP = env.TMPDIR = temporaryRoot;
@@ -350,7 +451,19 @@ function prepareTrial(candidate, directory, workspace, testCase) {
     const stores = findListStores(env.TYPEAGENT_USER_DATA_DIR);
     if (stores.length !== 1)
         throw new Error("Expected exactly one disposable list store");
-    fs.writeFileSync(stores[0], JSON.stringify(seededLists));
+    resetLists(stores[0]);
+    if (listCategory) {
+        env.TYPEAGENT_GHCP_EVAL_LIST_POLICY = path.resolve(
+            directory,
+            "list-policy.json",
+        );
+        fs.writeFileSync(
+            env.TYPEAGENT_GHCP_EVAL_LIST_POLICY,
+            JSON.stringify(
+                listPolicy(testCase.id, stores[0], false, evidence?.issueTitle),
+            ),
+        );
+    }
     const sessionDataPath = path.join(
         path.dirname(path.dirname(stores[0])),
         "data.json",
@@ -414,6 +527,10 @@ function persistTrial({
     result.totalIncludingSetupMs = performance.now() - started;
     try {
         result.finalFiles = snapshotFiles(workspace);
+        const stores = findListStores(env.TYPEAGENT_USER_DATA_DIR);
+        if (stores.length !== 1)
+            throw new Error("Expected one final list store");
+        result.finalLists = readLists(stores[0]);
     } catch (error) {
         result.status = "harness_failed";
         result.error = `Final fixture snapshot failed: ${String(error)}`;
@@ -441,11 +558,13 @@ function persistTrial({
 
 async function trial(candidate, directory, testCase, workspace, evidence) {
     const { env, config, stores, sessionDataPath, sessionData, sessionId } =
-        prepareTrial(candidate, directory, workspace, testCase);
+        prepareTrial(candidate, directory, workspace, testCase, evidence);
     const result = {
         phase,
         candidate: candidate.id,
         caseId: testCase.id,
+        category: category.name,
+        protocolVersion,
         corpusVersion,
         prompt: testCase.prompt,
         sessionId,
@@ -459,7 +578,9 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
         grade: null,
         permissions: [],
         toolResults: [],
+        recoverableToolFailures: [],
         noPrematureFileMutation: true,
+        noPrematureListMutation: true,
     };
     let server;
     let client;
@@ -472,18 +593,35 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
     const network = ["S5", "M2"].includes(testCase.id)
         ? { toolResults: [] }
         : undefined;
-    const approvedInteractions = new Set();
+    const approvedInteractions = new Map();
+    const boundary = candidateToolBoundary(candidate, nativeTools);
+    const interactionGate = pendingInteractionGate();
+    const consentResults = [];
     const clarify = (question, source) => {
         if (executionStopped || clarificationGiven)
             throw new Error("Clarification cannot replay stopped work");
         result.stateAtClarification = snapshotFiles(workspace);
+        result.listsAtClarification = readLists(stores[0]);
+        if (!listsUnchanged(stores[0])) result.noPrematureListMutation = false;
         if (!fileStateMatches(result.stateAtClarification, fileFixture))
             result.noPrematureFileMutation = false;
         clarificationGiven = true;
         fs.writeFileSync(
             env.TYPEAGENT_GHCP_EVAL_FILE_POLICY,
-            JSON.stringify(filePolicy(testCase.id, true)),
+            JSON.stringify(caseFilePolicy(testCase.id, true)),
         );
+        if (listCategory)
+            fs.writeFileSync(
+                env.TYPEAGENT_GHCP_EVAL_LIST_POLICY,
+                JSON.stringify(
+                    listPolicy(
+                        testCase.id,
+                        stores[0],
+                        true,
+                        evidence?.issueTitle,
+                    ),
+                ),
+            );
         result.clarificationSource = source;
         result.clarificationQuestion = question;
         return testCase.clarification;
@@ -560,15 +698,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             sessionLimits: { maxAiCredits: 60 },
             workingDirectory: workspace,
             skipCustomInstructions: true,
-            availableTools:
-                candidate.id === 7
-                    ? nativeTools
-                    : [
-                          "mcp:*",
-                          ...(candidate.id >= 5
-                              ? nativeTools
-                              : ["builtin:ask_user"]),
-                      ],
+            availableTools: boundary.availableTools,
             ...(candidate.id === 7
                 ? {}
                 : { mcpServers: { "typeagent-e2e": config } }),
@@ -577,7 +707,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 : {
                       systemMessage: {
                           mode: "append",
-                          content: `${candidate.policy}. Use only the exposed TypeAgent MCP interface. Preserve confirmation and clarification; never replay failed or uncertain effects through another route.`,
+                          content: `${candidate.policy}. Use only the exposed TypeAgent MCP interface. Preserve confirmation and clarification. Ordinary read failures may be corrected within this route; denials, cancellation and uncertain effects never authorize replay or a permission bypass.`,
                       },
                   }),
             onPermissionRequest: (request) => {
@@ -585,7 +715,7 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                     kind: request.kind,
                     readOnly: request.readOnly,
                 });
-                const policy = filePolicy(testCase.id, clarificationGiven);
+                const policy = caseFilePolicy(testCase.id, clarificationGiven);
                 if (
                     executionStopped ||
                     (preparation && request.kind === "write")
@@ -633,12 +763,11 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             onUserInputRequest: (request) => {
                 result.interactions.push(request.question);
                 if (testCase.clarification && !clarificationGiven) {
-                    if (
-                        !isClarificationQuestion(testCase.id, request.question)
-                    ) {
+                    if (!clarificationQuestion(testCase.id, request.question)) {
                         result.routeViolations.push(
                             "confirmation-or-unrelated-question-before-clarification",
                         );
+                        executionStopped = true;
                         throw new Error(
                             "Clarification is required before effect confirmation.",
                         );
@@ -648,72 +777,130 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                         wasFreeform: true,
                     };
                 }
-                const pending = result.toolResults.findLast(
-                    (tool) =>
-                        tool.result?.structuredContent?.status ===
-                        "requires_interaction",
-                )?.result.structuredContent;
-                const action = pending?.prompt?.action;
+                const { action, pending, handlerAnswer } = fileConsentContext(
+                    result.tools,
+                    consentResults,
+                    readBackendEvents(env.TYPEAGENT_GHCP_EVAL_TRACE),
+                    request,
+                );
                 if (
                     !executionStopped &&
                     confirmationCount < 8 &&
-                    pending?.prompt?.type === "confirmation" &&
-                    (fixtureConfirmationAllowed(
-                        testCase.id,
+                    (pending?.prompt?.type === "confirmation" ||
+                        handlerAnswer) &&
+                    caseConsentAllowed(
                         action,
+                        testCase,
+                        stores[0],
                         workspace,
-                        evidence?.issueTitle,
-                    ) ||
-                        (action?.schemaName === "powershell.powershell-files" &&
-                            action.actionName === "readFile" &&
-                            typeof action.parameters?.path === "string" &&
-                            isGhcpEvalArtifact(
-                                action.parameters.path,
-                                env.TYPEAGENT_GHCP_EVAL_ARTIFACTS,
-                            )))
+                        clarificationGiven,
+                        evidence,
+                        env,
+                    )
                 ) {
-                    const yes = request.choices?.find((choice) =>
-                        /^(yes|approve|confirm|proceed|allow)\b/i.test(choice),
-                    );
+                    const yes = handlerAnswer
+                        ? "Run"
+                        : request.choices?.find((choice) =>
+                              /^(yes|approve|confirm|proceed|allow)\b/i.test(
+                                  choice,
+                              ),
+                          );
                     confirmationCount++;
-                    approvedInteractions.add(pending.interactionId);
+                    if (pending)
+                        approvedInteractions.set(pending.interactionId, {
+                            operationId: pending.operationId,
+                            scopeId: pending.scopeId,
+                            response: handlerAnswer ?? {
+                                type: "confirmation",
+                                approved: true,
+                            },
+                        });
                     return {
                         answer: yes ?? "Yes",
                         wasFreeform: yes === undefined,
                     };
                 }
+                executionStopped = true;
                 throw new Error(
                     "No authorized scripted answer for this interaction.",
                 );
             },
             hooks: {
+                onPreMcpToolCall: (input) => {
+                    fs.writeFileSync(
+                        env.TYPEAGENT_GHCP_EVAL_CORRELATION,
+                        JSON.stringify(
+                            callCorrelation(result, input, result.tools.length),
+                        ),
+                    );
+                },
                 onPreToolUse: (input) => {
+                    input = {
+                        ...input,
+                        toolName: boundary.canonical(input.toolName),
+                    };
+                    if (
+                        listCategory &&
+                        testCase.clarification &&
+                        !clarificationGiven &&
+                        !listsUnchanged(stores[0])
+                    )
+                        result.noPrematureListMutation = false;
                     if (
                         testCase.clarification &&
                         !clarificationGiven &&
                         !fileStateMatches(snapshotFiles(workspace), fileFixture)
                     )
                         result.noPrematureFileMutation = false;
+                    const continuation =
+                        input.toolName.includes("continueAction");
                     const unauthorizedContinuation =
-                        input.toolName.includes("continueAction") &&
-                        input.toolArgs?.response?.approved === true &&
-                        !approvedInteractions.has(
-                            input.toolArgs?.interactionId,
+                        continuation &&
+                        input.toolArgs?.response?.approved !== false &&
+                        !consumeFixtureContinuation(
+                            approvedInteractions,
+                            input.toolArgs,
+                            executionStopped,
                         );
+                    if (!/ask_user|continueAction/.test(input.toolName))
+                        approvedInteractions.clear();
+                    const wrongRoute = !boundary.check(input.toolName);
+                    const pendingReason = interactionGate.reason(
+                        input.toolName,
+                        input.toolArgs,
+                    );
                     const forbidden =
+                        wrongRoute ||
+                        pendingReason ||
+                        (input.toolName !== "ask_user" &&
+                            boundary.hasActiveDomainCall()) ||
                         unauthorizedContinuation ||
-                        (executionStopped &&
-                            !/ask_user|cancelAction/.test(input.toolName)) ||
-                        (candidate.id === 4 &&
-                            ((!preparation &&
-                                input.toolName.includes("searchActions")) ||
-                                (preparation &&
-                                    input.toolName.includes("executeAction"))));
+                        executionRouteViolation(
+                            input.toolName,
+                            candidate,
+                            preparation,
+                            executionStopped,
+                        );
+                    boundary.recordDecision(
+                        input.toolName,
+                        input.toolArgs,
+                        !forbidden,
+                    );
                     if (forbidden) {
+                        executionStopped = true;
                         result.routeViolations.push(input.toolName);
+                        result.boundaryDenials ??= [];
+                        result.boundaryDenials.push({
+                            tool: input.toolName,
+                            reason: wrongRoute
+                                ? "outside_candidate_allowlist"
+                                : (pendingReason ??
+                                  "execution_or_consent_guard"),
+                        });
                         return {
                             permissionDecision: "deny",
                             permissionDecisionReason:
+                                pendingReason ??
                                 "Evaluation route/interaction policy denied this call; do not replay it.",
                         };
                     }
@@ -721,6 +908,16 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 },
             },
         });
+        try {
+            result.toolBoundary = {
+                admitted: await boundary.initialize(session),
+                verifiedBeforePrompt: true,
+                auditedCalls: 0,
+            };
+        } catch (error) {
+            result.harnessError = `Tool boundary preflight failed: ${String(error)}`;
+            throw error;
+        }
         session.on("assistant.usage", (event) =>
             result.usage.push({
                 model: event.data.model,
@@ -729,15 +926,23 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 preparation,
             }),
         );
-        session.on("tool.execution_start", (event) =>
-            result.tools.push({
-                toolCallId: event.data.toolCallId,
-                name: event.data.toolName,
-                arguments: event.data.arguments,
-                preparation,
-                startMs: performance.now() - started,
-            }),
-        );
+        session.on("tool.execution_start", (event) => {
+            try {
+                result.tools.push({
+                    toolCallId: event.data.toolCallId,
+                    name: event.data.toolName,
+                    arguments: event.data.arguments,
+                    preparation,
+                    startMs: performance.now() - started,
+                    backendEventOffset: readBackendEvents(
+                        env.TYPEAGENT_GHCP_EVAL_TRACE,
+                    ).length,
+                });
+            } catch (error) {
+                result.harnessError = `Backend trace failed: ${String(error)}`;
+                executionStopped = true;
+            }
+        });
         session.on("tool.execution_complete", (event) => {
             try {
                 const artifact = registerGhcpEvalArtifact(
@@ -758,29 +963,56 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
                 (tool) => tool.toolCallId === event.data.toolCallId,
             );
             if (tool) tool.endMs = performance.now() - started;
-            if (
-                terminalExecutionFailure(
-                    tool?.name ?? "",
-                    event.data.result,
-                    event.data.success,
+            try {
+                if (!tool)
+                    throw new Error("Tool completion has no start record");
+                const admitted = boundary.audit(tool.name, tool.arguments);
+                result.toolBoundary.auditedCalls++;
+                if (!admitted && event.data.success === true)
+                    throw new Error(
+                        "Denied outer tool reported success; enforcement unavailable",
+                    );
+                interactionGate.observe(event.data.result);
+                if (
+                    terminalExecutionFailure(
+                        tool?.name ?? "",
+                        event.data.result,
+                        event.data.success,
+                        event.data.error,
+                        tool
+                            ? readBackendEvents(
+                                  env.TYPEAGENT_GHCP_EVAL_TRACE,
+                              ).slice(tool.backendEventOffset)
+                            : [],
+                    )
                 )
-            )
+                    executionStopped = true;
+                else if (
+                    terminalExecutionFailure(
+                        tool?.name ?? "",
+                        event.data.result,
+                        event.data.success,
+                    )
+                )
+                    result.recoverableToolFailures.push(event.data.toolCallId);
+            } catch (error) {
+                result.harnessError = `Backend trace failed: ${String(error)}`;
                 executionStopped = true;
-            result.toolResults.push({
-                toolCallId: event.data.toolCallId,
-                success: event.data.success,
-                result:
-                    testCase.id === "S5" || testCase.id === "M2"
-                        ? "[network evidence withheld]"
-                        : event.data.result,
-            });
+            }
+            const views = toolEvidenceViews(event.data, Boolean(network));
+            result.toolResults.push(views.persisted);
+            consentResults.push(views.consent);
+            if (executionStopped) {
+                approvedInteractions.clear();
+                interactionGate.clear();
+            }
         });
         result.status = "running";
         if (preparation) {
             const preparationStart = performance.now();
             await session.sendAndWait(
                 {
-                    prompt: "Discover available contracts for file inventory, reading, writing/appending and copying files, GitHub pull-request files/checks and issue details, and read-only IP configuration. Do not execute actions, inspect contents, establish preferred targets, or guess future requests.",
+                    prompt: category.preparation,
                 },
                 90_000,
             );
@@ -799,10 +1031,17 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
             testCase,
             canClarify: () => !clarificationGiven && !executionStopped,
             clarify,
+            isClarification: clarificationQuestion,
         });
         result.e2eMs = performance.now() - measuredStart;
         result.finalResponseAt = new Date().toISOString();
         result.answer = answer?.data.content ?? "";
+        interactionGate.assertSettled();
+        if (result.toolBoundary.auditedCalls !== result.tools.length) {
+            result.harnessError =
+                "Incomplete tool boundary audit at final response";
+            throw new Error(result.harnessError);
+        }
         gradeCompletedTrial({
             result,
             testCase,
@@ -853,18 +1092,19 @@ async function trial(candidate, directory, testCase, workspace, evidence) {
 
 const repetitions = phase === "pilot" ? 1 : Number(repetitionsText);
 const batchStart = Number(batchStartText);
-const batchSize = phase === "pilot" ? 7 : Number(batchSizeText);
+const width = category.candidates.length;
+const batchSize = phase === "pilot" ? width : Number(batchSizeText ?? width);
 if (
     !Number.isInteger(batchStart) ||
     batchStart < 0 ||
     !Number.isInteger(batchSize) ||
     batchSize < 1 ||
-    batchSize > 7
+    batchSize > width
 )
-    throw new Error("Each batch must contain between one and seven trials");
-if (phase === "measured" && (batchStart % 7 !== 0 || batchSize !== 7))
+    throw new Error("Batch size exceeds the active category candidate count");
+if (phase === "measured" && (batchStart % width !== 0 || batchSize !== width))
     throw new Error(
-        "Measured batches must preserve all seven candidates for one paired case",
+        "Measured batches must preserve all category candidates for one paired case",
     );
 fs.mkdirSync(outputDirectory, { recursive: true });
 const resultsPath = path.join(outputDirectory, "results.json");
@@ -877,7 +1117,8 @@ if (results.length !== batchStart)
     );
 const selected = selection.split(",").map(Number);
 if (
-    selected.some((id) => !candidates.some((candidate) => candidate.id === id))
+    selected.some((id) => !category.candidates.includes(id)) ||
+    new Set(selected).size !== selected.length
 ) {
     throw new Error("Unknown pilot candidate");
 }
@@ -885,12 +1126,19 @@ if (!["pilot", "measured"].includes(phase))
     throw new Error("Unknown run phase");
 const workspace = path.resolve(outputDirectory, "workspace");
 fs.mkdirSync(workspace, { recursive: true });
-const corpus = buildCorpus(workspace, "microsoft/TypeAgent", 3058, 3067, 2617);
+const corpus = categoryCorpus(
+    category,
+    workspace,
+    "microsoft/TypeAgent",
+    3058,
+    3067,
+    2617,
+);
 const evidence = evidencePath
     ? JSON.parse(fs.readFileSync(evidencePath, "utf8"))
     : undefined;
 if (evidence?.readinessFile)
-    assertCorpusReadiness(
+    assertReadiness(
         JSON.parse(
             fs.readFileSync(
                 path.resolve(
@@ -904,15 +1152,15 @@ if (evidence?.readinessFile)
 if (
     phase === "measured" &&
     (!evidence?.issueTitle ||
-        selected.length !== 7 ||
-        new Set(selected).size !== 7 ||
+        selected.length !== width ||
+        new Set(selected).size !== width ||
         !evidence.readinessFile)
 ) {
     throw new Error(
-        "Measured runs require independent issue evidence and all seven candidates",
+        "Measured runs require independent issue evidence and all category candidates",
     );
 }
-if (evidence?.readinessFile)
+if (evidence?.readinessFile && !listCategory)
     evidence.prOracles = externalOracle(
         JSON.parse(
             fs.readFileSync(
@@ -930,19 +1178,24 @@ const cases =
         ? corpus.filter(({ id }) => pilotCases.split(",").includes(id))
         : shuffled(corpus, seed);
 if (cases.length === 0) throw new Error("No cases selected");
-const order = balancedOrder(
+const { order, ...applicability } = categorySchedule(
+    category,
     cases,
     phase === "pilot" ? selected : shuffled(selected, seed),
     repetitions,
 );
+assertCategoryResults(results, order, category);
 const specification =
     JSON.stringify(
         {
-            protocolVersion: 5,
+            protocolVersion,
+            category: category.name,
             corpusVersion,
-            applicability:
-                "All twenty common-file cases apply to all seven candidates; no list tasks or native N/A slots.",
             fixtures: fileFixture,
+            listFixtures: listFixture,
+            preparationPrompt: category.preparation,
+            outerToolBoundary:
+                "Exact source-qualified allowlist, initialized runtime metadata before prompt, deny hook, per-call enforcement audit. Missing evidence fails closed.",
             runnerSha256: createHash("sha256")
                 .update(fs.readFileSync(fileURLToPath(import.meta.url)))
                 .digest("hex"),
@@ -956,7 +1209,13 @@ const specification =
             seed,
             order,
             cases,
-            candidates,
+            candidates: candidates.filter(({ id }) =>
+                category.candidates.includes(id),
+            ),
+            applicability: {
+                ...applicability,
+                policy: `Only ${category.candidates.join(",")} are eligible in ${category.name}; derive separate denominators from this category schedule.`,
+            },
             model: evalModel,
             reasoningEffort: "high",
             concurrency: 1,
@@ -973,12 +1232,12 @@ const specification =
             overflowPolicy:
                 "Trial-private temp artifacts registered from SDK completion notices; canonical direct child, regular unlinked file, SHA256 rechecked before registered reads.",
             clarificationPolicy:
-                "One scripted corpus answer through callback or final text, same 90-second end-to-end deadline; no continuation after execution failure.",
+                "One scripted corpus answer through callback or final text, same 90-second end-to-end deadline; no continuation after terminal failure.",
             sessionCreditSoftLimit: 60,
             ledgerPath,
             templateDirectory: path.resolve(template),
             fixtureReset:
-                "Copy catalog-only state, exclude stale locks; keep inactive lists unchanged, restore seven ordinary text files and remove the previous trial backup.",
+                "Copy category preflight state, exclude stale locks; restore exact seven-list seed and seven ordinary files, remove previous backup; validate both domains independently.",
             gradingStatus:
                 "independent fixture oracles; explicit final-answer review required",
             nativeTools,
@@ -993,27 +1252,29 @@ const specification =
                 "typeagent-macros",
                 "typeagent-skills",
             ],
-            safety: "Normal confirmation retained; no replay after failed/denied/cancelled/uncertain execution, including internal error-triggered retries. Translation fallback toolset retained.",
+            safety: "Ordinary read I/O errors require affirmative safe evidence for recovery within existing routes, permissions and budgets. Denied/cancelled/uncertain execution and missing error details remain terminal. Translation fallback toolset retained.",
         },
         null,
         2,
     ) + "\n";
 const specificationPath = path.join(outputDirectory, "specification.json");
-if (
-    fs.existsSync(specificationPath) &&
-    fs.readFileSync(specificationPath, "utf8") !== specification
-)
-    throw new Error("Frozen run specification changed; start a distinct run");
+assertFrozenSpecification(
+    fs.existsSync(specificationPath)
+        ? fs.readFileSync(specificationPath, "utf8")
+        : undefined,
+    specification,
+);
 fs.writeFileSync(specificationPath, specification);
 for (const entry of order.slice(batchStart, batchStart + batchSize)) {
     const candidate = candidates.find(({ id }) => id === entry.candidate);
     const testCase = cases.find(({ id }) => id === entry.caseId);
+    const directory = path.join(
+        outputDirectory,
+        `${entry.repetition}-${entry.caseId}-candidate-${candidate.id}`,
+    );
     const result = await trial(
         candidate,
-        path.join(
-            outputDirectory,
-            `${entry.repetition}-${entry.caseId}-candidate-${candidate.id}`,
-        ),
+        directory,
         testCase,
         workspace,
         evidence,

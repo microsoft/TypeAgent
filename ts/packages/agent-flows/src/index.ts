@@ -37,6 +37,7 @@ export type { SandboxDeclarationConfig } from "./sandbox/declarationGenerator.js
 // Grammar
 export {
     generateGrammarRuleText,
+    extractRulePatterns,
     extractRuleNames,
     buildStartRule,
     assembleDynamicGrammar,

@@ -15,6 +15,16 @@ export {
 } from "./defaultAgentRuntime.js";
 export { getDefaultConstructionProvider } from "./defaultConstructionProvider.js";
 export {
+    createMacroAppAgentProvider,
+    getMacroActionName,
+    macroAgentName,
+} from "./macroAgentProvider.js";
+export {
+    createMacroLearningRuntime,
+    validateMacroGrammar,
+    type MacroLearningQuery,
+} from "./macroLearningRuntime.js";
+export {
     SessionMcpCredentialStore,
     type McpCredentialStore,
 } from "./mcp/mcpCredentialStore.js";
@@ -44,6 +54,12 @@ export {
 } from "./mcp/mcpReplayHost.js";
 export type { McpHostServices } from "./mcp/mcpServerProvider.js";
 export type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
+export { getCurrentMcpToolCatalogs } from "./mcp/mcpCatalogSnapshots.js";
+export type {
+    RegisteredMcpToolCatalog,
+    McpToolSnapshot,
+} from "./mcp/mcpToolCatalog.js";
+export { validateCatalogSchemaValues } from "./mcp/mcpToolCatalog.js";
 export {
     createOnboardingOnlyDispatcher,
     type OnboardingDispatcherHandle,

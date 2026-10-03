@@ -39,6 +39,14 @@ export async function handleImportWebsiteDataWithProgress(
     const { importId, totalItems = 0 } = message.parameters;
 
     try {
+        if (
+            message.parameters.mode !== undefined &&
+            message.parameters.mode !== "content"
+        ) {
+            throw new Error(
+                "Unsupported import mode. Only 'content' is supported.",
+            );
+        }
         // Send initial progress update
         sendProgressToUI(importId, {
             importId,
@@ -56,7 +64,7 @@ export async function handleImportWebsiteDataWithProgress(
                 limit: message.parameters.limit,
                 days: message.parameters.days,
                 folder: message.parameters.folder,
-                mode: message.parameters.mode || "basic",
+                mode: "content",
                 maxConcurrent: message.parameters.maxConcurrent,
                 contentTimeout: message.parameters.contentTimeout,
                 importId: importId,
@@ -169,6 +177,11 @@ export async function handleImportHtmlFolder(message: any) {
     try {
         const { parameters } = message;
         const { folderPath, options, importId } = parameters;
+        if (options?.mode !== undefined && options.mode !== "content") {
+            throw new Error(
+                "Unsupported import mode. Only 'content' is supported.",
+            );
+        }
 
         // Send action to backend agent using the new ImportHtmlFolder action
         const result = await sendActionToAgent({
@@ -176,7 +189,7 @@ export async function handleImportHtmlFolder(message: any) {
             parameters: {
                 folderPath,
                 options: {
-                    mode: options?.mode || "basic",
+                    mode: "content",
                     preserveStructure: options?.preserveStructure ?? true,
                     recursive: options?.recursive ?? true,
                     fileTypes: options?.fileTypes ?? [
@@ -436,15 +449,19 @@ export async function indexPageContent(
     tab: chrome.tabs.Tab,
     showNotification: boolean = true,
     options: {
-        quality?: "fast" | "balanced" | "deep";
         textOnly?: boolean;
-        mode?: "basic" | "content" | "actions" | "full";
+        mode?: "content";
         extractedKnowledge?: any;
         activityType?: "visited" | "captured";
         reportHowToStatus?: boolean;
     } = {},
 ): Promise<PageIndexResult> {
     try {
+        if (options.mode !== undefined && options.mode !== "content") {
+            throw new Error(
+                "Unsupported indexing mode. Only 'content' is supported.",
+            );
+        }
         let htmlFragments = null;
         let extractKnowledge = true;
 
@@ -467,9 +484,8 @@ export async function indexPageContent(
             title: tab.title,
             extractKnowledge: extractKnowledge,
             timestamp: new Date().toISOString(),
-            quality: options.quality || "balanced",
             textOnly: options.textOnly || false,
-            mode: options.mode || "content",
+            mode: "content",
             activityType: options.activityType ?? "captured",
             reportHowToStatus: options.reportHowToStatus ?? false,
         };
@@ -1026,81 +1042,6 @@ export async function handleHybridSearch(message: any): Promise<any> {
                 error instanceof Error ? error.message : "Hybrid search failed",
             searchMethod: "hybrid-direct",
             query: message.query || "",
-        };
-    }
-}
-
-/**
- * Handle requests for hierarchical topic data
- */
-export async function handleGetHierarchicalTopics(message: any): Promise<any> {
-    try {
-        console.log("Fetching hierarchical topics from agent...");
-        const startTime = Date.now();
-
-        // Send action to agent to get hierarchical topics
-        const result = await sendActionToAgent({
-            actionName: "getHierarchicalTopics",
-            parameters: {
-                centerTopic: message.parameters?.centerTopic,
-                includeRelationships:
-                    message.parameters?.includeRelationships ?? true,
-                maxDepth: message.parameters?.maxDepth ?? 5,
-                domain: message.parameters?.domain, // Optional domain filter
-            },
-        });
-
-        console.log("Received hierarchical topics result:", result);
-
-        if (result && result.success !== false) {
-            return {
-                success: true,
-                topics: result.topics || [],
-                relationships: result.relationships || [],
-                centerTopic: message.parameters?.centerTopic || null,
-                maxDepth: result.maxDepth || 0,
-                metadata: {
-                    totalTopics: (result.topics || []).length,
-                    queryTime: Date.now() - startTime,
-                    source: "hierarchical_storage",
-                },
-            };
-        } else {
-            console.warn(
-                "No hierarchical topics found or agent returned error:",
-                result?.error,
-            );
-            return {
-                success: false,
-                topics: [],
-                relationships: [],
-                centerTopic: null,
-                maxDepth: 0,
-                error: result?.error || "No hierarchical topics available",
-                metadata: {
-                    totalTopics: 0,
-                    queryTime: Date.now() - startTime,
-                    source: "hierarchical_storage",
-                },
-            };
-        }
-    } catch (error) {
-        console.error("Error fetching hierarchical topics:", error);
-        return {
-            success: false,
-            topics: [],
-            relationships: [],
-            centerTopic: null,
-            maxDepth: 0,
-            error:
-                error instanceof Error
-                    ? error.message
-                    : "Failed to fetch hierarchical topics",
-            metadata: {
-                totalTopics: 0,
-                queryTime: 0,
-                source: "hierarchical_storage",
-            },
         };
     }
 }

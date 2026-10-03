@@ -1,6 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type {
+    ProcedureCandidate,
+    ProcedureDocument,
+    ProcedureSaveRequest,
+    ProcedureSourceCitation,
+    ProcedureSummary,
+    ProcedureVersion,
+} from "@typeagent/memory-service";
+
 // =============================================
 // Agent-side operations (forwarded via WebSocket)
 // =============================================
@@ -152,52 +161,11 @@ export type MemoryCenterHowToSettings = {
     preferences?: Record<string, unknown>;
 };
 
-export type MemoryCenterProcedureCitation = {
-    sourceId: string;
-    revisionId: string;
-    locator?: string;
-    excerpt?: string;
-};
-
-export type MemoryCenterProcedureDocument = {
-    title: string;
-    summary?: string;
-    steps: string[];
-    citations: MemoryCenterProcedureCitation[];
-    additionalSections?: Array<{ heading: string; content: string }>;
-};
-
-export type MemoryCenterProcedureCandidate = MemoryCenterProcedureDocument & {
-    candidateId: string;
-    corpusId: string;
-    state: "detected" | "draft" | "rejected" | "saved";
-    createdAt: string;
-    updatedAt: string;
-};
-
-export type MemoryCenterProcedureSummary = {
-    corpusId: string;
-    procedureId: string;
-    title: string;
-    state: "saved" | "stale" | "archived";
-    latestVersion: number;
-    updatedAt: string;
-};
-
-export type MemoryCenterProcedureVersion = {
-    corpusId: string;
-    procedureId: string;
-    version: number;
-    state: "saved" | "stale" | "archived";
-    document: MemoryCenterProcedureDocument;
-    canonicalJson: string;
-    markdown: string;
-    createdAt: string;
-    jsonHash: string;
-    markdownHash: string;
-    basedOnCandidateId?: string;
-    previousVersion?: number;
-};
+export type MemoryCenterProcedureCitation = ProcedureSourceCitation;
+export type MemoryCenterProcedureDocument = ProcedureDocument;
+export type MemoryCenterProcedureCandidate = ProcedureCandidate;
+export type MemoryCenterProcedureSummary = ProcedureSummary;
+export type MemoryCenterProcedureVersion = ProcedureVersion;
 
 export type MemoryCenterProcedureSearchMatch = {
     procedure: MemoryCenterProcedureSummary;
@@ -362,14 +330,9 @@ export type MemoryCenterInvokeFunctions = {
         corpusId: string;
         candidateId: string;
     }): Promise<MemoryCenterProcedureCandidate>;
-    memorySaveProcedure(params: {
-        corpusId: string;
-        procedureId?: string;
-        candidateId?: string;
-        expectedVersion?: number;
-        document?: MemoryCenterProcedureDocument;
-        markdown?: string;
-    }): Promise<MemoryCenterProcedureVersion>;
+    memorySaveProcedure(
+        params: ProcedureSaveRequest,
+    ): Promise<MemoryCenterProcedureVersion>;
     memoryListProcedures(params: {
         corpusId: string;
         states?: MemoryCenterProcedureSummary["state"][];
@@ -466,23 +429,9 @@ export type BrowserAgentInvokeFunctions = {
         combineStrategies?: boolean;
     }): Promise<any>;
 
-    getHierarchicalTopics(params: {
-        centerTopic?: string;
-        includeRelationships?: boolean;
-        maxDepth?: number;
-        domain?: string;
-    }): Promise<any>;
-
     getTopicImportanceLayer(params: {
         maxNodes?: number;
         minImportanceThreshold?: number;
-    }): Promise<any>;
-
-    getTopicViewportNeighborhood(params: {
-        centerTopic: string;
-        viewportTopicIds: string[];
-        maxNodes?: number;
-        maxDepth?: number;
     }): Promise<any>;
 
     getTopicMetrics(params: { topicId: string }): Promise<any>;
@@ -515,8 +464,6 @@ export type BrowserAgentInvokeFunctions = {
     getKnowledgeGraphStatus(params: {}): Promise<any>;
     buildKnowledgeGraph(params: any): Promise<any>;
     rebuildKnowledgeGraph(params: {}): Promise<any>;
-    testMergeTopicHierarchies(params: {}): Promise<any>;
-    mergeTopicHierarchies(params: {}): Promise<any>;
     getGlobalGraphLayoutData(params: any): Promise<any>;
 
     getEntityNeighborhood(params: {
@@ -885,9 +832,7 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         searchWebMemories(params: any): Promise<any>;
         searchByEntities(params: any): Promise<any>;
         searchByTopics(params: any): Promise<any>;
-        getHierarchicalTopics(params: any): Promise<any>;
         getTopicImportanceLayer(params: any): Promise<any>;
-        getTopicViewportNeighborhood(params: any): Promise<any>;
         getTopicMetrics(params: any): Promise<any>;
         getTopicDetails(params: any): Promise<any>;
         getEntityDetails(params: any): Promise<any>;
@@ -916,8 +861,6 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         getKnowledgeGraphStatus(): Promise<any>;
         buildKnowledgeGraph(params: any): Promise<any>;
         rebuildKnowledgeGraph(): Promise<any>;
-        testMergeTopicHierarchies(): Promise<any>;
-        mergeTopicHierarchies(): Promise<any>;
         getGlobalGraphLayoutData(params: any): Promise<any>;
         getEntityNeighborhood(params: any): Promise<any>;
         getEntityNeighborhoodLayoutData(params: any): Promise<any>;

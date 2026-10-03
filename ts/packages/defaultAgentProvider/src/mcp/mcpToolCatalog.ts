@@ -43,6 +43,33 @@ export interface McpToolCatalog {
     readonly fingerprint: string;
 }
 
+export type McpToolSnapshot = Omit<
+    McpToolCatalogEntry,
+    "validateArguments" | "validateOutput"
+> & {
+    permission?: {
+        configuredDecision: "allow" | "deny" | "unset";
+        promptWithoutSessionGrant: boolean;
+    };
+};
+
+export type RegisteredMcpToolCatalog = {
+    serverConfigId: string;
+    name: string;
+    trust: string;
+    enabled: boolean;
+    available: boolean;
+    entries: McpToolSnapshot[];
+    notices?: string[];
+};
+
+export function snapshotMcpTools(catalog: McpToolCatalog): McpToolSnapshot[] {
+    return [...catalog.entries.values()].map(
+        ({ validateArguments: _input, validateOutput: _output, ...entry }) =>
+            structuredClone(entry),
+    );
+}
+
 function canonicalize(value: unknown): unknown {
     if (Array.isArray(value)) {
         return value.map(canonicalize);
@@ -139,6 +166,36 @@ function compileValidator<T>(
                 error instanceof Error ? error.message : String(error)
             }`,
         );
+    }
+}
+
+export function validateCatalogSchemaValues(
+    schema: Record<string, unknown>,
+    values: readonly unknown[],
+): { valid: boolean; reason?: string } {
+    try {
+        const validate = compileValidator<unknown>(
+            new AjvJsonSchemaValidator(),
+            schema,
+            "Catalog argument schema",
+        );
+        for (const value of values) {
+            const result = validate(value);
+            if (!result.valid) {
+                return {
+                    valid: false,
+                    reason:
+                        result.errorMessage ??
+                        "Arguments do not fit the current catalog schema.",
+                };
+            }
+        }
+        return { valid: true };
+    } catch {
+        return {
+            valid: false,
+            reason: "Current catalog argument schema cannot be safely validated.",
+        };
     }
 }
 

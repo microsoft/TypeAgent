@@ -20,6 +20,11 @@ import { ContentScriptRpc } from "@typeagent/browser-control-rpc/contentScriptRp
 import { getTabHTMLFragments, CompressionMode } from "./capture";
 import { screenshotCoordinator } from "./screenshotCoordinator";
 import { runBrowserAction } from "./browserActions";
+import {
+    resolveLocalBrowserViewUrl,
+    type ViewHostLookup,
+} from "./browserViewNavigation";
+import { createPageCapture } from "./pageCapture";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "@typeagent/aiclient";
 
@@ -124,17 +129,43 @@ function isNoReceiverError(error: unknown): boolean {
     );
 }
 
-export function createExternalBrowserServer(channel: RpcChannel) {
+export function createExternalBrowserServer(
+    channel: RpcChannel,
+    lookupViewHost: ViewHostLookup,
+) {
     const rpcMap = new Map<
         number,
         { channel: ChannelAdapter; contentScriptRpc: ContentScriptRpc }
     >();
+    const documentRpcMap = new Map<
+        string,
+        {
+            tabId: number;
+            channel: ChannelAdapter;
+            contentScriptRpc: ContentScriptRpc;
+        }
+    >();
+
+    function disconnectDocumentRpcs(tabId: number) {
+        for (const [key, entry] of documentRpcMap) {
+            if (entry.tabId === tabId) {
+                entry.channel.notifyDisconnected();
+                documentRpcMap.delete(key);
+            }
+        }
+    }
 
     chrome.tabs.onRemoved.addListener((tabId) => {
+        disconnectDocumentRpcs(tabId);
         const entry = rpcMap.get(tabId);
         if (entry) {
             entry.channel.notifyDisconnected();
             rpcMap.delete(tabId);
+        }
+    });
+    chrome.tabs.onUpdated.addListener((tabId, change) => {
+        if (change.status === "loading" || change.url !== undefined) {
+            disconnectDocumentRpcs(tabId);
         }
     });
 
@@ -250,42 +281,58 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         return contentScriptRpc;
     }
 
+    function getDocumentRpc(tabId: number, documentId: string) {
+        const key = `${tabId}:${documentId}`;
+        const existing = documentRpcMap.get(key);
+        if (existing) return existing.contentScriptRpc;
+        const channel = createChannelAdapter(async (message, cb) => {
+            try {
+                // Retrying injection cannot target a replacement document.
+                const response: unknown = await sendTabMessageWithInjection(
+                    tabId,
+                    { type: "captureRpc", message },
+                    { documentId },
+                );
+                if (
+                    !response ||
+                    typeof response !== "object" ||
+                    !("captureRpcAccepted" in response) ||
+                    response.captureRpcAccepted !== true
+                ) {
+                    throw new Error(
+                        "Explicit-page capture is unavailable in this document.",
+                    );
+                }
+            } catch (error) {
+                cb?.(error as Error);
+            }
+        });
+        const contentScriptRpc = createContentScriptRpcClient(channel.channel);
+        documentRpcMap.set(key, { tabId, channel, contentScriptRpc });
+        return contentScriptRpc;
+    }
+    const pageCapture = createPageCapture(getDocumentRpc);
+
     async function getActiveTabRpc() {
         const targetTab = await ensureActiveTab();
         return getContentScriptRpc(targetTab.id!);
     }
 
-    function resolveCustomProtocolUrl(url: string): string {
-        // Handle typeagent-browser custom protocol
-        if (url.startsWith("typeagent-browser://")) {
-            const customUrl = new URL(url);
-            const customPath = customUrl.pathname;
-            const queryString = customUrl.search;
-
-            // Map custom protocol to actual extension URL
-            const libraryMapping: Record<string, string> = {
-                "/annotationsLibrary.html": "views/annotationsLibrary.html",
-                "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
-                "/memoryCenter.html": "views/memoryCenter.html",
-                "/macrosLibrary.html": "views/macrosLibrary.html",
-                "/entityGraphView.html": "views/entityGraphView.html",
-                "/topicGraphView.html": "views/topicGraphView.html",
-            };
-
-            const extensionPath = libraryMapping[customPath];
-            if (extensionPath) {
-                // Append query parameters to preserve entity/topic selection
-                return chrome.runtime.getURL(extensionPath) + queryString;
-            } else {
-                throw new Error(`Unknown library page: ${customPath}`);
-            }
-        }
-
-        return url;
-    }
-
     chrome.runtime.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender) => {
+            if (message.type === "captureRpc") {
+                const tabId = sender.tab?.id;
+                if (
+                    tabId !== undefined &&
+                    sender.frameId === 0 &&
+                    sender.documentId
+                ) {
+                    documentRpcMap
+                        .get(`${tabId}:${sender.documentId}`)
+                        ?.channel.notifyMessage(message.message);
+                }
+                return;
+            }
             if (message.type === "rpc") {
                 const tabId = sender.tab?.id;
                 if (tabId) {
@@ -296,9 +343,15 @@ export function createExternalBrowserServer(channel: RpcChannel) {
     );
 
     const invokeFunctions: BrowserControlInvokeFunctions = {
+        getCapturePages: () => pageCapture.getCapturePages(),
+        capturePageSnapshot: (pageId) =>
+            pageCapture.capturePageSnapshot(pageId),
         openWebPage: async (url: string, options?: { newTab?: boolean }) => {
             // Resolve custom protocol URLs to actual extension URLs
-            const resolvedUrl = resolveCustomProtocolUrl(url);
+            const resolvedUrl = await resolveLocalBrowserViewUrl(
+                url,
+                lookupViewHost,
+            );
 
             const targetTab = await getActiveTab();
             // Register the load-complete listener BEFORE issuing the
@@ -453,7 +506,10 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             );
 
             if (url) {
-                const resolvedUrl = resolveCustomProtocolUrl(url);
+                const resolvedUrl = await resolveLocalBrowserViewUrl(
+                    url,
+                    lookupViewHost,
+                );
                 console.log(
                     `[followLinkByText] resolvedUrl="${resolvedUrl}" openInNewTab=${openInNewTab}`,
                 );
@@ -490,7 +546,10 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const url = await contentScriptRpc.getPageLinksByPosition(position);
 
             if (url) {
-                const resolvedUrl = resolveCustomProtocolUrl(url);
+                const resolvedUrl = await resolveLocalBrowserViewUrl(
+                    url,
+                    lookupViewHost,
+                );
                 if (openInNewTab) {
                     await chrome.tabs.create({
                         url: resolvedUrl,

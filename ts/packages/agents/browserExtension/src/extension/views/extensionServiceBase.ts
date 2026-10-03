@@ -234,7 +234,7 @@ export abstract class ExtensionServiceBase {
 
     async indexPageContent(
         url: string,
-        mode: string,
+        mode: "content",
         extractedKnowledge?: any,
     ): Promise<any> {
         const message: any = {
@@ -252,7 +252,7 @@ export abstract class ExtensionServiceBase {
 
     async extractPageKnowledge(
         url: string,
-        mode: string,
+        mode: "content",
         extractionSettings: any,
     ): Promise<any> {
         return this.sendMessage({
@@ -300,7 +300,7 @@ export abstract class ExtensionServiceBase {
         url: string,
         title: string,
         extractedKnowledge: any,
-        mode?: string,
+        mode?: "content",
         timestamp?: string,
     ): Promise<any> {
         return this.sendMessage({
@@ -405,17 +405,6 @@ export abstract class ExtensionServiceBase {
     async rebuildKnowledgeGraph(): Promise<any> {
         return this.sendMessage({
             type: "rebuildKnowledgeGraph",
-        });
-    }
-
-    async mergeTopicHierarchies(): Promise<{
-        success: boolean;
-        mergeCount: number;
-        message?: string;
-        error?: string;
-    }> {
-        return this.sendMessage({
-            type: "mergeTopicHierarchies",
         });
     }
 

@@ -1,0 +1,154 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.memory-runbooks {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.memory-runbooks * {
+  box-sizing: border-box;
+}
+.memory-runbooks [hidden] {
+  display: none !important;
+}
+.memory-runbooks .runbook-columns > * {
+  min-width: 0;
+}
+.memory-runbooks pre {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memory-runbooks .runbook-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin: 12px 0;
+}
+.memory-runbooks label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.memory-runbooks input,
+.memory-runbooks select,
+.memory-runbooks textarea {
+  max-width: 100%;
+  min-width: 0;
+}
+.memory-runbooks textarea {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+}
+.memory-runbooks .runbook-markdown {
+  min-height: 350px;
+  font-family: Consolas, monospace;
+}
+.memory-runbooks .runbook-list,
+.memory-runbooks .runbook-fields {
+  display: grid;
+  gap: 12px;
+}
+.memory-runbooks article,
+.memory-runbooks .runbook-card {
+  padding: 14px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+.memory-runbooks .runbook-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.memory-runbooks .runbook-warning {
+  margin: 12px 0;
+  padding: 12px;
+  background: #fff4d6;
+  white-space: pre-wrap;
+}
+.memory-runbooks .runbook-error {
+  margin: 12px 0;
+  padding: 12px;
+  color: #8a2231;
+  background: #fff0f1;
+  white-space: pre-wrap;
+}
+.memory-runbooks .runbook-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.memory-runbooks .runbook-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.memory-runbooks [aria-selected="true"] {
+  background: #eef0ff;
+  border-color: #667eea;
+}
+.memory-runbooks .runbook-inspector {
+  display: none;
+}
+body.inspector .memory-runbooks .runbook-inspector {
+  display: block;
+}
+.memory-runbooks .runbook-original img {
+  max-width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+}
+.memory-runbooks .runbook-original pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memory-runbooks mark {
+  background: #fff1a8;
+  color: inherit;
+}
+.memory-runbooks .runbook-affected {
+  border-left: 4px solid #b77f00;
+}
+.memory-runbooks .runbook-selected {
+  border: 2px solid #586ad1;
+}
+.memory-runbooks dialog {
+  width: min(850px, calc(100vw - 24px));
+  max-height: 90vh;
+  overflow: auto;
+}
+.memory-runbooks .runbook-preview table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.memory-runbooks .runbook-preview td,
+.memory-runbooks .runbook-preview th {
+  border: 1px solid #ccc;
+  padding: 5px;
+}
+.memory-runbooks button:focus-visible,
+.memory-runbooks [tabindex]:focus-visible {
+  outline: 3px solid #586ad1;
+  outline-offset: 2px;
+}
+.memory-runbooks .runbook-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+}
+.memory-runbooks .runbook-check input {
+  width: auto;
+}
+@media (max-width: 500px) {
+  .memory-runbooks .runbook-controls > * {
+    max-width: 100%;
+  }
+  .memory-runbooks .runbook-columns {
+    grid-template-columns: 1fr;
+  }
+}

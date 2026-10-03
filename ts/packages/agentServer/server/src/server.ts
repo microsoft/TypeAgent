@@ -22,6 +22,8 @@ import {
     getDefaultConstructionProvider,
     McpReplayHost,
     SessionMcpCredentialStore,
+    createMacroAppAgentProvider,
+    createMacroLearningRuntime,
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
@@ -48,6 +50,11 @@ import { MemoryServiceHost } from "@typeagent/memory-mcp-server";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import { createDurableMemoryService } from "./durableMemoryService.js";
 import { createLocalSkillServices } from "./skillCatalog.js";
+import { createAutomationSources } from "./automationSources.js";
+import { createRunbookHostCapabilities } from "./runbookCapabilities.js";
+import { getCurrentMcpToolCatalogs } from "default-agent-provider";
+import type { RunbookBindingValidator } from "@typeagent/memory-service";
+import { createRunbookBindingValidator } from "./runbookBindingValidator.js";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -351,8 +358,17 @@ async function main() {
         debugStartup("developer mode enabled at startup (--dev)");
     }
     debugStartup("starting instance memory service");
+    let bindingValidator: RunbookBindingValidator | undefined;
     const memoryService = createDurableMemoryService(
         path.join(instanceDir, "memory"),
+        (...args: Parameters<RunbookBindingValidator>) => {
+            if (bindingValidator === undefined) {
+                throw new Error(
+                    "Runbook catalog binding validation is not ready.",
+                );
+            }
+            return bindingValidator(...args);
+        },
     );
     const memoryServiceHost = await MemoryServiceHost.start(memoryService, {
         onError: (error) =>
@@ -402,15 +418,34 @@ async function main() {
     // (shell, CLI dispatcher) skip this and let each dispatcher mint
     // its own — see DispatcherOptions.portRegistrar in agent-dispatcher.
     const portRegistrar = new PortRegistrar();
+    const macroManager = new MacroManager(
+        instanceDir,
+        new McpReplayHost(instanceDir),
+    );
+    const { skillCatalog, skillAcquirer } =
+        await createLocalSkillServices(instanceDir);
+    const runbookCapabilities = createRunbookHostCapabilities({
+        skillCatalog,
+        macroManager,
+        procedureService: memoryService,
+        readMcpCatalogs: () =>
+            getCurrentMcpToolCatalogs(defaultAgentRuntime.appAgentSources),
+    });
+    bindingValidator = createRunbookBindingValidator(runbookCapabilities);
+    await macroManager.configureLearning(
+        createMacroLearningRuntime(undefined, () =>
+            macroManager.getApprovedMacros(),
+        ),
+    );
 
     const conversationManager: ConversationManager =
         await createConversationManager(
             "agent server",
             {
-                appAgentProviders: getDefaultAppAgentProviders(
-                    instanceDir,
-                    configName,
-                ),
+                appAgentProviders: [
+                    ...getDefaultAppAgentProviders(instanceDir, configName),
+                    createMacroAppAgentProvider(macroManager),
+                ],
                 appAgentSources: defaultAgentRuntime.appAgentSources,
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
@@ -433,6 +468,7 @@ async function main() {
                 // work (queueAddMessage), so the extraction LLM call runs in the
                 // background and does not block the turn.
                 conversationMemorySettings: {
+                    durableMemoryService: memoryService,
                     requestKnowledgeExtraction: true,
                     actionResultKnowledgeExtraction: true,
                 },
@@ -444,8 +480,13 @@ async function main() {
                 allowSharedLocalView: ["browser"],
                 agentInitOptions: {
                     browser: {
+                        runbookCapabilities,
                         memoryServiceClient:
                             createMemoryServiceRpcFacade(memoryService),
+                        automations: createAutomationSources(
+                            instanceDir,
+                            macroManager,
+                        ),
                     },
                     memory: {
                         memoryServiceClient:
@@ -456,17 +497,12 @@ async function main() {
             instanceDir,
         );
     failedStartupCleanup = async () => {
-        await Promise.all([
-            memoryServiceHost.close(),
-            conversationManager.close(),
-        ]);
+        try {
+            await conversationManager.close();
+        } finally {
+            await memoryServiceHost.close();
+        }
     };
-    const macroManager = new MacroManager(
-        instanceDir,
-        new McpReplayHost(instanceDir),
-    );
-    const { skillCatalog, skillAcquirer } =
-        await createLocalSkillServices(instanceDir);
 
     debugStartup("conversation manager ready; prewarming default conversation");
     // Pre-initialize the default conversation dispatcher before accepting clients,
@@ -526,8 +562,11 @@ async function main() {
     function teardownServer(): Promise<void> {
         teardownPromise ??= (async () => {
             wss?.close();
-            await memoryServiceHost.close();
-            await conversationManager.close();
+            try {
+                await conversationManager.close();
+            } finally {
+                await memoryServiceHost.close();
+            }
             removeServerPid(port);
         })();
         return teardownPromise;
@@ -607,6 +646,7 @@ async function main() {
             conversationManager,
             macroManager,
             skillCatalog,
+            runbookCapabilities,
             skillAcquirer,
             procedureService: memoryService,
             shutdown: shutdownServer,

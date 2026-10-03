@@ -35,6 +35,9 @@ import {
     SpeechToken,
     ApproveMacroRequest,
     ArmRecordingRequest,
+    MacroLearningMode,
+    MacroLearningPreference,
+    MacroLearningJob,
     ClaimRecordingRequest,
     CopilotToolMacro,
     CreateMacroFromTraceRequest,
@@ -78,6 +81,7 @@ import {
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
+import type { RunbookHostCapabilities } from "@typeagent/agent-server-protocol";
 
 const debug = registerDebug("typeagent:agent-server-client");
 const debugErr = registerDebug("typeagent:agent-server-client:error");
@@ -172,6 +176,16 @@ export type ConversationDispatcher = {
 };
 
 export type AgentServerConnection = {
+    getMacroLearningPreference(cwd: string): Promise<MacroLearningPreference>;
+    setMacroLearningPreference(request: {
+        cwd: string;
+        mode: MacroLearningMode;
+    }): Promise<MacroLearningPreference>;
+    prepareMacroLearning(request: {
+        traceId: string;
+    }): Promise<MacroLearningJob>;
+    getMacroLearningJob(jobId: string): Promise<MacroLearningJob>;
+    cancelMacroLearningJob(jobId: string): Promise<MacroLearningJob>;
     armMacroRecording(request: ArmRecordingRequest): Promise<RecordingToken>;
     getMacroRecordingState(sessionId: string): Promise<RecordingState>;
     claimMacroRecording(
@@ -208,6 +222,11 @@ export type AgentServerConnection = {
     cancelMacroRun(runId: string): Promise<void>;
     getMacroRun(runId: string): Promise<MacroRunRecord>;
     listSkills?(request?: ListSkillsRequest): Promise<CatalogEntry[]>;
+    getSkillLifecycle?: RunbookHostCapabilities["getSkillLifecycle"];
+    changeSkillLifecycle?: RunbookHostCapabilities["changeSkillLifecycle"];
+    listBindingTargets?: RunbookHostCapabilities["listBindingTargets"];
+    checkBindingTargets?: RunbookHostCapabilities["checkBindingTargets"];
+    suggestBindings?: RunbookHostCapabilities["suggestBindings"];
     searchSkills?(
         request: SearchSkillsRequest,
     ): Promise<readonly CatalogSearchResult[]>;
@@ -424,6 +443,16 @@ export function createAgentServerConnection(
     let closed = false;
 
     const connection: AgentServerConnection = {
+        getMacroLearningPreference: (cwd) =>
+            rpc.invoke("getMacroLearningPreference", cwd),
+        setMacroLearningPreference: (request) =>
+            rpc.invoke("setMacroLearningPreference", request),
+        prepareMacroLearning: (request) =>
+            rpc.invoke("prepareMacroLearning", request),
+        getMacroLearningJob: (jobId) =>
+            rpc.invoke("getMacroLearningJob", jobId),
+        cancelMacroLearningJob: (jobId) =>
+            rpc.invoke("cancelMacroLearningJob", jobId),
         async armMacroRecording(
             request: ArmRecordingRequest,
         ): Promise<RecordingToken> {
@@ -531,6 +560,15 @@ export function createAgentServerConnection(
         async listSkills(request?: ListSkillsRequest): Promise<CatalogEntry[]> {
             return rpc.invoke("listSkills", request);
         },
+        getSkillLifecycle: (request) =>
+            rpc.invoke("getSkillLifecycle", request),
+        changeSkillLifecycle: (request) =>
+            rpc.invoke("changeSkillLifecycle", request),
+        listBindingTargets: (request) =>
+            rpc.invoke("listBindingTargets", request),
+        checkBindingTargets: (request) =>
+            rpc.invoke("checkBindingTargets", request),
+        suggestBindings: (request) => rpc.invoke("suggestBindings", request),
 
         async searchSkills(
             request: SearchSkillsRequest,

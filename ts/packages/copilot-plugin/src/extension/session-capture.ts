@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Dispatcher } from "@typeagent/agent-server-client";
+import type {
+    AgentServerConnection,
+    Dispatcher,
+} from "@typeagent/agent-server-client";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import type { RecordedInteractionTrace } from "@typeagent/copilot-macros";
 import {
@@ -9,14 +12,15 @@ import {
     connectToTypeAgent,
     createClientIO,
 } from "../shared/typeagent-client.js";
-import { isTypeAgentAgentServerTool } from "../shared/tool-identities.js";
+import {
+    isCopilotTelemetryTool,
+    isTypeAgentAgentServerTool,
+} from "../shared/tool-identities.js";
 import { makeTurnId, writeDemoState } from "../hooks/demo-state.js";
 import {
     ExtensionTraceAssembler,
     type ExtensionSessionEvent,
 } from "./trace-assembler.js";
-
-const skippedTools = new Set(["report_intent"]);
 
 interface ToolMetadata {
     toolName: string;
@@ -24,7 +28,15 @@ interface ToolMetadata {
 }
 
 export interface SessionCaptureDependencies {
-    connectAgentServer: typeof connectToAgentServer;
+    connectAgentServer: () => Promise<
+        Pick<
+            AgentServerConnection,
+            | "getMacroRecordingState"
+            | "finalizeMacroRecording"
+            | "failMacroRecording"
+            | "close"
+        >
+    >;
     insertToolHistory: typeof insertToolHistory;
     insertTurnHistory: typeof insertTurnHistory;
 }
@@ -53,9 +65,10 @@ function resultText(result: unknown): string {
 }
 
 async function withDispatcher(
+    sessionId: string,
     operation: (dispatcher: Dispatcher) => Promise<void>,
 ): Promise<void> {
-    const dispatcher = await connectToTypeAgent(createClientIO({}));
+    const dispatcher = await connectToTypeAgent(createClientIO({}), sessionId);
     try {
         await operation(dispatcher);
     } finally {
@@ -63,7 +76,10 @@ async function withDispatcher(
     }
 }
 
-async function insertToolHistory(event: ExtensionSessionEvent): Promise<void> {
+async function insertToolHistory(
+    event: ExtensionSessionEvent,
+    sessionId: string,
+): Promise<void> {
     if (event.data.success !== true) return;
     const toolName =
         typeof event.data.toolName === "string"
@@ -71,7 +87,12 @@ async function insertToolHistory(event: ExtensionSessionEvent): Promise<void> {
             : undefined;
     if (
         !toolName ||
-        skippedTools.has(toolName) ||
+        isCopilotTelemetryTool(
+            toolName,
+            typeof event.data.mcpServerName === "string"
+                ? event.data.mcpServerName
+                : undefined,
+        ) ||
         isTypeAgentAgentServerTool(
             toolName,
             typeof event.data.mcpServerName === "string"
@@ -89,7 +110,7 @@ async function insertToolHistory(event: ExtensionSessionEvent): Promise<void> {
             source: "copilot-cli",
         },
     };
-    await withDispatcher(async (dispatcher) => {
+    await withDispatcher(sessionId, async (dispatcher) => {
         await awaitCommand(
             dispatcher,
             `@history insert ${JSON.stringify(message)}`,
@@ -99,6 +120,7 @@ async function insertToolHistory(event: ExtensionSessionEvent): Promise<void> {
 
 async function insertTurnHistory(
     trace: RecordedInteractionTrace,
+    sessionId: string,
 ): Promise<void> {
     if (
         trace.toolCalls.some((tool) =>
@@ -116,7 +138,7 @@ async function insertTurnHistory(
             source: "copilot-cli",
         },
     };
-    await withDispatcher(async (dispatcher) => {
+    await withDispatcher(sessionId, async (dispatcher) => {
         await awaitCommand(
             dispatcher,
             `@history insert ${JSON.stringify(message)}`,
@@ -128,12 +150,17 @@ export class SessionCapture {
     private readonly assembler: ExtensionTraceAssembler;
     private readonly toolMetadata = new Map<string, ToolMetadata>();
     private pending = Promise.resolve();
+    private historyPending = Promise.resolve();
+    private historyQueueLength = 0;
 
     public constructor(
         private readonly sessionId: string,
         cwd: string,
         private readonly logError: (message: string) => void,
         private readonly dependencies: SessionCaptureDependencies = defaultDependencies,
+        private readonly notifyLearning: (
+            message: string,
+        ) => Promise<void> = async (message) => logError(message),
     ) {
         this.assembler = new ExtensionTraceAssembler(sessionId, cwd);
     }
@@ -171,8 +198,29 @@ export class SessionCapture {
         }
     }
 
-    public flush(): Promise<void> {
-        return this.pending;
+    public async flush(): Promise<void> {
+        await this.pending;
+        await this.historyPending;
+    }
+
+    private queueHistory(operation: () => Promise<void>): void {
+        if (this.historyQueueLength >= 32) {
+            this.logError(
+                "[typeagent-extension] History queue is full; optional indexing was skipped.",
+            );
+            return;
+        }
+        this.historyQueueLength++;
+        this.historyPending = this.historyPending
+            .then(operation)
+            .catch((error) =>
+                this.logError(
+                    `[typeagent-extension] History indexing failed: ${error instanceof Error ? error.message : String(error)}`,
+                ),
+            )
+            .finally(() => {
+                this.historyQueueLength--;
+            });
     }
 
     private async handle(
@@ -200,10 +248,16 @@ export class SessionCapture {
             const metadata = this.toolMetadata.get(key);
             this.toolMetadata.delete(key);
             if (metadata) {
-                await this.dependencies.insertToolHistory({
+                const historyEvent = {
                     ...event,
                     data: { ...event.data, ...metadata },
-                });
+                };
+                this.queueHistory(() =>
+                    this.dependencies.insertToolHistory(
+                        historyEvent,
+                        this.sessionId,
+                    ),
+                );
             }
         }
         if (event.type === "session.idle") {
@@ -228,28 +282,39 @@ export class SessionCapture {
             const state = await connection.getMacroRecordingState(
                 this.sessionId,
             );
+            const selectedToken =
+                state.status === "claimed" &&
+                state.token?.promptHash &&
+                state.token.promptHash === this.assembler.getPromptHash()
+                    ? state.token
+                    : undefined;
             const trace = this.assembler.finish(
-                state.status === "claimed"
-                    ? state.token?.promptHash
-                    : undefined,
+                selectedToken?.promptHash,
                 aborted,
             );
-            if (state.status === "claimed" && state.token) {
+            if (selectedToken) {
                 if (trace) {
-                    await connection.finalizeMacroRecording({
-                        tokenId: state.token.id,
+                    const summary = await connection.finalizeMacroRecording({
+                        tokenId: selectedToken.id,
                         trace,
                     });
+                    if (summary.learningJobId) {
+                        await this.notifyLearning(
+                            `Macro learning queued (${summary.learningJobId}). Use /typeagent-macro-status to inspect preparation or readiness. No additional task execution is required.`,
+                        );
+                    }
                 } else {
                     await connection.failMacroRecording(
                         this.sessionId,
-                        state.token.id,
+                        selectedToken.id,
                         "The selected interaction was incomplete and was not stored.",
                     );
                 }
             }
             if (trace && !aborted) {
-                await this.dependencies.insertTurnHistory(trace);
+                this.queueHistory(() =>
+                    this.dependencies.insertTurnHistory(trace, this.sessionId),
+                );
                 writeDemoState({
                     event: "turnComplete",
                     turnId: makeTurnId(this.sessionId),

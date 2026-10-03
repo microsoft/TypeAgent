@@ -3,9 +3,25 @@
 **Audience:** TypeAgent maintainers, agent authors, and engineers debugging
 memory behavior.
 
-This page maps the memory implementation as of September 2026. For the
+This page maps the memory implementation as of October 2026. For the
 Structured RAG concepts, see [Memory architecture](memory.md). For supported
 user journeys, see [Memory scenarios](scenarios.md).
+
+## Design rules
+
+1. **KnowPro is the only retrieval engine.** Documents, conversations and
+   approved how-tos are searched through KnowPro: structured search first, with
+   KnowPro's own embedding fallback. No component may add a lexical, substring
+   or separate vector search.
+2. **One model-driven `content` pipeline.** There are no basic, fast, balanced
+   or deep modes and no import presets. The only tuning option is chunk size.
+3. **Canonical data is kept, derived data is disposable.** Source revisions,
+   event ledgers, procedure versions and forget tombstones are canonical. Every
+   index is derived and is rebuilt, not migrated, when its schema marker is
+   missing or older.
+4. **Producers capture, the service indexes.** The browser, dispatcher and
+   agents supply content and provenance. Chunking, extraction, indexing and
+   answer generation belong to the memory service.
 
 ## Runtime topology
 
@@ -26,27 +42,19 @@ flowchart TB
         SERVICE[FileMemoryService]
     end
 
-    subgraph ConversationStores[Conversation stores]
-        LOCAL[(Per-conversation ConversationMemory)]
-        UNIFIED[(Unified ConversationSearchIndex)]
-        LOG[(displayLog.json)]
-    end
-
     subgraph DurableStore[Profile durable memory]
         SOURCES[(Corpora, sources, revisions)]
-        EVENTS[(Event logs)]
+        EVENTS[(Event ledgers)]
         PROCEDURES[(Procedure versions)]
         JOBS[(Jobs and index generations)]
     end
 
     CHAT --> CM --> DISP
-    DISP --> LOCAL
-    DISP --> UNIFIED
-    DISP --> LOG
-    LOG -. historical backfill .-> UNIFIED
+    DISP -->|typed events| SERVICE
     MEMORYAGENT --> SERVICE
     BROWSER --> SERVICE
     EXT --> BROWSER
+    CM -->|searchEvents| SERVICE
     MCPCLIENT --> MCPHOST --> SERVICE
     SERVICE --> SOURCES
     SERVICE --> EVENTS
@@ -54,88 +62,94 @@ flowchart TB
     SERVICE --> JOBS
 ```
 
-The agent server creates one durable service under `<instanceDir>/memory`,
-starts an authenticated loopback MCP host, and injects an in-process RPC facade
-into the browser and memory agents. The native agent and MCP endpoint are two
-interfaces to the same service.
+The agent server (and the in-process host used by the Shell and CLI) creates
+one durable service under `<instanceDir>/memory`, starts an authenticated
+loopback MCP host, and injects an in-process RPC facade into the browser and
+memory agents. The native agent and MCP endpoint are two interfaces to the
+same service.
 
-## Memory models
+## Conversation memory
 
-### 1. Per-conversation structured memory
+When a durable service is injected, conversation memory is the **event
+ledger**: the dispatcher is the only live producer. There is no separate
+per-conversation `ConversationMemory` and no separate unified index. At
+start, `initializeMemory` removes any old per-conversation `conversationMemory`
+data and creates a `ConversationDurableMemory` for the conversation.
 
-`initializeMemory` creates a `ConversationMemory` beneath each conversation's
-persist directory. Messages and extracted semantic references are persisted;
-transient indexes are rebuilt when the store opens. Connected mode currently
-queues knowledge extraction for user requests and action results.
+| Event type               | Sender    | Authority label                         |
+| ------------------------ | --------- | --------------------------------------- |
+| `user-turn`              | user      | `user-assertion`                        |
+| `assistant-evidence`     | assistant | `evidence-only`                         |
+| `verified-action-result` | tool      | `verified-observation` (with `outcome`) |
+| `explicit-decision`      | agent     | `explicit`                              |
+| `task-outcome`           | agent     | `evidence-only`                         |
 
-This path answers questions about the active conversation. It is isolated by
-conversation and is not the cross-conversation routing index.
+All events go to the profile corpus `typeagent-profile-conversations`.
+`@conversation search` calls `searchEvents` on that corpus and groups the
+KnowPro-ranked events by conversation. `@conversation index` imports
+historical user turns from display logs as `user-assertion` events.
+Deleting a conversation purges its ledger events and records a tombstone. The
+design record is `packages/agentServer/server/docs/conversation-memory.md`.
+
+A host without a durable service falls back to the older
+`knowledge-processor` conversation manager plus a KnowPro `ConversationMemory`
+(`execution.memory.legacy`). Content indexing and search in such a host fail
+explicitly instead of reporting success.
+
+The Copilot CLI memory plugin (`packages/copilot-memory-plugin`) keeps its own
+workspace-scoped `ConversationMemory` and is intentionally not connected to the
+durable service. It is one arm of an experiment comparing a self-contained
+plugin with the service-backed MCP path as an externally consumable package.
 
 Primary code:
 
+- `packages/dispatcher/dispatcher/src/context/conversationDurableMemory.ts`
 - `packages/dispatcher/dispatcher/src/context/memory.ts`
-- `packages/memory/conversation/src/conversationMemory.ts`
-- `packages/memory/conversation/src/memory.ts`
-- `packages/knowPro/src/`
-
-### 2. Unified cross-conversation index
-
-`ConversationManager` owns one derived index at
-`<instanceDir>/conversations/_unified`. Live user and assistant messages enter
-through a host-provided content sink and carry `conv:<conversationId>` and turn
-tags. Copilot imports append imported user and assistant messages directly.
-
-Search combines structured natural-language search with message-text
-similarity, resolves names from the live registry, and groups matches by
-conversation. Deletion tombstones a conversation so results are filtered
-immediately. Physical compaction is not implemented.
-
-Primary code:
-
-- `packages/agentServer/server/src/conversationSearchIndex.ts`
+- `packages/dispatcher/dispatcher/src/context/personalMemorySearch.ts`
 - `packages/agentServer/server/src/conversationManager.ts`
-- `packages/dispatcher/dispatcher/src/context/system/handlers/conversationCommandHandlers.ts`
-- `packages/cli/src/commands/conversations/search.ts`
+- `packages/agentServer/server/src/conversationSearchIndex.ts` (a facade over
+  the ledger projection plus replay state)
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Dispatcher
-    participant Local as ConversationMemory
-    participant Unified as ConversationSearchIndex
+    participant Ledger as Event ledger
+    participant Index as KnowPro event projection
     participant Manager as ConversationManager
 
     User->>Dispatcher: conversation turn
-    Dispatcher-->>Local: queue extracted memory
-    Dispatcher-->>Unified: append tagged text
+    Dispatcher-->>Ledger: append typed events (async)
     User->>Dispatcher: @conversation search query
     Dispatcher->>Manager: searchConversationContent
-    Manager->>Unified: structured + text search
-    Unified-->>Manager: grouped tagged matches
+    Manager->>Ledger: searchEvents
+    Ledger->>Index: reconcile, structured search
+    Index-->>Manager: ranked events
     Manager-->>User: conversations and snippets
 ```
 
-### 3. Durable corpus memory
+## Durable corpus memory
 
-`FileMemoryService` is the profile-level managed memory implementation. It
-owns source content and revisions, extraction, chunks, indexes, event logs,
-jobs, grounded evidence, correction, forgetting, and personal procedures.
+`FileMemoryService` owns source content and revisions, extraction, chunks,
+index generations, event ledgers, jobs, grounded evidence, correction,
+forgetting, and personal procedures.
 
-Document ingestion modes:
+Ingestion accepts only `content` mode. Revisions record their pipeline
+settings, but the stored mode is not used to choose behavior: a legacy
+revision is reported as `content` and rebuilt with the current pipeline.
 
-| Mode      | Extraction                                 | Intended use                            |
-| --------- | ------------------------------------------ | --------------------------------------- |
-| `basic`   | Model-free exact-search evidence           | Fast imports and deterministic fallback |
-| `content` | Content indexing and structured extraction | Default managed-memory workflow         |
-| `full`    | Deeper structured indexing                 | High-detail imports                     |
-
-The native agent maps these to `fast`, `balanced`, and `deep` import profiles.
-Effective mode and chunk size are stored with the revision.
+Each derived index generation (`documents`, `conversation-events`,
+`procedures`) contains `index-schema.json` (`indexSchemaVersion` 1, engine
+`knowpro`). A missing or older descriptor, or a current generation without
+valid semantic data, triggers a scoped reset and a rebuild from canonical
+records. A malformed descriptor or a newer version is an explicit error and
+the generation is left in place.
 
 Primary code:
 
 - `packages/memory/service/src/fileMemoryService.ts`
 - `packages/memory/service/src/knowProCorpusIndex.ts`
+- `packages/memory/service/src/indexSchema.ts`
 - `packages/memory/service/src/types.ts`
 - `packages/memory/client/src/memoryClient.ts`
 - `packages/memory/mcp-server/src/memoryMcpServer.ts`
@@ -143,13 +157,14 @@ Primary code:
 
 ## Producers and consumers
 
-| Producer or consumer | Data written or read                                                                 | Boundary                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| Dispatcher           | Conversation turns, assistant evidence, verified action results, decisions, outcomes | Fixed profile corpus; no caller-selected cross-profile corpus                 |
-| Browser agent        | Web sources plus visited, bookmarked, captured, and imported events                  | Browser captures and normalizes; service chunks and extracts                  |
-| Native memory agent  | Markdown files/folders, corpus and source management, search and answers             | Host validates local paths; service never receives arbitrary filesystem paths |
-| MCP clients          | Content-oriented ingestion and complete management APIs                              | Authenticated loopback transport                                              |
-| Procedure clients    | Candidates, immutable versions, settings, search, archive                            | Procedures persist independently from source manifests                        |
+| Producer or consumer | Data written or read                                                                     | Boundary                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Dispatcher           | Conversation turns, assistant evidence, verified action results, decisions, outcomes     | Fixed profile corpus; no caller-selected cross-profile corpus                 |
+| Browser agent        | Web sources plus visited, bookmarked, captured, imported events                          | Browser captures and normalizes; service chunks and extracts                  |
+| Native memory agent  | Markdown files and folders, corpus and source management, search and answers             | Host validates local paths; service never receives arbitrary filesystem paths |
+| MCP clients          | Content-oriented ingestion and management APIs                                           | Authenticated loopback transport                                              |
+| Procedure clients    | Candidates, immutable versions, settings, search, archive                                | Procedures persist independently from source manifests                        |
+| Reasoning agents     | `search_memory` over conversation events, all non-conversation corpora, saved procedures | Read only; evidence is untrusted text                                         |
 
 ## Source and event lifecycle
 
@@ -176,54 +191,76 @@ service restart and removes source-derived artifacts together.
 Events are append-only records with producer identity, idempotency key,
 observed and event times, and optional conversation, run, turn, sender, action,
 and linked-source provenance. Events can be filtered or forgotten without
-rebuilding the document index. Linked sources are retained unless deletion is
-explicit and no retained event references them.
+rebuilding the document index. Forgetting writes suppression tombstones that
+survive restart. Linked sources are retained unless deletion is explicit and no
+retained event references them.
 
 ## Search and answer semantics
 
-| Surface                          | Search unit                                                | Result contract                       |
-| -------------------------------- | ---------------------------------------------------------- | ------------------------------------- |
-| Current conversation             | KnowPro entities, topics, and messages                     | Conversation-local evidence or answer |
-| `@conversation search`           | Tagged messages in unified index                           | Ranked conversations with snippets    |
-| Durable `search`                 | Corpus evidence constrained by source and metadata filters | Source-linked evidence matches        |
-| Durable `answer` / `@memory ask` | Bounded durable evidence                                   | Extractive answer with citations      |
-| Event search                     | Event content and provenance filters                       | Ranked typed events                   |
-| Procedure search                 | Saved procedure versions                                   | Versioned procedural guidance         |
+| Surface                          | Search unit                                                         | Result contract                                                                                                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@conversation search`           | Ledger events (KnowPro projection)                                  | Ranked conversations with snippets                                                                                                                                                             |
+| Reasoning `search_memory`        | Conversation events, corpus evidence, saved procedures, in parallel | Cited evidence sections                                                                                                                                                                        |
+| Durable `search`                 | Corpus evidence constrained by source and tag filters               | Source-linked evidence matches                                                                                                                                                                 |
+| Durable `answer` / `@memory ask` | KnowPro evidence for the question                                   | **Synthesized** answer by default, generated by KnowPro's answer generator over the evidence, with citations. `answerMode: "extractive"` (`--extractive`) returns the ranked snippets verbatim |
+| Event search                     | Event content and provenance filters                                | Ranked typed events                                                                                                                                                                            |
+| Procedure search                 | Saved procedure versions                                            | Versioned procedural guidance                                                                                                                                                                  |
 
-Assistant prose in durable conversation events is evidence-only. User
-assertions, explicit decisions, tool results, and task outcomes carry stronger
-authority metadata; retrieval does not turn unsupported assistant text into a
-verified fact.
+Synthesized answers can be scoped with `sourceIds`; the answer context is then
+built only from matched messages of those sources. A failure to generate an
+answer is an error, not a silent switch to extractive output. Index
+implementations without answer support (test fakes) return extractive answers
+unless synthesis is requested explicitly.
+
+The browser page Q&A path uses the same service answer, scoped to the matching
+page sources.
+
+Assistant prose in conversation events is evidence-only. User assertions,
+explicit decisions, and verified tool results carry stronger authority labels;
+retrieval presents the label with each snippet and does not turn unsupported
+assistant text into a verified fact.
 
 ## Degraded behavior and failure modes
 
-- Unified conversation search becomes inert if its model dependencies cannot
-  initialize. Conversation CRUD and chat continue.
-- Durable `basic` ingestion and exact search do not require a model. Richer
-  modes require configured extraction and embedding models.
+- Searching and answering need the configured extraction and query models.
+  Events are appended without a model, but nothing becomes searchable until the
+  projection can be built. There is no model-free fallback search.
 - Jobs interrupted by service restart are marked failed instead of remaining
   permanently active.
-- Native import batch manifests persist durable job IDs. Local abort
+- Native import batch manifests (version 2) persist durable job IDs. Local abort
   controllers do not persist, and closing an agent does not cancel accepted
   service jobs.
-- The per-conversation queue and unified content sink are independent. Failure
-  of one indexing path must not block a user turn or imply success in the
-  other.
+- Append failures for conversation events surface on the next `flush()` and do
+  not block the user turn.
+- A host without a durable service can manage conversations, but content
+  indexing and search fail explicitly.
+
+## Legacy and separate packages
+
+| Package                                                      | Status                                                                                                                                                                      |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/memory/website`                                    | Browser import helpers and HTML content extraction only. Its collection, graph, indexing service and batch processor were removed; `@index create website` no longer exists |
+| `packages/knowledgeProcessor`                                | Early Structured RAG sample, still used by the no-service dispatcher fallback and a few agents                                                                              |
+| `packages/memory/image`, `packages/memory/storage`           | Image memory for `@index` and montage; separate from the durable service                                                                                                    |
+| `packages/kp`                                                | Lightweight keyword index used by the email agent                                                                                                                           |
+| Email and podcast memories in `packages/memory/conversation` | Used by the sample chat app only                                                                                                                                            |
 
 ## Verification map
 
 Focused automated coverage lives in:
 
-- `packages/agentServer/server/test/conversationSearchIndex.spec.ts`
-- `packages/agentServer/server/test/conversationSummary.spec.ts`
-- `packages/agentServer/server/test/copilotImport.spec.ts`
-- `packages/dispatcher/dispatcher/test/conversationDurableMemory.spec.ts`
-- `packages/memory/service/test/fileMemoryService.spec.ts`
+- `packages/memory/service/test/*.spec.ts` (including `indexSchema.spec.ts`,
+  `answerKnowPro.spec.ts` for real KnowPro answer synthesis)
 - `packages/memory/mcp-server/test/memoryMcpServer.spec.ts`
 - `packages/agents/memory/test/memoryAgent.spec.ts`
-- `packages/agents/browser/test/browserMemoryService.test.ts`
-- `packages/agents/browser/test/websiteMemoryImport.test.ts`
+- `packages/agentServer/server/test/conversationSearchIndex.spec.ts`,
+  `conversationSummary.spec.ts`, `copilotImport.spec.ts`
+- `packages/dispatcher/dispatcher/test/conversationDurableMemory.spec.ts`,
+  `personalMemorySearch.spec.ts`, `conversationMemoryIntegration.spec.ts`
+- `packages/agents/browser/test/browserMemoryService.test.ts`,
+  `websiteMemoryImport.test.ts`
 
 The remaining risk is integration acceptance, especially live browser import,
-cancelled-content visibility, restart recovery across the full UI, and
-conversation-event parity.
+cancelled-content visibility, restart recovery across the full UI, live model
+answer quality, and conversation-event parity. See
+[the status ledger](../../plans/memory-system/STATUS.md).

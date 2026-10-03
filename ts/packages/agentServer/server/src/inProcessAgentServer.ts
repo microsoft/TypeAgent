@@ -13,8 +13,17 @@ import os from "node:os";
 import path from "node:path";
 import registerDebug from "debug";
 import { MacroManager } from "@typeagent/copilot-macros";
-import { McpReplayHost } from "default-agent-provider";
+import {
+    McpReplayHost,
+    createMacroAppAgentProvider,
+    createMacroLearningRuntime,
+    getCurrentMcpToolCatalogs,
+} from "default-agent-provider";
 import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
+import type {
+    MemoryService,
+    PersonalHowToService,
+} from "@typeagent/memory-service";
 
 import {
     createConversationManager,
@@ -22,7 +31,17 @@ import {
 } from "./conversationManager.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
 import { createLocalSkillServices } from "./skillCatalog.js";
+import {
+    createAutomationSources,
+    withAutomationSources,
+} from "./automationSources.js";
 import { createDurableMemoryService } from "./durableMemoryService.js";
+import {
+    createRunbookHostCapabilities,
+    withRunbookHostCapabilities,
+} from "./runbookCapabilities.js";
+import { createRunbookBindingValidator } from "./runbookBindingValidator.js";
+import { createRunbookBindingCatalog } from "./runbookBindingCatalog.js";
 
 const debug = registerDebug("agent-server:in-process");
 
@@ -78,9 +97,72 @@ export async function createInProcessAgentServer(
     instanceDir: string,
     options: InProcessAgentServerOptions,
 ): Promise<InProcessAgentServer> {
+    const macroManager = new MacroManager(
+        instanceDir,
+        new McpReplayHost(instanceDir),
+    );
+    await macroManager.configureLearning(
+        createMacroLearningRuntime(undefined, () =>
+            macroManager.getApprovedMacros(),
+        ),
+    );
+    const memoryAgentOptions = dispatcherOptions.agentInitOptions?.memory as
+        | { memoryServiceClient?: MemoryService }
+        | undefined;
+    const injectedMemoryService =
+        dispatcherOptions.conversationMemorySettings?.durableMemoryService ??
+        memoryAgentOptions?.memoryServiceClient;
+    const ownedMemoryService =
+        injectedMemoryService === undefined
+            ? createDurableMemoryService(
+                  path.join(instanceDir, "memory"),
+                  createRunbookBindingValidator(
+                      createRunbookBindingCatalog(macroManager, () =>
+                          getCurrentMcpToolCatalogs(
+                              dispatcherOptions.appAgentSources ?? [],
+                          ),
+                      ),
+                  ),
+              )
+            : undefined;
+    const memoryService = injectedMemoryService ?? ownedMemoryService!;
+    const procedureService =
+        "getProcedure" in memoryService &&
+        typeof memoryService.getProcedure === "function"
+            ? (memoryService as MemoryService &
+                  Pick<PersonalHowToService, "getProcedure">)
+            : undefined;
+    const { skillCatalog, skillAcquirer } = await createLocalSkillServices(
+        instanceDir,
+        options.skillAcquisition,
+    );
+    const runbookCapabilities = createRunbookHostCapabilities({
+        skillCatalog,
+        macroManager,
+        ...(procedureService === undefined ? {} : { procedureService }),
+        readMcpCatalogs: () =>
+            getCurrentMcpToolCatalogs(dispatcherOptions.appAgentSources ?? []),
+    });
     const conversationManager = await createConversationManager(
         hostName,
-        dispatcherOptions,
+        {
+            ...dispatcherOptions,
+            agentInitOptions: withRunbookHostCapabilities(
+                withAutomationSources(
+                    dispatcherOptions.agentInitOptions,
+                    createAutomationSources(instanceDir, macroManager),
+                ),
+                runbookCapabilities,
+            ),
+            appAgentProviders: [
+                ...(dispatcherOptions.appAgentProviders ?? []),
+                createMacroAppAgentProvider(macroManager),
+            ],
+            conversationMemorySettings: {
+                ...dispatcherOptions.conversationMemorySettings,
+                durableMemoryService: memoryService,
+            },
+        },
         instanceDir,
         options.idleTimeoutMs ?? 0,
         options.testMode ?? false,
@@ -89,22 +171,13 @@ export async function createInProcessAgentServer(
     // Pre-warm so the first join is fast and conversation metadata exists.
     await conversationManager.prewarmMostRecentConversation();
 
-    const memoryService = createDurableMemoryService(
-        path.join(instanceDir, "memory"),
-    );
-    const { skillCatalog, skillAcquirer } = await createLocalSkillServices(
-        instanceDir,
-        options.skillAcquisition,
-    );
     const { handler } = createAgentServerConnectionHandler({
         conversationManager,
-        macroManager: new MacroManager(
-            instanceDir,
-            new McpReplayHost(instanceDir),
-        ),
+        macroManager,
         skillCatalog,
+        runbookCapabilities,
         skillAcquirer,
-        procedureService: memoryService,
+        ...(procedureService === undefined ? {} : { procedureService }),
         shutdown: options.shutdown,
         getUserIdentity: options.getUserIdentity ?? defaultUserIdentity,
         // No discovery RPC here: embedded hosts run their own discovery
@@ -154,10 +227,11 @@ export async function createInProcessAgentServer(
         conversationManager,
         async close(): Promise<void> {
             closeTransport();
-            await Promise.all([
-                conversationManager.close(),
-                memoryService.close(),
-            ]);
+            try {
+                await conversationManager.close();
+            } finally {
+                await ownedMemoryService?.close();
+            }
         },
     };
 }
