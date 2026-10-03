@@ -65,6 +65,9 @@ each commit story.
 To resume reading, the watcher saves the session ID, transcript file, last
 complete event ID, and byte offset in the transcript. This tracks what it has read,
 not what downstream memory processing has finished.
+The byte offset determines where reading resumes; the event ID references the
+last captured event. Generated IDs are saved separately with their transcript
+locations so rereading an event reuses its assigned ID.
 
 ## Trademarks
 
