@@ -913,3 +913,22 @@ textarea:focus-visible {
 .hub-wysiwyg .milkdown .ProseMirror {
   padding: 16px 24px;
 }
+
+/* Math in rendered Markdown */
+.md-math-display {
+  margin: 10px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+.md-math:not(.md-math-rendered) {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12.5px;
+}
+.md-math-error {
+  color: var(--danger);
+  text-decoration: underline wavy;
+}
+.markdown-preview .katex {
+  color: inherit;
+  font-size: 1.05em;
+}

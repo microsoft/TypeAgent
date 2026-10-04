@@ -21,6 +21,7 @@ import type {
 import { invokeMemory } from "./viewClient";
 import { renderMarkdown } from "./utils/markdownRenderer";
 import { renderMermaidIn } from "./utils/mermaidView";
+import { renderMathIn } from "./utils/mathView";
 import { canEditWysiwyg } from "./utils/wysiwygEligibility";
 import { iconButton } from "./memoryHubUi";
 
@@ -504,6 +505,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         contentEditor.value = contentPage.content;
         contentPreview.innerHTML = renderMarkdown(contentPage.content);
         void renderMermaidIn(contentPreview);
+        void renderMathIn(contentPreview);
         const end = contentPage.offset + contentPage.content.length;
         contentRange.textContent = `${contentPage.offset + 1}-${end} of ${contentPage.totalChars} characters`;
         element<HTMLButtonElement>("contentPrevious").disabled =
@@ -579,6 +581,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         if (preview) {
             contentPreview.innerHTML = renderMarkdown(contentEditor.value);
             void renderMermaidIn(contentPreview);
+            void renderMathIn(contentPreview);
         }
         contentEditor.classList.toggle("hidden", preview);
         contentPreview.classList.toggle("hidden", !preview);

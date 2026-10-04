@@ -5,6 +5,7 @@ import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
 import DOMPurify from "dompurify";
 import { escapeHtml, highlightCode } from "./codeHighlight";
+import { mathPlugin } from "./markdownMath";
 
 const ALLOWED_TAGS = [
     "p",
@@ -51,6 +52,8 @@ function createRenderer(): MarkdownIt {
             return `<pre><code${classes}>${highlightCode(code, lang)}</code></pre>`;
         },
     });
+
+    md.use(mathPlugin);
 
     const defaultLink =
         md.renderer.rules.link_open ||
@@ -113,6 +116,8 @@ export function renderMarkdown(
             "type",
             "checked",
             "disabled",
+            "data-tex",
+            "data-display",
         ],
         ALLOW_DATA_ATTR: false,
     });

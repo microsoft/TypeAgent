@@ -2103,6 +2103,9 @@ importers:
       jsonpath:
         specifier: ^1.2.0
         version: 1.3.0
+      katex:
+        specifier: ^0.16.21
+        version: 0.16.22
       markdown-it:
         specifier: ^14.2.0
         version: 14.3.0
@@ -2194,6 +2197,9 @@ importers:
       '@types/jsonpath':
         specifier: 0.2.4
         version: 0.2.4
+      '@types/katex':
+        specifier: ^0.16.7
+        version: 0.16.7
       '@types/markdown-it':
         specifier: ^14.1.2
         version: 14.1.2
