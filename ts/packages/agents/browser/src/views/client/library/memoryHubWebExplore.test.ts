@@ -457,7 +457,6 @@ test("real analytics response preserves browsing, domain, content insights and H
         view: "entities",
         entity: entityName,
     });
-    expect(host.textContent).toContain("Fixed lens: TypeAgent Browser Memory");
     expect(host.querySelector("iframe")).toBeNull();
     expect(onError).not.toHaveBeenCalled();
 });

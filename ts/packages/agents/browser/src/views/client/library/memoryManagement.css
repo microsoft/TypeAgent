@@ -1,14 +1,80 @@
 /* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
 
 :root {
+  color-scheme: light;
   --primary: #667eea;
   --primary-dark: #4f5fcf;
+  --on-accent: #ffffff;
   --border: #e2e5ea;
+  --border-strong: #cbd0d8;
   --muted: #6c757d;
   --surface: #ffffff;
+  --surface-alt: #f8f9fa;
   --background: #f7f8fb;
+  --text: #20242a;
+  --text-strong: #353c50;
+  --accent-soft: #eef0ff;
   --danger: #bd2c38;
+  --danger-soft: #fff0f1;
+  --danger-border: #e5a7ad;
+  --danger-text: #7c1822;
+  --warn-soft: #fff5db;
+  --warn-text: #8a6500;
+  --warn-border: #b77f00;
   --success: #237b4b;
+  --success-soft: #c9e9d5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --primary: #8c96ff;
+    --primary-dark: #a9b1ff;
+    --on-accent: #12151d;
+    --border: #2d3342;
+    --border-strong: #414a5e;
+    --muted: #98a2b3;
+    --surface: #1b1f2a;
+    --surface-alt: #232837;
+    --background: #14171f;
+    --text: #e8ebf3;
+    --text-strong: #d3d8e6;
+    --accent-soft: #262b4a;
+    --danger: #ff7a86;
+    --danger-soft: #3a1f25;
+    --danger-border: #7c3a44;
+    --danger-text: #ffb3ba;
+    --warn-soft: #3a2f14;
+    --warn-text: #f0b34a;
+    --warn-border: #b98a2a;
+    --success: #52c98a;
+    --success-soft: #1f4a35;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --primary: #8c96ff;
+  --primary-dark: #a9b1ff;
+  --on-accent: #12151d;
+  --border: #2d3342;
+  --border-strong: #414a5e;
+  --muted: #98a2b3;
+  --surface: #1b1f2a;
+  --surface-alt: #232837;
+  --background: #14171f;
+  --text: #e8ebf3;
+  --text-strong: #d3d8e6;
+  --accent-soft: #262b4a;
+  --danger: #ff7a86;
+  --danger-soft: #3a1f25;
+  --danger-border: #7c3a44;
+  --danger-text: #ffb3ba;
+  --warn-soft: #3a2f14;
+  --warn-text: #f0b34a;
+  --warn-border: #b98a2a;
+  --success: #52c98a;
+  --success-soft: #1f4a35;
 }
 
 * {
@@ -17,7 +83,7 @@
 
 body {
   margin: 0;
-  color: #20242a;
+  color: var(--text);
   background: var(--background);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
@@ -76,9 +142,9 @@ select,
 input:not([type="checkbox"]):not([type="radio"]),
 textarea {
   padding: 7px 9px;
-  border: 1px solid #cbd0d8;
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
-  background: white;
+  background: var(--surface);
   color: inherit;
   font: inherit;
   min-height: 36px;
@@ -118,13 +184,13 @@ button:disabled {
 
 button.primary {
   border-color: var(--primary);
-  color: white;
+  color: var(--on-accent);
   background: var(--primary);
 }
 
 button.danger {
   border-color: var(--danger);
-  color: white;
+  color: var(--on-accent);
   background: var(--danger);
 }
 
@@ -292,12 +358,12 @@ h3 {
   text-align: left;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: white;
+  background: var(--surface);
 }
 
 .list-item.selected {
   border-color: var(--primary);
-  background: #f0f2ff;
+  background: var(--accent-soft);
 }
 
 .item-title {
@@ -392,7 +458,7 @@ h3 {
   min-height: 270px;
   padding: 12px;
   overflow-wrap: anywhere;
-  border: 1px solid #cbd0d8;
+  border: 1px solid var(--border-strong);
   border-top: 0;
   line-height: 1.55;
 }
@@ -419,7 +485,7 @@ h3 {
   gap: 4px;
   padding: 4px 5px 4px 7px;
   border-radius: 12px;
-  background: #eef0ff;
+  background: var(--accent-soft);
 }
 
 .chip-remove {
@@ -454,17 +520,17 @@ h3 {
 }
 
 .job-warning {
-  color: #8a6500;
+  color: var(--warn-text);
   white-space: pre-wrap;
 }
 
 .error {
   margin-bottom: 14px;
   padding: 10px 12px;
-  border: 1px solid #e5a7ad;
+  border: 1px solid var(--danger-border);
   border-radius: 6px;
-  color: #7c1822;
-  background: #fff0f1;
+  color: var(--danger-text);
+  background: var(--danger-soft);
   white-space: pre-wrap;
 }
 

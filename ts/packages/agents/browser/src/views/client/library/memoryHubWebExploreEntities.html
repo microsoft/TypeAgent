@@ -3,7 +3,7 @@
 
 <!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
 <div id="entity-graph-container">
-  <nav class="entity-nav">
+  <nav class="entity-nav" hidden>
     <div class="nav-content">
       <div class="breadcrumbs">
         <button id="entityGraphBreadcrumb" class="breadcrumb-link">
@@ -20,8 +20,13 @@
             placeholder="Enter entity name..."
             aria-label="Search entities"
           />
-          <button id="entitySearchButton" class="entity-search-btn">
-            Search
+          <button
+            id="entitySearchButton"
+            class="entity-search-btn"
+            aria-label="Search"
+            title="Search"
+          >
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
           </button>
         </div>
         <div
@@ -32,8 +37,11 @@
       <label
         >Filter type <input id="entityTypeFilter" placeholder="All types"
       /></label>
-      <button id="entityBack">Back</button
-      ><button id="entityForward">Forward</button>
+      <button id="entityBack" aria-label="Back" title="Back">
+        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i></button
+      ><button id="entityForward" aria-label="Forward" title="Forward">
+        <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+      </button>
     </div>
   </nav>
   <div class="entity-content">
@@ -95,34 +103,64 @@
       ></div>
       <div class="graph-controls">
         <div class="control-group">
-          <button id="zoomInBtn" class="control-btn" title="Zoom In">+</button>
-          <button id="zoomOutBtn" class="control-btn" title="Zoom Out">
-            -
+          <button
+            id="zoomInBtn"
+            class="control-btn"
+            aria-label="Zoom in"
+            title="Zoom in"
+          >
+            <i class="fa-solid fa-plus" aria-hidden="true"></i>
           </button>
-          <button id="fitBtn" class="control-btn" title="Fit to View">
-            Fit
+          <button
+            id="zoomOutBtn"
+            class="control-btn"
+            aria-label="Zoom out"
+            title="Zoom out"
+          >
+            <i class="fa-solid fa-minus" aria-hidden="true"></i>
           </button>
-          <button id="reLayoutBtn" class="control-btn" title="Re-run Layout">
-            Layout
+          <button
+            id="fitBtn"
+            class="control-btn"
+            aria-label="Fit to view"
+            title="Fit to view"
+          >
+            <i class="fa-solid fa-expand" aria-hidden="true"></i>
+          </button>
+          <button
+            id="reLayoutBtn"
+            class="control-btn"
+            aria-label="Re-run layout"
+            title="Re-run layout"
+          >
+            <i class="fa-solid fa-shuffle" aria-hidden="true"></i>
           </button>
           <button
             id="debugViewportBtn"
             class="control-btn"
-            title="Log Viewport Nodes"
+            aria-label="Log viewport nodes"
+            title="Log viewport nodes"
+            hidden
           >
-            Viewport
+            <i class="fa-solid fa-bug" aria-hidden="true"></i>
           </button>
         </div>
         <div class="control-group">
           <button
             id="screenshotBtn"
             class="control-btn"
-            title="Save Screenshot"
+            aria-label="Save image"
+            title="Save image"
           >
-            Image
+            <i class="fa-regular fa-image" aria-hidden="true"></i>
           </button>
-          <button id="exportBtn" class="control-btn" title="Export Data">
-            JSON
+          <button
+            id="exportBtn"
+            class="control-btn"
+            aria-label="Export data"
+            title="Export data"
+          >
+            <i class="fa-solid fa-file-export" aria-hidden="true"></i>
           </button>
         </div>
       </div>

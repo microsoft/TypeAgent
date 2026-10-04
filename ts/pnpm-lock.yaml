@@ -1947,12 +1947,27 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
+      '@codemirror/state':
+        specifier: ^6.7.1
+        version: 6.7.1
+      '@codemirror/view':
+        specifier: ^6.43.8
+        version: 6.43.8
       '@fortawesome/fontawesome-free':
         specifier: ^6.7.2
         version: 6.7.2
       '@github/copilot-sdk':
         specifier: 1.0.13
         version: 1.0.13
+      '@lezer/common':
+        specifier: ^1.5.2
+        version: 1.5.2
+      '@lezer/highlight':
+        specifier: ^1.2.3
+        version: 1.2.3
+      '@milkdown/crepe':
+        specifier: ^7.3.6
+        version: 7.13.1(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(typescript@5.4.5)
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@4.3.6)
@@ -2088,9 +2103,15 @@ importers:
       jsonpath:
         specifier: ^1.2.0
         version: 1.3.0
+      katex:
+        specifier: ^0.16.21
+        version: 0.16.22
       markdown-it:
         specifier: ^14.2.0
         version: 14.3.0
+      mermaid:
+        specifier: ^11.16.1
+        version: 11.16.1
       pdfjs-dist:
         specifier: 5.3.31
         version: 5.3.31
@@ -2176,6 +2197,9 @@ importers:
       '@types/jsonpath':
         specifier: 0.2.4
         version: 0.2.4
+      '@types/katex':
+        specifier: ^0.16.7
+        version: 0.16.7
       '@types/markdown-it':
         specifier: ^14.1.2
         version: 14.1.2
@@ -2884,7 +2908,7 @@ importers:
     dependencies:
       '@milkdown/core':
         specifier: ^7.3.6
-        version: 7.13.1(supports-color@8.1.1)
+        version: 7.13.1
       '@milkdown/crepe':
         specifier: ^7.3.6
         version: 7.13.1(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(typescript@5.4.5)
@@ -17056,7 +17080,7 @@ packages:
     hasBin: true
 
   pdfjs-dist@4.10.38:
-    resolution: {integrity: sha1-PuaYADeQ3CZsyLVcDmYsy5rhj1M=}
+    resolution: {integrity: sha512-/Y3fcFrXEAsMjJXeL9J8+ZG9U01LbuWaYypvDW2ycW1jL269L3js3DVBjDJ0Up9Np1uqDXsDrRihHANhZOlwdQ==}
     engines: {node: '>=20'}
 
   pdfjs-dist@5.3.31:
@@ -23188,7 +23212,7 @@ snapshots:
       '@codemirror/state': 6.5.2
       '@codemirror/view': 6.37.2
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/plugin-tooltip': 7.13.1
@@ -23211,13 +23235,13 @@ snapshots:
       - supports-color
       - typescript
 
-  '@milkdown/core@7.13.1(supports-color@8.1.1)':
+  '@milkdown/core@7.13.1':
     dependencies:
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/transformer': 7.13.1
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       tslib: 2.8.1
       unified: 11.0.5
@@ -23263,7 +23287,7 @@ snapshots:
   '@milkdown/kit@7.13.1(@codemirror/language@6.11.1)(@codemirror/state@6.5.2)(@codemirror/view@6.37.2)(typescript@5.4.5)':
     dependencies:
       '@milkdown/components': 7.13.1(@codemirror/language@6.11.1)(@codemirror/state@6.5.2)(@codemirror/view@6.37.2)(typescript@5.4.5)
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/plugin-block': 7.13.1
       '@milkdown/plugin-clipboard': 7.13.1
@@ -23291,7 +23315,7 @@ snapshots:
   '@milkdown/plugin-block@7.13.1':
     dependencies:
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23304,7 +23328,7 @@ snapshots:
 
   '@milkdown/plugin-clipboard@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23314,7 +23338,7 @@ snapshots:
 
   '@milkdown/plugin-collab@7.13.1(y-prosemirror@1.3.5(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27))(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27)':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23328,7 +23352,7 @@ snapshots:
 
   '@milkdown/plugin-cursor@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23338,7 +23362,7 @@ snapshots:
 
   '@milkdown/plugin-history@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23348,7 +23372,7 @@ snapshots:
 
   '@milkdown/plugin-indent@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23358,7 +23382,7 @@ snapshots:
 
   '@milkdown/plugin-listener@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23371,7 +23395,7 @@ snapshots:
   '@milkdown/plugin-slash@7.13.1':
     dependencies:
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23385,7 +23409,7 @@ snapshots:
   '@milkdown/plugin-tooltip@7.13.1':
     dependencies:
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23398,7 +23422,7 @@ snapshots:
 
   '@milkdown/plugin-trailing@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23408,7 +23432,7 @@ snapshots:
 
   '@milkdown/plugin-upload@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23419,7 +23443,7 @@ snapshots:
 
   '@milkdown/preset-commonmark@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23434,7 +23458,7 @@ snapshots:
 
   '@milkdown/preset-gfm@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/preset-commonmark': 7.13.1
@@ -23467,7 +23491,7 @@ snapshots:
 
   '@milkdown/theme-nord@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       clsx: 2.1.1
@@ -23480,7 +23504,7 @@ snapshots:
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
       remark: 15.0.1
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       tslib: 2.8.1
       unified: 11.0.5
@@ -23489,7 +23513,7 @@ snapshots:
 
   '@milkdown/utils@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -31927,14 +31951,14 @@ snapshots:
       unist-util-is: 6.0.1
       unist-util-visit-parents: 6.0.2
 
-  mdast-util-from-markdown@2.0.2(supports-color@8.1.1):
+  mdast-util-from-markdown@2.0.2:
     dependencies:
       '@types/mdast': 4.0.4
       '@types/unist': 3.0.3
       decode-named-character-reference: 1.1.0
       devlop: 1.1.0
       mdast-util-to-string: 4.0.0
-      micromark: 4.0.2(supports-color@8.1.1)
+      micromark: 4.0.2
       micromark-util-decode-numeric-character-reference: 2.0.2
       micromark-util-decode-string: 2.0.1
       micromark-util-normalize-identifier: 2.0.1
@@ -31951,7 +31975,7 @@ snapshots:
       decode-named-character-reference: 1.3.0
       devlop: 1.1.0
       mdast-util-to-string: 4.0.0
-      micromark: 4.0.2(supports-color@8.1.1)
+      micromark: 4.0.2
       micromark-util-decode-numeric-character-reference: 2.0.2
       micromark-util-decode-string: 2.0.1
       micromark-util-normalize-identifier: 2.0.1
@@ -32301,7 +32325,7 @@ snapshots:
 
   micromark-util-types@2.0.2: {}
 
-  micromark@4.0.2(supports-color@8.1.1):
+  micromark@4.0.2:
     dependencies:
       '@types/debug': 4.1.13
       debug: 4.4.3(supports-color@8.1.1)
@@ -33338,7 +33362,7 @@ snapshots:
   prosemirror-state@1.4.3:
     dependencies:
       prosemirror-model: 1.25.1
-      prosemirror-transform: 1.10.4
+      prosemirror-transform: 1.12.0
       prosemirror-view: 1.40.0
 
   prosemirror-tables@1.7.1:
@@ -33361,7 +33385,7 @@ snapshots:
     dependencies:
       prosemirror-model: 1.25.1
       prosemirror-state: 1.4.3
-      prosemirror-transform: 1.10.4
+      prosemirror-transform: 1.12.0
 
   prosemirror-virtual-cursor@0.4.2(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0):
     optionalDependencies:
@@ -33890,7 +33914,7 @@ snapshots:
       '@types/mdast': 4.0.4
       mdast-util-gfm: 3.1.0
       micromark-extension-gfm: 3.0.0
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       unified: 11.0.5
     transitivePeerDependencies:
@@ -33911,10 +33935,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  remark-parse@11.0.0(supports-color@8.1.1):
+  remark-parse@11.0.0:
     dependencies:
       '@types/mdast': 4.0.4
-      mdast-util-from-markdown: 2.0.2(supports-color@8.1.1)
+      mdast-util-from-markdown: 2.0.2
       micromark-util-types: 2.0.2
       unified: 11.0.5
     transitivePeerDependencies:
@@ -33929,7 +33953,7 @@ snapshots:
   remark@15.0.1:
     dependencies:
       '@types/mdast': 4.0.4
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       unified: 11.0.5
     transitivePeerDependencies:

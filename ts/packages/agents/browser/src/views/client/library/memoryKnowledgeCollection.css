@@ -34,7 +34,7 @@
 }
 .knowledge-collection-status,
 .knowledge-item-meta {
-  color: var(--muted, #596579);
+  color: var(--muted, var(--muted));
   font-size: 0.8rem;
 }
 .knowledge-cards {
@@ -52,9 +52,9 @@
 .knowledge-collection .knowledge-item {
   min-width: 0;
   padding: 10px;
-  border: 1px solid var(--border, #dce1ed);
+  border: 1px solid var(--border, var(--border));
   border-radius: 10px;
-  background: #f5f6ff;
+  background: var(--accent-soft);
   overflow-wrap: anywhere;
 }
 .knowledge-collection .knowledge-item .knowledge-item-title {
@@ -99,7 +99,7 @@
 }
 .knowledge-collection-warning {
   padding: 8px;
-  background: #fff3cd;
+  background: var(--warn-soft);
   overflow-wrap: anywhere;
 }
 .phase2-lists > .knowledge-collection[data-expanded="true"],

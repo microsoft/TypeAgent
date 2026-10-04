@@ -3,7 +3,7 @@
 
 <!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
 <div class="topic-graph-container">
-  <header class="topic-graph-header">
+  <header class="topic-graph-header" hidden>
     <div class="header-left">
       <div class="breadcrumbs">
         <button id="topicGraphBreadcrumb" class="breadcrumb-link">
@@ -22,7 +22,14 @@
             placeholder="Search topics..."
             aria-label="Search topics"
           />
-          <button id="searchButton" class="topic-search-btn">Search</button>
+          <button
+            id="searchButton"
+            class="topic-search-btn"
+            aria-label="Search"
+            title="Search"
+          >
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          </button>
         </div>
       </div>
     </div>
@@ -89,13 +96,32 @@
       </div>
       <div class="graph-controls">
         <div class="graph-action-controls">
-          <button id="topicZoomIn" title="Zoom In">+</button
-          ><button id="topicZoomOut" title="Zoom Out">-</button>
-          <button id="fitButton" title="Fit to view">Fit</button
-          ><button id="centerButton" title="Center graph">Center</button>
-          <button id="exportButton" title="Export as image">Image</button
-          ><button id="exportJsonButton" title="Export cytoscape JSON">
-            JSON
+          <button id="topicZoomIn" aria-label="Zoom in" title="Zoom in">
+            <i class="fa-solid fa-plus" aria-hidden="true"></i></button
+          ><button id="topicZoomOut" aria-label="Zoom out" title="Zoom out">
+            <i class="fa-solid fa-minus" aria-hidden="true"></i>
+          </button>
+          <button id="fitButton" aria-label="Fit to view" title="Fit to view">
+            <i class="fa-solid fa-expand" aria-hidden="true"></i></button
+          ><button
+            id="centerButton"
+            aria-label="Center graph"
+            title="Center graph"
+          >
+            <i class="fa-solid fa-crosshairs" aria-hidden="true"></i>
+          </button>
+          <button
+            id="exportButton"
+            aria-label="Export as image"
+            title="Export as image"
+          >
+            <i class="fa-regular fa-image" aria-hidden="true"></i></button
+          ><button
+            id="exportJsonButton"
+            aria-label="Export cytoscape JSON"
+            title="Export cytoscape JSON"
+          >
+            <i class="fa-solid fa-file-export" aria-hidden="true"></i>
           </button>
         </div>
       </div>
