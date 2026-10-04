@@ -233,11 +233,13 @@ function citationEditor(
                     options.changed();
                 }),
             );
-        for (const field of citations.querySelectorAll("label"))
-            field.classList.add("runbook-inspector");
     }
-    root.append(
-        rbNode("h4", "Exact citation references"),
+    const advanced = document.createElement("details");
+    advanced.className = "runbook-advanced";
+    const advancedTitle = document.createElement("summary");
+    advancedTitle.textContent = "Exact citation references";
+    advanced.append(
+        advancedTitle,
         citations,
         rbButton(
             "Add exact citation reference",
@@ -249,9 +251,7 @@ function citationEditor(
             "add-raw-citation",
         ),
     );
-    root
-        .querySelector('[name="add-raw-citation"]')
-        ?.classList.add("runbook-inspector");
+    root.append(advanced);
     render();
     for (const original of options.availableOriginals)
         root.append(
@@ -284,11 +284,6 @@ function citationEditor(
                             value.sourceId === asset.sourceId &&
                             value.revisionId === asset.revisionId,
                     )?.name ?? "Retained asset reference; metadata unavailable",
-                ),
-                rbNode(
-                    "p",
-                    `${asset.assetId} @ ${asset.revisionId}`,
-                    "runbook-inspector",
                 ),
                 rbField(
                     "Retained asset description",
@@ -433,15 +428,6 @@ function stepEditor(
         rbNode(
             "p",
             "Exact source citations and revision-owned assets are retained below. Uncited steps cannot be treated as reviewed.",
-        ),
-        rbNode(
-            "p",
-            JSON.stringify({
-                citations: step.citations,
-                assets: step.assets,
-                binding: step.binding,
-            }),
-            "runbook-inspector",
         ),
         citationEditor(step, options),
         rbButton("Inspect cited originals", () => options.onEvidence(step.id)),
@@ -665,7 +651,6 @@ export function mountRunbookEdition(
             renderSteps();
             options.changed();
         }),
-        rbNode("p", JSON.stringify(edition.synthesis), "runbook-inspector"),
         provenanceEditor(edition, options),
     );
     renderInputs();

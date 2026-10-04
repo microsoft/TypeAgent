@@ -5,6 +5,7 @@ import type {
     MemoryHubKnowledgeItem,
     MemoryHubKnowledgePage,
 } from "@typeagent/browser-control-rpc/viewRpc";
+import { setIconButton } from "./memoryHubUi";
 import "./memoryKnowledgeCollection.css";
 
 export const KNOWLEDGE_PREVIEW_SIZE = 6;
@@ -22,6 +23,10 @@ export type KnowledgeCollectionOptions = {
     total?: number;
     loadPage?: (request: PageRequest) => Promise<MemoryHubKnowledgePage>;
     onSelect?: (item: MemoryHubKnowledgeItem) => void;
+    // When set, "View all" calls this instead of expanding in place.
+    onViewAll?: () => void;
+    // Start in the full paged view (used inside a flyout).
+    startExpanded?: boolean;
     onError: (error: unknown) => void;
     itemClass?: string;
     renderSources?: (
@@ -93,18 +98,24 @@ export function mountKnowledgeCollection(
     grid.setAttribute("aria-label", options.title);
     toggle.setAttribute("aria-controls", grid.id);
     const pagination = element("div", undefined, "knowledge-pagination");
-    const previous = button("Previous");
-    const next = button("Next");
+    const previous = setIconButton(
+        button("Previous"),
+        "fa-chevron-left",
+        `${options.title} previous page`,
+    );
+    const next = setIconButton(
+        button("Next"),
+        "fa-chevron-right",
+        `${options.title} next page`,
+    );
     const pageLabel = element("span");
-    previous.setAttribute("aria-label", `${options.title} previous page`);
-    next.setAttribute("aria-label", `${options.title} next page`);
     pagination.append(previous, pageLabel, next);
     root.append(header, form, status, warning, grid, pagination);
     host.append(root);
     const listeners = new AbortController();
     let rowListeners = new AbortController();
     let rowDisposers: Array<() => void> = [];
-    let expanded = false;
+    let expanded = options.startExpanded === true;
     let disposed = false;
     let generation = 0;
     let offset = 0;
@@ -276,6 +287,10 @@ export function mountKnowledgeCollection(
     toggle.addEventListener(
         "click",
         () => {
+            if (!expanded && options.onViewAll) {
+                options.onViewAll();
+                return;
+            }
             expanded = !expanded;
             generation++;
             offset = 0;
@@ -316,7 +331,10 @@ export function mountKnowledgeCollection(
         },
         { signal: listeners.signal },
     );
-    preview();
+    if (expanded) {
+        toggle.hidden = true;
+        void load();
+    } else preview();
     return {
         dispose() {
             disposed = true;

@@ -105,18 +105,26 @@ test("overview retains counts and corpus-qualified provenance without plotting a
     );
     expect(host.querySelector("svg")).toBeNull();
     expect(host.querySelector("b")).toBeNull();
+    const flyout = host.querySelector<HTMLElement>(".hub-flyout")!;
+    expect(flyout.hidden).toBe(true);
     click("<b>Worker</b> · 7 mentions");
-    const selected = host.querySelector(
-        '[aria-label="Selected knowledge item sources"]',
-    )!;
-    selected.querySelector<HTMLButtonElement>(".knowledge-item-title")!.click();
+    expect(flyout.hidden).toBe(false);
+    expect(flyout.querySelector("h2")!.textContent).toBe("<b>Worker</b>");
+    flyout
+        .querySelector<HTMLButtonElement>(
+            '[aria-label="Selected knowledge item sources"] .knowledge-item-title',
+        )!
+        .click();
     expect(onSource).toHaveBeenCalledWith("a", "same");
+    expect(flyout.hidden).toBe(true);
     click("Queue · 5 mentions");
-    selected.querySelector<HTMLButtonElement>(".knowledge-item-title")!.click();
+    flyout
+        .querySelector<HTMLButtonElement>(
+            '[aria-label="Selected knowledge item sources"] .knowledge-item-title',
+        )!
+        .click();
     expect(onSource).toHaveBeenLastCalledWith("b", "same");
-    expect(host.textContent).toContain("They do not use the corpus selector");
-    expect(host.textContent).toContain("TypeAgent Browser Memory");
-    expect(host.querySelector("a")!.hash).toBe("#/explore/web/analytics");
+    expect(host.querySelector("a")).toBeNull();
 });
 
 test("bounded previews retain real totals and cached navigation avoids refetch", async () => {
@@ -143,7 +151,12 @@ test("View all browses the complete selected scope rather than expanding a graph
         query: "",
         sort: "mentions",
     });
-    expect(host.textContent).toContain("6000 matching items");
+    const flyout = host.querySelector<HTMLElement>(".hub-flyout")!;
+    expect(flyout.hidden).toBe(false);
+    expect(flyout.textContent).toContain("6000 matching items");
+    expect(flyout.querySelector("h2")!.textContent).toBe("Derived entities");
+    flyout.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click();
+    expect(flyout.hidden).toBe(true);
     expect(host.querySelector("svg")).toBeNull();
 });
 

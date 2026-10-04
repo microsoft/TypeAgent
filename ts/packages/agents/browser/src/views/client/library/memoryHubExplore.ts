@@ -7,11 +7,13 @@ import type {
     MemoryHubKnowledgeItem,
     MemoryHubKnowledgeKind,
 } from "@typeagent/browser-control-rpc/viewRpc";
+import { iconButton, watchSlowRequest } from "./memoryHubUi";
 import { invokeView } from "./viewClient";
 import {
     mountKnowledgeCollection,
     KNOWLEDGE_PREVIEW_SIZE,
 } from "./memoryKnowledgeCollection";
+import { mountFlyout, type FlyoutView } from "./memoryHubFlyout";
 import "./memoryHubPhase2.css";
 
 export type MemoryHubExploreOptions = {
@@ -27,12 +29,6 @@ function text<K extends keyof HTMLElementTagNameMap>(
     const value = document.createElement(tag);
     if (content !== undefined) value.textContent = content;
     if (className) value.className = className;
-    return value;
-}
-function button(label: string, action: () => void) {
-    const value = text("button", label);
-    value.type = "button";
-    value.addEventListener("click", action);
     return value;
 }
 export function mountMemoryHubExplore(
@@ -52,43 +48,16 @@ export function mountMemoryHubExplore(
     warning.hidden = true;
     warning.setAttribute("role", "status");
     const counts = text("div", undefined, "phase2-counts");
-    const selected = text("section");
-    selected.setAttribute("aria-label", "Selected knowledge item sources");
+    const note = text("div");
+    const flyout = mountFlyout(host, "Knowledge detail");
     const lists = text("div", undefined, "phase2-lists");
-    const lens = text("section");
-    const link = text("a", "Open browser reading analytics");
-    link.href = "#/explore/web/analytics";
-    lens.append(
-        text("h3", "Browser web lens"),
-        text(
-            "p",
-            "Entity graph, Topic graph and Reading analytics are separate views fixed to TypeAgent Browser Memory. They do not use the corpus selector.",
-        ),
-        link,
-    );
-    root.append(
-        text("h3", "Corpus overview"),
-        text(
-            "p",
-            "Counts cover responding corpora in the selected scope. Cards preview derived knowledge and contributing sources. View all to browse, filter and page the full collection.",
-        ),
-        controls,
-        status,
-        warning,
-        counts,
-        selected,
-        lists,
-        lens,
-    );
+    root.append(controls, status, warning, counts, note, lists);
     host.append(root);
     let cached: MemoryHubExploreResult | undefined;
     let version = 0;
     let disposed = false;
     let loading = false;
     let collections: ReturnType<typeof mountKnowledgeCollection>[] = [];
-    let selectedCollection:
-        | ReturnType<typeof mountKnowledgeCollection>
-        | undefined;
 
     function sourceItems(
         sources: MemoryHubGraphSource[],
@@ -116,16 +85,66 @@ export function mountMemoryHubExplore(
         const source = item.sources[0];
         if (!source)
             throw new Error("Contributing source identity is unavailable.");
+        flyout.close();
         options.onOpenSource(source.corpusId, source.sourceId);
     }
     function selectKnowledgeItem(value: MemoryHubKnowledgeItem) {
-        selectedCollection?.dispose();
-        selected.replaceChildren(text("h3", value.title));
-        selectedCollection = mountKnowledgeCollection(selected, {
-            title: "Selected item contributing sources",
-            items: sourceItems(value.sources),
-            onSelect: openSource,
-            onError: options.onError,
+        flyout.push(itemView(value));
+    }
+    function itemView(value: MemoryHubKnowledgeItem): FlyoutView {
+        return {
+            title: value.title,
+            render(body) {
+                const details = [
+                    value.subtitle,
+                    value.mentions === undefined
+                        ? undefined
+                        : `${value.mentions} mention${value.mentions === 1 ? "" : "s"}`,
+                ].filter(Boolean);
+                if (details.length)
+                    body.append(text("p", details.join(" · "), "phase2-text"));
+                const section = text("section");
+                section.setAttribute(
+                    "aria-label",
+                    "Selected knowledge item sources",
+                );
+                body.append(section);
+                const sources = mountKnowledgeCollection(section, {
+                    title: "Contributing sources",
+                    items: sourceItems(value.sources),
+                    onSelect: openSource,
+                    onError: options.onError,
+                });
+                return () => sources.dispose();
+            },
+        };
+    }
+    function viewAll(
+        title: string,
+        items: MemoryHubKnowledgeItem[],
+        total: number,
+        kind: MemoryHubKnowledgeKind,
+    ) {
+        flyout.open({
+            title,
+            render(body) {
+                const all = mountKnowledgeCollection(body, {
+                    title,
+                    items,
+                    total,
+                    loadPage: (request) =>
+                        invokeView("memoryHubKnowledge", {
+                            ...request,
+                            corpusId: options.scope(),
+                            kind,
+                        }),
+                    onSelect:
+                        kind === "sources" ? openSource : selectKnowledgeItem,
+                    startExpanded: true,
+                    onError: options.onError,
+                });
+                return () => all.dispose();
+            },
         });
     }
     function collection(
@@ -146,18 +165,18 @@ export function mountMemoryHubExplore(
                         kind,
                     }),
                 onSelect: kind === "sources" ? openSource : selectKnowledgeItem,
+                onViewAll: () => viewAll(title, items, total, kind),
                 onError: options.onError,
             }),
         );
     }
     function clearCollections() {
+        flyout.close();
         collections.forEach((value) => value.dispose());
         collections = [];
-        selectedCollection?.dispose();
-        selectedCollection = undefined;
     }
     function renderControls() {
-        const refresh = button("Refresh overview", () => {
+        const refresh = iconButton("fa-rotate", "Refresh overview", () => {
             void load();
         });
         refresh.disabled = loading;
@@ -230,9 +249,9 @@ export function mountMemoryHubExplore(
             data.contributingSourceCount ?? contributors.length,
             "sources",
         );
-        selected.replaceChildren();
+        note.replaceChildren();
         if (!data.entities.length && !data.topics.length)
-            selected.append(
+            note.append(
                 text(
                     "p",
                     errors.length
@@ -248,6 +267,12 @@ export function mountMemoryHubExplore(
         loading = true;
         status.textContent = "Loading corpus overview…";
         renderControls();
+        const stopWatching = watchSlowRequest(status, () => {
+            version++;
+            loading = false;
+            status.textContent = "Overview loading cancelled.";
+            renderControls();
+        });
         try {
             const data = await invokeView("memoryHubExplore", {
                 corpusId: scope,
@@ -273,6 +298,8 @@ export function mountMemoryHubExplore(
             status.textContent = `Explore unavailable: ${error instanceof Error ? error.message : String(error)}`;
             options.onError(error);
             renderControls();
+        } finally {
+            stopWatching();
         }
     }
     renderControls();
@@ -289,16 +316,20 @@ export function mountMemoryHubExplore(
             loading = false;
             counts.replaceChildren();
             lists.replaceChildren();
-            selected.replaceChildren();
+            note.replaceChildren();
             warning.hidden = true;
             status.textContent =
                 "Scope changed. Open Overview to load this corpus.";
             renderControls();
         },
+        hide() {
+            flyout.close();
+        },
         dispose() {
             disposed = true;
             version++;
             clearCollections();
+            flyout.dispose();
             root.remove();
         },
     };

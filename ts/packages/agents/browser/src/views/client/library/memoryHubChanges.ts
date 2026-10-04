@@ -80,22 +80,6 @@ export function mountMemoryHubChanges(
                 options.scope() ? "Selected corpus" : "Corpus-specific change",
             ),
         );
-        const references = [
-            `Receipt: ${receipt.changeId}`,
-            `Corpus ID: ${receipt.corpusId}`,
-            receipt.sourceId
-                ? `Opaque source reference: ${receipt.sourceId}`
-                : "",
-            receipt.previousRevisionId
-                ? `Opaque previous revision reference: ${receipt.previousRevisionId}`
-                : "",
-            receipt.revisionId
-                ? `Opaque revision reference: ${receipt.revisionId}`
-                : "",
-        ].filter(Boolean);
-        row.append(
-            element("p", references.join("\n"), "phase2-inspector phase2-text"),
-        );
         return row;
     }
     function render() {

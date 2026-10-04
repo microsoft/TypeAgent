@@ -23,6 +23,7 @@ import { mountRunbookSynthesis } from "./memoryHubRunbookSynthesis";
 import { createRunbookNavigation } from "./memoryHubRunbookNavigation";
 import {
     rbButton,
+    rbIconButton,
     rbCheck,
     rbError,
     rbField,
@@ -74,7 +75,7 @@ export function mountMemoryHubRunbooks(
     filterForm.append(
         queryLabel,
         rbSelect(
-            "Procedure state (separate from skill state)",
+            "State",
             state,
             ["all", "detected", "draft", "saved", "stale", "archived"],
             (value) => {
@@ -116,10 +117,6 @@ export function mountMemoryHubRunbooks(
     );
     list.append(
         rbNode("h2", "Runbooks", "runbook-list-heading"),
-        rbNode(
-            "p",
-            "Human guides, derived agent editions and linked immutable skills have separate states. Bindings and lifecycle changes never grant execution permission.",
-        ),
         create,
         filterForm,
         listStatus,
@@ -259,19 +256,27 @@ export function mountMemoryHubRunbooks(
                               : "No runbooks match these filters.",
                     ),
                 );
-            const previous = rbButton("Previous runbook page", () => {
-                if (pageIndex > 0) {
-                    pageIndex--;
-                    void loadList();
-                }
-            });
+            const previous = rbIconButton(
+                "fa-chevron-left",
+                "Previous runbook page",
+                () => {
+                    if (pageIndex > 0) {
+                        pageIndex--;
+                        void loadList();
+                    }
+                },
+            );
             previous.disabled = pageIndex === 0;
-            const next = rbButton("Next runbook page", () => {
-                if (page.nextContinuationToken) {
-                    tokens[++pageIndex] = page.nextContinuationToken;
-                    void loadList();
-                }
-            });
+            const next = rbIconButton(
+                "fa-chevron-right",
+                "Next runbook page",
+                () => {
+                    if (page.nextContinuationToken) {
+                        tokens[++pageIndex] = page.nextContinuationToken;
+                        void loadList();
+                    }
+                },
+            );
             next.disabled = !page.nextContinuationToken;
             paging.replaceChildren(
                 previous,
@@ -297,14 +302,10 @@ export function mountMemoryHubRunbooks(
                 "p",
                 `Linked catalog states: ${item.skills.length ? item.skills.map((skill) => skill.state).join(", ") : "no linked revisions returned; see catalog availability notices"}${item.drift.length ? ` · ${item.drift.length} changed binding/source notices` : ""}`,
             ),
-            rbNode(
-                "p",
-                `${item.corpusId} · ${item.objectId} · version ${item.latestVersion ?? "candidate"}`,
-                "runbook-inspector",
-            ),
         );
         return card;
     }
+    filterForm.addEventListener("change", () => filterForm.requestSubmit());
     filterForm.addEventListener("submit", (event) => {
         event.preventDefault();
         appliedFilters = {
@@ -409,7 +410,8 @@ export function mountMemoryHubRunbooks(
         const controls = rbNode("div", undefined, "runbook-controls");
         const previousEntry = navigationCursor.adjacent(-1);
         const nextEntry = navigationCursor.adjacent(1);
-        const previous = rbButton(
+        const previous = rbIconButton(
+            "fa-chevron-up",
             "Previous runbook",
             () => {
                 if (previousEntry)
@@ -421,7 +423,8 @@ export function mountMemoryHubRunbooks(
             "previous-runbook",
         );
         previous.disabled = !previousEntry;
-        const next = rbButton(
+        const next = rbIconButton(
+            "fa-chevron-down",
             "Next runbook",
             () => {
                 if (nextEntry)
@@ -431,16 +434,14 @@ export function mountMemoryHubRunbooks(
         );
         next.disabled = !nextEntry;
         controls.append(
-            rbButton("Back to runbooks", () => {
+            rbIconButton("fa-arrow-left", "Back to runbooks", () => {
                 void show();
             }),
             previous,
             next,
         );
         if (!navigationCursor.hasPosition)
-            controls.append(
-                rbNode("span", "Previous/Next use the loaded list page."),
-            );
+            controls.title = "Previous and Next use the loaded list page.";
         return controls;
     }
     function renderDetail() {
@@ -455,7 +456,7 @@ export function mountMemoryHubRunbooks(
                   : "Saved data loaded. No review, binding or lifecycle change is automatic.",
         );
         detailStatus.setAttribute("role", "status");
-        const tabs = rbNode("div", undefined, "runbook-controls");
+        const tabs = rbNode("div", undefined, "hub-tabs");
         tabs.setAttribute("role", "tablist");
         tabs.setAttribute("aria-label", "Runbook detail views");
         for (const name of [
@@ -679,11 +680,15 @@ export function mountMemoryHubRunbooks(
                     },
                     { multiline: true, name: `human-step-${index + 1}` },
                 ),
-                rbButton(`Remove human step ${index + 1}`, () => {
-                    draft?.document.steps.splice(index, 1);
-                    changed();
-                    renderDetail();
-                }),
+                rbIconButton(
+                    "fa-regular fa-trash-can",
+                    `Remove human step ${index + 1}`,
+                    () => {
+                        draft?.document.steps.splice(index, 1);
+                        changed();
+                        renderDetail();
+                    },
+                ),
             );
         container.append(
             rbButton("Add human step", () => {
@@ -832,7 +837,11 @@ export function mountMemoryHubRunbooks(
             );
     }
     function mutations() {
-        const controls = rbNode("div", undefined, "runbook-controls");
+        const controls = rbNode(
+            "div",
+            undefined,
+            "runbook-controls runbook-actionbar",
+        );
         const save = rbButton(
             "Save runbook version",
             () => {
@@ -840,10 +849,12 @@ export function mountMemoryHubRunbooks(
             },
             "save-runbook",
         );
+        save.classList.add("primary");
         save.disabled = saving;
         controls.append(
             save,
-            rbButton(
+            rbIconButton(
+                "fa-rotate-left",
                 "Reload latest / discard draft",
                 () => {
                     if (activeRequest)
@@ -868,7 +879,8 @@ export function mountMemoryHubRunbooks(
             );
         if (detail?.procedure && detail.procedure.state !== "archived")
             controls.append(
-                rbButton(
+                rbIconButton(
+                    "fa-box-archive",
                     "Archive human how-to",
                     () => {
                         void archive();

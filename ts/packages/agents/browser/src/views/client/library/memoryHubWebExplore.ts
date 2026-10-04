@@ -38,7 +38,7 @@ export function mountMemoryHubWebExplore(
     const root = document.createElement("section");
     root.className = "memory-web-explore";
     root.hidden = true;
-    root.innerHTML = `<header><h2>Web exploration</h2><p>Fixed lens: TypeAgent Browser Memory. These insights and graphs do not follow the Hub's current/all scope.</p>
+    root.innerHTML = `<header>
         <nav aria-label="Web exploration"><button data-view="analytics">Reading analytics</button><button data-view="entities">Entity graph</button><button data-view="topics">Topic graph</button></nav></header>
         <p data-web-error role="alert" hidden></p><div data-web-content></div>`;
     host.append(root);

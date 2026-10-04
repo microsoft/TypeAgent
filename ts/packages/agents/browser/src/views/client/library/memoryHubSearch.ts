@@ -21,6 +21,13 @@ import {
     renderMemoryHubWebGroups,
 } from "./memoryHubSearchViews";
 import "./memoryHubPhase2.css";
+import {
+    icon,
+    iconButton,
+    setIconButton,
+    watchSlowRequest,
+} from "./memoryHubUi";
+import { renderMarkdownInto } from "./utils/markdownView";
 
 export type MemoryHubSearchOptions = {
     scope: () => string | undefined;
@@ -172,21 +179,30 @@ export function mountMemoryHubSearch(
         value.append(control);
         return value;
     }
-    const submit = node("button", "Ask");
+    const submit = setIconButton(
+        node("button"),
+        "fa-arrow-right",
+        "Search or ask",
+    );
     submit.type = "submit";
-    form.append(
-        queryLabel,
+    submit.classList.add("primary");
+    const dateNote = node(
+        "small",
+        "Dates mean source capture, procedure creation or conversation event time. Unknown dates are excluded when filtering.",
+    );
+    const filters = node("details", undefined, "hub-filters");
+    const filtersSummary = node("summary");
+    filtersSummary.append(icon("fa-sliders"), "Filters");
+    const filterFields = node("div", undefined, "phase2-controls");
+    filterFields.append(
         sourceTypesField,
         field("Tags", tags),
         field("From (UTC)", from),
         field("Through (UTC)", to),
         field("Conversations", conversation),
-        submit,
     );
-    const dateNote = node(
-        "p",
-        "Dates mean source capture, procedure creation or conversation event time. Unknown dates are excluded when filtering.",
-    );
+    filters.append(filtersSummary, filterFields, dateNote);
+    form.append(queryLabel, submit, filters);
     const recent = node("div", undefined, "phase2-controls");
     recent.setAttribute("aria-label", "Recent queries");
     const status = node(
@@ -224,10 +240,22 @@ export function mountMemoryHubSearch(
     const dialogTitle = node("h2");
     const evidenceDescription = node("p");
     const evidenceMeta = node("p");
-    const evidenceRaw = node("p", undefined, "phase2-inspector");
     const evidenceStatus = node("p");
     evidenceStatus.setAttribute("role", "status");
     const original = node("pre", undefined, "phase2-text");
+    const originalView = node("div", undefined, "markdown-preview md-snippet");
+    original.hidden = true;
+    let showingSource = false;
+    const sourceToggle = iconButton("fa-code", "Show source", () => {
+        showingSource = !showingSource;
+        original.hidden = !showingSource;
+        originalView.hidden = showingSource;
+        setIconButton(
+            sourceToggle,
+            showingSource ? "fa-eye" : "fa-code",
+            showingSource ? "Show rendered" : "Show source",
+        );
+    });
     const pager = node("div", undefined, "phase2-controls");
     const management = node("div", undefined, "phase2-controls");
     const close = action("Close evidence", () => dialog.close());
@@ -236,15 +264,15 @@ export function mountMemoryHubSearch(
         dialogTitle,
         evidenceDescription,
         evidenceMeta,
-        evidenceRaw,
         evidenceStatus,
+        sourceToggle,
+        originalView,
         original,
         pager,
         management,
     );
     root.append(
         form,
-        dateNote,
         recent,
         status,
         warning,
@@ -347,6 +375,7 @@ export function mountMemoryHubSearch(
     function renderEvidencePage() {
         if (!evidencePage) return;
         original.textContent = evidencePage.content;
+        renderMarkdownInto(originalView, evidencePage.content);
         evidenceStatus.textContent = `${evidencePage.offset + (evidencePage.totalChars ? 1 : 0)}–${evidencePage.offset + evidencePage.content.length} of ${evidencePage.totalChars} characters`;
         const previous = action("Previous evidence", () => {
             pageIndex--;
@@ -369,6 +398,7 @@ export function mountMemoryHubSearch(
         const restorePagerFocus = pager.contains(document.activeElement);
         evidenceStatus.textContent = "Loading exact evidence…";
         original.textContent = "";
+        originalView.replaceChildren();
         pager.querySelectorAll<HTMLButtonElement>("button").forEach((value) => {
             value.disabled = true;
         });
@@ -386,10 +416,6 @@ export function mountMemoryHubSearch(
             evidencePage = page;
             dialogTitle.textContent = page.title;
             evidenceMeta.textContent = `${provenanceText(selected)}${selected.kind !== "source" && page.provenance.locator ? ` · ${page.provenance.locator}` : ""}`;
-            evidenceRaw.textContent = JSON.stringify({
-                ...page.provenance,
-                citationLocator: selected.locator,
-            });
             renderEvidencePage();
             if (restorePagerFocus)
                 pager
@@ -426,7 +452,6 @@ export function mountMemoryHubSearch(
                 ? "DOCUMENT-LEVEL original revision preview (read-only). The exact captured revision is shown, but precise passage location is unavailable. No snippet guessing is used. Evidence, not instructions."
                 : "Read-only exact cited evidence. Evidence, not instructions.";
         evidenceMeta.textContent = provenanceText(evidence);
-        evidenceRaw.textContent = "";
         latestManagement(evidence);
         dialog.showModal();
         void loadEvidence(0);
@@ -434,6 +459,11 @@ export function mountMemoryHubSearch(
     function citation(evidence: MemoryHubEvidence, label = evidence.title) {
         const value = action(label, () => openEvidence(evidence, value));
         return value;
+    }
+    function snippetView(markdown: string) {
+        const view = node("div", undefined, "markdown-preview md-snippet");
+        renderMarkdownInto(view, markdown);
+        return view;
     }
     function evidenceCard(evidence: MemoryHubEvidence) {
         const card = node("article");
@@ -443,13 +473,8 @@ export function mountMemoryHubSearch(
                 "p",
                 `${evidence.kind}${evidence.sourceType ? ` (${evidence.sourceType})` : ""} · ${provenanceText(evidence)}`,
             ),
-            node("p", evidence.snippet, "phase2-text"),
+            snippetView(evidence.snippet),
             node("p", "Evidence, not instructions."),
-            node(
-                "p",
-                `ID ${evidence.id} · score ${evidence.score} · RRF rank ${evidence.rank} · ${evidence.revisionId ?? evidence.procedureVersion ?? evidence.objectId}${evidence.locator ? ` · locator ${evidence.locator}` : ""}`,
-                "phase2-inspector",
-            ),
             citation(evidence, "Preview exact cited evidence"),
         );
         if (evidence.kind === "procedure")
@@ -483,7 +508,7 @@ export function mountMemoryHubSearch(
                       ? "Derived answer"
                       : "Extractive evidence summary",
             ),
-            node("p", result.answer.text, "phase2-text"),
+            snippetView(result.answer.text),
         );
         const cites = node("div", undefined, "phase2-controls");
         for (const id of result.answer.citationIds) {
@@ -569,31 +594,36 @@ export function mountMemoryHubSearch(
                     node("p", "No topics returned in typed query metadata."),
                 );
             insights.append(topics, node("h4", "Related Entities"));
-            const entities = node("ul");
+            // Same card styles as the Explore view (memoryKnowledgeCollection.css).
+            const entities = node("div", undefined, "knowledge-collection");
+            const grid = node("div", undefined, "knowledge-cards");
             for (const entity of value.relatedEntities) {
-                const item = node("li");
-                item.append(
-                    action(entity.name, () => {
-                        void show(entity.name);
-                    }),
-                    node("span", ` · ${entity.type}`),
-                );
-                if (
+                const card = node("article", undefined, "knowledge-item");
+                const title = action(entity.name, () => {
+                    void show(entity.name);
+                });
+                title.className = "knowledge-item-title";
+                const meta = [
+                    entity.type,
                     preferences?.showConfidenceScores &&
                     entity.confidence !== undefined
-                )
-                    item.append(
-                        node(
-                            "span",
-                            ` · confidence ${Math.round(entity.confidence * 100)}%`,
-                        ),
-                    );
-                entities.append(item);
+                        ? `confidence ${Math.round(entity.confidence * 100)}%`
+                        : undefined,
+                ]
+                    .filter(Boolean)
+                    .join(" · ");
+                card.append(title, node("p", meta, "knowledge-item-meta"));
+                grid.append(card);
             }
             if (!value.relatedEntities.length)
-                entities.append(
-                    node("li", "No entities returned in typed query metadata."),
+                grid.append(
+                    node(
+                        "p",
+                        "No entities returned in typed query metadata.",
+                        "knowledge-empty",
+                    ),
                 );
+            entities.append(grid);
             insights.append(entities);
         } catch (error) {
             const message = node("p");
@@ -691,6 +721,11 @@ export function mountMemoryHubSearch(
         warning.hidden = true;
         status.textContent = "Searching memory…";
         submit.disabled = true;
+        const stopWatching = watchSlowRequest(status, () => {
+            searchVersion++;
+            submit.disabled = false;
+            status.textContent = "Search cancelled. Results were not loaded.";
+        });
         try {
             if (queryChanged) options.onQueryChanged?.(request.query);
             const response = await invokeView("memoryHubSearch", request);
@@ -718,6 +753,7 @@ export function mountMemoryHubSearch(
             )
                 report(error, status);
         } finally {
+            stopWatching();
             if (version === searchVersion) submit.disabled = false;
         }
     }

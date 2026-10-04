@@ -24,6 +24,8 @@ import { mountMemoryHubViewPreferences } from "./memoryHubViewPreferences";
 import { mountMemoryHubWebExplore } from "./memoryHubWebExplore";
 import { notificationManager } from "./knowledgeUtilities";
 import { migrateLegacyMemoryLocation } from "./memoryHubMigration";
+import { mountThemeToggle } from "./memoryHubTheme";
+import { icon, iconButton, menuButton, setIconButton } from "./memoryHubUi";
 import {
     inboxCounts,
     inboxItems,
@@ -42,7 +44,6 @@ function el<T extends HTMLElement = HTMLElement>(id: string): T {
 
 const SCOPE_KEY = "memoryHub.corpus";
 const HIDE_KEY = "memoryHub.hidden";
-const INSPECTOR_KEY = "memoryHub.inspector";
 let scope = localStorage.getItem(SCOPE_KEY) ?? "";
 const hidden = readHidden(localStorage.getItem(HIDE_KEY));
 let snapshot: MemoryHubSnapshot = {
@@ -56,6 +57,7 @@ let snapshotAvailable = false;
 let jobsCountAvailable = true;
 let routeVersion = 0;
 let inboxPage = 0;
+let inboxKind = "";
 let lastHash = location.hash || "#/inbox";
 let reverting = false;
 let focusReturn: { corpusId: string; sourceId: string } | undefined;
@@ -76,6 +78,36 @@ let pendingSearchQuery: string | undefined;
 function invalidateDiscovery(): void {
     searchPanel.scopeChanged();
     explorePanel.scopeChanged();
+}
+
+const PDF_CHIP = "pdf";
+const PDF_URI_PREFIX = "urn:pdf:";
+
+const railPages: HubRoute["page"][] = [
+    "inbox",
+    "library",
+    "runbooks",
+    "explore",
+    "activity",
+    "settings",
+];
+
+function observeStatus(): void {
+    const status = el("hubStatus");
+    const update = () => {
+        const text = status.textContent ?? "";
+        status.dataset.state = /offline|failed/i.test(text)
+            ? "bad"
+            : /degraded|indexing/i.test(text)
+              ? "warn"
+              : "ok";
+    };
+    new MutationObserver(update).observe(status, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+    });
+    update();
 }
 
 function namedScopeAvailable(): boolean {
@@ -238,7 +270,8 @@ function mountPhaseTwo(): void {
     });
     importsPanel = mountMemoryHubImports(el("hubImportHost"), {
         targetLabel: "TypeAgent Browser Memory (fixed)",
-        scope: selectedScope,
+        scope: () =>
+            el<HTMLSelectElement>("addTarget").value || scope || undefined,
         onError,
         onOpenJobs: () => {
             void hubAction(async () => {
@@ -357,66 +390,183 @@ function inboxAction(item: MemoryHubInboxItem): void {
     }
 }
 
+const inboxKinds: Record<
+    MemoryHubInboxItem["kind"],
+    { label: string; chip: string; glyph: string; tone: string }
+> = {
+    candidate: {
+        label: "Discovered how-to",
+        chip: "How-tos",
+        glyph: "fa-lightbulb",
+        tone: "",
+    },
+    staleProcedure: {
+        label: "Stale procedure",
+        chip: "Stale",
+        glyph: "fa-hourglass-half",
+        tone: "warn",
+    },
+    job: {
+        label: "Failed or partial job",
+        chip: "Jobs",
+        glyph: "fa-triangle-exclamation",
+        tone: "bad",
+    },
+    skillDraft: {
+        label: "Skill draft",
+        chip: "Skill drafts",
+        glyph: "fa-rocket",
+        tone: "",
+    },
+    bindingDrift: {
+        label: "Changed tool binding",
+        chip: "Bindings",
+        glyph: "fa-link-slash",
+        tone: "warn",
+    },
+    runbookWarning: {
+        label: "Extraction warning",
+        chip: "Warnings",
+        glyph: "fa-circle-exclamation",
+        tone: "warn",
+    },
+};
+
+function hideInboxItem(item: MemoryHubInboxItem, until?: number): void {
+    hidden[item.id] = {
+        fingerprint: item.fingerprint,
+        ...(until === undefined ? {} : { until }),
+    };
+    persistHidden();
+}
+
 function inboxCard(item: MemoryHubInboxItem, dismissed: boolean): HTMLElement {
+    const kind = inboxKinds[item.kind];
     const card = document.createElement("article");
     card.className = "inbox-card";
+    const badge = document.createElement("div");
+    badge.className = `inbox-icon ${kind.tone}`.trim();
+    badge.append(icon(kind.glyph));
+    const body = document.createElement("div");
+    body.className = "inbox-body";
     const heading = document.createElement("h3");
     heading.textContent = item.title;
     const reason = document.createElement("p");
-    reason.textContent = `${item.corpusName} · ${item.kind} · ${item.reason} · ${new Date(item.updatedAt).toLocaleString()}`;
-    const ids = document.createElement("small");
-    ids.className = "inspector-detail";
-    ids.textContent = `${item.id} · ${item.fingerprint}`;
+    reason.textContent = `${kind.label} · ${item.corpusName} · ${item.reason} · ${new Date(item.updatedAt).toLocaleString()}`;
+    body.append(heading, reason);
     const actions = document.createElement("div");
-    actions.className = "hub-controls";
-    actions.append(
-        button(item.kind === "job" ? "Open job" : "Review", () =>
-            inboxAction(item),
-        ),
+    actions.className = "hub-row-actions";
+    const primary = button(item.kind === "job" ? "Open job" : "Review", () =>
+        inboxAction(item),
     );
+    primary.classList.add("primary");
+    actions.append(primary);
     if (dismissed) {
         actions.append(
-            button("Restore", () => {
+            iconButton("fa-rotate-left", "Restore", () => {
                 delete hidden[item.id];
                 persistHidden();
             }),
         );
     } else {
-        if (item.kind === "candidate") {
-            actions.append(
-                button("Reject", () => {
-                    void hubAction(async () => {
-                        if (
-                            !confirm(
-                                `Reject "${item.title}" in ${item.corpusName}?`,
-                            )
-                        )
-                            return;
-                        await invokeMemory("memoryRejectProcedureCandidate", {
-                            corpusId: item.corpusId,
-                            candidateId: item.objectId,
-                        });
-                        await refreshSnapshot();
-                    });
-                }),
-            );
-        }
+        const more = [
+            ...(item.kind === "candidate"
+                ? [
+                      {
+                          label: "Reject",
+                          icon: "fa-thumbs-down",
+                          danger: true,
+                          action: () => {
+                              void hubAction(async () => {
+                                  if (
+                                      !confirm(
+                                          `Reject "${item.title}" in ${item.corpusName}?`,
+                                      )
+                                  )
+                                      return;
+                                  await invokeMemory(
+                                      "memoryRejectProcedureCandidate",
+                                      {
+                                          corpusId: item.corpusId,
+                                          candidateId: item.objectId,
+                                      },
+                                  );
+                                  await refreshSnapshot();
+                              });
+                          },
+                      },
+                  ]
+                : []),
+            {
+                label: "Snooze 1 day",
+                icon: "fa-bell-slash",
+                action: () => hideInboxItem(item, Date.now() + 86_400_000),
+            },
+        ];
         actions.append(
-            button("Dismiss", () => {
-                hidden[item.id] = { fingerprint: item.fingerprint };
-                persistHidden();
-            }),
-            button("Snooze 1 day", () => {
-                hidden[item.id] = {
-                    fingerprint: item.fingerprint,
-                    until: Date.now() + 86_400_000,
-                };
-                persistHidden();
-            }),
+            menuButton("More actions", more),
+            iconButton("fa-xmark", "Dismiss", () => hideInboxItem(item)),
         );
     }
-    card.append(heading, reason, ids, actions);
+    card.append(badge, body, actions);
     return card;
+}
+
+function inboxEmpty(
+    dismissed: boolean,
+    unavailable: boolean,
+    degraded: boolean,
+): HTMLElement {
+    const empty = document.createElement("div");
+    empty.className = "hub-empty";
+    const title = document.createElement("h3");
+    const message = document.createElement("p");
+    if (unavailable) {
+        empty.append(icon("fa-plug-circle-exclamation"));
+        title.textContent = "Inbox unavailable";
+        message.textContent =
+            "Inbox is unavailable for this scope. Refresh or choose another corpus.";
+    } else if (degraded) {
+        empty.append(icon("fa-triangle-exclamation"));
+        title.textContent = "Nothing to show yet";
+        message.textContent =
+            "No matching items in available results. Some corpora could not be loaded.";
+    } else if (dismissed) {
+        empty.append(icon("fa-regular fa-bell-slash"));
+        title.textContent = "No dismissed items";
+        message.textContent = "Dismissed and snoozed items appear here.";
+    } else {
+        empty.append(icon("fa-regular fa-circle-check"));
+        title.textContent = "You're all caught up";
+        message.textContent = "Nothing needs your attention.";
+    }
+    empty.append(title, message);
+    return empty;
+}
+
+function renderInboxChips(available: MemoryHubInboxItem[]): void {
+    const host = el("inboxChips");
+    const kinds = Array.from(new Set(available.map((item) => item.kind)));
+    host.hidden = kinds.length < 2;
+    const entries: Array<[string, string, number]> = [
+        ["", "All", available.length],
+        ...kinds.map((value): [string, string, number] => [
+            value,
+            inboxKinds[value].chip,
+            available.filter((item) => item.kind === value).length,
+        ]),
+    ];
+    host.replaceChildren(
+        ...entries.map(([value, label, count]) => {
+            const chip = button(`${label} ${count}`, () => {
+                inboxKind = value;
+                inboxPage = 0;
+                renderInbox();
+            });
+            chip.setAttribute("aria-pressed", String(value === inboxKind));
+            return chip;
+        }),
+    );
 }
 
 function renderInbox(): void {
@@ -424,31 +574,31 @@ function renderInbox(): void {
     el("inboxBadge").textContent = snapshotAvailable
         ? String(counts.inbox)
         : "—";
+    el("inboxBadge").dataset.count = String(counts.inbox);
     el("activityBadge").textContent =
         snapshotAvailable && jobsCountAvailable
             ? String(counts.failedJobs)
             : "?";
-    const dismissed = el<HTMLInputElement>("inboxDismissed").checked;
+    el("activityBadge").dataset.count = String(counts.failedJobs);
+    el("inboxSummary").textContent =
+        snapshotAvailable && counts.inbox ? `${counts.inbox} need you` : "";
+    const dismissedBox = el<HTMLInputElement>("inboxDismissed");
+    const dismissed = dismissedBox.checked;
     const available = inboxItems(snapshot.inbox, hidden, {
         corpusId: scope || undefined,
         dismissed,
     });
-    for (const option of el<HTMLSelectElement>("inboxKind").options) {
-        const label = {
-            "": "All",
-            candidate: "Discovered how-tos",
-            staleProcedure: "Stale procedures",
-            job: "Failed / partial jobs",
-            skillDraft: "Skill drafts",
-            bindingDrift: "Changed tool bindings",
-            runbookWarning: "Runbook extraction warnings",
-        }[option.value as "" | MemoryHubInboxItem["kind"]];
-        option.textContent = `${label} (${available.filter((item) => !option.value || item.kind === option.value).length})`;
-    }
+    if (inboxKind && !available.some((item) => item.kind === inboxKind))
+        inboxKind = "";
+    renderInboxChips(available);
+    const hiddenCount = inboxItems(snapshot.inbox, hidden, {
+        corpusId: scope || undefined,
+        dismissed: true,
+    }).length;
+    dismissedBox.parentElement!.hidden = !hiddenCount && !dismissed;
     const items = inboxItems(snapshot.inbox, hidden, {
         corpusId: scope || undefined,
-        kind: el<HTMLSelectElement>("inboxKind").value,
-        group: el<HTMLSelectElement>("inboxGroup").value,
+        kind: inboxKind,
         dismissed,
     });
     inboxPage = Math.min(
@@ -461,27 +611,18 @@ function renderInbox(): void {
             .slice(inboxPage * 25, (inboxPage + 1) * 25)
             .map((item) => inboxCard(item, dismissed)),
     );
-    if (!items.length) {
-        const message = document.createElement("p");
-        message.textContent =
-            !snapshotAvailable || (scope && !namedScopeAvailable())
-                ? "Inbox is unavailable for this scope. Refresh or choose another corpus."
-                : snapshot.errors.length
-                  ? "No matching items in available results. Some corpora could not be loaded."
-                  : dismissed
-                    ? "No dismissed or snoozed items."
-                    : "Nothing needs your attention.";
-        const actions = document.createElement("div");
-        actions.className = "hub-controls";
-        actions.append(
-            button("Add to memory", () =>
-                el<HTMLDialogElement>("hubAddDialog").showModal(),
+    if (!items.length)
+        list.append(
+            inboxEmpty(
+                dismissed,
+                !snapshotAvailable || !!(scope && !namedScopeAvailable()),
+                snapshot.errors.length > 0,
             ),
-            button("Ask", () => open({ page: "search" })),
-            button("Open Runbooks", () => open({ page: "runbooks" })),
         );
-        list.append(message, actions);
-    }
+    el("inboxFilters").hidden =
+        el("inboxChips").hidden && dismissedBox.parentElement!.hidden;
+    const pager = el("inboxPage").parentElement!;
+    pager.hidden = items.length <= 25;
     el("inboxPage").textContent =
         `Page ${inboxPage + 1} · ${items.length} items`;
     el<HTMLButtonElement>("inboxPrevious").disabled = inboxPage === 0;
@@ -561,8 +702,31 @@ async function refreshSnapshot(): Promise<void> {
         select.append(unavailable);
     }
     select.value = scope;
+    renderAddTargets();
     renderInbox();
     renderErrors();
+}
+
+function renderAddTargets(): void {
+    const target = el<HTMLSelectElement>("addTarget");
+    const previous = target.value;
+    target.replaceChildren();
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Choose a corpus";
+    target.append(placeholder);
+    for (const corpus of snapshot.corpora) {
+        const option = document.createElement("option");
+        option.value = corpus.corpusId;
+        option.textContent = corpus.name;
+        target.append(option);
+    }
+    const preferred = [scope, previous].find((id) =>
+        snapshot.corpora.some((corpus) => corpus.corpusId === id),
+    );
+    target.value =
+        preferred ??
+        (snapshot.corpora.length === 1 ? snapshot.corpora[0].corpusId : "");
 }
 
 function move(selector: string, destination: string): HTMLElement {
@@ -606,10 +770,12 @@ async function loadManagement(): Promise<void> {
     knowledge.querySelector("h2")!.textContent = "Derived knowledge";
     move(".jobs-panel", "hubActivity");
     move(".activity-panel", "hubActivity");
-    const activityNotice = document.createElement("p");
-    activityNotice.textContent =
-        "Web activity is browser-wide. The existing activity API supports these six filters and linked-source filtering, not corpus scoping.";
-    document.querySelector(".activity-panel")!.prepend(activityNotice);
+    const browserWide = document.createElement("span");
+    browserWide.className = "hub-chip warn";
+    browserWide.textContent = "Browser-wide";
+    browserWide.title =
+        "Web activity is browser-wide. The activity API supports these filters and linked-source filtering, not corpus scoping.";
+    document.querySelector(".activity-panel h2")!.after(browserWide);
     const settings = move(".howto-settings", "hubRunbooks");
     const corpusSettings = document.createElement("section");
     corpusSettings.className = "card howto-settings";
@@ -626,21 +792,43 @@ async function loadManagement(): Promise<void> {
     template.append(settings);
     el("hubSettings").append(el("reindexCorpusButton"));
     el("hubMain").prepend(el("errorBanner"));
-    const typeLabel = document.createElement("label");
-    typeLabel.textContent = "Source type";
     const typeSelect = document.createElement("select");
     typeSelect.id = "hubSourceType";
-    for (const type of ["", "web", "markdown", "text", "html", "vtt"]) {
-        const option = document.createElement("option");
-        option.value = type;
-        option.textContent = type || "All types";
-        typeSelect.append(option);
+    typeSelect.hidden = true;
+    const typeChips = document.createElement("div");
+    typeChips.className = "hub-chips hub-source-types";
+    typeChips.setAttribute("role", "group");
+    typeChips.setAttribute("aria-label", "Source type");
+    for (const [type, label] of [
+        ["", "All"],
+        ["web", "Web"],
+        ["markdown", "Markdown"],
+        ["text", "Text"],
+        ["html", "HTML"],
+        ["vtt", "Transcript"],
+        [PDF_CHIP, "PDF"],
+    ]) {
+        if (type !== PDF_CHIP) {
+            const option = document.createElement("option");
+            option.value = type;
+            option.textContent = type || "All types";
+            typeSelect.append(option);
+        }
+        const chip = button(label, () => {
+            typeSelect.value = type === PDF_CHIP ? "" : type;
+            // PDF imports are Markdown sources with a urn:pdf: identity.
+            const filter = el<HTMLInputElement>("sourceFilter");
+            if (type === PDF_CHIP) filter.value = PDF_URI_PREFIX;
+            else if (filter.value === PDF_URI_PREFIX) filter.value = "";
+            for (const other of typeChips.querySelectorAll("button"))
+                other.setAttribute("aria-pressed", String(other === chip));
+            el("applySourceFilter").click();
+        });
+        chip.setAttribute("aria-pressed", String(type === ""));
+        typeChips.append(chip);
     }
-    typeLabel.append(typeSelect);
-    el("hubSources").prepend(typeLabel);
-    typeSelect.addEventListener("change", () =>
-        el("applySourceFilter").click(),
-    );
+    el("hubSources").prepend(typeChips, typeSelect);
+    iconifyManagement();
     manager = mountMemoryManagement({
         scope: () => scope || undefined,
         async sources(params) {
@@ -698,6 +886,214 @@ async function loadManagement(): Promise<void> {
                 throw new Error("Select a named corpus before reindexing.");
             });
     });
+}
+
+function restyleActivityPanel(): void {
+    const panel = document.querySelector<HTMLElement>(".activity-panel")!;
+    const filters = panel.querySelector<HTMLElement>(".activity-filters")!;
+    const actions = panel.querySelector<HTMLElement>(".activity-actions")!;
+    const details = document.createElement("details");
+    details.className = "hub-filters";
+    const summary = document.createElement("summary");
+    summary.append(icon("fa-sliders"), "Filters");
+    details.append(
+        summary,
+        filters,
+        el("applyActivityFilter"),
+        el("showSourceActivity"),
+    );
+    actions.before(details);
+    actions.hidden = true;
+    panel.querySelector(".section-heading")!.append(
+        menuButton(
+            "More activity actions",
+            [
+                {
+                    label: "Delete matching events…",
+                    icon: "fa-regular fa-trash-can",
+                    danger: true,
+                    action: () => el("forgetActivity").click(),
+                },
+            ],
+            "fa-ellipsis-vertical",
+        ),
+    );
+}
+
+function mountPageTabs(
+    pageId: string,
+    attribute: string,
+    label: string,
+    tabs: ReadonlyArray<readonly [string, string]>,
+): void {
+    const page = el(pageId);
+    const nav = document.createElement("nav");
+    nav.className = "hub-tabs";
+    nav.setAttribute("role", "tablist");
+    nav.setAttribute("aria-label", label);
+    const select = (name: string) => {
+        page.dataset[attribute] = name;
+        for (const tab of nav.querySelectorAll("button"))
+            tab.setAttribute(
+                "aria-selected",
+                String(tab.dataset.pageTab === name),
+            );
+    };
+    for (const [name, text] of tabs) {
+        const tab = button(text, () => select(name));
+        tab.setAttribute("role", "tab");
+        tab.dataset.pageTab = name;
+        nav.append(tab);
+    }
+    page.querySelector(".hub-page-head")!.after(nav);
+    select(tabs[0][0]);
+}
+
+function mountPageTabSets(): void {
+    mountPageTabs("page-activity", "activityTab", "Activity views", [
+        ["jobs", "Jobs"],
+        ["web", "Web history"],
+        ["changes", "Changes"],
+    ]);
+    mountPageTabs("page-settings", "settingsTab", "Settings groups", [
+        ["corpus", "Corpus"],
+        ["runbooks", "Runbook import"],
+        ["graph", "Browser graph"],
+        ["view", "View"],
+    ]);
+}
+
+function mountSettingsBar(): void {
+    const page = el("page-settings");
+    const group = el("hubSettings");
+    const bar = document.createElement("div");
+    bar.className = "hub-savebar";
+    const save = button("Save changes", () => target().save?.click());
+    save.classList.add("primary");
+    const discard = iconButton("fa-rotate-left", "Discard changes", () =>
+        target().reload?.click(),
+    );
+    const hint = document.createElement("span");
+    hint.className = "hub-hint";
+    bar.append(save, discard, hint);
+    page.append(bar);
+
+    function byText(root: ParentNode, prefix: string) {
+        return Array.from(root.querySelectorAll("button")).find((node) =>
+            node.textContent?.trim().startsWith(prefix),
+        );
+    }
+    function target(): {
+        save?: HTMLButtonElement;
+        reload?: HTMLButtonElement;
+    } {
+        switch (page.dataset.settingsTab) {
+            case "corpus":
+                return { save: el<HTMLButtonElement>("saveHowToSettings") };
+            case "runbooks": {
+                const form = group.querySelector("form.card");
+                return form
+                    ? {
+                          save: byText(form, "Save runbook preferences"),
+                          reload: byText(form, "Reload saved preferences"),
+                      }
+                    : {};
+            }
+            case "view": {
+                const view = group.querySelector(".memory-view-preferences");
+                return view
+                    ? {
+                          save: byText(view, "Save view preferences"),
+                          reload: byText(view, "Reload saved view"),
+                      }
+                    : {};
+            }
+            default:
+                return {};
+        }
+    }
+    function sync(): void {
+        const { save: saveButton, reload } = target();
+        bar.hidden = !saveButton;
+        for (const node of [
+            el("saveHowToSettings"),
+            ...group.querySelectorAll<HTMLButtonElement>(
+                "form.card button, .memory-view-preferences button",
+            ),
+        ]) {
+            const owned =
+                node === saveButton ||
+                node === reload ||
+                /^(Save|Reload)/.test(node.textContent?.trim() ?? "");
+            if (owned) node.classList.add("hub-bar-hidden");
+        }
+        const saveDisabled = !saveButton || saveButton.disabled;
+        save.disabled = saveDisabled;
+        discard.hidden = !reload;
+        discard.disabled = !reload || reload.disabled;
+        hint.textContent = saveDisabled
+            ? "No unsaved changes"
+            : "You have unsaved changes";
+    }
+    const observer = new MutationObserver(sync);
+    observer.observe(group, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ["disabled"],
+    });
+    observer.observe(page, {
+        attributes: true,
+        attributeFilter: ["data-settings-tab"],
+    });
+    sync();
+}
+
+function iconifyManagement(): void {
+    restyleActivityPanel();
+    for (const [id, glyph, label] of [
+        ["refreshButton", "fa-rotate", "Refresh corpus"],
+        ["refreshJobsButton", "fa-rotate", "Refresh jobs"],
+        ["sourcePrevious", "fa-chevron-left", "Previous sources"],
+        ["sourceNext", "fa-chevron-right", "Next sources"],
+        ["jobPrevious", "fa-chevron-left", "Previous jobs"],
+        ["jobNext", "fa-chevron-right", "Next jobs"],
+        ["activityPrevious", "fa-chevron-left", "Previous events"],
+        ["activityNext", "fa-chevron-right", "Next events"],
+        ["contentPrevious", "fa-chevron-left", "Previous content"],
+        ["contentNext", "fa-chevron-right", "Next content"],
+    ] as const)
+        setIconButton(el<HTMLButtonElement>(id), glyph, label);
+    const filter = el<HTMLInputElement>("sourceFilter");
+    filter.placeholder = "Filter by title, URL or tag";
+    let timer: number | undefined;
+    filter.addEventListener("input", () => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => el("applySourceFilter").click(), 300);
+    });
+    el("applySourceFilter").hidden = true;
+    const detailActions = el("reindexSourceButton").parentElement!;
+    detailActions.hidden = true;
+    const heading = detailActions.parentElement!;
+    heading.append(
+        menuButton("More source actions", [
+            {
+                label: "Reindex source",
+                icon: "fa-rotate",
+                disabled: () =>
+                    el<HTMLButtonElement>("reindexSourceButton").disabled,
+                action: () => el("reindexSourceButton").click(),
+            },
+            {
+                label: "Forget source…",
+                icon: "fa-regular fa-trash-can",
+                danger: true,
+                disabled: () =>
+                    el<HTMLButtonElement>("forgetSourceButton").disabled,
+                action: () => el("forgetSourceButton").click(),
+            },
+        ]),
+    );
 }
 
 async function showTab(name: string): Promise<void> {
@@ -802,9 +1198,26 @@ function updateExploreNavigation(view: HubRoute["webView"]): void {
     }
 }
 
+function updateExploreScope(
+    route: HubRoute,
+    visiblePage: (typeof pages)[number],
+): void {
+    if (visiblePage !== "explore") return;
+    const badge = el("exploreScopeBadge");
+    const browserOnly = !!route.webView;
+    badge.classList.toggle("warn", browserOnly);
+    badge.title = browserOnly
+        ? "This view always reads TypeAgent Browser Memory and ignores the scope selector."
+        : "";
+    badge.textContent = browserOnly
+        ? "Browser memory only"
+        : `Scope: ${snapshot.corpora.find((corpus) => corpus.corpusId === scope)?.name ?? "All memory"}`;
+}
+
 function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     if (visiblePage !== "settings") webMaintenancePanel.hide();
     if (visiblePage !== "explore" || !route.webView) webExplorePanel.hide();
+    if (visiblePage !== "explore" || route.webView) explorePanel.hide();
     el("hubExplore").hidden = !!route.webView;
     updateExploreNavigation(route.webView);
     if (visiblePage === "activity") runbookImportsPanel.showActivity();
@@ -818,11 +1231,11 @@ function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
             link.setAttribute("aria-current", "page");
         else link.removeAttribute("aria-current");
     }
+    updateExploreScope(route, visiblePage);
     el("hubDrawer").classList.add("hidden");
     el("hubActivity").append(
         document.querySelector<HTMLElement>(".activity-panel")!,
     );
-    el<HTMLButtonElement>("addMarkdown").disabled = !namedScopeAvailable();
     el<HTMLButtonElement>("reindexCorpusButton").disabled =
         !namedScopeAvailable();
 }
@@ -959,6 +1372,7 @@ async function showManagedRoute(
         await showTab("content");
         el("drawerClose").focus();
     } else if (route.page === "activity" && route.objectId) {
+        el("page-activity").dataset.activityTab = "jobs";
         await showJob(corpusId, route.objectId, version);
     } else {
         document.getElementById("hubJobDetail")?.remove();
@@ -1099,16 +1513,14 @@ export async function mountMemoryHub(): Promise<void> {
         localStorage.getItem("memoryHub.ask") ??
         "";
     el<HTMLInputElement>("hubAsk").value = query;
-    const inspector = el<HTMLInputElement>("hubInspector");
-    inspector.checked = localStorage.getItem(INSPECTOR_KEY) === "true";
-    document.body.classList.toggle("inspector", inspector.checked);
-    inspector.addEventListener("change", () => {
-        localStorage.setItem(INSPECTOR_KEY, String(inspector.checked));
-        document.body.classList.toggle("inspector", inspector.checked);
+    mountThemeToggle(el("hubTheme"));
+    observeStatus();
+    mountPageTabSets();
+    mountSettingsBar();
+    el("hubAdd").addEventListener("click", () => {
+        renderAddTargets();
+        el<HTMLDialogElement>("hubAddDialog").showModal();
     });
-    el("hubAdd").addEventListener("click", () =>
-        el<HTMLDialogElement>("hubAddDialog").showModal(),
-    );
     el("addClose").addEventListener("click", () =>
         el<HTMLDialogElement>("hubAddDialog").close(),
     );
@@ -1120,11 +1532,12 @@ export async function mountMemoryHub(): Promise<void> {
             void hubAction(async () => {
                 if (!discardChanges()) return;
                 if (id === "addMarkdown") {
-                    if (!scope)
+                    const target = el<HTMLSelectElement>("addTarget").value;
+                    if (!target)
                         throw new Error(
-                            "Select a named corpus before importing Markdown.",
+                            "Choose a corpus in Add to before importing Markdown.",
                         );
-                    await manager.selectCorpus(scope);
+                    await manager.selectCorpus(target);
                 }
                 el<HTMLDialogElement>("hubAddDialog").close();
                 el<HTMLDialogElement>(target).showModal();
@@ -1156,12 +1569,10 @@ export async function mountMemoryHub(): Promise<void> {
         location.hash = routeHash({ page: route.page });
         void hubAction(applyRoute);
     });
-    for (const id of ["inboxKind", "inboxGroup", "inboxDismissed"]) {
-        el(id).addEventListener("change", () => {
-            inboxPage = 0;
-            renderInbox();
-        });
-    }
+    el("inboxDismissed").addEventListener("change", () => {
+        inboxPage = 0;
+        renderInbox();
+    });
     el("inboxPrevious").addEventListener("click", () => {
         inboxPage--;
         renderInbox();
@@ -1249,9 +1660,9 @@ export async function mountMemoryHub(): Promise<void> {
             !document.querySelector("dialog[open]")
         )
             el("drawerClose").click();
-        if (event.altKey && /^[1-7]$/.test(event.key)) {
+        if (event.altKey && /^[1-6]$/.test(event.key)) {
             event.preventDefault();
-            open({ page: pages[Number(event.key) - 1] });
+            open({ page: railPages[Number(event.key) - 1] });
         }
     });
     const refreshTimer = window.setInterval(() => {

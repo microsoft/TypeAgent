@@ -255,7 +255,9 @@ describe("Runbook workspace", () => {
     }
     function click(text: string) {
         const value = [...host.querySelectorAll("button")].find(
-            (item) => item.textContent === text,
+            (item) =>
+                item.textContent === text ||
+                item.getAttribute("aria-label") === text,
         );
         if (!value) throw new Error(`Missing button ${text}`);
         value.click();
@@ -623,9 +625,7 @@ describe("Runbook workspace", () => {
         });
         expect(onChanged).toHaveBeenCalled();
         expect(document.activeElement).toBe(button("bind-stable-step"));
-        expect(host.textContent).toContain(
-            '"serverId":"server","targetId":"tool"',
-        );
+        expect(host.textContent).toContain("Binding: mcp");
         expect(host.textContent).toContain("Unreviewed draft");
         expect(mockView.mock.calls.map(([method]) => method)).not.toContain(
             "memoryHubSaveRunbook",
@@ -936,7 +936,8 @@ describe("Runbook workspace", () => {
         );
         expect(host.querySelector('[name="save-runbook"]')).toBeNull();
         click("Original");
-        expect(host.textContent).toContain("historical-revision");
+        expect(host.textContent).toContain("Source text. Unreviewed evidence");
+        expect(host.textContent).not.toContain("historical-revision");
     });
     test("stale comparison is three-column, marks affected steps/missing source and never overwrites the draft or publishes", async () => {
         const stale = procedure();

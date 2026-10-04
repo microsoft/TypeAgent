@@ -4,6 +4,7 @@
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
 import type { ProcedureDocument } from "@typeagent/memory-service";
+import { setIconButton } from "./memoryHubUi";
 
 export function rbNode<K extends keyof HTMLElementTagNameMap>(
     tag: K,
@@ -21,6 +22,14 @@ export function rbButton(text: string, handler: () => void, name?: string) {
     if (name) value.name = name;
     value.addEventListener("click", handler);
     return value;
+}
+export function rbIconButton(
+    glyph: string,
+    label: string,
+    handler: () => void,
+    name?: string,
+) {
+    return setIconButton(rbButton("", handler, name), glyph, label);
 }
 export function rbField(
     label: string,
@@ -112,12 +121,13 @@ export function rbMarkdown(value: string) {
     for (const heading of container.querySelectorAll("h2")) {
         if (!["Sources", "Agent Edition"].includes(heading.textContent ?? ""))
             continue;
-        heading.classList.add("runbook-inspector");
         let sibling = heading.nextElementSibling;
         while (sibling && sibling.tagName !== "H2") {
-            sibling.classList.add("runbook-inspector");
-            sibling = sibling.nextElementSibling;
+            const next: Element | null = sibling.nextElementSibling;
+            sibling.remove();
+            sibling = next;
         }
+        heading.remove();
     }
     return container;
 }
@@ -178,11 +188,6 @@ export function rbReadOnlyEdition(document: ProcedureDocument) {
     root.append(
         rbNode("p", `Overall verification: ${edition.verification.join("; ")}`),
         rbNode("p", `Overall rollback: ${edition.rollback.join("; ")}`),
-        rbNode(
-            "pre",
-            JSON.stringify(edition, undefined, 2),
-            "runbook-inspector",
-        ),
     );
     return root;
 }

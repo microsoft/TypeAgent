@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import "./memoryHubRunbookImports.css";
+import { iconButton } from "./memoryHubUi";
 import { invokeView } from "./viewClient";
 import {
     runbookImportLimits,
@@ -368,29 +369,32 @@ export function mountMemoryHubRunbookImports(
         },
         "runbook-import-start",
     );
-    const close = button(
-        "Close dialog",
+    const close = iconButton(
+        "fa-xmark",
+        "Close",
         () => dialog.close(),
-        "runbook-import-close",
+        "close-dialog",
     );
-    dialog.append(
-        title,
-        targetLabel,
-        fileLabel,
-        urlLabel,
+    close.name = "runbook-import-close";
+    const head = node("div");
+    head.className = "hub-dialog-head";
+    head.append(title, close);
+    start.classList.add("primary");
+    const help = node("details");
+    help.className = "hub-help-block";
+    help.append(
+        node("summary", "How this import works"),
         notice,
         node(
             "p",
             "Durable recovery begins after the server admits a batch. Before admission, fetched URL content is not durably frozen; retry may fetch changed content. The request fingerprint identifies the selection, not a saved pre-admission snapshot.",
         ),
-        start,
-        status,
         node(
             "p",
             "Closing this dialog does not cancel a server operation. Use the real batch cancellation control in Activity after the batch is identified.",
         ),
-        close,
     );
+    dialog.append(head, targetLabel, fileLabel, urlLabel, help, start, status);
     const activity = node("section");
     activity.className = "hub-runbook-imports hub-runbook-import-activity";
     activity.hidden = true;

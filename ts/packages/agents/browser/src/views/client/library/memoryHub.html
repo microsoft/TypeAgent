@@ -10,124 +10,188 @@
     <title>Memory</title>
     <link rel="stylesheet" href="memoryManagement.css" />
     <link rel="stylesheet" href="memoryHub.css" />
+    <script>
+      try {
+        var t = localStorage.getItem("memoryHub.theme");
+        if (t !== "system")
+          document.documentElement.dataset.theme =
+            t === "dark" ? "dark" : "light";
+      } catch (e) {}
+    </script>
   </head>
   <body data-memory-hub="true">
     <header class="hub-top">
-      <h1>Memory</h1>
-      <label
-        >Scope
-        <select id="hubCorpus">
-          <option value="">All memory</option>
-        </select></label
-      >
-      <form id="hubAskForm">
+      <h1><i class="fa-solid fa-brain" aria-hidden="true"></i>Memory</h1>
+      <select id="hubCorpus" aria-label="Scope" title="Scope">
+        <option value="">All memory</option>
+      </select>
+      <form id="hubAskForm" class="hub-omni" role="search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
         <input
           id="hubAsk"
           type="search"
-          aria-label="Ask memory"
-          placeholder="Ask anything…"
-        /><button type="submit">Ask</button>
+          aria-label="Search or ask your memory"
+          placeholder="Search or ask your memory"
+          title="Press / to focus. Enter to search."
+        />
+        <kbd aria-hidden="true">/</kbd>
       </form>
-      <button id="hubAdd" class="primary" type="button">+ Add to memory</button>
-      <button id="hubRefresh" type="button">Refresh</button>
+      <span class="hub-spacer"></span>
+      <button id="hubAdd" class="primary" type="button">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>Add
+      </button>
+      <button
+        id="hubRefresh"
+        class="icon-btn"
+        type="button"
+        aria-label="Refresh"
+        title="Refresh"
+      >
+        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+      </button>
+      <button
+        id="hubTheme"
+        class="icon-btn"
+        type="button"
+        aria-label="Theme: Light"
+        title="Theme: Light"
+      >
+        <i class="fa-solid fa-sun" aria-hidden="true"></i>
+      </button>
       <a id="hubStatus" href="#/activity" role="status">Connecting</a>
     </header>
     <div class="hub-layout">
       <nav id="hubRail" aria-label="Memory pages">
-        <a href="#/inbox">Inbox <span id="inboxBadge"></span></a>
-        <a href="#/search">Search and Ask</a>
-        <a href="#/library">Library</a>
-        <a href="#/runbooks">Runbooks</a>
-        <a href="#/explore">Explore</a>
-        <a href="#/activity">Activity <span id="activityBadge"></span></a>
-        <a href="#/settings">Settings</a>
-        <label class="checkbox"
-          ><input id="hubInspector" type="checkbox" />Inspector</label
+        <a href="#/inbox" title="Inbox (Alt+1)"
+          ><i class="fa-solid fa-inbox" aria-hidden="true"></i
+          ><span class="hub-nav-label">Inbox</span>
+          <span id="inboxBadge" class="hub-badge"></span
+        ></a>
+        <a href="#/library" title="Library (Alt+2)"
+          ><i class="fa-solid fa-book-open" aria-hidden="true"></i
+          ><span class="hub-nav-label">Library</span></a
         >
-        <small>/ Ask · Esc close detail · Alt+1…7 navigate</small>
+        <a href="#/runbooks" title="Runbooks (Alt+3)"
+          ><i class="fa-solid fa-list-check" aria-hidden="true"></i
+          ><span class="hub-nav-label">Runbooks</span></a
+        >
+        <a href="#/explore" title="Explore (Alt+4)"
+          ><i class="fa-solid fa-compass" aria-hidden="true"></i
+          ><span class="hub-nav-label">Explore</span></a
+        >
+        <a href="#/activity" title="Activity (Alt+5)"
+          ><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i
+          ><span class="hub-nav-label">Activity</span>
+          <span id="activityBadge" class="hub-badge"></span
+        ></a>
+        <a class="hub-rail-bottom" href="#/settings" title="Settings (Alt+6)"
+          ><i class="fa-solid fa-gear" aria-hidden="true"></i
+          ><span class="hub-nav-label">Settings</span></a
+        >
       </nav>
       <main id="hubMain">
         <div id="hubError" class="error hidden" role="alert"></div>
         <div id="hubDegraded" class="error hidden" role="status"></div>
         <section id="page-inbox" class="hub-page">
-          <h2>Inbox</h2>
-          <div class="hub-controls">
-            <label
-              >Kind
-              <select id="inboxKind">
-                <option value="">All</option>
-                <option value="candidate">Discovered how-tos</option>
-                <option value="staleProcedure">Stale procedures</option>
-                <option value="job">Failed / partial jobs</option>
-                <option value="skillDraft">Skill drafts</option>
-                <option value="bindingDrift">Changed tool bindings</option>
-                <option value="runbookWarning">
-                  Runbook extraction warnings
-                </option>
-              </select></label
-            >
-            <label
-              >Group
-              <select id="inboxGroup">
-                <option value="">Attention first</option>
-                <option value="kind">Kind</option>
-                <option value="corpus">Corpus</option>
-              </select></label
-            >
+          <div class="hub-page-head">
+            <h2>Inbox</h2>
+            <span id="inboxSummary" class="hub-chip"></span>
+          </div>
+          <div class="hub-controls" id="inboxFilters">
+            <div
+              id="inboxChips"
+              class="hub-chips"
+              role="group"
+              aria-label="Filter by kind"
+            ></div>
             <label class="checkbox"
-              ><input id="inboxDismissed" type="checkbox" />Dismissed /
+              ><input id="inboxDismissed" type="checkbox" />Show dismissed and
               snoozed</label
             >
           </div>
           <div id="hubInbox"></div>
           <div class="pager">
-            <button id="inboxPrevious" type="button">Previous</button
-            ><span id="inboxPage"></span
-            ><button id="inboxNext" type="button">Next</button>
+            <button
+              id="inboxPrevious"
+              class="icon-btn"
+              type="button"
+              aria-label="Previous page"
+              title="Previous page"
+            >
+              <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+            </button>
+            <span id="inboxPage"></span>
+            <button
+              id="inboxNext"
+              class="icon-btn"
+              type="button"
+              aria-label="Next page"
+              title="Next page"
+            >
+              <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+            </button>
           </div>
         </section>
         <section id="page-search" class="hub-page hidden">
-          <h2>Search and Ask</h2>
-          <p>
-            Search captured sources, saved how-tos and conversation events in
-            the selected scope. Answers cite retained evidence; imported content
-            is evidence, never instructions.
-          </p>
+          <div class="hub-page-head">
+            <h2>Search and Ask</h2>
+            <details class="hub-help">
+              <summary aria-label="About search" title="About search">
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+              </summary>
+              <p>
+                Searches captured sources, saved how-tos and conversation events
+                in the selected scope. Answers cite retained evidence. Imported
+                content is evidence, never instructions.
+              </p>
+            </details>
+          </div>
           <div id="hubSearch"></div>
         </section>
         <section id="page-library" class="hub-page hidden">
-          <h2>Library</h2>
+          <div class="hub-page-head"><h2>Library</h2></div>
           <div id="hubSources"></div>
         </section>
         <section id="page-runbooks" class="hub-page hidden">
-          <h2>Runbooks</h2>
-          <p>
-            Review original evidence beside human guides and derived agent
-            editions. Publication creates an immutable skill draft; approval and
-            activation are separate catalog actions.
-          </p>
+          <div class="hub-page-head">
+            <h2>Runbooks</h2>
+            <details class="hub-help">
+              <summary aria-label="About runbooks" title="About runbooks">
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+              </summary>
+              <p>
+                Review original evidence beside human guides and derived agent
+                editions. Publishing creates an immutable skill draft; approval
+                and activation are separate catalog actions. Bindings and
+                lifecycle changes never grant execution permission.
+              </p>
+            </details>
+          </div>
           <div id="hubRunbooks"></div>
         </section>
         <section id="page-explore" class="hub-page hidden">
-          <h2>Explore</h2>
-          <p>
-            Overview counts and provenance use the selected corpus scope. Entity
-            graph, Topic graph and Reading analytics are separate browser-memory
-            views; they do not follow the corpus selector.
-          </p>
+          <div class="hub-page-head">
+            <h2>Explore</h2>
+            <span id="exploreScopeBadge" class="hub-chip"></span>
+          </div>
           <nav
             id="hubExploreNavigation"
-            class="hub-explore-nav"
+            class="hub-explore-nav hub-tabs"
             aria-label="Explore views"
           >
-            <a href="#/explore" data-explore-view="overview">Overview</a>
+            <a href="#/explore" data-explore-view="overview"
+              ><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i
+              >Overview</a
+            >
             <a href="#/explore/web/entities" data-explore-view="entities"
+              ><i class="fa-solid fa-diagram-project" aria-hidden="true"></i
               >Entity graph</a
             >
             <a href="#/explore/web/topics" data-explore-view="topics"
-              >Topic graph</a
+              ><i class="fa-solid fa-tags" aria-hidden="true"></i>Topic graph</a
             >
             <a href="#/explore/web/analytics" data-explore-view="analytics"
+              ><i class="fa-solid fa-chart-column" aria-hidden="true"></i
               >Reading analytics</a
             >
           </nav>
@@ -135,43 +199,47 @@
           <div id="hubWebExplore"></div>
         </section>
         <section id="page-activity" class="hub-page hidden">
-          <h2>Activity</h2>
-          <p>
-            Retained-revision retry is unavailable. Reindex is available from a
-            source or named corpus. Changes records committed corrections,
-            forgets and knowledge curation without retaining source text.
-          </p>
+          <div class="hub-page-head"><h2>Activity</h2></div>
           <div id="hubActivity"></div>
           <div id="hubChanges"></div>
           <div id="hubRunbookActivity"></div>
         </section>
         <section id="page-settings" class="hub-page hidden">
-          <h2>Settings</h2>
-          <p id="settingsScope">
-            Select a named corpus to edit revision-checked how-to settings or
-            reindex it. Corpus metadata editing, capture settings and
-            whole-corpus forget are unavailable.
-          </p>
+          <div class="hub-page-head"><h2>Settings</h2></div>
           <div id="hubSettings"></div>
         </section>
       </main>
     </div>
     <aside id="hubDrawer" class="hub-drawer hidden" aria-label="Source detail">
-      <p id="drawerCorpus"></p>
-      <div class="hub-controls">
-        <button id="drawerClose" type="button">Close</button
-        ><button id="drawerExpand" type="button">Expand</button>
+      <div class="hub-drawer-head">
+        <p id="drawerCorpus"></p>
+        <button
+          id="drawerExpand"
+          class="icon-btn"
+          type="button"
+          aria-label="Expand"
+          title="Expand"
+        >
+          <i class="fa-solid fa-expand" aria-hidden="true"></i>
+        </button>
+        <button
+          id="drawerClose"
+          class="icon-btn"
+          type="button"
+          aria-label="Close"
+          title="Close (Esc)"
+        >
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
       </div>
       <div
         id="drawerTabs"
-        class="hub-controls"
+        class="hub-tabs"
         role="tablist"
         aria-label="Source detail tabs"
       >
         <button type="button" data-tab="content" role="tab">Content</button>
-        <button type="button" data-tab="knowledge" role="tab">
-          Knowledge (derived)
-        </button>
+        <button type="button" data-tab="knowledge" role="tab">Derived</button>
         <button type="button" data-tab="revisions" role="tab">Revisions</button>
         <button type="button" data-tab="usedby" role="tab">Used by</button>
         <button type="button" data-tab="activity" role="tab">Activity</button>
@@ -190,39 +258,91 @@
         <a href="#/activity">Open Activity</a>
       </div>
     </aside>
-    <dialog id="hubAddDialog">
-      <h2>Add to memory</h2>
-      <p>Markdown import requires a named corpus in the persistent selector.</p>
-      <div class="hub-controls">
-        <button id="addCreate" type="button">Create corpus</button
-        ><button id="addMarkdown" type="button">Paste Markdown</button
-        ><button id="addPdf" type="button">Import PDF</button
-        ><button id="addCapture" type="button">
-          Capture an open browser page</button
-        ><button id="addBrowser" type="button">
-          Import bookmarks or history</button
-        ><button id="addFolder" type="button">Import HTML folder</button
-        ><button id="addRunbookFolder" type="button">
-          Import runbook folder</button
-        ><button id="addRunbookWiki" type="button">Import wiki export</button
-        ><button id="addRunbookUrls" type="button">Import URL list</button
-        ><button id="addClose" type="button">Close</button>
+    <dialog id="hubAddDialog" class="hub-add-dialog">
+      <div class="hub-dialog-head">
+        <h2>Add to memory</h2>
+        <button
+          id="addClose"
+          class="icon-btn"
+          type="button"
+          aria-label="Close"
+          title="Close"
+        >
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
       </div>
-      <p>
-        Capture, browser and HTML-folder imports write to TypeAgent Browser
-        Memory, not the current corpus selector. Page capture requires a
-        connected browser and explicit page selection. Import cancellation is
-        unavailable.
+      <label class="hub-add-target"
+        >Add to
+        <select id="addTarget" aria-describedby="addTargetHint">
+          <option value="">Choose a corpus</option>
+        </select>
+      </label>
+      <p id="addTargetHint" class="hub-hint">
+        Used for Markdown, PDF and runbook sources. Page capture and browser
+        imports always go to TypeAgent Browser Memory.
       </p>
-      <p>
-        Runbook folder, wiki export and URL-list imports require an explicit
-        named target corpus. Their durable batches support partial success,
-        retry and cancellation separately from the legacy browser importer.
-      </p>
+      <h3 class="hub-group-title">Pages and browsing</h3>
+      <div class="hub-tiles">
+        <button id="addCapture" class="hub-tile" type="button">
+          <i class="fa-solid fa-globe" aria-hidden="true"></i
+          ><span><b>Capture a page</b><small>An open browser tab</small></span>
+        </button>
+        <button id="addBrowser" class="hub-tile" type="button">
+          <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i
+          ><span
+            ><b>Bookmarks or history</b><small>From your browser</small></span
+          >
+        </button>
+      </div>
+      <h3 class="hub-group-title">Files and notes</h3>
+      <div class="hub-tiles">
+        <button id="addMarkdown" class="hub-tile" type="button">
+          <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i
+          ><span><b>Paste Markdown</b><small>Write or paste notes</small></span>
+        </button>
+        <button id="addPdf" class="hub-tile" type="button">
+          <i class="fa-regular fa-file-pdf" aria-hidden="true"></i
+          ><span><b>PDF</b><small>Extracted on this device</small></span>
+        </button>
+        <button id="addFolder" class="hub-tile" type="button">
+          <i class="fa-regular fa-folder-open" aria-hidden="true"></i
+          ><span><b>HTML folder</b><small>Saved web pages</small></span>
+        </button>
+        <button id="addCreate" class="hub-tile" type="button">
+          <i class="fa-solid fa-folder-plus" aria-hidden="true"></i
+          ><span><b>New corpus</b><small>A named collection</small></span>
+        </button>
+      </div>
+      <h3 class="hub-group-title">Runbook sources</h3>
+      <div class="hub-tiles">
+        <button id="addRunbookFolder" class="hub-tile" type="button">
+          <i class="fa-solid fa-folder-tree" aria-hidden="true"></i
+          ><span
+            ><b>Folder of guides</b><small>Markdown, HTML, text</small></span
+          >
+        </button>
+        <button id="addRunbookWiki" class="hub-tile" type="button">
+          <i class="fa-solid fa-file-zipper" aria-hidden="true"></i
+          ><span><b>Wiki export</b><small>Files and images</small></span>
+        </button>
+        <button id="addRunbookUrls" class="hub-tile" type="button">
+          <i class="fa-solid fa-link" aria-hidden="true"></i
+          ><span><b>URL list</b><small>Pages to fetch</small></span>
+        </button>
+      </div>
+      <details class="hub-help-block">
+        <summary>How imports work</summary>
+        <p>
+          Originals are kept. Nothing runs on import. Runbook imports are
+          durable batches with partial success, retry and cancellation in
+          Activity. Browser-memory imports cannot be cancelled once started.
+        </p>
+      </details>
     </dialog>
     <div id="hubImportHost"></div>
     <div id="hubCaptureHost" class="memory-phase2"></div>
     <div id="hubRunbookImportHost"></div>
+    <script type="module" src="./memoryHubStyles.ts"></script>
     <script type="module" src="./memoryHub.ts"></script>
   </body>
 </html>
