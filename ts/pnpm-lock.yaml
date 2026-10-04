@@ -5149,6 +5149,9 @@ importers:
       '@typeagent/agent-cache':
         specifier: workspace:*
         version: link:../../cache
+      '@typeagent/agent-flows':
+        specifier: workspace:*
+        version: link:../../agent-flows
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
