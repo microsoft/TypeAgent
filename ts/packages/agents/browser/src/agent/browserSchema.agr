@@ -15,7 +15,7 @@ import { BrowserActions } from "./browserActionSchema.mts";
           | <Zoom>
           | <ReadPage>
           | <Screenshot>
-          | <CreateFlow>;
+        | <CreateFlow>;
 
 // ===== Open Web Page =====
 <OpenPage> = open $(site:wildcard) -> { actionName: "openWebPage", parameters: { site } }

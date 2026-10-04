@@ -26,6 +26,13 @@ import {
 } from "./components/ScreenshotToolbar";
 import { AnnotationManager } from "./core/annotationManager";
 import { PDFJSHighlightManager } from "./core/pdfJSHighlightManager";
+import { setupPdfCorpusBridge } from "./core/pdfCorpusBridge";
+import {
+    setupPdfInspection,
+    retainPdfBytes,
+    type PdfCaptureInput,
+    type PdfInspectionController,
+} from "./core/pdfInspection";
 
 import "./pdf-viewer.css";
 import "@fortawesome/fontawesome-free/css/all.min.css";
@@ -41,21 +48,13 @@ declare global {
     interface Window {
         pdfjsLib: any;
         pdfjsViewer: any;
+        TypeAgentPDFViewer: TypeAgentPDFViewerApp;
     }
 }
 
 // Configure PDF.js worker
 if (typeof window !== "undefined") {
     // Ensure pdfjsLib is available globally
-    window.pdfjsLib = pdfjsLib;
-}
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/build/pdf.worker.mjs",
-    import.meta.url,
-).toString();
-
-if (typeof window !== "undefined") {
     window.pdfjsLib = pdfjsLib;
 }
 
@@ -73,6 +72,13 @@ export class TypeAgentPDFViewerApp {
     private pdfApiService: PDFApiService;
     private sseClient: PDFSSEClient | null = null;
     private documentId: string | null = null;
+    private inspection: PdfInspectionController | null = null;
+    private captureInput: PdfCaptureInput | null = null;
+    private loadGeneration = 0;
+    private pendingLoad: ReturnType<typeof pdfjsLib.getDocument> | null = null;
+    private remoteLoad: AbortController | null = null;
+    private disposed = false;
+    private toolbarObserver: ResizeObserver | null = null;
 
     private selectionManager: TextSelectionManager | null = null;
     private contextualToolbar: ContextualToolbar | null = null;
@@ -100,13 +106,39 @@ export class TypeAgentPDFViewerApp {
         try {
             await this.setupPDFJSViewer();
             this.setupEventHandlers();
+            setupPdfCorpusBridge(() => this.captureInput, pdfjsLib.version);
+            this.inspection = setupPdfInspection({
+                getInput: () => this.captureInput,
+                beginLocalOpen: () => {
+                    this.loadGeneration++;
+                    this.captureInput = null;
+                    this.inspection?.documentChanged();
+                    this.remoteLoad?.abort();
+                    this.remoteLoad = null;
+                },
+                load: async (data, title) => {
+                    this.remoteLoad?.abort();
+                    this.remoteLoad = null;
+                    this.documentId = null;
+                    this.sseClient?.close();
+                    this.sseClient = null;
+                    await this.loadPDFDocument(data, { title });
+                },
+                pdfjsVersion: pdfjsLib.version,
+                getCurrentPage: () => this.currentPage,
+                goToPage: (page) => {
+                    void this.goToPage(page);
+                },
+                eventBus: this.eventBus,
+            });
             await this.initializeHighlightingComponents();
             this.extractDocumentId();
 
             if (this.documentId) {
                 await this.loadDocument(this.documentId);
             } else {
-                await this.loadSampleDocument();
+                this.hideLoadingState();
+                this.inspection.documentChanged();
             }
 
             console.log(
@@ -812,9 +844,21 @@ export class TypeAgentPDFViewerApp {
             left: 0; 
             right: 0; 
             bottom: 0; 
+            height: auto;
             overflow: auto;
             background: #323639;
         `;
+        const updateToolbarLayout = () => {
+            const height = toolbar?.offsetHeight ?? 0;
+            viewerContainer.style.top = `${height}px`;
+            document.documentElement.style.setProperty(
+                "--pdf-toolbar-height",
+                `${height}px`,
+            );
+        };
+        updateToolbarLayout();
+        this.toolbarObserver = new ResizeObserver(updateToolbarLayout);
+        if (toolbar) this.toolbarObserver.observe(toolbar);
 
         const linkService = new window.pdfjsViewer.PDFLinkService({
             eventBus: this.eventBus,
@@ -1019,20 +1063,36 @@ export class TypeAgentPDFViewerApp {
     }
 
     async loadPDFFromUrl(url: string): Promise<void> {
+        this.remoteLoad?.abort();
+        const request = new AbortController();
+        this.remoteLoad = request;
+        this.loadGeneration++;
+        this.captureInput = null;
+        this.inspection?.documentChanged();
         try {
             const urlMapping =
                 await this.pdfApiService.getDocumentIdFromUrl(url);
+            if (request.signal.aborted || this.disposed) return;
             this.documentId = urlMapping.documentId;
             const response = await fetch(url, {
                 headers: { Accept: "application/pdf" },
+                signal: request.signal,
             });
             if (!response.ok)
                 throw new Error(`Failed to fetch PDF: ${response.status}`);
             const arrayBuffer = await response.arrayBuffer();
-            await this.loadPDFDocument(arrayBuffer);
+            if (request.signal.aborted || this.disposed) return;
+            const parsedUrl = new URL(url, window.location.href);
+            await this.loadPDFDocument(arrayBuffer, {
+                title: parsedUrl.pathname.split("/").pop() || "PDF document",
+                canonicalUri: parsedUrl.href,
+            });
         } catch (error) {
+            if (request.signal.aborted || this.disposed) return;
             this.showError("Failed to load PDF from URL");
             throw error;
+        } finally {
+            if (this.remoteLoad === request) this.remoteLoad = null;
         }
     }
 
@@ -1042,15 +1102,66 @@ export class TypeAgentPDFViewerApp {
         await this.loadPDFFromUrl(samplePdfUrl);
     }
 
-    private async loadPDFDocument(data: ArrayBuffer): Promise<void> {
+    public getPdfCaptureInput(): PdfCaptureInput {
+        if (!this.captureInput) throw new Error("No PDF is loaded.");
+        return { ...this.captureInput, bytes: this.captureInput.bytes.slice() };
+    }
+
+    public getPdfInspectionController(): PdfInspectionController | null {
+        return this.inspection;
+    }
+
+    private async loadPDFDocument(
+        data: ArrayBuffer,
+        metadata: { title: string; canonicalUri?: string } = {
+            title: "PDF document",
+        },
+    ): Promise<void> {
+        if (this.disposed) return;
+        const generation = ++this.loadGeneration;
+        this.captureInput = null;
+        this.inspection?.documentChanged();
+        const retained = await retainPdfBytes(data);
+        if (generation !== this.loadGeneration || this.disposed) return;
+        await this.pendingLoad?.destroy();
+        const previous = this.pdfDoc;
+        this.pdfDoc = null;
+        document
+            .querySelectorAll<HTMLElement>(".toolbar-center, .toolbar-right")
+            .forEach((element) => {
+                element.hidden = true;
+            });
+        this.pdfViewer?.setDocument(null);
+        await previous?.destroy();
+        if (generation !== this.loadGeneration || this.disposed) return;
         console.log("📄 Loading PDF document...");
-        const loadingTask = window.pdfjsLib.getDocument({
+        const loadingTask = pdfjsLib.getDocument({
             data: data,
-            cMapUrl: "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.3.31/cmaps/",
+            fontExtraProperties: true,
+            isEvalSupported: false,
+            cMapUrl: new URL("./vendor/pdfjs/cmaps/", document.baseURI).href,
             cMapPacked: true,
+            standardFontDataUrl: new URL(
+                "./vendor/pdfjs/standard_fonts/",
+                document.baseURI,
+            ).href,
+            wasmUrl: new URL("./vendor/pdfjs/wasm/", document.baseURI).href,
         });
 
-        this.pdfDoc = await loadingTask.promise;
+        this.pendingLoad = loadingTask;
+        const loadedDocument = await loadingTask.promise;
+        if (generation !== this.loadGeneration || this.disposed) {
+            await loadingTask.destroy();
+            return;
+        }
+        this.pendingLoad = null;
+        this.pdfDoc = loadedDocument;
+        this.captureInput = {
+            document: loadedDocument,
+            ...retained,
+            ...metadata,
+        };
+        this.inspection?.documentChanged();
         console.log(
             `📄 PDF loaded successfully: ${this.pdfDoc.numPages} pages`,
         );
@@ -1061,6 +1172,11 @@ export class TypeAgentPDFViewerApp {
         }
 
         this.pdfViewer.setDocument(this.pdfDoc);
+        document
+            .querySelectorAll<HTMLElement>(".toolbar-center, .toolbar-right")
+            .forEach((element) => {
+                element.hidden = false;
+            });
         console.log("📄 Document set on viewer");
 
         this.updatePageCount();
@@ -1069,6 +1185,7 @@ export class TypeAgentPDFViewerApp {
 
         // Fallback: Hide loading state after a delay if pagesinit doesn't fire
         setTimeout(() => {
+            if (generation !== this.loadGeneration || this.disposed) return;
             console.log("📄 Fallback: Hiding loading state");
             this.hideLoadingState();
         }, 2000);
@@ -1285,6 +1402,20 @@ export class TypeAgentPDFViewerApp {
     }
 
     destroy(): void {
+        this.disposed = true;
+        this.toolbarObserver?.disconnect();
+        this.toolbarObserver = null;
+        this.loadGeneration++;
+        this.captureInput = null;
+        this.inspection?.destroy();
+        this.inspection = null;
+        this.remoteLoad?.abort();
+        this.remoteLoad = null;
+        void this.pendingLoad?.destroy();
+        this.pendingLoad = null;
+        this.pdfViewer?.setDocument(null);
+        void this.pdfDoc?.destroy();
+        this.pdfDoc = null;
         // Clean up zoom wheel event handler
         if (this.wheelEventHandler) {
             const viewerContainer = document.getElementById("viewerContainer");
@@ -1385,7 +1516,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     );
     try {
         const app = new TypeAgentPDFViewerApp();
-        (window as any).TypeAgentPDFViewer = app;
+        window.TypeAgentPDFViewer = app;
         await app.initialize();
 
         console.log("🎉 PDF Viewer with Complete Highlighting Features Ready!");

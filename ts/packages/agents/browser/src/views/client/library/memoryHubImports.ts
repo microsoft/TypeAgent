@@ -4,6 +4,8 @@
 import "./memoryHubImports.css";
 import { WebsiteImportManager } from "./websiteImportManager";
 import { createExtensionService } from "./knowledgeUtilities";
+import { invokeMemory } from "./viewClient";
+import { createPdfCorpusImport } from "../../../../../browserExtension/src/extension/views/pdfCorpusImport";
 import type {
     FolderImportOptions,
     ImportOptions,
@@ -18,6 +20,7 @@ export interface MemoryHubImportOptions {
     onError: (error: unknown) => void;
     onComplete: () => Promise<void>;
     onOpenJobs?: () => void;
+    scope?: () => string | undefined;
 }
 
 function field<T extends HTMLElement>(root: HTMLElement, name: string): T {
@@ -95,10 +98,12 @@ export function mountMemoryHubImports(
 ): {
     openBrowserImport(): void;
     openFolderImport(): void;
+    openPdfImport(): Promise<void>;
     dispose(): void;
 } {
     const manager = new WebsiteImportManager();
     const service = createExtensionService();
+    let pdfImport: ReturnType<typeof createPdfCorpusImport> | undefined;
     const dialog = document.createElement("dialog");
     dialog.className = "hub-import-dialog";
     dialog.setAttribute("aria-label", "Import browser memories");
@@ -300,9 +305,30 @@ export function mountMemoryHubImports(
     return {
         openBrowserImport: () => open("browser"),
         openFolderImport: () => open("folder"),
+        async openPdfImport() {
+            if (disposed) return;
+            pdfImport ??= createPdfCorpusImport(
+                options.onComplete,
+                { invoke: invokeMemory },
+                {
+                    host,
+                    assetBase: new URL(
+                        "/pdf/vendor/pdfjs/",
+                        window.location.href,
+                    ).href,
+                    corpusId: options.scope,
+                },
+            );
+            try {
+                await pdfImport.open();
+            } catch (error) {
+                options.onError(error);
+            }
+        },
         dispose: () => {
             if (disposed) return;
             disposed = true;
+            pdfImport?.dispose();
             window.removeEventListener("viewServiceError", streamError);
             manager.onProgressUpdate(() => {});
             if (importId) service.removeImportProgress(importId);

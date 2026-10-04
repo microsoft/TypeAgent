@@ -3880,12 +3880,21 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         const { revisions, ...document } = source;
         return {
             ...structuredClone(document),
-            revisions: revisions.map(({ content: _content, ...revision }) => ({
-                ...structuredClone(revision),
-                ...(revision.pipeline === undefined
-                    ? {}
-                    : { pipeline: contentPipeline(revision.pipeline) }),
-            })),
+            revisions: revisions.map((storedRevision) => {
+                const {
+                    content: _content,
+                    locationMap: _locationMap,
+                    ...revision
+                } = storedRevision as typeof storedRevision & {
+                    locationMap?: unknown;
+                };
+                return {
+                    ...structuredClone(revision),
+                    ...(revision.pipeline === undefined
+                        ? {}
+                        : { pipeline: contentPipeline(revision.pipeline) }),
+                };
+            }),
         };
     }
 

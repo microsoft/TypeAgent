@@ -22,6 +22,36 @@ puppeteer helpers).
 
 ## Architecture
 
+### PDF Understanding Worktree
+
+The PDF viewer supports local open/drop, selected-page semantic inspection,
+sanitized Markdown preview, Markdown/JSON export, and pause/cancel. Extraction
+uses the viewer-owned PDF.js document without destroying it. Semantic results
+are cached only in memory; persistent extraction checkpoints and block/crop
+inspection controls are removed. Preview/export does not implicitly save bytes
+to memory.
+
+Corpus PDF import submits extracted Markdown through `memoryImportDocument` to
+the shared memory service in `content` mode, with title, optional canonical URI
+and tags. Memory owns source revisions and ingestion jobs. The browser agent
+does not retain original PDF bytes, extraction artifacts, capture manifests or
+location maps, and does not expose PDF-specific storage or capability RPC.
+Removing this functionality does not delete previously saved user data.
+
+The converter reuses pinned Papero extraction and Markdown/math algorithms in
+`browserControlRpc/src/converters/pdfToMarkdown`. Tests live in the parent
+package's `test/pdfToMarkdown`; regeneration and qualification tools live in
+`ts/tools/scripts/converters/pdfToMarkdown`. The parent package owns dependencies
+and compilation, with no nested converter package. Full-book upstream/adapted/
+production Markdown parity is verified; general semantic correctness of tables,
+math, figures/captions and difficult reading order is not. Local viewer opening allows 50 MiB. Performance
+reports do not qualify browser memory, image rendering or annotation interaction.
+
+Retained-PDF capture/status/read/query/open actions are removed. Imported
+Markdown uses ordinary memory source content, search, job and forget operations.
+See [PDF Markdown import boundaries](docs/pdf-markdown-import.md) for the
+remaining WebSocket and native renderer routing boundaries.
+
 ### Memory imports and page capture
 
 Browser history, bookmark, HTML-folder imports, and saved pages use the shared

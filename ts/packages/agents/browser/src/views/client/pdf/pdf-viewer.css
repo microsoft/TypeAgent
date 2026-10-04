@@ -69,6 +69,29 @@ body {
   transition: background-color 0.2s ease;
 }
 
+.toolbar button[hidden] {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .toolbar-right {
+    margin-left: auto;
+  }
+
+  .toolbar-center {
+    position: static;
+    transform: none;
+    order: 3;
+    flex-basis: 100%;
+    justify-content: center;
+  }
+}
+
 .toolbar button:hover {
   background: rgba(255, 255, 255, 0.1);
 }
@@ -143,6 +166,76 @@ body {
 
 .file-input {
   display: none;
+}
+
+.pdf-inspection {
+  position: absolute;
+  top: calc(var(--pdf-toolbar-height, 56px) + 8px);
+  left: 12px;
+  bottom: 12px;
+  width: min(400px, calc(100vw - 24px));
+  box-sizing: border-box;
+  overflow: auto;
+  z-index: 9;
+  padding: 12px;
+  background: #fafafa;
+  color: #222;
+  border: 1px solid #777;
+  border-radius: 4px;
+}
+
+.pdf-inspection[hidden] {
+  display: none;
+}
+.pdf-inspection [hidden],
+.toolbar [hidden] {
+  display: none !important;
+}
+.toolbar-center[hidden],
+.toolbar-right[hidden] {
+  display: none;
+}
+.inspection-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pdf-inspection button {
+  cursor: pointer;
+  color: #222;
+  background: #eee;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  min-width: 32px;
+  min-height: 32px;
+}
+.pdf-inspection pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.pdf-inspection h2 {
+  font-size: 14px;
+  margin-block: 12px 8px;
+}
+#inspectionPreview {
+  overflow-x: auto;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+#inspectionPreview h1,
+#inspectionPreview h2,
+#inspectionPreview h3 {
+  font-size: 16px;
+}
+#inspectionPreview table {
+  border-collapse: collapse;
+}
+#inspectionPreview td,
+#inspectionPreview th {
+  border: 1px solid #aaa;
+  padding: 4px;
 }
 
 .viewer-container {

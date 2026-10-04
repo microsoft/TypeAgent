@@ -1,0 +1,206 @@
+{
+  "repository": "https://github.com/beatrizalmeidaf/papero-pdf-text-extractor",
+  "revision": "f9e92cbc0224d1413c11dda15b284ee41b9fc48f",
+  "upstreamHeadAtFetch": "f9e92cbc0224d1413c11dda15b284ee41b9fc48f",
+  "fetchedAt": "2026-10-02T12:23:33.909Z",
+  "license": {
+    "spdx": "MIT",
+    "copyright": "Copyright (c) 2026 Beatriz Almeida",
+    "notice": "LICENSE"
+  },
+  "hashAlgorithm": "SHA-256",
+  "files": [
+    {
+      "upstreamPath": "web/assets/engine.js",
+      "localPath": "engine.js",
+      "originalSha256": "7c2b334913bd04e8c2544f907b974c43a1032a9452499ce1724bab1f7479ff1e",
+      "vendoredSha256": "124f8ac91432d03e46cf0c5a4718b0e8f5774b084b668734a58276742614afc7",
+      "patch": "patches/engine.js.patch"
+    },
+    {
+      "upstreamPath": "web/assets/columns.js",
+      "localPath": "columns.js",
+      "originalSha256": "306e4edf04fdc82d0fc2bb4ca5500a2e14101d35e92362b3a8cd4b86ae8ee3d4",
+      "vendoredSha256": "45aedb24795f2c6bd43de1d3e3eed58ea72c9f205baa457130057357c869e64c",
+      "patch": "patches/columns.js.patch"
+    },
+    {
+      "upstreamPath": "web/assets/symbols.js",
+      "localPath": "symbols.js",
+      "originalSha256": "916cce32f3a427e9649d3ae78076115c13d1eaec1fd8bdcf9e7eac728ed5e430",
+      "vendoredSha256": "f863d3d6250c0e24ab35537b29c9b01ca3cc43d663a2d707a4966c608bf46990",
+      "patch": "patches/symbols.js.patch"
+    },
+    {
+      "upstreamPath": "web/assets/texfonts.js",
+      "localPath": "texfonts.js",
+      "originalSha256": "d5fdacc5d2114db0dbb9a545272c11f52e0c7dd7dfbdfcc6fc0f8b94e882e851",
+      "vendoredSha256": "dbda3bbbeefef10e9eb6ebb91d52d460a888f46178b71c8d34bbdcefa38e43ef",
+      "patch": "patches/texfonts.js.patch"
+    },
+    {
+      "upstreamPath": "web/assets/mathtext.js",
+      "localPath": "mathtext.js",
+      "originalSha256": "523faff05ff29340b542f9b4ca7001375c14b71c33d75cdd9ef6ff3c975d9451",
+      "vendoredSha256": "289ce30aa20deddf02423ed26a9a0d3c7ae126065cd4ba51092281de5d31e309",
+      "patch": "patches/mathtext.js.patch"
+    },
+    {
+      "upstreamPath": "web/assets/export.js",
+      "localPath": "export.js",
+      "originalSha256": "eb0aa0c079f936f878f0519bd234dc45ed6b60e6dd6cec5ac99b344044c5b889",
+      "vendoredSha256": "4c217d68f0fa50fec703286cea7a7636aedcb8cf41ab81c1b97e6d152e50c1dd",
+      "patch": "patches/export.js.patch"
+    },
+    {
+      "upstreamPath": "LICENSE",
+      "localPath": "LICENSE",
+      "originalSha256": "e353eb0cbf99b3b6baf62510b10196646efb2000d335f41b548e0abd0513400e",
+      "vendoredSha256": "e353eb0cbf99b3b6baf62510b10196646efb2000d335f41b548e0abd0513400e",
+      "patch": null
+    }
+  ],
+  "markdownExports": [
+    "contentBlocks",
+    "mdTable",
+    "figureWords",
+    "blockMarkdown",
+    "toMarkdown"
+  ],
+  "markdownClosure": [
+    "FURNITURE",
+    "BULLET_CHARS",
+    "contentBlocks",
+    "mdCell",
+    "mdTable",
+    "imageMd",
+    "figureWords",
+    "emphasis",
+    "mdInline",
+    "mdInlineLatex",
+    "blockMarkdown",
+    "toMarkdown"
+  ],
+  "dependencies": [
+    {
+      "name": "pdfjs-dist",
+      "upstreamVersion": "4.10.38",
+      "localVersion": "5.3.31",
+      "license": "Apache-2.0",
+      "use": "Local operator/font engine and caller-managed worker"
+    }
+  ],
+  "testOnlyDependencies": [
+    {
+      "name": "pdfjs-baseline",
+      "version": "npm:pdfjs-dist@4.10.38",
+      "use": "Parent dev dependency for isolated upstream comparison; never imported by runtime"
+    },
+    {
+      "name": "@napi-rs/canvas",
+      "version": "0.1.100",
+      "use": "Parent dev dependency for Node qualification canvas globals"
+    }
+  ],
+  "patchDirectory": "ts/tools/scripts/converters/pdfToMarkdown/patches",
+  "sourceHeaderPolicy": "Upstream copyright, MIT license, pinned source URL and TypeAgent modification attribution on each vendored JavaScript file; original hashes unchanged",
+  "localAdapters": [
+    {
+      "localPath": "index.js",
+      "sha256": "1da74c0f1c55e83e9b962f69c2a772b1eecf24dc36d3aa2a9f46a7ddd98217f4"
+    },
+    {
+      "localPath": "index.d.ts",
+      "sha256": "563fa7f297b4e08b5a72a35e48760bb243ff3694b7b0e424d274c79132ba64c1"
+    },
+    {
+      "localPath": "lifecycle.js",
+      "sha256": "67b94c80f9935ac84b37bda5ead65d4b461787a743944654aa43b7c482d18b63"
+    },
+    {
+      "localPath": "pdfjs5.js",
+      "sha256": "8a94d4e56cdfd71e9de711ef030c005d9ff42dc899d745532c549293c03dce34"
+    }
+  ],
+  "demo": {
+    "revision": null,
+    "evidence": "Public deployed asset bytes; no deployment commit identifier advertised by these assets",
+    "assets": [
+      {
+        "path": "assets/engine.js",
+        "url": "https://beatrizalmeidaf.github.io/papero-pdf-text-extractor/assets/engine.js",
+        "sha256": "7c2b334913bd04e8c2544f907b974c43a1032a9452499ce1724bab1f7479ff1e",
+        "matchesPin": true
+      },
+      {
+        "path": "assets/columns.js",
+        "url": "https://beatrizalmeidaf.github.io/papero-pdf-text-extractor/assets/columns.js",
+        "sha256": "306e4edf04fdc82d0fc2bb4ca5500a2e14101d35e92362b3a8cd4b86ae8ee3d4",
+        "matchesPin": true
+      },
+      {
+        "path": "assets/symbols.js",
+        "url": "https://beatrizalmeidaf.github.io/papero-pdf-text-extractor/assets/symbols.js",
+        "sha256": "916cce32f3a427e9649d3ae78076115c13d1eaec1fd8bdcf9e7eac728ed5e430",
+        "matchesPin": true
+      },
+      {
+        "path": "assets/texfonts.js",
+        "url": "https://beatrizalmeidaf.github.io/papero-pdf-text-extractor/assets/texfonts.js",
+        "sha256": "d5fdacc5d2114db0dbb9a545272c11f52e0c7dd7dfbdfcc6fc0f8b94e882e851",
+        "matchesPin": true
+      },
+      {
+        "path": "assets/mathtext.js",
+        "url": "https://beatrizalmeidaf.github.io/papero-pdf-text-extractor/assets/mathtext.js",
+        "sha256": "523faff05ff29340b542f9b4ca7001375c14b71c33d75cdd9ef6ff3c975d9451",
+        "matchesPin": true
+      },
+      {
+        "path": "assets/export.js",
+        "url": "https://beatrizalmeidaf.github.io/papero-pdf-text-extractor/assets/export.js",
+        "sha256": "eb0aa0c079f936f878f0519bd234dc45ed6b60e6dd6cec5ac99b344044c5b889",
+        "matchesPin": true
+      }
+    ]
+  },
+  "localPatches": [
+    {
+      "id": "P1",
+      "file": "engine.js",
+      "description": "Local PDF.js import; remove global worker mutation"
+    },
+    {
+      "id": "P2",
+      "file": "engine.js",
+      "helper": "lifecycle.js",
+      "description": "One document, bounded page concurrency 1-4 (default 1), injected loading/worker/password options, abort gates, guarded cleanup"
+    },
+    {
+      "id": "P3",
+      "file": "export.js",
+      "description": "AST-selected exact Markdown dependency closure; omit Word/Excel/HTML/text/CSV/JSON/archive exporters"
+    },
+    {
+      "id": "P4",
+      "file": "engine.js",
+      "description": "Canvas release on failure and render cancellation; page cleanup after extraction/cropping; preserve openPdf proxy result"
+    },
+    {
+      "id": "P5",
+      "file": "engine.js",
+      "helper": "pdfjs5.js",
+      "description": "Normalize combined compact PDF.js 5 constructPath/paint operations to upstream primitives; use public operator lists to avoid renderer-mutated Path2D caches"
+    },
+    {
+      "id": "P6",
+      "file": "engine.js",
+      "description": "Extract caller-owned viewer proxies without destroying or cleaning their pages; bound cumulative text and block work; yield and check cancellation at page boundaries"
+    },
+    {
+      "id": "P7",
+      "file": "*.js",
+      "description": "Pinned per-file upstream provenance headers; helper algorithm bodies unchanged"
+    }
+  ]
+}
