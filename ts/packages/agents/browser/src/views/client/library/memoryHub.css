@@ -932,3 +932,15 @@ textarea:focus-visible {
   color: inherit;
   font-size: 1.05em;
 }
+
+/* Rendered Markdown inside search results and evidence */
+.md-snippet.markdown-preview {
+  min-height: 0;
+  max-height: 16em;
+  padding: 0;
+  overflow: auto;
+  border: 0;
+}
+.phase2-search-insights .knowledge-cards {
+  max-height: none;
+}

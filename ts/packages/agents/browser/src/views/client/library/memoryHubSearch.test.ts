@@ -629,6 +629,65 @@ test("optional success notifications honor preferences without suppressing error
     expect(onNotify).toHaveBeenCalledTimes(1);
 });
 
+test("snippets and the answer render as Markdown, not raw text", async () => {
+    const rich: MemoryHubEvidence = {
+        ...source,
+        snippet:
+            "## Setup\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n" +
+            "```ts\nconst x = 1;\n```\n\n- [x] done",
+    };
+    invoke.mockResolvedValueOnce({
+        ...result([rich]),
+        answer: {
+            text: "Use **bold** steps.",
+            mode: "synthesized",
+            citationIds: [],
+            followUps: [],
+        },
+    });
+    await mounted.show("worker");
+    const card = host.querySelector("article .md-snippet")!;
+    expect(card.querySelector("h2")!.textContent).toBe("Setup");
+    expect(card.querySelectorAll("table th")).toHaveLength(2);
+    expect(card.querySelector("code.language-ts")).not.toBeNull();
+    expect(card.querySelector("input[type=checkbox]")).not.toBeNull();
+    expect(card.textContent).not.toContain("|---|");
+    expect(host.querySelector("strong")!.textContent).toBe("bold");
+});
+
+test("related entities are cards like the Explore view", async () => {
+    scope = "a";
+    invoke.mockResolvedValueOnce({
+        ...result([source]),
+        insights: {
+            provider: "canonical",
+            status: "available",
+            corpusId: "a",
+            topTopics: [],
+            relatedEntities: [
+                { name: "Worker", type: "service", confidence: 0.87 },
+                { name: "Queue", type: "system" },
+            ],
+        },
+    });
+    await mounted.show("worker");
+    const insights = host.querySelector(".phase2-search-insights")!;
+    expect(insights.querySelector("ul")).toBeNull();
+    const cards = insights.querySelectorAll(
+        ".knowledge-collection .knowledge-cards article.knowledge-item",
+    );
+    expect(cards).toHaveLength(2);
+    expect(cards[0].querySelector(".knowledge-item-title")!.textContent).toBe(
+        "Worker",
+    );
+    expect(cards[0].querySelector(".knowledge-item-meta")!.textContent).toBe(
+        "service · confidence 87%",
+    );
+    expect(cards[1].querySelector(".knowledge-item-meta")!.textContent).toBe(
+        "system",
+    );
+});
+
 test("canonical typed insights navigate queries without losing named scope or filters and confidence is preference-driven", async () => {
     scope = "a";
     field<HTMLInputElement>("tags").value = "ops";
