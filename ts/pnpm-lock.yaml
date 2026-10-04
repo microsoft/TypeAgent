@@ -4179,6 +4179,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../cache
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -4890,6 +4893,9 @@ importers:
       '@modelcontextprotocol/client':
         specifier: ^2.0.0
         version: 2.0.0
+      '@modelcontextprotocol/sdk':
+        specifier: 1.26.0
+        version: 1.26.0(zod@4.1.13)
       '@modelcontextprotocol/server-filesystem':
         specifier: 2026.1.14
         version: 2026.1.14(zod@4.1.13)
@@ -8868,51 +8874,51 @@ packages:
     engines: {node: '>=6'}
 
   '@github/copilot-sdk-darwin-arm64@1.0.13':
-    resolution: {integrity: sha512-AvBV5dzjNWpGwgoCnttrETnt7rLI4pTFQsRSM7GU5TK+YqShauffdMU06Bn/d+IDX2fj1Z4ThH7yl/gHCDvoNQ==}
+    resolution: {integrity: sha1-E1C7OtV78Uif9acJtkiVMYcOwno=}
     cpu: [arm64]
     os: [darwin]
 
   '@github/copilot-sdk-darwin-x64@1.0.13':
-    resolution: {integrity: sha512-ZNQmTnHwk8bO/E514k0sFBsuCVNpFj8jMH4jeLncASQM4RRdOqYhXlYLW7H/ts7ANjdfMJjJY29NUqzEWaADOA==}
+    resolution: {integrity: sha1-8JlBgPGmh/mG6Ntt1uKgYo+/4H4=}
     cpu: [x64]
     os: [darwin]
 
   '@github/copilot-sdk-linux-arm64@1.0.13':
-    resolution: {integrity: sha512-km1jvveDwlJbht8luFyBurz0wUxPHSzdkZRMJEJgVHYfMn03gi0gdnZ6fC6JWgkiffNZpukSxRPJmPfRobw6Aw==}
+    resolution: {integrity: sha1-j8EQsK0ia+NZMyT0vWO4e73zOKU=}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
   '@github/copilot-sdk-linux-x64@1.0.13':
-    resolution: {integrity: sha512-4AbzC8Nb1dWYQ1uxbHGAh0ZAoOJeL3Ms1oe3byZLn8ENP1PfoyD8DJZUSsyXGYHxL7oLJyUqd3wyt18ifIg8iw==}
+    resolution: {integrity: sha1-LAAMh3TY4wLAemLNec5TJe5xtEQ=}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
   '@github/copilot-sdk-linuxmusl-arm64@1.0.13':
-    resolution: {integrity: sha512-pCUjly1nXcNpYDZNnKrglFIFejbb+QDkloilldu+0tTbSzb8gEmVsbGwpfwyZXfNQf5Je5FFjsOfQR9PXH1NDQ==}
+    resolution: {integrity: sha1-OGpaHk6oDBcavPuH0z1Ks8lMujg=}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
   '@github/copilot-sdk-linuxmusl-x64@1.0.13':
-    resolution: {integrity: sha512-y5RmqAbKSYHt+OwQdILIiiMSibXdd7/0kO7kFoTZCN2gn2eGRA8wJbXlf6KZh+yYgWSJGUL8677LDJd3WnIHbA==}
+    resolution: {integrity: sha1-Wh2T9+rExyAOjIuZ598iJD38Ghs=}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
   '@github/copilot-sdk-win32-arm64@1.0.13':
-    resolution: {integrity: sha512-azISXh4pEVfX0hPzu58wZTYg3tdWG4L1nNpiRa/wdBxhcovbxw+eZVkI4C6FZMx0tiNYFkqWzVTV7oKskNybcw==}
+    resolution: {integrity: sha1-syiDiHYBtnxP5LbP3aCT3AZcKeg=}
     cpu: [arm64]
     os: [win32]
 
   '@github/copilot-sdk-win32-x64@1.0.13':
-    resolution: {integrity: sha512-lvS7kMbuuxydBQxPDHCkuUwbC858Rvcz3Q3vv0mxnLKuWJ75lAcqERefqA2p4beaPdez+ifZOA5heUT0rx3GnA==}
+    resolution: {integrity: sha1-rgJLcDBgPLXY58/YSScIYaO11g8=}
     cpu: [x64]
     os: [win32]
 
   '@github/copilot-sdk@1.0.13':
-    resolution: {integrity: sha512-/j6/tGc9HOtcupuYFloOKk0fpScdpy65EVF1LKg2Z2VQOojCGPgBGkhgVGVDaqW7UB6TV2qbQZa9rKJimJ0wWQ==}
+    resolution: {integrity: sha1-R5uTEp2RjnOGevKTnLEThopcwVo=}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   '@hapi/bourne@3.0.0':
@@ -9642,7 +9648,7 @@ packages:
     os: [freebsd]
 
   '@koromix/koffi-linux-arm64@3.2.1':
-    resolution: {integrity: sha512-K+cGUL5iBcDqxmsocrjmlASqDf24gc7artbVW3PewG2c9AqwC63lezgwvB85Nx4lZAQjB6zIFHh9A7t1yGbwhw==}
+    resolution: {integrity: sha1-ddSlPuDQYfoVnMG+eugLBNEAkg8=}
     cpu: [arm64]
     os: [linux]
 
@@ -9667,7 +9673,7 @@ packages:
     os: [linux]
 
   '@koromix/koffi-linux-x64@3.2.1':
-    resolution: {integrity: sha512-c7hw7Qs/r5gnFRTQLcbifBwRU7wiocj+2pVuDQ5Ahb3r36SZmupmgYbTWcLvTW+hul1jd7SKRV0d14ZJq/tvSw==}
+    resolution: {integrity: sha1-I3tGQNc4A+tny7pDe1Eu2HkzgD0=}
     cpu: [x64]
     os: [linux]
 

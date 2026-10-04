@@ -134,6 +134,7 @@ export type DispatcherConfig = {
                 jsonSchemaFunction: boolean;
                 jsonSchemaWithTs: boolean; // only applies when jsonSchema or jsonSchemaFunction is true
                 jsonSchemaValidate: boolean; // only applies when jsonSchema or jsonSchemaFunction is true
+                validate: boolean;
             };
             optimize: {
                 enabled: boolean;
@@ -443,6 +444,7 @@ const defaultSessionConfig: SessionConfig = {
                 jsonSchemaFunction: false,
                 jsonSchemaWithTs: false,
                 jsonSchemaValidate: true,
+                validate: true,
             },
             optimize: {
                 enabled: false,

@@ -1,0 +1,158 @@
+{
+  "source": {
+    "dataset": "mllmTeam/DroidCall",
+    "revision": "42563ae614280d2891d57f1e7057c4bc50dd27bd",
+    "files": {
+      "DroidCall_code_short.jsonl": {
+        "bytes": 32059826,
+        "sha256": "263e79dbc060fa5c228dbeb835b89e04087c0a723904b5704a82c86001feb7b1"
+      },
+      "DroidCall_train.jsonl": {
+        "bytes": 12923060,
+        "sha256": "4cb2d5691c1b95b0908c59efcb361c8a9c9b12f0a4d182acfc2df0ccc92e6d3b"
+      },
+      "DroidCall_test.jsonl": {
+        "bytes": 251384,
+        "sha256": "d7e40ce794c98984befb872d2d71ee28511938c0baef881b14098575cda151f2"
+      },
+      "annotated_api.jsonl": {
+        "bytes": 25706,
+        "sha256": "29c4791f7a496e587af74b1a1398864bd6c6de9db767cb97606525d62ec05951"
+      },
+      "README.md": {
+        "bytes": 4568,
+        "sha256": "08a6c5cfa655e1ecd774a41a9a815e845ad0afd47b289378bc1d6ee66c81dda9"
+      },
+      ".gitattributes": {
+        "bytes": 2597,
+        "sha256": "74a8a09003e5506f7f0d9f5571d9ec05fba960e14e08f8eeb20aab0c429d2303"
+      },
+      "figures/data_generation.png": {
+        "bytes": 338653,
+        "sha256": "a126a0caebabfb48b80815a81e2d23ccc80a82c13adba62d23ab339ba5061313"
+      },
+      "figures/intent.png": {
+        "bytes": 181026,
+        "sha256": "8d67eb492ed2c05498581fb9a6842ed899155530f25c18ddf8f5929bc63e157b"
+      }
+    }
+  },
+  "splits": {
+    "full": {
+      "rows": 10271,
+      "calls": 14325,
+      "buckets": {
+        "singleTool": {
+          "rows": 7589,
+          "percent": 73.89
+        },
+        "multiCallNested": {
+          "rows": 1151,
+          "percent": 11.21
+        },
+        "multiCallWithoutNested": {
+          "rows": 1531,
+          "percent": 14.91
+        }
+      },
+      "callCountDistribution": {
+        "1": 7589,
+        "2": 1523,
+        "3": 965,
+        "4": 177,
+        "5": 15,
+        "6": 2
+      },
+      "nestedConsumerTools": {
+        "send_email": 331,
+        "send_message": 198,
+        "ACTION_VIEW_CONTACT": 180,
+        "dial": 163,
+        "ACTION_INSERT_EVENT": 88,
+        "get_contact_info_from_uri": 83,
+        "ACTION_EDIT_CONTACT": 81,
+        "web_search": 36,
+        "ACTION_INSERT_CONTACT": 13,
+        "convert_date_to_end_of_day": 1,
+        "get_date_plus_hours": 1
+      }
+    },
+    "train": {
+      "rows": 10071,
+      "calls": 14053,
+      "buckets": {
+        "singleTool": {
+          "rows": 7435,
+          "percent": 73.83
+        },
+        "multiCallNested": {
+          "rows": 1128,
+          "percent": 11.2
+        },
+        "multiCallWithoutNested": {
+          "rows": 1508,
+          "percent": 14.97
+        }
+      },
+      "callCountDistribution": {
+        "1": 7435,
+        "2": 1499,
+        "3": 947,
+        "4": 173,
+        "5": 15,
+        "6": 2
+      },
+      "nestedConsumerTools": {
+        "send_email": 323,
+        "send_message": 197,
+        "ACTION_VIEW_CONTACT": 174,
+        "dial": 159,
+        "ACTION_INSERT_EVENT": 87,
+        "ACTION_EDIT_CONTACT": 81,
+        "get_contact_info_from_uri": 80,
+        "web_search": 36,
+        "ACTION_INSERT_CONTACT": 13,
+        "convert_date_to_end_of_day": 1,
+        "get_date_plus_hours": 1
+      }
+    },
+    "test": {
+      "rows": 200,
+      "calls": 272,
+      "buckets": {
+        "singleTool": {
+          "rows": 154,
+          "percent": 77
+        },
+        "multiCallNested": {
+          "rows": 23,
+          "percent": 11.5
+        },
+        "multiCallWithoutNested": {
+          "rows": 23,
+          "percent": 11.5
+        }
+      },
+      "callCountDistribution": {
+        "1": 154,
+        "2": 24,
+        "3": 18,
+        "4": 4
+      },
+      "nestedConsumerTools": {
+        "send_email": 8,
+        "ACTION_VIEW_CONTACT": 6,
+        "dial": 4,
+        "get_contact_info_from_uri": 3,
+        "ACTION_INSERT_EVENT": 1,
+        "send_message": 1
+      }
+    }
+  },
+  "parserValidation": {
+    "rows": 10071,
+    "exactMatches": 10069,
+    "parseFailures": 0,
+    "mismatches": 2
+  }
+}
