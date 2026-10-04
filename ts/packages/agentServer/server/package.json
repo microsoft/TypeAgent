@@ -69,7 +69,7 @@
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
