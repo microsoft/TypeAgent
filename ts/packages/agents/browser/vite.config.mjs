@@ -3,8 +3,47 @@
 
 import { defineConfig } from "vite";
 import { resolve } from "path";
+import { cpSync, mkdirSync } from "node:fs";
 
 export default defineConfig({
+    plugins: [
+        {
+            name: "pdf-managed-assets",
+            closeBundle() {
+                const output = resolve(
+                    __dirname,
+                    "dist/views/public/pdf/vendor/pdfjs",
+                );
+                mkdirSync(output, { recursive: true });
+                for (const name of [
+                    "build/pdf.worker.min.mjs",
+                    "cmaps",
+                    "standard_fonts",
+                    "wasm",
+                    "LICENSE",
+                ])
+                    cpSync(
+                        resolve(__dirname, "node_modules/pdfjs-dist", name),
+                        resolve(output, name.replace(/^build\//, "")),
+                        { recursive: true },
+                    );
+                const notices = resolve(
+                    __dirname,
+                    "dist/views/public/pdf/vendor/converters/pdfToMarkdown",
+                );
+                mkdirSync(notices, { recursive: true });
+                for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"])
+                    cpSync(
+                        resolve(
+                            __dirname,
+                            "../browserControlRpc/src/converters/pdfToMarkdown",
+                            name,
+                        ),
+                        resolve(notices, name),
+                    );
+            },
+        },
+    ],
     root: resolve(__dirname, "src/views/client"),
     build: {
         outDir: resolve(__dirname, "dist/views/public"),

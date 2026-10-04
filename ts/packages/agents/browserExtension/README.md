@@ -60,6 +60,59 @@ pre-release extraction settings are reported explicitly; use **Reset to
 Defaults** on the options page to discard them. Procedure discovery settings
 and candidate review remain independent of memory processing.
 
+## PDF imports
+
+Memory Hub's **Add to memory** dialog provides **Import PDF**. Select a named
+corpus in the persistent selector and a local PDF, then import. Memory Hub
+extracts Markdown locally and submits `corpusId`, `title`, `markdown` and
+`canonicalUri` through ordinary `memoryImportDocument`. No PDF bytes, layout
+artifacts or location maps are sent to memory. The selected Memory Hub corpus
+is the explicit import target. The host uses the shared memory service's
+`content` pipeline.
+
+The extension-hosted PDF viewer provides **Save to corpus** in its toolbar.
+Choose a corpus and submit to extract from the already-loaded PDF using the same
+adapter in Chrome and Electron. The bridge initializes by parent-window messaging rather than a URL
+token, checks source/origin/token, and reuses the extension transport. Standalone
+viewer pages do not expose save without that bridge. This channel check does not
+grant PDF storage or read access. Viewer messages carry Markdown, source identity
+and extraction statistics, never PDF bytes or layout artifacts.
+
+Extraction reports page progress. The dialog observes ordinary memory job states
+and saves only pending job, corpus, source and revision identifiers in session
+storage for reconnect without resubmission. Import and Cancel share one action
+row. Closing after submission leaves indexing running; cancellation uses
+`memoryCancelJob`. Monitoring uses source-scoped `memoryListJobs` pages and
+verifies the accepted job, source and revision identity. Source content and
+forgetting use ordinary memory operations.
+
+Import currently limits local PDFs to 10 MiB and inline Markdown requests to
+16 MiB. These are enforced limits, not a performance qualification. Preview,
+export and inspection keep PDF bytes and extraction artifacts local; corpus
+import stores Markdown through memory ingestion. Local source identity
+uses the original-byte SHA-256; remote identities reject credentials and query
+parameters unless the user selects a safe alias or byte-hash identity.
+
+The shared `@typeagent/browser-control-rpc/pdfMarkdown` adapter uses the pinned
+Papero engine and Markdown/math exporter, without OCR. Runtime code lives in
+`browserControlRpc/src/converters/pdfToMarkdown`, parent tests in
+`browserControlRpc/test/pdfToMarkdown`, and regeneration/qualification tools in
+`ts/tools/scripts/converters/pdfToMarkdown`. Dependencies belong to the parent
+package. Full-book upstream/adapted/production Markdown parity is verified, not
+general correctness of every table, formula, figure/caption or reading order.
+Image-only PDFs fail explicitly;
+textless pages require consent to import available text. Encrypted local imports
+request a password without persisting it. Viewer inspection now has tested
+in-memory semantic caching and pause/cancel; persistent text-page checkpoints
+and block/crop controls are removed. Offline tests do not qualify live indexing,
+all PDF layouts or full-book performance.
+
+See [PDF Markdown import boundaries](../browser/docs/pdf-markdown-import.md).
+
+See the [implementation coverage and mandatory remaining gates](../../../../../codeDocs/TypeAgent/forAgent/projects/inProgress/2026-10-01_pdf-document-understanding-proposal/implementation-status.md)
+in the sibling codeDocs checkout. Passing offline import/bridge tests does not
+mean that all PDF work packages or live acceptance scenarios are complete.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

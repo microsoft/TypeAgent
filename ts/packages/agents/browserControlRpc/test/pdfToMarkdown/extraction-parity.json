@@ -1,0 +1,127 @@
+{
+  "revision": "f9e92cbc0224d1413c11dda15b284ee41b9fc48f",
+  "baselinePdfjs": "4.10.38",
+  "localPdfjs": "5.3.31",
+  "pages": [
+    {
+      "number": 1,
+      "width": 600,
+      "height": 800,
+      "blocks": [
+        {
+          "id": "p1-b0",
+          "type": "heading",
+          "order": 0,
+          "bbox": [
+            50,
+            45.64,
+            211.18,
+            64.14
+          ],
+          "text": "Papero fixture title",
+          "level": 1,
+          "format": {
+            "align": "left"
+          },
+          "style": {
+            "size": 18.3,
+            "bold": false,
+            "pt": 20,
+            "font": "Helvetica"
+          }
+        },
+        {
+          "id": "p1-b1",
+          "type": "paragraph",
+          "order": 1,
+          "bbox": [
+            50,
+            91.38,
+            247.4,
+            102.48
+          ],
+          "text": "Operator glyph text with local PDF.js.",
+          "format": {
+            "align": "left"
+          },
+          "style": {
+            "size": 11,
+            "bold": false,
+            "pt": 12,
+            "font": "Helvetica"
+          }
+        },
+        {
+          "id": "p1-b2",
+          "type": "table",
+          "order": 2,
+          "bbox": [
+            50,
+            180,
+            250,
+            240
+          ],
+          "text": "Name | Value\nAlpha | One",
+          "rows": [
+            [
+              "Name",
+              "Value"
+            ],
+            [
+              "Alpha",
+              "One"
+            ]
+          ]
+        },
+        {
+          "id": "p1-b3",
+          "type": "paragraph",
+          "order": 3,
+          "bbox": [
+            491.38,
+            485.3,
+            502.48,
+            550
+          ],
+          "text": "Rotated text",
+          "runs": [
+            {
+              "text": "Ro",
+              "bold": false,
+              "italic": false,
+              "script": null
+            },
+            {
+              "text": "tat",
+              "bold": false,
+              "italic": false,
+              "script": "sub"
+            },
+            {
+              "text": "ed",
+              "bold": false,
+              "italic": false,
+              "script": null
+            },
+            {
+              "text": "text",
+              "bold": false,
+              "italic": false,
+              "script": "super"
+            }
+          ],
+          "format": {
+            "align": "left"
+          },
+          "style": {
+            "size": 11,
+            "bold": false,
+            "pt": 12,
+            "font": "Helvetica"
+          }
+        }
+      ]
+    }
+  ],
+  "markdown": "# Papero fixture title\n\nOperator glyph text with local PDF.js.\n\n| Name | Value |\n|---|---|\n| Alpha | One |\n\n$\\operatorname{Ro}_{tat}ed^{text}$\n"
+}

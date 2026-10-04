@@ -86,6 +86,52 @@ test.each(["documents", "conversation-events", "procedures"] as const)(
     },
 );
 
+test.each(["documents", "conversation-events", "procedures"] as const)(
+    "%s handles retired projection markers without changing schema safety checks",
+    async (kind) => {
+        const directory = await mkdtemp(
+            path.join(os.tmpdir(), "memory-projection-marker-"),
+        );
+        try {
+            const schema = path.join(directory, schemaFileName);
+            await writeFile(schema, descriptor(kind));
+            await writeFile(
+                path.join(directory, semanticFileName),
+                JSON.stringify({
+                    messages: [{ text: "retained" }],
+                    semanticRefs: [],
+                }),
+            );
+            for (const marker of [
+                JSON.stringify({
+                    schemaVersion: 1,
+                    offsetUnit: "utf16",
+                    proseVersion: 1,
+                }),
+                "{",
+            ]) {
+                await writeFile(
+                    path.join(directory, "document-projection.json"),
+                    marker,
+                );
+                expect(await classifyIndexSchema(directory, kind, true)).toBe(
+                    kind === "documents" ? "reset" : "current",
+                );
+            }
+            await writeFile(schema, descriptor(kind, 2));
+            await expect(
+                classifyIndexSchema(directory, kind, true),
+            ).rejects.toThrow("Unsupported future index schema version");
+            await writeFile(schema, "{");
+            await expect(
+                classifyIndexSchema(directory, kind, true),
+            ).rejects.toThrow("Malformed index schema");
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    },
+);
+
 test("document reset replays canonical content and never copies an unmarked generation", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "memory-schema-doc-"));
     const counts = { rebuild: 0, append: 0 };

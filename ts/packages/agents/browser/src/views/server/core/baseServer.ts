@@ -56,9 +56,13 @@ export class BaseServer {
             res.status(403).send("Origin not allowed");
         });
         this.app.use((req, res, next) => {
+            const readerAncestors =
+                req.path === "/pdf" || req.path.startsWith("/pdf/")
+                    ? " chrome-extension: moz-extension:"
+                    : "";
             res.setHeader(
                 "Content-Security-Policy",
-                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self' http://localhost:* http://127.0.0.1:*",
+                `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self' http://localhost:* http://127.0.0.1:*${readerAncestors}`,
             );
             res.setHeader("X-Content-Type-Options", "nosniff");
             res.setHeader("Referrer-Policy", "no-referrer");
