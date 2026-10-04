@@ -13,8 +13,9 @@
     <script>
       try {
         var t = localStorage.getItem("memoryHub.theme");
-        if (t === "light" || t === "dark")
-          document.documentElement.dataset.theme = t;
+        if (t !== "system")
+          document.documentElement.dataset.theme =
+            t === "dark" ? "dark" : "light";
       } catch (e) {}
     </script>
   </head>
@@ -52,10 +53,10 @@
         id="hubTheme"
         class="icon-btn"
         type="button"
-        aria-label="Theme: System"
-        title="Theme: System"
+        aria-label="Theme: Light"
+        title="Theme: Light"
       >
-        <i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i>
+        <i class="fa-solid fa-sun" aria-hidden="true"></i>
       </button>
       <a id="hubStatus" href="#/activity" role="status">Connecting</a>
     </header>
@@ -261,15 +262,6 @@
       <div class="hub-dialog-head">
         <h2>Add to memory</h2>
         <button
-          id="addPdf"
-          class="icon-btn"
-          type="button"
-          aria-label="Import PDF"
-          title="Import PDF into the selected corpus"
-        >
-          <i class="fa-solid fa-file-pdf" aria-hidden="true"></i>
-        </button>
-        <button
           id="addClose"
           class="icon-btn"
           type="button"
@@ -286,8 +278,8 @@
         </select>
       </label>
       <p id="addTargetHint" class="hub-hint">
-        Used for Markdown and runbook sources. Page capture and browser imports
-        always go to TypeAgent Browser Memory.
+        Used for Markdown, PDF and runbook sources. Page capture and browser
+        imports always go to TypeAgent Browser Memory.
       </p>
       <h3 class="hub-group-title">Pages and browsing</h3>
       <div class="hub-tiles">
@@ -307,6 +299,10 @@
         <button id="addMarkdown" class="hub-tile" type="button">
           <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i
           ><span><b>Paste Markdown</b><small>Write or paste notes</small></span>
+        </button>
+        <button id="addPdf" class="hub-tile" type="button">
+          <i class="fa-regular fa-file-pdf" aria-hidden="true"></i
+          ><span><b>PDF</b><small>Extracted on this device</small></span>
         </button>
         <button id="addFolder" class="hub-tile" type="button">
           <i class="fa-regular fa-folder-open" aria-hidden="true"></i

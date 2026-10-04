@@ -80,6 +80,9 @@ function invalidateDiscovery(): void {
     explorePanel.scopeChanged();
 }
 
+const PDF_CHIP = "pdf";
+const PDF_URI_PREFIX = "urn:pdf:";
+
 const railPages: HubRoute["page"][] = [
     "inbox",
     "library",
@@ -267,7 +270,8 @@ function mountPhaseTwo(): void {
     });
     importsPanel = mountMemoryHubImports(el("hubImportHost"), {
         targetLabel: "TypeAgent Browser Memory (fixed)",
-        scope: selectedScope,
+        scope: () =>
+            el<HTMLSelectElement>("addTarget").value || scope || undefined,
         onError,
         onOpenJobs: () => {
             void hubAction(async () => {
@@ -802,13 +806,20 @@ async function loadManagement(): Promise<void> {
         ["text", "Text"],
         ["html", "HTML"],
         ["vtt", "Transcript"],
+        [PDF_CHIP, "PDF"],
     ]) {
-        const option = document.createElement("option");
-        option.value = type;
-        option.textContent = type || "All types";
-        typeSelect.append(option);
+        if (type !== PDF_CHIP) {
+            const option = document.createElement("option");
+            option.value = type;
+            option.textContent = type || "All types";
+            typeSelect.append(option);
+        }
         const chip = button(label, () => {
-            typeSelect.value = type;
+            typeSelect.value = type === PDF_CHIP ? "" : type;
+            // PDF imports are Markdown sources with a urn:pdf: identity.
+            const filter = el<HTMLInputElement>("sourceFilter");
+            if (type === PDF_CHIP) filter.value = PDF_URI_PREFIX;
+            else if (filter.value === PDF_URI_PREFIX) filter.value = "";
             for (const other of typeChips.querySelectorAll("button"))
                 other.setAttribute("aria-pressed", String(other === chip));
             el("applySourceFilter").click();

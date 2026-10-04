@@ -317,6 +317,7 @@ export function mountMemoryHubImports(
                         window.location.href,
                     ).href,
                     corpusId: options.scope,
+                    dialogClass: "hub-import-dialog hub-pdf-dialog",
                 },
             );
             try {

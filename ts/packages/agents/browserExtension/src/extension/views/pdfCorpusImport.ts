@@ -171,6 +171,9 @@ export function createPdfCorpusImport(
         host?: HTMLElement;
         assetBase?: string;
         corpusId?: () => string | undefined;
+        // Hosts that provide their own dialog styling set this instead of
+        // the default inline styles.
+        dialogClass?: string;
     },
 ): { open: (provider?: PdfProvider) => Promise<void>; dispose: () => void } {
     const rpc: PdfImportTransport | undefined =
@@ -190,8 +193,10 @@ export function createPdfCorpusImport(
         >;
     }
     const dialog = document.createElement("dialog");
-    dialog.style.cssText =
-        "box-sizing:border-box;max-width:520px;width:calc(100% - 48px);border:1px solid #888;border-radius:6px;padding:24px;";
+    if (options?.dialogClass) dialog.className = options.dialogClass;
+    else
+        dialog.style.cssText =
+            "box-sizing:border-box;max-width:520px;width:calc(100% - 48px);border:1px solid #888;border-radius:6px;padding:24px;";
     dialog.innerHTML = `<form><h2 style="font-size:20px;margin:0 0 16px">Import PDF to corpus</h2>
         <p><label style="display:block">Corpus <select class="form-select" style="max-width:100%" name="corpus" required></select></label></p>
         <p><label style="display:block">PDF file <input class="form-control" style="max-width:100%" name="file" type="file" accept="application/pdf,.pdf" required></label></p>
@@ -221,6 +226,7 @@ export function createPdfCorpusImport(
     let generation = 0;
     let notifiedJobId: string | undefined;
     let cancelling = false;
+    let loadingCorpora = false;
     let disposed = false;
     let targetCorpusId: string | undefined;
     function stopPolling(): void {
@@ -239,7 +245,7 @@ export function createPdfCorpusImport(
         select.closest("p")!.hidden = running || succeeded;
         fileInput.closest("p")!.hidden = running || succeeded || !!provider;
         fileInput.disabled = running;
-        progressBar.hidden = !running;
+        progressBar.hidden = !running && !loadingCorpora;
         success.hidden = !succeeded;
         cancel.disabled = cancelling || (!extraction && !pending);
         close.disabled = busy && !extraction;
@@ -338,6 +344,7 @@ export function createPdfCorpusImport(
             terminal = await showJob(value, expected);
         } catch (error) {
             if (epoch !== generation || !dialog.open) return;
+            updateProgress();
             status.textContent = `Import status unavailable. ${errorText(error)}. Reconnecting...`;
         }
         if (terminal || epoch !== generation || !dialog.open) return;
@@ -425,10 +432,15 @@ export function createPdfCorpusImport(
         status.textContent = "Loading PDF...";
         try {
             const result = await source((completed, total) => {
-                if (!controller.signal.aborted) {
-                    updateProgress(completed, total);
-                    status.textContent = `Extracting layout: page ${completed} of ${total}`;
+                if (controller.signal.aborted) return;
+                if (completed >= total) {
+                    // The last page is read, but Markdown is still assembled.
+                    updateProgress();
+                    status.textContent = "Finalizing Markdown...";
+                    return;
                 }
+                updateProgress(completed, total);
+                status.textContent = `Extracting layout: page ${completed} of ${total}`;
             }, controller.signal);
             checkAbort(controller.signal);
             if (
@@ -512,6 +524,7 @@ export function createPdfCorpusImport(
             fileInput.closest("p")!.hidden = !!source;
             select.replaceChildren();
             status.textContent = "Loading corpora...";
+            loadingCorpora = true;
             controls();
             dialog.showModal();
             try {
@@ -540,6 +553,9 @@ export function createPdfCorpusImport(
             } catch (error) {
                 if (epoch === generation && dialog.open)
                     status.textContent = errorText(error);
+            } finally {
+                loadingCorpora = false;
+                controls();
             }
         },
         dispose() {

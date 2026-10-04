@@ -174,6 +174,35 @@ describe("PDF Markdown corpus import", () => {
         expect(document.querySelector("[name=searchCapture]")).toBeNull();
         expect(document.querySelector("[name=openCapture]")).toBeNull();
     });
+    it("shows an indeterminate bar while corpora load", async () => {
+        let release!: (value: unknown) => void;
+        const invoke = jest.fn(
+            () => new Promise((resolve) => (release = resolve)),
+        );
+        const opening = createPdfCorpusImport(undefined, { invoke }).open();
+        const bar = document.querySelector("progress")!;
+        expect(bar.hidden).toBe(false);
+        expect(bar.hasAttribute("value")).toBe(false);
+        release([{ corpusId: "a", name: "A" }]);
+        await opening;
+        expect(bar.hidden).toBe(true);
+    });
+    it("switches to an indeterminate bar once the last page is read", async () => {
+        let report!: (completed: number, total: number) => void;
+        await createPdfCorpusImport().open(
+            (progress) =>
+                new Promise(() => {
+                    report = progress;
+                }),
+        );
+        submit();
+        report(1, 3);
+        const bar = document.querySelector("progress")!;
+        expect(bar.value).toBe(1);
+        report(3, 3);
+        expect(bar.hasAttribute("value")).toBe(false);
+        expect(text()).toContain("Finalizing Markdown");
+    });
     it("reuses a supplied transport", async () => {
         const invoke = jest.fn(async () => [
             { corpusId: "shared", name: "Shared" },

@@ -25,22 +25,24 @@ function toggle(): HTMLButtonElement {
     return button;
 }
 
-test("theme cycles system, light and dark", () => {
-    expect(nextTheme("system")).toBe("light");
+test("theme cycles light, dark and system", () => {
     expect(nextTheme("light")).toBe("dark");
     expect(nextTheme("dark")).toBe("system");
+    expect(nextTheme("system")).toBe("light");
 });
 
-test("unknown or unavailable storage falls back to the system theme", () => {
-    expect(readTheme(storage({ [THEME_KEY]: "sepia" }))).toBe("system");
+test("nothing stored, unknown values and unavailable storage default to light", () => {
+    expect(readTheme(storage())).toBe("light");
+    expect(readTheme(storage({ [THEME_KEY]: "sepia" }))).toBe("light");
     expect(readTheme(storage({ [THEME_KEY]: "dark" }))).toBe("dark");
+    expect(readTheme(storage({ [THEME_KEY]: "system" }))).toBe("system");
     expect(
         readTheme({
             getItem: () => {
                 throw new Error("blocked");
             },
         }),
-    ).toBe("system");
+    ).toBe("light");
 });
 
 test("applyTheme sets the root attribute and the toggle label", () => {
@@ -80,5 +82,5 @@ test("a storage failure does not break the toggle", () => {
     } as unknown as Storage;
     mountThemeToggle(button, blocked, root);
     expect(() => button.click()).not.toThrow();
-    expect(root.dataset.theme).toBe("light");
+    expect(root.dataset.theme).toBe("dark");
 });

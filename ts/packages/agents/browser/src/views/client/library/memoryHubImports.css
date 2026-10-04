@@ -45,3 +45,24 @@
 .hub-import-dialog [role="alert"] {
   color: var(--danger-text);
 }
+
+/* PDF import dialog (created by the shared PDF import module) */
+.hub-pdf-dialog h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+.hub-pdf-dialog [data-import-success] {
+  color: var(--success) !important;
+}
+.hub-pdf-dialog select,
+.hub-pdf-dialog input[type="file"] {
+  width: 100%;
+}
+.hub-pdf-dialog progress {
+  accent-color: var(--primary);
+}
+.hub-pdf-dialog .btn-primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-accent);
+}

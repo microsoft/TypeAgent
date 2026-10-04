@@ -625,6 +625,9 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     value("hubAdd").click();
     expect(value<HTMLDialogElement>("hubAddDialog").open).toBe(true);
     expect(value<HTMLButtonElement>("addMarkdown").disabled).toBe(false);
+    expect(value("addPdf").closest(".hub-tiles")).not.toBeNull();
+    expect(value("addPdf").closest(".hub-dialog-head")).toBeNull();
+    expect(value("addPdf").textContent).toContain("PDF");
     value("addBrowser").click();
     const browserImport =
         document.querySelector<HTMLDialogElement>(".hub-import-dialog")!;

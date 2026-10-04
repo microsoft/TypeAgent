@@ -10,7 +10,8 @@ const modes: Record<ThemeMode, { icon: string; label: string }> = {
     light: { icon: "fa-sun", label: "Light" },
     dark: { icon: "fa-moon", label: "Dark" },
 };
-const order: ThemeMode[] = ["system", "light", "dark"];
+// Light is the default; System follows the OS only when chosen.
+const order: ThemeMode[] = ["light", "dark", "system"];
 
 export function nextTheme(mode: ThemeMode): ThemeMode {
     return order[(order.indexOf(mode) + 1) % order.length];
@@ -19,9 +20,9 @@ export function nextTheme(mode: ThemeMode): ThemeMode {
 export function readTheme(storage: Pick<Storage, "getItem">): ThemeMode {
     try {
         const value = storage.getItem(THEME_KEY);
-        return value === "light" || value === "dark" ? value : "system";
+        return value === "dark" || value === "system" ? value : "light";
     } catch {
-        return "system";
+        return "light";
     }
 }
 
