@@ -1417,6 +1417,12 @@ importers:
 
   packages/agent-flows:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
+      debug:
+        specifier: ^4.3.4
+        version: 4.4.3(supports-color@8.1.1)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -1424,6 +1430,9 @@ importers:
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
@@ -5155,6 +5164,9 @@ importers:
       '@typeagent/agent-cache':
         specifier: workspace:*
         version: link:../../cache
+      '@typeagent/agent-flows':
+        specifier: workspace:*
+        version: link:../../agent-flows
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc

@@ -234,6 +234,9 @@ export function createSessionContext<T = unknown>(
             choices: string[] = ["Yes", "No"], // default choices
             defaultId?: number,
         ): Promise<number> {
+            if (name === "powershell" && context.batchMode) {
+                return Promise.resolve(defaultId ?? 0);
+            }
             return context.clientIO.question(
                 getStructuredExecution(context) === undefined
                     ? undefined

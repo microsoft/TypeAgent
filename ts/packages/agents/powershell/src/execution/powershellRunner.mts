@@ -9,6 +9,8 @@ import { fileURLToPath } from "url";
 import { getPowerShellExecutionGates } from "../config/executionGates.mjs";
 import type { ScriptExecutionProvenance } from "../types/scriptRecipe.js";
 import { executeBrokeredPowerShell } from "./windowsSandboxBroker.mjs";
+import { powerShellFingerprint } from "@typeagent/agent-flows/powershell/integrity";
+import { approveInvocation } from "./invocationApproval.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -62,6 +64,9 @@ export interface ScriptExecutionRequest {
     workingDirectory?: string;
     abortSignal?: AbortSignal | undefined;
     profiler?: ScriptExecutionProfiler | undefined;
+    revisionHash?: string | undefined;
+    requestApproval?: ((message: string) => Promise<number>) | undefined;
+    assertCurrent?: (() => Promise<void>) | undefined;
 }
 
 export interface ScriptExecutionResult {
@@ -169,27 +174,54 @@ export async function executeScript(
             "PowerShell policy denied an unsupported dynamic command.",
         );
     }
+    if (
+        !Number.isInteger(request.sandbox.maxExecutionTime) ||
+        request.sandbox.maxExecutionTime < 1 ||
+        request.sandbox.maxExecutionTime > 120 ||
+        request.workingDirectory !== undefined
+    ) {
+        return createPolicyDeniedResult(
+            "PowerShell policy requires a 1-120 second timeout and a private sandbox working directory.",
+        );
+    }
+
+    const approval = await approveInvocation(request);
+    if ("failure" in approval) return approval.failure;
+    const snapshot = approval.snapshot;
+    if (!isDynamicProvenance(snapshot.provenance)) {
+        return createPolicyDeniedResult(
+            "PowerShell invocation has no recognized dynamic provenance.",
+        );
+    }
+    const currentGates = getPowerShellExecutionGates();
+    if (
+        !currentGates.dynamicExecution.enabled ||
+        !currentGates.brokerExecution.enabled
+    ) {
+        return createPolicyDeniedResult(
+            "PowerShell execution was disabled while approval was pending.",
+        );
+    }
 
     const profile = request.profiler?.measure(
         "powershellSandboxExecution",
         true,
         {
-            provenance: request.provenance,
+            provenance: snapshot.provenance,
             policyVersion: "appcontainer-v1",
             isolationMode: "appcontainer",
             languageMode: "ConstrainedLanguage",
-            scriptHash: createHash("sha256")
-                .update(request.script)
-                .digest("hex"),
+            scriptHash: powerShellFingerprint(snapshot.script),
+            invocationHash: approval.invocationHash,
         },
     );
     try {
         const result = await executeBrokeredPowerShell({
-            script: request.script,
-            parameters: request.parameters,
-            provenance: request.provenance,
-            allowedCommands: request.sandbox.allowedCmdlets,
-            maxExecutionTime: request.sandbox.maxExecutionTime,
+            script: snapshot.script,
+            parameters: snapshot.parameters,
+            provenance: snapshot.provenance,
+            allowedCommands: snapshot.sandbox.allowedCmdlets,
+            maxExecutionTime: snapshot.sandbox.maxExecutionTime,
             abortSignal: request.abortSignal,
         });
         profile?.stop({

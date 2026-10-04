@@ -109,6 +109,8 @@ import {
     getReasoningPermissionChoices,
     hasCachedReasoningApproval,
     recordReasoningApprovalChoice,
+    getPowerShellExecutionBlock,
+    recordPowerShellExecutionBlock,
     type ReasoningPermissionPolicyRequest,
 } from "./reasoningPermissionPolicy.js";
 
@@ -728,6 +730,11 @@ function createCopilotPermissionHandler(
     allowedRoot?: string,
 ): PermissionHandler {
     return async (request) => {
+        const blocked = getPowerShellExecutionBlock(
+            context.sessionContext.agentContext,
+            getRequestId(context.sessionContext.agentContext).requestId,
+        );
+        if (blocked) return { kind: "reject", feedback: blocked };
         if (ghcpEvalExecutionStopped()) {
             return {
                 kind: "denied-no-approval-rule-and-could-not-request-from-user",
@@ -1450,6 +1457,16 @@ function getCopilotSessionConfig(
         },
         handler: async (args: any) =>
             executeActionLock(async () => {
+                const blocked = getPowerShellExecutionBlock(
+                    systemContext,
+                    getRequestId(systemContext).requestId,
+                );
+                if (blocked) {
+                    return {
+                        textResultForLlm: blocked,
+                        resultType: "failure" as const,
+                    };
+                }
                 const { schemaName, action: actionJson } = args;
                 debug(
                     `Executing action: ${schemaName}.${actionJson.actionName}`,
@@ -1475,6 +1492,10 @@ function getCopilotSessionConfig(
                         .reasoningForwardActions;
                 const capturingClientIO: ClientIO = {
                     ...nullClientIO,
+                    question: (...args) =>
+                        args[4] === "powershell"
+                            ? baseClientIO.question(...args)
+                            : nullClientIO.question(...args),
                     setDisplay: (message) => {
                         result.push(message);
                     },
@@ -1503,6 +1524,11 @@ function getCopilotSessionConfig(
                         },
                         context,
                         actionIndex++,
+                    );
+                    recordPowerShellExecutionBlock(
+                        systemContext,
+                        getRequestId(systemContext).requestId,
+                        actionResult,
                     );
                     if (actionResult.error === undefined) {
                         const commandResult =

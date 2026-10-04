@@ -276,6 +276,194 @@ describe("createAndExecutePowerShellFlow", () => {
         await setDynamicExecution(true);
     });
 
+    describe("mandatory dynamic invocation approval", () => {
+        it.each([
+            { actionName: "approvalFlow", parameters: {} },
+            {
+                actionName: "executePowerShellFlow",
+                parameters: { flowName: "approvalFlow" },
+            },
+            {
+                actionName: "testPowerShellFlow",
+                parameters: {
+                    script: "Write-Output 'draft'",
+                    allowedCmdlets: ["Write-Output"],
+                },
+            },
+            {
+                actionName: "createAndExecutePowerShellFlow",
+                parameters: {
+                    actionName: "newCandidate",
+                    script: "Write-Output 'new'",
+                    allowedCmdlets: ["Write-Output"],
+                },
+            },
+            {
+                actionName: "createAndExecutePowerShellFlow",
+                parameters: {
+                    actionName: "approvalFlow",
+                    script: "Write-Output 'ignored'",
+                    allowedCmdlets: ["Write-Output"],
+                },
+            },
+            {
+                actionName: "repairAndExecutePowerShellFlow",
+                parameters: {
+                    flowName: "approvalFlow",
+                    script: "Write-Output 'repair'",
+                    allowedCmdlets: ["Write-Output"],
+                },
+            },
+        ])(
+            "requires default-Cancel approval for $actionName",
+            async (action) => {
+                const popup = jest.fn<SessionContext["popupQuestion"]>(
+                    async () => 0,
+                );
+                const { agent, context } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    undefined,
+                    popup,
+                );
+                await createStoredFlow(agent, context, "approvalFlow");
+                expect(popup).not.toHaveBeenCalled();
+                const result = await agent.executeAction?.(
+                    { schemaName: "powershell", ...action },
+                    context,
+                );
+                expect(result).toMatchObject({
+                    errorCode: "powershell.approvalDenied",
+                    retryable: false,
+                    fallbackToReasoning: false,
+                });
+                expect(popup).toHaveBeenCalledTimes(1);
+                expect(popup).toHaveBeenCalledWith(
+                    expect.stringContaining("Exact script begins below:"),
+                    ["Cancel", "Approve once"],
+                    0,
+                );
+            },
+        );
+
+        it("requires invocation approval for the CLI run route", async () => {
+            const popup = jest.fn<SessionContext["popupQuestion"]>(
+                async () => 0,
+            );
+            const { agent, context } = await createAgentHarness(
+                undefined,
+                undefined,
+                undefined,
+                popup,
+            );
+            await createStoredFlow(agent, context, "cliApprovalFlow");
+            await expect(
+                agent.executeCommand?.(
+                    ["run"],
+                    {
+                        args: { flowName: "cliApprovalFlow" },
+                        flags: {},
+                    },
+                    context,
+                ),
+            ).rejects.toThrow("not approved");
+            expect(popup).toHaveBeenCalledTimes(1);
+        });
+
+        it("keeps parent environment references literal, including parameter defaults", async () => {
+            const name = "TYPEAGENT_SYNTHETIC_APPROVAL_SECRET";
+            const previous = process.env[name];
+            process.env[name] = "synthetic-secret-must-not-leak";
+            const popup = jest.fn<SessionContext["popupQuestion"]>(
+                async () => 0,
+            );
+            try {
+                const { agent, context } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    undefined,
+                    popup,
+                );
+                await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "createPowerShellFlow",
+                        parameters: {
+                            actionName: "literalEnvironmentFlow",
+                            script: "param([string]$Value)\nWrite-Output $Value",
+                            allowedCmdlets: ["Write-Output"],
+                            scriptParameters: [
+                                {
+                                    name: "Value",
+                                    type: "string",
+                                    required: false,
+                                    description: "",
+                                    default: `$env:${name}`,
+                                },
+                            ],
+                        },
+                    },
+                    context,
+                );
+                for (const parameters of [{}, { Value: `$env:${name}` }]) {
+                    const result = await agent.executeAction?.(
+                        {
+                            schemaName: "powershell",
+                            actionName: "literalEnvironmentFlow",
+                            parameters,
+                        },
+                        context,
+                    );
+                    expect(result).toHaveProperty(
+                        "errorCode",
+                        "powershell.approvalDenied",
+                    );
+                }
+                expect(popup).toHaveBeenCalledTimes(2);
+                for (const [message] of popup.mock.calls) {
+                    expect(message).toContain(`$env:${name}`);
+                    expect(message).not.toContain(
+                        "synthetic-secret-must-not-leak",
+                    );
+                }
+            } finally {
+                if (previous === undefined) delete process.env[name];
+                else process.env[name] = previous;
+            }
+        });
+
+        it("reports stored tampering without offering approval or reasoning fallback", async () => {
+            const popup = jest.fn<SessionContext["popupQuestion"]>(
+                async () => 1,
+            );
+            const { agent, context, storage } = await createAgentHarness(
+                undefined,
+                undefined,
+                undefined,
+                popup,
+            );
+            await createStoredFlow(agent, context, "tamperedFlow");
+            await storage.write(
+                "scripts/tamperedFlow.ps1",
+                "Write-Output 'different content, same command'",
+            );
+            const result = await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "tamperedFlow",
+                    parameters: {},
+                },
+                context,
+            );
+            expect(result).toMatchObject({
+                errorCode: "powershell.integrityFailure",
+                fallbackToReasoning: false,
+                retryable: false,
+            });
+            expect(popup).not.toHaveBeenCalled();
+        });
+    });
+
     describe("static network actions", () => {
         it("does not intercept a root flow with the same action name", async () => {
             const { agent, context } = await createAgentHarness();
@@ -781,7 +969,7 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
         });
     });
 
-    it("denies a stored flow with missing provenance", async () => {
+    it("reports integrity failure when persisted provenance is removed", async () => {
         const { agent, storage, context } = await createAgentHarness();
         await createStoredFlow(agent, context, "unknownProvenanceFlow");
         const flow = JSON.parse(
@@ -802,7 +990,11 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
             context,
         );
 
-        expectPolicyDenied(result);
+        expect(result).toMatchObject({
+            errorCode: "powershell.integrityFailure",
+            retryable: false,
+            fallbackToReasoning: false,
+        });
     });
 
     it("marks edited flows while retaining generated provenance", async () => {

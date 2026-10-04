@@ -5,6 +5,7 @@ import { openai } from "@typeagent/aiclient";
 import type { ScriptRecipe } from "../types/scriptRecipe.js";
 import { basename } from "path";
 import registerDebug from "debug";
+import { validatePowerShellIdentifier } from "@typeagent/agent-flows/powershell/integrity";
 
 const debug = registerDebug("typeagent:powershell:analyzer");
 
@@ -17,6 +18,9 @@ export class ScriptAnalyzer {
         filePath: string,
         overrideActionName?: string,
     ): Promise<ScriptRecipe> {
+        if (overrideActionName !== undefined) {
+            validatePowerShellIdentifier(overrideActionName);
+        }
         if (scriptContent.length > MAX_SCRIPT_SIZE) {
             throw new Error(
                 `Script too large for analysis (${(scriptContent.length / 1024).toFixed(0)}KB, max 100KB)`,
@@ -51,6 +55,7 @@ export class ScriptAnalyzer {
         }
 
         const recipe = JSON.parse(jsonMatch[1]) as ScriptRecipe;
+        validatePowerShellIdentifier(recipe.actionName);
         if (!recipe.actionName || !recipe.script?.body) {
             throw new Error(
                 "Analysis produced invalid recipe: missing actionName or script.body",

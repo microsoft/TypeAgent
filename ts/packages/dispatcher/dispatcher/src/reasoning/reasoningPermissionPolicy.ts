@@ -62,6 +62,36 @@ type SessionState = {
 export type ReasoningPermissionHost = { session: object };
 
 const state = new WeakMap<object, SessionState>();
+const blockedPowerShellRequests = new WeakMap<object, Set<string>>();
+
+export function recordPowerShellExecutionBlock(
+    host: ReasoningPermissionHost,
+    requestId: string,
+    result: { error?: string | undefined; errorCode?: string | undefined },
+): void {
+    if (
+        result.error !== undefined &&
+        /^(powershell\.(policyDenied|integrityFailure|approvalRequired|approvalDenied|stalePlan|cancelled|partialSideEffects))$/.test(
+            result.errorCode ?? "",
+        )
+    ) {
+        let blocked = blockedPowerShellRequests.get(host.session);
+        if (!blocked) {
+            blocked = new Set();
+            blockedPowerShellRequests.set(host.session, blocked);
+        }
+        blocked.add(requestId);
+    }
+}
+
+export function getPowerShellExecutionBlock(
+    host: ReasoningPermissionHost,
+    requestId: string,
+): string | undefined {
+    return blockedPowerShellRequests.get(host.session)?.has(requestId)
+        ? "PowerShell execution was blocked. This request cannot retry, repair, or switch to another executor. Start a new user request to review a new invocation."
+        : undefined;
+}
 
 function getOrCreateState(host: ReasoningPermissionHost): SessionState {
     let s = state.get(host.session);
@@ -100,6 +130,7 @@ export function hasCachedReasoningApproval(
     host: ReasoningPermissionHost,
     request: ReasoningPermissionPolicyRequest,
 ): boolean {
+    if (getPowerShellExecutionBlock(host, request.requestId)) return false;
     if (!request.cacheEligible) {
         return false;
     }
@@ -160,6 +191,7 @@ export function recordReasoningApprovalChoice(
     request: ReasoningPermissionPolicyRequest,
     choice: string,
 ): boolean {
+    if (getPowerShellExecutionBlock(host, request.requestId)) return false;
     switch (choice) {
         case REASONING_ALLOW_ONCE:
             return true;

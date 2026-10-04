@@ -339,6 +339,34 @@ PowerShell supports two creation paths:
 
 ### Execution architecture
 
+Dynamic PowerShell does **not** use the reviewed-static launch described below.
+Its shared candidate store verifies host-owned SHA-256 script and execution
+metadata revisions before preparing an invocation. Import, generation, reasoning
+capture, seeding and promotion only register candidates. Unexpected edits or
+missing legacy revisions fail closed without rebaselining or deleting user data.
+
+Each invocation requires a default-Cancel approval of the exact script, resolved
+literal arguments and effective policy. Parent environment variables are not
+expanded into dynamic parameters. The runner sends its approved in-memory
+snapshot to the Windows broker, without reopening script paths. Approval cannot
+authorize a later retry or repair. Terminal PowerShell decisions stop automatic
+reasoning fallback and further execution tools in the same request, not future
+deliberate user requests.
+
+The foundation retains the default-off dynamic gates, existing command/AST
+restrictions, ConstrainedLanguage, denied network, no external paths or modules,
+and one-process Job Object. The cwd is private broker scratch space. Windows
+runtime/AppContainer baseline access remains; this is not an exact filesystem
+allowlist. Expanded modules, local Git and language-policy relaxation require
+separate containment work and review. See the
+[PowerShell trust and recovery guide](../../../packages/agents/powershell/README.md#dynamic-execution-trust-foundation).
+
+### Reviewed-static execution architecture
+
+The following legacy host flags and category tables describe the separate
+reviewed-static path and recipe metadata, not the dynamic broker's containment
+guarantees. Dynamic scripts must never be relabeled reviewed-static.
+
 ```
   Node.js                              PowerShell
   +------------------+                 +---------------------------+

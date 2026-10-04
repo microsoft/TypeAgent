@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { executeScript } from "../src/execution/powershellRunner.mjs";
+import {
+    executeScript as executeApprovedScript,
+    type ScriptExecutionRequest,
+} from "../src/execution/powershellRunner.mjs";
 import { runDeniedFileReadCase } from "./sandboxCases.js";
 
 const describeOnWindows =
@@ -14,6 +17,13 @@ const describeOnWindows =
         ? describe
         : describe.skip;
 const BROKER_TEST_TIMEOUT_SECONDS = 30;
+
+function executeScript(request: ScriptExecutionRequest) {
+    return executeApprovedScript({
+        ...request,
+        requestApproval: async () => 1,
+    });
+}
 
 describeOnWindows("PowerShell sandbox broker", () => {
     const originalConfigDir = process.env.TYPEAGENT_CONFIG_DIR;

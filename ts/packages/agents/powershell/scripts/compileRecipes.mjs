@@ -21,6 +21,7 @@ import {
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
+import { validatePowerShellIdentifier } from "@typeagent/agent-flows/powershell/integrity";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG = join(__dirname, "..");
@@ -163,6 +164,7 @@ let anyCompiled = false;
 for (const recipeFile of recipeFiles) {
     const recipePath = join(pendingDir, recipeFile);
     const recipe = JSON.parse(readFileSync(recipePath, "utf8"));
+    validatePowerShellIdentifier(recipe.actionName);
     console.log(`\nCompiling: ${recipe.actionName}`);
 
     // 1. Write flow.json
