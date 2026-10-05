@@ -7,9 +7,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DAEMON_PORT } from "../daemonApi.js";
+import { daemonClient } from "../daemonClient.js";
 import { cliLogger, daemonLogger } from "../logger.js";
-import { DAEMON_ROUTE } from "../server/router.js";
-import { startServer } from "../server/server.js";
 
 // One daemon per user, shared by every project. Each API request names its
 // project by absolute path, so the daemon does not depend on any cwd.
@@ -35,7 +35,6 @@ const STATE_FILE = "daemon.json";
 const START_TIMEOUT_MS = 5000;
 const STOP_TIMEOUT_MS = 5000;
 const POLL_MS = 50;
-const IDENTITY_TIMEOUT_MS = 1000;
 
 type DaemonState = { pid: number; port: number };
 
@@ -57,15 +56,11 @@ function isAlive(pid: number): boolean {
     }
 }
 
-// True when the server on `state.port` reports `state.pid`. A live pid alone
+// True when the daemon port reports `state.pid`. A live pid alone
 // is not enough: after a crash or reboot the OS can reuse it.
 async function answersAsDaemon(state: DaemonState): Promise<boolean> {
     try {
-        const res = await fetch(`${url(state)}${DAEMON_ROUTE}`, {
-            signal: AbortSignal.timeout(IDENTITY_TIMEOUT_MS),
-        });
-        const body = (await res.json()) as { pid?: number };
-        return body.pid === state.pid;
+        return (await daemonClient.identity()).pid === state.pid;
     } catch {
         return false;
     }
@@ -107,10 +102,6 @@ function removeStateIfOwned(pid: number): void {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const url = (s: DaemonState) => `http://127.0.0.1:${s.port}`;
-
-// Fixed so every client knows where the daemon listens. Chosen from the
-// IANA dynamic range (49152-65535) to avoid registered services.
-const DAEMON_PORT = 51703;
 
 async function start(): Promise<void> {
     const running = await readState();
@@ -206,6 +197,8 @@ async function stop(): Promise<void> {
 export async function runDaemon(): Promise<void> {
     const port = DAEMON_PORT;
     const file = path.join(stateDir(), STATE_FILE);
+    // Loaded here so CLI commands and hooks never load the HTTP server.
+    const { startServer } = await import("../server/server.js");
     let server: Awaited<ReturnType<typeof startServer>>;
     try {
         server = await startServer(port);

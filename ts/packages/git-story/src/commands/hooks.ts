@@ -4,12 +4,17 @@
 import type {
     AgentStopOutput,
     BaseHookInput,
+    SessionStartInput,
     SessionStartOutput,
     UserPromptSubmittedOutput,
 } from "@typeagent/agent-harness-hooks/copilot-cli";
 import { Command } from "commander";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
+import { daemonClient } from "../daemonClient.js";
 import { cliLogger } from "../logger.js";
+import type { SessionRegistration } from "../sessionWatcher.js";
 
 // Reads all of stdin. Hooks get their payload here (Copilot JSON, or lines
 // git pipes to hooks such as pre-push). Returns "" when stdin is a terminal.
@@ -28,13 +33,48 @@ export const hooksCommand = new Command("hooks").description(
 
 // Reads a Copilot hook payload and logs its session id.
 // Empty stdin (manual run) is treated as `{}`.
-async function readCopilotInput(hook: string): Promise<Partial<BaseHookInput>> {
-    const input = JSON.parse(
-        (await readStdin()) || "{}",
-    ) as Partial<BaseHookInput>;
+async function readCopilotInput<T extends BaseHookInput>(
+    hook: string,
+): Promise<Partial<T>> {
+    const input = JSON.parse((await readStdin()) || "{}") as Partial<T>;
     process.stderr.write(`git-story ${hook}: session=${input.sessionId}\n`);
     cliLogger.info(`${hook} session=${input.sessionId}`);
     return input;
+}
+
+const COPILOT_CLIENT_NAME = "copilot-cli";
+
+// Builds the daemon registration for a Copilot sessionStart payload.
+// Example: {sessionId:"s7", cwd:"/repo/src"} ->
+//   {projectPath:"/repo", sessionId:"s7",
+//    metadata:{clientName:"copilot-cli", models:[]}}
+function sessionRegistration(
+    input: Pick<SessionStartInput, "sessionId" | "cwd">,
+): SessionRegistration {
+    const projectPath = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+        cwd: input.cwd,
+        encoding: "utf8",
+        windowsHide: true,
+    }).trim();
+    return {
+        projectPath: path.resolve(projectPath),
+        sessionId: input.sessionId,
+        metadata: { clientName: COPILOT_CLIENT_NAME, models: [] },
+    };
+}
+
+// Registers the session with the daemon. Never throws: a missing daemon,
+// non-git cwd, or timeout is logged and ignored so the agent is unaffected.
+async function registerSession(
+    input: Partial<SessionStartInput>,
+): Promise<void> {
+    try {
+        const body = sessionRegistration(input as SessionStartInput);
+        await daemonClient.registerSession(body);
+        cliLogger.info(`sessionStart registered: ${body.sessionId}`);
+    } catch (e) {
+        cliLogger.info(`sessionStart not registered: ${(e as Error).message}`);
+    }
 }
 
 // Copilot CLI hooks. Each writes `{}` (change nothing). Placeholder until
@@ -56,7 +96,9 @@ copilotCommand
     .command("session-start")
     .description("Handle the Copilot sessionStart hook")
     .action(async () => {
-        await readCopilotInput("sessionStart");
+        await registerSession(
+            await readCopilotInput<SessionStartInput>("sessionStart"),
+        );
         const output: SessionStartOutput = {};
         process.stdout.write(`${JSON.stringify(output)}\n`);
     });

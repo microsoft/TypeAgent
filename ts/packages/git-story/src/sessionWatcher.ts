@@ -10,6 +10,10 @@ export type SessionWatchRequest = {
     metadata: SessionMetadata;
 };
 
+// What a client hook sends. The daemon derives transcriptPath from
+// metadata.clientName, so hooks need no client storage layout.
+export type SessionRegistration = Omit<SessionWatchRequest, "transcriptPath">;
+
 // Capture progress only, not acknowledgement of downstream processing.
 export type SessionCaptureCheckpoint = {
     sessionId: string;
