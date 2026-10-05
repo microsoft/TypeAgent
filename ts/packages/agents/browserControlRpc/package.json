@@ -42,7 +42,7 @@
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/memory-service": "workspace:*",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.16",
     "jsdom": "^28.1.0",
     "pdfjs-dist": "5.3.31"
   },
