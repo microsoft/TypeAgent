@@ -360,6 +360,78 @@ describe("approved macro action provider", () => {
         expect(calls).toHaveLength(0);
     });
 
+    it("learns the exact workspace-tool request with escaped JSON and bounded variants", async () => {
+        const macro = await manager.inspectMacro(await draft());
+        const original =
+            'Use the typeagent-workspace read tool with {"path":"package.json"}. Do not use typeagent-processCommand.';
+        const requests = [
+            original,
+            "Read package.json for me",
+            "Open package.json for me",
+            "Show package.json for me",
+        ];
+        const runtime = createMacroLearningRuntime(async (prompt) => {
+            expect(prompt).toContain(
+                "Escape literal AGR special characters in matchPattern",
+            );
+            expect(prompt).toContain("typeagent\\\\-workspace");
+            expect(prompt).toContain(
+                "Preserve all fixed trailing text after captured inputs",
+            );
+            return grammarModelResponse({
+                grammarPattern: {
+                    matchPattern: prompt.includes(`Request: "${original}"`)
+                        ? String.raw`Use the typeagent\-workspace read tool with \{"path":"$(step_1_path:wildcard)"\}. Do not use typeagent\-processCommand.`
+                        : "(read | open | show) $(step_1_path:wildcard) for me",
+                    actionParameters: [
+                        {
+                            parameterName: "step_1_path",
+                            parameterValue: "step_1_path",
+                        },
+                    ],
+                },
+            });
+        });
+        const rules = await runtime.generateGrammar(
+            macro,
+            { step_1_path: "package.json" },
+            requests,
+            new AbortController().signal,
+        );
+        expect(rules).toHaveLength(4);
+        const grammar = loadGrammarRules("workspace.agr", rules.join("\n"));
+        const nfa = compileGrammarToNFA(grammar);
+        for (const request of requests) {
+            expect(
+                matchGrammarWithNFA(
+                    grammar,
+                    nfa,
+                    request.replace(
+                        "package.json",
+                        "packages\\copilot-macros\\package.json",
+                    ),
+                ).map((match) => match.match),
+            ).toEqual([
+                {
+                    actionName: getMacroActionName(macro),
+                    parameters: {
+                        step_1_path: "packages\\copilot-macros\\package.json",
+                    },
+                },
+            ]);
+            for (const unsupported of [
+                `Don't ${request}`,
+                `${request} and delete all data`,
+            ]) {
+                expect(
+                    matchGrammarWithNFA(grammar, nfa, unsupported),
+                ).toHaveLength(0);
+            }
+        }
+        expect(calls).toHaveLength(0);
+        expect(await manager.getApprovedMacros()).toEqual([]);
+    });
+
     it.each([true, false])(
         "does not mutate existing routes when a staged analysis requests shared phrases (generate=%s)",
         async (shouldGenerateGrammar) => {

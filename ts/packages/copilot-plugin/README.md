@@ -616,6 +616,12 @@ The successful recording queues background recipe extraction, generalized
 macro building, offline evidence validation, and grammar generation. Learning
 does not execute the task again. Inspect status for the candidate/version or a
 specific failure; the original answer does not wait for model generation.
+Extraction receives result availability and JSON types, not the recorded result
+bodies. It describes the procedure (for example, read a file and return the new
+result), not the previous answer's contents. Withheld contents alone are not
+missing evidence; unrecorded ranking, synthesis, or other unsupported work still
+blocks preparation. Failure status includes the specific uncertainty, subject to
+the existing redaction and error-length limits.
 Optional conversation indexing uses its own bounded background queue, not
 the event-ingestion path. Native `report_intent` telemetry is not a task operation.
 
@@ -648,6 +654,11 @@ sets, even when generation is rejected or the candidate awaits approval.
 Candidate and combined-catalog checks cover exact actions/inputs, changed
 values, competing routes, and representative negative intents. These checks
 are not a proof of arbitrary natural-language intent equivalence.
+Generated request variants use fixed words around free-form inputs and end in
+`for me`, so an input cannot simply absorb a following operation. The original
+request is preserved exactly. Grammar generation is instructed to escape literal
+tool-name hyphens and JSON punctuation; malformed or overly broad rules still
+fail validation rather than being published.
 
 This is an initial learning implementation, not a completed live WorkIQ
 certification. The engine supports preparation from stored traces and
@@ -666,8 +677,10 @@ macro creation, inspection, or execution. Recording and learning are separate:
 
 - `armed` means the next task has been selected for recording; `claimed` means
   that task started. Their recording token is not a saved trace ID.
-- `completed` includes the saved trace ID. Learning can still be queued or
-  building; in Prepare mode a successfully prepared candidate needs review.
+- `completed` includes the saved trace ID and, for selected learning, a
+  `learningJob` with its current status, candidate/version, or failure reason.
+  The recording can be completed while learning is queued, building, or failed;
+  in Prepare mode a successfully prepared candidate has status `needsReview`.
 - `failed` includes an error to investigate. An empty macro catalog alone does
   not establish whether a trace exists or learning is still pending.
 
@@ -686,6 +699,13 @@ in [Step 3](#step-3-launch-copilot-with-the-plugin); rebuilding does not remove 
 persisted disabled-extension setting. These are distinct from tool/model failures
 reported by the learning job. Capture the status/error before cancelling or
 starting another recording.
+
+Restarting does not retry a failed extraction or grammar job. Preparing the same
+saved trace, or recording the same request and tool arguments again, returns the
+existing job. After fixing a learning failure, rebuild and restart agent-server,
+reload the plugin, then explicitly record a different harmless example, such as
+reading `README.md` instead of `package.json` from `ts`. Do not delete saved job
+data or create a manual draft to force a retry.
 
 ### Legacy manual lifecycle
 
