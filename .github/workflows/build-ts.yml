@@ -25,10 +25,10 @@ permissions:
 
 env:
   NODE_OPTIONS: --max_old_space_size=8192
-  # Fast lane: a change confined to FAST_LANE_DIR builds and tests only
-  # FAST_LANE_PACKAGE (and its dependencies) on a single matrix leg.
+  # Fast lane: a PR confined to ts/packages/git-story (see the paths-filter
+  # step) builds and tests only FAST_LANE_PACKAGE (and its dependencies) on a
+  # single matrix leg.
   FAST_LANE_PACKAGE: git-story
-  FAST_LANE_DIR: ts/packages/git-story
   FAST_LANE_OS: ubuntu-latest
   FAST_LANE_NODE: 22
 
@@ -53,38 +53,50 @@ jobs:
         with:
           # Full history so the changed-files lint can diff against the base.
           fetch-depth: 0
-      # Decide how much CI this change needs (PRs and merge queue alike):
+      # Decide how much CI this change needs:
       #   skip - nothing under ts/ (or this workflow) changed
-      #   fast - only FAST_LANE_DIR changed; one FAST_LANE_OS/FAST_LANE_NODE
+      #   fast - only ts/packages/git-story changed; one FAST_LANE_OS/FAST_LANE_NODE
       #          leg builds and tests FAST_LANE_PACKAGE and its dependencies;
       #          the other matrix legs skip (and report success).
-      #   full - anything else; push to main and manual runs are always full,
-      #          which backstops the fast lane after merge.
+      #   full - anything else.  Only pull requests are scoped; merge queue,
+      #          push to main and manual runs are always full, which
+      #          backstops the fast lane.  A paths-filter failure is also full.
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        if: ${{ github.event_name == 'pull_request' }}
+        continue-on-error: true
+        with:
+          # `every` is needed for the negated pattern, so each filter holds a
+          # single positive pattern.
+          predicate-quantifier: every
+          filters: |
+            ts:
+              - "ts/**"
+            ts_outside_fast_lane:
+              - "ts/**"
+              - "!ts/packages/git-story/**"
+            workflow:
+              - ".github/workflows/build-ts.yml"
       - name: Determine CI scope
         id: scope
         shell: bash
         env:
           EVENT: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          MERGE_GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          FILTER_OUTCOME: ${{ steps.filter.outcome }}
+          TS: ${{ steps.filter.outputs.ts }}
+          TS_OUTSIDE: ${{ steps.filter.outputs.ts_outside_fast_lane }}
+          WORKFLOW: ${{ steps.filter.outputs.workflow }}
           LEG_OS: ${{ matrix.os }}
           LEG_NODE: ${{ matrix.version }}
         run: |
-          base=""
-          case "$EVENT" in
-            pull_request)
-              git fetch --no-tags origin "$BASE_REF"
-              base="$(git merge-base "origin/$BASE_REF" HEAD)" ;;
-            merge_group)
-              base="$MERGE_GROUP_BASE" ;;
-          esac
-          # Pathspecs instead of regexes; any git error falls back to full.
           mode=full
-          if [ -n "$base" ] && git rev-parse -q --verify "$base^{commit}" >/dev/null; then
-            if git diff --quiet "$base" HEAD -- ts .github/workflows/build-ts.yml; then
-              mode=skip
-            elif git diff --quiet "$base" HEAD -- ts ":(exclude)$FAST_LANE_DIR" .github/workflows/build-ts.yml; then
+          if [ "$EVENT" = pull_request ] && [ "$FILTER_OUTCOME" = success ]; then
+            if [ "$TS_OUTSIDE" = true ] || [ "$WORKFLOW" = true ]; then
+              mode=full
+            elif [ "$TS" = true ]; then
               mode=fast
+            elif [ "$TS" = false ]; then
+              mode=skip
             fi
           fi
           run=true
@@ -93,7 +105,6 @@ jobs:
           echo "CI scope: $mode (run on this leg: $run)"
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "run=$run" >> "$GITHUB_OUTPUT"
-          echo "base=$base" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: ${{ steps.scope.outputs.run == 'true' }}
         name: Install pnpm
@@ -133,8 +144,6 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git fetch --no-tags origin "${{ github.base_ref }}"
             node tools/scripts/prettier-changed.mjs --base "origin/${{ github.base_ref }}"
-          elif [ "${{ steps.scope.outputs.mode }}" = fast ]; then
-            node tools/scripts/prettier-changed.mjs --base "${{ steps.scope.outputs.base }}"
           else
             npm run lint
           fi
