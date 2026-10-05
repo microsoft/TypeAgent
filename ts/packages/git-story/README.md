@@ -31,6 +31,12 @@ filtered v2 story. `post-commit` advances the linked session checkpoints.
 Stories are capped at 16 KiB; snippets and ordinary run commands are removed
 before elevated-risk commands.
 
+## Memory
+
+`git story memory sync` indexes commit stories under `.git/story/memory/`.
+`git story ask "<question>"` answers from that memory. Sync skips commits it has
+already indexed and does not extract knowledge.
+
 ## Daemon
 
 `git story daemon start|stop|restart|status` manages one HTTP API server per
