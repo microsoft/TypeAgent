@@ -300,6 +300,12 @@ export interface AgentThreadHandle {
     complete(): void;
 }
 
+export interface SecurityApprovalRequest {
+    message: string;
+    choices: string[];
+    defaultId: number;
+}
+
 export interface SessionContext<T = unknown> {
     readonly agentContext: T;
     readonly sessionStorage: Storage | undefined;
@@ -339,6 +345,9 @@ export interface SessionContext<T = unknown> {
         choices?: string[],
         defaultId?: number,
     ): Promise<number>;
+
+    // Only a trusted interactive client may answer. Never use model continuations.
+    requestSecurityApproval?(request: SecurityApprovalRequest): Promise<number>;
 
     // can only toggle the sub agent of the current agent
     toggleTransientAgent(agentName: string, active: boolean): Promise<void>;
@@ -499,6 +508,13 @@ export interface ActionContext<T = void> {
     // false when dispatched directly from the translator. Agents can use this to decide whether
     // to execute immediately or redirect back to the reasoning loop.
     readonly isFromReasoningLoop: boolean;
+    // Supplied by the dispatcher, never by action parameters.
+    readonly executionOrigin?:
+        | "direct-user"
+        | "reasoning"
+        | "structured"
+        | "background"
+        | undefined;
 
     // Absolute filesystem root authorized by the host for this action.
     readonly workingDirectory?: string | undefined;

@@ -238,6 +238,33 @@ export function createSessionContext<T = unknown>(
                 name,
             );
         },
+        async requestSecurityApproval(request) {
+            const requestId = context.currentRequestId;
+            const signal = context.currentAbortSignal;
+            const session = context.session;
+            const client = context.clientIO;
+            signal?.throwIfAborted();
+            if (!requestId || !client.requestSecurityApproval) {
+                throw new Error(
+                    "Security approval requires an interactive TypeAgent client. Model continuation answers cannot authorize execution.",
+                );
+            }
+            const result = await client.requestSecurityApproval(
+                { ...requestId },
+                request,
+                name,
+            );
+            signal?.throwIfAborted();
+            if (
+                context.session !== session ||
+                context.currentRequestId?.requestId !== requestId.requestId
+            ) {
+                throw new Error(
+                    "The request changed while security approval was pending.",
+                );
+            }
+            return result;
+        },
         async reloadAgentSchema(): Promise<void> {
             await context.agents.reloadAgentSchema(name, context);
         },

@@ -23,6 +23,8 @@ powershell/
 │   └── listFiles.flow.json     # Flow metadata + parameters + sandbox
 ├── scripts/
 │   └── listFiles.ps1           # Separated PowerShell script
+├── revisions/
+│   └── listFiles.json          # Saved-version fingerprint, not permission
 └── pending/
     └── *.recipe.json           # Captured from reasoning, not yet promoted
 ```
@@ -31,8 +33,39 @@ powershell/
 
 1. `updateAgentContext(enable=true)` → init store → seed samples → register grammars
 2. Grammar matcher routes to powershell agent on match
-3. `executeAction` looks up flow from store → reads `.ps1` → executes in sandbox
-4. Reasoning traces with PowerShell → `ScriptRecipeGenerator` → saved to `pending/`
+3. `executeAction` looks up a flow, reads `.ps1`, obtains/verifies authorization, then executes locally
+4. Reasoning traces with PowerShell → `ScriptRecipeGenerator` → shared validated store
+
+## Execution authorization
+
+The dynamic and broker YAML gates control execution availability. When both are
+enabled, authorization-required current-user execution is the default; there is
+no additional mode flag. Gate availability never grants script approval.
+
+Approved-local execution is not a sandbox. Its central runner requires trusted
+UI authorization, including before tests, drafts, and repairs. The model cannot
+approve code through recipe fields. Direct connected-client calls may remember
+the exact script/definition/arguments/working-directory/timeout for the current
+session; reasoning calls require fresh consent. Approval records are in memory,
+not saved next to the scripts. They use the host-issued session lifetime, not
+the identity of a transient RPC wrapper. Restarting asks again.
+
+Use `requestSecurityApproval`, never `popupQuestion`, for execution consent.
+Only an explicitly interactive client implements this channel. Model-callable
+structured continuations cannot supply it. Forward it through reasoning capture
+and agent/client RPC without putting it in the shared pending-interaction registry.
+
+The initial confirmation is compact: flow, working directory, arguments, and
+current-user execution warning. **Review script and details** exposes the full
+snapshot before approval; viewing it is not authorization. Both views default
+to Cancel, and truncated summary fields are explicitly labelled.
+
+The `sandbox.maxExecutionTime` field is an operational timeout, not containment.
+`requiredModules` are loaded after approval. Old `allowedModules` lists are
+accepted as dependencies; other old permission fields do not restrict execution.
+Do not present paths or networking as sandbox-restricted.
+Use `@powershell revoke` to clear session approvals. Restricted broker protocol v1
+remains only for compatibility.
 
 ## Script Recipe Format
 
@@ -68,23 +101,23 @@ powershell/
       "examples": ["ls downloads"]
     }
   ],
-  "sandbox": {
-    "allowedCmdlets": ["Get-ChildItem", "Select-Object"],
-    "allowedPaths": ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-    "allowedModules": ["Microsoft.PowerShell.Management"],
-    "maxExecutionTime": 30,
-    "networkAccess": false
-  }
+  "requiredModules": ["Microsoft.PowerShell.Management"],
+  "sandbox": { "maxExecutionTime": 30 }
 }
 ```
 
 ### Key Differences from TaskFlow Recipes
 
 - Uses `script.body` (PowerShell) instead of `steps` array of agent actions
-- Has `sandbox` policy (cmdlet whitelist, path restrictions, timeout)
+- Has an operational timeout and optional module dependencies
 - `grammarPatterns` are objects with `isAlias` flag, not plain strings
 - Parameter type can be `"path"` (validated as filesystem path)
 - Stored in instance storage, not in the package directory
+
+The store and recipe types live in `@typeagent/agent-flows/powershell`.
+Saved revision records detect unexpected changes; they never grant approval.
+Missing records on older flows are an `unverified` review state, not a reason
+to drop the store or silently approve existing scripts.
 
 ### Grammar Pattern Syntax
 

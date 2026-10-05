@@ -91,6 +91,8 @@ import {
     getReasoningPermissionChoices,
     hasCachedReasoningApproval,
     recordReasoningApprovalChoice,
+    getPowerShellExecutionBlock,
+    recordPowerShellExecutionBlock,
 } from "./reasoningPermissionPolicy.js";
 import {
     buildClaudePolicyRequest,
@@ -457,6 +459,11 @@ function createClaudeCanUseTool(context: ActionContext<CommandHandlerContext>) {
     ) => {
         const agentContext = context.sessionContext.agentContext;
         const requestId = getRequestId(agentContext);
+        const blocked = getPowerShellExecutionBlock(
+            agentContext,
+            requestId.requestId,
+        );
+        if (blocked) return { behavior: "deny" as const, message: blocked };
         const policyRequest = buildClaudePolicyRequest(
             toolName,
             options,
@@ -574,6 +581,16 @@ function getClaudeOptions(
         ].join("\n"),
         inputSchema: executeSchema,
         handler: async (args) => {
+            const blocked = getPowerShellExecutionBlock(
+                systemContext,
+                getRequestId(systemContext).requestId,
+            );
+            if (blocked) {
+                return {
+                    content: [{ type: "text", text: blocked }],
+                    isError: true,
+                };
+            }
             debugMcp(
                 `execute_action schema=${args.schemaName} action=${args.action?.actionName}`,
             );
@@ -623,6 +640,17 @@ function getClaudeOptions(
                     .reasoningForwardActions;
             const capturingClientIO: ClientIO = {
                 ...nullClientIO,
+                requestSecurityApproval: (...args) => {
+                    if (!baseClientIO.requestSecurityApproval)
+                        throw new Error(
+                            "Trusted security approval is unavailable.",
+                        );
+                    return baseClientIO.requestSecurityApproval(...args);
+                },
+                question: (...args) =>
+                    args[4] === "powershell"
+                        ? baseClientIO.question(...args)
+                        : nullClientIO.question(...args),
                 setDisplay: (message) => {
                     result.push(message);
                 },
@@ -647,6 +675,7 @@ function getClaudeOptions(
                       }
                     : {}),
             };
+            const previousReasoningOrigin = systemContext.isInsideReasoningLoop;
             systemContext.isInsideReasoningLoop = true;
             let actionResult: ActionResult | undefined;
             try {
@@ -661,9 +690,14 @@ function getClaudeOptions(
                     context,
                     actionIndex++,
                 );
+                recordPowerShellExecutionBlock(
+                    systemContext,
+                    getRequestId(systemContext).requestId,
+                    actionResult,
+                );
             } finally {
                 systemContext.clientIO = savedClientIO;
-                systemContext.isInsideReasoningLoop = false;
+                systemContext.isInsideReasoningLoop = previousReasoningOrigin;
             }
             // Surface the action's history text (its full, model-facing output
             // - e.g. the page text webFetch/webSearch carry there) to the
@@ -1450,8 +1484,7 @@ function getClaudeOptions(
                           "3. If a matching flow exists, tell user it's already available",
                           "4. If no matching flow, first TEST the script with powershell.testPowerShellFlow:",
                           "   - script: PowerShell script body with param() block",
-                          "   - allowedCmdlets: cmdlets the script uses",
-                          "   - allowedModules: modules to load (e.g., ['NetTCPIP'])",
+                          "   - requiredModules: installed modules to load after approval (e.g., ['NetTCPIP'])",
                           "   - testParameters: JSON string of test parameter values",
                           "5. If testPowerShellFlow PASSES, register with powershell.createPowerShellFlow:",
                           "   - actionName: camelCase identifier (e.g., 'findLargeFiles', 'listRunningServices')",
@@ -1460,26 +1493,22 @@ function getClaudeOptions(
                           "   - script: same script that passed testing",
                           "   - scriptParameters: array of { name, type, required, description, default? }",
                           "   - grammarPatterns: array of { pattern, isAlias } with $(param:wildcard) captures",
-                          "   - allowedCmdlets: cmdlets the script uses",
-                          "   - allowedModules: modules to load — pass the SAME list you used in",
-                          "     testPowerShellFlow (e.g. ['NetTCPIP'] for Get-NetTCPConnection). The",
-                          "     registered flow runs with EXACTLY the sandbox you supply here, so omitting",
-                          "     allowedModules makes module cmdlets fail at invocation with 'not recognized'",
-                          "     even though the test passed. Always carry over the exact allowedCmdlets",
-                          "     AND allowedModules that made the test succeed.",
-                          "6. If testPowerShellFlow FAILS, fix the script and test again before registering",
+                          "   - requiredModules: preserve the dependencies used by the successful test",
+                          "6. If execution is denied or cancelled, stop. A new user request is required.",
+                          "   A requested repair must receive fresh authorization before testing.",
                           "7. Tell user: 'PowerShell registered: ACTION_NAME. It is now available for use.'",
                           "   Any example invocation phrases you show MUST follow '# Showing Invocation Examples'.",
                           "",
                           "POWERSHELL SCRIPT RULES:",
-                          "- Scripts run in FullLanguage mode with cmdlet whitelisting",
+                          "- Scripts execute with the current user's privileges after trusted UI authorization.",
+                          "- They are not sandboxed; no model field or continuation can approve execution.",
                           "- Full PowerShell syntax is available: [PSCustomObject], [math]::Round(), etc.",
                           "",
                           "CMDLET ACCESS:",
                           "- Core cmdlets: Always available (Get-ChildItem, Get-Process, Select-Object, etc.)",
-                          "- Module cmdlets: Available when module is in allowedModules",
-                          "  Example: Get-NetTCPConnection requires allowedModules: ['NetTCPIP']",
-                          "- Network cmdlets: Require networkAccess: true in sandbox policy",
+                          "- Installed modules can be loaded with requiredModules or Import-Module.",
+                          "  Example: Get-NetTCPConnection uses requiredModules: ['NetTCPIP']",
+                          "- Files, networking and child programs follow the user's OS permissions.",
                           "",
                           "COMMON MODULES AND THEIR CMDLETS:",
                           "- NetTCPIP: Get-NetTCPConnection, Get-NetIPAddress, Get-NetAdapter",
@@ -1517,30 +1546,26 @@ function getClaudeOptions(
                           "",
                           "# PowerShell Script Guidelines (Windows)",
                           "",
-                          "PowerShell runs scripts in FullLanguage mode with cmdlet whitelisting.",
+                          "PowerShell runs authorized local code subject to operating-system policy.",
                           "Full PowerShell syntax is supported including [PSCustomObject], [math]::Round(), etc.",
                           "",
-                          "## Sandbox Policy",
+                          "## Execution Authorization",
                           "",
-                          "Each script defines its sandbox policy with:",
-                          "- **allowedCmdlets**: Cmdlets the script can use (whitelist)",
-                          "- **allowedModules**: PowerShell modules to load (enables module cmdlets)",
-                          "- **allowedPaths**: Filesystem paths the script can access",
-                          "- **networkAccess**: Whether network cmdlets are allowed",
-                          "- **maxExecutionTime**: Timeout in seconds",
+                          "There is no arbitrary-code sandbox or cmdlet whitelist.",
+                          "- **requiredModules**: Installed dependencies loaded after approval",
+                          "- **sandbox.maxExecutionTime**: Operational timeout in seconds",
+                          "Imports and captured recipes are candidates, not execution approval.",
                           "",
                           "## Module Cmdlets",
                           "",
-                          "To use module-specific cmdlets, add the module to allowedModules:",
+                          "To preload module-specific cmdlets, add the module to requiredModules:",
                           "- **NetTCPIP**: Get-NetTCPConnection, Get-NetIPAddress, Get-NetAdapter, Get-NetRoute",
                           "- **CimCmdlets**: Get-CimInstance (modern WMI queries)",
                           "- **Microsoft.PowerShell.Management**: Get-Service, Get-Process, Get-EventLog",
                           "",
-                          "Example sandbox policy for network diagnostics:",
+                          "Example dependency declaration for network diagnostics:",
                           "```json",
-                          '{ "allowedCmdlets": ["Get-NetTCPConnection", "Get-Process", "Where-Object", "Select-Object"],',
-                          '  "allowedModules": ["NetTCPIP"],',
-                          '  "networkAccess": false }',
+                          '{ "requiredModules": ["NetTCPIP"] }',
                           "```",
                           "",
                           "## Reserved Variables",
@@ -2114,14 +2139,17 @@ async function executeReasoningWithTracing(
                                     "powershell",
                                     systemContext,
                                 );
-                            } catch {
-                                debug(
-                                    "Failed to reload powershell schema after saving recipes",
+                            } catch (error) {
+                                context.actionIO.appendDisplay(
+                                    `PowerShell candidates were saved but activation failed: ${error instanceof Error ? error.message : String(error)}`,
                                 );
                             }
                         }
                     }
                 } catch (error) {
+                    context.actionIO.appendDisplay(
+                        `PowerShell recipe capture failed: ${error instanceof Error ? error.message : String(error)}`,
+                    );
                     debug(
                         "Failed to generate script recipe from trace:",
                         error,
@@ -2275,14 +2303,10 @@ export async function executeReasoningAction(
     });
 }
 
-import type { Storage } from "@typeagent/agent-sdk";
+import { PowerShellStore } from "@typeagent/agent-flows/powershell";
 import type { ScriptRecipe as CapturedScriptRecipe } from "./scriptRecipeGenerator.js";
 
-/**
- * Save captured script recipes as active powershells by writing directly
- * to the powershell agent's instance storage in the format its store expects.
- * This avoids a dependency on the powershell package.
- */
+// Recording creates candidates, never invocation approval.
 async function saveScriptRecipesAsActiveFlows(
     recipes: CapturedScriptRecipe[],
     systemContext: CommandHandlerContext,
@@ -2299,159 +2323,24 @@ async function saveScriptRecipesAsActiveFlows(
         return [];
     }
 
-    // Read existing index
-    let index: {
-        version: 1;
-        flows: Record<string, unknown>;
-        deletedSamples: string[];
-        lastModified: string;
-    };
-    try {
-        const indexJson = await storage.read("index.json", "utf8");
-        index = JSON.parse(indexJson);
-    } catch {
-        index = {
-            version: 1,
-            flows: {},
-            deletedSamples: [],
-            lastModified: new Date().toISOString(),
-        };
-    }
-
+    const store = new PowerShellStore(storage);
+    await store.initialize();
     const saved: string[] = [];
     for (const recipe of recipes) {
         const { actionName } = recipe;
-        // Skip if flow already exists
-        if (index.flows[actionName]) {
+        if (store.hasFlow(actionName)) {
             debug(`Flow '${actionName}' already exists, skipping`);
             continue;
         }
-
-        const flowPath = `flows/${actionName}.flow.json`;
-        const scriptPath = `scripts/${actionName}.ps1`;
-
-        // Write flow definition
-        const flowDef = {
-            version: 1,
-            actionName,
-            displayName: recipe.displayName,
-            description: recipe.description,
-            parameters: recipe.parameters,
-            scriptRef: scriptPath,
-            expectedOutputFormat: recipe.script.expectedOutputFormat,
-            grammarPatterns: recipe.grammarPatterns,
-            sandbox: recipe.sandbox,
-            source: recipe.source,
-        };
-        await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
-        await storage.write(scriptPath, recipe.script.body);
-
-        // Generate grammar rule text — use flow's own actionName
-        const grammarRuleText = generateGrammarRuleTextForRecipe(
-            actionName,
-            recipe.grammarPatterns,
-        );
-
-        const parametersMeta = recipe.parameters.map(
-            (p: {
-                name: string;
-                type: string;
-                required: boolean;
-                description: string;
-            }) => ({
-                name: p.name,
-                type: p.type,
-                required: p.required,
-                description: p.description,
-            }),
-        );
-
-        const now = new Date().toISOString();
-        index.flows[actionName] = {
-            actionName,
-            displayName: recipe.displayName,
-            description: recipe.description,
-            flowPath,
-            scriptPath,
-            grammarRuleText,
-            parameters: parametersMeta,
-            created: now,
-            updated: now,
-            source: "reasoning",
-            usageCount: 0,
-            enabled: true,
-        };
-        index.lastModified = now;
+        await store.saveFlow(recipe, "reasoning");
         saved.push(actionName);
-        debug(`Script flow registered as active: ${actionName}`);
     }
-
-    if (saved.length > 0) {
-        await storage.write("index.json", JSON.stringify(index, null, 2));
-
-        // Regenerate grammar file
-        await writeDynamicGrammarForIndex(storage, index);
-    }
-
     return saved;
-}
-
-function generateGrammarRuleTextForRecipe(
-    actionName: string,
-    patterns: { pattern: string; isAlias: boolean }[],
-): string {
-    const rules: string[] = [];
-    let aliasIndex = 0;
-    for (const pattern of patterns) {
-        const ruleName = pattern.isAlias
-            ? `${actionName}Alias${++aliasIndex}`
-            : actionName;
-
-        // Preserve named captures — use flow's own actionName
-        const captures = [...pattern.pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
-            (m) => m[1],
-        );
-        const paramJson =
-            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
-
-        rules.push(
-            `<${ruleName}> [spacing=optional] = ${pattern.pattern}` +
-                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
-        );
-    }
-    return rules.join("\n");
-}
-
-async function writeDynamicGrammarForIndex(
-    storage: Storage,
-    index: { flows: Record<string, any> },
-): Promise<void> {
-    const ruleNames: string[] = [];
-    const ruleTexts: string[] = [];
-    for (const entry of Object.values(index.flows)) {
-        if (!entry.enabled || !entry.grammarRuleText) continue;
-        ruleTexts.push(entry.grammarRuleText);
-        for (const line of (entry.grammarRuleText as string).split("\n")) {
-            const m = line.match(/^<(\w+)>/);
-            if (m && !ruleNames.includes(m[1])) {
-                ruleNames.push(m[1]);
-            }
-        }
-    }
-    if (ruleNames.length === 0) {
-        await storage.write("grammar/dynamic.agr", "");
-        return;
-    }
-    const startRule = `<Start> = ${ruleNames.map((n) => `<${n}>`).join(" | ")};`;
-    await storage.write(
-        "grammar/dynamic.agr",
-        `${startRule}\n\n${ruleTexts.join("\n\n")}`,
-    );
 }
 
 /**
  * Save a TaskFlow recipe directly to instance storage and register it as
- * an active flow. Mirrors saveScriptRecipesAsActiveFlows but for TaskFlow.
+ * an active flow.
  */
 async function saveTaskFlowRecipeToInstanceStorage(
     recipe: {

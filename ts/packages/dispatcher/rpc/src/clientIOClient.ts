@@ -47,6 +47,9 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         question(...args): Promise<number> {
             return rpc.invoke("question", ...args);
         },
+        requestSecurityApproval(...args): Promise<number> {
+            return rpc.invoke("requestSecurityApproval", ...args);
+        },
         proposeAction(...args): Promise<unknown> {
             return rpc.invoke("proposeAction", ...args);
         },

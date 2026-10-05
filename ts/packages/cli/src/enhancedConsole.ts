@@ -1106,6 +1106,12 @@ export function createEnhancedClientIO(
             // REVIEW: Ignored.
         },
 
+        async requestSecurityApproval(
+            requestId,
+            { message, choices, defaultId },
+        ) {
+            return this.question(requestId, message, choices, defaultId);
+        },
         // Input — unified question prompt (handles both yes/no and multi-choice)
         async question(
             _requestId: RequestId | undefined,

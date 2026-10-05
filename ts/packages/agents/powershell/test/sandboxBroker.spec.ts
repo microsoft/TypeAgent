@@ -2,11 +2,23 @@
 // Licensed under the MIT License.
 
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+    access,
+    copyFile,
+    mkdtemp,
+    readFile,
+    rm,
+    writeFile,
+} from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { executeScript } from "../src/execution/powershellRunner.mjs";
-import { runDeniedFileReadCase } from "./sandboxCases.js";
+import { fileURLToPath } from "node:url";
+import { executeBrokeredPowerShell } from "../src/execution/windowsSandboxBroker.mjs";
+import {
+    runDeniedFileReadCase,
+    executeRestrictedScript as executeScript,
+} from "./sandboxCases.js";
 
 const describeOnWindows =
     process.platform === "win32" &&
@@ -15,7 +27,7 @@ const describeOnWindows =
         : describe.skip;
 const BROKER_TEST_TIMEOUT_SECONDS = 30;
 
-describeOnWindows("PowerShell sandbox broker", () => {
+describeOnWindows("legacy restricted broker protocol compatibility", () => {
     const originalConfigDir = process.env.TYPEAGENT_CONFIG_DIR;
     const originalBrokerPath = process.env.TYPEAGENT_POWERSHELL_BROKER;
     let configDirectory: string;
@@ -45,7 +57,7 @@ describeOnWindows("PowerShell sandbox broker", () => {
         await rm(configDirectory, { recursive: true, force: true });
     });
 
-    it("denies the original out-of-policy .NET file read", async () => {
+    it("rejects the original .NET read using the legacy host's AST policy", async () => {
         const result = await runDeniedFileReadCase();
 
         expect(result).toMatchObject({
@@ -239,6 +251,33 @@ Write-Output $xml.DocumentElement.Name`,
         expect(result.stdout.trim()).toBe("héllo 世界");
     });
 
+    it.each(["Format-Table", "Format-List"])(
+        "renders %s output rather than internal formatting records",
+        async (format) => {
+            const result = await executeScript({
+                script: `ConvertFrom-Json '{"Name":"sample","Count":7}' | ${format}`,
+                parameters: {},
+                provenance: "generated",
+                sandbox: {
+                    allowedCmdlets: ["ConvertFrom-Json", format],
+                    allowedPaths: [],
+                    allowedModules: [],
+                    maxExecutionTime: BROKER_TEST_TIMEOUT_SECONDS,
+                    networkAccess: false,
+                },
+            });
+
+            expect(result).toMatchObject({ success: true, stderr: "" });
+            expect(result.stdout).toContain("Name");
+            expect(result.stdout).toContain("Count");
+            expect(result.stdout).toContain("sample");
+            expect(result.stdout).toContain("7");
+            expect(result.stdout).not.toMatch(
+                /FormatEntryData|FormatStartData/,
+            );
+        },
+    );
+
     it("isolates concurrent dynamic executions", async () => {
         const execute = (value: string) =>
             executeScript({
@@ -289,52 +328,22 @@ Write-Output $xml.DocumentElement.Name`,
     });
 
     it.each([
-        {
-            label: "network capability",
-            sandbox: {
-                allowedCmdlets: ["Write-Output"],
-                allowedPaths: [],
-                allowedModules: [],
-                maxExecutionTime: BROKER_TEST_TIMEOUT_SECONDS,
-                networkAccess: true,
-            },
-        },
-        {
-            label: "module capability",
-            sandbox: {
-                allowedCmdlets: ["Write-Output"],
-                allowedPaths: [],
-                allowedModules: ["Microsoft.PowerShell.Management"],
-                maxExecutionTime: BROKER_TEST_TIMEOUT_SECONDS,
-                networkAccess: false,
-            },
-        },
-        {
-            label: "filesystem capability",
-            sandbox: {
-                allowedCmdlets: ["Write-Output"],
-                allowedPaths: ["$env:USERPROFILE"],
-                allowedModules: [],
-                maxExecutionTime: BROKER_TEST_TIMEOUT_SECONDS,
-                networkAccess: false,
-            },
-        },
-        {
-            label: "process command",
-            sandbox: {
-                allowedCmdlets: ["Start-Process"],
-                allowedPaths: [],
-                allowedModules: [],
-                maxExecutionTime: BROKER_TEST_TIMEOUT_SECONDS,
-                networkAccess: false,
-            },
-        },
-    ])("denies requested $label", async ({ sandbox }) => {
+        "Invoke-WebRequest",
+        "Import-Module",
+        "Get-Content",
+        "Start-Process",
+    ])("retains protocol-v1 command rejection for %s", async (command) => {
         const result = await executeScript({
             script: "Write-Output 'blocked'",
             parameters: {},
             provenance: "generated",
-            sandbox,
+            sandbox: {
+                allowedCmdlets: [command],
+                allowedPaths: [],
+                allowedModules: [],
+                maxExecutionTime: BROKER_TEST_TIMEOUT_SECONDS,
+                networkAccess: false,
+            },
         });
 
         expect(result.success).toBe(false);
@@ -365,5 +374,156 @@ Write-Output $xml.DocumentElement.Name`,
             stdout: "",
         });
         expect(result.stderr).toMatch(/broker failed to start/i);
+    });
+
+    describe("OS containment independently of AST and language restrictions", () => {
+        beforeEach(async () => {
+            const architecture =
+                process.arch === "arm64" ? "win-arm64" : "win-x64";
+            const brokerName = "PowerShellSandboxBroker.exe";
+            const testBroker = join(configDirectory, brokerName);
+            await copyFile(
+                fileURLToPath(
+                    new URL(
+                        `../../broker/${architecture}/${brokerName}`,
+                        import.meta.url,
+                    ),
+                ),
+                testBroker,
+            );
+            await copyFile(
+                fileURLToPath(
+                    new URL(
+                        "../../test/fixtures/osIsolationHost.ps1",
+                        import.meta.url,
+                    ),
+                ),
+                join(configDirectory, "scriptHost.ps1"),
+            );
+            process.env.TYPEAGENT_POWERSHELL_BROKER = testBroker;
+        });
+
+        async function executeProbe(
+            script: string,
+            parameters: Record<string, unknown> = {},
+        ) {
+            const result = await executeBrokeredPowerShell({
+                script,
+                parameters,
+                provenance: "generated",
+                allowedCommands: [],
+                maxExecutionTime: BROKER_TEST_TIMEOUT_SECONDS,
+            });
+            expect(result.stdout).toContain("OS probe started: FullLanguage");
+            return result;
+        }
+
+        it("permits actual .NET reads and writes in private profile storage", async () => {
+            const result = await executeProbe(String.raw`
+$path = [System.IO.Path]::Combine($env:USERPROFILE, 'probe.txt')
+[System.IO.File]::WriteAllText($path, 'private-marker')
+[System.IO.File]::ReadAllText($path)
+`);
+
+            expect(result.success).toBe(true);
+            expect(result.stdout).toContain("private-marker");
+        });
+
+        it.each([
+            "[System.IO.File]::ReadAllText($Path)",
+            "[System.IO.File]::WriteAllText($Path, 'changed')",
+        ])(
+            "denies an actual external file operation: %s",
+            async (operation) => {
+                const marker = join(configDirectory, "outside.txt");
+                await writeFile(marker, "outside-marker");
+                const result = await executeProbe(
+                    `param([string]$Path)\n${operation}`,
+                    { Path: marker },
+                );
+
+                expect(result.success).toBe(false);
+                expect(result.stderr).toContain("UnauthorizedAccessException");
+                expect(result.stdout).not.toContain("outside-marker");
+                await expect(readFile(marker, "utf8")).resolves.toBe(
+                    "outside-marker",
+                );
+            },
+        );
+
+        it.each([
+            String.raw`
+$start = [System.Diagnostics.ProcessStartInfo]::new()
+$start.FileName = "$env:SYSTEMROOT\System32\cmd.exe"
+$start.Arguments = '/c exit 42'
+$start.UseShellExecute = $false
+$child = [System.Diagnostics.Process]::Start($start)
+$child.WaitForExit()
+Write-Output "child exited: $($child.ExitCode)"
+`,
+            String.raw`
+Import-Module Microsoft.PowerShell.Management
+New-PSDrive -Name Private -PSProvider FileSystem -Root $env:USERPROFILE | Out-Null
+Set-Location Private:\
+$child = Start-Process cmd.exe -ArgumentList '/c exit 42' -Wait -PassThru
+Write-Output "child exited: $($child.ExitCode)"
+`,
+        ])(
+            "denies actual child creation through .NET or a reimported module",
+            async (script) => {
+                const result = await executeProbe(script);
+
+                expect(result.success).toBe(false);
+                expect(result.stderr).toMatch(
+                    /Win32Exception|InvalidOperationException/,
+                );
+                expect(result.stdout).not.toContain("child exited:");
+            },
+        );
+
+        it("blocks actual HTTP egress without receiving a request", async () => {
+            let requests = 0;
+            const server = createServer((_request, response) => {
+                requests++;
+                response.end("network-marker");
+            });
+            await new Promise<void>((resolve, reject) => {
+                server.once("error", reject);
+                server.listen(0, "127.0.0.1", resolve);
+            });
+            try {
+                const address = server.address();
+                if (address === null || typeof address === "string") {
+                    throw new Error("Expected a TCP listener.");
+                }
+                const url = `http://127.0.0.1:${address.port}`;
+                expect(await (await fetch(url)).text()).toBe("network-marker");
+                expect(requests).toBe(1);
+                requests = 0;
+
+                const result = await executeProbe(
+                    String.raw`param([string]$Url)
+$request = [System.Net.WebRequest]::Create($Url)
+$request.Timeout = 2000
+$response = $request.GetResponse()
+$response.Close()
+Write-Output 'network succeeded'
+`,
+                    { Url: url },
+                );
+
+                expect(result.success).toBe(false);
+                expect(result.stderr).toContain("WebException");
+                expect(result.stdout).not.toContain("network succeeded");
+                expect(requests).toBe(0);
+            } finally {
+                await new Promise<void>((resolve, reject) => {
+                    server.close((error) =>
+                        error ? reject(error) : resolve(),
+                    );
+                    server.closeAllConnections();
+                });
+            }
+        });
     });
 });

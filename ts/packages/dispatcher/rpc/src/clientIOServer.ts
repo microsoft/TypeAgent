@@ -17,6 +17,14 @@ export function createClientIORpcServer(
         question: async (...args) => {
             return clientIO.question(...args);
         },
+        requestSecurityApproval: async (...args) => {
+            if (!clientIO.requestSecurityApproval) {
+                throw new Error(
+                    "Security approval is unavailable in this client. Use the interactive TypeAgent Shell or CLI.",
+                );
+            }
+            return clientIO.requestSecurityApproval(...args);
+        },
         proposeAction: async (...args) => {
             return clientIO.proposeAction(...args);
         },

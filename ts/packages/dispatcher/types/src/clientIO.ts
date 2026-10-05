@@ -7,6 +7,7 @@ import {
     DisplayContent,
     QuestionForm,
     QuestionFormResponse,
+    SecurityApprovalRequest,
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -142,6 +143,12 @@ export interface ClientIO {
         choices: string[],
         defaultId?: number,
         source?: string,
+    ): Promise<number>;
+    // Separate from model-answerable questions and shared interaction replay.
+    requestSecurityApproval?(
+        requestId: RequestId,
+        request: SecurityApprovalRequest,
+        source: string,
     ): Promise<number>;
     proposeAction(
         requestId: RequestId,

@@ -209,6 +209,12 @@ function createConsoleClientIO(
             // REVIEW: Ignored.
         },
 
+        async requestSecurityApproval(
+            requestId,
+            { message, choices, defaultId },
+        ) {
+            return this.question(requestId, message, choices, defaultId);
+        },
         // Input
         async question(
             _requestId: RequestId | undefined,

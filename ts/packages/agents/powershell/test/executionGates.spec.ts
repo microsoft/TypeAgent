@@ -158,6 +158,59 @@ describe("PowerShell execution gates", () => {
         });
     });
 
+    it("cannot select approved-local execution without a trusted authorization context", async () => {
+        await writeFile(
+            join(configDirectory, "config.local.yaml"),
+            "powershell:\n  dynamicExecution:\n    enabled: true\n  brokerExecution:\n    enabled: true\n",
+        );
+        const result = await executeScript({
+            script: "Write-Output 'must not run'",
+            parameters: { approved: true, approvedLocal: true },
+            provenance: "generated",
+            sandbox: {
+                allowedCmdlets: [],
+                allowedPaths: [],
+                allowedModules: [],
+                maxExecutionTime: 30,
+                networkAccess: false,
+            },
+        });
+        expect(result).toMatchObject({
+            success: false,
+            stdout: "",
+            errorCode: "powershell.policyDenied",
+        });
+        expect(result.stderr).toContain("authorization context");
+    });
+
+    it.each([true, false])(
+        "ignores obsolete mode selection (%s) without bypassing authorization",
+        async (legacyValue) => {
+            await writeFile(
+                join(configDirectory, "config.local.yaml"),
+                `powershell:\n  dynamicExecution:\n    enabled: true\n  brokerExecution:\n    enabled: true\n  approvedExecution:\n    enabled: ${legacyValue}\n`,
+            );
+            const result = await executeScript({
+                script: "Write-Output 'must not run'",
+                parameters: {},
+                provenance: "generated",
+                sandbox: {
+                    allowedCmdlets: ["Write-Output"],
+                    allowedPaths: [],
+                    allowedModules: [],
+                    maxExecutionTime: 30,
+                    networkAccess: false,
+                },
+            });
+            expect(result).toMatchObject({
+                success: false,
+                stdout: "",
+                errorCode: "powershell.policyDenied",
+            });
+            expect(result.stderr).toContain("authorization context");
+        },
+    );
+
     it("denies dynamic execution when the broker gate is disabled", async () => {
         await writeFile(
             join(configDirectory, "config.local.yaml"),
@@ -208,25 +261,41 @@ describe("PowerShell execution gates", () => {
     });
 
     itOnWindows(
-        "allows direct dynamic runner calls with an explicit YAML opt-in",
+        "allows dynamic runner calls after explicit user authorization",
         async () => {
             await writeFile(
                 join(configDirectory, "config.local.yaml"),
                 "powershell:\n  dynamicExecution:\n    enabled: true\n  brokerExecution:\n    enabled: true\n",
             );
 
-            const result = await executeScript({
-                script: "Write-Output 'ran'",
-                parameters: {},
-                provenance: "generated",
-                sandbox: {
-                    allowedCmdlets: ["Write-Output"],
-                    allowedPaths: [],
-                    allowedModules: [],
-                    maxExecutionTime: 30,
-                    networkAccess: false,
+            const result = await executeScript(
+                {
+                    script: "Write-Output 'ran'",
+                    parameters: {},
+                    provenance: "generated",
+                    sandbox: {
+                        allowedCmdlets: ["Write-Output"],
+                        allowedPaths: [],
+                        allowedModules: [],
+                        maxExecutionTime: 30,
+                        networkAccess: false,
+                    },
                 },
-            });
+                {
+                    sessionContext: {
+                        currentConnectionId: "gates-test",
+                        sessionContextId: "gate-test",
+                        requestSecurityApproval: async () => 0,
+                    },
+                    definition: {
+                        actionName: "gateSmoke",
+                        displayName: "Gate smoke test",
+                        description: "Print a marker after authorization",
+                        parameters: [],
+                        grammarPatterns: [],
+                    },
+                },
+            );
 
             expect(result).toMatchObject({
                 success: true,

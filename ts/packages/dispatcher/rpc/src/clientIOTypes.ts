@@ -28,6 +28,11 @@ export type ClientIOInvokeFunctions = {
         defaultId?: number,
         source?: string,
     ): Promise<number>;
+    requestSecurityApproval(
+        requestId: RequestId,
+        request: import("@typeagent/agent-sdk").SecurityApprovalRequest,
+        source: string,
+    ): Promise<number>;
     proposeAction(
         requestId: RequestId,
         actionTemplates: TemplateEditConfig,

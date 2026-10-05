@@ -89,6 +89,16 @@ export interface BridgeClientIOContext {
  */
 export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
     return {
+        requestSecurityApproval: async (
+            _requestId,
+            { message, choices, defaultId },
+        ) => {
+            const pick = await vscode.window.showQuickPick(
+                choices.map((label, index) => ({ label, index })),
+                { placeHolder: message, ignoreFocusOut: true },
+            );
+            return pick?.index ?? defaultId;
+        },
         question: async (
             _requestId: RequestId | undefined,
             message: string,

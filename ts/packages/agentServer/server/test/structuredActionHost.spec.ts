@@ -37,7 +37,7 @@ const manifest: AppAgentManifest = {
             format: "ts",
             content: `
                 export type Actions = Read | Write;
-                type Params = { mode: "plain" | "question" | "choice" };
+                type Params = { mode: "plain" | "question" | "choice" | "security" };
                 type Read = { actionName: "read"; parameters: Params };
                 type Write = { actionName: "write"; parameters: Params };
             `,
@@ -74,7 +74,16 @@ async function fixture() {
             choices.handleChoice(id, response, context),
         executeAction: async (action, context) => {
             entered++;
-            if (action.parameters?.mode === "question") {
+            if (action.parameters?.mode === "security") {
+                const answer = await context.sessionContext
+                    .requestSecurityApproval!({
+                    message: "Run local code?",
+                    choices: ["Run", "Cancel"],
+                    defaultId: 1,
+                });
+                context.abortSignal?.throwIfAborted();
+                if (answer !== 0) return complete();
+            } else if (action.parameters?.mode === "question") {
                 await context.sessionContext.popupQuestion(
                     "Allow?",
                     ["Yes", "No"],
@@ -186,7 +195,10 @@ async function fixture() {
         shared,
         messages,
         counts: () => ({ entered, effects }),
-        async join(structured: { resumeToken?: string } | false = {}) {
+        async join(
+            structured: { resumeToken?: string } | false = {},
+            approval?: ClientIO["requestSecurityApproval"],
+        ) {
             let client: ChannelProviderAdapter | undefined;
             const server = createChannelProviderAdapter(
                 "host-test-server",
@@ -204,13 +216,19 @@ async function fixture() {
             handler(server, disconnect);
             const connection = createAgentServerConnection(client, disconnect);
             closeConnections.push(() => connection.close());
-            const joined = await connection.joinConversation(io, {
-                conversationId: "conversation",
-                filter: true,
-                ...(structured === false
-                    ? {}
-                    : { structuredActions: structured }),
-            });
+            const joined = await connection.joinConversation(
+                {
+                    ...io,
+                    ...(approval ? { requestSecurityApproval: approval } : {}),
+                },
+                {
+                    conversationId: "conversation",
+                    filter: true,
+                    ...(structured === false
+                        ? {}
+                        : { structuredActions: structured }),
+                },
+            );
             return { ...joined, disconnect, connection };
         },
         async close() {
@@ -259,6 +277,86 @@ function respond(
 }
 
 describe("real structured shared host and dispatcher RPC", () => {
+    test("disconnect invalidates a pending security approval and ignores its late answer", async () => {
+        const host = await fixture();
+        try {
+            let ready!: () => void;
+            let approve!: (choice: number) => void;
+            const requested = new Promise<void>((resolve) => {
+                ready = resolve;
+            });
+            const decision = new Promise<number>((resolve) => {
+                approve = resolve;
+            });
+            const first = await host.join({}, async () => {
+                ready();
+                return decision;
+            });
+            const running = execute(first.dispatcher, "read", "security").then(
+                (result) => result.status,
+                () => "disconnected",
+            );
+            await requested;
+            first.disconnect();
+            approve(0);
+            expect(await running).not.toBe("completed");
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            expect(host.counts().effects).toBe(0);
+        } finally {
+            await host.close();
+        }
+    });
+
+    test("security approval targets only its initiating client and never uses shared interaction replay", async () => {
+        const host = await fixture();
+        try {
+            let ready!: () => void;
+            let approve!: (choice: number) => void;
+            const requested = new Promise<void>((resolve) => {
+                ready = resolve;
+            });
+            const decision = new Promise<number>((resolve) => {
+                approve = resolve;
+            });
+            let otherPrompts = 0;
+            const first = await host.join({}, async (_id, request) => {
+                expect(request.defaultId).toBe(1);
+                ready();
+                return decision;
+            });
+            await host.join({}, async () => {
+                otherPrompts++;
+                return 0;
+            });
+            const running = execute(first.dispatcher, "read", "security");
+            await requested;
+            expect(host.counts().effects).toBe(0);
+            expect(otherPrompts).toBe(0);
+            expect(host.shared.pendingInteractions.size).toBe(0);
+            expect(JSON.stringify(host.messages)).not.toContain(
+                "Run local code?",
+            );
+            approve(0);
+            expect((await running).status).toBe("completed");
+            expect(host.counts().effects).toBe(1);
+        } finally {
+            await host.close();
+        }
+    });
+
+    test("a model-only client cannot turn security approval into a continuation", async () => {
+        const host = await fixture();
+        try {
+            const first = await host.join();
+            const result = await execute(first.dispatcher, "read", "security");
+            expect(result.status).not.toBe("requires_interaction");
+            expect(result.status).not.toBe("completed");
+            expect(host.counts().effects).toBe(0);
+            expect(host.shared.pendingInteractions.size).toBe(0);
+        } finally {
+            await host.close();
+        }
+    });
     test("resumes confirmation after takeover, preserving actual values and private prompts", async () => {
         const host = await fixture();
         try {

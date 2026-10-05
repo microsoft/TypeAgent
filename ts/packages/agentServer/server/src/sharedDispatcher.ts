@@ -226,6 +226,44 @@ export async function createSharedDispatcher(
             );
         },
 
+        requestSecurityApproval: async (requestId, request, source) => {
+            const connectionId = requestId.connectionId;
+            const record =
+                connectionId === undefined
+                    ? undefined
+                    : clients.get(connectionId);
+            context.requestQueue.markBlocked(
+                requestId.requestId,
+                "interaction",
+            );
+            try {
+                const answer = await callback(requestId, (client) => {
+                    if (!client.requestSecurityApproval) {
+                        throw new Error(
+                            "The requesting client cannot obtain trusted security approval.",
+                        );
+                    }
+                    return client.requestSecurityApproval(
+                        requestId,
+                        request,
+                        source,
+                    );
+                });
+                if (
+                    connectionId === undefined ||
+                    !record ||
+                    clients.get(connectionId) !== record
+                ) {
+                    throw new Error(
+                        "The approving client disconnected or changed.",
+                    );
+                }
+                return answer;
+            } finally {
+                context.requestQueue.markUnblocked(requestId.requestId);
+            }
+        },
+
         // ===== Async deferred pattern for blocking interactions =====
         // Create a deferred promise and broadcast to all clients; the first
         // client to respondToInteraction resolves it.
