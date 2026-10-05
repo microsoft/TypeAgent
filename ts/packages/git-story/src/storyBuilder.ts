@@ -58,11 +58,10 @@ export class StoryBuilder {
     }
 }
 
-export function linkSessions(
-    repository: string,
-    store: SessionStore,
-    staged: StagedFile[],
-): CommitLink {
+function sessionWrites(store: SessionStore): {
+    events: Map<SessionKey, SessionEvent[]>;
+    writes: Write[];
+} {
     const events = new Map<SessionKey, SessionEvent[]>();
     const writes: Write[] = [];
     for (const session of store.sessions()) {
@@ -72,19 +71,15 @@ export function linkSessions(
         let commandIndex = 0;
         for (const event of sessionEvents) {
             if (event.kind === "command") {
-                const publishedCommandIndex = !isReadOnlyGitCommand(
-                    event.command,
-                )
-                    ? commandIndex++
-                    : undefined;
+                const via = isReadOnlyGitCommand(event.command)
+                    ? undefined
+                    : commandIndex++;
                 for (const write of event.writes) {
                     writes.push({
                         ...write,
                         session,
                         at: event.at,
-                        ...(publishedCommandIndex === undefined
-                            ? {}
-                            : { via: publishedCommandIndex }),
+                        ...(via === undefined ? {} : { via }),
                     });
                 }
             } else if (isFileEffect(event)) {
@@ -92,6 +87,15 @@ export function linkSessions(
             }
         }
     }
+    return { events, writes };
+}
+
+export function linkSessions(
+    repository: string,
+    store: SessionStore,
+    staged: StagedFile[],
+): CommitLink {
+    const { events, writes } = sessionWrites(store);
     writes.sort((left, right) => left.at.localeCompare(right.at));
 
     const stagedPaths = new Set(staged.map(({ path }) => path));

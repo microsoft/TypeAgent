@@ -7,6 +7,7 @@ import path from "node:path";
 import type { BaseHookInput } from "@typeagent/agent-harness-hooks/copilot-cli";
 import type {
     CommandRisk,
+    EventBase,
     FileEffect,
     SessionEvent,
     SessionKey,
@@ -54,79 +55,97 @@ export function recordCopilotHook(
             ...(model ? { model } : {}),
         };
 
-        if (hook === "userPromptSubmitted") {
-            append(store, {
-                ...common,
-                kind: "prompt",
-                text: stringValue(input.prompt) ?? "",
-            });
-            return;
-        }
-        if (hook === "agentStop" || hook === "sessionEnd") {
-            if (hook === "sessionEnd") {
-                const reply = stringValue(input.finalMessage);
-                if (reply)
-                    append(store, { ...common, kind: "reply", text: reply });
-            }
-            const transcript = stringValue(input.transcriptPath);
-            if (transcript) store.setTranscriptPath(session, transcript);
-            return;
-        }
+        if (recordSessionHook(hook, input, store, common)) return;
         const details = tool(input);
+        if (!details) return;
         if (hook === "preToolUse") {
-            if (!details || !shellCommand(details)) return;
-            const file = snapshotFile(store, session, details);
-            mkdirSync(path.dirname(file), { recursive: true });
-            writeFileSync(
-                file,
-                JSON.stringify(snapshotWorkingTree(repository)),
-                {
-                    mode: 0o600,
-                },
-            );
+            recordPreToolUse(repository, store, session, details);
             return;
         }
-        if (
-            (hook !== "postToolUse" && hook !== "postToolUseFailure") ||
-            !details
-        )
-            return;
-        const command = shellCommand(details);
-        if (command) {
-            const file = snapshotFile(store, session, details);
-            let before: WorkingSnapshot = {};
-            try {
-                before = JSON.parse(
-                    readFileSync(file, "utf8"),
-                ) as WorkingSnapshot;
-            } catch {
-                // Missing pre-hook state yields no inferred writes.
-            }
-            const writes = diffSnapshots(
-                before,
-                snapshotWorkingTree(repository),
-                repository,
-            );
-            if (!isReadOnlyGitCommand(command) || writes.length) {
-                const script = detectScript(command, repository, cwd);
-                append(store, {
-                    ...common,
-                    kind: "command",
-                    command,
-                    risk: classifyRisk(details.name, command),
-                    ...(script ? { script } : {}),
-                    writes,
-                });
-            }
-            rmSync(file, { force: true });
-            return;
-        }
-        for (const effect of fileEffects(repository, cwd, details)) {
-            append(store, { ...common, ...effect });
-        }
+        if (hook !== "postToolUse" && hook !== "postToolUseFailure") return;
+        recordPostToolUse(repository, cwd, store, common, session, details);
     } catch {
         // Capture is observational and must not block Copilot.
     }
+}
+
+function recordSessionHook(
+    hook: CopilotHookName,
+    input: HookInput,
+    store: JsonlSessionStore,
+    common: EventBase,
+): boolean {
+    if (hook === "userPromptSubmitted") {
+        append(store, {
+            ...common,
+            kind: "prompt",
+            text: stringValue(input.prompt) ?? "",
+        });
+        return true;
+    }
+    if (hook !== "agentStop" && hook !== "sessionEnd") return false;
+    if (hook === "sessionEnd") {
+        const reply = stringValue(input.finalMessage);
+        if (reply) append(store, { ...common, kind: "reply", text: reply });
+    }
+    const transcript = stringValue(input.transcriptPath);
+    if (transcript) store.setTranscriptPath(common.session, transcript);
+    return true;
+}
+
+function recordPreToolUse(
+    repository: string,
+    store: JsonlSessionStore,
+    session: SessionKey,
+    details: ToolDetails,
+): void {
+    if (!shellCommand(details)) return;
+    const file = snapshotFile(store, session, details);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(snapshotWorkingTree(repository)), {
+        mode: 0o600,
+    });
+}
+
+function recordPostToolUse(
+    repository: string,
+    cwd: string,
+    store: JsonlSessionStore,
+    common: EventBase,
+    session: SessionKey,
+    details: ToolDetails,
+): void {
+    const command = shellCommand(details);
+    if (!command) {
+        for (const effect of fileEffects(repository, cwd, details)) {
+            append(store, { ...common, ...effect });
+        }
+        return;
+    }
+    const file = snapshotFile(store, session, details);
+    let before: WorkingSnapshot = {};
+    try {
+        before = JSON.parse(readFileSync(file, "utf8")) as WorkingSnapshot;
+    } catch {
+        // Missing pre-hook state yields no inferred writes.
+    }
+    const writes = diffSnapshots(
+        before,
+        snapshotWorkingTree(repository),
+        repository,
+    );
+    if (!isReadOnlyGitCommand(command) || writes.length) {
+        const script = detectScript(command, repository, cwd);
+        append(store, {
+            ...common,
+            kind: "command",
+            command,
+            risk: classifyRisk(details.name, command),
+            ...(script ? { script } : {}),
+            writes,
+        });
+    }
+    rmSync(file, { force: true });
 }
 
 function append(store: JsonlSessionStore, event: SessionEvent): void {
