@@ -3,6 +3,7 @@
 
 import { getRequestListener } from "@hono/node-server";
 import { Hono, type Context } from "hono";
+import { DAEMON_ROUTE, SESSIONS_ROUTE } from "../daemonApi.js";
 import { daemonApiHandler } from "./routes/daemonApiHandler.js";
 import { sessionsApiHandler } from "./routes/sessionsApiHandler.js";
 import { storyCommitsApiHandler } from "./routes/storyCommitsApiHandler.js";
@@ -10,12 +11,6 @@ import { storyCommitsApiHandler } from "./routes/storyCommitsApiHandler.js";
 const HTTP_NOT_FOUND = 404;
 const HTTP_METHOD_NOT_ALLOWED = 405;
 const HTTP_INTERNAL_ERROR = 500;
-
-// Identity route: `daemon status` checks the pid it returns.
-export const DAEMON_ROUTE = "/api/daemon";
-
-// Session registration route: Copilot `sessionStart` hook posts here.
-export const SESSIONS_ROUTE = "/api/sessions";
 
 // All API routes.
 // Example: GET /api/story/commits/abc123 -> storyCommitsApiHandler, param hash="abc123"

@@ -1,8 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DAEMON_ROUTE, SESSIONS_ROUTE } from "./server/router.js";
-import { LOOPBACK_HOST } from "./server/server.js";
+import {
+    DAEMON_PORT,
+    DAEMON_ROUTE,
+    LOOPBACK_HOST,
+    SESSIONS_ROUTE,
+} from "./daemonApi.js";
 import type { StoryCommit } from "./server/routes/storyCommitsApiHandler.js";
 import type { SessionRegistration } from "./sessionWatcher.js";
 
@@ -11,7 +15,7 @@ export type SessionAccepted = { sessionId: string };
 
 // Typed HTTP client for the git-story daemon API. One method per route;
 // non-2xx responses throw with the daemon's error message.
-// Example: new GitStoryDaemonClient(51703, 2000).registerSession(req)
+// Example: daemonClient.registerSession(req)
 //   -> POST http://127.0.0.1:51703/api/sessions -> {"sessionId":"s7"}
 export class GitStoryDaemonClient {
     constructor(
@@ -63,3 +67,12 @@ export class GitStoryDaemonClient {
         return json;
     }
 }
+
+// Hooks run inside the agent, so a slow daemon must not hold them up.
+const DAEMON_TIMEOUT_MS = 2000;
+
+// The one client every CLI command uses.
+export const daemonClient = new GitStoryDaemonClient(
+    DAEMON_PORT,
+    DAEMON_TIMEOUT_MS,
+);

@@ -12,10 +12,9 @@ import { Command } from "commander";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { GitStoryDaemonClient } from "../daemonClient.js";
+import { daemonClient } from "../daemonClient.js";
 import { cliLogger } from "../logger.js";
 import type { SessionRegistration } from "../sessionWatcher.js";
-import { DAEMON_PORT } from "./daemon.js";
 
 // Reads all of stdin. Hooks get their payload here (Copilot JSON, or lines
 // git pipes to hooks such as pre-push). Returns "" when stdin is a terminal.
@@ -44,8 +43,6 @@ async function readCopilotInput<T extends BaseHookInput>(
 }
 
 const COPILOT_CLIENT_NAME = "copilot-cli";
-// The hook must not hold up the agent when the daemon is slow.
-const REGISTER_TIMEOUT_MS = 2000;
 
 // Builds the daemon registration for a Copilot sessionStart payload.
 // Example: {sessionId:"s7", cwd:"/repo/src"} ->
@@ -73,11 +70,7 @@ async function registerSession(
 ): Promise<void> {
     try {
         const body = sessionRegistration(input as SessionStartInput);
-        const client = new GitStoryDaemonClient(
-            DAEMON_PORT,
-            REGISTER_TIMEOUT_MS,
-        );
-        await client.registerSession(body);
+        await daemonClient.registerSession(body);
         cliLogger.info(`sessionStart registered: ${body.sessionId}`);
     } catch (e) {
         cliLogger.info(`sessionStart not registered: ${(e as Error).message}`);
