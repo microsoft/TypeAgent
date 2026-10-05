@@ -110,7 +110,7 @@ const url = (s: DaemonState) => `http://127.0.0.1:${s.port}`;
 
 // Fixed so every client knows where the daemon listens. Chosen from the
 // IANA dynamic range (49152-65535) to avoid registered services.
-const DAEMON_PORT = 51703;
+export const DAEMON_PORT = 51703;
 
 async function start(): Promise<void> {
     const running = await readState();
