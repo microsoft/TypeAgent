@@ -25,9 +25,9 @@ describe("resolveCopilotReasoningModel", () => {
         );
     });
 
-    it("defaults to GPT-5.6 Sol", () => {
+    it("defaults to GPT-6 Sol", () => {
         expect(resolveCopilotReasoningModel(undefined, undefined)).toBe(
-            "gpt-5.6-sol",
+            "gpt-6-sol",
         );
     });
 });

@@ -416,6 +416,7 @@ const defaultSessionConfig: SessionConfig = {
         enabled: true,
         // Override per session with `@config translation model <name>`.
         model: openai.GPT_5_6_LUNA,
+        reasoningEffort: "medium",
         stream: true,
         promptConfig: {
             additionalInstructions: true,

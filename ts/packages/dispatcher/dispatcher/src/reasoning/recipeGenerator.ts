@@ -195,7 +195,7 @@ SCRIPT GENERATION RULES:
 7. Return { success: true, message: "..." } on success
 8. Parameterize values that change between invocations via params.paramName
 9. Use template literals for string interpolation: \`Top \${params.quantity} songs\`
-10. Default LLM model: "gpt-5.6-sol" for extraction/formatting
+10. Default LLM model: "gpt-6-sol" for extraction/formatting
 11. BLOCKED identifiers — do NOT use: ${BLOCKED_IDENTIFIERS}
 
 GRAMMAR PATTERN RULES:

@@ -190,7 +190,7 @@ async function sendMessageAndWaitWithCancellation(
     }
 }
 
-const FALLBACK_MODEL = "gpt-5.6-sol";
+const FALLBACK_MODEL = "gpt-6-sol";
 
 // Default reasoning effort when COPILOT_REASONING_EFFORT is unset/invalid.
 // "high" makes the model more likely to actually run verification tool calls
