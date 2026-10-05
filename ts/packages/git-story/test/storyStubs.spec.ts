@@ -5,7 +5,6 @@ import path from "node:path";
 import {
     SessionWatcher,
     type SessionWatchRequest,
-    type NormalizedSessionUpdate,
 } from "../src/sessionWatcher.js";
 import { StoryBuilder } from "../src/storyBuilder.js";
 
@@ -42,48 +41,11 @@ const watchRequest: SessionWatchRequest = {
     metadata: { clientName: "Copilot CLI", models: [] },
 };
 
-const sessionUpdate: NormalizedSessionUpdate = {
-    projectPath: watchRequest.projectPath,
-    sessionId: watchRequest.sessionId,
-    events: [
-        {
-            id: "event-1",
-            sourceEventId: "event-1",
-            type: "message",
-            role: "user",
-            text: "Use a queue per repository.",
-        },
-        {
-            id: "event-2",
-            sourceEventId: "event-2",
-            type: "message",
-            role: "agent",
-            text: "I will update the queue selection.",
-        },
-        {
-            id: "f497080c-849a-4ab9-a686-5022d6559931",
-            type: "session",
-            eventType: "internal",
-            details: {},
-        },
-    ],
-    metadata: watchRequest.metadata,
-};
-
 test.each(["processUpdates"] as const)(
     "session watcher rejects %s until implemented",
     async (method) => {
         await expect(
             new SessionWatcher()[method](watchRequest),
-        ).rejects.toThrow(`SessionWatcher.${method} is not implemented`);
-    },
-);
-
-test.each(["filterForPrivacy", "publishUpdate"] as const)(
-    "session watcher rejects %s rather than passing data through",
-    async (method) => {
-        await expect(
-            new SessionWatcher()[method](sessionUpdate),
         ).rejects.toThrow(`SessionWatcher.${method} is not implemented`);
     },
 );

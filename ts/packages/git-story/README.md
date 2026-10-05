@@ -72,9 +72,10 @@ locations so rereading an event reuses its assigned ID.
 
 `SessionWatcher.captureUpdates(request, checkpoint?, options?)` delegates to
 `captureSessionUpdates` in `src/sessionCapture.ts`. Batch capture, normalization,
-and metadata collection/restoration are implemented. Watch/stop, processing,
-privacy filtering, and delivery remain separate work. Nothing starts a watcher,
-daemon, hook, or VS Code adapter.
+metadata collection/restoration, and the privacy/approved-update boundary are
+implemented. Watch/stop and processing remain separate work; production privacy
+policy and delivery are injected dependencies. Nothing starts a watcher, daemon,
+hook, or VS Code adapter.
 
 With no checkpoint, capture loads the saved cursor. `options.stateDirectory`
 defaults to `~/.typeagent/git-story/capture`. `options.maxRecords` defaults to
@@ -256,6 +257,59 @@ const restored = await watcher.restoreMetadata(
 // Future batches use collectMetadata(request, normalizedBatch, state).
 // Recovery of downstream event delivery is separate from metadata recovery.
 ```
+
+### Privacy and approved-update handoff
+
+`SessionWatcher` accepts optional `privacyFilter` and
+`approvedUpdateDestination` constructor dependencies. No production filter or
+destination is provided: filtering without a filter and publishing without a
+destination fail explicitly. Watching, stopping, and `processUpdates` remain
+unimplemented; batch capture, normalization, and metadata collection/restoration
+are available separately.
+
+The filter receives a private snapshot of the **whole** `NormalizedSessionUpdate`:
+project path, session ID, every event field (including messages, tool arguments,
+results, and diffs), and session metadata. It returns an approved/redacted update
+or `null` for deliberate exclusion, synchronously or asynchronously. The real
+policy must inspect all outgoing fields and preserve valid references after
+redaction; this connection does not implement that policy or validate its
+decisions. Dependencies are trusted application code, not sandboxed plugins.
+Updates and filter results must be data supported by Node's V8 serialization.
+Functions and shared-memory buffers are rejected so snapshots cannot retain
+mutable shared backing memory.
+
+`filterForPrivacy` returns an opaque `ApprovedSessionUpdate` handle, or `null`.
+The handle contains no payload. A private per-watcher registry checks its identity
+at runtime; a TypeScript cast, copied handle, or another watcher's approval cannot
+authorize delivery. `publishUpdate` accepts only a handle from that watcher:
+
+```typescript
+const watcher = new SessionWatcher({
+  privacyFilter,
+  approvedUpdateDestination,
+});
+const approved = await watcher.filterForPrivacy(update);
+if (approved !== null) {
+  await watcher.publishUpdate(approved);
+}
+```
+
+The watcher snapshots the input before invoking the filter, snapshots the
+approved result before returning its handle, and gives the destination a fresh
+copy on each call. Mutating the caller's input, a retained filter result, or a
+previous delivery cannot change the stored approval. Handles are process-local,
+reusable for explicit retries, and retained only while referenced; there is no
+automatic retry, durable queue, or deduplication here. The destination must use
+the approved session/event identities for any idempotency it requires, including
+metadata-only updates.
+
+The destination accepts a `NormalizedSessionUpdate` containing **only** the
+approved snapshot and returns `void` or `Promise<void>`. It resolves when the
+handoff is accepted, not when Neumem extraction or story building finishes.
+Delivery never changes or acknowledges the source-read checkpoint. Filter,
+snapshot, and destination failures surface as fixed stage-specific errors
+without raw payloads or dependency error causes; this boundary logs nothing.
+Injected dependencies must follow the same no-sensitive-logging requirement.
 
 ## Trademarks
 
