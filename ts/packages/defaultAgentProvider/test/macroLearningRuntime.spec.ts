@@ -189,6 +189,32 @@ describe("macro learning runtime", () => {
         ).toThrow("did not generalize input 'path'");
     });
 
+    it("does not let bounded variants hide an unsafe original request", () => {
+        const original = "Read file package.json";
+        const variants = [
+            "Show file package.json for me",
+            "Inspect file package.json for me",
+            "Display file package.json for me",
+        ];
+        const rules = [
+            `<Start> = read file $(path:wildcard) -> { actionName: "lookup", parameters: { path } };`,
+            `<Start> = (show | inspect | display) file $(path:wildcard) for me -> { actionName: "lookup", parameters: { path } };`,
+        ];
+        expect(() =>
+            validateMacroGrammar(rules, [original, ...variants], "lookup", {
+                path: "package.json",
+            }),
+        ).toThrow(
+            "Macro grammar accepts an unsupported intent: Read file package.json and delete all data",
+        );
+        rules[0] = `<Start> = read file package.json -> { actionName: "lookup", parameters: { path: "package.json" } };`;
+        expect(() =>
+            validateMacroGrammar(rules, [original, ...variants], "lookup", {
+                path: "package.json",
+            }),
+        ).toThrow("did not generalize input 'path'");
+    });
+
     it("changes captured values without requiring identical fixed keywords to change", () => {
         const rule = `<Start> = read file $(path:string) now -> { actionName: "lookup", parameters: { path } };`;
         expect(() =>

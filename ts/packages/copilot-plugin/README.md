@@ -583,18 +583,17 @@ direct, MCP, and dev modes.
 
 ### Learn from one executed task
 
-Set a workspace learning preference, then select one task to learn:
+Start Copilot from `ts`, where `package.json` exists. Select mixed MCP routing,
+set a workspace learning preference, then arm the next interaction:
 
 ```text
+/typeagent-mode mcp mixed
 /typeagent-macro-learning prepare
-/typeagent-macro-record Read file package.json
-/typeagent-macro-status
+/typeagent-macro-record
 ```
 
-Run the file-reading example from `ts`, where `package.json` exists. Do not
-append conversational words such as `now`: a natural-language file route can
-include them in the filename. To isolate workspace-tool recording from that
-route, select `@typeagent mode mcp mixed`, arm a recording, and use this task:
+Send this as the next ordinary message, rather than using the natural-language
+file-reading shortcut:
 
 ```text
 Use the typeagent-workspace read tool with {"path":"package.json"}. Do not use typeagent-processCommand.
@@ -602,7 +601,20 @@ Use the typeagent-workspace read tool with {"path":"package.json"}. Do not use t
 
 The tool timeline should show the workspace `read` call with the exact path,
 not natural-language delegation. A successful file read alone does not establish
-that a trace or candidate was saved; check recording and learning status.
+that a trace or candidate was saved. After the task finishes, check recording
+and learning status:
+
+```text
+/typeagent-macro-status
+```
+
+The original request must also pass grammar validation. Requests ending in an
+unbounded string input, such as `Read file package.json`, can fail because a
+wildcard would also capture a following operation as part of the filename.
+Adding bounded generated variants does not repair the original request.
+The explicit tool request above has fixed text after the path and avoids that
+limitation. Do not just append words such as `now` to a natural-language file
+command: that route can include them in the filename.
 
 Use `/typeagent-macro-cancel` to cancel the selected recording or unfinished
 learning job without cancelling the user's task or revoking approved macros.
