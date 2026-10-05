@@ -1,14 +1,35 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
     ScriptExecutionRequest,
     ScriptExecutionResult,
 } from "../src/execution/powershellRunner.mjs";
 import { executeBrokeredPowerShell } from "../src/execution/windowsSandboxBroker.mjs";
+
+export async function copyBrokerWithTestHost(
+    directory: string,
+    hostScript: string,
+): Promise<string> {
+    const architecture = process.arch === "arm64" ? "win-arm64" : "win-x64";
+    const brokerName = "PowerShellSandboxBroker.exe";
+    const broker = join(directory, brokerName);
+    await copyFile(
+        fileURLToPath(
+            new URL(
+                `../../broker/${architecture}/${brokerName}`,
+                import.meta.url,
+            ),
+        ),
+        broker,
+    );
+    await writeFile(join(directory, "scriptHost.ps1"), hostScript);
+    return broker;
+}
 
 export function executeRestrictedScript(
     request: ScriptExecutionRequest,

@@ -9,7 +9,7 @@ import type {
 } from "@typeagent/agent-sdk";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { jest } from "@jest/globals";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
@@ -35,6 +35,7 @@ import {
     hasNamespaceAction,
 } from "../src/namespaces/actionHandlerRegistry.mjs";
 import { revokeScriptApprovals } from "../src/execution/scriptApproval.mjs";
+import { copyBrokerWithTestHost } from "./sandboxCases.js";
 
 const itOnWindows =
     process.platform === "win32" &&
@@ -1788,8 +1789,33 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
             },
         );
 
+        itOnWindows.each([
+            "$PSModuleAutoLoadingPreference = 'None'\n'expected-output'",
+            "function Out-String { 'wrong-formatter' }\n'expected-output'",
+        ])(
+            "keeps host output formatting independent of approved-script state: %s",
+            async (script) => {
+                const { agent, context } = await createAgentHarness();
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "testPowerShellFlow",
+                        parameters: { script },
+                    },
+                    context,
+                );
+                expect(result).not.toHaveProperty("error");
+                expect(result).toMatchObject({
+                    displayContent: expect.stringContaining("expected-output"),
+                });
+                expect(result).not.toMatchObject({
+                    displayContent: expect.stringContaining("wrong-formatter"),
+                });
+            },
+        );
+
         itOnWindows.each(["success", "timeout"])(
-            "terminates owned native children after approved-script %s",
+            "terminates owned native children after approved-script %s despite slow startup",
             async (mode) => {
                 const { sessionContext } = await createAgentHarness(
                     undefined,
@@ -1797,54 +1823,130 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
                     new MemoryStorage(),
                     async () => 0,
                 );
-                const marker = join(fixtureDirectory, `child-pid-${mode}.txt`);
-                const result = await executeScript(
+                const directory = await mkdtemp(
+                    join(fixtureDirectory, "child-lifetime-"),
+                );
+                const marker = join(directory, "child-pid.txt");
+                const release = join(directory, "release-script.txt");
+                const host = await readFile(
+                    new URL("../../scripts/scriptHost.ps1", import.meta.url),
+                    "utf8",
+                );
+                const initialization = "$ErrorActionPreference = 'Stop'";
+                expect(host).toContain(initialization);
+                const originalBroker = process.env.TYPEAGENT_POWERSHELL_BROKER;
+                // Exceed the old three-second budget before any user code runs.
+                process.env.TYPEAGENT_POWERSHELL_BROKER =
+                    await copyBrokerWithTestHost(
+                        directory,
+                        host.replace(
+                            initialization,
+                            `${initialization}\n[System.Threading.Thread]::Sleep(6000)`,
+                        ),
+                    );
+                const controller = new AbortController();
+                const started = Date.now();
+                const execution = executeScript(
                     {
-                        script: String.raw`param([string]$Marker, [bool]$Wait)
-$child = Start-Process "$env:SYSTEMROOT\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList '-NoProfile -NonInteractive -Command Start-Sleep -Seconds 30' -PassThru -WindowStyle Hidden
+                        script: String.raw`param([string]$Marker, [string]$Release)
+$child = Start-Process "$env:SYSTEMROOT\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList '-NoProfile -NonInteractive -Command Start-Sleep -Seconds 120' -PassThru -WindowStyle Hidden
 [System.IO.File]::WriteAllText($Marker, [string]$child.Id)
-if ($Wait) { Start-Sleep -Seconds 30 }`,
+while (-not [System.IO.File]::Exists($Release)) { Start-Sleep -Milliseconds 50 }`,
                         parameters: {
                             Marker: marker,
-                            Wait: mode === "timeout",
+                            Release: release,
                         },
+                        abortSignal: controller.signal,
                         provenance: "generated",
                         sandbox: {
-                            allowedCmdlets: [],
-                            allowedPaths: [],
-                            allowedModules: [],
-                            networkAccess: false,
-                            maxExecutionTime: mode === "timeout" ? 3 : 30,
+                            maxExecutionTime: 30,
                         },
                     },
                     {
                         sessionContext,
                         definition: {
-                            actionName: "childTimeout",
-                            displayName: "Child timeout",
+                            actionName: "childLifetime",
+                            displayName: "Child lifetime",
                             description: "Verify owned-process cleanup",
                             parameters: [],
                             grammarPatterns: [],
                         },
                     },
                 );
-                expect(result.success).toBe(mode === "success");
-                if (mode === "timeout")
-                    expect(result.stderr).toMatch(/timed out/i);
-                const pid = Number(await readFile(marker, "utf8"));
-                expect(Number.isInteger(pid) && pid > 0).toBe(true);
-                let running = true;
-                for (let attempt = 0; attempt < 50; attempt++) {
-                    try {
-                        process.kill(pid, 0);
-                    } catch {
-                        running = false;
-                        break;
+                try {
+                    const deadline = Date.now() + 25_000;
+                    let pid: number | undefined;
+                    while (Date.now() < deadline) {
+                        if (existsSync(marker)) {
+                            const value = Number(
+                                await readFile(marker, "utf8"),
+                            );
+                            if (Number.isInteger(value) && value > 0) {
+                                pid = value;
+                                break;
+                            }
+                        }
+                        const finished = await Promise.race([
+                            execution.then((result) => ({ result })),
+                            delay(50).then(() => undefined),
+                        ]);
+                        if (finished) {
+                            throw new Error(
+                                `PowerShell ended before child readiness: ${JSON.stringify(finished.result)}`,
+                            );
+                        }
                     }
-                    await delay(100);
+                    if (pid === undefined)
+                        throw new Error(
+                            "Child did not become ready within 25 seconds.",
+                        );
+                    const childPid = pid;
+                    expect(Date.now() - started).toBeGreaterThanOrEqual(6000);
+                    expect(() => process.kill(childPid, 0)).not.toThrow();
+                    if (mode === "success") await writeFile(release, "");
+                    const result = await execution;
+                    expect(result).toMatchObject({
+                        success: mode === "success",
+                        cancelled: false,
+                    });
+                    if (mode === "timeout") {
+                        expect(result.stderr).toMatch(/timed out/i);
+                        expect(result.duration).toBeGreaterThanOrEqual(30_000);
+                    } else {
+                        expect(result.stderr).toBe("");
+                    }
+                    let running = true;
+                    for (let attempt = 0; attempt < 50; attempt++) {
+                        try {
+                            process.kill(childPid, 0);
+                        } catch (error) {
+                            if (
+                                typeof error !== "object" ||
+                                error === null ||
+                                !("code" in error) ||
+                                error.code !== "ESRCH"
+                            )
+                                throw error;
+                            running = false;
+                            break;
+                        }
+                        await delay(100);
+                    }
+                    if (running) process.kill(childPid);
+                    expect(running).toBe(false);
+                } finally {
+                    controller.abort();
+                    try {
+                        await execution;
+                    } finally {
+                        if (originalBroker === undefined)
+                            delete process.env.TYPEAGENT_POWERSHELL_BROKER;
+                        else
+                            process.env.TYPEAGENT_POWERSHELL_BROKER =
+                                originalBroker;
+                        await rm(directory, { recursive: true, force: true });
+                    }
                 }
-                if (running) process.kill(pid);
-                expect(running).toBe(false);
             },
         );
     });

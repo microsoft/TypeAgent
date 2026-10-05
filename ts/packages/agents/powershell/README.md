@@ -147,6 +147,11 @@ Native stderr with a successful exit is displayed as a warning, not treated as
 a script failure. A nonzero final native exit code is a failure; scripts that
 intentionally handle such an exit must reset `LASTEXITCODE` after recovery.
 
+Output formatting uses a separate runspace initialized with built-in commands.
+It does not depend on module auto-loading in the outer host or on formatting
+commands redefined by the script. This also preserves readable `Format-Table`
+and `Format-List` output in the retained restricted broker.
+
 The broker retains restricted protocol v1 for compatibility, not as a selectable
 flow execution mode. Its OS-isolation tests use a separate test-only host and
 do not establish containment of approved-local execution. Existing

@@ -574,9 +574,24 @@ try {
 
     $output = $ps.EndInvoke($asyncResult)
 
-    # Out-String renders Format-* records instead of exposing their internal names.
+    # Render with built-in commands, independent of host auto-loading and script state.
     if ($output.Count -gt 0) {
-        $output | Out-String -Width 200 | Write-Output
+        $formatter = [System.Management.Automation.PowerShell]::Create(
+            [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+        )
+        try {
+            [void]$formatter.AddCommand('Out-String')
+            [void]$formatter.AddParameter('Width', 200)
+            $formatted = $formatter.Invoke($output)
+            if ($formatter.HadErrors) {
+                throw $formatter.Streams.Error[0]
+            }
+            foreach ($line in $formatted) {
+                [Console]::Out.WriteLine([string]$line)
+            }
+        } finally {
+            $formatter.Dispose()
+        }
     }
 
     # Native tools can write warnings to stderr and still succeed.

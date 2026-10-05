@@ -2,22 +2,15 @@
 // Licensed under the MIT License.
 
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
-import {
-    access,
-    copyFile,
-    mkdtemp,
-    readFile,
-    rm,
-    writeFile,
-} from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { executeBrokeredPowerShell } from "../src/execution/windowsSandboxBroker.mjs";
 import {
     runDeniedFileReadCase,
     executeRestrictedScript as executeScript,
+    copyBrokerWithTestHost,
 } from "./sandboxCases.js";
 
 const describeOnWindows =
@@ -222,7 +215,7 @@ Write-Output $xml.DocumentElement.Name`,
                 },
             });
 
-            expect(result.success).toBe(true);
+            expect(result).toMatchObject({ success: true, stderr: "" });
             expect(result.stdout).not.toContain("parent-secret");
         } finally {
             if (originalSecret === undefined) {
@@ -247,7 +240,7 @@ Write-Output $xml.DocumentElement.Name`,
             },
         });
 
-        expect(result.success).toBe(true);
+        expect(result).toMatchObject({ success: true, stderr: "" });
         expect(result.stdout.trim()).toBe("héllo 世界");
     });
 
@@ -278,6 +271,51 @@ Write-Output $xml.DocumentElement.Name`,
         },
     );
 
+    it.each([
+        {
+            script: "Write-Output 'héllo 世界'",
+            commands: ["Write-Output"],
+            expected: "héllo 世界",
+        },
+        ...["Format-Table", "Format-List"].map((format) => ({
+            script: `ConvertFrom-Json '{"Name":"sample","Count":7}' | ${format}`,
+            commands: ["ConvertFrom-Json", format],
+            expected: "sample",
+        })),
+    ])(
+        "renders output without outer-host module auto-loading: $commands",
+        async ({ script, commands, expected }) => {
+            const host = await readFile(
+                new URL("../../scripts/scriptHost.ps1", import.meta.url),
+                "utf8",
+            );
+            const initialization = "$ErrorActionPreference = 'Stop'";
+            expect(host).toContain(initialization);
+            process.env.TYPEAGENT_POWERSHELL_BROKER =
+                await copyBrokerWithTestHost(
+                    configDirectory,
+                    host.replace(
+                        initialization,
+                        `${initialization}\n$PSModuleAutoLoadingPreference = 'None'`,
+                    ),
+                );
+            const result = await executeScript({
+                script,
+                parameters: {},
+                provenance: "generated",
+                sandbox: {
+                    allowedCmdlets: commands,
+                    maxExecutionTime: BROKER_TEST_TIMEOUT_SECONDS,
+                },
+            });
+            expect(result).toMatchObject({ success: true, stderr: "" });
+            expect(result.stdout).toContain(expected);
+            expect(result.stdout).not.toMatch(
+                /FormatEntryData|FormatStartData/,
+            );
+        },
+    );
+
     it("isolates concurrent dynamic executions", async () => {
         const execute = (value: string) =>
             executeScript({
@@ -298,9 +336,9 @@ Write-Output $xml.DocumentElement.Name`,
             execute("second"),
         ]);
 
-        expect(first).toMatchObject({ success: true });
+        expect(first).toMatchObject({ success: true, stderr: "" });
         expect(first.stdout.trim()).toBe("first");
-        expect(second).toMatchObject({ success: true });
+        expect(second).toMatchObject({ success: true, stderr: "" });
         expect(second.stdout.trim()).toBe("second");
     });
 
@@ -378,29 +416,17 @@ Write-Output $xml.DocumentElement.Name`,
 
     describe("OS containment independently of AST and language restrictions", () => {
         beforeEach(async () => {
-            const architecture =
-                process.arch === "arm64" ? "win-arm64" : "win-x64";
-            const brokerName = "PowerShellSandboxBroker.exe";
-            const testBroker = join(configDirectory, brokerName);
-            await copyFile(
-                fileURLToPath(
-                    new URL(
-                        `../../broker/${architecture}/${brokerName}`,
-                        import.meta.url,
+            process.env.TYPEAGENT_POWERSHELL_BROKER =
+                await copyBrokerWithTestHost(
+                    configDirectory,
+                    await readFile(
+                        new URL(
+                            "../../test/fixtures/osIsolationHost.ps1",
+                            import.meta.url,
+                        ),
+                        "utf8",
                     ),
-                ),
-                testBroker,
-            );
-            await copyFile(
-                fileURLToPath(
-                    new URL(
-                        "../../test/fixtures/osIsolationHost.ps1",
-                        import.meta.url,
-                    ),
-                ),
-                join(configDirectory, "scriptHost.ps1"),
-            );
-            process.env.TYPEAGENT_POWERSHELL_BROKER = testBroker;
+                );
         });
 
         async function executeProbe(
