@@ -33,7 +33,7 @@ function isNodeCompatible(binaryPath) {
     return res.status === 0;
 }
 
-// Partial installs (e.g. the CI git-story fast lane) don't include
+// Partial installs (e.g. the CI fast lane) don't include
 // better-sqlite3; let them opt out instead of failing.
 if (process.env.TYPEAGENT_SKIP_BETTER_SQLITE3 === "1") {
     console.log(

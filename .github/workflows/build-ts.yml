@@ -25,10 +25,8 @@ permissions:
 
 env:
   NODE_OPTIONS: --max_old_space_size=8192
-  # Fast lane: a PR confined to ts/packages/git-story (see the paths-filter
-  # step) builds and tests only FAST_LANE_PACKAGE (and its dependencies) on a
-  # single matrix leg.
-  FAST_LANE_PACKAGE: git-story
+  # Fast lane (see the "Determine CI scope" step): a PR whose affected
+  # packages don't need the full pipeline runs on this single matrix leg.
   FAST_LANE_OS: ubuntu-latest
   FAST_LANE_NODE: 22
 
@@ -53,57 +51,39 @@ jobs:
         with:
           # Full history so the changed-files lint can diff against the base.
           fetch-depth: 0
-      # Decide how much CI this change needs:
+      # Decide how much CI this change needs (tools/scripts/ciScope.mjs):
       #   skip - nothing under ts/ (or this workflow) changed
-      #   fast - only ts/packages/git-story changed; one FAST_LANE_OS/FAST_LANE_NODE
-      #          leg builds and tests FAST_LANE_PACKAGE and its dependencies;
-      #          the other matrix legs skip (and report success).
-      #   full - anything else.  Only pull requests are scoped; merge queue,
-      #          push to main and manual runs are always full, which
-      #          backstops the fast lane.  A paths-filter failure is also full.
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
-        if: ${{ github.event_name == 'pull_request' }}
-        continue-on-error: true
-        with:
-          # `every` is needed for the negated pattern, so each filter holds a
-          # single positive pattern.
-          predicate-quantifier: every
-          filters: |
-            ts:
-              - "ts/**"
-            ts_outside_fast_lane:
-              - "ts/**"
-              - "!ts/packages/git-story/**"
-            workflow:
-              - ".github/workflows/build-ts.yml"
+      #   fast - every change is inside workspace packages whose dependents
+      #          don't reach Electron; one FAST_LANE_OS/FAST_LANE_NODE leg
+      #          installs, builds and tests only the affected packages (the
+      #          changed ones plus their workspace dependents); the other legs
+      #          skip and report success.
+      #   full - anything else (root config, lockfile, shared tools/scripts,
+      #          this workflow, Electron-reaching packages, too many packages).
+      # Only pull requests are scoped; merge queue, push to main and manual
+      # runs are always full, which backstops the fast lane.  A scope failure
+      # also falls back to full.
       - name: Determine CI scope
         id: scope
         shell: bash
         env:
           EVENT: ${{ github.event_name }}
-          FILTER_OUTCOME: ${{ steps.filter.outcome }}
-          TS: ${{ steps.filter.outputs.ts }}
-          TS_OUTSIDE: ${{ steps.filter.outputs.ts_outside_fast_lane }}
-          WORKFLOW: ${{ steps.filter.outputs.workflow }}
+          BASE_REF: ${{ github.base_ref }}
           LEG_OS: ${{ matrix.os }}
           LEG_NODE: ${{ matrix.version }}
+        working-directory: ts
         run: |
-          mode=full
-          if [ "$EVENT" = pull_request ] && [ "$FILTER_OUTCOME" = success ]; then
-            if [ "$TS_OUTSIDE" = true ] || [ "$WORKFLOW" = true ]; then
-              mode=full
-            elif [ "$TS" = true ]; then
-              mode=fast
-            elif [ "$TS" = false ]; then
-              mode=skip
-            fi
+          if [ "$EVENT" = pull_request ]; then
+            git fetch --no-tags origin "$BASE_REF" || true
+            node tools/scripts/ciScope.mjs --base "origin/$BASE_REF" --full-trigger .github/workflows/build-ts.yml || echo "mode=full" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=full" >> "$GITHUB_OUTPUT"
           fi
+          mode=$(grep '^mode=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)
           run=true
           if [ "$mode" = skip ]; then run=false; fi
           if [ "$mode" = fast ] && [ "$LEG_OS/$LEG_NODE" != "$FAST_LANE_OS/$FAST_LANE_NODE" ]; then run=false; fi
-          echo "CI scope: $mode (run on this leg: $run)"
-          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Run on this leg: $run"
           echo "run=$run" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: ${{ steps.scope.outputs.run == 'true' }}
@@ -122,9 +102,10 @@ jobs:
         shell: bash
         run: |
           if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
-            # git-story's closure has no better-sqlite3; skip the root
+            # Without better-sqlite3 in the closure, skip the root
             # postinstall's SQLite binary provisioning.
-            TYPEAGENT_SKIP_BETTER_SQLITE3=1 pnpm install --frozen-lockfile --strict-peer-dependencies --filter . --filter "$FAST_LANE_PACKAGE..."
+            if [ "${{ steps.scope.outputs.sqlite }}" != true ]; then export TYPEAGENT_SKIP_BETTER_SQLITE3=1; fi
+            pnpm install --frozen-lockfile --strict-peer-dependencies --filter . ${{ steps.scope.outputs.filters }}
           else
             pnpm install --frozen-lockfile --strict-peer-dependencies
           fi
@@ -134,7 +115,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
-            pnpm --filter "$FAST_LANE_PACKAGE..." run build
+            pnpm ${{ steps.scope.outputs.filters }} run build
           else
             npm run build
           fi
@@ -200,7 +181,7 @@ jobs:
           git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-debt -- --gate --base "origin/${{ github.base_ref }}"
       - name: Restore better-sqlite3 for Node.js
-        if: ${{ steps.scope.outputs.run == 'true' && steps.scope.outputs.mode == 'full' }}
+        if: ${{ steps.scope.outputs.run == 'true' && (steps.scope.outputs.mode == 'full' || steps.scope.outputs.sqlite == 'true') }}
         working-directory: ts
         run: |
           pnpm run postinstall:better-sqlite3-node-restore
@@ -216,7 +197,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
-            pnpm --filter "$FAST_LANE_PACKAGE..." test
+            pnpm --no-bail ${{ steps.scope.outputs.test_filters }} --if-present run test:local
           else
             node tools/scripts/runTestLocalWithSummary.mjs
           fi
