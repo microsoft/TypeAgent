@@ -59,6 +59,11 @@ Tests, drafts, repairs, reasoning-loop and background invocations require
 fresh confirmation; an import merely saves a script and cannot authorize it.
 Missing or unavailable confirmation fails closed.
 
+The approved working directory comes from the host's action context, including
+for tests, drafts, repairs and saved flows. Relative script operations and the
+`$env:PWD` path-parameter alias use that directory. Hosts that supply no working
+directory retain the server's current-directory fallback.
+
 Execution consent uses a dedicated security-approval channel, not an ordinary
 question or a model-callable structured continuation. The Shell, CLI, and VS Code
 Shell display the question to the initiating client only. Reasoning forwards this
@@ -66,6 +71,15 @@ channel to that client. A headless/model-only MCP client cannot answer it by
 calling `continueAction`; without an interactive approval endpoint, execution is
 unavailable. A refusal blocks executor switching for that reasoning request, not
 future independent user requests.
+
+`requestSecurityApproval` is a reusable host API, not a PowerShell-only protocol
+and not an automatic guard around every TypeAgent command. Its current execution
+callers are PowerShell flows and built-in PowerShell actions that require
+confirmation. Other tools retain their own authorization policies.
+Stopping or superseding a request, or disconnecting its client, cancels the
+pending approval callback and dismisses its input UI. Late answers cannot
+authorize that cancelled operation. Restart both clients and server after an
+update so the approval and cancellation protocols match.
 
 VS Code Shell presents the complete review text in a read-only document, with a
 separate choice picker whose active default is Cancel. Script details are not

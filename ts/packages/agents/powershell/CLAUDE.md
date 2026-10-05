@@ -36,6 +36,10 @@ powershell/
 3. `executeAction` looks up a flow, reads `.ps1`, obtains/verifies authorization, then executes locally
 4. Reasoning traces with PowerShell → `ScriptRecipeGenerator` → shared validated store
 
+Initialize flow storage and seed samples only when the root `powershell` schema
+is enabled. Static namespaces can enable concurrently; they must not create
+competing store instances or revoke the root flow approvals on disable.
+
 ## Execution authorization
 
 The dynamic and broker YAML gates control execution availability. When both are
@@ -54,6 +58,10 @@ Use `requestSecurityApproval`, never `popupQuestion`, for execution consent.
 Only an explicitly interactive client implements this channel. Model-callable
 structured continuations cannot supply it. Forward it through reasoning capture
 and agent/client RPC without putting it in the shared pending-interaction registry.
+
+Pass the host's action working directory to every dynamic execution request and
+use it for the safe `$env:PWD` parameter alias. The host forwards request
+cancellation to the approval UI; never serialize an AbortSignal across RPC.
 
 The initial confirmation is compact: flow, working directory, arguments, and
 current-user execution warning. **Review script and details** exposes the full

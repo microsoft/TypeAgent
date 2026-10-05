@@ -259,6 +259,7 @@ export function createSessionContext<T = unknown>(
                 { ...requestId },
                 request,
                 name,
+                signal,
             );
             signal?.throwIfAborted();
             if (

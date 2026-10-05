@@ -12,7 +12,14 @@ import { jest } from "@jest/globals";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+    mkdir,
+    mkdtemp,
+    readFile,
+    realpath,
+    rm,
+    writeFile,
+} from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -1045,6 +1052,169 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
     });
 
     describe("approved-local execution", () => {
+        it("does not initialize shared flow storage when enabling static namespaces", async () => {
+            const storage = new MemoryStorage();
+            const read = jest.spyOn(storage, "read");
+            const write = jest.spyOn(storage, "write");
+            const session = createSessionContext(storage);
+            const agent = instantiate();
+            await agent.initializeAgentContext?.();
+            await Promise.all(
+                [
+                    "powershell-files",
+                    "powershell-network",
+                    "powershell-system",
+                ].map((name) =>
+                    agent.updateAgentContext?.(
+                        true,
+                        session,
+                        `powershell.${name}`,
+                    ),
+                ),
+            );
+            expect(read).not.toHaveBeenCalled();
+            expect(write).not.toHaveBeenCalled();
+            await agent.updateAgentContext?.(true, session, "powershell");
+            expect(write).toHaveBeenCalledWith(
+                "grammar/dynamic.agr",
+                expect.any(String),
+            );
+            await agent.closeAgentContext?.(session);
+        });
+
+        itOnWindows.each([
+            "testPowerShellFlow",
+            "createAndExecutePowerShellFlow",
+            "executePowerShellFlow",
+            "directoryFlow",
+            "repairAndExecutePowerShellFlow",
+            "@powershell run",
+        ])(
+            "uses the action directory for %s and its PWD alias",
+            async (actionName) => {
+                const directory = await realpath(
+                    await mkdtemp(join(tmpdir(), "ta-cwd-")),
+                );
+                try {
+                    await writeFile(
+                        join(directory, "cwd-marker.txt"),
+                        "project-marker",
+                    );
+                    const popup = jest.fn(async () => 0);
+                    const { agent, context } = await createAgentHarness(
+                        undefined,
+                        undefined,
+                        undefined,
+                        popup,
+                    );
+                    const projectContext = {
+                        ...context,
+                        workingDirectory: directory,
+                    };
+                    expect(directory).not.toBe(process.cwd());
+                    const definition = {
+                        actionName: "directoryFlow",
+                        description: "Read a project-relative fixture",
+                        script: "param([string]$Path)\nGet-Content -LiteralPath '.\\cwd-marker.txt'\nWrite-Output (Get-Location).Path\nWrite-Output $Path",
+                        scriptParameters: [
+                            {
+                                name: "Path",
+                                type: "path",
+                                required: true,
+                                description: "Project directory",
+                            },
+                        ],
+                    };
+                    if (
+                        actionName !== "testPowerShellFlow" &&
+                        actionName !== "createAndExecutePowerShellFlow"
+                    ) {
+                        expect(
+                            await agent.executeAction?.(
+                                {
+                                    schemaName: "powershell",
+                                    actionName: "createPowerShellFlow",
+                                    parameters: definition,
+                                },
+                                projectContext,
+                            ),
+                        ).not.toHaveProperty("error");
+                    }
+                    // Unsaved tests have no parameter-role metadata, so the alias
+                    // applies only to flows with a declared path parameter.
+                    const args = {
+                        Path:
+                            actionName === "testPowerShellFlow"
+                                ? directory
+                                : "$env:pWd",
+                    };
+                    if (actionName === "@powershell run") {
+                        await agent.executeCommand?.(
+                            ["run"],
+                            {
+                                args: { flowName: "directoryFlow" },
+                                flags: {
+                                    flowParametersJson: JSON.stringify(args),
+                                },
+                            },
+                            projectContext,
+                        );
+                        expect(
+                            context.actionIO.setDisplay,
+                        ).toHaveBeenCalledWith(
+                            expect.stringContaining(`project-marker`),
+                        );
+                        expect(
+                            context.actionIO.setDisplay,
+                        ).toHaveBeenCalledWith(
+                            expect.stringContaining(
+                                `${directory}\r\n${directory}`,
+                            ),
+                        );
+                    } else {
+                        const result = await agent.executeAction?.(
+                            {
+                                schemaName: "powershell",
+                                actionName,
+                                parameters:
+                                    actionName === "directoryFlow"
+                                        ? args
+                                        : {
+                                              ...definition,
+                                              flowName: "directoryFlow",
+                                              testParameters:
+                                                  JSON.stringify(args),
+                                              executionParametersJson:
+                                                  JSON.stringify(args),
+                                              flowParametersJson:
+                                                  JSON.stringify(args),
+                                          },
+                            },
+                            projectContext,
+                        );
+                        expect(result).not.toHaveProperty("error");
+                        expect(result).toMatchObject({
+                            displayContent:
+                                expect.stringContaining("project-marker"),
+                        });
+                        expect(result).toMatchObject({
+                            displayContent: expect.stringContaining(
+                                `${directory}\r\n${directory}`,
+                            ),
+                        });
+                    }
+                    expect(popup).toHaveBeenCalledTimes(1);
+                    expect(popup.mock.calls[0]).toEqual(
+                        expect.arrayContaining([
+                            expect.stringContaining(`Folder: ${directory}`),
+                        ]),
+                    );
+                } finally {
+                    await rm(directory, { recursive: true, force: true });
+                }
+            },
+        );
+
         itOnWindows(
             "shows a remembered approval correctly for older module metadata",
             async () => {
@@ -1072,6 +1242,11 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
                     ["run"],
                     { args: { flowName: "legacyModules" }, flags: {} },
                     directContext,
+                );
+                await agent.updateAgentContext?.(
+                    false,
+                    directContext.sessionContext,
+                    "powershell.powershell-files",
                 );
                 await agent.executeCommand?.(
                     ["show"],
@@ -1613,30 +1788,33 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
             },
         );
 
-        itOnWindows(
-            "terminates owned native children when an approved script times out",
-            async () => {
+        itOnWindows.each(["success", "timeout"])(
+            "terminates owned native children after approved-script %s",
+            async (mode) => {
                 const { sessionContext } = await createAgentHarness(
                     undefined,
                     undefined,
                     new MemoryStorage(),
                     async () => 0,
                 );
-                const marker = join(fixtureDirectory, "child-pid.txt");
+                const marker = join(fixtureDirectory, `child-pid-${mode}.txt`);
                 const result = await executeScript(
                     {
-                        script: String.raw`param([string]$Marker)
+                        script: String.raw`param([string]$Marker, [bool]$Wait)
 $child = Start-Process "$env:SYSTEMROOT\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList '-NoProfile -NonInteractive -Command Start-Sleep -Seconds 30' -PassThru -WindowStyle Hidden
 [System.IO.File]::WriteAllText($Marker, [string]$child.Id)
-Start-Sleep -Seconds 30`,
-                        parameters: { Marker: marker },
+if ($Wait) { Start-Sleep -Seconds 30 }`,
+                        parameters: {
+                            Marker: marker,
+                            Wait: mode === "timeout",
+                        },
                         provenance: "generated",
                         sandbox: {
                             allowedCmdlets: [],
                             allowedPaths: [],
                             allowedModules: [],
                             networkAccess: false,
-                            maxExecutionTime: 3,
+                            maxExecutionTime: mode === "timeout" ? 3 : 30,
                         },
                     },
                     {
@@ -1650,8 +1828,9 @@ Start-Sleep -Seconds 30`,
                         },
                     },
                 );
-                expect(result.success).toBe(false);
-                expect(result.stderr).toMatch(/timed out/i);
+                expect(result.success).toBe(mode === "success");
+                if (mode === "timeout")
+                    expect(result.stderr).toMatch(/timed out/i);
                 const pid = Number(await readFile(marker, "utf8"));
                 expect(Number.isInteger(pid) && pid > 0).toBe(true);
                 let running = true;

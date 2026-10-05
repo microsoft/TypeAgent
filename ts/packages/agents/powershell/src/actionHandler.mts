@@ -176,6 +176,7 @@ async function executeFlowScript(
     const request: ScriptExecutionRequest = {
         script,
         parameters: resolvedParams,
+        workingDirectory: context.workingDirectory ?? process.cwd(),
         provenance: getScriptExecutionProvenance(flow.source),
         parameterRoles: getScriptParameterRoles(flow.parameters),
         sandbox: {
@@ -258,13 +259,14 @@ function mapParamsToFlowDefs(
 function validateFlowParameters(
     params: Record<string, unknown>,
     paramDefs: ScriptParameter[],
+    workingDirectory: string = process.cwd(),
 ): string | undefined {
     const pathAliases = new Map([
         ["USERPROFILE", homedir()],
         ["HOME", homedir()],
         ["TEMP", tmpdir()],
         ["TMP", tmpdir()],
-        ["PWD", process.cwd()],
+        ["PWD", workingDirectory],
     ]);
     for (const def of paramDefs) {
         if (def.type !== "path" && def.type !== "executable") continue;
@@ -553,6 +555,7 @@ async function executeDraftRecipe(
     const validationError = validateFlowParameters(
         executionParameters,
         recipe.parameters,
+        context.workingDirectory,
     );
     if (validationError) {
         return {
@@ -567,6 +570,7 @@ async function executeDraftRecipe(
         {
             script: recipe.script.body,
             parameters: executionParameters,
+            workingDirectory: context.workingDirectory ?? process.cwd(),
             provenance: getScriptExecutionProvenance(recipe.source),
             parameterRoles: getScriptParameterRoles(recipe.parameters),
             sandbox: {
@@ -757,6 +761,7 @@ async function executeExistingPowerShellFlow(
     const validationError = validateFlowParameters(
         mappedParameters,
         flow.parameters,
+        context.workingDirectory,
     );
     if (validationError) {
         return createPowerShellFailure("invalidParameters", validationError);
@@ -1222,6 +1227,7 @@ async function handlePowerShellFlowAction(
             const request: ScriptExecutionRequest = {
                 script: scriptBody,
                 parameters: testParams,
+                workingDirectory: context.workingDirectory ?? process.cwd(),
                 provenance: "generated",
                 sandbox: {
                     maxExecutionTime: 30,
@@ -1319,6 +1325,7 @@ async function handlePowerShellFlowAction(
             const validationError = validateFlowParameters(
                 flowParameters,
                 flow.parameters,
+                context.workingDirectory,
             );
             if (validationError) {
                 return createPowerShellFailure(
@@ -1454,6 +1461,7 @@ async function handlePowerShellFlowAction(
             const validationError = validateFlowParameters(
                 directParams,
                 flow.parameters,
+                context.workingDirectory,
             );
             if (validationError) {
                 return createPowerShellFailure(
@@ -1642,6 +1650,7 @@ class RunHandler implements CommandHandler {
         const validationError = validateFlowParameters(
             flowParameters,
             flow.parameters,
+            context.workingDirectory,
         );
         if (validationError) {
             throw new Error(validationError);
@@ -1845,7 +1854,11 @@ export function instantiate(): AppAgent {
         async updateAgentContext(
             enable: boolean,
             sessionContext: SessionContext,
+            schemaName: string,
         ) {
+            // Namespace activation runs concurrently. Only the root schema
+            // initializes shared flow storage and owns its execution approvals.
+            if (schemaName !== "powershell") return;
             if (!enable) {
                 closeScriptApprovals(sessionContext);
                 return;

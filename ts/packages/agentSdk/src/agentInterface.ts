@@ -348,7 +348,9 @@ export interface SessionContext<T = unknown> {
         defaultId?: number,
     ): Promise<number>;
 
+    // Reusable approval API, not an automatic guard for every agent action.
     // Only a trusted interactive client may answer. Never use model continuations.
+    // The host cancels pending approval with the owning request or connection.
     requestSecurityApproval?(request: SecurityApprovalRequest): Promise<number>;
 
     // can only toggle the sub agent of the current agent

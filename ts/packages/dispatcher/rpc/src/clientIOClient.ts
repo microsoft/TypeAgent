@@ -10,10 +10,15 @@ import type {
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
 
 export function createClientIORpcClient(channel: RpcChannel): ClientIO {
+    let connected = true;
+    channel.once("disconnect", () => {
+        connected = false;
+    });
     const rpc = createRpc<ClientIOInvokeFunctions, ClientIOCallFunctions>(
         "clientio",
         channel,
     );
+    let nextApprovalId = 0;
     return {
         clear(...args): void {
             return rpc.send("clear", ...args);
@@ -47,8 +52,43 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         question(...args): Promise<number> {
             return rpc.invoke("question", ...args);
         },
-        requestSecurityApproval(...args): Promise<number> {
-            return rpc.invoke("requestSecurityApproval", ...args);
+        async requestSecurityApproval(requestId, request, source, signal) {
+            signal?.throwIfAborted();
+            const approvalId = nextApprovalId++;
+            const pending = rpc.invoke(
+                "requestSecurityApproval",
+                requestId,
+                request,
+                source,
+                approvalId,
+            );
+            let onAbort = () => {};
+            const cancellationFailure = new Promise<never>(
+                (_resolve, reject) => {
+                    onAbort = () => {
+                        if (connected) {
+                            // Use invoke for both operations so cancellation cannot
+                            // overtake the RPC's deferred approval handler.
+                            void rpc
+                                .invoke("cancelSecurityApproval", approvalId)
+                                .catch(reject);
+                        }
+                    };
+                },
+            );
+            signal?.addEventListener("abort", onAbort, { once: true });
+            try {
+                // An in-process transport can cancel during invoke().
+                if (signal?.aborted) onAbort();
+                const result = await Promise.race([
+                    pending,
+                    cancellationFailure,
+                ]);
+                signal?.throwIfAborted();
+                return result;
+            } finally {
+                signal?.removeEventListener("abort", onAbort);
+            }
         },
         proposeAction(...args): Promise<unknown> {
             return rpc.invoke("proposeAction", ...args);

@@ -149,6 +149,7 @@ export interface ClientIO {
         requestId: RequestId,
         request: SecurityApprovalRequest,
         source: string,
+        signal?: AbortSignal,
     ): Promise<number>;
     proposeAction(
         requestId: RequestId,

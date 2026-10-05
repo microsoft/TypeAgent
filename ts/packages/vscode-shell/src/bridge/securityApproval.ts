@@ -14,7 +14,9 @@ type ApprovalChoice = vscode.QuickPickItem & { index: number };
 export async function showSecurityApproval(
     api: ApprovalApi,
     { message, choices, defaultId }: SecurityApprovalRequest,
+    signal?: AbortSignal,
 ): Promise<number> {
+    signal?.throwIfAborted();
     if (
         !Number.isInteger(defaultId) ||
         defaultId < 0 ||
@@ -28,7 +30,7 @@ export async function showSecurityApproval(
     // Content-provider documents are read-only. Keep the entire snapshot out
     // of Quick Pick's single-line placeholder and out of temporary disk files.
     const scheme = `typeagent-security-review-${randomUUID()}`;
-    const uri = api.Uri.parse(`${scheme}:/PowerShell-approval.txt`);
+    const uri = api.Uri.parse(`${scheme}:/Security-approval.txt`);
     const provider = api.workspace.registerTextDocumentContentProvider(scheme, {
         provideTextDocumentContent: () => message,
     });
@@ -36,14 +38,16 @@ export async function showSecurityApproval(
     const subscriptions: vscode.Disposable[] = [];
     try {
         const document = await api.workspace.openTextDocument(uri);
+        signal?.throwIfAborted();
         await api.window.showTextDocument(document, {
             preview: true,
             viewColumn: api.ViewColumn.Active,
         });
+        signal?.throwIfAborted();
         const input = api.window.createQuickPick<ApprovalChoice>();
         picker = input;
         const items = choices.map((label, index) => ({ label, index }));
-        input.title = "Authorize local PowerShell (not sandboxed)";
+        input.title = "TypeAgent security approval";
         input.placeholder =
             "Review the read-only document before approving. Cancel is selected.";
         input.ignoreFocusOut = true;
@@ -51,8 +55,14 @@ export async function showSecurityApproval(
         input.items = items;
         input.activeItems = [items[defaultId]];
 
-        return await new Promise<number>((resolve) => {
+        return await new Promise<number>((resolve, reject) => {
+            const onAbort = () => reject(signal?.reason);
+            signal?.addEventListener("abort", onAbort, { once: true });
             subscriptions.push(
+                {
+                    dispose: () =>
+                        signal?.removeEventListener("abort", onAbort),
+                },
                 input.onDidAccept(() => {
                     const selected =
                         input.selectedItems[0] ?? input.activeItems[0];
@@ -64,6 +74,7 @@ export async function showSecurityApproval(
                 }),
                 input.onDidHide(() => resolve(defaultId)),
             );
+            signal?.throwIfAborted();
             input.show();
         });
     } finally {

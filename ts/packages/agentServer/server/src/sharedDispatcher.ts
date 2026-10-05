@@ -81,6 +81,7 @@ function throwAgentStateFailures(
 type ClientRecord = {
     clientIO: ClientIO;
     filter: boolean;
+    disconnectController: AbortController;
 };
 
 export async function createSharedDispatcher(
@@ -226,34 +227,37 @@ export async function createSharedDispatcher(
             );
         },
 
-        requestSecurityApproval: async (requestId, request, source) => {
+        requestSecurityApproval: async (requestId, request, source, signal) => {
             const connectionId = requestId.connectionId;
             const record =
                 connectionId === undefined
                     ? undefined
                     : clients.get(connectionId);
+            if (
+                connectionId === undefined ||
+                !record?.clientIO.requestSecurityApproval
+            ) {
+                throw new Error(
+                    "The requesting client cannot obtain trusted security approval.",
+                );
+            }
             context.requestQueue.markBlocked(
                 requestId.requestId,
                 "interaction",
             );
             try {
-                const answer = await callback(requestId, (client) => {
-                    if (!client.requestSecurityApproval) {
-                        throw new Error(
-                            "The requesting client cannot obtain trusted security approval.",
-                        );
-                    }
-                    return client.requestSecurityApproval(
-                        requestId,
-                        request,
-                        source,
-                    );
-                });
-                if (
-                    connectionId === undefined ||
-                    !record ||
-                    clients.get(connectionId) !== record
-                ) {
+                const approvalSignal = AbortSignal.any([
+                    ...(signal ? [signal] : []),
+                    record.disconnectController.signal,
+                ]);
+                const answer = await record.clientIO.requestSecurityApproval(
+                    requestId,
+                    request,
+                    source,
+                    approvalSignal,
+                );
+                approvalSignal.throwIfAborted();
+                if (clients.get(connectionId) !== record) {
                     throw new Error(
                         "The approving client disconnected or changed.",
                     );
@@ -690,6 +694,7 @@ export async function createSharedDispatcher(
             clients.set(connectionId, {
                 clientIO,
                 filter: options?.filter ?? false,
+                disconnectController: new AbortController(),
             });
             // First (re)joining client — clear any pending grace timer.
             if (wasEmpty) {
@@ -705,6 +710,7 @@ export async function createSharedDispatcher(
                 async () => {
                     structuredLease?.release();
                     structuredLeases.delete(connectionId);
+                    clients.get(connectionId)?.disconnectController.abort();
                     clients.delete(connectionId);
                     dispatchers.delete(connectionId);
                     unregisterClient(connectionId);
@@ -1000,12 +1006,16 @@ export async function createSharedDispatcher(
                 // Remove synchronously so clientCount reflects post-leave state
                 // before any async close work completes. The close callback
                 // also calls clients.delete; the double-delete is idempotent.
+                clients.get(connectionId)?.disconnectController.abort();
                 clients.delete(connectionId);
                 await dispatcher.close();
             }
         },
         async closeAllClients() {
             const promises: Promise<void>[] = [];
+            for (const record of clients.values()) {
+                record.disconnectController.abort();
+            }
             for (const dispatcher of dispatchers.values()) {
                 promises.push(dispatcher.close());
             }

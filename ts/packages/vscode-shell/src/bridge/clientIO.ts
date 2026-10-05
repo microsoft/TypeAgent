@@ -90,8 +90,8 @@ export interface BridgeClientIOContext {
  */
 export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
     return {
-        requestSecurityApproval: (_requestId, request) =>
-            showSecurityApproval(vscode, request),
+        requestSecurityApproval: (_requestId, request, _source, signal) =>
+            showSecurityApproval(vscode, request, signal),
         question: async (
             _requestId: RequestId | undefined,
             message: string,

@@ -277,29 +277,86 @@ function respond(
 }
 
 describe("real structured shared host and dispatcher RPC", () => {
+    test.each(["stop", "supersede"])(
+        "%s closes security approval without waiting for an answer",
+        async (mode) => {
+            const host = await fixture();
+            try {
+                let ready!: () => void;
+                let approve!: (choice: number) => void;
+                let signal: AbortSignal | undefined;
+                const requested = new Promise<void>((resolve) => {
+                    ready = resolve;
+                });
+                const decision = new Promise<number>((resolve) => {
+                    approve = resolve;
+                });
+                const owner = await host.join(
+                    {},
+                    async (_id, _request, _source, promptSignal) => {
+                        signal = promptSignal;
+                        ready();
+                        return decision;
+                    },
+                );
+                const running = execute(owner.dispatcher, "read", "security");
+                await requested;
+                if (mode === "stop") {
+                    const head = host.shared.getQueueSnapshot().running;
+                    if (!head) throw new Error("Expected a running request");
+                    await owner.dispatcher.cancelCommand(head.requestId);
+                } else {
+                    const submission =
+                        await owner.dispatcher.submitCommand("@help");
+                    if (!submission.ok)
+                        throw new Error("Expected queued command");
+                    await submission.entry.completion;
+                }
+                expect((await running).status).not.toBe("completed");
+                expect(signal?.aborted).toBe(true);
+                await new Promise<void>((resolve) => setImmediate(resolve));
+                expect(host.shared.getQueueSnapshot().running).toBeNull();
+                approve(0);
+                await new Promise<void>((resolve) => setImmediate(resolve));
+                expect(host.counts().effects).toBe(0);
+                expect((await execute(owner.dispatcher, "read")).status).toBe(
+                    "completed",
+                );
+            } finally {
+                await host.close();
+            }
+        },
+    );
+
     test("disconnect invalidates a pending security approval and ignores its late answer", async () => {
         const host = await fixture();
         try {
             let ready!: () => void;
             let approve!: (choice: number) => void;
+            let signal: AbortSignal | undefined;
             const requested = new Promise<void>((resolve) => {
                 ready = resolve;
             });
             const decision = new Promise<number>((resolve) => {
                 approve = resolve;
             });
-            const first = await host.join({}, async () => {
-                ready();
-                return decision;
-            });
+            const first = await host.join(
+                {},
+                async (_id, _request, _source, promptSignal) => {
+                    signal = promptSignal;
+                    ready();
+                    return decision;
+                },
+            );
             const running = execute(first.dispatcher, "read", "security").then(
                 (result) => result.status,
                 () => "disconnected",
             );
             await requested;
             first.disconnect();
-            approve(0);
             expect(await running).not.toBe("completed");
+            expect(signal?.aborted).toBe(true);
+            approve(0);
             await new Promise<void>((resolve) => setImmediate(resolve));
             expect(host.counts().effects).toBe(0);
         } finally {

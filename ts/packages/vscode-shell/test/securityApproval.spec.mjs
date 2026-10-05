@@ -147,3 +147,46 @@ test("invalid default indices fail before showing approval", async () => {
         /cancellation default/,
     );
 });
+
+test("cancelling an open approval releases the picker and ignores a late accept", async () => {
+    const controller = new AbortController();
+    const error = new Error("Request stopped");
+    const { api, state } = fixture((picker, events) => {
+        controller.abort(error);
+        picker.selectedItems = [picker.items[0]];
+        events.accept();
+    });
+    await assert.rejects(
+        showSecurityApproval(api, request, controller.signal),
+        error,
+    );
+    assert.equal(state.providerDisposed, true);
+    assert.equal(state.pickerDisposed, true);
+});
+
+test("a cancelled request never opens a picker after document loading", async () => {
+    const controller = new AbortController();
+    const { api, state } = fixture(() => assert.fail("Must not show approval"));
+    const openDocument = api.workspace.openTextDocument;
+    api.workspace.openTextDocument = async (uri) => {
+        controller.abort(new Error("Stopped while opening"));
+        return openDocument(uri);
+    };
+    await assert.rejects(
+        showSecurityApproval(api, request, controller.signal),
+        /Stopped while opening/,
+    );
+    assert.equal(state.providerDisposed, true);
+    assert.equal(state.pickerDisposed, false);
+});
+
+test("an already cancelled request creates no review provider", async () => {
+    const controller = new AbortController();
+    controller.abort(new Error("Already stopped"));
+    const { api, state } = fixture(() => assert.fail("Must not show approval"));
+    await assert.rejects(
+        showSecurityApproval(api, request, controller.signal),
+        /Already stopped/,
+    );
+    assert.equal(state.provider, undefined);
+});

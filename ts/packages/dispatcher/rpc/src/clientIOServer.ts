@@ -13,17 +13,64 @@ export function createClientIORpcServer(
     clientIO: ClientIO,
     channel: RpcChannel,
 ) {
+    const approvals = new Map<number, AbortController>();
+    let connected = true;
+    channel.once("disconnect", () => {
+        connected = false;
+        for (const controller of approvals.values()) controller.abort();
+        approvals.clear();
+    });
     const clientIOInvokeFunctions: ClientIOInvokeFunctions = {
+        cancelSecurityApproval: async (approvalId) => {
+            approvals.get(approvalId)?.abort();
+        },
         question: async (...args) => {
             return clientIO.question(...args);
         },
-        requestSecurityApproval: async (...args) => {
+        requestSecurityApproval: async (
+            requestId,
+            request,
+            source,
+            approvalId,
+        ) => {
+            if (!connected)
+                throw new Error("Security approval channel disconnected.");
             if (!clientIO.requestSecurityApproval) {
                 throw new Error(
                     "Security approval is unavailable in this client. Use the interactive TypeAgent Shell or CLI.",
                 );
             }
-            return clientIO.requestSecurityApproval(...args);
+            if (
+                !Number.isSafeInteger(approvalId) ||
+                approvalId < 0 ||
+                approvals.has(approvalId)
+            ) {
+                throw new Error("Invalid security approval request identity.");
+            }
+            const controller = new AbortController();
+            approvals.set(approvalId, controller);
+            const { signal } = controller;
+            let onAbort: () => void = () => {};
+            const cancelled = new Promise<never>((_resolve, reject) => {
+                onAbort = () => reject(signal.reason);
+                signal.addEventListener("abort", onAbort, { once: true });
+            });
+            try {
+                const result = await Promise.race([
+                    clientIO.requestSecurityApproval(
+                        requestId,
+                        request,
+                        source,
+                        signal,
+                    ),
+                    cancelled,
+                ]);
+                signal.throwIfAborted();
+                return result;
+            } finally {
+                signal.removeEventListener("abort", onAbort);
+                approvals.delete(approvalId);
+            }
         },
         proposeAction: async (...args) => {
             return clientIO.proposeAction(...args);
