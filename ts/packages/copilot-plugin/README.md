@@ -481,10 +481,46 @@ Wait until you see the server is ready on port 8999.
 ### Step 3: Launch Copilot with the Plugin
 
 ```powershell
-copilot --plugin-dir D:\repos\TypeAgent\ts\packages\copilot-plugin
+copilot --experimental --plugin-dir D:\repos\TypeAgent\ts\packages\copilot-plugin
 ```
 
 The `--plugin-dir` flag loads the plugin from a local directory. On first launch it reads `plugin.json`, registers hooks from `hooks.json`, and exposes the MCP server from `.mcp.json`.
+
+The recorder additionally needs Copilot's extension support. In CLI 1.0.92-4,
+extensions are gated by experimental mode; hooks, MCP servers, and skills can
+load without it. Use `--experimental` as above, or
+`pnpm copilot -- --experimental` from `ts`. This enables experimental features
+for that invocation without changing the global setting, and does not grant
+extension permissions or approve macros.
+
+The source plugin also includes `extensions/typeagent/extension.mjs`, which
+loads the built recorder from `dist/extensions/typeagent/extension.mjs`.
+This entry point is required for both `pnpm copilot` and `pnpm copilot:dev`:
+working hooks and MCP tools alone do not mean session recording is active.
+Rebuild the plugin and start a fresh Copilot session after updating it.
+
+If the TypeAgent skills appear but `/typeagent-status` and
+`/typeagent-macro-status` are unknown, first confirm that extension support is
+enabled for the CLI invocation. Then check whether the recorder extension is
+disabled independently of the plugin. In PowerShell, run:
+
+```powershell
+copilot config extensions.disabledExtensions
+```
+
+If the output includes `plugin:typeagent:typeagent` and you want to enable the
+recorder, remove only that entry:
+
+```powershell
+copilot config --rm extensions.disabledExtensions plugin:typeagent:typeagent
+```
+
+Exit and relaunch Copilot with extension support and the plugin enabled.
+Review any extension permission-access
+prompt before granting access; declining it prevents the recorder from loading.
+These steps enable the recorder, not an individual macro: macro review, approval,
+and execution remain separate. Confirm `/typeagent-status` and
+`/typeagent-macro-status` are recognized before starting a new recording.
 
 ### Step 4: Test Routing
 
@@ -551,9 +587,22 @@ Set a workspace learning preference, then select one task to learn:
 
 ```text
 /typeagent-macro-learning prepare
-/typeagent-macro-record Read file package.json now
+/typeagent-macro-record Read file package.json
 /typeagent-macro-status
 ```
+
+Run the file-reading example from `ts`, where `package.json` exists. Do not
+append conversational words such as `now`: a natural-language file route can
+include them in the filename. To isolate workspace-tool recording from that
+route, select `@typeagent mode mcp mixed`, arm a recording, and use this task:
+
+```text
+Use the typeagent-workspace read tool with {"path":"package.json"}. Do not use typeagent-processCommand.
+```
+
+The tool timeline should show the workspace `read` call with the exact path,
+not natural-language delegation. A successful file read alone does not establish
+that a trace or candidate was saved; check recording and learning status.
 
 Use `/typeagent-macro-cancel` to cancel the selected recording or unfinished
 learning job without cancelling the user's task or revoking approved macros.
@@ -609,6 +658,34 @@ Account/config identity drift, retention/privacy policy, broader wildcard
 safety, and real-model latency/coverage still require validation/hardening.
 Restart the existing agent-server and reload the built plugin before testing;
 building does not change an already running server or session.
+
+### Recording does not produce a candidate
+
+Check `@typeagent macro status` in the same Copilot session before attempting
+macro creation, inspection, or execution. Recording and learning are separate:
+
+- `armed` means the next task has been selected for recording; `claimed` means
+  that task started. Their recording token is not a saved trace ID.
+- `completed` includes the saved trace ID. Learning can still be queued or
+  building; in Prepare mode a successfully prepared candidate needs review.
+- `failed` includes an error to investigate. An empty macro catalog alone does
+  not establish whether a trace exists or learning is still pending.
+
+Never pass a recording token to `create_macro_from_trace`. Selected learning
+prepares its own candidate; do not create a second draft to bypass a pending or
+failed learning job. An inspection-only request must not create, approve, or run
+a macro when no candidate is available.
+
+If the task has finished but recording remains `claimed`, inspect the
+TypeAgent extension's loading errors. It receives the task-completion events
+and saves the trace; the prompt hook only arms and claims the recording.
+Ensure the source entry point and its built recorder are present, or reinstall
+the staged plugin, then restart Copilot. If its slash commands are unknown,
+also check the independent extension enablement and startup permission described
+in [Step 3](#step-3-launch-copilot-with-the-plugin); rebuilding does not remove a
+persisted disabled-extension setting. These are distinct from tool/model failures
+reported by the learning job. Capture the status/error before cancelling or
+starting another recording.
 
 ### Legacy manual lifecycle
 
@@ -1017,6 +1094,12 @@ The plugin extension registers `/typeagent-status`, `/typeagent-mode`, and
 `/typeagent-macro-record`. It consumes typed Copilot session events to capture
 macro traces and TypeAgent history, injects PowerShell guidance with an
 `onPreToolUse` hook, and emits turn-completion state for the demo driver.
+
+In the source checkout this entry point imports the bundled extension under
+`dist/extensions/typeagent/`. Staging places the bundle directly at the same
+manifest entry point, so installed snapshots do not depend on the source loader.
+Run `npm run test:extension-layout` to check source discovery and bundle loading
+without starting Copilot, connecting to agent-server, or executing task tools.
 
 ### MCP Servers (`.mcp.json`)
 
