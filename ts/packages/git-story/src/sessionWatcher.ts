@@ -7,6 +7,25 @@ import {
     type CapturedSessionUpdates,
     type SessionCaptureOptions,
 } from "./sessionCapture.js";
+import {
+    normalizeSessionEvents,
+    type NormalizedSessionBatch,
+} from "./sessionNormalization.js";
+import {
+    collectSessionMetadata,
+    restoreSessionMetadata,
+    type RestoredSessionMetadata,
+    type SessionMetadataState,
+} from "./sessionMetadata.js";
+
+export type {
+    NormalizedSessionBatch,
+    SessionNormalizationDiagnostic,
+} from "./sessionNormalization.js";
+export type {
+    RestoredSessionMetadata,
+    SessionMetadataState,
+} from "./sessionMetadata.js";
 
 export type {
     CapturedSessionRecord,
@@ -20,7 +39,7 @@ export type SessionWatchRequest = {
     projectPath: string;
     sessionId: string;
     transcriptPath: string;
-    metadata: SessionMetadata;
+    metadata: CapturedSessionMetadata;
 };
 
 // Capture progress only, not acknowledgement of downstream processing.
@@ -38,6 +57,7 @@ export type NormalizedSessionEvent = {
     sourceEventId?: string;
     timestamp?: string;
     model?: string;
+    agentId?: string;
 } & (
     | {
           type: "message";
@@ -55,6 +75,9 @@ export type NormalizedSessionEvent = {
           toolCallId: string;
           success: boolean;
           output?: string;
+          // UI detail can be text or structured evidence, not necessarily a diff.
+          detailedContent?: unknown;
+          error?: Record<string, unknown>;
           // Source-reported edit evidence, not a diff reconstructed from Git.
           // Absence means no recorded diff, not that the tool changed no files.
           diff?: string;
@@ -109,8 +132,9 @@ export class SessionWatcher {
         // Pseudocode:
         // captured = await captureUpdates(request, checkpoint).
         // Capture has persisted read progress, independently of ingestion.
-        // events = normalizeEvents(request, captured).
-        // metadata = collectMetadata(request, events, previous session metadata).
+        // batch = normalizeEvents(request, captured); surface batch.diagnostics.
+        // state = collectMetadata(request, batch, previous generation-bound state).
+        // events = batch.events; metadata = state.metadata.
         // approved = await filterForPrivacy({ projectPath, sessionId, events, metadata }).
         // If approved is not null, await publishUpdate(approved).
         // Return captured.nextCheckpoint; it does not certify downstream delivery.
@@ -128,40 +152,27 @@ export class SessionWatcher {
     }
 
     normalizeEvents(
-        _request: SessionWatchRequest,
-        _updates: CapturedSessionUpdates,
-    ): NormalizedSessionEvent[] {
-        // Pseudocode:
-        // Validate GHCP payloads and map messages, tools, and session lifecycle records.
-        // Map the source's assistant message role to agent in the normalized format.
-        // Normalize each source event independently; preserve a native ID as sourceEventId.
-        // With a native ID, set id = sourceEventId; do not require GUID format.
-        // Without a native ID, omit sourceEventId and set id to the GUID assigned during capture.
-        // Keep the assigned GUID separate from the original record's native ID.
-        // Distinct ID-less records get distinct GUIDs, even if their content is identical.
-        // Reuse persisted assignments on retries/replay instead of generating new GUIDs.
-        // All events belong to the parent update's sessionId.
-        // Scope event IDs by update.sessionId.
-        // Preserve toolCallId to associate starts/results, including across update batches.
-        // CLI apply_patch: retain the completion's reported diff and success separately.
-        // Preserve script commands/results even when no diff is present.
-        // Diagnose unsupported records; ignore only explicitly recognized non-content records.
-        // Do not infer intent, extract memories, or assign events to commits.
-        throw new Error("SessionWatcher.normalizeEvents is not implemented");
+        request: SessionWatchRequest,
+        updates: CapturedSessionUpdates,
+    ): NormalizedSessionBatch {
+        return normalizeSessionEvents(request, updates);
     }
 
     collectMetadata(
-        _request: SessionWatchRequest,
-        _events: NormalizedSessionEvent[],
-        _previous?: CapturedSessionMetadata,
-    ): CapturedSessionMetadata {
-        // Pseudocode:
-        // Merge request metadata, previous observations, and explicit source metadata.
-        // Collect client name, distinct models, session times, and parent/subagent linkage.
-        // Preserve missing values as unknown; do not infer authorship or commit ownership.
-        // Keep metadata associated with this session, not a presumed candidate commit.
-        // Return it for privacy filtering together with the normalized events.
-        throw new Error("SessionWatcher.collectMetadata is not implemented");
+        request: SessionWatchRequest,
+        batch: NormalizedSessionBatch,
+        previous?: SessionMetadataState,
+    ): SessionMetadataState {
+        return collectSessionMetadata(request, batch, previous);
+    }
+
+    async restoreMetadata(
+        request: SessionWatchRequest,
+        through: SessionCaptureCheckpoint,
+        generation: string,
+        options?: Pick<SessionCaptureOptions, "stateDirectory" | "maxRecords">,
+    ): Promise<RestoredSessionMetadata> {
+        return restoreSessionMetadata(request, through, generation, options);
     }
 
     async filterForPrivacy(
