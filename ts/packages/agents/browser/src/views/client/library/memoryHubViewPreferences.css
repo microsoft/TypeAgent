@@ -1,0 +1,15 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.memory-view-preferences form {
+  display: grid;
+  gap: 12px;
+  max-width: 640px;
+}
+.memory-view-preferences label {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.memory-view-preferences [role="status"] {
+  white-space: pre-wrap;
+}

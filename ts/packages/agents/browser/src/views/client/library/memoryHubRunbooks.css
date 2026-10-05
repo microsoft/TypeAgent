@@ -1,0 +1,227 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.memory-runbooks {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.memory-runbooks * {
+  box-sizing: border-box;
+}
+.memory-runbooks [hidden] {
+  display: none !important;
+}
+.memory-runbooks .runbook-columns > * {
+  min-width: 0;
+}
+.memory-runbooks pre {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memory-runbooks .runbook-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin: 12px 0;
+}
+.memory-runbooks label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.memory-runbooks input,
+.memory-runbooks select,
+.memory-runbooks textarea {
+  max-width: 100%;
+  min-width: 0;
+}
+.memory-runbooks textarea {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+}
+.memory-runbooks .runbook-markdown {
+  min-height: 350px;
+  font-family: Consolas, monospace;
+}
+.memory-runbooks .runbook-list,
+.memory-runbooks .runbook-fields {
+  display: grid;
+  gap: 12px;
+}
+.memory-runbooks article,
+.memory-runbooks .runbook-card {
+  padding: 14px;
+  border: 1px solid var(--border, var(--border));
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.memory-runbooks .runbook-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.memory-runbooks .runbook-warning {
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--warn-soft);
+  white-space: pre-wrap;
+}
+.memory-runbooks .runbook-error {
+  margin: 12px 0;
+  padding: 12px;
+  color: var(--danger-text);
+  background: var(--danger-soft);
+  white-space: pre-wrap;
+}
+.memory-runbooks .runbook-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.memory-runbooks .runbook-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.memory-runbooks [aria-selected="true"] {
+  background: var(--accent-soft);
+  border-color: #667eea;
+}
+.memory-runbooks .runbook-original img {
+  max-width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+}
+.memory-runbooks .runbook-original pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memory-runbooks mark {
+  background: var(--warn-soft);
+  color: inherit;
+}
+.memory-runbooks .runbook-affected {
+  border-left: 4px solid var(--warn-border);
+}
+.memory-runbooks .runbook-selected {
+  border: 2px solid #586ad1;
+}
+.memory-runbooks dialog {
+  width: min(850px, calc(100vw - 24px));
+  max-height: 90vh;
+  overflow: auto;
+}
+.memory-runbooks .runbook-preview table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.memory-runbooks .runbook-preview td,
+.memory-runbooks .runbook-preview th {
+  border: 1px solid var(--border-strong);
+  padding: 5px;
+}
+.memory-runbooks button:focus-visible,
+.memory-runbooks [tabindex]:focus-visible {
+  outline: 3px solid #586ad1;
+  outline-offset: 2px;
+}
+.memory-runbooks .runbook-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+}
+.memory-runbooks .runbook-check input {
+  width: auto;
+}
+@media (max-width: 500px) {
+  .memory-runbooks .runbook-controls > * {
+    max-width: 100%;
+  }
+  .memory-runbooks .runbook-columns {
+    grid-template-columns: 1fr;
+  }
+}
+.memory-runbooks .runbook-actionbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+}
+.memory-runbooks .runbook-warning:empty {
+  display: none;
+}
+.memory-runbooks .runbook-list article > button:first-child {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 650;
+  text-align: left;
+}
+.memory-runbooks .runbook-list article > button:first-child:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+.memory-runbooks .runbook-list article > p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.memory-runbooks form.runbook-controls button[type="submit"] {
+  display: none;
+}
+.memory-runbooks .runbook-controls:has(> span) {
+  align-items: center;
+}
+.memory-runbooks > div > .runbook-controls:last-child {
+  align-items: center;
+}
+.memory-runbooks .hub-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.memory-runbooks .hub-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  counter-increment: step;
+}
+.memory-runbooks .hub-steps li::before {
+  content: counter(step);
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-size: 12px;
+}
+.memory-runbooks .hub-steps li.done::before {
+  content: "\2713";
+  border-color: transparent;
+  background: var(--success);
+  color: var(--on-accent);
+}
+.memory-runbooks .hub-steps li[aria-current="step"] {
+  color: var(--primary-dark);
+  font-weight: 650;
+}
+.memory-runbooks .hub-steps li[aria-current="step"]::before {
+  border-color: var(--primary);
+  color: var(--primary-dark);
+}

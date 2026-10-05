@@ -17,7 +17,7 @@ import type {
 } from "@typeagent/memory-service";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
 
-const browserCorpusName = "TypeAgent Browser Memory";
+export const browserCorpusName = "TypeAgent Browser Memory";
 const browserActivityProducer = {
     producerId: "typeagent-browser",
     producerType: "browser",

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export type IndexKind = "documents" | "conversation-events" | "procedures";
@@ -100,6 +100,16 @@ export async function classifyIndexSchema(
         descriptor.indexKind !== indexKind
     ) {
         throw new Error(`Incompatible index schema '${filePath}'`);
+    }
+    if (indexKind === "documents") {
+        try {
+            await stat(path.join(directory, "document-projection.json"));
+            return "reset";
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                throw error;
+            }
+        }
     }
     if (hasDocuments && !(await hasSemanticData(directory))) {
         return "reset";

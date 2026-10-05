@@ -103,3 +103,4 @@ export type {
     CancelResult,
 } from "./queue.js";
 export { QueueFullError, ServerStoppingError } from "./queue.js";
+export type * from "./runbookCapabilities.js";

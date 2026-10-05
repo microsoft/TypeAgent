@@ -10,6 +10,8 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
     capabilitiesSchema,
+    changeListRequestSchema,
+    changePageSchema,
     answerRequestSchema,
     answerResultSchema,
     clearedCountSchema,
@@ -38,6 +40,8 @@ import {
     optionalProcedureVersionSchema,
     personalHowToSettingsSchema,
     personalHowToSettingsUpdateSchema,
+    runbookSynthesisRequestSchema,
+    runbookJobResultSchema,
     procedureArchiveRequestSchema,
     procedureCandidateCreateRequestSchema,
     procedureCandidateInputSchema,
@@ -67,6 +71,7 @@ import type {
     DocumentIngestRequest,
     JobListRequest,
     MemoryAnswerRequest,
+    MemoryChangeListRequest,
     MemoryEventAppendRequest,
     MemoryEventForgetRequest,
     MemoryEventListRequest,
@@ -84,6 +89,7 @@ import type {
     SourceListRequest,
     SourceReplaceRequest,
 } from "@typeagent/memory-service";
+import { validateProcedureSaveRequest } from "@typeagent/memory-service";
 import { z } from "zod";
 
 const corpusCreateInputSchema = z.object({
@@ -147,6 +153,25 @@ export class MemoryMcpServer {
     }
 
     private registerTools(): void {
+        this.server.registerTool(
+            memoryToolNames.changesList,
+            {
+                description:
+                    "List committed metadata-only memory changes retained for 90 days.",
+                inputSchema: changeListRequestSchema,
+                outputSchema: outputSchema(changePageSchema),
+                annotations: { readOnlyHint: true },
+            },
+            async (request) =>
+                this.run(() => {
+                    if (this.service.listChanges === undefined) {
+                        throw new Error("Memory changes are not supported");
+                    }
+                    return this.service.listChanges(
+                        request as MemoryChangeListRequest,
+                    );
+                }),
+        );
         this.server.registerTool(
             memoryToolNames.corpusCreate,
             {
@@ -290,7 +315,7 @@ export class MemoryMcpServer {
             async (request, extra) =>
                 this.run(() =>
                     this.service.ingestDocument(
-                        request as DocumentIngestRequest,
+                        request as unknown as DocumentIngestRequest,
                         extra.signal,
                     ),
                 ),
@@ -307,7 +332,7 @@ export class MemoryMcpServer {
             async (request, extra) =>
                 this.run(() =>
                     this.service.replaceSource(
-                        request as SourceReplaceRequest,
+                        request as unknown as SourceReplaceRequest,
                         extra.signal,
                     ),
                 ),
@@ -558,6 +583,62 @@ export class MemoryMcpServer {
                 ),
         );
         this.server.registerTool(
+            memoryToolNames.runbookSynthesisRequest,
+            {
+                description:
+                    "Explicitly request durable draft runbook synthesis for an exact retained source revision. Reuses pending/completed jobs without overwriting edited candidates or saved procedures. Never executes bindings.",
+                inputSchema: runbookSynthesisRequestSchema,
+                outputSchema: outputSchema(runbookJobResultSchema),
+                annotations: { destructiveHint: false, idempotentHint: true },
+            },
+            async (request) =>
+                this.run(() => {
+                    if (this.service.requestRunbookSynthesis === undefined)
+                        throw new Error(
+                            "Memory runbook synthesis is not supported",
+                        );
+                    return this.service.requestRunbookSynthesis(request);
+                }),
+        );
+        this.server.registerTool(
+            memoryToolNames.runbookJobGet,
+            {
+                description:
+                    "Read a durable runbook synthesis job and its actual candidate IDs.",
+                inputSchema: jobInputSchema,
+                outputSchema: outputSchema(runbookJobResultSchema.nullable()),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ jobId }) =>
+                this.run(async () => {
+                    if (this.service.getRunbookJob === undefined)
+                        throw new Error(
+                            "Memory runbook jobs are not supported",
+                        );
+                    return (await this.service.getRunbookJob(jobId)) ?? null;
+                }),
+        );
+        this.server.registerTool(
+            memoryToolNames.runbookJobsList,
+            {
+                description:
+                    "List the latest durable runbook synthesis jobs for a corpus.",
+                inputSchema: corpusIdInputSchema,
+                outputSchema: outputSchema(
+                    runbookJobResultSchema.array().max(100),
+                ),
+                annotations: { readOnlyHint: true },
+            },
+            async ({ corpusId }) =>
+                this.run(() => {
+                    if (this.service.listRunbookJobs === undefined)
+                        throw new Error(
+                            "Memory runbook jobs are not supported",
+                        );
+                    return this.service.listRunbookJobs(corpusId);
+                }),
+        );
+        this.server.registerTool(
             memoryToolNames.procedureCandidateCreate,
             {
                 description: "Create a detected or draft procedure candidate.",
@@ -622,15 +703,20 @@ export class MemoryMcpServer {
             memoryToolNames.procedureSave,
             {
                 description:
-                    "Save canonical procedure JSON or validated Markdown.",
+                    "Save canonical procedure JSON or validated Markdown. Review requires explicit reviewAgentEdition and safetyConfirmed intent; client review stamps are not trusted. No tools or commands execute.",
                 inputSchema: procedureSaveRequestSchema,
                 outputSchema: outputSchema(procedureVersionSchema),
                 annotations: { destructiveHint: false },
             },
             async (request) =>
-                this.run(() =>
-                    this.service.saveProcedure(request as ProcedureSaveRequest),
-                ),
+                this.run(() => {
+                    validateProcedureSaveRequest(
+                        request as ProcedureSaveRequest,
+                    );
+                    return this.service.saveProcedure(
+                        request as ProcedureSaveRequest,
+                    );
+                }),
         );
         this.server.registerTool(
             memoryToolNames.procedureGet,

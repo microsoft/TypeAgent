@@ -123,6 +123,106 @@ function schemaContent(manifest: {
 }
 
 describe("MCP server provider milestone 5", () => {
+    it("reports real configured tool decisions and prompt requirements without executing tools", async () => {
+        const settings = config("actual-server");
+        settings.toolApproval = {
+            allow: ["allowed"],
+            deny: ["blocked"],
+            prompt: ["prompted"],
+        };
+        const connection = new FakeConnection(
+            ["allowed", "blocked", "prompted"].map((name) =>
+                tool(name, {
+                    annotations: { readOnlyHint: true, destructiveHint: false },
+                }),
+            ),
+            false,
+        );
+        const provider = createMcpServerAppAgentProvider(
+            "server",
+            settings,
+            { name: "test", version: "1" },
+            {
+                credentialStore: new SessionMcpCredentialStore(),
+                policy: defaultMcpPolicy,
+                audit: { write: async () => {} },
+                connectionFactory: async () => connection,
+            },
+        );
+        await provider.loadAppAgent("server");
+        expect(
+            (await provider.getCurrentToolCatalog()).entries.map(
+                (entry) => entry.permission,
+            ),
+        ).toEqual([
+            { configuredDecision: "allow", promptWithoutSessionGrant: false },
+            { configuredDecision: "deny", promptWithoutSessionGrant: false },
+            { configuredDecision: "unset", promptWithoutSessionGrant: true },
+        ]);
+        expect(connection.calls).toHaveLength(0);
+        await provider.unloadAppAgent("server");
+    });
+
+    it("reads only registered current snapshots and observes same-tool schema drift without execution", async () => {
+        const scheduler = new ManualScheduler();
+        const connection = new FakeConnection([tool("search")], true);
+        let notify:
+            | ((error: Error | null, tools: Tool[] | null) => void)
+            | undefined;
+        let connected = 0;
+        const provider = createMcpServerAppAgentProvider(
+            "server",
+            config("actual-server"),
+            { name: "test", version: "1" },
+            {
+                credentialStore: new SessionMcpCredentialStore(),
+                policy: defaultMcpPolicy,
+                audit: { write: async () => {} },
+                refreshScheduler: scheduler,
+                connectionFactory: async (_info, _transport, options) => {
+                    connected++;
+                    notify = options.toolsChanged;
+                    return connection;
+                },
+            },
+        );
+        expect(await provider.getCurrentToolCatalog()).toMatchObject({
+            available: false,
+            entries: [],
+        });
+        expect(connected).toBe(0);
+        const loading = provider.loadAppAgent("server");
+        expect(await provider.getCurrentToolCatalog()).toMatchObject({
+            available: false,
+        });
+        await loading;
+        const first = await provider.getCurrentToolCatalog();
+        notify!(null, [
+            tool("search", {
+                inputSchema: {
+                    type: "object",
+                    properties: { query: { type: "string" } },
+                    required: ["query"],
+                },
+            }),
+        ]);
+        scheduler.runAll();
+        await settle();
+        const current = await provider.getCurrentToolCatalog();
+        expect(current.entries[0].id).toBe(first.entries[0].id);
+        expect(current.entries[0].fingerprint).not.toBe(
+            first.entries[0].fingerprint,
+        );
+        expect(current.entries[0].inputSchema.properties).toHaveProperty(
+            "query",
+        );
+        expect(connection.calls).toHaveLength(0);
+        await provider.unloadAppAgent("server");
+        expect(await provider.getCurrentToolCatalog()).toMatchObject({
+            available: false,
+            entries: [],
+        });
+    });
     it("returns failed ActionResults for argument and output validation", async () => {
         const typed = tool("typed", {
             inputSchema: {
@@ -285,6 +385,15 @@ describe("MCP server provider milestone 5", () => {
             "server",
         );
         const initialManifest = await provider.getAppAgentManifest("server");
+        const initialCatalog = await provider.getCurrentToolCatalog();
+        expect(initialCatalog).toMatchObject({
+            serverConfigId: "server-id",
+            available: true,
+            entries: [{ id: getMcpToolIdentity("server-id", "first") }],
+        });
+        expect(initialCatalog.entries[0]).not.toHaveProperty(
+            "validateArguments",
+        );
         expect(Object.isFrozen(initialManifest)).toBe(true);
         expect(schemaContent(initialManifest)).toContain("first");
         expect(initialManifest.schema?.cacheBinding).toMatchObject({
@@ -301,6 +410,11 @@ describe("MCP server provider milestone 5", () => {
         await settle();
 
         const refreshed = await provider.getAppAgentManifest("server");
+        const refreshedCatalog = await provider.getCurrentToolCatalog();
+        expect(refreshedCatalog.entries[0].id).toBe(
+            getMcpToolIdentity("server-id", "third"),
+        );
+        expect(connection.calls).toHaveLength(0);
         expect(schemaContent(refreshed)).toContain("third");
         expect(schemaContent(refreshed)).not.toContain("first");
         expect(schemaContent(initialManifest)).toContain("first");

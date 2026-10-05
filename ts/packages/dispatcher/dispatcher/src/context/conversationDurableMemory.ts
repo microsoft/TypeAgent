@@ -8,12 +8,15 @@ import type {
     MemoryService,
 } from "@typeagent/memory-service";
 import registerDebug from "debug";
+import {
+    conversationCorpusName,
+    conversationProducerId,
+} from "@typeagent/memory-service";
 import type { Entity } from "@typeagent/agent-sdk";
 
 const debug = registerDebug("typeagent:dispatcher:memory");
 
-export const conversationCorpusName = "typeagent-profile-conversations";
-export const conversationProducerId = "typeagent.dispatcher.conversation";
+export { conversationCorpusName, conversationProducerId };
 
 export type ConversationDurableEventType =
     | "user-turn"
@@ -67,6 +70,10 @@ export async function searchDurableConversationMemory(
  * preventing conversation data from crossing profile/corpus boundaries.
  */
 export class ConversationDurableMemory {
+    public get conversationId(): string {
+        return this.options.conversationId;
+    }
+
     private readonly now: () => Date;
     private readonly corpusIdPromise: Promise<string>;
     private writeTail: Promise<void> = Promise.resolve();

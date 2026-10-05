@@ -29,6 +29,7 @@ dist-pub/
 # Local development and debugging
 .scratch/
 .context/
+/ts/.runbook-markdown-quality/
 .vscode
 **/.vscode/*
 **/tsconfig.debug.json

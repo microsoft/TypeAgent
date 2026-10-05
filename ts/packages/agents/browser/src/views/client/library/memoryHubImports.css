@@ -1,0 +1,68 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.hub-import-dialog {
+  width: min(620px, 90vw);
+  max-height: 85vh;
+  overflow: auto;
+  padding: 24px;
+  color: var(--text-strong);
+  background: var(--surface);
+  border: 1px solid var(--border, var(--border));
+  border-radius: 10px;
+  box-shadow: 0 12px 48px #0003;
+}
+.hub-import-dialog::backdrop {
+  background: #0005;
+}
+.hub-import-dialog fieldset {
+  border: 1px solid var(--border, var(--border));
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.hub-import-dialog label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0;
+}
+.hub-import-dialog [hidden] {
+  display: none;
+}
+.hub-import-dialog input:not([type="checkbox"]),
+.hub-import-dialog select {
+  flex: 1;
+  min-width: 0;
+}
+.hub-import-dialog .hub-import-warning {
+  padding: 12px;
+  background: var(--warn-soft);
+  border-radius: 6px;
+}
+.hub-import-dialog pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.hub-import-dialog [role="alert"] {
+  color: var(--danger-text);
+}
+
+/* PDF import dialog (created by the shared PDF import module) */
+.hub-pdf-dialog h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+.hub-pdf-dialog [data-import-success] {
+  color: var(--success) !important;
+}
+.hub-pdf-dialog select,
+.hub-pdf-dialog input[type="file"] {
+  width: 100%;
+}
+.hub-pdf-dialog progress {
+  accent-color: var(--primary);
+}
+.hub-pdf-dialog .btn-primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-accent);
+}

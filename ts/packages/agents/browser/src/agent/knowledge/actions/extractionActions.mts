@@ -7,7 +7,9 @@ import {
     SessionContext,
 } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
-import { convert } from "html-to-text";
+import { createExtractionInputsFromFragments } from "./extractionInputs.mjs";
+export { createExtractionInputsFromFragments } from "./extractionInputs.mjs";
+export type { BrowserDocumentExtractionInput } from "./extractionInputs.mjs";
 
 import {
     BrowserActionContext,
@@ -34,67 +36,6 @@ import { handleKnowledgeAction } from "./knowledgeActionRouter.mjs";
 const debug = registerDebug("typeagent:browser:knowledge");
 const activeKnowledgeExtractions = new Map<string, ActiveKnowledgeExtraction>();
 const extractionControllers = new Map<string, AbortController>();
-
-export interface BrowserDocumentExtractionInput {
-    url: string;
-    title: string;
-    htmlFragments: unknown[];
-    textContent: string;
-    source: "direct" | "index" | "bookmark" | "history" | "import";
-    timestamp?: string;
-    metadata: {
-        frameId?: number;
-        isIframe: boolean;
-    };
-}
-
-export function createExtractionInputsFromFragments(
-    htmlFragments: any[],
-    url: string,
-    title: string,
-    source: BrowserDocumentExtractionInput["source"],
-    timestamp?: string,
-): BrowserDocumentExtractionInput[] {
-    return htmlFragments
-        .map((fragment, index) => {
-            const frameId = fragment.frameId ?? index;
-            const textContent =
-                typeof fragment.content === "string" &&
-                fragment.content.trim().length > 0
-                    ? convert(fragment.content, {
-                          wordwrap: false,
-                          selectors: [
-                              {
-                                  selector: "script",
-                                  format: "skip",
-                              },
-                              {
-                                  selector: "style",
-                                  format: "skip",
-                              },
-                          ],
-                      }).trim()
-                    : typeof fragment.text === "string"
-                      ? fragment.text.trim()
-                      : "";
-            const input: BrowserDocumentExtractionInput = {
-                url: `${url}#iframe-${frameId}`,
-                title: `${title} (Frame ${frameId})`,
-                htmlFragments: [fragment],
-                textContent,
-                source,
-                metadata: {
-                    frameId,
-                    isIframe: frameId !== 0,
-                },
-            };
-            if (timestamp !== undefined) {
-                input.timestamp = timestamp;
-            }
-            return input;
-        })
-        .filter((input) => input.textContent.length > 50);
-}
 
 export function aggregateExtractionResults(results: any[]): {
     entities: Entity[];

@@ -31,9 +31,13 @@ import type {
     JobState,
     MemoryEvidence,
     MemoryService,
+    PersonalHowToService,
+    ProcedureDocument,
+    ProcedureSaveRequest,
     SourceReplaceRequest,
 } from "@typeagent/memory-service";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
+import { validateProcedureSaveRequest } from "@typeagent/memory-service";
 import { type ImportBatchManifest, importMarkdownPath } from "./importer.js";
 import type { MemoryAction } from "./memorySchema.js";
 
@@ -75,7 +79,7 @@ interface ReplacePreview {
 }
 
 export interface MemoryAgentContext {
-    service: MemoryService;
+    service: MemoryService & Partial<PersonalHowToService>;
     activeCorpusId?: string;
     clearPreview?: ClearPreview;
     replacePreview?: ReplacePreview;
@@ -1382,12 +1386,221 @@ const jobCommands: CommandHandlerTable = {
     },
 };
 
+type RunbookService = Pick<
+    PersonalHowToService,
+    "listProcedures" | "getProcedure" | "saveProcedure"
+>;
+
+function runbookService(context: MemoryAgentContext): RunbookService {
+    const service = context.service;
+    if (
+        service.listProcedures === undefined ||
+        service.getProcedure === undefined ||
+        service.saveProcedure === undefined
+    ) {
+        throw new Error("Memory runbooks are not supported by this service");
+    }
+    return service as MemoryService & RunbookService;
+}
+
+async function saveRunbookFile(
+    context: MemoryAgentContext,
+    params: Params,
+): Promise<ActionResult> {
+    const filePath = stringValue(args(params).path, "procedure file path");
+    const content = await readFile(resolve(filePath), "utf8");
+    const options = flags(params);
+    const procedureId = optionalString(options.procedureId);
+    const expectedVersion = optionalNumber(options.expectedVersion);
+    const request: ProcedureSaveRequest = {
+        corpusId: requireActiveCorpus(context),
+        ...(filePath.toLowerCase().endsWith(".json")
+            ? { document: JSON.parse(content) as ProcedureDocument }
+            : { markdown: content }),
+        ...(procedureId === undefined ? {} : { procedureId }),
+        ...(expectedVersion === undefined ? {} : { expectedVersion }),
+        reviewAgentEdition: booleanValue(options.reviewAgentEdition),
+        safetyConfirmed: booleanValue(options.safetyConfirmed),
+    };
+    validateProcedureSaveRequest(request);
+    return markdown(await runbookService(context).saveProcedure(request));
+}
+
+async function reviewRunbook(
+    context: MemoryAgentContext,
+    params: Params,
+): Promise<ActionResult> {
+    const service = runbookService(context);
+    const corpusId = requireActiveCorpus(context);
+    const procedureId = stringValue(args(params).procedureId, "procedure ID");
+    const current = await service.getProcedure(corpusId, procedureId);
+    if (current === undefined) throw new Error("Runbook not found");
+    if (current.state !== "saved")
+        throw new Error("Resolve stale or archived sources before review");
+    if (!booleanValue(flags(params).safetyConfirmed))
+        throw new Error("Explicit --safetyConfirmed is required");
+    return markdown(
+        await service.saveProcedure({
+            corpusId,
+            procedureId,
+            expectedVersion:
+                optionalNumber(flags(params).expectedVersion) ??
+                current.version,
+            document: current.document,
+            reviewAgentEdition: true,
+            safetyConfirmed: true,
+        }),
+    );
+}
+
+async function synthesizeRunbook(
+    context: MemoryAgentContext,
+    params: Params,
+): Promise<ActionResult> {
+    if (context.service.requestRunbookSynthesis === undefined)
+        throw new Error("Memory runbook synthesis is not supported");
+    return markdown(
+        await context.service.requestRunbookSynthesis({
+            corpusId: requireActiveCorpus(context),
+            sourceId: stringValue(args(params).sourceId, "source ID"),
+            revisionId: stringValue(args(params).revisionId, "revision ID"),
+        }),
+    );
+}
+
+const runbookCommands: CommandHandlerTable = {
+    description:
+        "Inspect, synthesize drafts, save, and explicitly review versioned runbooks; never execute steps",
+    commands: {
+        list: noParameters("List procedures", async (context) =>
+            markdown(
+                await runbookService(context).listProcedures({
+                    corpusId: requireActiveCorpus(context),
+                }),
+            ),
+        ),
+        show: parameters(
+            {
+                args: { procedureId: { description: "Procedure ID" } },
+                flags: {
+                    version: {
+                        description: "Exact saved version",
+                        type: "number",
+                    },
+                },
+            },
+            async (context, params) =>
+                markdown(
+                    (await runbookService(context).getProcedure(
+                        requireActiveCorpus(context),
+                        stringValue(args(params).procedureId, "procedure ID"),
+                        optionalNumber(flags(params).version),
+                    )) ?? "Runbook not found.",
+                ),
+        ),
+        save: parameters(
+            {
+                args: {
+                    path: {
+                        description:
+                            "Canonical procedure JSON or Markdown file",
+                    },
+                },
+                flags: {
+                    procedureId: { description: "Existing procedure ID" },
+                    expectedVersion: {
+                        description: "Optimistic version",
+                        type: "number",
+                    },
+                    reviewAgentEdition: {
+                        description:
+                            "Explicitly review the resulting exact version",
+                        default: false,
+                    },
+                    safetyConfirmed: {
+                        description:
+                            "Confirm all step safety labels; grants no execution permission",
+                        default: false,
+                    },
+                },
+            },
+            saveRunbookFile,
+        ),
+        review: parameters(
+            {
+                args: { procedureId: { description: "Saved procedure ID" } },
+                flags: {
+                    expectedVersion: {
+                        description: "Optimistic version",
+                        type: "number",
+                    },
+                    safetyConfirmed: {
+                        description: "Required explicit safety confirmation",
+                        default: false,
+                    },
+                },
+            },
+            reviewRunbook,
+        ),
+        synthesize: parameters(
+            {
+                args: {
+                    sourceId: { description: "Retained source ID" },
+                    revisionId: {
+                        description: "Exact retained source revision ID",
+                    },
+                },
+            },
+            synthesizeRunbook,
+            sourceCompletions,
+        ),
+    },
+};
+
 const handlers: CommandHandlerTable = {
     description: "Durable memory management and grounded retrieval",
     commands: {
         corpus: corpusCommands,
         import: importCommands,
         sources: sourceCommands,
+        runbooks: runbookCommands,
+        changes: parameters(
+            {
+                flags: {
+                    pageSize: {
+                        description: "Receipt page size (1-200)",
+                        type: "number",
+                    },
+                    continuationToken: {
+                        description: "Token from the previous receipt page",
+                    },
+                },
+            },
+            async (context, params) => {
+                if (context.service.listChanges === undefined) {
+                    throw new Error("Memory changes are not supported");
+                }
+                return markdown(
+                    await context.service.listChanges({
+                        corpusId: requireActiveCorpus(context),
+                        ...(flags(params).pageSize === undefined
+                            ? {}
+                            : {
+                                  pageSize: optionalNumber(
+                                      flags(params).pageSize,
+                                  )!,
+                              }),
+                        ...(flags(params).continuationToken === undefined
+                            ? {}
+                            : {
+                                  continuationToken: optionalString(
+                                      flags(params).continuationToken,
+                                  )!,
+                              }),
+                    }),
+                );
+            },
+        ),
         search: parameters(
             {
                 args: {

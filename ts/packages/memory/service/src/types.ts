@@ -1,6 +1,26 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { AgentEdition } from "./agentEdition.js";
+import type {
+    RevisionAssetDescriptor,
+    RevisionAssetInput,
+    RevisionAssetReadRequest,
+    RevisionAssetRequest,
+} from "./revisionAssetStore.js";
+import type {
+    MemoryBatchImport,
+    MemoryBatchImportLookup,
+    MemoryBatchImportRequest,
+} from "./batchImport.js";
+import type {
+    RunbookJobResult,
+    RunbookSynthesisRequest,
+} from "./runbookPipeline.js";
+
+export const conversationCorpusName = "typeagent-profile-conversations";
+export const conversationProducerId = "typeagent.dispatcher.conversation";
+
 export type CorpusState = "ready" | "indexing" | "degraded" | "error";
 
 export type SourceType = "web" | "markdown" | "text" | "html" | "vtt";
@@ -72,6 +92,7 @@ export interface SourceRevision {
         maxCharsPerChunk?: number;
     };
     embeddingIdentity?: string;
+    assets?: RevisionAssetDescriptor[];
     state: "accepted" | "processing" | "ready" | "failed" | "deleted";
 }
 
@@ -92,6 +113,7 @@ export interface IngestionSource {
     capturedAt?: string;
     sourceModifiedAt?: string;
     contentHash?: string;
+    assets?: RevisionAssetInput[];
 }
 
 export interface DocumentIngestRequest {
@@ -147,6 +169,28 @@ export interface MemoryPage<T> {
     items: T[];
     total: number;
     nextContinuationToken?: string;
+}
+
+export interface MemoryChangeReceipt {
+    changeId: string;
+    corpusId: string;
+    operation: "replace" | "forget" | "suppress" | "restore";
+    createdAt: string;
+    outcome: "committed";
+    sourceId?: string;
+    previousRevisionId?: string;
+    revisionId?: string;
+    counts: {
+        sources: number;
+        revisions: number;
+        knowledge: number;
+    };
+}
+
+export interface MemoryChangeListRequest {
+    corpusId: string;
+    pageSize?: number;
+    continuationToken?: string;
 }
 
 export interface SourceListRequest {
@@ -233,6 +277,8 @@ export interface MemorySearchRequest {
     sourceTypes?: SourceType[];
     tags?: string[];
     sourceIds?: string[];
+    dateFrom?: string;
+    dateTo?: string;
 }
 
 export interface MemoryEvidence {
@@ -504,6 +550,7 @@ export interface ProcedureDocument {
     steps: string[];
     citations: ProcedureSourceCitation[];
     additionalSections?: ProcedureSection[];
+    agentEdition?: AgentEdition;
 }
 
 export interface ProcedureCandidate extends ProcedureDocument {
@@ -551,6 +598,8 @@ export interface ProcedureSaveRequest {
     expectedVersion?: number;
     document?: ProcedureDocument;
     markdown?: string;
+    reviewAgentEdition?: boolean;
+    safetyConfirmed?: boolean;
 }
 
 export interface ProcedureListRequest {
@@ -576,6 +625,30 @@ export interface MemoryService {
     listCorpora(): Promise<MemoryCorpus[]>;
     getCorpus(corpusId: string): Promise<MemoryCorpusStatus | undefined>;
     clearCorpus(corpusId: string): Promise<number>;
+    listChanges?(
+        request: MemoryChangeListRequest,
+    ): Promise<MemoryPage<MemoryChangeReceipt>>;
+    getRevisionAssets?(
+        request: RevisionAssetRequest,
+    ): Promise<RevisionAssetDescriptor[]>;
+    readRevisionAsset?(
+        request: RevisionAssetReadRequest,
+    ): Promise<{ descriptor: RevisionAssetDescriptor; bytes: Uint8Array }>;
+    startBatchImport?(
+        request: MemoryBatchImportRequest,
+    ): Promise<MemoryBatchImport>;
+    getBatchImport?(batchId: string): Promise<MemoryBatchImport>;
+    findBatchImport?(
+        request: MemoryBatchImportLookup,
+    ): Promise<MemoryBatchImport | undefined>;
+    listBatchImports?(corpusId: string): Promise<MemoryBatchImport[]>;
+    retryBatchImport?(batchId: string): Promise<MemoryBatchImport>;
+    cancelBatchImport?(batchId: string): Promise<MemoryBatchImport>;
+    listRunbookJobs?(corpusId: string): Promise<RunbookJobResult[]>;
+    getRunbookJob?(jobId: string): Promise<RunbookJobResult | undefined>;
+    requestRunbookSynthesis?(
+        request: RunbookSynthesisRequest,
+    ): Promise<RunbookJobResult>;
     listSources(corpusId: string): Promise<MemorySource[]>;
     listSourcesPage(
         request: SourceListRequest,

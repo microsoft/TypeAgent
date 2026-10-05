@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 export { SkillCatalog } from "./catalog.js";
+export { allowedSkillTransitions } from "./catalog.js";
+export type { ExpectedSkillState } from "./catalog.js";
 export { SkillCorrectionStore } from "./corrections.js";
 export { SkillGrammarIndex } from "./grammarIndex.js";
 export { LiveSkillCatalog } from "./liveCatalog.js";

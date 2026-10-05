@@ -81,6 +81,7 @@ import {
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
+import type { RunbookHostCapabilities } from "@typeagent/agent-server-protocol";
 
 const debug = registerDebug("typeagent:agent-server-client");
 const debugErr = registerDebug("typeagent:agent-server-client:error");
@@ -221,6 +222,11 @@ export type AgentServerConnection = {
     cancelMacroRun(runId: string): Promise<void>;
     getMacroRun(runId: string): Promise<MacroRunRecord>;
     listSkills?(request?: ListSkillsRequest): Promise<CatalogEntry[]>;
+    getSkillLifecycle?: RunbookHostCapabilities["getSkillLifecycle"];
+    changeSkillLifecycle?: RunbookHostCapabilities["changeSkillLifecycle"];
+    listBindingTargets?: RunbookHostCapabilities["listBindingTargets"];
+    checkBindingTargets?: RunbookHostCapabilities["checkBindingTargets"];
+    suggestBindings?: RunbookHostCapabilities["suggestBindings"];
     searchSkills?(
         request: SearchSkillsRequest,
     ): Promise<readonly CatalogSearchResult[]>;
@@ -554,6 +560,15 @@ export function createAgentServerConnection(
         async listSkills(request?: ListSkillsRequest): Promise<CatalogEntry[]> {
             return rpc.invoke("listSkills", request);
         },
+        getSkillLifecycle: (request) =>
+            rpc.invoke("getSkillLifecycle", request),
+        changeSkillLifecycle: (request) =>
+            rpc.invoke("changeSkillLifecycle", request),
+        listBindingTargets: (request) =>
+            rpc.invoke("listBindingTargets", request),
+        checkBindingTargets: (request) =>
+            rpc.invoke("checkBindingTargets", request),
+        suggestBindings: (request) => rpc.invoke("suggestBindings", request),
 
         async searchSkills(
             request: SearchSkillsRequest,

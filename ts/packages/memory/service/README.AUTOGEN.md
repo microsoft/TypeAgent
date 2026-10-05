@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2fbcf915c011e39fd4e829dbe15cd8d407d1964d3c71294e64dac4576d1520fd -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d9df400c638f6c08f0fd0904d0aed59e4940a103f54fb5b2892930e429914922 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/memory-service — AI-generated documentation
@@ -44,10 +44,10 @@ External: `proper-lockfile`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/fileMemoryService.ts`, `./src/knowProCorpusIndex.ts`, …and 4 more under `./src/`.
+`./src/indexSchema.ts`, `./src/index.ts`, `./src/fileMemoryService.ts`, …and 5 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `698fc097c4b8743475487a6ec91e80c3a0ac4f25` on `2026-09-22T17:27:42.286Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-service docs:verify-links` to spot-check._
+_Auto-generated against commit `9fc6f4ab76b32ea5c60ad14107ee3d95c276c83b` on `2026-10-01T08:35:59.559Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/memory-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

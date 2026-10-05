@@ -15,7 +15,8 @@
     ".": "./dist/index.js",
     "./powershell": "./dist/powershell/powerShellStore.mjs",
     "./powershell/recipe": "./dist/powershell/scriptRecipe.js",
-    "./powershell/integrity": "./dist/powershell/integrity.js"
+    "./powershell/integrity": "./dist/powershell/integrity.js",
+    "./catalog": "./dist/catalog/index.js"
   },
   "types": "./dist/index.d.ts",
   "files": [

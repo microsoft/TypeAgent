@@ -21,6 +21,19 @@ export function createExternalBrowserClient(
         return client.browserControlRpc;
     }
 
+    async function invokeCapture<T>(invoke: () => Promise<T>): Promise<T> {
+        try {
+            return await invoke();
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            if (message.includes("No invoke handler")) {
+                throw new Error("Explicit-page capture is unavailable.");
+            }
+            throw error;
+        }
+    }
+
     const control: BrowserControl = {
         openWebPage: async (...args) =>
             getActiveRpc().invoke("openWebPage", ...args),
@@ -32,6 +45,12 @@ export function createExternalBrowserClient(
         goBack: async () => getActiveRpc().invoke("goBack"),
         reload: async () => getActiveRpc().invoke("reload"),
         getPageUrl: async () => getActiveRpc().invoke("getPageUrl"),
+        getCapturePages: () =>
+            invokeCapture(() => getActiveRpc().invoke("getCapturePages")),
+        capturePageSnapshot: async (pageId) =>
+            invokeCapture(() =>
+                getActiveRpc().invoke("capturePageSnapshot", pageId),
+            ),
         setAgentStatus: (...args) =>
             getActiveRpc().send("setAgentStatus", ...args),
         scrollUp: async () => getActiveRpc().invoke("scrollUp"),

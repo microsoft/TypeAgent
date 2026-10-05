@@ -3,8 +3,47 @@
 
 import { defineConfig } from "vite";
 import { resolve } from "path";
+import { cpSync, mkdirSync } from "node:fs";
 
 export default defineConfig({
+    plugins: [
+        {
+            name: "pdf-managed-assets",
+            closeBundle() {
+                const output = resolve(
+                    __dirname,
+                    "dist/views/public/pdf/vendor/pdfjs",
+                );
+                mkdirSync(output, { recursive: true });
+                for (const name of [
+                    "build/pdf.worker.min.mjs",
+                    "cmaps",
+                    "standard_fonts",
+                    "wasm",
+                    "LICENSE",
+                ])
+                    cpSync(
+                        resolve(__dirname, "node_modules/pdfjs-dist", name),
+                        resolve(output, name.replace(/^build\//, "")),
+                        { recursive: true },
+                    );
+                const notices = resolve(
+                    __dirname,
+                    "dist/views/public/pdf/vendor/converters/pdfToMarkdown",
+                );
+                mkdirSync(notices, { recursive: true });
+                for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"])
+                    cpSync(
+                        resolve(
+                            __dirname,
+                            "../browserControlRpc/src/converters/pdfToMarkdown",
+                            name,
+                        ),
+                        resolve(notices, name),
+                    );
+            },
+        },
+    ],
     root: resolve(__dirname, "src/views/client"),
     build: {
         outDir: resolve(__dirname, "dist/views/public"),
@@ -13,6 +52,22 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 pdf: resolve(__dirname, "src/views/client/pdf/index.html"),
+                automationsLibrary: resolve(
+                    __dirname,
+                    "src/views/client/library/automationsLibrary.html",
+                ),
+                memoryManagement: resolve(
+                    __dirname,
+                    "src/views/client/library/memoryManagement.html",
+                ),
+                memoryHub: resolve(
+                    __dirname,
+                    "src/views/client/library/memoryHub.html",
+                ),
+                annotationsLibrary: resolve(
+                    __dirname,
+                    "src/views/client/library/annotationsLibrary.html",
+                ),
             },
             output: {
                 entryFileNames: (chunkInfo) => {
@@ -65,6 +120,14 @@ export default defineConfig({
     },
     resolve: {
         extensions: [".ts", ".js"],
+        // Milkdown and the other CodeMirror packages resolve different copies
+        // of these, and mixing copies breaks editor extensions.
+        dedupe: [
+            "@codemirror/state",
+            "@codemirror/view",
+            "@lezer/common",
+            "@lezer/highlight",
+        ],
         alias: {
             "@": resolve(__dirname, "src/views/client"),
         },

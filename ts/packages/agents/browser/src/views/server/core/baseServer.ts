@@ -10,6 +10,7 @@ import { FeatureConfig, ServerConfig, SSEManager } from "./types.js";
 import { SSEManagerImpl } from "./sseManager.js";
 import { isAllowedViewOrigin } from "./originAllowlist.js";
 import registerDebug from "debug";
+import { registerBrowserNavigationRoutes } from "../features/views/viewNavigationRoutes.mjs";
 
 const debug = registerDebug("typeagent:views:server:core");
 
@@ -54,6 +55,38 @@ export class BaseServer {
             debug(`Rejecting request from origin ${origin}`);
             res.status(403).send("Origin not allowed");
         });
+        this.app.use((req, res, next) => {
+            const readerAncestors =
+                req.path === "/pdf" || req.path.startsWith("/pdf/")
+                    ? " chrome-extension: moz-extension:"
+                    : "";
+            res.setHeader(
+                "Content-Security-Policy",
+                `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self' http://localhost:* http://127.0.0.1:*${readerAncestors}`,
+            );
+            res.setHeader("X-Content-Type-Options", "nosniff");
+            res.setHeader("Referrer-Policy", "no-referrer");
+            if (req.path.startsWith("/api/views/")) {
+                const expectedHost = `localhost:${this.boundPort ?? this.config.port}`;
+                const host = req.headers.host;
+                const validHost =
+                    host === expectedHost ||
+                    host === `127.0.0.1:${this.boundPort ?? this.config.port}`;
+                const origin = req.headers.origin;
+                if (
+                    !validHost ||
+                    (origin !== undefined && origin !== `http://${host}`) ||
+                    req.headers["sec-fetch-site"] === "cross-site"
+                ) {
+                    res.status(403).json({
+                        success: false,
+                        error: "Same-origin view request required",
+                    });
+                    return;
+                }
+            }
+            next();
+        });
 
         // Rate limiting
         const limiter = rateLimit({
@@ -70,11 +103,38 @@ export class BaseServer {
                 extended: true,
             }),
         );
+        this.app.use(
+            (
+                error: unknown,
+                req: Request,
+                res: Response,
+                next: express.NextFunction,
+            ) => {
+                if (!error) {
+                    next();
+                    return;
+                }
+                const status = (error as { status?: number }).status;
+                res.status(status === 413 ? 413 : 400).json({
+                    success: false,
+                    error:
+                        status === 413
+                            ? "Request body too large"
+                            : "Invalid request body",
+                });
+            },
+        );
 
         // CORS if enabled
         if (this.config.enableCors) {
             this.app.use((req, res, next) => {
-                res.header("Access-Control-Allow-Origin", "*");
+                if (req.headers.origin) {
+                    res.header(
+                        "Access-Control-Allow-Origin",
+                        req.headers.origin,
+                    );
+                    res.header("Vary", "Origin");
+                }
                 res.header(
                     "Access-Control-Allow-Methods",
                     "GET, POST, PUT, DELETE, OPTIONS",
@@ -92,6 +152,7 @@ export class BaseServer {
         }
 
         // Static file serving
+        registerBrowserNavigationRoutes(this.app);
         this.app.use(
             express.static(path.join(__dirname, "..", "..", "public")),
         );

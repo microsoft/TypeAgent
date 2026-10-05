@@ -11,19 +11,25 @@ $ cd ts/packages/git-story
 $ pnpm build
 $ npm link            # puts git-story on PATH
 $ git story init   # registers Copilot CLI and git hooks for this repo
-$ git story hooks copilot user-prompt-submitted
-Hello World
+$ echo '{"sessionId":"s1","timestamp":0,"cwd":".","prompt":"hi"}' | git story hooks copilot user-prompt-submitted
+git-story userPromptSubmitted: session=s1
+{}
 $ echo input | git story hooks git pre-commit a b
 git-story pre-commit: args=["a","b"] stdin="input\n"
 ```
 
-`init` writes the hooks to `.github/copilot/settings.local.json` and adds that
+`init` registers the `userPromptSubmitted`, `sessionStart`, and `agentStop`
+Copilot hooks in `.github/copilot/settings.local.json` and adds that
 file to `.git/info/exclude`, so it stays local to the clone.
 
-`init` also writes a `pre-commit` script to the git hooks directory (honors
-`core.hooksPath`). The script runs `exec git-story hooks git pre-commit "$@"`,
+`init` also writes `pre-commit` and `prepare-commit-msg` scripts to the git
+hooks directory (honors `core.hooksPath`). Each script runs
+`exec git-story hooks git <hook> "$@"`,
 so git's hook arguments and stdin reach the command unchanged. `init` does not
 overwrite a hook that it did not write.
+
+`prepare-commit-msg` appends a `typeagent` line to the commit message, once.
+This is a placeholder for the git-story summary.
 
 ## Daemon
 
@@ -44,6 +50,29 @@ $ curl -G http://127.0.0.1:51703/api/story/commits/79f77a3 --data-urlencode proj
 ```
 
 Routes are in `src/server/router.ts`; handlers are in `src/server/routes/`.
+
+## Session Watcher
+
+The Session Watcher reads GitHub Copilot (GHCP) CLI transcripts to gather context
+for commit stories. Its responsibilities are to:
+
+- Capture new session activity, including conversations and tool use.
+- Normalize events into a common format, keeping the original event ID when
+  available or assigning a GUID when it is missing.
+  Keep the session context and any recorded edit diffs.
+- Pass events and metadata through a separate privacy filter before sharing them
+  with memory processing.
+- Collect session metadata, such as the client, models, timestamps, and related
+  sessions.
+
+The watcher supplies this context; the Story Builder decides what belongs in
+each commit story.
+
+To resume reading, the watcher saves the session ID, transcript file, and byte
+offset after the last complete record. This tracks what it has read, not what
+downstream memory processing has finished.
+Generated IDs are saved separately with their transcript
+locations so rereading an event reuses its assigned ID.
 
 ## Trademarks
 

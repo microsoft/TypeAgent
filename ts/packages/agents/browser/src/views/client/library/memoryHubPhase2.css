@@ -1,0 +1,139 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.memory-phase2 {
+  min-width: 0;
+}
+.memory-phase2 [hidden] {
+  display: none !important;
+}
+.memory-phase2 .phase2-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin: 12px 0;
+}
+.memory-phase2 .phase2-controls label,
+.memory-phase2 .phase2-source-types {
+  min-width: 120px;
+  flex: 1 1 140px;
+}
+.memory-phase2 .phase2-controls input,
+.memory-phase2 .phase2-controls select {
+  width: 100%;
+  min-width: 0;
+}
+.memory-phase2 .phase2-query {
+  flex: 3 1 260px !important;
+}
+.memory-phase2 .phase2-source-types {
+  display: grid;
+  gap: 5px;
+  font-weight: 600;
+}
+.memory-phase2 .phase2-source-types details {
+  position: relative;
+  min-width: 0;
+}
+.memory-phase2 .phase2-source-types summary {
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: normal;
+  overflow-wrap: anywhere;
+}
+.memory-phase2 .phase2-type-options {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 2;
+  width: 240px;
+  max-width: calc(100vw - 48px);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 4px 16px #0002;
+  font-weight: normal;
+}
+.memory-phase2 .phase2-type-options small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+}
+.memory-phase2 .phase2-results {
+  display: grid;
+  gap: 12px;
+}
+.memory-phase2 .phase2-results.grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+}
+.memory-search .phase2-group-results {
+  display: grid;
+  gap: 12px;
+}
+.memory-search .phase2-search-group h3 {
+  overflow-wrap: anywhere;
+}
+.memory-search .phase2-search-insights {
+  margin: 12px 0;
+}
+.memory-phase2 article,
+.memory-phase2 .phase2-answer {
+  padding: 16px;
+  border: 1px solid var(--border, var(--border));
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.memory-phase2 .phase2-warning {
+  padding: 12px;
+  margin: 12px 0;
+  background: var(--warn-soft);
+  white-space: pre-wrap;
+}
+.memory-phase2 .phase2-status {
+  margin: 12px 0;
+}
+.memory-phase2 .phase2-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.memory-phase2 dialog {
+  width: min(820px, calc(100vw - 24px));
+  max-height: 90vh;
+  overflow: auto;
+}
+.memory-phase2 dialog pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memory-phase2 .phase2-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+.memory-phase2 .phase2-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 16px;
+}
+.memory-phase2 .phase2-lists ul {
+  padding-left: 20px;
+}
+.memory-phase2 button:focus-visible,
+.memory-phase2 a:focus-visible,
+.memory-phase2 [tabindex]:focus-visible {
+  outline: 3px solid #5b69cf;
+  outline-offset: 2px;
+}
+.memory-search > form > .phase2-query {
+  flex: 1 1 320px;
+}
+.memory-search > form > button[type="submit"] {
+  align-self: end;
+}

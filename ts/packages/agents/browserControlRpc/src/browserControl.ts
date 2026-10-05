@@ -8,6 +8,18 @@ export interface BrowserSettings {
     extractionMode: ExtractionMode;
 }
 
+export interface BrowserCapturePage {
+    /** Opaque, provider-local handle bound to the listed page's document. */
+    pageId: string;
+    url: string;
+    title: string;
+}
+
+export interface BrowserCaptureSnapshot extends BrowserCapturePage {
+    htmlFragments: Array<{ frameId: string; content: string }>;
+    warnings: string[];
+}
+
 export type BrowserControlInvokeFunctions = {
     /**
      * open a new browser view with the specified URL.
@@ -25,6 +37,10 @@ export type BrowserControlInvokeFunctions = {
     goBack(): Promise<void>;
     reload(): Promise<void>;
     getPageUrl(): Promise<string>;
+    /** Lists capturable HTTP(S) pages, excluding private browsing pages. */
+    getCapturePages(): Promise<BrowserCapturePage[]>;
+    /** Captures a listed document without activating it; rejects stale handles. */
+    capturePageSnapshot(pageId: string): Promise<BrowserCaptureSnapshot>;
     scrollUp(): Promise<void>;
     scrollDown(): Promise<void>;
     zoomIn(): Promise<void>;
@@ -102,6 +118,18 @@ export function createBrowserControlRpcFacade(
         goBack: (...args) => browserControl.goBack(...args),
         reload: (...args) => browserControl.reload(...args),
         getPageUrl: (...args) => browserControl.getPageUrl(...args),
+        getCapturePages: async () => {
+            if (!browserControl.getCapturePages) {
+                throw new Error("Explicit-page capture is unavailable.");
+            }
+            return browserControl.getCapturePages();
+        },
+        capturePageSnapshot: async (pageId) => {
+            if (!browserControl.capturePageSnapshot) {
+                throw new Error("Explicit-page capture is unavailable.");
+            }
+            return browserControl.capturePageSnapshot(pageId);
+        },
         scrollUp: (...args) => browserControl.scrollUp(...args),
         scrollDown: (...args) => browserControl.scrollDown(...args),
         zoomIn: (...args) => browserControl.zoomIn(...args),

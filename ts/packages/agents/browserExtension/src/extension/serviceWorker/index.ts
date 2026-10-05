@@ -57,7 +57,7 @@ export async function initialize(): Promise<void> {
     }
 
     // Initialize context menu
-    initializeContextMenu();
+    await initializeContextMenu();
     initContextMenuSettings();
 
     // Set up RPC server for typed view communication
@@ -349,7 +349,24 @@ function setupEventListeners(): void {
     });
 
     // Context menu clicks
-    chrome.contextMenus?.onClicked.addListener(handleContextMenuClick);
+    chrome.contextMenus?.onClicked.addListener((info, tab) => {
+        handleContextMenuClick(info, tab).catch((error: unknown) => {
+            console.error("TypeAgent context menu action failed:", error);
+            if (tab?.id !== undefined) {
+                void chrome.action
+                    .setTitle({
+                        tabId: tab.id,
+                        title: `TypeAgent action failed: ${error instanceof Error ? error.message : String(error)}`,
+                    })
+                    .catch((notificationError: unknown) =>
+                        console.error(
+                            "Failed to report context menu error:",
+                            notificationError,
+                        ),
+                    );
+            }
+        });
+    });
 
     // Storage changes
     chrome.storage.onChanged.addListener((changes, namespace) => {

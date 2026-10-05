@@ -1,0 +1,284 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.memory-web-explore {
+  color: var(--text);
+  min-width: 0;
+}
+.memory-web-explore [hidden] {
+  display: none !important;
+}
+.memory-web-explore header,
+.memory-web-explore .content-section {
+  margin-bottom: 1rem;
+}
+.memory-web-explore nav,
+.memory-web-explore .nav-content,
+.memory-web-explore .topic-graph-header,
+.memory-web-explore .search-input-group,
+.memory-web-explore .control-group,
+.memory-web-explore .graph-action-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.memory-web-explore .entity-content,
+.memory-web-explore .topic-graph-main {
+  display: flex;
+  min-width: 0;
+  min-height: 34rem;
+}
+.memory-web-explore .graph-main,
+.memory-web-explore .graph-container {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 34rem;
+}
+.memory-web-explore .cytoscape-container {
+  width: 100%;
+  height: 34rem;
+  background: var(--surface-alt);
+}
+.memory-web-explore .entity-sidebar,
+.memory-web-explore .topic-sidebar,
+.memory-web-explore .content-panel {
+  width: 17rem;
+  flex-shrink: 0;
+  padding: 1rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  max-height: 34rem;
+  border: 1px solid var(--border);
+}
+.memory-web-explore .topic-sidebar.collapsed {
+  display: none;
+}
+.memory-web-explore .graph-controls {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.memory-web-explore .graph-controls .control-group,
+.memory-web-explore .graph-controls .graph-action-controls {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.25rem;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.memory-web-explore .graph-loading,
+.memory-web-explore .graph-empty,
+.memory-web-explore .loading-overlay,
+.memory-web-explore .error-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  text-align: center;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+}
+.memory-web-explore [data-web-error] {
+  padding: 1rem;
+  border: 1px solid var(--danger-border);
+  background: var(--danger-soft);
+}
+.memory-web-explore .quick-stats,
+.memory-web-explore .knowledge-overview-cards,
+.memory-web-explore .insights-grid,
+.memory-web-explore .activity-summary {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.memory-web-explore .knowledge-card,
+.memory-web-explore .card,
+.memory-web-explore .stat-item {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  min-width: min(10rem, 100%);
+  overflow-wrap: anywhere;
+}
+.memory-web-explore h3 {
+  font-size: 1rem;
+  text-transform: none;
+  color: inherit;
+  letter-spacing: normal;
+}
+.memory-web-explore .card-body {
+  min-width: 0;
+}
+.memory-web-explore .card-title {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+.memory-web-explore .analytics-grid,
+.memory-web-explore .discovery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 16px;
+}
+.memory-web-explore .knowledge-progress-grid {
+  display: grid;
+  gap: 12px;
+}
+.memory-web-explore .progress-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.memory-web-explore .progress-bar {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--surface-alt);
+}
+.memory-web-explore .progress-fill {
+  height: 100%;
+}
+.memory-web-explore .quality-distribution {
+  display: flex;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+.memory-web-explore .quality-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 0.8rem;
+}
+.memory-web-explore .quality-segment.high,
+.memory-web-explore .legend-color.high {
+  background: var(--success-soft);
+}
+.memory-web-explore .quality-segment.medium,
+.memory-web-explore .legend-color.medium {
+  background: var(--warn-soft);
+}
+.memory-web-explore .quality-segment.low,
+.memory-web-explore .legend-color.low {
+  background: var(--danger-border);
+}
+.memory-web-explore .quality-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.memory-web-explore .btn-close {
+  flex-shrink: 0;
+}
+.memory-web-explore .panel-header,
+.memory-web-explore .sidebar-header,
+.memory-web-explore .entity-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.memory-web-explore .nav-content,
+.memory-web-explore .control-group {
+  align-items: end;
+}
+.memory-web-explore .nav-content input,
+.memory-web-explore .control-group select {
+  min-width: 0;
+  max-width: 100%;
+}
+.memory-web-explore .knowledge-visualization-section,
+.memory-web-explore .top-domains-section {
+  margin: 16px 0;
+}
+.memory-web-explore .analytics-source {
+  margin: 6px 10px 12px;
+  font-size: 0.8rem;
+  font-weight: normal;
+  overflow-wrap: anywhere;
+}
+.memory-web-explore .analytics-source a {
+  color: var(--primary-dark);
+}
+.memory-web-explore .pill-type {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.memory-web-explore .relationship-item {
+  padding: 10px;
+  margin: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.memory-web-explore .domain-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.memory-web-explore .stat-number,
+.memory-web-explore .knowledge-metric {
+  font-size: 1.8rem;
+}
+.memory-web-explore .knowledge-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 8px;
+  min-height: 4.5rem;
+}
+.memory-web-explore .knowledge-card-header h4 {
+  margin: 0;
+}
+.memory-web-explore .bar-fill {
+  background: #667eea;
+}
+.memory-web-explore .legend-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.memory-web-explore .legend-color {
+  width: 1rem;
+  height: 1rem;
+}
+.memory-web-explore .bar-fill {
+  min-height: 0.5rem;
+}
+.memory-web-explore .entity-pill,
+.memory-web-explore .topic-pill,
+.memory-web-explore .topic-tag {
+  cursor: pointer;
+  margin: 0.25rem;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+}
+.memory-web-explore .related-websites a,
+.memory-web-explore .topic-sources a {
+  display: block;
+}
+@media (max-width: 900px) {
+  .memory-web-explore .entity-content,
+  .memory-web-explore .topic-graph-main {
+    flex-wrap: wrap;
+  }
+  .memory-web-explore .entity-sidebar,
+  .memory-web-explore .topic-sidebar,
+  .memory-web-explore .content-panel {
+    width: 100%;
+    max-height: 20rem;
+  }
+  .memory-web-explore .graph-main,
+  .memory-web-explore .graph-container {
+    flex-basis: 100%;
+  }
+}

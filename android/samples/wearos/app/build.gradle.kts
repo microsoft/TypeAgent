@@ -50,8 +50,6 @@ dependencies {
     implementation(libs.wear.tooling.preview)
     implementation(libs.activity.compose)
     implementation(libs.core.splashscreen)
-    implementation(libs.constraintlayout.compose.android)
-    implementation(libs.constraintlayout)
     implementation(libs.wear.remote.interactions)
     implementation(libs.concurrent.futures.ktx)
     implementation(libs.fragment.ktx)

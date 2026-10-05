@@ -1,0 +1,219 @@
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+<div id="entity-graph-container">
+  <nav class="entity-nav" hidden>
+    <div class="nav-content">
+      <div class="breadcrumbs">
+        <button id="entityGraphBreadcrumb" class="breadcrumb-link">
+          Entity Graph
+        </button>
+        <span id="entityNameBreadcrumb" class="breadcrumb-entity"></span>
+      </div>
+      <div class="entity-search">
+        <div class="search-input-group">
+          <input
+            type="search"
+            id="entitySearchInput"
+            class="entity-search-input"
+            placeholder="Enter entity name..."
+            aria-label="Search entities"
+          />
+          <button
+            id="entitySearchButton"
+            class="entity-search-btn"
+            aria-label="Search"
+            title="Search"
+          >
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div
+          id="entitySearchSuggestions"
+          class="entity-search-suggestions"
+        ></div>
+      </div>
+      <label
+        >Filter type <input id="entityTypeFilter" placeholder="All types"
+      /></label>
+      <button id="entityBack" aria-label="Back" title="Back">
+        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i></button
+      ><button id="entityForward" aria-label="Forward" title="Forward">
+        <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+      </button>
+    </div>
+  </nav>
+  <div class="entity-content">
+    <aside class="entity-sidebar" id="entitySidebar" hidden>
+      <div class="entity-header">
+        <div class="entity-info">
+          <h3 class="entity-name" id="entityName">Select an Entity</h3>
+          <div class="entity-type-badge" id="entityType"></div>
+        </div>
+        <button
+          id="closeEntitySidebar"
+          class="btn-close"
+          aria-label="Close entity details"
+        >
+          Close
+        </button>
+      </div>
+      <div class="entity-overview">
+        <div class="entity-metrics">
+          <div class="metric-item">
+            <span class="metric-label">Mentions</span
+            ><span class="metric-value" id="entityMentions">-</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Relationships</span
+            ><span class="metric-value" id="entityRelationships">-</span>
+          </div>
+        </div>
+        <div class="entity-details">
+          <h4>Details</h4>
+          <div id="entityFacets" class="detail-section">
+            <strong>Facets:</strong>
+            <div class="facets-list"></div>
+          </div>
+          <div id="entityTopics" class="detail-section">
+            <strong>Topics:</strong>
+            <div class="topics-list"></div>
+          </div>
+        </div>
+        <div class="entity-timeline">
+          <h4>Timeline</h4>
+          <div class="timeline-item">
+            <span class="timeline-label">First Seen:</span
+            ><span class="timeline-value" id="entityFirstSeen">-</span>
+          </div>
+          <div class="timeline-item">
+            <span class="timeline-label">Last Seen:</span
+            ><span class="timeline-value" id="entityLastSeen">-</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="graph-main">
+      <div
+        id="cytoscape-container"
+        class="cytoscape-container"
+        tabindex="0"
+        aria-label="Entity graph"
+      ></div>
+      <div class="graph-controls">
+        <div class="control-group">
+          <button
+            id="zoomInBtn"
+            class="control-btn"
+            aria-label="Zoom in"
+            title="Zoom in"
+          >
+            <i class="fa-solid fa-plus" aria-hidden="true"></i>
+          </button>
+          <button
+            id="zoomOutBtn"
+            class="control-btn"
+            aria-label="Zoom out"
+            title="Zoom out"
+          >
+            <i class="fa-solid fa-minus" aria-hidden="true"></i>
+          </button>
+          <button
+            id="fitBtn"
+            class="control-btn"
+            aria-label="Fit to view"
+            title="Fit to view"
+          >
+            <i class="fa-solid fa-expand" aria-hidden="true"></i>
+          </button>
+          <button
+            id="reLayoutBtn"
+            class="control-btn"
+            aria-label="Re-run layout"
+            title="Re-run layout"
+          >
+            <i class="fa-solid fa-shuffle" aria-hidden="true"></i>
+          </button>
+          <button
+            id="debugViewportBtn"
+            class="control-btn"
+            aria-label="Log viewport nodes"
+            title="Log viewport nodes"
+            hidden
+          >
+            <i class="fa-solid fa-bug" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="control-group">
+          <button
+            id="screenshotBtn"
+            class="control-btn"
+            aria-label="Save image"
+            title="Save image"
+          >
+            <i class="fa-regular fa-image" aria-hidden="true"></i>
+          </button>
+          <button
+            id="exportBtn"
+            class="control-btn"
+            aria-label="Export data"
+            title="Export data"
+          >
+            <i class="fa-solid fa-file-export" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <div id="graphLoading" class="graph-loading" hidden>
+        <div class="loading-content">
+          <p class="loading-text" role="status">Loading entity graph...</p>
+        </div>
+      </div>
+      <div id="graphEmpty" class="graph-empty" hidden>
+        <div class="empty-content">
+          <h3>No Entity Graph</h3>
+          <p>No entities were returned by TypeAgent Browser Memory.</p>
+        </div>
+      </div>
+    </div>
+    <aside class="content-panel" id="contentPanel" hidden>
+      <div class="panel-header">
+        <h3>Entity Content</h3>
+        <button
+          id="closePanelBtn"
+          class="btn-close"
+          aria-label="Close entity content"
+        >
+          Close
+        </button>
+      </div>
+      <div class="entity-content-view">
+        <div class="content-section">
+          <h4>Context Snippets</h4>
+          <div id="contextSnippets" class="context-snippets"></div>
+        </div>
+        <div class="content-section">
+          <h4>Contributing Sources</h4>
+          <div id="relatedWebsites" class="related-websites"></div>
+        </div>
+        <div class="content-section">
+          <h4>Entity Insights</h4>
+          <div id="entityInsights" class="entity-insights">
+            <div class="insight-item">
+              <span class="insight-label">Importance Score:</span
+              ><span class="insight-value" id="importanceScore">-</span>
+            </div>
+            <div class="insight-item">
+              <span class="insight-label">Cluster Group:</span
+              ><span class="insight-value" id="clusterGroup">-</span>
+            </div>
+            <div class="insight-item">
+              <span class="insight-label">Co-occurrences:</span
+              ><span class="insight-value" id="coOccurrences">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>

@@ -51,3 +51,14 @@ packages/defaultAgentProvider/test/reliability/README.md
 # VS Studio Files
 .vs/**
 
+# Pinned upstream converter bodies and reproducible provenance artifacts
+packages/agents/browserControlRpc/src/converters/pdfToMarkdown/engine.js
+packages/agents/browserControlRpc/src/converters/pdfToMarkdown/columns.js
+packages/agents/browserControlRpc/src/converters/pdfToMarkdown/symbols.js
+packages/agents/browserControlRpc/src/converters/pdfToMarkdown/texfonts.js
+packages/agents/browserControlRpc/src/converters/pdfToMarkdown/mathtext.js
+packages/agents/browserControlRpc/src/converters/pdfToMarkdown/export.js
+packages/agents/browserControlRpc/src/converters/pdfToMarkdown/source-manifest.json
+packages/agents/browserControlRpc/test/pdfToMarkdown/*-parity.json
+tools/scripts/converters/pdfToMarkdown/patches/**
+

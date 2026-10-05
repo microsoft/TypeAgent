@@ -2,6 +2,12 @@
 // Licensed under the MIT License.
 
 import type { ProcedureVersion } from "@typeagent/memory-service";
+import {
+    renderAgentEdition,
+    renderAgentEditionReferences,
+    validateReviewedAgentEdition,
+    redactRunbookText,
+} from "@typeagent/memory-service";
 import type {
     SkillFileInput,
     SkillIdentity,
@@ -63,11 +69,21 @@ function validateArtifactPath(path: string): void {
         path.length === 0 ||
         path.startsWith("/") ||
         path.includes("\\") ||
-        path.includes("\0") ||
+        /[<>:"|?*\u0000-\u001f]/.test(path) ||
         /^[A-Za-z]:/.test(path) ||
         path
             .split("/")
-            .some((part) => part === "" || part === "." || part === "..")
+            .some(
+                (part) =>
+                    part === "" ||
+                    part === "." ||
+                    part === ".." ||
+                    part.trim() !== part ||
+                    part.endsWith(".") ||
+                    /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(
+                        part,
+                    ),
+            )
     ) {
         throw new Error(`Unsafe skill file path: ${path}`);
     }
@@ -104,19 +120,19 @@ function renderSkillMarkdown(
             `  typeagent-previous-version: ${yamlString(String(lineage.previousVersion))}`,
         );
     }
-    lines.push(
-        "---",
-        "",
-        `# ${procedure.document.title}`,
-        "",
-        description,
-        "",
-        "## Procedure",
-        "",
-        ...procedure.document.steps.flatMap((step, index) => [
-            `${index + 1}. ${step}`,
-        ]),
-    );
+    lines.push("---", "", `# ${procedure.document.title}`, "", description, "");
+    const edition = procedure.document.agentEdition;
+    if (edition === undefined) {
+        lines.push(
+            "## Procedure",
+            "",
+            ...procedure.document.steps.map(
+                (step, index) => `${index + 1}. ${step}`,
+            ),
+        );
+    } else {
+        lines.push(renderAgentEdition(edition));
+    }
     for (const section of procedure.document.additionalSections ?? []) {
         lines.push("", `## ${section.heading}`, "", section.content);
     }
@@ -136,7 +152,7 @@ function renderSkillMarkdown(
             }
         });
     }
-    return `${lines.join("\n")}\n`;
+    return `${redactRunbookText(lines.join("\n"))}\n`;
 }
 
 function addArtifact(
@@ -147,6 +163,16 @@ function addArtifact(
     if (artifact === undefined) return;
     const path = artifact.path ?? defaultPath;
     validateArtifactPath(path);
+    if (!path.endsWith(".json")) {
+        throw new Error(
+            "Schema and grammar artifacts must be JSON, not scripts or executables.",
+        );
+    }
+    JSON.parse(
+        typeof artifact.content === "string"
+            ? artifact.content
+            : Buffer.from(artifact.content).toString("utf8"),
+    );
     files.push({ path, content: artifact.content });
 }
 
@@ -155,12 +181,14 @@ export function createSkillPackage(
     options: ProcedureSkillOptions,
 ): SkillPackageInput {
     validateProcedure(procedure);
+    validateReviewedAgentEdition(procedure);
     validateSkillName(options.identity.name);
     validateIdentity(options.identity);
-    const description =
+    const description = redactRunbookText(
         options.description ??
-        procedure.document.summary ??
-        procedure.document.title;
+            procedure.document.summary ??
+            procedure.document.title,
+    );
     validateDescription(description);
 
     const files: SkillFileInput[] = [
@@ -173,14 +201,23 @@ export function createSkillPackage(
             ),
         },
     ];
+    if (procedure.document.agentEdition !== undefined) {
+        files.push({
+            path: "references/runbook.md",
+            content: renderAgentEditionReferences(
+                procedure.document.agentEdition,
+            ),
+        });
+    }
     addArtifact(files, options.schema, "artifacts/schema.json");
     addArtifact(files, options.grammar, "artifacts/grammar.ag.json");
     const paths = new Set<string>();
     for (const file of files) {
-        if (paths.has(file.path)) {
+        const normalizedPath = file.path.toLowerCase();
+        if (paths.has(normalizedPath)) {
             throw new Error(`Duplicate skill artifact path: ${file.path}`);
         }
-        paths.add(file.path);
+        paths.add(normalizedPath);
     }
     const schemaFingerprint =
         options.schema === undefined
@@ -188,7 +225,7 @@ export function createSkillPackage(
             : hashArtifact(options.schema.content);
     return {
         identity: structuredClone(options.identity),
-        displayName: procedure.document.title,
+        displayName: redactRunbookText(procedure.document.title),
         description,
         schemaFingerprint,
         files,

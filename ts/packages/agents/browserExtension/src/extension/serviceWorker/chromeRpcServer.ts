@@ -7,6 +7,44 @@ import {
 } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 
+const trustedViewPaths = new Set([
+    "/views/annotationsLibrary.html",
+    "/views/chatPanel.html",
+    "/views/entityGraphView.html",
+    "/views/memoryHub.html",
+    "/views/macrosLibrary.html",
+    "/views/options.html",
+    "/views/pdfView.html",
+    "/views/topicGraphView.html",
+]);
+
+export function isTrustedRpcView(
+    sender: chrome.runtime.MessageSender,
+): boolean {
+    if (
+        !sender ||
+        sender.id !== chrome.runtime.id ||
+        !sender.url ||
+        (sender.frameId !== undefined && sender.frameId !== 0)
+    ) {
+        return false;
+    }
+    try {
+        const root = new URL(chrome.runtime.getURL("/"));
+        const url = new URL(sender.url);
+        return (
+            (root.protocol === "chrome-extension:" ||
+                root.protocol === "moz-extension:") &&
+            url.protocol === root.protocol &&
+            url.host === root.host &&
+            sender.origin === `${root.protocol}//${root.host}` &&
+            trustedViewPaths.has(url.pathname)
+        );
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Creates an RPC server in the service worker that communicates with
  * extension views (popup, sidepanel, etc.) via chrome.runtime messages.
@@ -30,8 +68,12 @@ export function createChromeRpcServer<
     });
 
     chrome.runtime.onMessage.addListener(
-        (msg: any, _sender: chrome.runtime.MessageSender) => {
-            if (msg.type === "rpc" && msg.target === "serviceWorker") {
+        (msg: any, sender: chrome.runtime.MessageSender) => {
+            if (
+                msg?.type === "rpc" &&
+                msg.target === "serviceWorker" &&
+                isTrustedRpcView(sender)
+            ) {
                 adapter.notifyMessage(msg.message);
             }
         },

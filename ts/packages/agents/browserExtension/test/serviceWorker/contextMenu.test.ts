@@ -18,6 +18,7 @@ jest.mock("../../src/extension/serviceWorker/messageHandlers", () => ({
 }));
 
 import { indexPageContent } from "../../src/extension/serviceWorker/messageHandlers";
+import { sendActionToAgent } from "../../src/extension/serviceWorker/websocket";
 
 let contextMenuModule: any;
 const mockIndexPageContent = indexPageContent as jest.MockedFunction<
@@ -27,10 +28,14 @@ const mockIndexPageContent = indexPageContent as jest.MockedFunction<
 describe("Context Menu Module", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.mocked(sendActionToAgent).mockResolvedValue({
+            url: "http://localhost:49152",
+        });
 
         // Clear all mock implementations from Chrome API
         chrome.contextMenus.create.mockClear();
         chrome.contextMenus.remove.mockClear();
+        chrome.contextMenus.removeAll.mockResolvedValue(undefined);
         chrome.sidePanel.open.mockClear();
         chrome.tabs.sendMessage.mockClear();
         chrome.action.setTitle = jest.fn().mockResolvedValue(undefined);
@@ -47,9 +52,39 @@ describe("Context Menu Module", () => {
     });
 
     describe("initializeContextMenu", () => {
-        it("should create context menu items", () => {
-            contextMenuModule.initializeContextMenu();
+        it("reports menu cleanup failures without registering replacements", async () => {
+            chrome.contextMenus.removeAll.mockRejectedValueOnce(
+                new Error("Menu cleanup failed"),
+            );
+            await expect(
+                contextMenuModule.initializeContextMenu(),
+            ).rejects.toThrow("Menu cleanup failed");
+            expect(chrome.contextMenus.create).not.toHaveBeenCalled();
+        });
 
+        it("waits for stale entries to be removed before registering replacements", async () => {
+            let removed!: () => void;
+            chrome.contextMenus.removeAll.mockReturnValueOnce(
+                new Promise<void>((resolve) => {
+                    removed = resolve;
+                }),
+            );
+            const pending = contextMenuModule.initializeContextMenu();
+            expect(chrome.contextMenus.create).not.toHaveBeenCalled();
+            removed();
+            await pending;
+            expect(chrome.contextMenus.create).toHaveBeenCalled();
+        });
+
+        it("replaces existing menus and exposes Memory without retired duplicates", async () => {
+            await contextMenuModule.initializeContextMenu();
+
+            expect(chrome.contextMenus.removeAll).toHaveBeenCalledTimes(1);
+            expect(
+                chrome.contextMenus.removeAll.mock.invocationCallOrder[0],
+            ).toBeLessThan(
+                chrome.contextMenus.create.mock.invocationCallOrder[0],
+            );
             expect(chrome.contextMenus.create).toHaveBeenCalled();
             expect(
                 chrome.contextMenus.create.mock.calls.length,
@@ -64,6 +99,30 @@ describe("Context Menu Module", () => {
                 ),
             ).toEqual(["menuSeparator1", "saveThisPage"]);
             expect(ids).not.toContain("askAboutPage");
+            expect(ids).not.toContain("showMemoryCenter");
+            expect(ids).not.toContain("showWebsiteLibrary");
+            expect(ids.filter((id) => id === "showMemoryHub")).toHaveLength(1);
+            expect(chrome.contextMenus.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: "showMemoryHub",
+                    title: "Memory",
+                }),
+            );
+            expect(chrome.contextMenus.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: "openPdfReader",
+                    title: "Open TypeAgent Reader",
+                }),
+            );
+            expect(chrome.contextMenus.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: "openPdfLink",
+                    contexts: ["link"],
+                    targetUrlPatterns: expect.arrayContaining([
+                        "https://*/*.pdf*",
+                    ]),
+                }),
+            );
             expect(chrome.contextMenus.create).toHaveBeenCalledWith(
                 expect.objectContaining({
                     id: "saveThisPage",
@@ -74,6 +133,51 @@ describe("Context Menu Module", () => {
     });
 
     describe("handleContextMenuClick", () => {
+        it("opens the reader without a hard-coded service port", async () => {
+            chrome.runtime.getURL.mockReturnValue(
+                "chrome-extension://abcdefgh/views/pdfView.html",
+            );
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "openPdfReader" },
+                { id: 123 },
+            );
+            expect(chrome.tabs.create).toHaveBeenCalledWith({
+                url: "chrome-extension://abcdefgh/views/pdfView.html",
+                active: true,
+            });
+        });
+
+        it("opens a PDF link with its query and fragment intact", async () => {
+            chrome.runtime.getURL.mockReturnValue(
+                "chrome-extension://abcdefgh/views/pdfView.html",
+            );
+            const target = "https://example.com/book.PDF?download=1#page=3";
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "openPdfLink", linkUrl: target },
+                { id: 123 },
+            );
+            const created = chrome.tabs.create.mock.calls[0][0];
+            expect(new URL(created.url!).searchParams.get("url")).toBe(target);
+            expect(created.active).toBe(true);
+        });
+
+        it.each([
+            "javascript:alert(1)",
+            "file:///book.pdf",
+            "https://example.com/not.pdf.exe",
+            "not a URL",
+            undefined,
+        ])("rejects an unsupported PDF link: %s", async (linkUrl) => {
+            chrome.runtime.getURL.mockReturnValue(
+                "chrome-extension://abcdefgh/views/pdfView.html",
+            );
+            await contextMenuModule.handleContextMenuClick(
+                { menuItemId: "openPdfLink", linkUrl },
+                { id: 123 },
+            );
+            expect(chrome.tabs.create).not.toHaveBeenCalled();
+        });
+
         it("should handle openChatPanel menu click", async () => {
             const mockTab = { id: 123, url: "https://example.com" };
             const mockInfo = { menuItemId: "openChatPanel" };
@@ -88,25 +192,55 @@ describe("Context Menu Module", () => {
             expect(chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 123 });
         });
 
-        it("should open the Memory Center", async () => {
-            const mockTab = { id: 123, url: "https://example.com" };
-            chrome.runtime.getURL.mockReturnValue(
-                "chrome-extension://abcdefgh/views/memoryCenter.html",
-            );
-            chrome.tabs.query.mockResolvedValue([]);
+        it.each([
+            ["showMemoryHub", "memory/hub/"],
+            ["showAutomations", "automations/"],
+            ["showAnnotationsLibrary", "annotations/"],
+        ])(
+            "opens %s on the live local view host",
+            async (menuItemId, route) => {
+                chrome.tabs.query.mockResolvedValue([]);
+                await contextMenuModule.handleContextMenuClick(
+                    { menuItemId },
+                    { id: 123, url: "https://example.com" },
+                );
+                expect(chrome.tabs.create).toHaveBeenCalledWith({
+                    url: `http://localhost:49152/${route}`,
+                    active: true,
+                });
+                expect(sendActionToAgent).toHaveBeenCalledWith({
+                    actionName: "getViewHostUrl",
+                    parameters: {},
+                });
+            },
+        );
 
+        it("focuses an existing local library tab", async () => {
+            chrome.tabs.query.mockResolvedValue([{ id: 456, windowId: 789 }]);
             await contextMenuModule.handleContextMenuClick(
-                { menuItemId: "showMemoryCenter" },
-                mockTab,
+                { menuItemId: "showMemoryHub" },
+                { id: 123, url: "https://example.com" },
             );
-
-            expect(chrome.tabs.query).toHaveBeenCalledWith({
-                url: "chrome-extension://abcdefgh/views/memoryCenter.html",
-            });
-            expect(chrome.tabs.create).toHaveBeenCalledWith({
-                url: "chrome-extension://abcdefgh/views/memoryCenter.html",
+            expect(chrome.tabs.update).toHaveBeenCalledWith(456, {
                 active: true,
             });
+            expect(chrome.windows.update).toHaveBeenCalledWith(789, {
+                focused: true,
+            });
+            expect(chrome.tabs.create).not.toHaveBeenCalled();
+        });
+
+        it("fails rather than opening an invalid or unavailable view host", async () => {
+            jest.mocked(sendActionToAgent).mockResolvedValue({
+                error: "Unavailable",
+            });
+            await expect(
+                contextMenuModule.handleContextMenuClick(
+                    { menuItemId: "showMemoryHub" },
+                    { id: 123, url: "https://example.com" },
+                ),
+            ).rejects.toThrow(/unavailable/);
+            expect(chrome.tabs.create).not.toHaveBeenCalled();
         });
 
         it("saves the clicked tab and reports discovered candidates", async () => {

@@ -48,6 +48,7 @@
     "dompurify": "^3.4.13",
     "html-to-text": "^9.0.5",
     "markdown-it": "^14.2.0",
+    "pdfjs-dist": "5.3.31",
     "prismjs": "^1.30.0"
   },
   "devDependencies": {

@@ -15,6 +15,42 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import lockfile from "proper-lockfile";
+import {
+    getProcedureEvidenceReferences,
+    normalizeAgentEditionDocument,
+    type RunbookBindingValidator,
+} from "./agentEdition.js";
+import { redactRunbookText, redactRunbookValue } from "./runbookRedaction.js";
+import {
+    RevisionAssetStore,
+    revisionDigest,
+    validateAssetInputs,
+    type RevisionAssetRequest,
+    type RevisionAssetReadRequest,
+    type RevisionAssetDescriptor,
+} from "./revisionAssetStore.js";
+import {
+    MemoryBatchStore,
+    type MemoryBatchImportRequest,
+    type MemoryBatchImportLookup,
+    type MemoryBatchImport,
+} from "./batchImport.js";
+import { RunbookJobStore } from "./runbookJobs.js";
+import { writeRunbookJson } from "./durableRunbookJson.js";
+import {
+    runbookPreferences,
+    type RunbookSynthesizer,
+    type RunbookJobResult,
+    type RunbookSynthesisRequest,
+    type RunbookSynthesisInput,
+} from "./runbookPipeline.js";
+import { createConfiguredRunbookSynthesizer } from "./runbookSynthesizer.js";
+import {
+    createChangeReceipt,
+    opaqueChangeReference,
+    pageChangeReceipts,
+    pruneChangeReceipts,
+} from "./changeReceipts.js";
 import { createKnowProCorpusIndex } from "./knowProCorpusIndex.js";
 import {
     classifyIndexSchema,
@@ -24,6 +60,7 @@ import {
 import {
     detectProcedureCandidates,
     PersonalHowToStore,
+    procedureFromMarkdown,
 } from "./personalHowToStore.js";
 import type {
     AnswerMode,
@@ -39,6 +76,8 @@ import type {
     JobState,
     MemoryCorpus,
     MemoryCorpusStatus,
+    MemoryChangeReceipt,
+    MemoryChangeListRequest,
     MemoryEvent,
     MemoryEventAuthority,
     MemoryEventAppendRequest,
@@ -70,6 +109,8 @@ import type {
     ProcedureSearchRequest,
     ProcedureSummary,
     ProcedureVersion,
+    ProcedureDocument,
+    ProcedureSourceCitation,
     ReindexResult,
     SourceContent,
     SourceContentRequest,
@@ -160,6 +201,7 @@ interface StoredSource extends SourceDocument {
 interface CorpusManifest {
     corpus: MemoryCorpus;
     sources: StoredSource[];
+    changes?: MemoryChangeReceipt[];
     knowledgeSuppressions?: SourceKnowledgeSuppression[];
     indexGeneration?: string;
     pendingSourceForget?: {
@@ -183,6 +225,10 @@ interface CorpusRuntime {
 }
 
 export interface FileMemoryServiceOptions {
+    runbookBindingValidator?: RunbookBindingValidator;
+    runbookSynthesizer?: RunbookSynthesizer;
+    runbookModelEndpoint?: string;
+    runbookMultimodal?: boolean;
     indexFactory?: CorpusIndexFactory;
     procedureIndexFactory?: CorpusIndexFactory;
     eventIndexFactory?: CorpusIndexFactory;
@@ -262,6 +308,7 @@ function raceWithAbort<T>(
     signal: AbortSignal,
 ): Promise<T> {
     if (signal.aborted) {
+        void operation.catch(() => undefined);
         return Promise.reject(
             signal.reason ?? new Error("Operation cancelled"),
         );
@@ -412,6 +459,72 @@ function validateTimestamp(kind: string, value: string): void {
     if (!Number.isFinite(Date.parse(value))) {
         throw new Error(`Invalid ${kind} '${value}'`);
     }
+}
+
+function validateSearchTimestamp(kind: string, value: string): void {
+    const match =
+        /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(
+            value,
+        );
+    if (match === null || !Number.isFinite(Date.parse(value))) {
+        throw new Error(`Invalid search ${kind}; expected an ISO timestamp`);
+    }
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const days = [
+        31,
+        leapYear ? 29 : 28,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ][month - 1];
+    if (days === undefined || day < 1 || day > days) {
+        throw new Error(`Invalid search ${kind}; expected an ISO timestamp`);
+    }
+}
+
+function validateSearchDateRange(
+    request: Pick<MemorySearchRequest, "dateFrom" | "dateTo">,
+): void {
+    if (request.dateFrom !== undefined) {
+        validateSearchTimestamp("dateFrom", request.dateFrom);
+    }
+    if (request.dateTo !== undefined) {
+        validateSearchTimestamp("dateTo", request.dateTo);
+    }
+    if (
+        request.dateFrom !== undefined &&
+        request.dateTo !== undefined &&
+        Date.parse(request.dateFrom) > Date.parse(request.dateTo)
+    ) {
+        throw new Error("Search dateFrom must not be later than dateTo");
+    }
+}
+
+function matchesSearchDate(
+    revision: SourceRevision,
+    request: Pick<MemorySearchRequest, "dateFrom" | "dateTo">,
+): boolean {
+    if (request.dateFrom === undefined && request.dateTo === undefined) {
+        return true;
+    }
+    const capturedAt = Date.parse(revision.capturedAt ?? "");
+    return (
+        Number.isFinite(capturedAt) &&
+        (request.dateFrom === undefined ||
+            capturedAt >= Date.parse(request.dateFrom)) &&
+        (request.dateTo === undefined ||
+            capturedAt <= Date.parse(request.dateTo))
+    );
 }
 
 function eventIdempotencyKey(
@@ -710,8 +823,13 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     private readonly eventIndexFactory: CorpusIndexFactory;
     private readonly capabilities: MemoryServiceCapabilities;
     private readonly personalHowToStore: PersonalHowToStore;
+    private readonly assetStore: RevisionAssetStore;
+    private readonly batchStore: MemoryBatchStore;
+    private readonly runbookJobs: RunbookJobStore;
+    private readonly runbookMultimodal: boolean;
     private readonly corpora = new Map<string, CorpusRuntime>();
     private readonly jobs = new Map<string, IngestionJobStatus>();
+    private readonly jobWrites = new Map<string, Promise<void>>();
     private readonly controllers = new Map<string, AbortController>();
     private initializePromise: Promise<void> | undefined;
     private releaseLock: (() => Promise<void>) | undefined;
@@ -728,10 +846,39 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         this.eventIndexFactory =
             options.eventIndexFactory ?? this.procedureIndexFactory;
         this.capabilities = options.capabilities ?? defaultCapabilities();
+        this.assetStore = new RevisionAssetStore(rootDirectory);
+        this.batchStore = new MemoryBatchStore(rootDirectory, this);
+        this.runbookMultimodal = options.runbookMultimodal ?? false;
+        this.runbookJobs = new RunbookJobStore(
+            rootDirectory,
+            options.runbookSynthesizer ??
+                createConfiguredRunbookSynthesizer(
+                    options.runbookModelEndpoint,
+                ),
+            (input, candidates, signal) =>
+                this.enqueueWrite(input.corpusId, async () => {
+                    signal.throwIfAborted();
+                    const runtime = await this.getCorpusRuntime(input.corpusId);
+                    const source = runtime.manifest.sources.find(
+                        (item) => item.sourceId === input.sourceId,
+                    );
+                    if (source?.activeRevisionId !== input.revisionId)
+                        throw new Error(
+                            "Source revision changed before draft publication",
+                        );
+                    await this.personalHowToStore.createDetectedCandidates(
+                        candidates.map((candidate) => ({
+                            ...candidate,
+                            ...normalizeAgentEditionDocument(candidate),
+                        })),
+                    );
+                }),
+        );
         this.personalHowToStore = new PersonalHowToStore(
             rootDirectory,
             (corpusId, procedures) =>
                 this.publishProcedureIndex(corpusId, procedures),
+            options.runbookBindingValidator,
         );
     }
 
@@ -739,9 +886,12 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (this.closed) {
             return Promise.reject(new Error("Memory service is closed"));
         }
-        this.initializePromise ??= this.acquireStorageLock().then(() =>
-            this.recoverInterruptedJobs(),
-        );
+        this.initializePromise ??= this.acquireStorageLock().then(async () => {
+            await this.pruneStoredChanges();
+            await this.recoverInterruptedJobs();
+            await this.batchStore.recover();
+            await this.runbookJobs.recover();
+        });
         return this.initializePromise;
     }
 
@@ -754,6 +904,8 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         for (const controller of this.controllers.values()) {
             controller.abort(new Error("Memory service is closing"));
         }
+        await this.batchStore.close();
+        await this.runbookJobs.close();
         await Promise.allSettled([
             this.rootWriteTail,
             ...[...this.corpora.values()].map((runtime) => runtime.writeTail),
@@ -893,6 +1045,8 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     public async clearCorpus(corpusId: string): Promise<number> {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
+        await this.batchStore.purge(corpusId);
+        await this.runbookJobs.purge(corpusId);
         let clearedCount = 0;
         await this.enqueueWrite(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
@@ -907,6 +1061,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 );
             }
             clearedCount = runtime.manifest.sources.length;
+            const removedSources = structuredClone(runtime.manifest.sources);
             const indexGeneration = randomUUID();
             await mkdir(this.indexDirectory(corpusId, indexGeneration), {
                 recursive: true,
@@ -958,6 +1113,26 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             runtime.events = [];
             runtime.eventIdempotency.clear();
             this.setEventSuppressions(runtime, suppressions);
+            for (const source of removedSources) {
+                for (const revision of source.revisions) {
+                    if (!revision.assets?.length) continue;
+                    await this.assetStore.removeRevision({
+                        corpusId,
+                        sourceId: source.sourceId,
+                        revisionId: revision.revisionId,
+                    });
+                }
+            }
+            for (const source of removedSources) {
+                await this.personalHowToStore.markStale(
+                    corpusId,
+                    source.sourceId,
+                );
+                await this.rejectObsoleteRunbookCandidates(
+                    corpusId,
+                    source.sourceId,
+                );
+            }
             await this.removeDerivedIndexRoot(
                 this.eventIndexRoot(corpusId),
                 "conversation-events",
@@ -977,6 +1152,120 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         return runtime.manifest.sources.map((source) =>
             this.toMemorySource(source),
         );
+    }
+
+    public async getRevisionAssets(
+        request: RevisionAssetRequest,
+    ): Promise<RevisionAssetDescriptor[]> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        validateIdentifier("source ID", request.sourceId);
+        validateIdentifier("revision ID", request.revisionId);
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        const source = runtime.manifest.sources.find(
+            (item) => item.sourceId === request.sourceId,
+        );
+        const revision = source?.revisions.find(
+            (item) => item.revisionId === request.revisionId,
+        );
+        if (!revision) throw new Error("Unknown retained source revision");
+        return structuredClone(revision.assets ?? []);
+    }
+
+    public async readRevisionAsset(
+        request: RevisionAssetReadRequest,
+    ): Promise<{ descriptor: RevisionAssetDescriptor; bytes: Uint8Array }> {
+        const descriptor = (await this.getRevisionAssets(request)).find(
+            (asset) => asset.assetId === request.assetId,
+        );
+        if (!descriptor) throw new Error("Unknown retained revision asset");
+        return {
+            descriptor,
+            bytes: await this.assetStore.read(request, descriptor),
+        };
+    }
+
+    public async startBatchImport(
+        request: MemoryBatchImportRequest,
+    ): Promise<MemoryBatchImport> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        await this.getCorpusRuntime(request.corpusId);
+        return this.enqueueRootWrite(() => this.batchStore.start(request));
+    }
+
+    public async getBatchImport(batchId: string): Promise<MemoryBatchImport> {
+        await this.initialize();
+        return this.batchStore.get(batchId);
+    }
+
+    public async findBatchImport(
+        request: MemoryBatchImportLookup,
+    ): Promise<MemoryBatchImport | undefined> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        await this.getCorpusRuntime(request.corpusId);
+        return this.batchStore.find(request.corpusId, request.idempotencyKey);
+    }
+
+    public async listBatchImports(
+        corpusId: string,
+    ): Promise<MemoryBatchImport[]> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        return this.batchStore.list(corpusId);
+    }
+
+    public async retryBatchImport(batchId: string): Promise<MemoryBatchImport> {
+        await this.initialize();
+        return this.enqueueRootWrite(() => this.batchStore.retry(batchId));
+    }
+
+    public async cancelBatchImport(
+        batchId: string,
+    ): Promise<MemoryBatchImport> {
+        await this.initialize();
+        return this.batchStore.cancel(batchId);
+    }
+
+    public async listRunbookJobs(
+        corpusId: string,
+    ): Promise<RunbookJobResult[]> {
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        return this.runbookJobs.list(corpusId);
+    }
+
+    public async getRunbookJob(
+        jobId: string,
+    ): Promise<RunbookJobResult | undefined> {
+        await this.initialize();
+        return this.runbookJobs.get(jobId);
+    }
+
+    public async requestRunbookSynthesis(
+        request: RunbookSynthesisRequest,
+    ): Promise<RunbookJobResult> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        validateIdentifier("source ID", request.sourceId);
+        validateIdentifier("revision ID", request.revisionId);
+        return this.enqueueWrite(request.corpusId, async () =>
+            this.runbookJobs.start(
+                await this.buildRunbookSynthesisInput(request),
+            ),
+        );
+    }
+
+    public async listChanges(
+        request: MemoryChangeListRequest,
+    ): Promise<MemoryPage<MemoryChangeReceipt>> {
+        await this.initialize();
+        validateIdentifier("corpus ID", request.corpusId);
+        return this.enqueueWrite(request.corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(request.corpusId);
+            return pageChangeReceipts(runtime.manifest.changes ?? [], request);
+        });
     }
 
     public async listSourcesPage(
@@ -1153,7 +1442,12 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         }
         const sourceId = request.source.sourceId ?? randomUUID();
         validateIdentifier("source ID", sourceId);
-        const revisionId = contentHash;
+        validateAssetInputs(request.source.assets ?? []);
+        const revisionId = revisionDigest(
+            contentHash,
+            request.source.assets ?? [],
+        );
+        request = structuredClone(request);
         const jobId = randomUUID();
         const timestamp = now();
         const job: IngestionJobStatus = {
@@ -1177,6 +1471,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 once: true,
             },
         );
+        if (signal?.aborted) controller.abort(signal.reason);
         void this.enqueueWrite(request.corpusId, async () => {
             await this.processIngestion(
                 request,
@@ -1282,6 +1577,21 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
         validateIdentifier("source ID", request.sourceId);
+        const forgetRuntime = await this.getCorpusRuntime(request.corpusId);
+        const pendingForget = forgetRuntime.manifest.pendingSourceForget;
+        const forgetSource = forgetRuntime.manifest.sources.find(
+            (source) => source.sourceId === request.sourceId,
+        );
+        if (
+            pendingForget === undefined ||
+            pendingForget.sourceId !== request.sourceId ||
+            pendingForget.activeRevisionId !== forgetSource?.activeRevisionId ||
+            pendingForget.confirmationToken !== request.confirmationToken
+        )
+            throw new Error("Invalid or stale source forget confirmation");
+        if (Date.parse(pendingForget.expiresAt) <= Date.now())
+            throw new Error("Source forget confirmation has expired");
+        await this.batchStore.cancelSource(request.corpusId, request.sourceId);
         let result: SourceForgetResult | undefined;
         await this.enqueueWrite(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
@@ -1314,13 +1624,46 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                     );
             }
             delete candidateManifest.pendingSourceForget;
+            const forgottenReference = opaqueChangeReference(
+                request.corpusId,
+                "source",
+                request.sourceId,
+            );
+            candidateManifest.changes = pruneChangeReceipts(
+                candidateManifest.changes,
+            ).filter((receipt) => receipt.sourceId !== forgottenReference);
+            candidateManifest.changes.push(
+                createChangeReceipt(
+                    request.corpusId,
+                    "forget",
+                    request.sourceId,
+                    {
+                        sources: 1,
+                        revisions: source.revisions.length,
+                        knowledge: 0,
+                    },
+                ),
+            );
             await this.rebuildAndActivate(
                 request.corpusId,
                 runtime,
                 candidateManifest,
                 new AbortController().signal,
             );
+            await this.runbookJobs.purge(request.corpusId, request.sourceId);
+            for (const revision of source.revisions) {
+                if (!revision.assets?.length) continue;
+                await this.assetStore.removeRevision({
+                    corpusId: request.corpusId,
+                    sourceId: request.sourceId,
+                    revisionId: revision.revisionId,
+                });
+            }
             await this.personalHowToStore.markStale(
+                request.corpusId,
+                request.sourceId,
+            );
+            await this.rejectObsoleteRunbookCandidates(
                 request.corpusId,
                 request.sourceId,
             );
@@ -1331,6 +1674,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 indexVersion: this.indexVersion(runtime.manifest),
             };
         });
+        await this.batchStore.purge(request.corpusId, request.sourceId);
         return result!;
     }
 
@@ -1424,7 +1768,9 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (job === undefined) {
             return undefined;
         }
-        if (["complete", "failed", "cancelled"].includes(job.state)) {
+        if (
+            ["complete", "partial", "failed", "cancelled"].includes(job.state)
+        ) {
             return job;
         }
         await this.updateJob(job, "cancelling", {
@@ -1724,6 +2070,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<MemorySearchResult> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
+        validateSearchDateRange(request);
         const query = request.query.trim();
         if (query.length === 0) {
             throw new Error("Search query cannot be empty");
@@ -1743,7 +2090,15 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             return {
                 query,
                 matches,
-                warnings: [...this.capabilities.warnings],
+                warnings: [
+                    ...this.capabilities.warnings,
+                    ...(request.dateFrom === undefined &&
+                    request.dateTo === undefined
+                        ? []
+                        : [
+                              `Date predicates filter at most ${limit * 4} ranked index candidates; additional matching evidence may be omitted. Results are not complete totals.`,
+                          ]),
+                ],
                 capabilitiesUsed: ["structured-search"],
                 indexVersion: this.indexVersion(runtime.manifest),
             };
@@ -1756,7 +2111,12 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         candidates: CorpusIndexMatch[],
         request: Pick<
             MemorySearchRequest,
-            "sourceIds" | "sourceTypes" | "tags" | "maxResponseChars"
+            | "sourceIds"
+            | "sourceTypes"
+            | "tags"
+            | "maxResponseChars"
+            | "dateFrom"
+            | "dateTo"
         >,
         limit: number,
     ): MemoryEvidence[] {
@@ -1783,6 +2143,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 source === undefined ||
                 revision === undefined ||
                 source.activeRevisionId !== revision.revisionId ||
+                !matchesSearchDate(revision, request) ||
                 (sourceIds !== undefined && !sourceIds.has(source.sourceId)) ||
                 (sourceTypes !== undefined &&
                     !sourceTypes.has(source.sourceType)) ||
@@ -2000,6 +2361,22 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                           },
                       ]
                 : suppressions.filter((item) => !matches(item));
+            const changed =
+                candidateManifest.knowledgeSuppressions.length !==
+                suppressions.length;
+            candidateManifest.changes = pruneChangeReceipts(
+                candidateManifest.changes,
+            );
+            if (changed) {
+                candidateManifest.changes.push(
+                    createChangeReceipt(
+                        request.corpusId,
+                        suppress ? "suppress" : "restore",
+                        request.sourceId,
+                        { sources: 1, revisions: 0, knowledge: 1 },
+                    ),
+                );
+            }
             await writeJsonAtomic(
                 this.manifestPath(request.corpusId),
                 candidateManifest,
@@ -2080,8 +2457,111 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<ProcedureVersion> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
-        return this.enqueueWrite(request.corpusId, () =>
-            this.personalHowToStore.save(request),
+        return this.enqueueWrite(request.corpusId, async () => {
+            if (request.reviewAgentEdition)
+                await this.validateRunbookReviewEvidence(request);
+            return this.personalHowToStore.save(request);
+        });
+    }
+
+    private async validateRunbookReviewEvidence(
+        request: ProcedureSaveRequest,
+    ): Promise<void> {
+        let document: ProcedureDocument | undefined = request.document;
+        if (document === undefined && request.markdown !== undefined)
+            document = procedureFromMarkdown(request.markdown);
+        if (document === undefined && request.candidateId !== undefined)
+            document = await this.personalHowToStore.getCandidate(
+                request.corpusId,
+                request.candidateId,
+            );
+        if (document?.agentEdition === undefined)
+            throw new Error("No agent edition evidence to review");
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        const references = getProcedureEvidenceReferences(document);
+        for (const citation of references.citations) {
+            const revision = this.currentRunbookEvidence(runtime, citation);
+            if (
+                citation.excerpt !== undefined &&
+                !this.matchesRunbookExcerpt(citation, revision.content)
+            )
+                throw new Error(
+                    "Runbook citation does not match retained passage offsets",
+                );
+        }
+        for (const asset of references.assets) {
+            const revision = this.currentRunbookEvidence(runtime, asset);
+            const descriptor = revision.assets?.find(
+                (item) => item.assetId === asset.assetId,
+            );
+            if (!descriptor)
+                throw new Error(
+                    "Runbook asset is not retained under the cited revision",
+                );
+            await this.assetStore.read(
+                {
+                    corpusId: request.corpusId,
+                    sourceId: asset.sourceId,
+                    revisionId: asset.revisionId,
+                    assetId: asset.assetId,
+                    hash: descriptor.hash,
+                    variant: "original",
+                },
+                descriptor,
+            );
+        }
+        for (const step of document.agentEdition.steps) {
+            if (
+                !step.citations.some(
+                    (citation) =>
+                        citation.excerpt !== undefined &&
+                        this.matchesRunbookExcerpt(
+                            citation,
+                            this.currentRunbookEvidence(runtime, citation)
+                                .content,
+                        ) &&
+                        redactRunbookText(citation.excerpt).includes(
+                            redactRunbookText(step.humanText),
+                        ),
+                )
+            )
+                throw new Error(
+                    "Each reviewed derived step requires a retained supporting passage and faithful human text",
+                );
+        }
+    }
+
+    private currentRunbookEvidence(
+        runtime: CorpusRuntime,
+        reference: { sourceId: string; revisionId: string },
+    ): StoredRevision {
+        const source = runtime.manifest.sources.find(
+            (item) => item.sourceId === reference.sourceId,
+        );
+        const revision = source?.revisions.find(
+            (item) => item.revisionId === reference.revisionId,
+        );
+        if (!revision || source?.activeRevisionId !== reference.revisionId)
+            throw new Error(
+                "Runbook evidence is missing or source revision is stale",
+            );
+        return revision;
+    }
+
+    private matchesRunbookExcerpt(
+        citation: ProcedureSourceCitation,
+        content: string,
+    ): boolean {
+        const offsets = /^chars:(\d+)-(\d+)$/.exec(citation.locator ?? "");
+        if (!offsets || citation.excerpt === undefined) return false;
+        const start = Number(offsets[1]);
+        const end = Number(offsets[2]);
+        return (
+            start >= 0 &&
+            end > start &&
+            end <= content.length &&
+            redactRunbookText(content.slice(start, end)) ===
+                redactRunbookText(citation.excerpt)
         );
     }
 
@@ -2391,6 +2871,26 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         }
     }
 
+    private async pruneStoredChanges(): Promise<void> {
+        const entries = await readdir(this.rootDirectory, {
+            withFileTypes: true,
+        });
+        for (const entry of entries) {
+            if (!entry.isDirectory()) {
+                continue;
+            }
+            const manifestPath = this.manifestPath(entry.name);
+            const manifest = await readJson<CorpusManifest>(manifestPath);
+            if (manifest?.changes === undefined) {
+                continue;
+            }
+            const changes = pruneChangeReceipts(manifest.changes);
+            if (changes.length !== manifest.changes.length) {
+                await writeJsonAtomic(manifestPath, { ...manifest, changes });
+            }
+        }
+    }
+
     private enqueueRootWrite<T>(operation: () => Promise<T>): Promise<T> {
         const result = this.rootWriteTail.then(operation, operation);
         this.rootWriteTail = result.then(
@@ -2410,6 +2910,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         signal: AbortSignal,
     ): Promise<void> {
         let candidateIndexDirectory: string | undefined;
+        let committed = false;
         try {
             await this.updateJob(job, "validating", {
                 completed: 0,
@@ -2460,6 +2961,10 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 revisionId,
                 this.mimeType(request.source.sourceType),
                 existing,
+            );
+            revision.assets = await this.assetStore.retain(
+                { corpusId: request.corpusId, sourceId, revisionId },
+                request.source.assets ?? [],
             );
             const candidateManifest = structuredClone(runtime.manifest);
             delete candidateManifest.pendingSourceForget;
@@ -2561,6 +3066,21 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             revision.state = "ready";
             revision.indexedAt = now();
             candidateManifest.corpus.status = "ready";
+            candidateManifest.changes = pruneChangeReceipts(
+                candidateManifest.changes,
+            );
+            if (existing !== undefined) {
+                candidateManifest.changes.push(
+                    createChangeReceipt(
+                        request.corpusId,
+                        "replace",
+                        sourceId,
+                        { sources: 1, revisions: 1, knowledge: 0 },
+                        existing.activeRevisionId,
+                        revisionId,
+                    ),
+                );
+            }
             await this.updateJob(job, "persisting", {
                 completed: 1,
                 total: 1,
@@ -2573,10 +3093,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
             candidateIndexDirectory = undefined;
-            await this.removeInactiveIndexGenerations(
-                request.corpusId,
-                indexGeneration,
-            );
+            committed = true;
             job.warnings.push(
                 ...(await this.updatePersonalHowToAfterIngestion(
                     request,
@@ -2585,32 +3102,139 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                     content,
                 )),
             );
+            await this.cleanupReplacedAssets(
+                request.corpusId,
+                source,
+                existing,
+            );
+            await this.removeInactiveIndexGenerations(
+                request.corpusId,
+                indexGeneration,
+            );
             await this.updateJob(job, "complete", {
                 completed: 1,
                 total: 1,
                 message: "Ingestion complete",
             });
         } catch (error) {
-            if (candidateIndexDirectory !== undefined) {
-                await rm(candidateIndexDirectory, {
-                    recursive: true,
-                    force: true,
-                });
-            }
-            const cancelled = signal.aborted;
-            await this.updateJob(
+            await this.handleIngestionFailure(
                 job,
-                cancelled ? "cancelled" : "failed",
-                {
-                    ...job.progress,
-                    message: cancelled
-                        ? "Ingestion cancelled"
-                        : "Ingestion failed",
-                },
-                error instanceof Error ? error.message : String(error),
+                signal,
+                error,
+                committed,
+                candidateIndexDirectory,
+                Boolean(request.source.assets?.length),
             );
         } finally {
             this.controllers.delete(job.jobId);
+        }
+    }
+
+    private async cleanupReplacedAssets(
+        corpusId: string,
+        source: StoredSource,
+        existing?: StoredSource,
+    ): Promise<void> {
+        const retained = new Set(
+            source.revisions.map((revision) => revision.revisionId),
+        );
+        for (const removed of existing?.revisions ?? []) {
+            if (retained.has(removed.revisionId) || !removed.assets?.length)
+                continue;
+            await this.assetStore.removeRevision({
+                corpusId,
+                sourceId: source.sourceId,
+                revisionId: removed.revisionId,
+            });
+        }
+        await this.runbookJobs.purge(corpusId, source.sourceId, retained);
+    }
+
+    private async handleIngestionFailure(
+        job: IngestionJobStatus,
+        signal: AbortSignal,
+        error: unknown,
+        committed: boolean,
+        candidateIndexDirectory: string | undefined,
+        hasAssets: boolean,
+    ): Promise<void> {
+        if (committed) {
+            job.warnings.push(
+                `Post-commit maintenance failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            await this.updateJob(job, "complete", {
+                completed: 1,
+                total: 1,
+                message: "Source committed with maintenance warning",
+            });
+            return;
+        }
+        const runtime = await this.getCorpusRuntime(job.corpusId);
+        if (
+            hasAssets &&
+            !runtime.manifest.sources.some(
+                (source) =>
+                    source.sourceId === job.sourceId &&
+                    source.revisions.some(
+                        (revision) => revision.revisionId === job.revisionId,
+                    ),
+            )
+        ) {
+            try {
+                await this.assetStore.removeRevision({
+                    corpusId: job.corpusId,
+                    sourceId: job.sourceId,
+                    revisionId: job.revisionId,
+                });
+            } catch (cleanupError) {
+                job.warnings.push(
+                    `Uncommitted asset cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+                );
+            }
+        }
+        if (candidateIndexDirectory !== undefined) {
+            await rm(candidateIndexDirectory, {
+                recursive: true,
+                force: true,
+            });
+        }
+        const cancelled = signal.aborted;
+        await this.updateJob(
+            job,
+            cancelled ? "cancelled" : "failed",
+            {
+                ...job.progress,
+                message: cancelled ? "Ingestion cancelled" : "Ingestion failed",
+            },
+            error instanceof Error ? error.message : String(error),
+        );
+    }
+
+    private async rejectObsoleteRunbookCandidates(
+        corpusId: string,
+        sourceId: string,
+        activeRevisionId?: string,
+    ): Promise<void> {
+        const candidates = await this.personalHowToStore.listCandidates(
+            corpusId,
+            ["detected", "draft"],
+        );
+        for (const candidate of candidates) {
+            if (candidate.agentEdition === undefined) continue;
+            const references = getProcedureEvidenceReferences(candidate);
+            const obsolete = [
+                ...references.citations,
+                ...references.assets,
+            ].some(
+                (reference) =>
+                    reference.sourceId === sourceId &&
+                    reference.revisionId !== activeRevisionId,
+            );
+            if (obsolete)
+                await this.personalHowToStore.rejectCandidate(
+                    corpusId,
+                    candidate.candidateId,
+                );
         }
     }
 
@@ -2627,15 +3251,17 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 sourceId,
                 revisionId,
             );
+            await this.rejectObsoleteRunbookCandidates(
+                request.corpusId,
+                sourceId,
+                revisionId,
+            );
         } catch (error) {
             warnings.push(
                 `Personal how-to stale update failed: ${
                     error instanceof Error ? error.message : String(error)
                 }`,
             );
-        }
-        if (request.source.html !== undefined) {
-            return warnings;
         }
         try {
             const settings = await this.personalHowToStore.getSettings(
@@ -2644,13 +3270,34 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             if (!settings.enabled || !settings.detectCandidates) {
                 return warnings;
             }
-            const candidates = detectProcedureCandidates(
-                request.corpusId,
-                sourceId,
-                revisionId,
-                content,
-            );
+            const preferences = runbookPreferences(settings);
+            const detected =
+                request.source.html !== undefined
+                    ? []
+                    : detectProcedureCandidates(
+                          request.corpusId,
+                          sourceId,
+                          revisionId,
+                          content,
+                      );
+            const candidates =
+                preferences === undefined
+                    ? detected
+                    : detected.map(
+                          (candidate) =>
+                              redactRunbookValue(
+                                  candidate,
+                              ) as ProcedureCandidateCreateRequest,
+                      );
             await this.personalHowToStore.createDetectedCandidates(candidates);
+            if (preferences !== undefined) {
+                await this.runbookJobs.start(
+                    await this.buildRunbookSynthesisInput(
+                        { corpusId: request.corpusId, sourceId, revisionId },
+                        candidates,
+                    ),
+                );
+            }
         } catch (error) {
             warnings.push(
                 `Procedure candidate extraction failed: ${
@@ -2661,12 +3308,107 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         return warnings;
     }
 
+    private async buildRunbookSynthesisInput(
+        request: RunbookSynthesisRequest,
+        seeds?: ProcedureCandidateCreateRequest[],
+    ): Promise<RunbookSynthesisInput> {
+        const runtime = await this.getCorpusRuntime(request.corpusId);
+        const revision = this.currentRunbookEvidence(runtime, request);
+        if (revision.state !== "ready")
+            throw new Error(
+                "Runbook synthesis requires a ready retained source revision",
+            );
+        const source = runtime.manifest.sources.find(
+            (item) => item.sourceId === request.sourceId,
+        );
+        if (!source) throw new Error("Unknown retained source");
+        const settings = await this.personalHowToStore.getSettings(
+            request.corpusId,
+        );
+        const preferences = runbookPreferences(settings);
+        if (preferences === undefined)
+            throw new Error(
+                "Runbook synthesis requires enabled how-to detection and buildAgentEdition preferences",
+            );
+        const assets = await this.getRevisionAssets(request);
+        const images: RunbookSynthesisInput["images"] = [];
+        if (preferences.describeImages && this.runbookMultimodal) {
+            for (const asset of assets.filter((item) =>
+                ["image/png", "image/jpeg", "image/webp"].includes(
+                    item.mimeType,
+                ),
+            )) {
+                images.push({
+                    assetId: asset.assetId,
+                    mimeType: asset.mimeType,
+                    bytes: await this.assetStore.read(
+                        {
+                            ...request,
+                            assetId: asset.assetId,
+                            hash: asset.hash,
+                            variant: "original",
+                        },
+                        asset,
+                    ),
+                });
+            }
+        }
+        const detected =
+            source.sourceType === "html"
+                ? []
+                : detectProcedureCandidates(
+                      request.corpusId,
+                      request.sourceId,
+                      request.revisionId,
+                      revision.content,
+                  );
+        return {
+            ...request,
+            title: source.title,
+            content: revision.content,
+            assets,
+            images,
+            preferences,
+            seeds:
+                seeds ??
+                detected.map(
+                    (candidate) =>
+                        redactRunbookValue(
+                            candidate,
+                        ) as ProcedureCandidateCreateRequest,
+                ),
+            linkedDocuments: runtime.manifest.sources
+                .filter((item) => item.sourceId !== request.sourceId)
+                .slice(0, 100)
+                .map((item) => ({
+                    sourceId: item.sourceId,
+                    revisionId: item.activeRevisionId,
+                    title: item.title,
+                    ...(item.canonicalUri === undefined
+                        ? {}
+                        : { canonicalUri: item.canonicalUri }),
+                })),
+            ...(typeof settings.preferences?.extractionGuidance === "string"
+                ? { guidance: settings.preferences.extractionGuidance }
+                : {}),
+        };
+    }
+
     private async enqueueWrite<T>(
         corpusId: string,
         operation: () => Promise<T>,
     ): Promise<T> {
         const runtime = await this.getCorpusRuntime(corpusId);
-        const queued = runtime.writeTail.then(operation, operation);
+        const run = async () => {
+            const changes = pruneChangeReceipts(runtime.manifest.changes);
+            if (changes.length !== (runtime.manifest.changes ?? []).length) {
+                const candidate = { ...runtime.manifest, changes };
+                await writeJsonAtomic(this.manifestPath(corpusId), candidate);
+                runtime.manifest = candidate;
+            }
+            return operation();
+        };
+        const queued = runtime.writeTail.then(run, run);
         runtime.writeTail = queued.then(
             () => undefined,
             () => undefined,
@@ -3138,12 +3880,21 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         const { revisions, ...document } = source;
         return {
             ...structuredClone(document),
-            revisions: revisions.map(({ content: _content, ...revision }) => ({
-                ...structuredClone(revision),
-                ...(revision.pipeline === undefined
-                    ? {}
-                    : { pipeline: contentPipeline(revision.pipeline) }),
-            })),
+            revisions: revisions.map((storedRevision) => {
+                const {
+                    content: _content,
+                    locationMap: _locationMap,
+                    ...revision
+                } = storedRevision as typeof storedRevision & {
+                    locationMap?: unknown;
+                };
+                return {
+                    ...structuredClone(revision),
+                    ...(revision.pipeline === undefined
+                        ? {}
+                        : { pipeline: contentPipeline(revision.pipeline) }),
+                };
+            }),
         };
     }
 
@@ -3519,8 +4270,32 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     }
 
     private async saveJob(job: IngestionJobStatus): Promise<void> {
-        this.jobs.set(job.jobId, job);
-        await writeJsonAtomic(this.jobPath(job.jobId), job);
+        await this.serializeJobWrite(job.jobId, async () => {
+            await writeRunbookJson(
+                this.jobPath(job.jobId),
+                JSON.stringify(job),
+            );
+            this.jobs.set(job.jobId, job);
+        });
+    }
+
+    private async serializeJobWrite<T>(
+        jobId: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        const previous = this.jobWrites.get(jobId) ?? Promise.resolve();
+        const task = previous.then(operation, operation);
+        const settled = task.then(
+            () => undefined,
+            () => undefined,
+        );
+        this.jobWrites.set(jobId, settled);
+        try {
+            return await task;
+        } finally {
+            if (this.jobWrites.get(jobId) === settled)
+                this.jobWrites.delete(jobId);
+        }
     }
 
     private async updateJob(
@@ -3529,18 +4304,36 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         progress: JobProgress,
         error?: string,
     ): Promise<void> {
-        const timestamp = now();
-        const updated: IngestionJobStatus = {
-            ...job,
-            state,
-            progress,
-            updatedAt: timestamp,
-            trace: [...(job.trace ?? []), { state, timestamp, ...progress }],
-            ...(error === undefined ? {} : { error }),
-        };
-        await writeJsonAtomic(this.jobPath(job.jobId), updated);
-        Object.assign(job, updated);
-        this.jobs.set(job.jobId, job);
+        await this.serializeJobWrite(job.jobId, async () => {
+            const current = this.jobs.get(job.jobId) ?? job;
+            const terminal = ["complete", "partial", "failed", "cancelled"];
+            if (
+                !terminal.includes(state) &&
+                (terminal.includes(current.state) ||
+                    (current.state === "cancelling" && state !== "cancelling"))
+            ) {
+                Object.assign(job, current);
+                return;
+            }
+            const timestamp = now();
+            const updated: IngestionJobStatus = {
+                ...job,
+                state,
+                progress,
+                updatedAt: timestamp,
+                trace: [
+                    ...(current.trace ?? []),
+                    { state, timestamp, ...progress },
+                ],
+                ...(error === undefined ? {} : { error }),
+            };
+            await writeRunbookJson(
+                this.jobPath(job.jobId),
+                JSON.stringify(updated),
+            );
+            Object.assign(job, updated);
+            this.jobs.set(job.jobId, job);
+        });
     }
 
     private manifestPath(corpusId: string): string {

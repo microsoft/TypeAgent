@@ -24,7 +24,9 @@ import {
     validateSkillPath,
 } from "./util.js";
 
-const allowedTransitions: Readonly<Record<CatalogState, CatalogState[]>> = {
+export const allowedSkillTransitions: Readonly<
+    Record<CatalogState, readonly CatalogState[]>
+> = {
     draft: ["validated", "archived"],
     validated: ["approved", "draft", "archived"],
     approved: ["active", "disabled", "archived"],
@@ -32,6 +34,8 @@ const allowedTransitions: Readonly<Record<CatalogState, CatalogState[]>> = {
     disabled: ["approved", "active", "archived"],
     archived: [],
 };
+
+export type ExpectedSkillState = { state: CatalogState; active: boolean };
 
 interface CatalogIndex {
     identities: Record<string, SkillIdentity>;
@@ -113,10 +117,12 @@ export class SkillCatalog {
         identity: SkillIdentity,
         revision: string,
         next: CatalogState,
+        expected?: ExpectedSkillState,
     ): Promise<CatalogEntry> {
         return this.exclusive(async () => {
             const entry = await this.requireEntry(identity, revision);
-            if (!allowedTransitions[entry.state].includes(next)) {
+            this.checkExpected(entry, expected);
+            if (!allowedSkillTransitions[entry.state].includes(next)) {
                 throw new Error(
                     `Invalid catalog transition: ${entry.state} -> ${next}`,
                 );
@@ -138,15 +144,37 @@ export class SkillCatalog {
     public activate(
         identity: SkillIdentity,
         revision: string,
+        expected?: ExpectedSkillState,
     ): Promise<CatalogEntry> {
-        return this.exclusive(() => this.activateCore(identity, revision));
+        return this.exclusive(async () => {
+            this.checkExpected(
+                await this.requireEntry(identity, revision),
+                expected,
+            );
+            return this.activateCore(identity, revision);
+        });
     }
 
     public rollback(
         identity: SkillIdentity,
         revision: string,
+        expected?: ExpectedSkillState,
     ): Promise<CatalogEntry> {
-        return this.activate(identity, revision);
+        return this.activate(identity, revision, expected);
+    }
+
+    private checkExpected(
+        entry: CatalogEntry,
+        expected?: ExpectedSkillState,
+    ): void {
+        if (
+            expected !== undefined &&
+            (entry.state !== expected.state || entry.active !== expected.active)
+        ) {
+            throw new Error(
+                "Skill lifecycle conflict: revision state changed; refresh before reviewing.",
+            );
+        }
     }
 
     public async list(): Promise<CatalogEntry[]> {

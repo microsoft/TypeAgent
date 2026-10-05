@@ -17,6 +17,8 @@ import { createAgentOriginAllowlist } from "@typeagent/websocket-utils/originAll
  * fires. Every per-agent listener that binds to an ephemeral port via
  * the PortRegistrar must gate Origin so those ports can't be dialed by
  * arbitrary web pages on the same host.
+ * This is an anti-cross-site connection policy, not client authentication.
+ * Native callers can forge Origin and identifiers.
  */
 export const isAllowedAgentOrigin = createAgentOriginAllowlist({
     extensionSchemes: ["chrome-extension://", "moz-extension://"],

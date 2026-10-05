@@ -319,6 +319,8 @@ export interface SessionContext<T = unknown> {
      * most in-process agents do not need to read this directly.
      */
     readonly sessionContextId: string;
+    /** Conversation owning this context, when provided by the host. Not a session-context ID. */
+    readonly conversationId?: string | undefined;
 
     /**
      * Connection that made the request being processed, or `undefined` between

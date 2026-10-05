@@ -1,0 +1,38 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.hub-runbook-import-dialog {
+  width: min(740px, 90vw);
+  max-height: 85vh;
+  overflow: auto;
+  padding: 24px;
+  color: var(--text-strong);
+  background: var(--surface);
+  border: 1px solid var(--border, var(--border));
+  border-radius: 10px;
+  box-shadow: 0 12px 48px #0003;
+}
+.hub-runbook-import-dialog::backdrop {
+  background: #0005;
+}
+.hub-runbook-imports label {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.hub-runbook-imports [hidden] {
+  display: none;
+}
+.hub-runbook-imports pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.hub-runbook-imports article {
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid var(--border, var(--border));
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.hub-runbook-imports button {
+  margin-right: 8px;
+}

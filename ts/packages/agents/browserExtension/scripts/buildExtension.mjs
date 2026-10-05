@@ -67,12 +67,6 @@ const sharedScripts = {
     webTypeAgentMain: "webTypeAgentMain.ts",
     webTypeAgentContentScript: "webTypeAgentContentScript.ts",
     "views/options": "views/options.ts",
-    "views/macrosLibrary": "views/macrosLibrary.ts",
-    "views/entityGraphView": "views/entityGraphView.ts",
-    "views/topicGraphView": "views/topicGraphView.ts",
-    "views/annotationsLibrary": "views/annotationsLibrary.ts",
-    "views/knowledgeLibrary": "views/knowledgeLibrary.ts",
-    "views/memoryCenter": "views/memoryCenter.ts",
     "views/pdfView": "views/pdfView.ts",
     "views/chatPanel": "views/chatPanel.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
@@ -87,6 +81,10 @@ const electronOnlyScripts = {
 };
 
 const vendorAssets = [
+    [
+        "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
+        "vendor/pdfjs/pdf.worker.min.mjs",
+    ],
     [
         "node_modules/bootstrap/dist/css/bootstrap.min.css",
         "vendor/bootstrap/bootstrap.min.css",
@@ -122,18 +120,6 @@ const vendorAssets = [
 ];
 
 const libraryAssets = [
-    "views/annotationsLibrary.css",
-    "views/annotationsLibrary.html",
-    "views/entityGraphView.css",
-    "views/entityGraphView.html",
-    "views/topicGraphView.css",
-    "views/topicGraphView.html",
-    "views/knowledgeLibrary.css",
-    "views/knowledgeLibrary.html",
-    "views/memoryCenter.css",
-    "views/memoryCenter.html",
-    "views/macrosLibrary.css",
-    "views/macrosLibrary.html",
     "views/options.css",
     "views/options.html",
     "views/pdfView.css",
@@ -150,6 +136,23 @@ function copyLibraryAssets(outDir) {
 }
 
 function copyCommonStaticAssets(outDir) {
+    for (const name of ["cmaps", "standard_fonts", "wasm", "LICENSE"])
+        cpSync(
+            resolve(__dirname, "../node_modules/pdfjs-dist", name),
+            resolve(outDir, "vendor/pdfjs", name),
+            { recursive: true },
+        );
+    const notices = resolve(outDir, "vendor/converters/pdfToMarkdown");
+    mkdirSync(notices, { recursive: true });
+    for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"])
+        copyFileSync(
+            resolve(
+                __dirname,
+                "../../browserControlRpc/src/converters/pdfToMarkdown",
+                name,
+            ),
+            resolve(notices, name),
+        );
     // Copy library assets
     copyLibraryAssets(outDir);
 

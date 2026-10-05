@@ -184,6 +184,7 @@ describe("agent action context RPC", () => {
         const received: SessionContext[] = [];
         const origins: ActionContext["executionOrigin"][] = [];
         const approvals: number[] = [];
+        let receivedConversationId: string | undefined;
         const serverAgent: AppAgent = {
             initializeAgentContext: async () => ({}),
             executeAction: async (_action, context) => {
@@ -197,6 +198,7 @@ describe("agent action context RPC", () => {
                         defaultId: 1,
                     }),
                 );
+                receivedConversationId = context.sessionContext.conversationId;
                 return undefined;
             },
         };
@@ -218,6 +220,7 @@ describe("agent action context RPC", () => {
             const sessionContext = {
                 agentContext,
                 sessionContextId: "rpc-working-directory-test",
+                conversationId: "owning-conversation",
             } as SessionContext<unknown>;
             sessionContext.requestSecurityApproval = async () => 1;
             const actionContext = {
@@ -257,6 +260,7 @@ describe("agent action context RPC", () => {
                     actionContext,
                 ),
             ).rejects.toThrow("does not support trusted security approval");
+            expect(receivedConversationId).toBe("owning-conversation");
         } finally {
             server.closeFn();
             clientProvider.notifyDisconnected();
