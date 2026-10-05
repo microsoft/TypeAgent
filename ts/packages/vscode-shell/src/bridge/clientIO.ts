@@ -21,6 +21,7 @@ import type {
 import type { BridgeToWebviewMessage } from "./messages.js";
 import { clientIdOf } from "./requestIds.js";
 import { gatherUserContext } from "./userContext.js";
+import { showSecurityApproval } from "./securityApproval.js";
 
 /**
  * Narrow callback surface needed by the bridge ClientIO. Keeping this
@@ -89,16 +90,8 @@ export interface BridgeClientIOContext {
  */
 export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
     return {
-        requestSecurityApproval: async (
-            _requestId,
-            { message, choices, defaultId },
-        ) => {
-            const pick = await vscode.window.showQuickPick(
-                choices.map((label, index) => ({ label, index })),
-                { placeHolder: message, ignoreFocusOut: true },
-            );
-            return pick?.index ?? defaultId;
-        },
+        requestSecurityApproval: (_requestId, request) =>
+            showSecurityApproval(vscode, request),
         question: async (
             _requestId: RequestId | undefined,
             message: string,

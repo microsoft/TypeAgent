@@ -5,7 +5,7 @@ Agent to create and execute PowerShell workflows
 ## Copilot capability fallback
 
 When the PowerShell fast path cannot match a Copilot dev-mode request, the
-reasoning agent checks whether PowerShell can safely complete it. It prefers to
+reasoning agent checks whether PowerShell can complete it. It prefers to
 reuse an existing flow, adds validated grammar aliases when only the phrasing
 is new, and creates a reusable flow only when no equivalent exists.
 
@@ -42,6 +42,12 @@ to operating-system policy. TypeAgent requires authorization before executing a
 new or changed script and verifies that reusable scripts still match the approved
 version. It does not claim to sandbox arbitrary approved PowerShell.
 
+This intentionally replaces containment with an authorization boundary for
+dynamic flows. Approval does not make code harmless or restrict its filesystem,
+network, module, or native-program access. A fingerprint detects a changed
+version; it is not a safety assessment or permission to execute a new script.
+Imported and generated code both require authorization before first execution.
+
 Before execution, a compact confirmation shows the flow, working directory,
 arguments, and a warning that the code runs with TypeAgent's user privileges
 without a sandbox. Changed versions are identified. Long summary fields are
@@ -60,6 +66,11 @@ channel to that client. A headless/model-only MCP client cannot answer it by
 calling `continueAction`; without an interactive approval endpoint, execution is
 unavailable. A refusal blocks executor switching for that reasoning request, not
 future independent user requests.
+
+VS Code Shell presents the complete review text in a read-only document, with a
+separate choice picker whose active default is Cancel. Script details are not
+placed in a clipped, single-line placeholder. Closing the picker or failing to
+open the review does not approve execution.
 
 Direct connected-client flow invocations can remember an exact invocation for
 the active session. SHA-256 binds the script and definition, and a separate
@@ -115,8 +126,8 @@ literal. Expanding an alias does not grant filesystem access.
 
 Script execution errors are displayed without automatically falling back to
 tool-enabled reasoning or retrying the script. Failed scripts may already have
-produced side effects. An explicitly requested repair remains subject to the
-selected execution mode and authorization requirements.
+produced side effects. An explicitly requested repair requires authorization of
+the replacement code before execution.
 
 Native stderr with a successful exit is displayed as a warning, not treated as
 a script failure. A nonzero final native exit code is a failure; scripts that

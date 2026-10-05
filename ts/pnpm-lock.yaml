@@ -1443,6 +1443,18 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
+  packages/agent-harness-hooks:
+    devDependencies:
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agentRpc:
     dependencies:
       '@opentelemetry/api':
@@ -1732,6 +1744,9 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@typeagent/agent-flows':
+        specifier: workspace:*
+        version: link:../../agent-flows
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
@@ -1941,9 +1956,27 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
+      '@codemirror/state':
+        specifier: ^6.7.1
+        version: 6.7.1
+      '@codemirror/view':
+        specifier: ^6.43.8
+        version: 6.43.8
+      '@fortawesome/fontawesome-free':
+        specifier: ^6.7.2
+        version: 6.7.2
       '@github/copilot-sdk':
         specifier: 1.0.13
         version: 1.0.13
+      '@lezer/common':
+        specifier: ^1.5.2
+        version: 1.5.2
+      '@lezer/highlight':
+        specifier: ^1.2.3
+        version: 1.2.3
+      '@milkdown/crepe':
+        specifier: ^7.3.6
+        version: 7.13.1(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(typescript@5.4.5)
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@4.3.6)
@@ -2019,12 +2052,27 @@ importers:
       '@typeagent/websocket-utils':
         specifier: workspace:*
         version: link:../../utils/webSocketUtils
+      bootstrap:
+        specifier: ^5.3.3
+        version: 5.3.6(@popperjs/core@2.11.8)
+      bootstrap-icons:
+        specifier: ^1.13.1
+        version: 1.13.1
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
       cheerio:
         specifier: ^1.1.0
         version: 1.1.0
+      cytoscape:
+        specifier: ^3.32.0
+        version: 3.34.1
+      cytoscape-dagre:
+        specifier: ^2.5.0
+        version: 2.5.0(cytoscape@3.34.1)
+      dagre:
+        specifier: ^0.8.5
+        version: 0.8.5
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -2064,9 +2112,21 @@ importers:
       jsonpath:
         specifier: ^1.2.0
         version: 1.3.0
+      katex:
+        specifier: ^0.16.21
+        version: 0.16.22
+      markdown-it:
+        specifier: ^14.2.0
+        version: 14.3.0
+      mermaid:
+        specifier: ^11.16.1
+        version: 11.16.1
       pdfjs-dist:
-        specifier: ^5.3.31
+        specifier: 5.3.31
         version: 5.3.31
+      prismjs:
+        specifier: ^1.30.0
+        version: 1.30.0
       puppeteer:
         specifier: ^24.15.0
         version: 24.37.5(typescript@5.4.5)
@@ -2116,6 +2176,15 @@ importers:
       '@typeagent/browser-extension':
         specifier: workspace:*
         version: link:../browserExtension
+      '@types/bootstrap':
+        specifier: ^5.2.10
+        version: 5.2.11
+      '@types/cytoscape':
+        specifier: ^3.21.9
+        version: 3.21.9
+      '@types/cytoscape-dagre':
+        specifier: ^2.3.3
+        version: 2.3.3
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -2137,9 +2206,18 @@ importers:
       '@types/jsonpath':
         specifier: 0.2.4
         version: 0.2.4
+      '@types/katex':
+        specifier: ^0.16.7
+        version: 0.16.7
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.1.2
       '@types/node':
         specifier: ^22.0.0
         version: 22.15.18
+      '@types/prismjs':
+        specifier: ^1.26.3
+        version: 1.26.5
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
@@ -2164,13 +2242,25 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/memory-service':
+        specifier: workspace:*
+        version: link:../../memory/service
       dompurify:
         specifier: ^3.4.13
         version: 3.4.13
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0
+      pdfjs-dist:
+        specifier: 5.3.31
+        version: 5.3.31
     devDependencies:
+      '@napi-rs/canvas':
+        specifier: 0.1.100
+        version: 0.1.100
+      pdfjs-baseline:
+        specifier: npm:pdfjs-dist@4.10.38
+        version: pdfjs-dist@4.10.38
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2237,6 +2327,9 @@ importers:
       markdown-it:
         specifier: ^14.2.0
         version: 14.2.0
+      pdfjs-dist:
+        specifier: 5.3.31
+        version: 5.3.31
       prismjs:
         specifier: ^1.30.0
         version: 1.30.0
@@ -2824,7 +2917,7 @@ importers:
     dependencies:
       '@milkdown/core':
         specifier: ^7.3.6
-        version: 7.13.1(supports-color@8.1.1)
+        version: 7.13.1
       '@milkdown/crepe':
         specifier: ^7.3.6
         version: 7.13.1(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(typescript@5.4.5)
@@ -4708,6 +4801,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@3.25.76)
+      '@typeagent/agent-harness-hooks':
+        specifier: workspace:*
+        version: link:../agent-harness-hooks
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
@@ -4751,6 +4847,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(zod@3.25.76)
+      '@typeagent/agent-harness-hooks':
+        specifier: workspace:*
+        version: link:../agent-harness-hooks
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -5324,6 +5423,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.17
         version: 1.19.17(hono@4.13.5)
+      '@typeagent/agent-harness-hooks':
+        specifier: workspace:*
+        version: link:../agent-harness-hooks
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -5912,6 +6014,9 @@ importers:
 
   packages/memory/service:
     dependencies:
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/conversation-memory':
         specifier: workspace:*
         version: link:../conversation
@@ -5921,6 +6026,9 @@ importers:
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/jest':
         specifier: ^29.5.7
@@ -8803,6 +8911,10 @@ packages:
   '@fontsource/lato@5.2.5':
     resolution: {integrity: sha1-z1UvE6Vpr/KGJdnTfbNcomvn1ZQ=}
 
+  '@fortawesome/fontawesome-free@6.7.2':
+    resolution: {integrity: sha512-JUOtgFW6k9u4Y+xeIaEiLr3+cjoUPiAuLXoyKOJSia6Duzb7pq+A76P9ZdPDoAoxHdHzq6gE9/jKBGXlZT8FbA==}
+    engines: {node: '>=6'}
+
   '@github/copilot-sdk-darwin-arm64@1.0.13':
     resolution: {integrity: sha512-AvBV5dzjNWpGwgoCnttrETnt7rLI4pTFQsRSM7GU5TK+YqShauffdMU06Bn/d+IDX2fj1Z4ThH7yl/gHCDvoNQ==}
     cpu: [arm64]
@@ -9543,37 +9655,37 @@ packages:
       tslib: '2'
 
   '@koromix/koffi-android-arm64@3.2.1':
-    resolution: {integrity: sha1-Lc55jTZp0re1bpwCqKaidKvWx8Y=}
+    resolution: {integrity: sha512-1pJQ4jnZlUJduK9u9DC5CGy3aOgDUPvIXpNb6syV3+Dh5Q/ugezAIGCqvY+w+1mgXsve0pd0NVvJRjdZNHQ6MA==}
     cpu: [arm64]
     os: [android]
 
   '@koromix/koffi-android-x64@3.2.1':
-    resolution: {integrity: sha1-TQr8uvZgQjEKwbOs8sWMb/6XN0M=}
+    resolution: {integrity: sha512-HH40xGh3gVQifjOBnhwT2tECC0lL1lYe+nxHvWNSzxDIyQNcVPXg38ta7vuONRFpD+uIrw7fqGYLzbZIagkVcg==}
     cpu: [x64]
     os: [android]
 
   '@koromix/koffi-darwin-arm64@3.2.1':
-    resolution: {integrity: sha1-IP1RZvBGbrn1lplQbLeK8cUgfQk=}
+    resolution: {integrity: sha512-Vj4h+xcjc5+Cn0DhPHjgRX4omKAv96Kehtcd+1YgYuY2W7FvQn9vS+3SmzVwhC5Qmg9bIwUZObYQ8T/4hBqQqA==}
     cpu: [arm64]
     os: [darwin]
 
   '@koromix/koffi-darwin-x64@3.2.1':
-    resolution: {integrity: sha1-A+TMtBoFV58aKcKB5IJiEzF89so=}
+    resolution: {integrity: sha512-gFCWxNBTZIvxo1p+PURWfsy2Ctj5FGnVVs1f03lTLhBvmxEto70pdIiFztdFLDFkAJ1pmtQmruRKapeK+E8YPA==}
     cpu: [x64]
     os: [darwin]
 
   '@koromix/koffi-freebsd-arm64@3.2.1':
-    resolution: {integrity: sha1-0+Tp8iGTKchvN7woVoXriVpSgb0=}
+    resolution: {integrity: sha512-qj+f1s2e6vULaUG1cdlTcCXmunCq2t+rjxku1+esaMIqVnHpOwj0QzPuInG0AFdXjwBNQhyVR/HpDj8daEwwsQ==}
     cpu: [arm64]
     os: [freebsd]
 
   '@koromix/koffi-freebsd-ia32@3.2.1':
-    resolution: {integrity: sha1-hphgO4/QJ8Hs9tw6rX303Bbv398=}
+    resolution: {integrity: sha512-6olHb1Qfgai0jjs6ddlDDD0ZfsCxy7SPi8rMRpuYQWH0qhgtyQu82hw5b1p7z+TJ0zZP3ZeQQ6l+U/MlM1ICHQ==}
     cpu: [ia32]
     os: [freebsd]
 
   '@koromix/koffi-freebsd-x64@3.2.1':
-    resolution: {integrity: sha1-hROyr0V+Jtl+gNNPY8vwBjhzBYY=}
+    resolution: {integrity: sha512-Dikhw1ySYNVMkmeFvFVjnU5Wdk6mffNoOjJxm9bTG96vg7OlemylxqdEven47R1YJ3yzNVJn/MlQ207ORWfi2w==}
     cpu: [x64]
     os: [freebsd]
 
@@ -9583,22 +9695,22 @@ packages:
     os: [linux]
 
   '@koromix/koffi-linux-arm@3.2.1':
-    resolution: {integrity: sha1-U8kNnV+aiTlB862CivSHs3lejuE=}
+    resolution: {integrity: sha512-OfwUwZylidq95wQKp6ClInULrfB2giu7dqM6Rhe0zAe6lES5I2SXNw15T9+GnRHk3/9hKT2XZ37OZLaKSyWNLA==}
     cpu: [arm]
     os: [linux]
 
   '@koromix/koffi-linux-ia32@3.2.1':
-    resolution: {integrity: sha1-TvuhuJjnO2GNIqngyfPp0R192rQ=}
+    resolution: {integrity: sha512-rxj6UYjU1qd98gxNQOSCdLpc5cPRi5Giq9rNd3jnGuSNIyMkwa6Dxw4cUjmhIBCYESMJtmNt5NWnJp5u9wTfYQ==}
     cpu: [ia32]
     os: [linux]
 
   '@koromix/koffi-linux-loong64@3.2.1':
-    resolution: {integrity: sha1-Kg2NCvf2bpXiVxEeX1TsIQjYs7g=}
+    resolution: {integrity: sha512-aHhnHzkPRmT/IHDlGvESJ/Bs32m8N6UE6Ab6kMeJzgk74IN8af2m/81/wZJtybR1M2UxCV4NmlVNUYQQvSAO3Q==}
     cpu: [loong64]
     os: [linux]
 
   '@koromix/koffi-linux-riscv64@3.2.1':
-    resolution: {integrity: sha1-1VWiDsNvfBkM8W/vEFWkKtkYPU0=}
+    resolution: {integrity: sha512-qtQBsjbm3LiirLJvajWmKkNb7ARk7fvJVXdftJ7NtAnF3Xw8EbDvrtvmvtNI1yLPlYcBmlzCCD71hwhWYk0SIA==}
     cpu: [riscv64]
     os: [linux]
 
@@ -9608,12 +9720,12 @@ packages:
     os: [linux]
 
   '@koromix/koffi-openbsd-ia32@3.2.1':
-    resolution: {integrity: sha1-QzemOyiO/9HqwdOHbXlK4rfuPRg=}
+    resolution: {integrity: sha512-mmY8fY8LQ/CB52+h3yrMYmVyoxzW3x08S0yI6VNfHWdfU6yJtZkKCbhjmQCYMrWbYKC4gMvwZwCywIGPAkLyeA==}
     cpu: [ia32]
     os: [openbsd]
 
   '@koromix/koffi-openbsd-x64@3.2.1':
-    resolution: {integrity: sha1-xZycfkCVP/t+MvjY+8sZ/zio7wM=}
+    resolution: {integrity: sha512-k4ig6aAPbFSRATOIIOfdf/KtlOGH4SVls6L9fy0QnTxRJYvY2oSltTsQtBDANgEQldlq8Kl5WnpRa1VSibP4Lw==}
     cpu: [x64]
     os: [openbsd]
 
@@ -9623,7 +9735,7 @@ packages:
     os: [win32]
 
   '@koromix/koffi-win32-ia32@3.2.1':
-    resolution: {integrity: sha1-n60joxMqlAcm//MI5bKXVRepoys=}
+    resolution: {integrity: sha512-Z50EM6TAZ7CFyMmyX6thv8eNpJchqe9eenhibSIy2Eq/FQYF76gU2VK/LEoaF46L8hfC7TpTp9b10MvReHEyFA==}
     cpu: [ia32]
     os: [win32]
 
@@ -9854,16 +9966,34 @@ packages:
     resolution: {integrity: sha1-E0484/8WdnFuVQ3guN6Ve8xZIIs=}
     engines: {node: '>=14.0.0'}
 
+  '@napi-rs/canvas-android-arm64@0.1.100':
+    resolution: {integrity: sha1-t8aLkdV3AqX8Uj+oLecup0Hmdm4=}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [android]
+
   '@napi-rs/canvas-android-arm64@0.1.72':
     resolution: {integrity: sha1-vByo4D7SymTYAwuQ+R+gmF6+llo=}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [android]
 
+  '@napi-rs/canvas-darwin-arm64@0.1.100':
+    resolution: {integrity: sha1-0WhvpsppmwdkDvpfRUJdsKTnJeI=}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [darwin]
+
   '@napi-rs/canvas-darwin-arm64@0.1.72':
     resolution: {integrity: sha1-3Ett1Bq6ObuF27J57nM5DA9YWHY=}
     engines: {node: '>= 10'}
     cpu: [arm64]
+    os: [darwin]
+
+  '@napi-rs/canvas-darwin-x64@0.1.100':
+    resolution: {integrity: sha1-kpeP1+yiH38bWb0TujznwOfIeaE=}
+    engines: {node: '>= 10'}
+    cpu: [x64]
     os: [darwin]
 
   '@napi-rs/canvas-darwin-x64@0.1.72':
@@ -9872,11 +10002,24 @@ packages:
     cpu: [x64]
     os: [darwin]
 
+  '@napi-rs/canvas-linux-arm-gnueabihf@0.1.100':
+    resolution: {integrity: sha1-lfmJLh1agnSHHY7kBjdOnvaSvZ8=}
+    engines: {node: '>= 10'}
+    cpu: [arm]
+    os: [linux]
+
   '@napi-rs/canvas-linux-arm-gnueabihf@0.1.72':
     resolution: {integrity: sha1-REpnSdEIVoU/ZmTWY7MAMcGvg7c=}
     engines: {node: '>= 10'}
     cpu: [arm]
     os: [linux]
+
+  '@napi-rs/canvas-linux-arm64-gnu@0.1.100':
+    resolution: {integrity: sha1-ayt8S7AWuPUwgRWsmukJ30lnqUs=}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
 
   '@napi-rs/canvas-linux-arm64-gnu@0.1.72':
     resolution: {integrity: sha1-dqP4Pyr7RKq7vdfx8nGrji3N60c=}
@@ -9885,6 +10028,13 @@ packages:
     os: [linux]
     libc: [glibc]
 
+  '@napi-rs/canvas-linux-arm64-musl@0.1.100':
+    resolution: {integrity: sha1-SM9jQlQ+T4fPH46bGqoZrYW8wXg=}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
   '@napi-rs/canvas-linux-arm64-musl@0.1.72':
     resolution: {integrity: sha1-g8HYY9DLbHtldZ7e3tTsMZjudfA=}
     engines: {node: '>= 10'}
@@ -9892,10 +10042,24 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@napi-rs/canvas-linux-riscv64-gnu@0.1.100':
+    resolution: {integrity: sha1-cbARAHsDdVyDSpYXNTAsWDewQdo=}
+    engines: {node: '>= 10'}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [glibc]
+
   '@napi-rs/canvas-linux-riscv64-gnu@0.1.72':
     resolution: {integrity: sha1-Bc2vO7Q4NFgaSCR3wB4h/XaAuVQ=}
     engines: {node: '>= 10'}
     cpu: [riscv64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/canvas-linux-x64-gnu@0.1.100':
+    resolution: {integrity: sha1-P0edO4uMRljl3sG5Q619Lu/SgR8=}
+    engines: {node: '>= 10'}
+    cpu: [x64]
     os: [linux]
     libc: [glibc]
 
@@ -9906,6 +10070,13 @@ packages:
     os: [linux]
     libc: [glibc]
 
+  '@napi-rs/canvas-linux-x64-musl@0.1.100':
+    resolution: {integrity: sha1-G+rKIsH+l3CanChxFcs8kBlN3sY=}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
   '@napi-rs/canvas-linux-x64-musl@0.1.72':
     resolution: {integrity: sha1-vba03KCLqUXvYVsnkRwkGnrF4Xs=}
     engines: {node: '>= 10'}
@@ -9913,11 +10084,27 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@napi-rs/canvas-win32-arm64-msvc@0.1.100':
+    resolution: {integrity: sha1-ihcotFXdF5ZflcC/32dTvoxYUcA=}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@napi-rs/canvas-win32-x64-msvc@0.1.100':
+    resolution: {integrity: sha1-HlKIP4eE/9vlLcLUewWgiGqm6c8=}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [win32]
+
   '@napi-rs/canvas-win32-x64-msvc@0.1.72':
     resolution: {integrity: sha1-KZ/MiJzqhS2XK19rk6faFE3Zrqg=}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
+
+  '@napi-rs/canvas@0.1.100':
+    resolution: {integrity: sha1-LImhXCimLhNyviP9R0dirhqLFrc=}
+    engines: {node: '>= 10'}
 
   '@napi-rs/canvas@0.1.72':
     resolution: {integrity: sha1-owBt/7OVDEZcMVgZhuiAo2uIRUs=}
@@ -11171,6 +11358,9 @@ packages:
 
   '@types/bonjour@3.5.13':
     resolution: {integrity: sha1-rfkM4aEF6B3R+cYf3Fr9ob+5KVY=}
+
+  '@types/bootstrap@5.2.11':
+    resolution: {integrity: sha512-69ykbLiNzQxi6Q/y/aYJLrlzI5QkLQjhIYW2U+cxujBxAmaBtmXKtxnFes59Ttfpt936as6xJU0dYnmVpcwIwg==}
 
   '@types/cacheable-request@6.0.3':
     resolution: {integrity: sha1-pDCzJgRmyntcpb/XNWk7Nuep0YM=}
@@ -12441,15 +12631,6 @@ packages:
       bare-abort-controller:
         optional: true
 
-  bare-fs@4.1.5:
-    resolution: {integrity: sha1-HQbAduaMyL+XAQ0pr546w4CM3Pc=}
-    engines: {bare: '>=1.16.0'}
-    peerDependencies:
-      bare-buffer: '*'
-    peerDependenciesMeta:
-      bare-buffer:
-        optional: true
-
   bare-fs@4.8.0:
     resolution: {integrity: sha1-jA+RaDOuEebZ00f54Kf0b3N1u48=}
     engines: {bare: '>=1.28.0'}
@@ -12458,13 +12639,6 @@ packages:
     peerDependenciesMeta:
       bare-buffer:
         optional: true
-
-  bare-os@3.6.1:
-    resolution: {integrity: sha1-mSH29Z7b6Br6n1aRBlhCLA9IWNQ=}
-    engines: {bare: '>=1.14.0'}
-
-  bare-path@3.0.0:
-    resolution: {integrity: sha1-tZ0YEwulKmr5J22z6WouPT6lIXg=}
 
   bare-path@3.1.1:
     resolution: {integrity: sha1-1KIHwIhgm0Zjp1VqRqlzQjmL9+I=}
@@ -12478,17 +12652,6 @@ packages:
     peerDependenciesMeta:
       bare-abort-controller:
         optional: true
-      bare-buffer:
-        optional: true
-      bare-events:
-        optional: true
-
-  bare-stream@2.6.5:
-    resolution: {integrity: sha1-u6joeWdMTCf34ngF3wBcFdeiygc=}
-    peerDependencies:
-      bare-buffer: '*'
-      bare-events: '*'
-    peerDependenciesMeta:
       bare-buffer:
         optional: true
       bare-events:
@@ -12560,6 +12723,9 @@ packages:
   boolean@3.2.0:
     resolution: {integrity: sha1-nlKUr06YMUSUy7F5efpUyhWfEWs=}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+
+  bootstrap-icons@1.13.1:
+    resolution: {integrity: sha512-ijombt4v6bv5CLeXvRWKy7CuM3TRTuPEuGaGKvTV5cz65rQSY8RQ2JcHt6b90cBBAC7s8fsf2EkQDldzCoXUjw==}
 
   bootstrap@5.3.6:
     resolution: {integrity: sha1-+9keuv8JP1sZGhwBqMhm0k+fpuE=}
@@ -16925,6 +17091,10 @@ packages:
     resolution: {integrity: sha1-F5Dz2ZEYMzzH9JjegWAoo0bvNn8=}
     hasBin: true
 
+  pdfjs-dist@4.10.38:
+    resolution: {integrity: sha512-/Y3fcFrXEAsMjJXeL9J8+ZG9U01LbuWaYypvDW2ycW1jL269L3js3DVBjDJ0Up9Np1uqDXsDrRihHANhZOlwdQ==}
+    engines: {node: '>=20'}
+
   pdfjs-dist@5.3.31:
     resolution: {integrity: sha1-DEKfO8Q8V+walfoodPL5MYnS1A4=}
     engines: {node: '>=20.16.0 || >=22.3.0'}
@@ -18270,9 +18440,6 @@ packages:
 
   tar-fs@2.1.4:
     resolution: {integrity: sha1-gAgk2/TvBt7Zr+pKyv5xxnx2uTA=}
-
-  tar-fs@3.1.1:
-    resolution: {integrity: sha1-TxZOWftg8QPUcjYHMejGu0p/6e8=}
 
   tar-fs@3.1.3:
     resolution: {integrity: sha1-BWaMxoowdBw4E/nBZZO43sfcvNE=}
@@ -21786,6 +21953,8 @@ snapshots:
 
   '@fontsource/lato@5.2.5': {}
 
+  '@fortawesome/fontawesome-free@6.7.2': {}
+
   '@github/copilot-sdk-darwin-arm64@1.0.13':
     optional: true
 
@@ -23055,7 +23224,7 @@ snapshots:
       '@codemirror/state': 6.5.2
       '@codemirror/view': 6.37.2
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/plugin-tooltip': 7.13.1
@@ -23078,13 +23247,13 @@ snapshots:
       - supports-color
       - typescript
 
-  '@milkdown/core@7.13.1(supports-color@8.1.1)':
+  '@milkdown/core@7.13.1':
     dependencies:
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/transformer': 7.13.1
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       tslib: 2.8.1
       unified: 11.0.5
@@ -23130,7 +23299,7 @@ snapshots:
   '@milkdown/kit@7.13.1(@codemirror/language@6.11.1)(@codemirror/state@6.5.2)(@codemirror/view@6.37.2)(typescript@5.4.5)':
     dependencies:
       '@milkdown/components': 7.13.1(@codemirror/language@6.11.1)(@codemirror/state@6.5.2)(@codemirror/view@6.37.2)(typescript@5.4.5)
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/plugin-block': 7.13.1
       '@milkdown/plugin-clipboard': 7.13.1
@@ -23158,7 +23327,7 @@ snapshots:
   '@milkdown/plugin-block@7.13.1':
     dependencies:
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23171,7 +23340,7 @@ snapshots:
 
   '@milkdown/plugin-clipboard@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23181,7 +23350,7 @@ snapshots:
 
   '@milkdown/plugin-collab@7.13.1(y-prosemirror@1.3.5(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27))(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27)':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23195,7 +23364,7 @@ snapshots:
 
   '@milkdown/plugin-cursor@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23205,7 +23374,7 @@ snapshots:
 
   '@milkdown/plugin-history@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23215,7 +23384,7 @@ snapshots:
 
   '@milkdown/plugin-indent@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23225,7 +23394,7 @@ snapshots:
 
   '@milkdown/plugin-listener@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23238,7 +23407,7 @@ snapshots:
   '@milkdown/plugin-slash@7.13.1':
     dependencies:
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23252,7 +23421,7 @@ snapshots:
   '@milkdown/plugin-tooltip@7.13.1':
     dependencies:
       '@floating-ui/dom': 1.7.1
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23265,7 +23434,7 @@ snapshots:
 
   '@milkdown/plugin-trailing@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       '@milkdown/utils': 7.13.1
@@ -23275,7 +23444,7 @@ snapshots:
 
   '@milkdown/plugin-upload@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23286,7 +23455,7 @@ snapshots:
 
   '@milkdown/preset-commonmark@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23301,7 +23470,7 @@ snapshots:
 
   '@milkdown/preset-gfm@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/preset-commonmark': 7.13.1
@@ -23334,7 +23503,7 @@ snapshots:
 
   '@milkdown/theme-nord@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/prose': 7.13.1
       clsx: 2.1.1
@@ -23347,7 +23516,7 @@ snapshots:
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
       remark: 15.0.1
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       tslib: 2.8.1
       unified: 11.0.5
@@ -23356,7 +23525,7 @@ snapshots:
 
   '@milkdown/utils@7.13.1':
     dependencies:
-      '@milkdown/core': 7.13.1(supports-color@8.1.1)
+      '@milkdown/core': 7.13.1
       '@milkdown/ctx': 7.13.1
       '@milkdown/exception': 7.13.1
       '@milkdown/prose': 7.13.1
@@ -23498,35 +23667,82 @@ snapshots:
 
   '@mozilla/readability@0.6.0': {}
 
+  '@napi-rs/canvas-android-arm64@0.1.100':
+    optional: true
+
   '@napi-rs/canvas-android-arm64@0.1.72':
+    optional: true
+
+  '@napi-rs/canvas-darwin-arm64@0.1.100':
     optional: true
 
   '@napi-rs/canvas-darwin-arm64@0.1.72':
     optional: true
 
+  '@napi-rs/canvas-darwin-x64@0.1.100':
+    optional: true
+
   '@napi-rs/canvas-darwin-x64@0.1.72':
+    optional: true
+
+  '@napi-rs/canvas-linux-arm-gnueabihf@0.1.100':
     optional: true
 
   '@napi-rs/canvas-linux-arm-gnueabihf@0.1.72':
     optional: true
 
+  '@napi-rs/canvas-linux-arm64-gnu@0.1.100':
+    optional: true
+
   '@napi-rs/canvas-linux-arm64-gnu@0.1.72':
+    optional: true
+
+  '@napi-rs/canvas-linux-arm64-musl@0.1.100':
     optional: true
 
   '@napi-rs/canvas-linux-arm64-musl@0.1.72':
     optional: true
 
+  '@napi-rs/canvas-linux-riscv64-gnu@0.1.100':
+    optional: true
+
   '@napi-rs/canvas-linux-riscv64-gnu@0.1.72':
+    optional: true
+
+  '@napi-rs/canvas-linux-x64-gnu@0.1.100':
     optional: true
 
   '@napi-rs/canvas-linux-x64-gnu@0.1.72':
     optional: true
 
+  '@napi-rs/canvas-linux-x64-musl@0.1.100':
+    optional: true
+
   '@napi-rs/canvas-linux-x64-musl@0.1.72':
+    optional: true
+
+  '@napi-rs/canvas-win32-arm64-msvc@0.1.100':
+    optional: true
+
+  '@napi-rs/canvas-win32-x64-msvc@0.1.100':
     optional: true
 
   '@napi-rs/canvas-win32-x64-msvc@0.1.72':
     optional: true
+
+  '@napi-rs/canvas@0.1.100':
+    optionalDependencies:
+      '@napi-rs/canvas-android-arm64': 0.1.100
+      '@napi-rs/canvas-darwin-arm64': 0.1.100
+      '@napi-rs/canvas-darwin-x64': 0.1.100
+      '@napi-rs/canvas-linux-arm-gnueabihf': 0.1.100
+      '@napi-rs/canvas-linux-arm64-gnu': 0.1.100
+      '@napi-rs/canvas-linux-arm64-musl': 0.1.100
+      '@napi-rs/canvas-linux-riscv64-gnu': 0.1.100
+      '@napi-rs/canvas-linux-x64-gnu': 0.1.100
+      '@napi-rs/canvas-linux-x64-musl': 0.1.100
+      '@napi-rs/canvas-win32-arm64-msvc': 0.1.100
+      '@napi-rs/canvas-win32-x64-msvc': 0.1.100
 
   '@napi-rs/canvas@0.1.72':
     optionalDependencies:
@@ -24125,7 +24341,7 @@ snapshots:
       progress: 2.0.3
       proxy-agent: 6.5.0
       semver: 7.8.5
-      tar-fs: 3.1.1
+      tar-fs: 3.1.3
       yargs: 17.7.3
     transitivePeerDependencies:
       - bare-abort-controller
@@ -24918,6 +25134,10 @@ snapshots:
   '@types/bonjour@3.5.13':
     dependencies:
       '@types/node': 22.20.1
+
+  '@types/bootstrap@5.2.11':
+    dependencies:
+      '@popperjs/core': 2.11.8
 
   '@types/cacheable-request@6.0.3':
     dependencies:
@@ -26642,16 +26862,6 @@ snapshots:
 
   bare-events@2.9.1: {}
 
-  bare-fs@4.1.5:
-    dependencies:
-      bare-events: 2.9.1
-      bare-path: 3.1.1
-      bare-stream: 2.6.5(bare-events@2.9.1)
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - react-native-b4a
-    optional: true
-
   bare-fs@4.8.0:
     dependencies:
       bare-events: 2.9.1
@@ -26662,14 +26872,6 @@ snapshots:
     transitivePeerDependencies:
       - bare-abort-controller
       - react-native-b4a
-
-  bare-os@3.6.1:
-    optional: true
-
-  bare-path@3.0.0:
-    dependencies:
-      bare-os: 3.6.1
-    optional: true
 
   bare-path@3.1.1: {}
 
@@ -26682,16 +26884,6 @@ snapshots:
       bare-events: 2.9.1
     transitivePeerDependencies:
       - react-native-b4a
-
-  bare-stream@2.6.5(bare-events@2.9.1):
-    dependencies:
-      streamx: 2.28.0
-    optionalDependencies:
-      bare-events: 2.9.1
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - react-native-b4a
-    optional: true
 
   bare-url@2.4.5:
     dependencies:
@@ -26780,6 +26972,8 @@ snapshots:
   boolbase@1.0.0: {}
 
   boolean@3.2.0: {}
+
+  bootstrap-icons@1.13.1: {}
 
   bootstrap@5.3.6(@popperjs/core@2.11.8):
     dependencies:
@@ -27621,6 +27815,11 @@ snapshots:
   cytoscape-dagre@2.5.0(cytoscape@3.33.3):
     dependencies:
       cytoscape: 3.33.3
+      dagre: 0.8.5
+
+  cytoscape-dagre@2.5.0(cytoscape@3.34.1):
+    dependencies:
+      cytoscape: 3.34.1
       dagre: 0.8.5
 
   cytoscape-fcose@2.2.0(cytoscape@3.34.1):
@@ -31764,14 +31963,14 @@ snapshots:
       unist-util-is: 6.0.1
       unist-util-visit-parents: 6.0.2
 
-  mdast-util-from-markdown@2.0.2(supports-color@8.1.1):
+  mdast-util-from-markdown@2.0.2:
     dependencies:
       '@types/mdast': 4.0.4
       '@types/unist': 3.0.3
       decode-named-character-reference: 1.1.0
       devlop: 1.1.0
       mdast-util-to-string: 4.0.0
-      micromark: 4.0.2(supports-color@8.1.1)
+      micromark: 4.0.2
       micromark-util-decode-numeric-character-reference: 2.0.2
       micromark-util-decode-string: 2.0.1
       micromark-util-normalize-identifier: 2.0.1
@@ -31788,7 +31987,7 @@ snapshots:
       decode-named-character-reference: 1.3.0
       devlop: 1.1.0
       mdast-util-to-string: 4.0.0
-      micromark: 4.0.2(supports-color@8.1.1)
+      micromark: 4.0.2
       micromark-util-decode-numeric-character-reference: 2.0.2
       micromark-util-decode-string: 2.0.1
       micromark-util-normalize-identifier: 2.0.1
@@ -32138,7 +32337,7 @@ snapshots:
 
   micromark-util-types@2.0.2: {}
 
-  micromark@4.0.2(supports-color@8.1.1):
+  micromark@4.0.2:
     dependencies:
       '@types/debug': 4.1.13
       debug: 4.4.3(supports-color@8.1.1)
@@ -32917,6 +33116,10 @@ snapshots:
       ieee754: 1.2.1
       resolve-protobuf-schema: 2.1.0
 
+  pdfjs-dist@4.10.38:
+    optionalDependencies:
+      '@napi-rs/canvas': 0.1.72
+
   pdfjs-dist@5.3.31:
     optionalDependencies:
       '@napi-rs/canvas': 0.1.72
@@ -33171,7 +33374,7 @@ snapshots:
   prosemirror-state@1.4.3:
     dependencies:
       prosemirror-model: 1.25.1
-      prosemirror-transform: 1.10.4
+      prosemirror-transform: 1.12.0
       prosemirror-view: 1.40.0
 
   prosemirror-tables@1.7.1:
@@ -33194,7 +33397,7 @@ snapshots:
     dependencies:
       prosemirror-model: 1.25.1
       prosemirror-state: 1.4.3
-      prosemirror-transform: 1.10.4
+      prosemirror-transform: 1.12.0
 
   prosemirror-virtual-cursor@0.4.2(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0):
     optionalDependencies:
@@ -33723,7 +33926,7 @@ snapshots:
       '@types/mdast': 4.0.4
       mdast-util-gfm: 3.1.0
       micromark-extension-gfm: 3.0.0
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       unified: 11.0.5
     transitivePeerDependencies:
@@ -33744,10 +33947,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  remark-parse@11.0.0(supports-color@8.1.1):
+  remark-parse@11.0.0:
     dependencies:
       '@types/mdast': 4.0.4
-      mdast-util-from-markdown: 2.0.2(supports-color@8.1.1)
+      mdast-util-from-markdown: 2.0.2
       micromark-util-types: 2.0.2
       unified: 11.0.5
     transitivePeerDependencies:
@@ -33762,7 +33965,7 @@ snapshots:
   remark@15.0.1:
     dependencies:
       '@types/mdast': 4.0.4
-      remark-parse: 11.0.0(supports-color@8.1.1)
+      remark-parse: 11.0.0
       remark-stringify: 11.0.0
       unified: 11.0.5
     transitivePeerDependencies:
@@ -34773,18 +34976,6 @@ snapshots:
       mkdirp-classic: 0.5.3
       pump: 3.0.4
       tar-stream: 2.2.0
-
-  tar-fs@3.1.1:
-    dependencies:
-      pump: 3.0.2
-      tar-stream: 3.2.0
-    optionalDependencies:
-      bare-fs: 4.1.5
-      bare-path: 3.0.0
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-      - react-native-b4a
 
   tar-fs@3.1.3:
     dependencies:
