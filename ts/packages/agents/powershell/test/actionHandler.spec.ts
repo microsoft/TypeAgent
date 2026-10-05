@@ -1643,6 +1643,8 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
                 expect(await run()).not.toHaveProperty("error");
                 expect(popup).toHaveBeenCalledTimes(4);
             },
+            // Four native executions, each with a 30s limit and broker startup grace.
+            180_000,
         );
 
         it("rechecks disablement after a pending approval", async () => {
