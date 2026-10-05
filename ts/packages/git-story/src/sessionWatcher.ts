@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { deserialize, serialize } from "node:v8";
 import type { SessionMetadata } from "./gitCommitStory.js";
 
 export type SessionWatchRequest = {
@@ -71,7 +72,55 @@ export type NormalizedSessionUpdate = {
     metadata: CapturedSessionMetadata;
 };
 
+export type SessionPrivacyFilter = (
+    update: NormalizedSessionUpdate,
+) => NormalizedSessionUpdate | null | Promise<NormalizedSessionUpdate | null>;
+
+// Resolve after accepting the approved update, not after memory extraction.
+export type ApprovedUpdateDestination = (
+    update: NormalizedSessionUpdate,
+) => void | Promise<void>;
+
+export type SessionWatcherDependencies = {
+    privacyFilter?: SessionPrivacyFilter;
+    approvedUpdateDestination?: ApprovedUpdateDestination;
+};
+
+const approvalBrand = Symbol("ApprovedSessionUpdate");
+
+// An opaque handle, valid only on the watcher that issued it.
+export type ApprovedSessionUpdate = {
+    readonly [approvalBrand]: true;
+};
+
+function snapshotUpdate(
+    update: NormalizedSessionUpdate,
+): NormalizedSessionUpdate {
+    try {
+        // Unlike structuredClone, serialization rejects shared-memory buffers.
+        return deserialize(serialize(update)) as NormalizedSessionUpdate;
+    } catch {
+        // Clone errors can contain raw content; do not retain a cause.
+        throw new Error("SessionWatcher update snapshot failed");
+    }
+}
+
 export class SessionWatcher {
+    readonly #privacyFilter: SessionPrivacyFilter | undefined;
+    readonly #approvedUpdateDestination: ApprovedUpdateDestination | undefined;
+    readonly #approvedUpdates = new WeakMap<
+        ApprovedSessionUpdate,
+        NormalizedSessionUpdate
+    >();
+
+    constructor({
+        privacyFilter,
+        approvedUpdateDestination,
+    }: SessionWatcherDependencies = {}) {
+        this.#privacyFilter = privacyFilter;
+        this.#approvedUpdateDestination = approvedUpdateDestination;
+    }
+
     async watch(_request: SessionWatchRequest): Promise<void> {
         // Pseudocode:
         // Validate the GHCP session identity and transcript path.
@@ -168,24 +217,62 @@ export class SessionWatcher {
     }
 
     async filterForPrivacy(
-        _update: NormalizedSessionUpdate,
-    ): Promise<NormalizedSessionUpdate | null> {
-        // Pseudocode:
-        // Connect the separately implemented privacy filter here.
-        // Pass all outgoing content: messages, arguments, results, diffs, paths, and metadata.
-        // Return the approved/redacted update, or null for deliberate exclusion.
-        // Preserve valid references after filtering, without leaking excluded content.
-        // If the filter is absent or fails, throw; never pass unfiltered data through.
-        throw new Error("SessionWatcher.filterForPrivacy is not implemented");
+        update: NormalizedSessionUpdate,
+    ): Promise<ApprovedSessionUpdate | null> {
+        if (this.#privacyFilter === undefined) {
+            throw new Error("SessionWatcher privacy filter is not configured");
+        }
+        const input = snapshotUpdate(update);
+        let result: NormalizedSessionUpdate | null;
+        try {
+            result = await this.#privacyFilter(input);
+        } catch {
+            // Dependency errors can contain raw content; do not retain a cause.
+            throw new Error("SessionWatcher privacy filtering failed");
+        }
+        if (result === null) {
+            return null;
+        }
+        const approved = snapshotUpdate(result);
+        if (
+            approved === undefined ||
+            typeof approved !== "object" ||
+            typeof approved.projectPath !== "string" ||
+            typeof approved.sessionId !== "string" ||
+            !Array.isArray(approved.events) ||
+            approved.metadata === null ||
+            typeof approved.metadata !== "object" ||
+            typeof approved.metadata.clientName !== "string" ||
+            !Array.isArray(approved.metadata.models)
+        ) {
+            throw new Error(
+                "SessionWatcher privacy filter returned an invalid update",
+            );
+        }
+        const handle: ApprovedSessionUpdate = Object.freeze({
+            [approvalBrand]: true,
+        });
+        this.#approvedUpdates.set(handle, approved);
+        return handle;
     }
 
-    async publishUpdate(_update: NormalizedSessionUpdate): Promise<void> {
-        // Pseudocode:
-        // Deliver only privacy-approved events and metadata to downstream memory ingestion.
-        // Use stable session/event IDs for idempotent delivery, including metadata updates.
-        // Hand off without waiting for memory extraction or story building.
-        // Surface delivery errors; this handoff does not control the read checkpoint.
-        // Memory extraction, story preparation, and commit attribution happen downstream.
-        throw new Error("SessionWatcher.publishUpdate is not implemented");
+    async publishUpdate(update: ApprovedSessionUpdate): Promise<void> {
+        const approved = this.#approvedUpdates.get(update);
+        if (approved === undefined) {
+            throw new Error(
+                "SessionWatcher update is not approved by this watcher",
+            );
+        }
+        if (this.#approvedUpdateDestination === undefined) {
+            throw new Error(
+                "SessionWatcher approved-update destination is not configured",
+            );
+        }
+        const delivery = snapshotUpdate(approved);
+        try {
+            await this.#approvedUpdateDestination(delivery);
+        } catch {
+            throw new Error("SessionWatcher approved-update delivery failed");
+        }
     }
 }
