@@ -7,8 +7,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { GitStoryDaemonClient } from "../daemonClient.js";
 import { cliLogger, daemonLogger } from "../logger.js";
-import { DAEMON_ROUTE } from "../server/router.js";
 import { startServer } from "../server/server.js";
 
 // One daemon per user, shared by every project. Each API request names its
@@ -61,11 +61,11 @@ function isAlive(pid: number): boolean {
 // is not enough: after a crash or reboot the OS can reuse it.
 async function answersAsDaemon(state: DaemonState): Promise<boolean> {
     try {
-        const res = await fetch(`${url(state)}${DAEMON_ROUTE}`, {
-            signal: AbortSignal.timeout(IDENTITY_TIMEOUT_MS),
-        });
-        const body = (await res.json()) as { pid?: number };
-        return body.pid === state.pid;
+        const client = new GitStoryDaemonClient(
+            state.port,
+            IDENTITY_TIMEOUT_MS,
+        );
+        return (await client.identity()).pid === state.pid;
     } catch {
         return false;
     }

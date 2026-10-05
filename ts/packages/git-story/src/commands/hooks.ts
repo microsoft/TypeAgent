@@ -12,8 +12,8 @@ import { Command } from "commander";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { GitStoryDaemonClient } from "../daemonClient.js";
 import { cliLogger } from "../logger.js";
-import { SESSIONS_ROUTE } from "../server/router.js";
 import type { SessionRegistration } from "../sessionWatcher.js";
 import { DAEMON_PORT } from "./daemon.js";
 
@@ -73,16 +73,12 @@ async function registerSession(
 ): Promise<void> {
     try {
         const body = sessionRegistration(input as SessionStartInput);
-        const res = await fetch(
-            `http://127.0.0.1:${DAEMON_PORT}${SESSIONS_ROUTE}`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body),
-                signal: AbortSignal.timeout(REGISTER_TIMEOUT_MS),
-            },
+        const client = new GitStoryDaemonClient(
+            DAEMON_PORT,
+            REGISTER_TIMEOUT_MS,
         );
-        cliLogger.info(`sessionStart registered: ${res.status}`);
+        await client.registerSession(body);
+        cliLogger.info(`sessionStart registered: ${body.sessionId}`);
     } catch (e) {
         cliLogger.info(`sessionStart not registered: ${(e as Error).message}`);
     }
