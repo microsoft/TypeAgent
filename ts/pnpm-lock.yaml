@@ -5423,6 +5423,9 @@ importers:
       tirith:
         specifier: 0.4.2
         version: 0.4.2
+      zod:
+        specifier: ^4.1.13
+        version: 4.3.6
     devDependencies:
       '@types/jest':
         specifier: ^29.5.7

@@ -4,6 +4,7 @@
 import os from "node:os";
 import path from "node:path";
 import type { Context } from "hono";
+import { SessionRegistrationSchema } from "../../daemonApi.js";
 import { daemonLogger } from "../../logger.js";
 import type {
     SessionRegistration,
@@ -33,19 +34,6 @@ const TRANSCRIPT_PATHS = new Map<string, (sessionId: string) => string>([
 // watching is not implemented yet.
 export const sessions = new Map<string, SessionWatchRequest>();
 
-// True when `body` matches SessionRegistration with an absolute projectPath.
-function isSessionRegistration(body: any): body is SessionRegistration {
-    return (
-        typeof body?.sessionId === "string" &&
-        body.sessionId !== "" &&
-        typeof body.projectPath === "string" &&
-        path.isAbsolute(body.projectPath) &&
-        typeof body.metadata?.clientName === "string" &&
-        Array.isArray(body.metadata.models) &&
-        body.metadata.models.every((m: unknown) => typeof m === "string")
-    );
-}
-
 // Adds the client's transcriptPath to a registration. Undefined for a
 // client without a known transcript location.
 export function toSessionWatchRequest(
@@ -66,13 +54,16 @@ export function toSessionWatchRequest(
 // Example: {"projectPath":"/repo","sessionId":"s7",
 //   "metadata":{"clientName":"copilot-cli","models":[]}} -> 202 {"sessionId":"s7"}
 export const sessionsApiHandler = async (c: Context) => {
-    const body = await c.req.json().catch(() => undefined);
-    if (!isSessionRegistration(body)) {
+    const parsed = SessionRegistrationSchema.safeParse(
+        await c.req.json().catch(() => undefined),
+    );
+    if (!parsed.success) {
         return c.json(
-            { error: "Invalid SessionRegistration" },
+            { error: `Invalid SessionRegistration: ${parsed.error.message}` },
             HTTP_BAD_REQUEST,
         );
     }
+    const body = parsed.data;
     const request = toSessionWatchRequest(body);
     if (!request) {
         return c.json(

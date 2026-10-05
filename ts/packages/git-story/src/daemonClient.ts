@@ -1,20 +1,27 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { z } from "zod";
 import {
     DAEMON_PORT,
     DAEMON_ROUTE,
+    DaemonIdentitySchema,
+    ErrorResponseSchema,
     LOOPBACK_HOST,
     SESSIONS_ROUTE,
+    SessionAcceptedSchema,
+    SessionRegistrationSchema,
+    StoryCommitSchema,
+    type DaemonIdentity,
+    type SessionAccepted,
 } from "./daemonApi.js";
 import type { StoryCommit } from "./server/routes/storyCommitsApiHandler.js";
 import type { SessionRegistration } from "./sessionWatcher.js";
 
-export type DaemonIdentity = { pid: number };
-export type SessionAccepted = { sessionId: string };
-
 // Typed HTTP client for the git-story daemon API. One method per route;
-// non-2xx responses throw with the daemon's error message.
+// zod validates request bodies before sending and responses on receipt, so
+// a malformed request or response throws. Non-2xx responses throw with the
+// daemon's error message.
 // Example: daemonClient.registerSession(req)
 //   -> POST http://127.0.0.1:51703/api/sessions -> {"sessionId":"s7"}
 export class GitStoryDaemonClient {
@@ -24,26 +31,35 @@ export class GitStoryDaemonClient {
     ) {}
 
     // GET /api/daemon
-    identity(): Promise<DaemonIdentity> {
-        return this.request("GET", DAEMON_ROUTE);
+    async identity(): Promise<DaemonIdentity> {
+        return this.request(DaemonIdentitySchema, "GET", DAEMON_ROUTE);
     }
 
     // POST /api/sessions
-    registerSession(request: SessionRegistration): Promise<SessionAccepted> {
-        return this.request("POST", SESSIONS_ROUTE, request);
+    async registerSession(
+        request: SessionRegistration,
+    ): Promise<SessionAccepted> {
+        return this.request(
+            SessionAcceptedSchema,
+            "POST",
+            SESSIONS_ROUTE,
+            SessionRegistrationSchema.parse(request),
+        );
     }
 
     // GET /api/story/commits/{hash}?project=<absolute path>
-    storyCommit(project: string, hash: string): Promise<StoryCommit> {
+    async storyCommit(project: string, hash: string): Promise<StoryCommit> {
         const query = new URLSearchParams({ project });
         return this.request(
+            StoryCommitSchema,
             "GET",
             `/api/story/commits/${encodeURIComponent(hash)}?${query}`,
         );
     }
 
-    // Sends one JSON request and parses the JSON response.
+    // Sends one JSON request; parses the response with `schema`.
     private async request<T>(
+        schema: z.ZodType<T>,
         method: string,
         path: string,
         body?: unknown,
@@ -60,11 +76,16 @@ export class GitStoryDaemonClient {
             `http://${LOOPBACK_HOST}:${this.port}${path}`,
             init,
         );
-        const json = (await res.json()) as T & { error?: string };
+        const json: unknown = await res.json();
         if (!res.ok) {
-            throw new Error(json.error ?? `${method} ${path}: ${res.status}`);
+            const error = ErrorResponseSchema.safeParse(json);
+            throw new Error(
+                error.success
+                    ? error.data.error
+                    : `${method} ${path}: ${res.status}`,
+            );
         }
-        return json;
+        return schema.parse(json);
     }
 }
 
