@@ -41,16 +41,6 @@ function isNodeCompatible(binaryPath) {
     return res.status === 0;
 }
 
-// Partial installs (e.g. the CI fast lane) don't include
-// better-sqlite3; let them opt out instead of failing.
-if (process.env.TYPEAGENT_SKIP_BETTER_SQLITE3 === "1") {
-    console.log(
-        "TYPEAGENT_SKIP_BETTER_SQLITE3=1, skipping",
-        path.basename(__filename),
-    );
-    process.exit(0);
-}
-
 // Find all better-sqlite3 installations in the pnpm store
 const pnpmDir = path.resolve(__dirname, "..", "..", "node_modules", ".pnpm");
 const entries = fs
@@ -58,6 +48,11 @@ const entries = fs
     .filter((e) => e.startsWith("better-sqlite3@"));
 
 if (entries.length === 0) {
+    // Partial installs (e.g. the CI fast lane) may not include better-sqlite3.
+    if (process.env.TYPEAGENT_BETTER_SQLITE3_OPTIONAL === "1") {
+        console.log("No better-sqlite3 installations found; skipping");
+        process.exit(0);
+    }
     console.error("No better-sqlite3 installations found in", pnpmDir);
     process.exit(1);
 }

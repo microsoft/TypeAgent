@@ -53,13 +53,11 @@ jobs:
           fetch-depth: 0
       # Decide how much CI this change needs (tools/scripts/ciScope.mjs):
       #   skip - nothing under ts/ (or this workflow) changed
-      #   fast - every change is inside workspace packages whose dependents
-      #          don't reach Electron; one FAST_LANE_OS/FAST_LANE_NODE leg
-      #          installs, builds and tests only the affected packages (the
-      #          changed ones plus their workspace dependents); the other legs
-      #          skip and report success.
-      #   full - anything else (root config, lockfile, shared tools/scripts,
-      #          this workflow, Electron-reaching packages, too many packages).
+      #   fast - every ts/ change is inside the hardcoded FAST_PACKAGES list
+      #          (git-story, the Copilot plugins); one FAST_LANE_OS/
+      #          FAST_LANE_NODE leg installs, builds and tests only those
+      #          packages; the other legs skip and report success.
+      #   full - anything else.
       # Only pull requests are scoped; merge queue, push to main and manual
       # runs are always full, which backstops the fast lane.  A scope failure
       # also falls back to full.
@@ -102,9 +100,9 @@ jobs:
         shell: bash
         run: |
           if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
-            # Without better-sqlite3 in the closure, skip the root
-            # postinstall's SQLite binary provisioning.
-            if [ "${{ steps.scope.outputs.sqlite }}" != true ]; then export TYPEAGENT_SKIP_BETTER_SQLITE3=1; fi
+            # The partial install may not contain better-sqlite3; let the
+            # root postinstall skip its SQLite provisioning in that case.
+            export TYPEAGENT_BETTER_SQLITE3_OPTIONAL=1
             pnpm install --frozen-lockfile --strict-peer-dependencies --filter . ${{ steps.scope.outputs.filters }}
           else
             pnpm install --frozen-lockfile --strict-peer-dependencies
@@ -181,8 +179,10 @@ jobs:
           git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-debt -- --gate --base "origin/${{ github.base_ref }}"
       - name: Restore better-sqlite3 for Node.js
-        if: ${{ steps.scope.outputs.run == 'true' && (steps.scope.outputs.mode == 'full' || steps.scope.outputs.sqlite == 'true') }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
+        env:
+          TYPEAGENT_BETTER_SQLITE3_OPTIONAL: ${{ steps.scope.outputs.mode == 'fast' && '1' || '0' }}
         run: |
           pnpm run postinstall:better-sqlite3-node-restore
       # Runs the unit suite once, then reruns only the packages that owned a

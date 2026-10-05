@@ -45,9 +45,9 @@ jobs:
         with:
           # Full history so the CI scope can diff against the base.
           fetch-depth: 0
-      # Package the shell unless the PR is confined to packages the shell
-      # doesn't reach (tools/scripts/ciScope.mjs "skip"/"fast" scope, which
-      # excludes anything depending on Electron).  Non-PR runs always package.
+      # Package the shell unless the PR is confined to the fast-lane packages
+      # (tools/scripts/ciScope.mjs FAST_PACKAGES), which the shell doesn't
+      # ship.  Non-PR runs always package.
       - name: Determine CI scope
         id: changes
         shell: bash
