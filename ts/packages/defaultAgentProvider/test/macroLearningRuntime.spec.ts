@@ -58,6 +58,84 @@ describe("macro learning runtime", () => {
         ).resolves.toEqual(recipe);
         expect(query).toHaveBeenCalledTimes(1);
         expect(query.mock.calls[0][0]).not.toContain("private-body");
+        const evidence = JSON.parse(
+            query.mock.calls[0][0].split("\nEVIDENCE:\n")[1],
+        );
+        expect(evidence.toolCalls[0].resultEvidence).toEqual({
+            available: true,
+            valueType: "object",
+        });
+        expect(query.mock.calls[0][0]).toContain(
+            "Returning the tool's runtime result does not require knowing its recorded contents.",
+        );
+    });
+
+    it.each([
+        [null, "null"],
+        [false, "boolean"],
+        [0, "number"],
+        ["private-body", "string"],
+        [["private-body"], "array"],
+    ])(
+        "describes result availability without exposing values (%j)",
+        async (result, valueType) => {
+            const recipe = {
+                schemaVersion: 1,
+                traceId: "source-1",
+                request: trace.prompt,
+                toolCallIds: ["call-1"],
+                description: "Read a file",
+                uncertainties: [],
+            };
+            const query = jest.fn<MacroLearningQuery>(async () =>
+                JSON.stringify(recipe),
+            );
+            const recording = structuredClone(trace);
+            recording.toolCalls[0].result = result;
+            recording.toolCalls[0].modelResult = { text: "private-model-body" };
+            await createMacroLearningRuntime(query).extract(
+                recording,
+                "source-1",
+                new AbortController().signal,
+            );
+            const prompt = query.mock.calls[0][0];
+            const evidence = JSON.parse(prompt.split("\nEVIDENCE:\n")[1]);
+            expect(evidence.toolCalls[0]).toMatchObject({
+                resultEvidence: { available: true, valueType },
+                modelResultEvidence: { available: true, valueType: "object" },
+            });
+            expect(prompt).not.toContain("private-body");
+            expect(prompt).not.toContain("private-model-body");
+        },
+    );
+
+    it("does not claim that missing result evidence is available", async () => {
+        const query = jest.fn<MacroLearningQuery>(async () =>
+            JSON.stringify({
+                schemaVersion: 1,
+                traceId: "source-1",
+                request: trace.prompt,
+                toolCallIds: ["call-1"],
+                description: "Read a file",
+                uncertainties: ["The tool result was not captured."],
+            }),
+        );
+        const recording = structuredClone(trace);
+        delete recording.toolCalls[0].result;
+        const recipe = await createMacroLearningRuntime(query).extract(
+            recording,
+            "source-1",
+            new AbortController().signal,
+        );
+        const evidence = JSON.parse(
+            query.mock.calls[0][0].split("\nEVIDENCE:\n")[1],
+        );
+        expect(evidence.toolCalls[0].resultEvidence).toEqual({
+            available: false,
+        });
+        expect(recipe.uncertainties).toEqual([
+            "The tool result was not captured.",
+        ]);
     });
 
     it("rejects aborted work before requesting a model", async () => {
@@ -106,6 +184,32 @@ describe("macro learning runtime", () => {
         const rule = `<Start> = read package.json now -> { actionName: "lookup", parameters: { path: "package.json" } };`;
         expect(() =>
             validateMacroGrammar([rule], [trace.prompt], "lookup", {
+                path: "package.json",
+            }),
+        ).toThrow("did not generalize input 'path'");
+    });
+
+    it("does not let bounded variants hide an unsafe original request", () => {
+        const original = "Read file package.json";
+        const variants = [
+            "Show file package.json for me",
+            "Inspect file package.json for me",
+            "Display file package.json for me",
+        ];
+        const rules = [
+            `<Start> = read file $(path:wildcard) -> { actionName: "lookup", parameters: { path } };`,
+            `<Start> = (show | inspect | display) file $(path:wildcard) for me -> { actionName: "lookup", parameters: { path } };`,
+        ];
+        expect(() =>
+            validateMacroGrammar(rules, [original, ...variants], "lookup", {
+                path: "package.json",
+            }),
+        ).toThrow(
+            "Macro grammar accepts an unsupported intent: Read file package.json and delete all data",
+        );
+        rules[0] = `<Start> = read file package.json -> { actionName: "lookup", parameters: { path: "package.json" } };`;
+        expect(() =>
+            validateMacroGrammar(rules, [original, ...variants], "lookup", {
                 path: "package.json",
             }),
         ).toThrow("did not generalize input 'path'");

@@ -406,6 +406,13 @@ describe("durable macro learning", () => {
         await expect(manager.getMacroLearningJob(jobId)).resolves.toMatchObject(
             { status: "queued" },
         );
+        await expect(
+            manager.getRecordingState("session-1"),
+        ).resolves.toMatchObject({
+            status: "completed",
+            trace: summary,
+            learningJob: { jobId, status: "queued" },
+        });
         const restarted = new MacroManager(directory, host);
         const learner = runtime();
         await restarted.configureLearning(learner);
@@ -489,6 +496,13 @@ describe("durable macro learning", () => {
             const summary = await capture(manager, { learning: true });
             const job = await terminal(manager, summary.learningJobId!);
             expect(job.status).toBe(status);
+            await expect(
+                manager.getRecordingState("session-1"),
+            ).resolves.toMatchObject({
+                status: "completed",
+                trace: summary,
+                learningJob: job,
+            });
             expect(host.callTool).not.toHaveBeenCalled();
         },
     );
@@ -689,6 +703,80 @@ describe("durable macro learning", () => {
         );
         expect(learner.build).not.toHaveBeenCalled();
     });
+
+    it("exposes actionable extraction uncertainties in recording status and persists them", async () => {
+        const { manager, directory, host } = await setup();
+        const learner = runtime();
+        const extract = learner.extract;
+        learner.extract = jest.fn(async (...args) => ({
+            ...(await extract(...args)),
+            uncertainties: [
+                "The requested ranking was not performed by the recorded tools.",
+                "The final report requires unsupported synthesis.",
+            ],
+        }));
+        await manager.configureLearning(learner);
+        const summary = await capture(manager, { learning: true });
+        const job = await terminal(manager, summary.learningJobId!);
+        expect(job.status).toBe("failed");
+        expect(job.error).toContain("requested ranking");
+        expect(job.error).toContain("unsupported synthesis");
+        await expect(
+            manager.getRecordingState("session-1"),
+        ).resolves.toMatchObject({
+            status: "completed",
+            trace: summary,
+            learningJob: job,
+        });
+        const restarted = new MacroManager(directory, host);
+        await expect(restarted.getMacroLearningJob(job.jobId)).resolves.toEqual(
+            job,
+        );
+        const equivalent = await capture(manager, {
+            learning: true,
+            sessionId: "equivalent-failed-source",
+        });
+        expect(equivalent.learningJobId).toBe(job.jobId);
+        expect(learner.extract).toHaveBeenCalledTimes(1);
+        expect(learner.build).not.toHaveBeenCalled();
+        expect(learner.generateGrammar).not.toHaveBeenCalled();
+        expect(await manager.listMacros()).toEqual([]);
+        expect(host.callTool).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ["bounded", "Unrecorded operation. ".repeat(150)],
+        ["secret", "Missing authorization: Bearer synthetic-test-value"],
+    ])(
+        "keeps %s uncertainty diagnostics safe to persist",
+        async (kind, uncertainty) => {
+            const { manager, directory } = await setup();
+            const learner = runtime();
+            const extract = learner.extract;
+            learner.extract = jest.fn(async (...args) => ({
+                ...(await extract(...args)),
+                uncertainties: [uncertainty],
+            }));
+            await manager.configureLearning(learner);
+            const summary = await capture(manager, { learning: true });
+            const job = await terminal(manager, summary.learningJobId!);
+            expect(job.status).toBe("failed");
+            if (kind === "bounded") {
+                expect(job.error).toContain("Unrecorded operation.");
+                expect(job.error).toHaveLength(2_000);
+            } else {
+                expect(job.error).toContain("Secret-bearing evidence");
+                expect(
+                    await readFile(
+                        path.join(directory, "copilot-macros", "learning.json"),
+                        "utf8",
+                    ),
+                ).not.toContain("synthetic-test-value");
+            }
+            expect(learner.build).not.toHaveBeenCalled();
+            expect(await manager.listMacros()).toEqual([]);
+        },
+    );
 
     it("deduplicates simultaneous submissions and equivalent traces before model work", async () => {
         const { manager } = await setup();

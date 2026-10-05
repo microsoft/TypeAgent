@@ -228,12 +228,24 @@ export class MacroManager {
         return token;
     }
 
-    getRecordingState(sessionId: string): RecordingState {
+    async getRecordingState(sessionId: string): Promise<RecordingState> {
         this.removeExpired(sessionId);
         const token = this.recordings.get(sessionId);
         if (token) return { status: token.status, token };
         const trace = this.completed.get(sessionId);
-        if (trace) return { status: "completed", trace };
+        if (trace) {
+            return {
+                status: "completed",
+                trace,
+                ...(trace.learningJobId
+                    ? {
+                          learningJob: await this.learning.getJob(
+                              trace.learningJobId,
+                          ),
+                      }
+                    : {}),
+            };
+        }
         const error = this.failures.get(sessionId);
         return error ? { status: "failed", error } : { status: "idle" };
     }
