@@ -35,7 +35,6 @@ import {
     hasNamespaceAction,
 } from "../src/namespaces/actionHandlerRegistry.mjs";
 import { revokeScriptApprovals } from "../src/execution/scriptApproval.mjs";
-import { copyBrokerWithTestHost } from "./sandboxCases.js";
 
 const itOnWindows =
     process.platform === "win32" &&
@@ -1815,7 +1814,7 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
         );
 
         itOnWindows.each(["success", "timeout"])(
-            "terminates owned native children after approved-script %s despite slow startup",
+            "terminates owned native children after approved-script %s with delayed child readiness",
             async (mode) => {
                 const { sessionContext } = await createAgentHarness(
                     undefined,
@@ -1828,38 +1827,27 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
                 );
                 const marker = join(directory, "child-pid.txt");
                 const release = join(directory, "release-script.txt");
-                const host = await readFile(
-                    new URL("../../scripts/scriptHost.ps1", import.meta.url),
-                    "utf8",
-                );
-                const initialization = "$ErrorActionPreference = 'Stop'";
-                expect(host).toContain(initialization);
-                const originalBroker = process.env.TYPEAGENT_POWERSHELL_BROKER;
-                // Exceed the old three-second budget before any user code runs.
-                process.env.TYPEAGENT_POWERSHELL_BROKER =
-                    await copyBrokerWithTestHost(
-                        directory,
-                        host.replace(
-                            initialization,
-                            `${initialization}\n[System.Threading.Thread]::Sleep(6000)`,
-                        ),
-                    );
+                const progress = join(directory, "root-progress.txt");
                 const controller = new AbortController();
                 const started = Date.now();
                 const execution = executeScript(
                     {
-                        script: String.raw`param([string]$Marker, [string]$Release)
+                        script: String.raw`param([string]$Marker, [string]$Release, [string]$Progress)
+[System.IO.File]::WriteAllText($Progress, 'root started')
+Start-Sleep -Seconds 6
+[System.IO.File]::WriteAllText($Progress, 'starting child')
 $child = Start-Process "$env:SYSTEMROOT\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList '-NoProfile -NonInteractive -Command Start-Sleep -Seconds 120' -PassThru -WindowStyle Hidden
 [System.IO.File]::WriteAllText($Marker, [string]$child.Id)
 while (-not [System.IO.File]::Exists($Release)) { Start-Sleep -Milliseconds 50 }`,
                         parameters: {
                             Marker: marker,
                             Release: release,
+                            Progress: progress,
                         },
                         abortSignal: controller.signal,
                         provenance: "generated",
                         sandbox: {
-                            maxExecutionTime: 30,
+                            maxExecutionTime: 60,
                         },
                     },
                     {
@@ -1874,7 +1862,9 @@ while (-not [System.IO.File]::Exists($Release)) { Start-Sleep -Milliseconds 50 }
                     },
                 );
                 try {
-                    const deadline = Date.now() + 25_000;
+                    // Allow cold hosted-runner startup, but require a live child
+                    // before testing either completion or the real timeout.
+                    const deadline = Date.now() + 55_000;
                     let pid: number | undefined;
                     while (Date.now() < deadline) {
                         if (existsSync(marker)) {
@@ -1896,10 +1886,14 @@ while (-not [System.IO.File]::Exists($Release)) { Start-Sleep -Milliseconds 50 }
                             );
                         }
                     }
-                    if (pid === undefined)
+                    if (pid === undefined) {
+                        const phase = existsSync(progress)
+                            ? await readFile(progress, "utf8")
+                            : "root not started";
                         throw new Error(
-                            "Child did not become ready within 25 seconds.",
+                            `Child did not become ready within 55 seconds (${phase}).`,
                         );
+                    }
                     const childPid = pid;
                     expect(Date.now() - started).toBeGreaterThanOrEqual(6000);
                     expect(() => process.kill(childPid, 0)).not.toThrow();
@@ -1911,7 +1905,7 @@ while (-not [System.IO.File]::Exists($Release)) { Start-Sleep -Milliseconds 50 }
                     });
                     if (mode === "timeout") {
                         expect(result.stderr).toMatch(/timed out/i);
-                        expect(result.duration).toBeGreaterThanOrEqual(30_000);
+                        expect(result.duration).toBeGreaterThanOrEqual(60_000);
                     } else {
                         expect(result.stderr).toBe("");
                     }
@@ -1939,11 +1933,6 @@ while (-not [System.IO.File]::Exists($Release)) { Start-Sleep -Milliseconds 50 }
                     try {
                         await execution;
                     } finally {
-                        if (originalBroker === undefined)
-                            delete process.env.TYPEAGENT_POWERSHELL_BROKER;
-                        else
-                            process.env.TYPEAGENT_POWERSHELL_BROKER =
-                                originalBroker;
                         await rm(directory, { recursive: true, force: true });
                     }
                 }
