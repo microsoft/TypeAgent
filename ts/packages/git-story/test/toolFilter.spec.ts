@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import {
     classifyTool,
     isInteresting,
+    isReadOnlyGitCommand,
     toToolClass,
     ToolClass,
 } from "../src/toolFilter.js";
@@ -36,6 +37,14 @@ test.each(fixtures)("$name", ({ name, shell, command, output }) => {
     expect(toToolClass(output)).toBe(expected);
     expect(classifyTool(TOOLS[shell], command)).toBe(expected);
     expect(isInteresting(expected)).toBe(expected !== ToolClass.Allow);
+});
+
+test("read-only git commands are excluded from run history", () => {
+    expect(isReadOnlyGitCommand("git --no-pager status --short")).toBe(true);
+    expect(isReadOnlyGitCommand("git -C repo diff --cached")).toBe(true);
+    expect(isReadOnlyGitCommand("git add file.txt")).toBe(false);
+    expect(isReadOnlyGitCommand("git branch -D feature")).toBe(false);
+    expect(isReadOnlyGitCommand("git status && pnpm install")).toBe(false);
 });
 
 test("non-shell tools and bad output", () => {

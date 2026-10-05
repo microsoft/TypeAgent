@@ -35,6 +35,15 @@ const SHELLS = new Map([
     ["powershell", "powershell"],
 ]);
 
+const READ_ONLY_GIT_COMMANDS = new Set([
+    "diff",
+    "grep",
+    "log",
+    "rev-parse",
+    "show",
+    "status",
+]);
+
 // Launcher script from the `tirith` npm package. It runs the binary from the
 // matching @sheeki03/tirith-<os>-<arch> optional dependency. Run through node
 // because Windows cannot spawn the script directly.
@@ -97,4 +106,14 @@ export function toToolClass(output: TirithCheckOutput): ToolClass {
 // A tool call is worth storing when tirith flagged it.
 export function isInteresting(c: ToolClass): boolean {
     return c === ToolClass.Warn || c === ToolClass.Block;
+}
+
+// Read-only Git inspection does not belong in the public command story.
+export function isReadOnlyGitCommand(command: string): boolean {
+    if (/[;&|`]|\$\(/.test(command)) return false;
+    const match =
+        /^\s*git(?:\s+(?:-[Cc]\s+\S+|--(?:git-dir|work-tree)(?:=\S+|\s+\S+)|--no-pager))*\s+([\w-]+)/.exec(
+            command,
+        );
+    return match ? READ_ONLY_GIT_COMMANDS.has(match[1]) : false;
 }

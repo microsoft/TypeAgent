@@ -4,15 +4,22 @@
 import type {
     AgentStopOutput,
     BaseHookInput,
+    PostToolUseFailureOutput,
+    PostToolUseOutput,
+    PreToolUseOutput,
+    SessionEndOutput,
     SessionStartOutput,
     UserPromptSubmittedOutput,
 } from "@typeagent/agent-harness-hooks/copilot-cli";
 import { Command } from "commander";
 import fs from "node:fs";
+import type { CopilotHookName } from "../hookRecorder.js";
+import { recordCopilotHook } from "../hookRecorder.js";
 import { cliLogger } from "../logger.js";
+import { findRepository, resolveGitDirectory, runGit } from "../git.js";
+import { JsonlSessionStore } from "../sessionStore.js";
+import { StoryBuilder } from "../storyBuilder.js";
 
-// Reads all of stdin. Hooks get their payload here (Copilot JSON, or lines
-// git pipes to hooks such as pre-push). Returns "" when stdin is a terminal.
 async function readStdin(): Promise<string> {
     if (process.stdin.isTTY) return "";
     const chunks: Buffer[] = [];
@@ -20,25 +27,21 @@ async function readStdin(): Promise<string> {
     return Buffer.concat(chunks).toString("utf8");
 }
 
-// `hooks`: agent and git hook handlers. Placeholder output until story
-// capture exists.
 export const hooksCommand = new Command("hooks").description(
     "Agent and git hook handlers",
 );
 
-// Reads a Copilot hook payload and logs its session id.
-// Empty stdin (manual run) is treated as `{}`.
-async function readCopilotInput(hook: string): Promise<Partial<BaseHookInput>> {
+async function readCopilotInput(
+    hook: CopilotHookName,
+): Promise<Partial<BaseHookInput> & Record<string, unknown>> {
     const input = JSON.parse(
         (await readStdin()) || "{}",
-    ) as Partial<BaseHookInput>;
-    process.stderr.write(`git-story ${hook}: session=${input.sessionId}\n`);
+    ) as Partial<BaseHookInput> & Record<string, unknown>;
+    recordCopilotHook(hook, input);
     cliLogger.info(`${hook} session=${input.sessionId}`);
     return input;
 }
 
-// Copilot CLI hooks. Each writes `{}` (change nothing). Placeholder until
-// story capture exists. Example: `git story hooks copilot session-start`.
 const copilotCommand = hooksCommand
     .command("copilot")
     .description("Copilot CLI hook handlers");
@@ -62,6 +65,33 @@ copilotCommand
     });
 
 copilotCommand
+    .command("pre-tool-use")
+    .description("Handle the Copilot preToolUse hook")
+    .action(async () => {
+        await readCopilotInput("preToolUse");
+        const output: PreToolUseOutput = {};
+        process.stdout.write(`${JSON.stringify(output)}\n`);
+    });
+
+copilotCommand
+    .command("post-tool-use")
+    .description("Handle the Copilot postToolUse hook")
+    .action(async () => {
+        await readCopilotInput("postToolUse");
+        const output: PostToolUseOutput = {};
+        process.stdout.write(`${JSON.stringify(output)}\n`);
+    });
+
+copilotCommand
+    .command("post-tool-use-failure")
+    .description("Handle the Copilot postToolUseFailure hook")
+    .action(async () => {
+        await readCopilotInput("postToolUseFailure");
+        const output: PostToolUseFailureOutput = {};
+        process.stdout.write(`${JSON.stringify(output)}\n`);
+    });
+
+copilotCommand
     .command("agent-stop")
     .description("Handle the Copilot agentStop hook")
     .action(async () => {
@@ -70,9 +100,15 @@ copilotCommand
         process.stdout.write(`${JSON.stringify(output)}\n`);
     });
 
-// `hooks git <hook> [args...]`: called by the scripts `init` writes to the
-// git hooks directory. Git's hook args and stdin are forwarded as-is.
-// Example: `git story hooks git pre-commit` with empty stdin.
+copilotCommand
+    .command("session-end")
+    .description("Handle the Copilot sessionEnd hook")
+    .action(async () => {
+        await readCopilotInput("sessionEnd");
+        const output: SessionEndOutput = {};
+        process.stdout.write(`${JSON.stringify(output)}\n`);
+    });
+
 const gitCommand = hooksCommand.command("git").description("Git hook handlers");
 
 gitCommand
@@ -81,26 +117,46 @@ gitCommand
     .argument("[args...]", "arguments git passed to the hook")
     .action(async (args: string[]) => {
         const input = await readStdin();
-        const message = `git-story pre-commit: args=${JSON.stringify(args)} stdin=${JSON.stringify(input)}`;
-        process.stdout.write(`${message}\n`);
-        cliLogger.info(message);
+        cliLogger.info(
+            `pre-commit: args=${JSON.stringify(args)} stdin=${JSON.stringify(input)}`,
+        );
     });
 
-// Trailer appended to each commit message.
-// TODO: replace with the git-story summary for the commit.
-const COMMIT_TRAILER = "typeagent";
-
-// `hooks git prepare-commit-msg <file> [source] [sha]`: git passes the path
-// of the message file. Appends COMMIT_TRAILER once, so amends and retries do
-// not repeat it. Example: "fix bug\n" -> "fix bug\n\ntypeagent\n".
 gitCommand
     .command("prepare-commit-msg")
-    .description("Handle the git prepare-commit-msg hook")
+    .description("Attach the current story to a commit message")
     .argument("<file>", "commit message file")
     .argument("[args...]", "message source and commit sha")
-    .action((file: string) => {
+    .action(async (file: string) => {
+        const repository = findRepository(process.cwd());
+        if (!repository) return;
+        const store = new JsonlSessionStore(resolveGitDirectory(repository));
         const message = fs.readFileSync(file, "utf8");
-        if (message.split("\n").includes(COMMIT_TRAILER)) return;
-        fs.writeFileSync(file, `${message.trimEnd()}\n\n${COMMIT_TRAILER}\n`);
-        cliLogger.info(`prepare-commit-msg: appended trailer to ${file}`);
+        const result = await new StoryBuilder().build({
+            commit: {
+                projectPath: repository,
+                diff: runGit(repository, ["diff", "--cached", "--binary"]),
+                message,
+            },
+            store,
+        });
+        if (!result.story.sessions.length && !result.story.humanOnly.length)
+            return;
+        fs.writeFileSync(file, result.commitMessage);
+        store.writePending(result.sessions);
+        cliLogger.info(`prepare-commit-msg: attached story to ${file}`);
+    });
+
+gitCommand
+    .command("post-commit")
+    .description("Advance committed session checkpoints")
+    .argument("[args...]", "arguments git passed to the hook")
+    .action(() => {
+        const repository = findRepository(process.cwd());
+        if (!repository) return;
+        const store = new JsonlSessionStore(resolveGitDirectory(repository));
+        const commit = runGit(repository, ["rev-parse", "HEAD"]);
+        for (const { session, count } of store.consumePending()) {
+            store.markCommitted(session, commit, count);
+        }
     });

@@ -12,10 +12,8 @@ const CLI = path.resolve(
     "../cli.js",
 );
 
-// End to end: `init` writes the hook, then a real `git commit` runs it
-// through git's own sh (Git Bash on Windows). An extensionless sh shim puts
-// `git-story` on PATH, same as `npm link` does on every OS.
-test("pre-commit hook forwards args and stdin to git-story", () => {
+// End to end: `init` writes hooks, then a real commit runs them through Git.
+test("git hooks attach human-only stories without duplicate blocks", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "git-story-"));
     const bin = path.join(dir, "bin");
     const repo = path.join(dir, "repo");
@@ -46,20 +44,18 @@ test("pre-commit hook forwards args and stdin to git-story", () => {
     fs.mkdirSync(repo);
     run("git", ["init", "-q"]);
     run("node", [CLI, "init"]);
+    fs.writeFileSync(path.join(repo, "file.txt"), "story\n");
+    run("git", ["add", "file.txt"]);
     const commit = ["-c", "user.name=t", "-c", "user.email=t@t"];
-    const out = run("git", [...commit, "commit", "--allow-empty", "-m", "x"]);
-    expect(out).toContain('git-story pre-commit: args=[] stdin=""');
-    // prepare-commit-msg appends the trailer once, even on amend.
+    run("git", [...commit, "commit", "-m", "x"]);
     run("git", [...commit, "commit", "--amend", "--allow-empty", "--no-edit"]);
-    expect(run("git", ["log", "-1", "--format=%B"])).toBe("x\n\ntypeagent\n\n");
-
-    const hook = path.join(repo, ".git/hooks/pre-commit");
-    const direct = run("sh", [hook, "a"], "piped\n");
-    expect(direct).toContain('args=["a"] stdin="piped\\n"');
+    const message = run("git", ["log", "-1", "--format=%B"]);
+    expect(message.match(/~~~story v2/g)).toHaveLength(1);
+    expect(message).toContain('"humanOnly":["file.txt"]');
 });
 
-// `init` registers each Copilot hook, and each command answers `{}`.
-test("Copilot session and prompt hooks are registered and answer {}", () => {
+// `init` registers each capture hook, and each command answers `{}`.
+test("Copilot capture hooks are registered and answer {}", () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-story-"));
     // Isolate from the user's git config (e.g. a global core.hooksPath).
     const env = {
@@ -83,7 +79,11 @@ test("Copilot session and prompt hooks are registered and answer {}", () => {
     for (const [hook, command] of [
         ["userPromptSubmitted", "user-prompt-submitted"],
         ["sessionStart", "session-start"],
+        ["preToolUse", "pre-tool-use"],
+        ["postToolUse", "post-tool-use"],
+        ["postToolUseFailure", "post-tool-use-failure"],
         ["agentStop", "agent-stop"],
+        ["sessionEnd", "session-end"],
     ]) {
         expect(settings.hooks[hook][0].bash).toBe(
             `git story hooks copilot ${command}`,
@@ -94,6 +94,5 @@ test("Copilot session and prompt hooks are registered and answer {}", () => {
             encoding: "utf8",
         });
         expect(r.stdout).toBe("{}\n");
-        expect(r.stderr).toContain(`git-story ${hook}: session=s1`);
     }
 });

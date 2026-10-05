@@ -1,7 +1,8 @@
 # git-story
 
-Attaches the agent sessions that led to a commit to that commit. This package is
-the scaffold: a CLI with no story logic yet.
+Attaches the agent sessions that led to a commit to that commit. Private session
+events stay in `.git/story/`; commits carry a filtered `~~~story v2` JSON block
+and `Story-Session` trailers.
 
 Git runs any `git-<name>` binary on `PATH` as `git <name>`, so the
 `git-story` binary is also `git story`.
@@ -10,26 +11,25 @@ Git runs any `git-<name>` binary on `PATH` as `git <name>`, so the
 $ cd ts/packages/git-story
 $ pnpm build
 $ npm link            # puts git-story on PATH
-$ git story init   # registers Copilot CLI and git hooks for this repo
-$ echo '{"sessionId":"s1","timestamp":0,"cwd":".","prompt":"hi"}' | git story hooks copilot user-prompt-submitted
-git-story userPromptSubmitted: session=s1
-{}
-$ echo input | git story hooks git pre-commit a b
-git-story pre-commit: args=["a","b"] stdin="input\n"
+$ git story init   # registers Copilot CLI and Git hooks for this repo
+$ copilot -p "Create hello.txt containing hello" --allow-all-tools
+$ git add hello.txt && git commit -m "Add hello"
+$ git story show HEAD
 ```
 
-`init` registers the `userPromptSubmitted`, `sessionStart`, and `agentStop`
-Copilot hooks in `.github/copilot/settings.local.json` and adds that
-file to `.git/info/exclude`, so it stays local to the clone.
+`init` registers prompt, session, tool, and stop hooks in
+`.github/copilot/settings.local.json`. It adds that file to
+`.git/info/exclude`, so the settings stay local to the clone.
 
-`init` also writes `pre-commit` and `prepare-commit-msg` scripts to the git
-hooks directory (honors `core.hooksPath`). Each script runs
-`exec git-story hooks git <hook> "$@"`,
-so git's hook arguments and stdin reach the command unchanged. `init` does not
-overwrite a hook that it did not write.
+`init` also writes `pre-commit`, `prepare-commit-msg`, and `post-commit` scripts
+to the Git hooks directory, honoring `core.hooksPath`. It does not overwrite a
+hook that it did not write. Story capture is observational: hook failures do not
+block commits.
 
-`prepare-commit-msg` appends a `typeagent` line to the commit message, once.
-This is a placeholder for the git-story summary.
+`prepare-commit-msg` links pending session writes to staged blobs and adds the
+filtered v2 story. `post-commit` advances the linked session checkpoints.
+Stories are capped at 16 KiB; snippets and ordinary run commands are removed
+before elevated-risk commands.
 
 ## Daemon
 

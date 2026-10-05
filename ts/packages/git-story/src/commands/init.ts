@@ -14,16 +14,19 @@ const COPILOT_SETTINGS = ".github/copilot/settings.local.json";
 const COPILOT_HOOKS = {
     userPromptSubmitted: "git story hooks copilot user-prompt-submitted",
     sessionStart: "git story hooks copilot session-start",
+    preToolUse: "git story hooks copilot pre-tool-use",
+    postToolUse: "git story hooks copilot post-tool-use",
+    postToolUseFailure: "git story hooks copilot post-tool-use-failure",
     agentStop: "git story hooks copilot agent-stop",
+    sessionEnd: "git story hooks copilot session-end",
 };
 
-// Each git hook gets a shell script that forwards git's args and stdin to
-// `git-story hooks git <hook>`. `exec` hands the script's stdin to the
-// command, so hooks that receive input (e.g. pre-push) keep it.
+// Each Git hook forwards its arguments and stdin. Story capture is
+// observational, so its failure never blocks a commit.
 // Marks scripts written by init, so init never overwrites a user's own hook.
 const GIT_HOOK_MARKER = "# git-story hook";
 const gitHookScript = (hook: string) =>
-    `#!/bin/sh\n${GIT_HOOK_MARKER}\nexec git-story hooks git ${hook} "$@"\n`;
+    `#!/bin/sh\n${GIT_HOOK_MARKER}\ngit-story hooks git ${hook} "$@" || true\n`;
 
 // Recursively sorts object keys so the settings file has a stable order.
 // Array order is kept. Example: {b:1,a:{d:2,c:3}} -> {a:{c:3,d:2},b:1}.
@@ -116,4 +119,5 @@ export const initCommand = new Command("init")
         };
         registerGitHook("pre-commit");
         registerGitHook("prepare-commit-msg");
+        registerGitHook("post-commit");
     });
