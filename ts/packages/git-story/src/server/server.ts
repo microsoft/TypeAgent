@@ -2,10 +2,8 @@
 // Licensed under the MIT License.
 
 import { createServer, type Server } from "node:http";
+import { LOOPBACK_HOST } from "../daemonApi.js";
 import { route } from "./router.js";
-
-// Loopback only: the API reads the repository and has no authentication.
-export const LOOPBACK_HOST = "127.0.0.1";
 const HTTP_FORBIDDEN = 403;
 
 // Starts the HTTP API on `port` and resolves once listening. Rejects with

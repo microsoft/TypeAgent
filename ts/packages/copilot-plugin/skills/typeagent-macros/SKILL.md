@@ -35,6 +35,13 @@ cancellation, and timeout are terminal outcomes, not adaptation signals.
 
 ## Lifecycle
 
+- For inspection-only requests, inspect an existing candidate; do not create one
+  when the catalog is empty. Report that no candidate is available and obtain
+  the recording/learning status before proposing another operation.
+- A recording token from `armed` or `claimed` is not a trace ID. Only use the
+  saved trace ID from a completed recording with `create_macro_from_trace`.
+  Selected learning prepares its own candidate; do not bypass a pending or
+  failed learning job by creating another draft.
 - Create drafts only from explicitly captured traces.
 - Validate drafts before asking the user to approve them.
 - Selected completed recordings automatically enter recipe extraction, generalized

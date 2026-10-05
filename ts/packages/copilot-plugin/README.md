@@ -481,10 +481,46 @@ Wait until you see the server is ready on port 8999.
 ### Step 3: Launch Copilot with the Plugin
 
 ```powershell
-copilot --plugin-dir D:\repos\TypeAgent\ts\packages\copilot-plugin
+copilot --experimental --plugin-dir D:\repos\TypeAgent\ts\packages\copilot-plugin
 ```
 
 The `--plugin-dir` flag loads the plugin from a local directory. On first launch it reads `plugin.json`, registers hooks from `hooks.json`, and exposes the MCP server from `.mcp.json`.
+
+The recorder additionally needs Copilot's extension support. In CLI 1.0.92-4,
+extensions are gated by experimental mode; hooks, MCP servers, and skills can
+load without it. Use `--experimental` as above, or
+`pnpm copilot -- --experimental` from `ts`. This enables experimental features
+for that invocation without changing the global setting, and does not grant
+extension permissions or approve macros.
+
+The source plugin also includes `extensions/typeagent/extension.mjs`, which
+loads the built recorder from `dist/extensions/typeagent/extension.mjs`.
+This entry point is required for both `pnpm copilot` and `pnpm copilot:dev`:
+working hooks and MCP tools alone do not mean session recording is active.
+Rebuild the plugin and start a fresh Copilot session after updating it.
+
+If the TypeAgent skills appear but `/typeagent-status` and
+`/typeagent-macro-status` are unknown, first confirm that extension support is
+enabled for the CLI invocation. Then check whether the recorder extension is
+disabled independently of the plugin. In PowerShell, run:
+
+```powershell
+copilot config extensions.disabledExtensions
+```
+
+If the output includes `plugin:typeagent:typeagent` and you want to enable the
+recorder, remove only that entry:
+
+```powershell
+copilot config --rm extensions.disabledExtensions plugin:typeagent:typeagent
+```
+
+Exit and relaunch Copilot with extension support and the plugin enabled.
+Review any extension permission-access
+prompt before granting access; declining it prevents the recorder from loading.
+These steps enable the recorder, not an individual macro: macro review, approval,
+and execution remain separate. Confirm `/typeagent-status` and
+`/typeagent-macro-status` are recognized before starting a new recording.
 
 ### Step 4: Test Routing
 
@@ -547,13 +583,38 @@ direct, MCP, and dev modes.
 
 ### Learn from one executed task
 
-Set a workspace learning preference, then select one task to learn:
+Start Copilot from `ts`, where `package.json` exists. Select mixed MCP routing,
+set a workspace learning preference, then arm the next interaction:
 
 ```text
+/typeagent-mode mcp mixed
 /typeagent-macro-learning prepare
-/typeagent-macro-record Read file package.json now
+/typeagent-macro-record
+```
+
+Send this as the next ordinary message, rather than using the natural-language
+file-reading shortcut:
+
+```text
+Use the typeagent-workspace read tool with {"path":"package.json"}. Do not use typeagent-processCommand.
+```
+
+The tool timeline should show the workspace `read` call with the exact path,
+not natural-language delegation. A successful file read alone does not establish
+that a trace or candidate was saved. After the task finishes, check recording
+and learning status:
+
+```text
 /typeagent-macro-status
 ```
+
+The original request must also pass grammar validation. Requests ending in an
+unbounded string input, such as `Read file package.json`, can fail because a
+wildcard would also capture a following operation as part of the filename.
+Adding bounded generated variants does not repair the original request.
+The explicit tool request above has fixed text after the path and avoids that
+limitation. Do not just append words such as `now` to a natural-language file
+command: that route can include them in the filename.
 
 Use `/typeagent-macro-cancel` to cancel the selected recording or unfinished
 learning job without cancelling the user's task or revoking approved macros.
@@ -567,6 +628,12 @@ The successful recording queues background recipe extraction, generalized
 macro building, offline evidence validation, and grammar generation. Learning
 does not execute the task again. Inspect status for the candidate/version or a
 specific failure; the original answer does not wait for model generation.
+Extraction receives result availability and JSON types, not the recorded result
+bodies. It describes the procedure (for example, read a file and return the new
+result), not the previous answer's contents. Withheld contents alone are not
+missing evidence; unrecorded ranking, synthesis, or other unsupported work still
+blocks preparation. Failure status includes the specific uncertainty, subject to
+the existing redaction and error-length limits.
 Optional conversation indexing uses its own bounded background queue, not
 the event-ingestion path. Native `report_intent` telemetry is not a task operation.
 
@@ -599,6 +666,11 @@ sets, even when generation is rejected or the candidate awaits approval.
 Candidate and combined-catalog checks cover exact actions/inputs, changed
 values, competing routes, and representative negative intents. These checks
 are not a proof of arbitrary natural-language intent equivalence.
+Generated request variants use fixed words around free-form inputs and end in
+`for me`, so an input cannot simply absorb a following operation. The original
+request is preserved exactly. Grammar generation is instructed to escape literal
+tool-name hyphens and JSON punctuation; malformed or overly broad rules still
+fail validation rather than being published.
 
 This is an initial learning implementation, not a completed live WorkIQ
 certification. The engine supports preparation from stored traces and
@@ -609,6 +681,43 @@ Account/config identity drift, retention/privacy policy, broader wildcard
 safety, and real-model latency/coverage still require validation/hardening.
 Restart the existing agent-server and reload the built plugin before testing;
 building does not change an already running server or session.
+
+### Recording does not produce a candidate
+
+Check `@typeagent macro status` in the same Copilot session before attempting
+macro creation, inspection, or execution. Recording and learning are separate:
+
+- `armed` means the next task has been selected for recording; `claimed` means
+  that task started. Their recording token is not a saved trace ID.
+- `completed` includes the saved trace ID and, for selected learning, a
+  `learningJob` with its current status, candidate/version, or failure reason.
+  The recording can be completed while learning is queued, building, or failed;
+  in Prepare mode a successfully prepared candidate has status `needsReview`.
+- `failed` includes an error to investigate. An empty macro catalog alone does
+  not establish whether a trace exists or learning is still pending.
+
+Never pass a recording token to `create_macro_from_trace`. Selected learning
+prepares its own candidate; do not create a second draft to bypass a pending or
+failed learning job. An inspection-only request must not create, approve, or run
+a macro when no candidate is available.
+
+If the task has finished but recording remains `claimed`, inspect the
+TypeAgent extension's loading errors. It receives the task-completion events
+and saves the trace; the prompt hook only arms and claims the recording.
+Ensure the source entry point and its built recorder are present, or reinstall
+the staged plugin, then restart Copilot. If its slash commands are unknown,
+also check the independent extension enablement and startup permission described
+in [Step 3](#step-3-launch-copilot-with-the-plugin); rebuilding does not remove a
+persisted disabled-extension setting. These are distinct from tool/model failures
+reported by the learning job. Capture the status/error before cancelling or
+starting another recording.
+
+Restarting does not retry a failed extraction or grammar job. Preparing the same
+saved trace, or recording the same request and tool arguments again, returns the
+existing job. After fixing a learning failure, rebuild and restart agent-server,
+reload the plugin, then explicitly record a different harmless example, such as
+reading `README.md` instead of `package.json` from `ts`. Do not delete saved job
+data or create a manual draft to force a retry.
 
 ### Legacy manual lifecycle
 
@@ -1017,6 +1126,12 @@ The plugin extension registers `/typeagent-status`, `/typeagent-mode`, and
 `/typeagent-macro-record`. It consumes typed Copilot session events to capture
 macro traces and TypeAgent history, injects PowerShell guidance with an
 `onPreToolUse` hook, and emits turn-completion state for the demo driver.
+
+In the source checkout this entry point imports the bundled extension under
+`dist/extensions/typeagent/`. Staging places the bundle directly at the same
+manifest entry point, so installed snapshots do not depend on the source loader.
+Run `npm run test:extension-layout` to check source discovery and bundle loading
+without starting Copilot, connecting to agent-server, or executing task tools.
 
 ### MCP Servers (`.mcp.json`)
 
