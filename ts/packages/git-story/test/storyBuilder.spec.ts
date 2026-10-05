@@ -16,9 +16,9 @@ const git = (repo: string, ...args: string[]) =>
 test("attributes exact and modified staged files", () => {
     const root = mkdtempSync(path.join(tmpdir(), "story-v2-"));
     git(root, "init", "-q");
-    writeFileSync(path.join(root, "file.txt"), "base\n");
-    git(root, "add", ".");
-    git(root, ..."-c user.name=t -c user.email=a@b commit -qm base".split(" "));
+    git(root, "config", "user.email", "a@b");
+    git(root, "config", "user.name", "t");
+    git(root, "commit", "--allow-empty", "-qm", "base");
     const store = new JsonlSessionStore(path.join(root, ".git"));
     writeFileSync(path.join(root, "file.txt"), "agent\n");
     const blob = git(root, "hash-object", "-w", "file.txt");

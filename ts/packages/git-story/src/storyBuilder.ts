@@ -20,7 +20,6 @@ import { readStagedFiles, runGit } from "./git.js";
 import { writeStory } from "./storyCodec.js";
 import { isReadOnlyGitCommand } from "./toolFilter.js";
 
-const EMPTY_BLOB_HASH = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
 const MAXIMUM_COMMAND_LENGTH = 200;
 const MAXIMUM_SNIPPET_LENGTH = 120;
 const MAXIMUM_SCRIPT_LENGTH = 200;
@@ -286,13 +285,9 @@ function diffBlobs(
     const directory = mkdtempSync(path.join(os.tmpdir(), "git-story-diff-"));
     const files = [before, after].map((blob, index) => {
         const file = path.join(directory, String(index));
-        const contents = execFileSync("git", [
-            "-C",
-            repository,
-            "cat-file",
-            "blob",
-            blob ?? EMPTY_BLOB_HASH,
-        ]);
+        const contents = blob
+            ? execFileSync("git", ["-C", repository, "cat-file", "blob", blob])
+            : Buffer.alloc(0);
         writeFileSync(file, contents);
         return file;
     });
