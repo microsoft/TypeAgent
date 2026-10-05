@@ -357,6 +357,18 @@ export function createMacroLearningRuntime(
                 controller.abort();
             }
         },
+        validateGrammar(macro, approved) {
+            if (!macro.learning) {
+                throw new Error("Staged learning grammar is required.");
+            }
+            validateCatalogCompatibility(
+                macro.learning.grammarRules,
+                macro.learning.requests,
+                macro,
+                macro.learning.exampleInputs,
+                approved,
+            );
+        },
     };
 }
 
