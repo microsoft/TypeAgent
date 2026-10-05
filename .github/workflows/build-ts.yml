@@ -47,45 +47,83 @@ jobs:
         with:
           # Full history so the changed-files lint can diff against the base.
           fetch-depth: 0
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
-        continue-on-error: true
-        with:
-          filters: |
-            ts:
-              - "ts/**"
-              - ".github/workflows/build-ts.yml"
+      # Decide how much CI this change needs (PRs and merge queue alike):
+      #   skip - nothing under ts/ (or this workflow) changed
+      #   fast - only ts/packages/git-story/** changed.  Nothing in the
+      #          monorepo depends on git-story, so a single Ubuntu/Node 22 leg
+      #          builds and tests just git-story and its dependencies; the
+      #          other matrix legs skip (and report success).
+      #   full - anything else; push to main and manual runs are always full,
+      #          which backstops the fast lane after merge.
+      - name: Determine CI scope
+        id: scope
+        shell: bash
+        run: |
+          mode=full
+          base=""
+          case "${{ github.event_name }}" in
+            pull_request)
+              git fetch --no-tags origin "${{ github.base_ref }}"
+              base="$(git merge-base "origin/${{ github.base_ref }}" HEAD)" ;;
+            merge_group)
+              base="${{ github.event.merge_group.base_sha }}" ;;
+          esac
+          if [ -n "$base" ] && changed="$(git diff --name-only "$base" HEAD)"; then
+            relevant="$(printf '%s\n' "$changed" | grep -E '^(ts/|\.github/workflows/build-ts\.yml$)' || true)"
+            if [ -z "$relevant" ]; then
+              mode=skip
+            elif ! printf '%s\n' "$relevant" | grep -qvE '^ts/packages/git-story/'; then
+              mode=fast
+            fi
+          fi
+          run=true
+          if [ "$mode" = skip ]; then run=false; fi
+          if [ "$mode" = fast ] && { [ "${{ matrix.os }}" != ubuntu-latest ] || [ "${{ matrix.version }}" != 22 ]; }; then run=false; fi
+          echo "CI scope: $mode (run on this leg: $run)"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         with:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
         run: |
-          pnpm install --frozen-lockfile --strict-peer-dependencies
+          if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
+            pnpm install --frozen-lockfile --strict-peer-dependencies --filter . --filter "git-story..."
+          else
+            pnpm install --frozen-lockfile --strict-peer-dependencies
+          fi
       - name: Build
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
         run: |
-          npm run build
+          if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
+            pnpm --filter "git-story..." run build
+          else
+            npm run build
+          fi
       # On pull requests only changed files are checked (fast); the
       # format-pr workflow auto-fixes them.  Other events check the whole repo.
       - name: Lint
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git fetch --no-tags origin "${{ github.base_ref }}"
             node tools/scripts/prettier-changed.mjs --base "origin/${{ github.base_ref }}"
+          elif [ "${{ steps.scope.outputs.mode }}" = fast ]; then
+            node tools/scripts/prettier-changed.mjs --base "${{ steps.scope.outputs.base }}"
           else
             npm run lint
           fi
@@ -97,7 +135,7 @@ jobs:
       # // code-complexity-allow markers.  Tune the thresholds down as hotspots
       # get refactored.
       - name: Complexity ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'pull_request' && steps.scope.outputs.run == 'true' }}
         working-directory: ts
         shell: bash
         run: |
@@ -110,7 +148,7 @@ jobs:
       # base branch.  Syntactic rules only, so it is fast; the count can only
       # trend down.  Run `npm run code-lint` locally to see the full report.
       - name: Lint ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'pull_request' && steps.scope.outputs.run == 'true' }}
         working-directory: ts
         shell: bash
         run: |
@@ -121,7 +159,7 @@ jobs:
       # set for HEAD and for the merge base (via a throwaway git worktree), so
       # this step is heavier than the others (madge runs twice).
       - name: Circular dependency ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'pull_request' && steps.scope.outputs.run == 'true' }}
         working-directory: ts
         shell: bash
         run: |
@@ -131,14 +169,14 @@ jobs:
       # (.only/fit/fdescribe) and no newly skipped tests (.skip/xit/xdescribe)
       # in changed files.  A small, fixable problem -> a hard gate, not a ratchet.
       - name: Test debt gate
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'pull_request' && steps.scope.outputs.run == 'true' }}
         working-directory: ts
         shell: bash
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-debt -- --gate --base "origin/${{ github.base_ref }}"
       - name: Restore better-sqlite3 for Node.js
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' && steps.scope.outputs.mode == 'full' }}
         working-directory: ts
         run: |
           pnpm run postinstall:better-sqlite3-node-restore
@@ -147,14 +185,19 @@ jobs:
       # Flaky tests are reported as annotations / a step summary but do not fail
       # the build; the final retry package suite must otherwise pass.
       - name: Test
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
         env:
           TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS: ${{ runner.os == 'Windows' && '1' || '0' }}
+        shell: bash
         run: |
-          node tools/scripts/runTestLocalWithSummary.mjs
+          if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
+            pnpm --filter git-story test
+          else
+            node tools/scripts/runTestLocalWithSummary.mjs
+          fi
       - name: UI tests (requires display)
-        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') && runner.os == 'Linux' }}
+        if: ${{ steps.scope.outputs.run == 'true' && steps.scope.outputs.mode == 'full' && runner.os == 'Linux' }}
         working-directory: ts
         run: |
           Xvfb :99 -screen 0 1600x1200x24 &
