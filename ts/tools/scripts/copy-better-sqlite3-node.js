@@ -41,6 +41,16 @@ function isNodeCompatible(binaryPath) {
     return res.status === 0;
 }
 
+// Partial installs (e.g. the CI git-story fast lane) don't include
+// better-sqlite3; let them opt out instead of failing.
+if (process.env.TYPEAGENT_SKIP_BETTER_SQLITE3 === "1") {
+    console.log(
+        "TYPEAGENT_SKIP_BETTER_SQLITE3=1, skipping",
+        path.basename(__filename),
+    );
+    process.exit(0);
+}
+
 // Find all better-sqlite3 installations in the pnpm store
 const pnpmDir = path.resolve(__dirname, "..", "..", "node_modules", ".pnpm");
 const entries = fs

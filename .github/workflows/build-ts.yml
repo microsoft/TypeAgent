@@ -119,15 +119,19 @@ jobs:
       - name: Install dependencies
         if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
+        shell: bash
         run: |
           if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
-            pnpm install --frozen-lockfile --strict-peer-dependencies --filter . --filter "$FAST_LANE_PACKAGE..."
+            # git-story's closure has no better-sqlite3; skip the root
+            # postinstall's SQLite binary provisioning.
+            TYPEAGENT_SKIP_BETTER_SQLITE3=1 pnpm install --frozen-lockfile --strict-peer-dependencies --filter . --filter "$FAST_LANE_PACKAGE..."
           else
             pnpm install --frozen-lockfile --strict-peer-dependencies
           fi
       - name: Build
         if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
+        shell: bash
         run: |
           if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
             pnpm --filter "$FAST_LANE_PACKAGE..." run build
@@ -212,7 +216,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
-            pnpm --filter "$FAST_LANE_PACKAGE" test
+            pnpm --filter "$FAST_LANE_PACKAGE..." test
           else
             node tools/scripts/runTestLocalWithSummary.mjs
           fi
