@@ -8,7 +8,7 @@ import type {
     SessionStartOutput,
     UserPromptSubmittedOutput,
 } from "@typeagent/agent-harness-hooks/copilot-cli";
-import { Command } from "commander";
+import { Argument, Command } from "commander";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -249,4 +249,20 @@ gitCommand
         await readStdin();
         if (command !== "rebase") return;
         await aggregateStoriesAfterGitChange("post-rewrite", process.cwd());
+    });
+
+gitCommand
+    .command("post-checkout")
+    .description("Aggregate stories after a branch checkout or switch")
+    .argument("<previous-head>", "previous HEAD")
+    .argument("<new-head>", "new HEAD")
+    .addArgument(
+        new Argument(
+            "<flag>",
+            "1 for branch checkout; 0 for file checkout",
+        ).choices(["0", "1"]),
+    )
+    .action(async (_previousHead: string, _newHead: string, flag: string) => {
+        if (flag === "0") return;
+        await aggregateStoriesAfterGitChange("post-checkout", process.cwd());
     });

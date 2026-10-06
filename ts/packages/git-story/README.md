@@ -23,8 +23,8 @@ Copilot hooks in `.github/copilot/settings.local.json` and adds that
 file to `.git/info/exclude`, so it stays local to the clone.
 
 `init` also writes `pre-commit`, `prepare-commit-msg`, `post-commit`,
-`post-merge`, and `post-rewrite` scripts to the git hooks directory (honors
-`core.hooksPath`). Each script runs
+`post-merge`, `post-rewrite`, and `post-checkout` scripts to the git hooks
+directory (honors `core.hooksPath`). Each script runs
 `exec git-story hooks git <hook> "$@"`,
 so git's hook arguments and stdin reach the command unchanged. `init` does not
 overwrite a hook that it did not write.
@@ -34,8 +34,13 @@ This is a placeholder for the git-story summary.
 
 `post-commit` requests aggregation at the new `HEAD`. Git has no `post-pull`
 hook, so `post-merge` handles pulls that merge or fast-forward and
-`post-rewrite` handles pulls that rebase. Aggregation failures are logged and
-do not change the result of the completed git operation.
+`post-rewrite` handles pulls that rewrite commits through rebase.
+`post-checkout` handles branch checkouts, detached-HEAD checkouts, and
+`git switch`; file-only checkouts do not request aggregation. A pull that
+reports "Already up to date" does not trigger aggregation through these hooks.
+Aggregation failures are logged and do not change the result of the completed
+git operation. Existing installations must rerun `git story init` to install
+the new hooks.
 
 ## Story Aggregator
 
@@ -50,10 +55,11 @@ malformed, or unsupported stories separately, and reports destination acceptance
 separately from completed indexing. It must also reconcile rewritten history so
 stories from commits that are no longer reachable do not remain searchable.
 
-The current post-git hooks call the aggregator scaffold directly. Before history
-scanning is implemented, aggregation admission should move behind the daemon so
-the hooks can submit a bounded asynchronous request instead of scanning Git
-history during `git commit` or `git pull`.
+The current post-git hooks call the aggregator scaffold directly; this PR does
+not add an HTTP aggregation-trigger API. Before history scanning is implemented,
+aggregation admission should move behind the daemon so the hooks can submit a
+bounded asynchronous request instead of scanning Git history during
+`git commit`, `git pull`, or branch checkout.
 
 ## Daemon
 

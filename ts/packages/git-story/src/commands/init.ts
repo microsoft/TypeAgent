@@ -42,6 +42,7 @@ const GIT_HOOKS = [
     "post-commit",
     "post-merge",
     "post-rewrite",
+    "post-checkout",
 ];
 const gitHookScript = (hook: string) =>
     `#!/bin/sh\n${GIT_HOOK_MARKER}\nexec git-story hooks git ${hook} "$@"\n`;

@@ -64,6 +64,7 @@ test("git hooks are installed and forward to git-story", () => {
         "post-commit",
         "post-merge",
         "post-rewrite",
+        "post-checkout",
     ]) {
         expect(
             fs.readFileSync(path.join(repo, ".git/hooks", hook), "utf8"),
