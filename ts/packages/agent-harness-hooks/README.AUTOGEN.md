@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8e8bb04db14493efd52ed97ab5cb1490638fe2d1407f1eec36cbd7724fb6706e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c8b91969c09702e9ad0b907eefd4ea7e99aa6f3108d3eb4009a08587a1bc0a97 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-harness-hooks — AI-generated documentation
@@ -32,7 +32,6 @@ External: _None at runtime._
 
 - [@typeagent/copilot-memory-plugin](../../packages/copilot-memory-plugin/README.md)
 - [@typeagent/copilot-plugin](../../packages/copilot-plugin/README.md)
-- [git-story](../../packages/git-story/README.md)
 
 ### Files of interest
 
@@ -40,6 +39,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `b705d07577da10f5438b417fd4dedb8a0a58ac9c` on `2026-10-02T02:45:42.886Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-harness-hooks docs:verify-links` to spot-check._
+_Auto-generated against commit `66f29c5f3cb9178b03dfeb37e33509cc052bdbc6` on `2026-10-06T20:01:30.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-harness-hooks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

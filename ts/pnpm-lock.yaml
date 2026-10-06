@@ -5406,46 +5406,6 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/git-story:
-    dependencies:
-      '@hono/node-server':
-        specifier: ^1.19.17
-        version: 1.19.17(hono@4.13.5)
-      '@typeagent/agent-harness-hooks':
-        specifier: workspace:*
-        version: link:../agent-harness-hooks
-      '@typeagent/conversation-memory':
-        specifier: workspace:*
-        version: link:../memory/conversation
-      commander:
-        specifier: ^12.1.0
-        version: 12.1.0
-      hono:
-        specifier: '>=4.12.8 <5.0.0'
-        version: 4.13.5
-      tirith:
-        specifier: 0.4.2
-        version: 0.4.2
-      zod:
-        specifier: ^4.1.13
-        version: 4.3.6
-    devDependencies:
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.14
-      '@types/node':
-        specifier: ^20.10.0
-        version: 20.19.43
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.43)(ts-node@10.9.2(@types/node@20.19.43)(typescript@5.4.5))
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-
   packages/grammarTools/cli:
     dependencies:
       '@typeagent/action-grammar':
@@ -10981,31 +10941,6 @@ packages:
 
   '@selderee/plugin-htmlparser2@0.11.0':
     resolution: {integrity: sha1-1bXimnum05WKGXLHvhb0ssGIxRc=}
-
-  '@sheeki03/tirith-darwin-arm64@0.4.2':
-    resolution: {integrity: sha512-L9GDpcYqT1wP0QmY1E8ATC7JE6oyenGyFbug85TC8vRzMvkDGDzzPG+ne4vx1Iw0QL7DbNL+4gebjV+E8RDy8Q==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@sheeki03/tirith-darwin-x64@0.4.2':
-    resolution: {integrity: sha512-EmHlZvkwSxTnJAWXRpEeN6U+f5QXnxt23RlJhgK89CcOgHUPH2guJUxyacHzKCg78oIiWRne70e0gnCiAtFmrw==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@sheeki03/tirith-linux-arm64@0.4.2':
-    resolution: {integrity: sha512-7Y/lmw5H6EErauzALkLAaHxzc+CAHJIts5qbF3OjHQjjbKJbsxx5612x76SBTzhvh+UB6ugutybo69EXiiivUg==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@sheeki03/tirith-linux-x64@0.4.2':
-    resolution: {integrity: sha512-EVxMj7b2hL1REprfC8IIRJ56rTNKBm+rJc92oY6vijEubUW8medNS+dOgux1qywD2kMWCkDRx/uWTI91PSU8ew==}
-    cpu: [x64]
-    os: [linux]
-
-  '@sheeki03/tirith-win32-x64@0.4.2':
-    resolution: {integrity: sha512-aQ4xhEPMCZWHvq4JN52M04SRy+TbInwH0f2eUFJBrlEKQPGZq8Lith2YD7la+fIWseqJRbNVsanEzDDsRjqrSA==}
-    cpu: [x64]
-    os: [win32]
 
   '@sinclair/typebox@0.27.12':
     resolution: {integrity: sha1-DKzTz/BHoyk2sazkfqfIbqq2Cn8=}
@@ -18588,10 +18523,6 @@ packages:
     resolution: {integrity: sha1-ViqabJ6ys7Ej05cZ+a9btE/NdjE=}
     engines: {node: '>=12.0.0'}
 
-  tirith@0.4.2:
-    resolution: {integrity: sha512-GO5750dIc9YYepPEYT6QTL4J0vl4gbf/UBb2njHE5grmBejR7wd8MQFcAvTs9zk9hkG8Ye1TGxhmmuKFd+Hilw==}
-    hasBin: true
-
   tlds@1.261.0:
     resolution: {integrity: sha1-BV5BLpLwH4SpyKwFBNNHLWizxMk=}
     hasBin: true
@@ -24622,21 +24553,6 @@ snapshots:
     dependencies:
       domhandler: 5.0.3
       selderee: 0.11.0
-
-  '@sheeki03/tirith-darwin-arm64@0.4.2':
-    optional: true
-
-  '@sheeki03/tirith-darwin-x64@0.4.2':
-    optional: true
-
-  '@sheeki03/tirith-linux-arm64@0.4.2':
-    optional: true
-
-  '@sheeki03/tirith-linux-x64@0.4.2':
-    optional: true
-
-  '@sheeki03/tirith-win32-x64@0.4.2':
-    optional: true
 
   '@sinclair/typebox@0.27.12': {}
 
@@ -35148,14 +35064,6 @@ snapshots:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
-
-  tirith@0.4.2:
-    optionalDependencies:
-      '@sheeki03/tirith-darwin-arm64': 0.4.2
-      '@sheeki03/tirith-darwin-x64': 0.4.2
-      '@sheeki03/tirith-linux-arm64': 0.4.2
-      '@sheeki03/tirith-linux-x64': 0.4.2
-      '@sheeki03/tirith-win32-x64': 0.4.2
 
   tlds@1.261.0: {}
 
