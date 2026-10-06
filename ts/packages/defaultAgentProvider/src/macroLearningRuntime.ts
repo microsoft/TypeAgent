@@ -18,6 +18,7 @@ import {
     parseMacroExecutionRecipe,
     parseMacroLearningBuild,
     type CopilotToolMacro,
+    type MacroLearningBuild,
     type MacroLearningRuntime,
 } from "@typeagent/copilot-macros";
 import {
@@ -79,6 +80,9 @@ Each input has name,description,required,secret,valueType. exampleInputs supplie
 the original values and must reconstruct every original argument exactly.
 requests contains the exact original request plus 3-5 reasonable equivalent
 natural requests using the same example values. Do not require a macro name.
+Every request must contain each required string exampleInputs value verbatim,
+using JSON escaping where needed. Do not omit or rename filenames or replace
+them with indirect descriptions such as "the workspace configuration".
 For every generated variant, put fixed operation words BEFORE AND AFTER every
 free-form string input. End each generated variant with the fixed words "for me".
 Do not end variants with punctuation. Do not start variants with an input.
@@ -91,6 +95,27 @@ Do not add ranking, latest-item selection, synthesis or other effects absent fro
 the observed procedure. If its complete output cannot be represented, fail with
 JSON {"error":"specific unsupported requirement"} instead of proposing a partial
 procedure. No credentials, new tools, loops or arbitrary executable scripts.`;
+
+function requestGroundingError(build: MacroLearningBuild): string | undefined {
+    for (const input of build.inputs) {
+        const value = build.exampleInputs[input.name];
+        if (
+            !input.required ||
+            typeof value !== "string" ||
+            value.length === 0
+        ) {
+            continue;
+        }
+        const escaped = JSON.stringify(value).slice(1, -1);
+        const request = build.requests.find(
+            (request) => !request.includes(value) && !request.includes(escaped),
+        );
+        if (request !== undefined) {
+            return `Request ${JSON.stringify(request)} does not contain required string input '${input.name}' value ${JSON.stringify(value)}.`;
+        }
+    }
+    return undefined;
+}
 
 const grammarInstructions = `MACRO GRAMMAR REQUIREMENTS:
 Do not add shared phrases: omit phrasesToAdd or return []. Use inline alternatives instead.
@@ -270,9 +295,25 @@ export function createMacroLearningRuntime(
             );
         },
         async build(recipe, _trace, baseline, signal) {
-            return parseMacroLearningBuild(
+            const build = parseMacroLearningBuild(
                 await ask(builderInstructions, { recipe, baseline }, signal),
             );
+            const groundingError = requestGroundingError(build);
+            if (groundingError === undefined) return build;
+            const corrected = parseMacroLearningBuild(
+                await ask(
+                    `${builderInstructions}\nCorrect the groundingError in the previousBuild. Preserve the exact original request, grounded example values and recorded procedure. Return the complete corrected build, not a patch.`,
+                    { recipe, baseline, previousBuild: build, groundingError },
+                    signal,
+                ),
+            );
+            const correctedError = requestGroundingError(corrected);
+            if (correctedError !== undefined) {
+                throw new Error(
+                    `Macro builder request grounding failed after one correction: ${correctedError}`,
+                );
+            }
+            return corrected;
         },
         async generateGrammar(macro, exampleInputs, requests, signal) {
             if (requests.length === 0 || requests.length > 6) {
@@ -332,7 +373,7 @@ export function createMacroLearningRuntime(
                         );
                         if (!result.success || !result.generatedRule) {
                             throw new Error(
-                                `Macro grammar rejected: ${result.rejectionReason ?? "No rule generated."}`,
+                                `Macro grammar rejected for request ${index + 1}/${requests.length} ${JSON.stringify(request)}: ${result.rejectionReason ?? "No rule generated."}`,
                             );
                         }
                         return result.generatedRule;
