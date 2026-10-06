@@ -10,8 +10,12 @@ export type StoryAggregationResult = {
     resolvedRevision: string;
     scannedCommits: number;
     commitsWithoutStory: number;
+    commitsWithMalformedStory: number;
+    commitsWithUnsupportedStory: number;
     // Accepted by the memory destination, not necessarily searchable yet.
     acceptedStories: number;
+    // Previously accepted stories retired because their commits are no longer reachable.
+    retiredStories: number;
 };
 
 export class StoryAggregator {
@@ -26,6 +30,7 @@ export class StoryAggregator {
         // Distinguish missing stories from malformed or unsupported stories.
         // Submit valid stories with repository and commit provenance.
         // Require repeat-safe submission through the memory adapter.
+        // Retire indexed stories whose commits are no longer reachable.
         // Report destination acceptance separately from indexing completion.
         // Surface failures rather than reporting incomplete work as success.
         throw new Error("StoryAggregator.aggregate is not implemented");

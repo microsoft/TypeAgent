@@ -92,7 +92,10 @@ test("post-git hook aggregation targets HEAD and does not block git", async () =
         resolvedRevision: "abc123",
         scannedCommits: 1,
         commitsWithoutStory: 0,
+        commitsWithMalformedStory: 0,
+        commitsWithUnsupportedStory: 0,
         acceptedStories: 1,
+        retiredStories: 0,
     };
     await aggregateStoriesAfterGitChange("post-commit", dir, {
         aggregate: async (request) => {

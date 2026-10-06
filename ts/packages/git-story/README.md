@@ -37,6 +37,24 @@ hook, so `post-merge` handles pulls that merge or fast-forward and
 `post-rewrite` handles pulls that rebase. Aggregation failures are logged and
 do not change the result of the completed git operation.
 
+## Story Aggregator
+
+The Session Watcher and Story Aggregator operate on different data. The watcher
+captures private session evidence, normalizes it, and sends privacy-approved
+updates to a configured destination. A Story Builder can use that evidence to
+produce a portable `GitCommitStory`. The aggregator reads only published stories
+from Git commit messages and submits those stories to searchable memory.
+
+Aggregation resolves a fixed revision, classifies commits with missing,
+malformed, or unsupported stories separately, and reports destination acceptance
+separately from completed indexing. It must also reconcile rewritten history so
+stories from commits that are no longer reachable do not remain searchable.
+
+The current post-git hooks call the aggregator scaffold directly. Before history
+scanning is implemented, aggregation admission should move behind the daemon so
+the hooks can submit a bounded asynchronous request instead of scanning Git
+history during `git commit` or `git pull`.
+
 ## Daemon
 
 `git story daemon start|stop|restart|status` manages one HTTP API server per
