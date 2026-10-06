@@ -28,9 +28,11 @@
   "dependencies": {
     "@hono/node-server": "^1.19.17",
     "@typeagent/agent-harness-hooks": "workspace:*",
+    "@typeagent/conversation-memory": "workspace:*",
     "commander": "^12.1.0",
     "hono": "^4.13.5",
-    "tirith": "0.4.2"
+    "tirith": "0.4.2",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/jest": "^29.5.7",

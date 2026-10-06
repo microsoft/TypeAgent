@@ -158,7 +158,10 @@ filter the available actions and are rechecked at execution.
 Learning is opt-in and uses an injected `MacroLearningRuntime`; this package has
 no model or SDK dependency and never launches a learning agent or calls task
 tools. The service supplies factual `extract`, generalized `build`, and checked
-`generateGrammar` implementations. Each receives an abort signal. The injected
+`generateGrammar` implementations. Each receives an abort signal. A synchronous
+`validateGrammar(macro, approved)` implementation rechecks the staged rules
+against the current approved catalog inside serialized approval and recovery.
+This validation must not generate rules or execute task tools. The injected
 runtime must not have task-execution capabilities. It must report unsupported
 selection, synthesis, or full-output requirements in
 `MacroLearningBuild.unsupportedOutputs`; a structurally valid, warning-free
@@ -197,6 +200,9 @@ The public coordinator API is:
 - `prepareMacroLearning({traceId})`: enqueue a previously captured interaction
   and return without waiting for extraction, building, or grammar generation.
 - `getMacroLearningJob(jobId)`: inspect persisted phase, macro reference, or error.
+- `await getRecordingState(sessionId)`: inspect recording state and, after a
+  selected recording completes, its current learning job, phase, version, or
+  error. Cancellation clients use this job ID before clearing the recording.
 - `cancelMacroLearningJob(jobId)`: persist cancellation and abort active work.
   Already approved macros must instead be disabled or forgotten.
 
@@ -217,6 +223,11 @@ steps/tools, unknown expressions, unsafe paths, unused inputs, overlapping
 bindings, invalid result guards, and unresolved recipe uncertainties fail before
 publication. Inputs may generalize evidenced argument values; these checks do not
 prove semantic wildcard safety or goal-level synthesis.
+
+Learning baselines use captured model-facing results when available, including
+for MCP-only procedures. Result guards and step dependencies therefore describe
+what the live runner observes, without changing tool execution-class metadata or
+raw-result semantics for non-learning deterministic replay.
 
 The runtime receives the anticipated approved artifact (`draft.version + 1`,
 initially version 2) for grammar generation. Rules, example inputs, requests,
@@ -261,6 +272,14 @@ and historical preparation of that runner trace converge on the same job.
 The adaptation retains the source macro ID and provenance, writes a new immutable
 draft/approved version pair, and generates grammar for that pair's anticipated
 approved version (for example, source v2 -> draft v3 -> approved v4).
+New adaptations reserve distinct draft/approval version pairs, including when
+another draft is still pending. Lifecycle versions are allocated above persisted
+immutable versions, so disabling v2 with a hidden v3 draft writes disabled v4
+instead of overwriting v3. Prepared grammar targets are never renumbered.
+Adaptation publication requires the source to remain the current approved
+version, including for historical traces of non-learning macros. Re-saving an
+identical persisted adaptation draft never changes the catalog; approval and
+interrupted-publication recovery recheck the source under the catalog lock.
 The prior approved route stays active while a Prepare adaptation awaits review;
 publication replaces it with one current approved artifact, not a competing
 catalog entry. Disable/forget suppress every learned version of that macro,
@@ -269,8 +288,8 @@ their explicit draft-return behavior; learned sources require the evidenced
 overload rather than that compatibility producer.
 
 The factual recipe contains source trace/call IDs, the canonical request,
-description, and uncertainty, not copied raw result bodies. The injected runtime
-owns model-facing evidence selection; the manager retains the actual redacted
+description, and uncertainty, not copied raw result bodies. The learning engine
+grounds the baseline in model-facing results; the manager retains the actual redacted
 trace locally for exact validation. Verified execution still does not prove
 goal-level selection, synthesis, or complete-answer generalization. Unsupported
 full outputs must be reported and rejected, never invented as observed evidence.

@@ -10,6 +10,16 @@ export type SessionWatchRequest = {
     metadata: SessionMetadata;
 };
 
+// What a client hook sends. A client that knows its transcript (VS Code
+// passes `transcript_path`) sends it; otherwise the daemon derives it from
+// metadata.clientName, so hooks need no client storage layout.
+export type SessionRegistration = Omit<
+    SessionWatchRequest,
+    "transcriptPath"
+> & {
+    transcriptPath?: string | undefined;
+};
+
 // Capture progress only, not acknowledgement of downstream processing.
 export type SessionCaptureCheckpoint = {
     sessionId: string;
