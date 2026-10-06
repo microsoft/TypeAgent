@@ -13,7 +13,10 @@ internal sealed record BrokerRequest(
     string[] AllowedCommands,
     int TimeoutSeconds,
     int MaxOutputBytes,
-    string Provenance);
+    string Provenance,
+    bool ApprovedLocal = false,
+    string? WorkingDirectory = null,
+    string[]? RequiredModules = null);
 
 internal sealed record BrokerResponse(
     bool Success,
@@ -31,7 +34,10 @@ internal sealed record HostRequest(
     string ParametersJson,
     string[] AllowedCommands,
     int TimeoutSeconds,
-    bool Diagnostics);
+    bool Diagnostics,
+    bool ApprovedLocal = false,
+    string? WorkingDirectory = null,
+    string[]? RequiredModules = null);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
@@ -79,7 +85,7 @@ internal static class BrokerProtocol
                 BrokerJsonContext.Default.BrokerRequest)
             ?? throw new BrokerPolicyException("broker.invalidRequest", "The broker request is empty.");
 
-        if (request.ProtocolVersion != CurrentVersion)
+        if (request.ProtocolVersion != (request.ApprovedLocal ? 2 : CurrentVersion))
         {
             throw new BrokerPolicyException(
                 "broker.unsupportedProtocol",
@@ -100,6 +106,27 @@ internal static class BrokerProtocol
         if (request.MaxOutputBytes is < 1 or > DefaultMaximumOutputBytes)
         {
             throw new BrokerPolicyException("broker.invalidRequest", "The output limit is outside the broker limit.");
+        }
+        if (request.ApprovedLocal)
+        {
+            if (request.RequiredModules is { Length: > 64 } ||
+                request.RequiredModules?.Any(name => string.IsNullOrWhiteSpace(name) || name.Length > 4096) == true)
+            {
+                throw new BrokerPolicyException("broker.invalidRequest", "Invalid required module list.");
+            }
+            if (request.WorkingDirectory is null ||
+                !Path.IsPathFullyQualified(request.WorkingDirectory) ||
+                !Directory.Exists(request.WorkingDirectory))
+            {
+                throw new BrokerPolicyException(
+                    "broker.invalidRequest",
+                    "Approved-local execution requires an existing absolute working directory.");
+            }
+            return request with { AllowedCommands = [] };
+        }
+        if (request.RequiredModules is { Length: > 0 })
+        {
+            throw new BrokerPolicyException("broker.policyDenied", "Restricted execution does not grant modules.");
         }
         var unsupported = request.AllowedCommands
             .Where(command => !SafeCommands.Contains(command))

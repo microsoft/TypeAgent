@@ -9,6 +9,11 @@ import { fileURLToPath } from "url";
 import { getPowerShellExecutionGates } from "../config/executionGates.mjs";
 import type { ScriptExecutionProvenance } from "../types/scriptRecipe.js";
 import { executeBrokeredPowerShell } from "./windowsSandboxBroker.mjs";
+import {
+    authorizeLocalScript,
+    consumeScriptApproval,
+    type ScriptApprovalContext,
+} from "./scriptApproval.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -53,13 +58,16 @@ export interface ScriptExecutionRequest {
     provenance?: ScriptExecutionProvenance | undefined;
     parameterRoles?: Partial<Record<string, ScriptParameterRole>>;
     sandbox: {
-        allowedCmdlets: string[];
-        allowedPaths: string[];
-        allowedModules: string[];
+        allowedCmdlets?: string[];
+        allowedPaths?: string[];
+        allowedModules?: string[];
         maxExecutionTime: number;
-        networkAccess: boolean;
+        networkAccess?: boolean;
     };
     workingDirectory?: string;
+    requiredModules?: string[] | undefined;
+    revisionStatus?: "verified" | "unverified" | "changed" | undefined;
+    onAuthorized?: (() => Promise<void>) | undefined;
     abortSignal?: AbortSignal | undefined;
     profiler?: ScriptExecutionProfiler | undefined;
 }
@@ -94,25 +102,6 @@ function isDynamicProvenance(
     return provenance !== undefined && knownDynamicProvenance.has(provenance);
 }
 
-export const DYNAMIC_POWERSHELL_COMMANDS = new Set([
-    "ConvertFrom-Csv",
-    "ConvertFrom-Json",
-    "ConvertTo-Csv",
-    "ConvertTo-Json",
-    "ForEach-Object",
-    "Format-List",
-    "Format-Table",
-    "Get-Date",
-    "Group-Object",
-    "Measure-Object",
-    "Out-String",
-    "Select-Object",
-    "Sort-Object",
-    "Start-Sleep",
-    "Where-Object",
-    "Write-Output",
-]);
-
 function createPolicyDeniedResult(message: string): ScriptExecutionResult {
     return {
         success: false,
@@ -128,6 +117,7 @@ function createPolicyDeniedResult(message: string): ScriptExecutionResult {
 
 export async function executeScript(
     request: ScriptExecutionRequest,
+    approval?: ScriptApprovalContext,
 ): Promise<ScriptExecutionResult> {
     request.abortSignal?.throwIfAborted();
     if (!isDynamicProvenance(request.provenance)) {
@@ -146,62 +136,111 @@ export async function executeScript(
             "PowerShell policy denied dynamic script execution because broker execution is disabled.",
         );
     }
-    if (request.sandbox.networkAccess) {
+    if (!approval) {
         return createPolicyDeniedResult(
-            "PowerShell policy denied dynamic network access because the sandbox broker does not grant network capability.",
+            "PowerShell requires an interactive authorization context.",
         );
     }
-    if (request.sandbox.allowedModules.length > 0) {
+    if (
+        typeof request.script !== "string" ||
+        !request.script.trim() ||
+        request.script.length > 512 * 1024 ||
+        !Number.isInteger(request.sandbox.maxExecutionTime) ||
+        request.sandbox.maxExecutionTime < 1 ||
+        request.sandbox.maxExecutionTime > 120 ||
+        !request.parameters ||
+        typeof request.parameters !== "object" ||
+        Array.isArray(request.parameters)
+    ) {
         return createPolicyDeniedResult(
-            "PowerShell policy denied dynamic module loading because the sandbox broker does not grant module capability.",
+            "Invalid approved-local PowerShell execution request.",
         );
     }
-    if (request.sandbox.allowedPaths.length > 0) {
-        return createPolicyDeniedResult(
-            "PowerShell policy denied dynamic filesystem access because the sandbox broker does not grant external path capability.",
-        );
-    }
-    const unsupportedCommands = request.sandbox.allowedCmdlets.filter(
-        (command) => !DYNAMIC_POWERSHELL_COMMANDS.has(command),
-    );
-    if (unsupportedCommands.length > 0) {
-        return createPolicyDeniedResult(
-            "PowerShell policy denied an unsupported dynamic command.",
-        );
-    }
+    return executeApprovedLocalScript(request, approval, request.provenance);
+}
 
+async function executeApprovedLocalScript(
+    request: ScriptExecutionRequest,
+    approval: ScriptApprovalContext,
+    provenance: DynamicScriptExecutionProvenance,
+): Promise<ScriptExecutionResult> {
+    let approved;
+    try {
+        approved = await authorizeLocalScript(
+            {
+                script: request.script,
+                parameters: request.parameters,
+                workingDirectory: request.workingDirectory,
+                maxExecutionTime: request.sandbox.maxExecutionTime,
+                provenance,
+                requiredModules: request.requiredModules,
+                revisionStatus: request.revisionStatus,
+            },
+            approval,
+            request.abortSignal,
+        );
+    } catch (error) {
+        request.abortSignal?.throwIfAborted();
+        return createPolicyDeniedResult(
+            `PowerShell authorization was unavailable or invalidated. No script was executed. ${error instanceof Error ? error.message : String(error)}`,
+        );
+    }
+    if (!approved) {
+        return createPolicyDeniedResult(
+            "PowerShell execution was not authorized. No script was executed.",
+        );
+    }
+    const gates = getPowerShellExecutionGates();
+    if (!gates.dynamicExecution.enabled || !gates.brokerExecution.enabled) {
+        return createPolicyDeniedResult(
+            "Approved-local PowerShell was disabled before execution.",
+        );
+    }
+    request.abortSignal?.throwIfAborted();
+    try {
+        await request.onAuthorized?.();
+    } catch (error) {
+        return createPolicyDeniedResult(
+            error instanceof Error ? error.message : String(error),
+        );
+    }
+    request.abortSignal?.throwIfAborted();
+    const launchGates = getPowerShellExecutionGates();
+    if (
+        !launchGates.dynamicExecution.enabled ||
+        !launchGates.brokerExecution.enabled ||
+        !consumeScriptApproval(approved, approval)
+    ) {
+        return createPolicyDeniedResult(
+            "PowerShell authorization was revoked, execution was disabled, or its snapshot changed. No script was executed.",
+        );
+    }
     const profile = request.profiler?.measure(
-        "powershellSandboxExecution",
+        "powershellApprovedLocalExecution",
         true,
         {
-            provenance: request.provenance,
-            policyVersion: "appcontainer-v1",
-            isolationMode: "appcontainer",
-            languageMode: "ConstrainedLanguage",
+            provenance,
+            policyVersion: "approved-local-v1",
+            isolationMode: "current-user",
             scriptHash: createHash("sha256")
-                .update(request.script)
+                .update(approved.script)
                 .digest("hex"),
         },
     );
     try {
-        const result = await executeBrokeredPowerShell({
-            script: request.script,
-            parameters: request.parameters,
-            provenance: request.provenance,
-            allowedCommands: request.sandbox.allowedCmdlets,
-            maxExecutionTime: request.sandbox.maxExecutionTime,
+        return await executeBrokeredPowerShell({
+            script: approved.script,
+            parameters: approved.parameters,
+            provenance,
+            allowedCommands: [],
+            maxExecutionTime: approved.maxExecutionTime,
             abortSignal: request.abortSignal,
+            approvedLocal: true,
+            workingDirectory: approved.workingDirectory,
+            requiredModules: approved.requiredModules,
         });
-        profile?.stop({
-            success: result.success,
-            cancelled: result.cancelled,
-            errorCode: result.errorCode,
-            duration: result.duration,
-        });
-        return result;
-    } catch (error) {
-        profile?.stop({ success: false, outcome: "exception" });
-        throw error;
+    } finally {
+        profile?.stop();
     }
 }
 
@@ -254,19 +293,19 @@ async function executeLegacyScript(
         "-ParameterRolesJson",
         JSON.stringify(request.parameterRoles ?? {}),
         "-AllowedCmdletsJson",
-        JSON.stringify(request.sandbox.allowedCmdlets),
+        JSON.stringify(request.sandbox.allowedCmdlets ?? []),
         "-NetworkAccess",
         request.sandbox.networkAccess ? "true" : "false",
         "-TimeoutSeconds",
         String(request.sandbox.maxExecutionTime),
     ];
 
-    if (request.sandbox.allowedPaths.length > 0) {
+    if (request.sandbox.allowedPaths?.length) {
         args.push("-AllowedPathsJson");
         args.push(JSON.stringify(request.sandbox.allowedPaths));
     }
 
-    if (request.sandbox.allowedModules.length > 0) {
+    if (request.sandbox.allowedModules?.length) {
         args.push("-AllowedModulesJson");
         args.push(JSON.stringify(request.sandbox.allowedModules));
     }

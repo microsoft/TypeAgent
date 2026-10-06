@@ -852,11 +852,10 @@ async function loadManagement(): Promise<void> {
                     !query ||
                     item.title.toLowerCase().includes(query.toLowerCase()),
             ),
-        changed: () =>
-            hubAction(async () => {
-                invalidateDiscovery();
-                await refreshSnapshot();
-            }),
+        changed: async () => {
+            invalidateDiscovery();
+            await refreshSnapshot();
+        },
         error: (_message, offline) => {
             el("hubStatus").textContent = offline
                 ? "Offline"
@@ -879,6 +878,16 @@ async function loadManagement(): Promise<void> {
             open({ page: "library", corpusId, objectId }),
         openProcedure: (corpusId, objectId) =>
             open({ page: "runbooks", corpusId, objectId }),
+        sourceForgotten: (corpusId, sourceId, title) => {
+            notificationManager.showSuccess(`Forgot source "${title}".`);
+            const route = parseRoute(location.hash);
+            if (
+                route.page === "library" &&
+                route.corpusId === corpusId &&
+                route.objectId === sourceId
+            )
+                open({ page: "library" });
+        },
     });
     el("reindexCorpusButton").addEventListener("click", () => {
         if (!scope)

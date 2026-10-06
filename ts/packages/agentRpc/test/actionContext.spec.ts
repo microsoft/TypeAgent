@@ -162,7 +162,7 @@ describe("agent action context RPC", () => {
         }
     });
 
-    test("propagates workingDirectory to the out-of-process agent", async () => {
+    test("propagates host origin, security approval and session identity across fresh RPC shims", async () => {
         let clientProvider: ChannelProviderAdapter;
         let serverProvider: ChannelProviderAdapter;
         clientProvider = createChannelProviderAdapter(
@@ -181,11 +181,23 @@ describe("agent action context RPC", () => {
         );
 
         let receivedWorkingDirectory: string | undefined;
+        const received: SessionContext[] = [];
+        const origins: ActionContext["executionOrigin"][] = [];
+        const approvals: number[] = [];
         let receivedConversationId: string | undefined;
         const serverAgent: AppAgent = {
             initializeAgentContext: async () => ({}),
             executeAction: async (_action, context) => {
                 receivedWorkingDirectory = context.workingDirectory;
+                received.push(context.sessionContext);
+                origins.push(context.executionOrigin);
+                approvals.push(
+                    await context.sessionContext.requestSecurityApproval!({
+                        message: "Execute?",
+                        choices: ["Run", "Cancel"],
+                        defaultId: 1,
+                    }),
+                );
                 receivedConversationId = context.sessionContext.conversationId;
                 return undefined;
             },
@@ -210,10 +222,12 @@ describe("agent action context RPC", () => {
                 sessionContextId: "rpc-working-directory-test",
                 conversationId: "owning-conversation",
             } as SessionContext<unknown>;
+            sessionContext.requestSecurityApproval = async () => 1;
             const actionContext = {
                 sessionContext,
                 workingDirectory: "C:\\host-authorized-workspace",
                 isFromReasoningLoop: false,
+                executionOrigin: "structured",
             } as ActionContext<unknown>;
 
             await clientAgent.executeAction?.(
@@ -228,6 +242,24 @@ describe("agent action context RPC", () => {
             expect(receivedWorkingDirectory).toBe(
                 "C:\\host-authorized-workspace",
             );
+            await clientAgent.executeAction?.(
+                { schemaName: "test", actionName: "test" },
+                actionContext,
+            );
+            expect(received[0]).not.toBe(received[1]);
+            expect(received.map((s) => s.sessionContextId)).toEqual([
+                "rpc-working-directory-test",
+                "rpc-working-directory-test",
+            ]);
+            expect(origins).toEqual(["structured", "structured"]);
+            expect(approvals).toEqual([1, 1]);
+            delete sessionContext.requestSecurityApproval;
+            await expect(
+                clientAgent.executeAction!(
+                    { schemaName: "test", actionName: "test" },
+                    actionContext,
+                ),
+            ).rejects.toThrow("does not support trusted security approval");
             expect(receivedConversationId).toBe("owning-conversation");
         } finally {
             server.closeFn();

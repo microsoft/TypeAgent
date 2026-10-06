@@ -585,6 +585,8 @@ export function createAgentRpcServer(
                     defaultId,
                 });
             },
+            requestSecurityApproval: (request) =>
+                rpc.invoke("requestSecurityApproval", { contextId, request }),
             toggleTransientAgent: async (
                 name: string,
                 enable: boolean,
@@ -848,6 +850,7 @@ export function createAgentRpcServer(
             streamingContext: undefined,
             activityContext: param.activityContext,
             isFromReasoningLoop: param.isFromReasoningLoop ?? false,
+            executionOrigin: param.executionOrigin,
             workingDirectory: param.workingDirectory,
             get abortSignal() {
                 return abortController.signal;

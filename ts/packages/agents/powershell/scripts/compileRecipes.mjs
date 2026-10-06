@@ -21,6 +21,8 @@ import {
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
+import { validatePowerShellIdentifier } from "@typeagent/agent-flows/powershell/integrity";
+import { getRequiredModules } from "@typeagent/agent-flows/powershell/recipe";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG = join(__dirname, "..");
@@ -129,12 +131,10 @@ function buildFlowJson(recipe) {
                 language: recipe.script?.language || "powershell",
                 body: recipe.script?.body || "",
                 parameters: scriptParams,
-                sandbox: recipe.sandbox || {
-                    allowedCmdlets: [],
-                    allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-                    maxExecutionTime: 30,
-                    networkAccess: false,
+                sandbox: {
+                    maxExecutionTime: recipe.sandbox?.maxExecutionTime ?? 30,
                 },
+                requiredModules: getRequiredModules(recipe),
             },
         ],
     };
@@ -163,6 +163,7 @@ let anyCompiled = false;
 for (const recipeFile of recipeFiles) {
     const recipePath = join(pendingDir, recipeFile);
     const recipe = JSON.parse(readFileSync(recipePath, "utf8"));
+    validatePowerShellIdentifier(recipe.actionName);
     console.log(`\nCompiling: ${recipe.actionName}`);
 
     // 1. Write flow.json

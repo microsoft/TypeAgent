@@ -100,5 +100,5 @@ jobs:
         env:
           TYPEAGENT_POWERSHELL_BROKER_DIAGNOSTICS: "1"
         run: |
-          pnpm run build packages/agents/powershell
+          pnpm exec fluid-build '@typeagent/powershell-typeagent' -t build --dep
           pnpm --filter @typeagent/powershell-typeagent test

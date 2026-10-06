@@ -9,11 +9,22 @@ import type {
 } from "@typeagent/agent-sdk";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { jest } from "@jest/globals";
-import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import {
+    mkdir,
+    mkdtemp,
+    readFile,
+    realpath,
+    rm,
+    writeFile,
+} from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { instantiate } from "../src/actionHandler.mjs";
+import type { PowerShellFlowDefinition } from "../src/store/powerShellStore.mjs";
 import {
     executeScript,
     executeReviewedStaticScript,
@@ -23,6 +34,7 @@ import {
     getRegisteredNamespaceActions,
     hasNamespaceAction,
 } from "../src/namespaces/actionHandlerRegistry.mjs";
+import { revokeScriptApprovals } from "../src/execution/scriptApproval.mjs";
 
 const itOnWindows =
     process.platform === "win32" &&
@@ -122,7 +134,10 @@ class MemoryStorage implements Storage {
     }
 
     async exists(path: string): Promise<boolean> {
-        return this.files.has(path);
+        return (
+            this.files.has(path) ||
+            [...this.files.keys()].some((key) => key.startsWith(`${path}/`))
+        );
     }
 
     async list(path: string): Promise<string[]> {
@@ -148,16 +163,26 @@ class MemoryStorage implements Storage {
 function createSessionContext(
     storage: Storage,
     reloadAgentSchema: () => Promise<void> = jest.fn(async () => {}),
-    popupQuestion: SessionContext["popupQuestion"] = async () => 1,
+    popupQuestion: SessionContext["popupQuestion"] = async (
+        _message,
+        choices,
+    ) => (choices?.[0] === "Run once" ? 0 : 1),
 ): SessionContext {
     return {
         agentContext: {},
         sessionStorage: storage,
         instanceStorage: storage,
-        sessionContextId: "powershell-action-handler-test",
+        sessionContextId: randomUUID(),
+        currentConnectionId: "powershell-test-client",
         notify: jest.fn(),
         beginAgentThread: jest.fn(),
         popupQuestion,
+        requestSecurityApproval: ({
+            message,
+            choices,
+            defaultId,
+        }: import("@typeagent/agent-sdk").SecurityApprovalRequest) =>
+            popupQuestion(message, choices, defaultId),
         toggleTransientAgent: jest.fn(),
         addDynamicAgent: jest.fn(),
         removeDynamicAgent: jest.fn(),
@@ -187,6 +212,7 @@ function createActionContext(
         sessionContext,
         abortSignal,
         isFromReasoningLoop: true,
+        executionOrigin: "direct-user",
         queueToggleTransientAgent: async () => {},
     };
 }
@@ -300,6 +326,35 @@ describe("createAndExecutePowerShellFlow", () => {
     });
 
     describe("static namespace coverage", () => {
+        it("does not fall back to ordinary questions when security approval is unavailable", async () => {
+            const popup = jest.fn(async () => 0);
+            const { agent, context } = await createAgentHarness(
+                undefined,
+                undefined,
+                undefined,
+                popup,
+            );
+            context.sessionContext.requestSecurityApproval = async () => {
+                throw new Error("No trusted UI");
+            };
+            const result = await agent.executeAction?.(
+                {
+                    schemaName: "powershell.powershell-files",
+                    actionName: "writeFile",
+                    parameters: {
+                        path: "C:\\must-not-write.txt",
+                        content: "not authorized",
+                    },
+                },
+                context,
+            );
+            expect(result).toMatchObject({
+                errorCode: "powershell.policyDenied",
+                retryable: false,
+            });
+            expect(popup).not.toHaveBeenCalled();
+        });
+
         it("registers exactly the namespaces declared by the manifest", () => {
             const manifest = JSON.parse(
                 readFileSync(
@@ -627,6 +682,246 @@ describe("createAndExecutePowerShellFlow", () => {
     });
 
     describe("dynamic execution containment", () => {
+        it.each(
+            [false, true].flatMap((enabled) =>
+                (["path", "string"] as const).flatMap((type) =>
+                    [false, true].map((direct) => ({
+                        enabled,
+                        type,
+                        direct,
+                    })),
+                ),
+            ),
+        )(
+            "does not expand parent secrets (enabled=$enabled, type=$type, direct=$direct)",
+            async ({ enabled, type, direct }) => {
+                const variable = "TYPEAGENT_FLOW_TEST_SECRET";
+                const previous = process.env[variable];
+                const secret = "must-not-leak-parent-value";
+                process.env[variable] = secret;
+                await setDynamicExecution(enabled);
+                try {
+                    const { agent, context, storage } =
+                        await createAgentHarness();
+                    const created = await agent.executeAction?.(
+                        {
+                            schemaName: "powershell",
+                            actionName: "createPowerShellFlow",
+                            parameters: {
+                                actionName: "secretExpansion",
+                                description: "Verify safe parameter handling",
+                                script: "param([string]$Value)\nWrite-Output $Value",
+                                scriptParameters: [
+                                    {
+                                        name: "Value",
+                                        type,
+                                        required: true,
+                                        description: "Input value",
+                                        validation: {
+                                            allowedValues: ["accepted"],
+                                        },
+                                    },
+                                ],
+                                allowedCmdlets: ["Write-Output"],
+                            },
+                        },
+                        context,
+                    );
+                    expect(created).not.toHaveProperty("error");
+                    const flowPath = "flows/secretExpansion.flow.json";
+                    const flow = JSON.parse(
+                        await storage.read(flowPath, "utf8"),
+                    ) as PowerShellFlowDefinition;
+                    flow.parameters[0].validation = {
+                        allowedValues: ["accepted"],
+                    };
+                    await storage.write(flowPath, JSON.stringify(flow));
+                    const parameters = { Value: `$env:${variable}` };
+                    const result = await agent.executeAction?.(
+                        {
+                            schemaName: "powershell",
+                            actionName: direct
+                                ? "secretExpansion"
+                                : "executePowerShellFlow",
+                            parameters: direct
+                                ? parameters
+                                : {
+                                      flowName: "secretExpansion",
+                                      flowParametersJson:
+                                          JSON.stringify(parameters),
+                                  },
+                        },
+                        context,
+                    );
+
+                    expect(result).toHaveProperty("error");
+                    expect(JSON.stringify(result)).not.toContain(secret);
+                    if (enabled) {
+                        expect(result).toMatchObject({
+                            errorCode: "powershell.invalidParameters",
+                        });
+                    }
+                } finally {
+                    if (previous === undefined) {
+                        delete process.env[variable];
+                    } else {
+                        process.env[variable] = previous;
+                    }
+                    await setDynamicExecution(true);
+                }
+            },
+        );
+
+        itOnWindows.each([
+            ["USERPROFILE", homedir()],
+            ["HOME", homedir()],
+            ["TEMP", tmpdir()],
+            ["TMP", tmpdir()],
+            ["PWD", process.cwd()],
+        ])("preserves the safe path alias %s", async (alias, expected) => {
+            const { agent, context } = await createAgentHarness();
+            if (alias === "USERPROFILE") {
+                // Keep alias validation independent of hosted-runner cold-start time.
+                const warmup = await executeScript(
+                    {
+                        script: "Write-Output 'ready'",
+                        parameters: {},
+                        provenance: "generated",
+                        sandbox: {
+                            maxExecutionTime: 90,
+                        },
+                    },
+                    {
+                        sessionContext: context.sessionContext,
+                        definition: {
+                            actionName: "approvedLocalWarmup",
+                            displayName: "Approved local warmup",
+                            description:
+                                "Warm the approved-local PowerShell broker",
+                            parameters: [],
+                            grammarPatterns: [],
+                        },
+                    },
+                );
+                expect(warmup.success).toBe(true);
+            }
+            const result = await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "createAndExecutePowerShellFlow",
+                    parameters: {
+                        actionName: "pathAlias",
+                        description: "Print a path without accessing it",
+                        script: "param([string]$Path)\nWrite-Output $Path",
+                        scriptParameters: [
+                            {
+                                name: "Path",
+                                type: "path",
+                                required: true,
+                                description: "Path to print",
+                            },
+                        ],
+                        allowedCmdlets: ["Write-Output"],
+                        executionParametersJson: JSON.stringify({
+                            Path: `$env:${alias.toLowerCase()}`,
+                        }),
+                    },
+                },
+                context,
+            );
+
+            expect(result).not.toHaveProperty("error");
+            expect(result).toMatchObject({
+                displayContent: expect.stringContaining(expected),
+            });
+        });
+
+        itOnWindows(
+            "keeps environment references in string arguments literal",
+            async () => {
+                const { agent, context } = await createAgentHarness();
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "createAndExecutePowerShellFlow",
+                        parameters: {
+                            actionName: "literalArgument",
+                            description: "Print a literal string",
+                            script: "param([string]$Value)\nWrite-Output $Value",
+                            scriptParameters: [
+                                {
+                                    name: "Value",
+                                    type: "string",
+                                    required: true,
+                                    description: "Text to print",
+                                },
+                            ],
+                            allowedCmdlets: ["Write-Output"],
+                            executionParametersJson: JSON.stringify({
+                                Value: "$env:USERPROFILE",
+                            }),
+                        },
+                    },
+                    context,
+                );
+
+                expect(result).not.toHaveProperty("error");
+                expect(result).toMatchObject({
+                    displayContent: expect.stringContaining("$env:USERPROFILE"),
+                });
+            },
+        );
+
+        itOnWindows.each([
+            "testPowerShellFlow",
+            "createAndExecutePowerShellFlow",
+            "executePowerShellFlow",
+            "ordinaryError",
+            "repairAndExecutePowerShellFlow",
+        ])(
+            "does not route ordinary errors from %s to reasoning",
+            async (actionName) => {
+                const { agent, context } = await createAgentHarness();
+                const script =
+                    "ConvertFrom-Json -InputObject 'invalid json'\nWrite-Output 'continued'";
+                const parameters = {
+                    actionName: "ordinaryError",
+                    description: "A script with a nonterminating error",
+                    script,
+                    allowedCmdlets: ["ConvertFrom-Json", "Write-Output"],
+                };
+                const created = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "createPowerShellFlow",
+                        parameters,
+                    },
+                    context,
+                );
+                expect(created).not.toHaveProperty("error");
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName,
+                        parameters: {
+                            ...parameters,
+                            actionName: "ordinaryErrorDraft",
+                            flowName: "ordinaryError",
+                            executionParametersJson: "{}",
+                        },
+                    },
+                    context,
+                );
+
+                expect(result).toMatchObject({
+                    errorCode: "powershell.scriptFailure",
+                    retryable: false,
+                    fallbackToReasoning: false,
+                    mayHaveSideEffects: true,
+                });
+            },
+        );
+
         it("denies create-and-execute without leaving artifacts", async () => {
             await withDynamicExecutionDisabled(async () => {
                 const directory = await mkdtemp(
@@ -781,6 +1076,897 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
         });
     });
 
+    describe("approved-local execution", () => {
+        it("does not initialize shared flow storage when enabling static namespaces", async () => {
+            const storage = new MemoryStorage();
+            const read = jest.spyOn(storage, "read");
+            const write = jest.spyOn(storage, "write");
+            const session = createSessionContext(storage);
+            const agent = instantiate();
+            await agent.initializeAgentContext?.();
+            await Promise.all(
+                [
+                    "powershell-files",
+                    "powershell-network",
+                    "powershell-system",
+                ].map((name) =>
+                    agent.updateAgentContext?.(
+                        true,
+                        session,
+                        `powershell.${name}`,
+                    ),
+                ),
+            );
+            expect(read).not.toHaveBeenCalled();
+            expect(write).not.toHaveBeenCalled();
+            await agent.updateAgentContext?.(true, session, "powershell");
+            expect(write).toHaveBeenCalledWith(
+                "grammar/dynamic.agr",
+                expect.any(String),
+            );
+            await agent.closeAgentContext?.(session);
+        });
+
+        itOnWindows.each([
+            "testPowerShellFlow",
+            "createAndExecutePowerShellFlow",
+            "executePowerShellFlow",
+            "directoryFlow",
+            "repairAndExecutePowerShellFlow",
+            "@powershell run",
+        ])(
+            "uses the action directory for %s and its PWD alias",
+            async (actionName) => {
+                const directory = await realpath(
+                    await mkdtemp(join(tmpdir(), "ta-cwd-")),
+                );
+                try {
+                    await writeFile(
+                        join(directory, "cwd-marker.txt"),
+                        "project-marker",
+                    );
+                    const popup = jest.fn(async () => 0);
+                    const { agent, context } = await createAgentHarness(
+                        undefined,
+                        undefined,
+                        undefined,
+                        popup,
+                    );
+                    const projectContext = {
+                        ...context,
+                        workingDirectory: directory,
+                    };
+                    expect(directory).not.toBe(process.cwd());
+                    const definition = {
+                        actionName: "directoryFlow",
+                        description: "Read a project-relative fixture",
+                        script: "param([string]$Path)\nGet-Content -LiteralPath '.\\cwd-marker.txt'\nWrite-Output (Get-Location).Path\nWrite-Output $Path",
+                        scriptParameters: [
+                            {
+                                name: "Path",
+                                type: "path",
+                                required: true,
+                                description: "Project directory",
+                            },
+                        ],
+                    };
+                    if (
+                        actionName !== "testPowerShellFlow" &&
+                        actionName !== "createAndExecutePowerShellFlow"
+                    ) {
+                        expect(
+                            await agent.executeAction?.(
+                                {
+                                    schemaName: "powershell",
+                                    actionName: "createPowerShellFlow",
+                                    parameters: definition,
+                                },
+                                projectContext,
+                            ),
+                        ).not.toHaveProperty("error");
+                    }
+                    // Unsaved tests have no parameter-role metadata, so the alias
+                    // applies only to flows with a declared path parameter.
+                    const args = {
+                        Path:
+                            actionName === "testPowerShellFlow"
+                                ? directory
+                                : "$env:pWd",
+                    };
+                    if (actionName === "@powershell run") {
+                        await agent.executeCommand?.(
+                            ["run"],
+                            {
+                                args: { flowName: "directoryFlow" },
+                                flags: {
+                                    flowParametersJson: JSON.stringify(args),
+                                },
+                            },
+                            projectContext,
+                        );
+                        expect(
+                            context.actionIO.setDisplay,
+                        ).toHaveBeenCalledWith(
+                            expect.stringContaining(`project-marker`),
+                        );
+                        expect(
+                            context.actionIO.setDisplay,
+                        ).toHaveBeenCalledWith(
+                            expect.stringContaining(
+                                `${directory}\r\n${directory}`,
+                            ),
+                        );
+                    } else {
+                        const result = await agent.executeAction?.(
+                            {
+                                schemaName: "powershell",
+                                actionName,
+                                parameters:
+                                    actionName === "directoryFlow"
+                                        ? args
+                                        : {
+                                              ...definition,
+                                              flowName: "directoryFlow",
+                                              testParameters:
+                                                  JSON.stringify(args),
+                                              executionParametersJson:
+                                                  JSON.stringify(args),
+                                              flowParametersJson:
+                                                  JSON.stringify(args),
+                                          },
+                            },
+                            projectContext,
+                        );
+                        expect(result).not.toHaveProperty("error");
+                        expect(result).toMatchObject({
+                            displayContent:
+                                expect.stringContaining("project-marker"),
+                        });
+                        expect(result).toMatchObject({
+                            displayContent: expect.stringContaining(
+                                `${directory}\r\n${directory}`,
+                            ),
+                        });
+                    }
+                    expect(popup).toHaveBeenCalledTimes(1);
+                    expect(popup.mock.calls[0]).toEqual(
+                        expect.arrayContaining([
+                            expect.stringContaining(`Folder: ${directory}`),
+                        ]),
+                    );
+                } finally {
+                    await rm(directory, { recursive: true, force: true });
+                }
+            },
+        );
+
+        itOnWindows(
+            "shows a remembered approval correctly for older module metadata",
+            async () => {
+                const popup = jest.fn(async () => 1);
+                const { agent, context, storage } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    undefined,
+                    popup,
+                );
+                await createStoredFlow(agent, context, "legacyModules");
+                const path = "flows/legacyModules.flow.json";
+                const flow = JSON.parse(
+                    await storage.read(path, "utf8"),
+                ) as PowerShellFlowDefinition;
+                delete flow.requiredModules;
+                flow.sandbox.allowedModules = [];
+                await storage.write(path, JSON.stringify(flow));
+                await storage.delete("revisions/legacyModules.json");
+                const directContext = {
+                    ...context,
+                    isFromReasoningLoop: false,
+                };
+                await agent.executeCommand?.(
+                    ["run"],
+                    { args: { flowName: "legacyModules" }, flags: {} },
+                    directContext,
+                );
+                await agent.updateAgentContext?.(
+                    false,
+                    directContext.sessionContext,
+                    "powershell.powershell-files",
+                );
+                await agent.executeCommand?.(
+                    ["show"],
+                    { args: { flowName: "legacyModules" }, flags: {} },
+                    directContext,
+                );
+                expect(context.actionIO.setDisplay).toHaveBeenLastCalledWith(
+                    expect.stringContaining("Version approved"),
+                );
+                expect(popup).toHaveBeenCalledTimes(1);
+            },
+        );
+
+        it("rechecks revocation after an asynchronous stored-revision update", async () => {
+            const { sessionContext } = await createAgentHarness();
+            const result = await executeScript(
+                {
+                    script: "Write-Output 'must not execute'",
+                    parameters: {},
+                    provenance: "generated",
+                    sandbox: { maxExecutionTime: 30 },
+                    onAuthorized: async () =>
+                        revokeScriptApprovals(sessionContext),
+                },
+                {
+                    sessionContext,
+                    definition: {
+                        actionName: "revoked",
+                        displayName: "Revoked",
+                        description: "",
+                        parameters: [],
+                        grammarPatterns: [],
+                    },
+                },
+            );
+            expect(result.errorCode).toBe("powershell.policyDenied");
+            expect(result.stderr).toContain("authorization was revoked");
+            expect(result.stdout).toBe("");
+        });
+
+        let fixtureDirectory: string;
+        let dataDirectory: string;
+        let repository: string;
+        let logPath: string;
+
+        beforeAll(async () => {
+            fixtureDirectory = await mkdtemp(
+                join(tmpdir(), "typeagent-approved-"),
+            );
+            dataDirectory = join(fixtureDirectory, "data");
+            repository = join(fixtureDirectory, "repository");
+            await mkdir(dataDirectory);
+            await mkdir(repository);
+            await writeFile(
+                join(dataDirectory, "duplicate-a.txt"),
+                "duplicate-content",
+            );
+            await writeFile(
+                join(dataDirectory, "duplicate-b.txt"),
+                "duplicate-content",
+            );
+            await writeFile(
+                join(dataDirectory, "largest.txt"),
+                "x".repeat(2048),
+            );
+            logPath = join(dataDirectory, "sample.log");
+            await writeFile(
+                logPath,
+                "first line\nERROR test fixture\nlast line\n",
+            );
+            const gitConfig = join(fixtureDirectory, "gitconfig");
+            await writeFile(gitConfig, "");
+            const git = (args: string[]) =>
+                execFileSync("git", ["-C", repository, ...args], {
+                    encoding: "utf8",
+                    env: {
+                        ...process.env,
+                        GIT_CONFIG_NOSYSTEM: "1",
+                        GIT_CONFIG_GLOBAL: gitConfig,
+                        GIT_AUTHOR_NAME: "Approval Fixture",
+                        GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+                        GIT_COMMITTER_NAME: "Approval Fixture",
+                        GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+                        GIT_AUTHOR_DATE: "2000-01-01T00:00:00Z",
+                        GIT_COMMITTER_DATE: "2000-01-01T00:00:00Z",
+                    },
+                });
+            git(["init", "-q", "-b", "main", "--template="]);
+            git([
+                "config",
+                "core.hooksPath",
+                join(fixtureDirectory, "no-hooks"),
+            ]);
+            await writeFile(join(repository, "tracked.txt"), "before\n");
+            git(["add", "tracked.txt"]);
+            git([
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-q",
+                "-m",
+                "initial fixture",
+            ]);
+            git(["branch", "old-feature"]);
+            await writeFile(join(repository, "tracked.txt"), "after\n");
+            await writeFile(join(repository, "untracked.txt"), "untracked");
+        });
+
+        beforeEach(async () => {
+            await writeFile(
+                localConfigPath,
+                "powershell:\n  dynamicExecution:\n    enabled: true\n  brokerExecution:\n    enabled: true\n",
+            );
+        });
+
+        afterEach(async () => {
+            await setDynamicExecution(true);
+        });
+
+        afterAll(async () => {
+            if (fixtureDirectory)
+                await rm(fixtureDirectory, { recursive: true, force: true });
+        });
+
+        itOnWindows.each([
+            "findDuplicates",
+            "findLargeFiles",
+            "listFiles",
+            "logGrep",
+            "tailLog",
+            "gitStatus",
+            "gitLog",
+            "gitDiff",
+            "gitBranches",
+            "staleBranches",
+        ])(
+            "runs the actual saved sample %s only after approval",
+            async (name) => {
+                const popup = jest.fn(async () => 0);
+                const previous = process.env.TYPEAGENT_NO_SAMPLES;
+                delete process.env.TYPEAGENT_NO_SAMPLES;
+                try {
+                    const { agent, context } = await createAgentHarness(
+                        undefined,
+                        undefined,
+                        new MemoryStorage(),
+                        popup,
+                    );
+                    const parameters: Record<string, unknown> =
+                        name.startsWith("git") || name === "staleBranches"
+                            ? { repoPath: repository }
+                            : name === "tailLog"
+                              ? { logPath, lines: 1 }
+                              : name === "logGrep"
+                                ? { logPath, pattern: "ERROR" }
+                                : {
+                                      path: dataDirectory,
+                                      minSizeMB: 0,
+                                      topN: 1,
+                                  };
+                    await agent.executeCommand?.(
+                        ["run"],
+                        {
+                            args: { flowName: name },
+                            flags: {
+                                flowParametersJson: JSON.stringify(parameters),
+                            },
+                        },
+                        context,
+                    );
+                    expect(popup).toHaveBeenCalledTimes(1);
+                    expect(popup).toHaveBeenCalledWith(
+                        expect.stringContaining("NOT a sandbox"),
+                        expect.any(Array),
+                        expect.any(Number),
+                    );
+                    const expected: Record<string, string[]> = {
+                        findDuplicates: ["duplicate-a.txt", "duplicate-b.txt"],
+                        findLargeFiles: ["largest.txt"],
+                        listFiles: ["largest.txt", "sample.log"],
+                        logGrep: ["ERROR test fixture"],
+                        tailLog: ["last line"],
+                        gitStatus: ["tracked.txt", "untracked.txt"],
+                        gitLog: ["initial fixture"],
+                        gitDiff: ["-before", "+after"],
+                        gitBranches: ["main", "old-feature"],
+                        staleBranches: ["old-feature", "DaysOld"],
+                    };
+                    for (const text of expected[name]) {
+                        expect(
+                            context.actionIO.setDisplay,
+                        ).toHaveBeenCalledWith(expect.stringContaining(text));
+                    }
+                } finally {
+                    if (previous === undefined)
+                        delete process.env.TYPEAGENT_NO_SAMPLES;
+                    else process.env.TYPEAGENT_NO_SAMPLES = previous;
+                }
+            },
+        );
+
+        it.each([
+            "testPowerShellFlow",
+            "createAndExecutePowerShellFlow",
+            "executePowerShellFlow",
+            "unapprovedFlow",
+            "repairAndExecutePowerShellFlow",
+        ])(
+            "does not execute a denied script through %s",
+            async (actionName) => {
+                const popup = jest.fn<SessionContext["popupQuestion"]>(
+                    async (_message, _choices, defaultId) => defaultId ?? -1,
+                );
+                const { agent, context, storage } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    new MemoryStorage(),
+                    popup,
+                );
+                const marker = join(fixtureDirectory, `${actionName}.txt`);
+                const script =
+                    "param([string]$Path)\nSet-Content -LiteralPath $Path -Value 'unauthorized'";
+                const definition = {
+                    actionName: "unapprovedFlow",
+                    description: "Authorization marker",
+                    script,
+                    allowedCmdlets: ["Set-Content"],
+                    scriptParameters: [
+                        {
+                            name: "Path",
+                            type: "path",
+                            required: true,
+                            description: "Marker file",
+                        },
+                    ],
+                };
+                await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "createPowerShellFlow",
+                        parameters: definition,
+                    },
+                    context,
+                );
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName,
+                        parameters: {
+                            ...definition,
+                            actionName: "unapprovedDraft",
+                            flowName: "unapprovedFlow",
+                            Path: marker,
+                            flowParametersJson: JSON.stringify({
+                                Path: marker,
+                            }),
+                            executionParametersJson: JSON.stringify({
+                                Path: marker,
+                            }),
+                            testParameters: JSON.stringify({ Path: marker }),
+                            approved: true,
+                            approvedLocal: true,
+                        },
+                    },
+                    context,
+                );
+                expectPolicyDenied(result);
+                expect(popup).toHaveBeenCalledTimes(1);
+                await expect(readFile(marker, "utf8")).rejects.toThrow();
+                expect(await storage.list("pending")).toEqual([]);
+            },
+        );
+
+        itOnWindows(
+            "reviews the script without executing until the user chooses Run once",
+            async () => {
+                const marker = join(
+                    fixtureDirectory,
+                    "review-before-execution.txt",
+                );
+                const script =
+                    "param([string]$Path)\nSet-Content -LiteralPath $Path -Value 'reviewed'";
+                let prompts = 0;
+                const popup = jest.fn<SessionContext["popupQuestion"]>(
+                    async (_message, choices) => {
+                        await expect(
+                            readFile(marker, "utf8"),
+                        ).rejects.toThrow();
+                        if (!choices)
+                            throw new Error("Expected approval choices");
+                        return prompts++ === 0
+                            ? choices.indexOf("Review script and details")
+                            : 0;
+                    },
+                );
+                const { agent, context } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    new MemoryStorage(),
+                    popup,
+                );
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "testPowerShellFlow",
+                        parameters: {
+                            script,
+                            allowedCmdlets: [],
+                            testParameters: JSON.stringify({ Path: marker }),
+                        },
+                    },
+                    context,
+                );
+
+                expect(result).not.toHaveProperty("error");
+                expect(popup).toHaveBeenCalledTimes(2);
+                expect(popup.mock.calls[0][0]).not.toContain(script);
+                expect(popup.mock.calls[1][0]).toContain(script);
+                await expect(readFile(marker, "utf8")).resolves.toMatch(
+                    /reviewed/,
+                );
+            },
+        );
+
+        it("does not execute when the approval UI is unavailable", async () => {
+            const { agent, context } = await createAgentHarness(
+                undefined,
+                undefined,
+                new MemoryStorage(),
+                async () => {
+                    throw new Error("No interactive client");
+                },
+            );
+            const result = await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "testPowerShellFlow",
+                    parameters: {
+                        script: "Write-Output 'must not run'",
+                        allowedCmdlets: [],
+                    },
+                },
+                context,
+            );
+            expectPolicyDenied(result);
+            expect(result?.error).toContain("authorization was unavailable");
+        });
+
+        itOnWindows(
+            "checks stored versions on every run and supports revocation",
+            async () => {
+                const popup = jest.fn(async () => 1);
+                const { agent, context, storage } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    new MemoryStorage(),
+                    popup,
+                );
+                await createStoredFlow(agent, context, "versionedFlow");
+                const directContext = {
+                    ...context,
+                    isFromReasoningLoop: false,
+                };
+                const run = () =>
+                    agent.executeAction?.(
+                        {
+                            schemaName: "powershell",
+                            actionName: "versionedFlow",
+                            parameters: {},
+                        },
+                        directContext,
+                    );
+                expect(await run()).not.toHaveProperty("error");
+                expect(await run()).not.toHaveProperty("error");
+                expect(popup).toHaveBeenCalledTimes(1);
+                await storage.write(
+                    "scripts/versionedFlow.ps1",
+                    "Write-Output 'changed'",
+                );
+                popup.mockResolvedValue(2);
+                expectPolicyDenied(await run());
+                expect(popup).toHaveBeenCalledTimes(2);
+                await agent.executeCommand?.(
+                    ["show"],
+                    { args: { flowName: "versionedFlow" }, flags: {} },
+                    context,
+                );
+                expect(context.actionIO.setDisplay).toHaveBeenCalledWith(
+                    expect.stringContaining("Changed since approval"),
+                );
+                popup.mockResolvedValue(1);
+                expect(await run()).not.toHaveProperty("error");
+                await agent.executeCommand?.(["revoke"], undefined, context);
+                expect(await run()).not.toHaveProperty("error");
+                expect(popup).toHaveBeenCalledTimes(4);
+            },
+            // Four native executions, each with a 30s limit and broker startup grace.
+            180_000,
+        );
+
+        it("rechecks disablement after a pending approval", async () => {
+            const { agent, context } = await createAgentHarness(
+                undefined,
+                undefined,
+                new MemoryStorage(),
+                async () => {
+                    await setDynamicExecution(false);
+                    return 0;
+                },
+            );
+            const result = await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "testPowerShellFlow",
+                    parameters: {
+                        script: "Write-Output 'must not run'",
+                        allowedCmdlets: [],
+                    },
+                },
+                context,
+            );
+            expectPolicyDenied(result);
+            expect(result?.error).toContain("disabled before execution");
+        });
+
+        itOnWindows.each([false, true])(
+            "loads a user module without a product cmdlet catalogue (declared=%s)",
+            async (declared) => {
+                const modulePath = join(fixtureDirectory, "team-fixture.psm1");
+                await writeFile(
+                    modulePath,
+                    "function Get-TeamFixture { 'team-module-marker' }\nExport-ModuleMember -Function Get-TeamFixture",
+                );
+                const { agent, context } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    new MemoryStorage(),
+                    async () => 0,
+                );
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "testPowerShellFlow",
+                        parameters: {
+                            script: declared
+                                ? "Get-TeamFixture"
+                                : "param([string]$Module)\nImport-Module $Module\nGet-TeamFixture",
+                            requiredModules: declared ? [modulePath] : [],
+                            allowedCmdlets: [],
+                            testParameters: JSON.stringify({
+                                Module: modulePath,
+                            }),
+                        },
+                    },
+                    context,
+                );
+                expect(result).not.toHaveProperty("error");
+                expect(result).toMatchObject({
+                    displayContent:
+                        expect.stringContaining("team-module-marker"),
+                });
+            },
+        );
+
+        itOnWindows(
+            "does not run the script when a required module cannot load",
+            async () => {
+                const { agent, context } = await createAgentHarness();
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "testPowerShellFlow",
+                        parameters: {
+                            script: "Write-Output 'root-script-must-not-run'",
+                            requiredModules: [
+                                join(fixtureDirectory, "missing-module.psm1"),
+                            ],
+                        },
+                    },
+                    context,
+                );
+                expect(result).toHaveProperty("error");
+                expect(JSON.stringify(result)).not.toContain(
+                    "root-script-must-not-run",
+                );
+            },
+        );
+
+        itOnWindows(
+            "keeps native stderr warnings visible without failing a successful command",
+            async () => {
+                const { agent, context } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    new MemoryStorage(),
+                    async () => 0,
+                );
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "testPowerShellFlow",
+                        parameters: {
+                            script: '& "$env:SYSTEMROOT\\System32\\cmd.exe" /d /c "echo native-warning 1>&2 & exit /b 0"',
+                            allowedCmdlets: [],
+                        },
+                    },
+                    context,
+                );
+                expect(result).not.toHaveProperty("error");
+                expect(result).toMatchObject({
+                    displayContent: expect.stringContaining("native-warning"),
+                });
+            },
+        );
+
+        itOnWindows(
+            "fails native nonzero exits even when stderr is empty",
+            async () => {
+                const { agent, context } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    new MemoryStorage(),
+                    async () => 0,
+                );
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "testPowerShellFlow",
+                        parameters: {
+                            script: '& "$env:SYSTEMROOT\\System32\\cmd.exe" /d /c "exit /b 17"',
+                            allowedCmdlets: [],
+                        },
+                    },
+                    context,
+                );
+                expect(result).toMatchObject({
+                    error: expect.stringContaining("exit code 17"),
+                    retryable: false,
+                    fallbackToReasoning: false,
+                });
+            },
+        );
+
+        itOnWindows.each([
+            "$PSModuleAutoLoadingPreference = 'None'\n'expected-output'",
+            "function Out-String { 'wrong-formatter' }\n'expected-output'",
+        ])(
+            "keeps host output formatting independent of approved-script state: %s",
+            async (script) => {
+                const { agent, context } = await createAgentHarness();
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "testPowerShellFlow",
+                        parameters: { script },
+                    },
+                    context,
+                );
+                expect(result).not.toHaveProperty("error");
+                expect(result).toMatchObject({
+                    displayContent: expect.stringContaining("expected-output"),
+                });
+                expect(result).not.toMatchObject({
+                    displayContent: expect.stringContaining("wrong-formatter"),
+                });
+            },
+        );
+
+        itOnWindows.each(["success", "timeout"])(
+            "terminates owned native children after approved-script %s with delayed child readiness",
+            async (mode) => {
+                const { sessionContext } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    new MemoryStorage(),
+                    async () => 0,
+                );
+                const directory = await mkdtemp(
+                    join(fixtureDirectory, "child-lifetime-"),
+                );
+                const marker = join(directory, "child-pid.txt");
+                const release = join(directory, "release-script.txt");
+                const progress = join(directory, "root-progress.txt");
+                const controller = new AbortController();
+                const started = Date.now();
+                const execution = executeScript(
+                    {
+                        script: String.raw`param([string]$Marker, [string]$Release, [string]$Progress)
+[System.IO.File]::WriteAllText($Progress, 'root started')
+Start-Sleep -Seconds 6
+[System.IO.File]::WriteAllText($Progress, 'starting child')
+$child = Start-Process "$env:SYSTEMROOT\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList '-NoProfile -NonInteractive -Command Start-Sleep -Seconds 120' -PassThru -WindowStyle Hidden
+[System.IO.File]::WriteAllText($Marker, [string]$child.Id)
+while (-not [System.IO.File]::Exists($Release)) { Start-Sleep -Milliseconds 50 }`,
+                        parameters: {
+                            Marker: marker,
+                            Release: release,
+                            Progress: progress,
+                        },
+                        abortSignal: controller.signal,
+                        provenance: "generated",
+                        sandbox: {
+                            maxExecutionTime: 60,
+                        },
+                    },
+                    {
+                        sessionContext,
+                        definition: {
+                            actionName: "childLifetime",
+                            displayName: "Child lifetime",
+                            description: "Verify owned-process cleanup",
+                            parameters: [],
+                            grammarPatterns: [],
+                        },
+                    },
+                );
+                try {
+                    // Allow cold hosted-runner startup, but require a live child
+                    // before testing either completion or the real timeout.
+                    const deadline = Date.now() + 55_000;
+                    let pid: number | undefined;
+                    while (Date.now() < deadline) {
+                        if (existsSync(marker)) {
+                            const value = Number(
+                                await readFile(marker, "utf8"),
+                            );
+                            if (Number.isInteger(value) && value > 0) {
+                                pid = value;
+                                break;
+                            }
+                        }
+                        const finished = await Promise.race([
+                            execution.then((result) => ({ result })),
+                            delay(50).then(() => undefined),
+                        ]);
+                        if (finished) {
+                            throw new Error(
+                                `PowerShell ended before child readiness: ${JSON.stringify(finished.result)}`,
+                            );
+                        }
+                    }
+                    if (pid === undefined) {
+                        const phase = existsSync(progress)
+                            ? await readFile(progress, "utf8")
+                            : "root not started";
+                        throw new Error(
+                            `Child did not become ready within 55 seconds (${phase}).`,
+                        );
+                    }
+                    const childPid = pid;
+                    expect(Date.now() - started).toBeGreaterThanOrEqual(6000);
+                    expect(() => process.kill(childPid, 0)).not.toThrow();
+                    if (mode === "success") await writeFile(release, "");
+                    const result = await execution;
+                    expect(result).toMatchObject({
+                        success: mode === "success",
+                        cancelled: false,
+                    });
+                    if (mode === "timeout") {
+                        expect(result.stderr).toMatch(/timed out/i);
+                        expect(result.duration).toBeGreaterThanOrEqual(60_000);
+                    } else {
+                        expect(result.stderr).toBe("");
+                    }
+                    let running = true;
+                    for (let attempt = 0; attempt < 50; attempt++) {
+                        try {
+                            process.kill(childPid, 0);
+                        } catch (error) {
+                            if (
+                                typeof error !== "object" ||
+                                error === null ||
+                                !("code" in error) ||
+                                error.code !== "ESRCH"
+                            )
+                                throw error;
+                            running = false;
+                            break;
+                        }
+                        await delay(100);
+                    }
+                    if (running) process.kill(childPid);
+                    expect(running).toBe(false);
+                } finally {
+                    controller.abort();
+                    try {
+                        await execution;
+                    } finally {
+                        await rm(directory, { recursive: true, force: true });
+                    }
+                }
+            },
+        );
+    });
+
     it("denies a stored flow with missing provenance", async () => {
         const { agent, storage, context } = await createAgentHarness();
         await createStoredFlow(agent, context, "unknownProvenanceFlow");
@@ -849,7 +2035,7 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
         );
 
         expect(result).toMatchObject({
-            errorCode: "powershell.policyDenied",
+            errorCode: "powershell.scriptFailure",
             retryable: false,
         });
         expect(await storage.list("pending")).toEqual([]);
@@ -1319,9 +2505,14 @@ Set-Content -LiteralPath $Path -Value "blocked"`,
     );
 
     itOnWindows(
-        "derives executable validation from dynamic flow parameter types",
+        "does not start a requested native program without authorization",
         async () => {
-            const { agent, storage, context } = await createAgentHarness();
+            const { agent, storage, context } = await createAgentHarness(
+                undefined,
+                undefined,
+                new MemoryStorage(),
+                async () => 1,
+            );
 
             const result = await agent.executeAction?.(
                 {
@@ -1353,7 +2544,7 @@ Start-Process -FilePath $Path`,
                 errorCode: "powershell.policyDenied",
                 retryable: false,
             });
-            expect(result?.error).toMatch(/unsupported dynamic command/i);
+            expect(result?.error).toMatch(/not authorized/i);
             expect(await storage.list("pending")).toEqual([]);
             expect(
                 await storage.exists("flows/startNamedExecutable.flow.json"),

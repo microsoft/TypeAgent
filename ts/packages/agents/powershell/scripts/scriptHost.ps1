@@ -2,8 +2,8 @@
 # Licensed under the MIT License.
 
 # scriptHost.ps1 - PowerShell execution host for PowerShell agent
-# Creates a runspace with cmdlet whitelisting, module loading, and timeout enforcement.
-# Untrusted requests are additionally isolated by the Windows broker.
+# Restricted requests use AST checks and CLM inside AppContainer.
+# Approved-local requests rely on prior application authorization, not containment.
 
 param(
     [string]$ScriptBody = '',
@@ -29,6 +29,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $UntrustedMode = $false
+$ApprovedLocal = $false
+$WorkingDirectory = $null
 $BrokerDiagnostics = $Diagnostics.IsPresent
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $utf8NoBom
@@ -286,7 +288,9 @@ try {
         $request = $jsonSerializer.DeserializeObject(
             [System.IO.File]::ReadAllText($RequestPath)
         )
-        if ([int]$request['protocolVersion'] -ne 1) {
+        $ApprovedLocal =
+            [int]$request['protocolVersion'] -eq 2 -and [bool]$request['approvedLocal']
+        if ([int]$request['protocolVersion'] -ne $(if ($ApprovedLocal) { 2 } else { 1 })) {
             [Console]::Error.WriteLine("Unsupported PowerShell broker protocol.")
             exit 1
         }
@@ -302,7 +306,9 @@ try {
         $TimeoutSeconds = [int]$request['timeoutSeconds']
         $BrokerDiagnostics =
             $BrokerDiagnostics -or [bool]$request['diagnostics']
-        $UntrustedMode = $true
+        $UntrustedMode = -not $ApprovedLocal
+        $WorkingDirectory = [string]$request['workingDirectory']
+        $RequiredModules = @($request['requiredModules'])
     } else {
         $allowedCmdlets = @($AllowedCmdletsJson | ConvertFrom-Json)
         $params = $ParametersJson | ConvertFrom-Json
@@ -494,7 +500,11 @@ try {
     $AllowedModules = $resolvedModules.ToArray()
 
     # Create session state with default cmdlets
-    $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+    $iss = if ($ApprovedLocal) {
+        [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault2()
+    } else {
+        [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+    }
 
     if ($UntrustedMode) {
         $iss.Variables.Add(
@@ -522,15 +532,27 @@ try {
     # Create runspace
     $runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($iss)
     $runspace.Open()
+    if ($ApprovedLocal) {
+        [void]$runspace.SessionStateProxy.Path.SetLocation($WorkingDirectory)
+    }
 
     # Build the script with injected parameters
     $ps = [System.Management.Automation.PowerShell]::Create()
     $ps.Runspace = $runspace
 
+    if ($ApprovedLocal) {
+        foreach ($module in $RequiredModules) {
+            if ($null -eq $module) { continue }
+            [void]$ps.AddCommand('Microsoft.PowerShell.Core\Import-Module')
+            [void]$ps.AddParameter('Name', [string]$module)
+            [void]$ps.AddParameter('ErrorAction', 'Stop')
+            [void]$ps.AddStatement()
+        }
+    }
     [void]$ps.AddScript($ScriptBody)
 
     # Pass parameters to the script's param() block
-    if ($UntrustedMode) {
+    if ($RequestPath) {
         foreach ($entry in $params.GetEnumerator()) {
             [void]$ps.AddParameter($entry.Key, $entry.Value)
         }
@@ -552,21 +574,48 @@ try {
 
     $output = $ps.EndInvoke($asyncResult)
 
-    # Render output — Out-String handles both plain objects and Format-* objects
+    # Render with built-in commands, independent of host auto-loading and script state.
     if ($output.Count -gt 0) {
-        if ($UntrustedMode) {
-            foreach ($item in $output) {
-                [Console]::Out.WriteLine([string]$item)
+        $formatter = [System.Management.Automation.PowerShell]::Create(
+            [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+        )
+        try {
+            [void]$formatter.AddCommand('Out-String')
+            [void]$formatter.AddParameter('Width', 200)
+            $formatted = $formatter.Invoke($output)
+            if ($formatter.HadErrors) {
+                throw $formatter.Streams.Error[0]
             }
-        } else {
-            $output | Out-String -Width 200 | Write-Output
+            foreach ($line in $formatted) {
+                [Console]::Out.WriteLine([string]$line)
+            }
+        } finally {
+            $formatter.Dispose()
         }
     }
 
-    # Report errors
+    # Native tools can write warnings to stderr and still succeed.
+    $hasScriptErrors = $false
     if ($ps.HadErrors) {
         foreach ($err in $ps.Streams.Error) {
             [Console]::Error.WriteLine([string]$err)
+            $nativeStderr =
+                $ApprovedLocal -and
+                $err.Exception -is [System.Management.Automation.RemoteException] -and
+                $err.FullyQualifiedErrorId -in @('NativeCommandError', 'NativeCommandErrorMessage')
+            if (-not $nativeStderr) {
+                $hasScriptErrors = $true
+            }
+        }
+    }
+    $nativeExitCode = if ($ApprovedLocal) {
+        $runspace.SessionStateProxy.GetVariable('LASTEXITCODE')
+    } else {
+        $null
+    }
+    if ($hasScriptErrors -or ($null -ne $nativeExitCode -and $nativeExitCode -ne 0)) {
+        if ($null -ne $nativeExitCode -and $nativeExitCode -ne 0) {
+            [Console]::Error.WriteLine("Native command failed with exit code $nativeExitCode.")
         }
         exit 1
     }
@@ -577,7 +626,9 @@ try {
 
 } catch {
     [Console]::Error.WriteLine(
-        $(if ($RequestPath -and $BrokerDiagnostics) {
+        $(if ($ApprovedLocal) {
+            "PowerShell script failed: $($_.Exception.Message)"
+        } elseif ($RequestPath -and $BrokerDiagnostics) {
             "PowerShell policy denied execution: $($_.Exception.ToString())"
         } elseif ($RequestPath) {
             "PowerShell policy denied execution."

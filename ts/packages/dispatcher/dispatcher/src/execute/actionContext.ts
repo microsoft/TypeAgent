@@ -89,6 +89,14 @@ export function getActionContext(
         isFromReasoningLoop:
             getStructuredExecution(context, requestId.requestId) ===
                 undefined && context.isInsideReasoningLoop,
+        executionOrigin:
+            getStructuredExecution(context, requestId.requestId) !== undefined
+                ? "structured"
+                : context.isInsideReasoningLoop
+                  ? "reasoning"
+                  : requestId.connectionId !== undefined
+                    ? "direct-user"
+                    : "background",
         workingDirectory: systemContext.currentOptions?.workingDirectory,
         activityContext:
             // Only make activityContext available if the action is from the same agent.

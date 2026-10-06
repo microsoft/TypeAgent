@@ -16,6 +16,16 @@
 # See packages/config/README.md for full documentation.
 # ──────────────────────────────────────────────────────────────────────
 
+# PowerShell execution is disabled by default. Approved execution runs local
+# code with the current user's privileges after an interactive approval.
+# It is NOT a sandbox. Both operational gates are required, as is authorization.
+# Remembered approvals last only for the current session and exact invocation.
+powershell:
+  dynamicExecution:
+    enabled: false
+  brokerExecution:
+    enabled: false
+
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Azure OpenAI                                                    ║
 # ╚═══════════════════════════════════════════════════════════════════╝
