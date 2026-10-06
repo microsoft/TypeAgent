@@ -21,6 +21,7 @@ import type {
 import type { BridgeToWebviewMessage } from "./messages.js";
 import { clientIdOf } from "./requestIds.js";
 import { gatherUserContext } from "./userContext.js";
+import { showSecurityApproval } from "./securityApproval.js";
 
 /**
  * Narrow callback surface needed by the bridge ClientIO. Keeping this
@@ -89,6 +90,8 @@ export interface BridgeClientIOContext {
  */
 export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
     return {
+        requestSecurityApproval: (_requestId, request, _source, signal) =>
+            showSecurityApproval(vscode, request, signal),
         question: async (
             _requestId: RequestId | undefined,
             message: string,

@@ -913,6 +913,23 @@ export function createChatPanelClient(
                 );
             });
         },
+        requestSecurityApproval: async (
+            requestId,
+            { message, choices, defaultId },
+            _source,
+            signal,
+        ) => {
+            if (isCancelledRequest(ridStr(requestId)))
+                throw new Error("Security approval was cancelled.");
+            const answer = await chatPanel.addChoicePrompt<number>(
+                message,
+                choices.map((label, value) => ({ label, value })),
+                { defaultValue: defaultId, signal },
+            );
+            if (isCancelledRequest(ridStr(requestId)))
+                throw new Error("Security approval was cancelled.");
+            return answer;
+        },
         question: async (requestId, message, choices, defaultId) => {
             if (requestId === undefined) {
                 throw new Error(

@@ -54,6 +54,7 @@
     "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-cache": "workspace:*",
+    "@typeagent/agent-flows": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",

@@ -54,28 +54,28 @@ See [Common lifecycle](#common-lifecycle) for implementation details
 
 ### Key concepts
 
-| Term                | Meaning                                                                                                                            |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Workflow**        | A parameterized, reusable automation definition that registers as a dispatchable action with grammar patterns for NL matching.     |
-| **Workflow store**  | Per-agent instance storage that persists workflow definitions, scripts, and an index file across sessions.                         |
-| **Dynamic schema**  | A runtime-generated TypeScript type definition that constrains LLM-translated parameter values to valid workflow names.            |
-| **Dynamic grammar** | Runtime-generated `.agr` rules that enable grammar matching for registered workflows.                                              |
-| **Script executor** | The sandboxed execution environment for each workflow type (PowerShell runner, WebFlow script executor, TaskFlow script executor). |
-| **Script host**     | A sandboxed execution environment for scripts (PowerShell constrained runspace, Node.js `new Function()` sandbox).                 |
-| **Self-repair**     | Fallback to LLM reasoning when a workflow execution fails, with context about the failure to guide correction.                     |
+| Term                | Meaning                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Workflow**        | A parameterized, reusable automation definition that registers as a dispatchable action with grammar patterns for NL matching. |
+| **Workflow store**  | Per-agent instance storage that persists workflow definitions, scripts, and an index file across sessions.                     |
+| **Dynamic schema**  | A runtime-generated TypeScript type definition that constrains LLM-translated parameter values to valid workflow names.        |
+| **Dynamic grammar** | Runtime-generated `.agr` rules that enable grammar matching for registered workflows.                                          |
+| **Script executor** | The type- and mode-specific execution environment for a workflow.                                                              |
+| **Script host**     | The process or runtime that executes code; the name does not imply OS containment.                                             |
+| **Self-repair**     | Fallback to LLM reasoning when a workflow execution fails, with context about the failure to guide correction.                 |
 
 ### Workflow types
 
 ![types](../images/workflow_types_architecture.svg)
 
-| Aspect        | PowerShell                              | WebFlow                                           | TaskFlow                                           | ExcelFlow                                        | ...            |
-| ------------- | --------------------------------------- | ------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------ | -------------- |
-| **Domain**    | OS / filesystem / processes             | Web page interaction                              | Cross-agent workflows                              | Excel / spreadsheet automation                   | _User-defined_ |
-| **Language**  | PowerShell                              | TypeScript                                        | TypeScript                                         | TypeScript                                       | —              |
-| **Sandbox**   | Constrained runspace + cmdlet whitelist | Frozen API + blocked identifiers (server-side)    | `new Function()` + frozen API + blocked globals    | `new Function()` + OfficeJS bridge               | —              |
-| **Execution** | `scriptHost.ps1` via child process      | `new Function()` in Node.js with frozen API proxy | `executeTaskFlowScript()` with `TaskFlowScriptAPI` | `new Function()` in Node.js with OfficeJS bridge | —              |
-| **Scope**     | System-wide                             | Per-site or global                                | Any agent combination                              | Per-workbook or global                           | —              |
-| **Platform**  | Windows only                            | Any (browser required)                            | Any                                                | Any (Excel required)                             | Any            |
+| Aspect        | PowerShell                                            | WebFlow                                           | TaskFlow                                           | ExcelFlow                                        | ...            |
+| ------------- | ----------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------ | -------------- |
+| **Domain**    | OS / filesystem / processes                           | Web page interaction                              | Cross-agent workflows                              | Excel / spreadsheet automation                   | _User-defined_ |
+| **Language**  | PowerShell                                            | TypeScript                                        | TypeScript                                         | TypeScript                                       | —              |
+| **Sandbox**   | Restricted mode only; approved-local is not sandboxed | Frozen API + blocked identifiers (server-side)    | `new Function()` + frozen API + blocked globals    | `new Function()` + OfficeJS bridge               | —              |
+| **Execution** | `scriptHost.ps1` via child process                    | `new Function()` in Node.js with frozen API proxy | `executeTaskFlowScript()` with `TaskFlowScriptAPI` | `new Function()` in Node.js with OfficeJS bridge | —              |
+| **Scope**     | System-wide                                           | Per-site or global                                | Any agent combination                              | Per-workbook or global                           | —              |
+| **Platform**  | Windows only                                          | Any (browser required)                            | Any                                                | Any (Excel required)                             | Any            |
 |               |
 
 > **Design trade-off — why separate workflow types instead of one?**
@@ -140,7 +140,7 @@ On agent activation (or after a workflow mutation), the agent calls
 
 ### Phase 4 — Execute
 
-Each workflow type has a domain-specific execution sandbox. See the per-type
+Each workflow type has a domain-specific execution and authorization model. See the per-type
 sections ([PowerShell](#powershell), [WebFlow](#webflow),
 [TaskFlow](#taskflow)) for architecture details.
 
@@ -148,6 +148,8 @@ sections ([PowerShell](#powershell), [WebFlow](#webflow),
 
 When execution fails, the system can fall back to LLM reasoning with
 context about the failure. See [Self-repair and reasoning fallback](#self-repair-and-reasoning-fallback).
+PowerShell script failures do not automatically enter that fallback; an explicit
+repair still requires fresh execution authorization.
 
 ---
 
@@ -197,16 +199,16 @@ interface GrammarPattern {
 }
 
 interface SandboxPolicy {
-  allowedCmdlets: string[];
-  allowedPaths: string[];
-  allowedModules: string[];
   maxExecutionTime: number;
-  networkAccess: boolean;
 }
 ```
 
-Persisted as two files per workflow: a `.flow.json` (metadata, parameters,
-sandbox policy, grammar patterns) and a `.ps1` (script body).
+Recipes also accept `requiredModules?: string[]`. Old permission fields remain
+readable for compatibility; they are not containment.
+
+Persisted as a `.flow.json` (metadata, parameters, dependencies, timeout and
+grammar), a `.ps1` (script body), and a `revisions/<name>.json` fingerprint.
+The fingerprint records a candidate version, not permission to execute it.
 
 ### WebFlow definition (`WebFlowDefinition`)
 
@@ -297,8 +299,10 @@ type names are preserved where they match code.
 
 ## PowerShell
 
-PowerShell manages parameterized PowerShell scripts and executes them in
-a sandboxed constrained runspace.
+PowerShell manages parameterized scripts. When its two operational gates are
+enabled, it runs explicitly authorized code with the current user's privileges,
+subject to OS policy. This is not an arbitrary-code sandbox, and there is no
+additional execution-mode feature flag.
 
 ### Capture paths
 
@@ -313,7 +317,7 @@ PowerShell supports two creation paths:
      v  LLM (Claude Sonnet) analyzes script:
      v    - Infers parameters from param() block or hardcoded values
      v    - Generates grammar patterns (2-4 patterns)
-     v    - Identifies required cmdlets for sandbox policy
+     v    - Records module dependencies (not execution approval)
      v  Saved to instance storage as active workflow
      v  reloadAgentSchema() -> grammar + schema updated
 ```
@@ -323,7 +327,7 @@ PowerShell supports two creation paths:
 ```
   LLM reasoning generates: createPowerShellFlow {
       actionName, description, script, scriptParameters,
-      grammarPatterns, allowedCmdlets
+      grammarPatterns, requiredModules
   }
      |
      v  actionHandler builds ScriptRecipe from provided fields
@@ -340,83 +344,97 @@ PowerShell supports two creation paths:
 ### Execution architecture
 
 ```
-  Node.js                              PowerShell
-  +------------------+                 +---------------------------+
-  | powershellRunner |---spawn-------->| scriptHost.ps1            |
-  | - serialize params|                | - parse JSON params       |
-  | - timeout control |                | - validate paths          |
-  |                  |                 | - create constrained      |
-  |                  |                 |   runspace (cmdlet        |
-  |                  |                 |   whitelist only)         |
-  |                  |<--stdout/err----| - inject params           |
-  +------------------+                 | - execute with timeout    |
-                                       +---------------------------+
+  Flow or candidate -> central powershellRunner
+    -> existing trusted YAML operational gates
+    -> trusted UI authorization and version/invocation verification
+    -> Windows broker (bounded JSON over stdin)
+    -> private request file and scriptHost.ps1
+    -> structured parameters, output, timeouts, owned-process cleanup
 ```
 
-The `powershellRunner.mts` module spawns a PowerShell child process
-running `scriptHost.ps1`. Arguments are passed via command-line flags:
+Both `powershell.dynamicExecution.enabled` and
+`powershell.brokerExecution.enabled` must be true in trusted YAML. They default
+to false. When enabled, authorization-required local execution is the default.
+These gates never grant permission for a script to execute without authorization.
 
-| Flag                  | Value                                                                                   |
-| --------------------- | --------------------------------------------------------------------------------------- |
-| `-ScriptBody`         | The PowerShell script text                                                              |
-| `-ParametersJson`     | JSON-serialized parameter values                                                        |
-| `-ParameterRolesJson` | Path and executable parameter roles derived from the flow's typed parameter definitions |
-| `-AllowedCmdletsJson` | JSON array of permitted cmdlet names                                                    |
-| `-TimeoutSeconds`     | Maximum execution time                                                                  |
-| `-AllowedPathsJson`   | JSON array of permitted path patterns                                                   |
+Reviewed package-owned namespace actions remain a separate trusted path.
+Mutable flow metadata cannot select that reviewed-static API.
 
-PowerShell recipes do not persist a separate `parameterRoles` property.
-`scriptParameters[].type` is the source of truth: `path` parameters are
-canonicalized as filesystem paths, while `executable` parameters resolve bare
-application names through PowerShell command resolution before the resulting
-file path is checked against `allowedPaths`. Other string parameters, including
-file content, URLs, patterns, and command arguments, are not path-validated.
+### Legacy broker compatibility
 
-### Sandbox: constrained runspace
+The native broker retains restricted protocol v1, its AST/command checks and
+AppContainer behavior for compatibility. It is not a selectable flow mode.
+Current flow execution always uses the authorization-guarded local path and
+never falls back to protocol v1 or another tool after a denied approval.
 
-PowerShell defines category-based cmdlet whitelists:
+### Approved-local execution
 
-| Category             | Representative cmdlets                                               |
-| -------------------- | -------------------------------------------------------------------- |
-| `file-operations`    | `Get-ChildItem`, `Get-Item`, `Test-Path`, `Copy-Item`, `Get-Content` |
-| `content-search`     | `Get-ChildItem`, `Get-Content`, `Select-String`, `Measure-Object`    |
-| `process-management` | `Get-Process`, `Stop-Process`, `Start-Process`                       |
-| `system-info`        | `Get-ComputerInfo`, `Get-Service`, `Get-WmiObject`                   |
-| `network`            | `Test-NetConnection`, `Invoke-WebRequest`, `ConvertFrom-Json`        |
-| `text-processing`    | `Select-String`, `ConvertFrom-Csv`, `ConvertTo-Json`                 |
+With both existing gates enabled, every new or changed script requires authorization before
+execution, including generated tests, drafts, and repairs. Import and
+registration do not confer approval.
 
-Blocked cmdlets that are never permitted regardless of category:
+The initial trusted UI shows a compact flow/working-directory/arguments summary
+and an ordinary-user authority warning. Long fields are explicitly marked as
+truncated, and changed versions are flagged. **Review script and details** exposes
+the full code, definition, arguments, previous remembered script when changed,
+account, runtime, timeout, and hash. Reviewing or returning to the summary never
+authorizes execution. Cancel is the default in both views. Direct
+connected-client invocations may remember an exact invocation for the active
+session. Reasoning-loop, draft, test, repair, and background calls require fresh
+consent.
 
-```
-Invoke-Expression, New-Object, Add-Type, Start-Process,
-Set-ExecutionPolicy, Register-ScheduledTask, Register-ObjectEvent,
-Register-EngineEvent, Register-WmiEvent, Unregister-ScheduledTask,
-Unregister-Event, Enable-PSRemoting, Enter-PSSession, New-PSSession
-```
+Security approvals use a dedicated, connection-targeted ClientIO/agent-RPC
+callback. They are not structured continuation questions or replayable shared
+interactions. Only interactive clients implement that callback; model-only MCP
+clients fail closed. Remembered approvals use host-issued session lifetime IDs,
+not transient RPC object identity, and are restricted to direct-user origin.
 
-### Sandbox enforcement
+SHA-256 binds the root script and definition; an invocation hash binds arguments,
+working directory, and timeout. The authoritative records are in application
+memory, not recipe fields. Changed content or context asks again. Restarting
+clears approval; persistent approvals are not implemented. `@powershell revoke`
+clears session records and `@powershell show <name>` displays the mode and status.
 
-All `SandboxPolicy` features are fully enforced at runtime:
+Approved code can use Git, native programs, modules, .NET, files, and networking
+under the current user's OS rights. This path does not impose AppContainer,
+forced CLM, a command catalogue, or a one-process limit. The launcher does not
+elevate or specify an execution-policy bypass. Legacy `allowed*` and
+`networkAccess` fields are descriptive, not security restrictions.
+Old `allowedModules` metadata is interpreted as module dependencies. New recipes
+use `requiredModules`; loading occurs after authorization and failure stops the
+root script. Module names are reviewed, but their file contents are not pinned.
 
-- **`networkAccess`**: When set to `false`, network-capable cmdlets
-  (Invoke-WebRequest, Invoke-RestMethod, Test-NetConnection, etc.) are
-  blocked even if included in `allowedCmdlets`. Scripts attempting to use
-  network cmdlets without permission will fail with a clear error message.
-- **`allowedPaths`**: Path validation is enforced by `scriptHost.ps1`.
-  Scripts attempting to access paths outside the allowed list will fail
-  before execution. Environment variables (e.g., `$env:USERPROFILE`) are
-  expanded before validation.
-- **`allowedModules`**: PowerShell module imports are validated against
-  the `allowedModules` list. Scripts attempting to import non-whitelisted
-  modules will fail before execution.
-- **`ScriptParameter.validation`**: All validation rules are enforced:
-  - `pattern`: Regular expression validation on string parameters
-  - `allowedValues`: Enum constraint validation
-  - `pathMustExist`: Enforces that path-type parameters must exist on disk
+Imports, edits, seeds and reasoning capture use the same validated store.
+Persistent candidate fingerprints cover exact code, parameter definitions and
+defaults, dependencies, timeout and provenance. Old flows missing a fingerprint
+remain available for review, with no automatic baseline on load. An explicit
+authorization establishes that version; unexpected later edits are shown as
+changed and cannot silently advance the record. These records do not authorize
+execution or resist replacement by an attacker controlling the same user account.
 
-Violations of sandbox policies result in immediate script termination with
-descriptive error messages, and trigger `fallbackToReasoning` to allow
-LLM-assisted correction via `editPowerShellFlow`.
+The broker retains private request transport, explicit inherited handles,
+operational output/time limits, and job-based cleanup of its owned process tree.
+Parameters are bound as data, not interpolated into commands. The default working
+directory is the TypeAgent process directory; profiles are not loaded.
+
+Root-script hashing does not pin loaded files, modules, or executables. The
+application and approval authority must remain trusted. It does not protect
+against a compromised local account or malicious already-approved code replacing
+user-owned application files. Independent shell/MCP tools have separate
+authorization requirements.
+
+### Parameters and failures
+
+`ScriptParameter.validation` handles patterns, allowed values, and required
+paths. Path/executable parameters expand only explicit USERPROFILE, HOME, TEMP,
+TMP, and PWD aliases, not arbitrary parent environment variables. Ordinary
+strings remain literal.
+
+Script, policy, and authorization failures do not automatically enter reasoning
+or switch to a more privileged tool. Deliberate repair produces a new candidate
+requiring authorization. Nonterminating script errors are failures; native stderr
+with a successful exit is a warning. A nonzero final native exit code fails
+execution. Cancellation and timeouts do not roll back side effects.
 
 ### Execution result
 
@@ -1034,32 +1052,12 @@ to retry via LLM reasoning with context about the failure.
 
 ### PowerShell self-repair
 
-```
-  Script fails (stderr or non-zero exit)
-       |
-       v
-  actionHandler returns ActionResult {
-      error: "Get-CimInstance: not recognized",
-      fallbackToReasoning: true,
-      fallbackContext: {
-          failedFlow: "listNodeProcesses",
-          errorMessage: "...",
-          hint: "Use editPowerShellFlow to fix the script"
-      }
-  }
-       |
-       v
-  Dispatcher calls executeReasoning() with fallback context
-       |
-       v
-  LLM reasoning sees: failed workflow name, error details, hint
-       |
-       v
-  LLM generates: editPowerShellFlow { flowName, script, allowedCmdlets }
-       |
-       v
-  Workflow fixed in-place, grammar unchanged, next invocation works
-```
+PowerShell failures return non-retryable errors without automatic reasoning
+fallback. A user can explicitly request an edit or repair. In approved-local
+mode the replacement is a candidate: the UI must authorize its exact content
+before any test or repair execution. Rejection leaves the old stored flow
+unchanged. A successful repair may update the stored script, but it cannot
+silently inherit a remembered approval for the previous version.
 
 ### TaskFlow self-repair
 
@@ -1122,9 +1120,11 @@ _Impact:_ LLM can't translate requests for workflows missing from schema.
 
 ### Execution invariants
 
-**#4 — Sandbox policy enforcement.**
-PowerShell scripts can only execute cmdlets listed in `allowedCmdlets`.
-_Impact:_ Unlisted cmdlets fail with "not recognized" even if installed.
+**#4 — Execution authorization.**
+Dynamic PowerShell requires trusted user authorization for the exact invocation.
+There is no product cmdlet catalogue or arbitrary-code sandbox on this path.
+_Impact:_ Model-supplied confirmation is insufficient; approved code has the
+current user's permissions, subject to OS policy.
 
 **#5 — Frozen API immutability.**
 WebFlow and TaskFlow scripts receive `Object.freeze()`d API and params objects.
@@ -1259,11 +1259,9 @@ interface ScriptExecutionRequest {
   script: string;
   parameters: Record<string, unknown>;
   sandbox: {
-    allowedCmdlets: string[];
-    allowedPaths: string[];
     maxExecutionTime: number;
-    networkAccess: boolean;
   };
+  requiredModules?: string[];
   workingDirectory?: string;
 }
 
@@ -1375,7 +1373,7 @@ interface GrammarContent {
     v Display: "Created playlist 'Top 10 Blues' with 10 songs"
 ```
 
-### Scenario 4 — Failure and self-repair
+### Scenario 4 — PowerShell failure and explicit repair
 
 ```
   User: "list node processes"
@@ -1383,24 +1381,18 @@ interface GrammarContent {
     v Grammar: MATCH -> executePowerShellFlow { flowName: "listNodeProcesses" }
     v scriptHost.ps1 executes: Get-CimInstance Win32_Process | Where-Object ...
     v Error: "Get-CimInstance: The term is not recognized"
-    v   (cmdlet not in allowedCmdlets whitelist)
-    v
-    v actionHandler returns: { error: "...", fallbackToReasoning: true }
-    v
-    v Dispatcher calls executeReasoning() with context:
-    v   "Failed workflow: listNodeProcesses"
-    v   "Error: Get-CimInstance not in allowed cmdlets"
-    v   "Hint: Use editPowerShellFlow to fix the script and sandbox"
-    v
-    v LLM generates: editPowerShellFlow {
+    v actionHandler returns a non-retryable failure, no automatic reasoning fallback
+    v User explicitly requests a repair
+    v LLM proposes: repairAndExecutePowerShellFlow {
     v   flowName: "listNodeProcesses",
     v   script: "Get-Process | Where-Object { $_.ProcessName -match 'node' }",
-    v   allowedCmdlets: ["Get-Process", "Where-Object", "Format-Table"]
+    v   requiredModules: ["Microsoft.PowerShell.Management"]
     v }
     v
-    v Workflow updated in-place, grammar unchanged
-    v LLM then executes: executePowerShellFlow { flowName: "listNodeProcesses" }
-    v Success: process list displayed
+    v Approved-local mode shows the replacement and asks for fresh authorization
+    v Cancel -> no replacement execution or persistence
+    v Approve -> execute the exact reviewed candidate under user privileges
+    v Success -> save the repaired workflow, grammar unchanged
 ```
 
 ---
@@ -1417,14 +1409,15 @@ interface GrammarContent {
    become instantly available for future grammar matching, eliminating
    repeated LLM calls for the same task.
 
-3. **Sandbox everything** — Each domain has its own security model
-   appropriate to its execution substrate: PowerShell constrained
-   language mode with cmdlet whitelists, browser frozen APIs with
-   blocked identifiers, dispatcher action validation for cross-agent
-   workflows.
+3. **Match the execution contract** — Each domain has its own
+   security model. PowerShell approved-local execution uses authorization and
+   version verification, not an arbitrary-code sandbox. The native broker's
+   restricted protocol remains only for compatibility. Other workflow types use their
+   documented validation and execution mechanisms.
 
-4. **Self-repairing workflows** — Failed executions fall back to reasoning
-   with context about the failure. The LLM can edit the broken script
+4. **Repair without bypassing authorization** — Where supported, failures may
+   enter reasoning with context. PowerShell does not automatically do so.
+   The LLM can propose edits to the broken script
    in-place rather than creating duplicates, preserving the grammar
    registration and user's mental model. Two properties matter:
 

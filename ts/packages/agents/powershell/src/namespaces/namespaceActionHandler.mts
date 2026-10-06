@@ -92,11 +92,22 @@ export function createPowerShellNamespaceActionHandler<
                 return undefined;
             }
             if (definition.confirmation) {
-                const choice = await context.sessionContext.popupQuestion(
-                    definition.confirmation,
-                    ["Run", "Cancel"],
-                    1,
-                );
+                let choice: number | undefined;
+                try {
+                    choice =
+                        await context.sessionContext.requestSecurityApproval?.({
+                            message: definition.confirmation,
+                            choices: ["Run", "Cancel"],
+                            defaultId: 1,
+                        });
+                } catch (error) {
+                    context.abortSignal?.throwIfAborted();
+                    return createPowerShellFailure(
+                        "policyDenied",
+                        `Trusted PowerShell authorization is unavailable: ${error instanceof Error ? error.message : String(error)}`,
+                        { retryable: false },
+                    );
+                }
                 if (choice !== 0) {
                     return createPowerShellFailure(
                         "policyDenied",
