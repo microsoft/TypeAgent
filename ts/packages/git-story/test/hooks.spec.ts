@@ -6,16 +6,21 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { aggregateStoriesAfterGitChange } from "../src/commands/hooks.js";
+import type {
+    StoryAggregationRequest,
+    StoryAggregationResult,
+} from "../src/storyAggregator.js";
 
 const CLI = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "../cli.js",
 );
 
-// End to end: `init` writes the hook, then a real `git commit` runs it
+// End to end: `init` writes the hooks, then a real `git commit` runs them
 // through git's own sh (Git Bash on Windows). An extensionless sh shim puts
 // `git-story` on PATH, same as `npm link` does on every OS.
-test("pre-commit hook forwards args and stdin to git-story", () => {
+test("git hooks are installed and forward to git-story", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "git-story-"));
     const bin = path.join(dir, "bin");
     const repo = path.join(dir, "repo");
@@ -53,9 +58,62 @@ test("pre-commit hook forwards args and stdin to git-story", () => {
     run("git", [...commit, "commit", "--amend", "--allow-empty", "--no-edit"]);
     expect(run("git", ["log", "-1", "--format=%B"])).toBe("x\n\ntypeagent\n\n");
 
-    const hook = path.join(repo, ".git/hooks/pre-commit");
-    const direct = run("sh", [hook, "a"], "piped\n");
+    for (const hook of [
+        "pre-commit",
+        "prepare-commit-msg",
+        "post-commit",
+        "post-merge",
+        "post-rewrite",
+    ]) {
+        expect(
+            fs.readFileSync(path.join(repo, ".git/hooks", hook), "utf8"),
+        ).toContain(`git-story hooks git ${hook}`);
+    }
+
+    const stdin = path.join(dir, "hook-stdin.txt");
+    fs.writeFileSync(stdin, "piped\n");
+    const direct = run(
+        "git",
+        ["hook", "run", `--to-stdin=${stdin}`, "pre-commit", "--", "a"],
+        "piped\n",
+    );
     expect(direct).toContain('args=["a"] stdin="piped\\n"');
+});
+
+test("post-git hook aggregation targets HEAD and does not block git", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "git-story-"));
+    spawnSync("git", ["init", "-q"], { cwd: dir });
+    const expectedRoot = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+        cwd: dir,
+        encoding: "utf8",
+    }).stdout.trim();
+    const requests: StoryAggregationRequest[] = [];
+    const result: StoryAggregationResult = {
+        resolvedRevision: "abc123",
+        scannedCommits: 1,
+        commitsWithoutStory: 0,
+        acceptedStories: 1,
+    };
+    await aggregateStoriesAfterGitChange("post-commit", dir, {
+        aggregate: async (request) => {
+            requests.push(request);
+            return result;
+        },
+    });
+    expect(requests).toEqual([
+        {
+            projectPath: path.resolve(expectedRoot),
+            revision: "HEAD",
+        },
+    ]);
+
+    await expect(
+        aggregateStoriesAfterGitChange("post-merge", dir, {
+            aggregate: async () => {
+                throw new Error("not implemented");
+            },
+        }),
+    ).resolves.toBeUndefined();
 });
 
 // `init` registers each Copilot hook, and each command answers `{}`.

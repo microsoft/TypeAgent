@@ -15,6 +15,7 @@ import path from "node:path";
 import { daemonClient } from "../daemonClient.js";
 import { cliLogger } from "../logger.js";
 import type { SessionRegistration } from "../sessionWatcher.js";
+import { StoryAggregator } from "../storyAggregator.js";
 
 // Reads all of stdin. Hooks get their payload here (Copilot JSON, or lines
 // git pipes to hooks such as pre-push). Returns "" when stdin is a terminal.
@@ -52,6 +53,29 @@ function projectPath(cwd: string): string {
         windowsHide: true,
     }).trim();
     return path.resolve(root);
+}
+
+type StoryAggregatorLike = Pick<StoryAggregator, "aggregate">;
+
+// Runs aggregation at the repository's current HEAD. Post hooks must not make
+// a completed git operation look unsuccessful, so failures are logged only.
+export async function aggregateStoriesAfterGitChange(
+    hook: string,
+    cwd: string,
+    aggregator: StoryAggregatorLike = new StoryAggregator(),
+): Promise<void> {
+    try {
+        const root = projectPath(cwd);
+        await aggregator.aggregate({
+            projectPath: root,
+            revision: "HEAD",
+        });
+        cliLogger.info(`${hook}: story aggregation completed`);
+    } catch (e) {
+        cliLogger.warn(
+            `${hook}: story aggregation not completed: ${(e as Error).message}`,
+        );
+    }
 }
 
 // Builds the daemon registration for a Copilot sessionStart payload.
@@ -200,4 +224,29 @@ gitCommand
         if (message.split("\n").includes(COMMIT_TRAILER)) return;
         fs.writeFileSync(file, `${message.trimEnd()}\n\n${COMMIT_TRAILER}\n`);
         cliLogger.info(`prepare-commit-msg: appended trailer to ${file}`);
+    });
+
+gitCommand
+    .command("post-commit")
+    .description("Aggregate stories after a git commit")
+    .action(async () => {
+        await aggregateStoriesAfterGitChange("post-commit", process.cwd());
+    });
+
+gitCommand
+    .command("post-merge")
+    .description("Aggregate stories after a merge or non-rebase pull")
+    .argument("[squash]", "whether the merge was a squash merge")
+    .action(async () => {
+        await aggregateStoriesAfterGitChange("post-merge", process.cwd());
+    });
+
+gitCommand
+    .command("post-rewrite")
+    .description("Aggregate stories after a rebase")
+    .argument("<command>", "command that rewrote commits")
+    .action(async (command: string) => {
+        await readStdin();
+        if (command !== "rebase") return;
+        await aggregateStoriesAfterGitChange("post-rewrite", process.cwd());
     });

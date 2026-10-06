@@ -22,14 +22,20 @@ git-story pre-commit: args=["a","b"] stdin="input\n"
 Copilot hooks in `.github/copilot/settings.local.json` and adds that
 file to `.git/info/exclude`, so it stays local to the clone.
 
-`init` also writes `pre-commit` and `prepare-commit-msg` scripts to the git
-hooks directory (honors `core.hooksPath`). Each script runs
+`init` also writes `pre-commit`, `prepare-commit-msg`, `post-commit`,
+`post-merge`, and `post-rewrite` scripts to the git hooks directory (honors
+`core.hooksPath`). Each script runs
 `exec git-story hooks git <hook> "$@"`,
 so git's hook arguments and stdin reach the command unchanged. `init` does not
 overwrite a hook that it did not write.
 
 `prepare-commit-msg` appends a `typeagent` line to the commit message, once.
 This is a placeholder for the git-story summary.
+
+`post-commit` requests aggregation at the new `HEAD`. Git has no `post-pull`
+hook, so `post-merge` handles pulls that merge or fast-forward and
+`post-rewrite` handles pulls that rebase. Aggregation failures are logged and
+do not change the result of the completed git operation.
 
 ## Daemon
 

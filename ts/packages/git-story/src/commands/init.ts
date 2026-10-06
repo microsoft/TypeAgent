@@ -36,6 +36,13 @@ const VSCODE_HOOKS_CONFIG = {
 // command, so hooks that receive input (e.g. pre-push) keep it.
 // Marks scripts written by init, so init never overwrites a user's own hook.
 const GIT_HOOK_MARKER = "# git-story hook";
+const GIT_HOOKS = [
+    "pre-commit",
+    "prepare-commit-msg",
+    "post-commit",
+    "post-merge",
+    "post-rewrite",
+];
 const gitHookScript = (hook: string) =>
     `#!/bin/sh\n${GIT_HOOK_MARKER}\nexec git-story hooks git ${hook} "$@"\n`;
 
@@ -141,6 +148,7 @@ export const initCommand = new Command("init")
             process.stdout.write(`${message}\n`);
             cliLogger.info(message);
         };
-        registerGitHook("pre-commit");
-        registerGitHook("prepare-commit-msg");
+        for (const hook of GIT_HOOKS) {
+            registerGitHook(hook);
+        }
     });
