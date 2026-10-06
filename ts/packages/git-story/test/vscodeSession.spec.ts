@@ -23,7 +23,12 @@ test("VS Code SessionStart maps to a watch request with its transcript", () => {
         },
         repo,
     );
-    expect(fs.realpathSync(registration.projectPath)).toBe(repo);
+    const repoStat = fs.statSync(repo);
+    const projectStat = fs.statSync(registration.projectPath);
+    expect([projectStat.dev, projectStat.ino]).toEqual([
+        repoStat.dev,
+        repoStat.ino,
+    ]);
     expect(toSessionWatchRequest(registration)).toEqual({
         projectPath: registration.projectPath,
         sessionId: "s7",
