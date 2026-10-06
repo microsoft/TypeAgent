@@ -3,12 +3,44 @@
 
 import { deserialize, serialize } from "node:v8";
 import type { SessionMetadata } from "./gitCommitStory.js";
+import {
+    captureSessionUpdates,
+    type CapturedSessionUpdates,
+    type SessionCaptureOptions,
+} from "./sessionCapture.js";
+import {
+    normalizeSessionEvents,
+    type NormalizedSessionBatch,
+} from "./sessionNormalization.js";
+import {
+    collectSessionMetadata,
+    restoreSessionMetadata,
+    type RestoredSessionMetadata,
+    type SessionMetadataState,
+} from "./sessionMetadata.js";
+
+export type {
+    NormalizedSessionBatch,
+    SessionNormalizationDiagnostic,
+} from "./sessionNormalization.js";
+export type {
+    RestoredSessionMetadata,
+    SessionMetadataState,
+} from "./sessionMetadata.js";
+
+export type {
+    CapturedSessionRecord,
+    CapturedSessionUpdates,
+    SessionCaptureDiagnostic,
+    SessionCaptureOptions,
+    SessionCaptureSource,
+} from "./sessionCapture.js";
 
 export type SessionWatchRequest = {
     projectPath: string;
     sessionId: string;
     transcriptPath: string;
-    metadata: SessionMetadata;
+    metadata: CapturedSessionMetadata;
 };
 
 // Capture progress only, not acknowledgement of downstream processing.
@@ -19,11 +51,6 @@ export type SessionCaptureCheckpoint = {
     sourceByteOffset: string;
 };
 
-export type CapturedSessionUpdates = {
-    records: unknown[];
-    nextCheckpoint: SessionCaptureCheckpoint;
-};
-
 export type NormalizedSessionEvent = {
     // Original source ID when present; otherwise a generated GUID.
     id: string;
@@ -31,6 +58,7 @@ export type NormalizedSessionEvent = {
     sourceEventId?: string;
     timestamp?: string;
     model?: string;
+    agentId?: string;
 } & (
     | {
           type: "message";
@@ -48,6 +76,9 @@ export type NormalizedSessionEvent = {
           toolCallId: string;
           success: boolean;
           output?: string;
+          // UI detail can be text or structured evidence, not necessarily a diff.
+          detailedContent?: unknown;
+          error?: Record<string, unknown>;
           // Source-reported edit evidence, not a diff reconstructed from Git.
           // Absence means no recorded diff, not that the tool changed no files.
           diff?: string;
@@ -149,9 +180,10 @@ export class SessionWatcher {
     ): Promise<SessionCaptureCheckpoint> {
         // Pseudocode:
         // captured = await captureUpdates(request, checkpoint).
-        // Persist captured.nextCheckpoint as read progress, independently of ingestion.
-        // events = normalizeEvents(request, captured).
-        // metadata = collectMetadata(request, events, previous session metadata).
+        // Capture has persisted read progress, independently of ingestion.
+        // batch = normalizeEvents(request, captured); surface batch.diagnostics.
+        // state = collectMetadata(request, batch, previous generation-bound state).
+        // events = batch.events; metadata = state.metadata.
         // approved = await filterForPrivacy({ projectPath, sessionId, events, metadata }).
         // If approved is not null, await publishUpdate(approved).
         // Return captured.nextCheckpoint; it does not certify downstream delivery.
@@ -161,59 +193,35 @@ export class SessionWatcher {
     }
 
     async captureUpdates(
-        _request: SessionWatchRequest,
-        _checkpoint?: SessionCaptureCheckpoint,
+        request: SessionWatchRequest,
+        checkpoint?: SessionCaptureCheckpoint,
+        options?: SessionCaptureOptions,
     ): Promise<CapturedSessionUpdates> {
-        // Pseudocode:
-        // Validate sessionId/transcriptPath; seek to sourceByteOffset.
-        // Detect transcript replacement/truncation before trusting the saved offset.
-        // Read complete GHCP JSONL records; leave a partially written tail unread.
-        // For ID-less records, assign a GUID once and retain it with the captured record.
-        // Persist mappings for all assigned GUIDs, keyed by session/transcript generation/record offset.
-        // Save assignments before advancing the checkpoint; reuse them when rereading records.
-        // Reconcile replaced/truncated transcripts separately; generated IDs cannot detect changes.
-        // Return the session, transcript path, and byte offset after the last complete record.
-        // With no complete new events, retain the checkpoint (byte offset zero at the start).
-        // The caller persists read progress; do not wait for downstream processing.
-        // Surface malformed complete records and unsupported formats explicitly.
-        throw new Error("SessionWatcher.captureUpdates is not implemented");
+        return captureSessionUpdates(request, checkpoint, options);
     }
 
     normalizeEvents(
-        _request: SessionWatchRequest,
-        _updates: CapturedSessionUpdates,
-    ): NormalizedSessionEvent[] {
-        // Pseudocode:
-        // Validate GHCP payloads and map messages, tools, and session lifecycle records.
-        // Map the source's assistant message role to agent in the normalized format.
-        // Normalize each source event independently; preserve a native ID as sourceEventId.
-        // With a native ID, set id = sourceEventId; do not require GUID format.
-        // Without a native ID, omit sourceEventId and set id to the GUID assigned during capture.
-        // Keep the assigned GUID separate from the original record's native ID.
-        // Distinct ID-less records get distinct GUIDs, even if their content is identical.
-        // Reuse persisted assignments on retries/replay instead of generating new GUIDs.
-        // All events belong to the parent update's sessionId.
-        // Scope event IDs by update.sessionId.
-        // Preserve toolCallId to associate starts/results, including across update batches.
-        // CLI apply_patch: retain the completion's reported diff and success separately.
-        // Preserve script commands/results even when no diff is present.
-        // Diagnose unsupported records; ignore only explicitly recognized non-content records.
-        // Do not infer intent, extract memories, or assign events to commits.
-        throw new Error("SessionWatcher.normalizeEvents is not implemented");
+        request: SessionWatchRequest,
+        updates: CapturedSessionUpdates,
+    ): NormalizedSessionBatch {
+        return normalizeSessionEvents(request, updates);
     }
 
     collectMetadata(
-        _request: SessionWatchRequest,
-        _events: NormalizedSessionEvent[],
-        _previous?: CapturedSessionMetadata,
-    ): CapturedSessionMetadata {
-        // Pseudocode:
-        // Merge request metadata, previous observations, and explicit source metadata.
-        // Collect client name, distinct models, session times, and parent/subagent linkage.
-        // Preserve missing values as unknown; do not infer authorship or commit ownership.
-        // Keep metadata associated with this session, not a presumed candidate commit.
-        // Return it for privacy filtering together with the normalized events.
-        throw new Error("SessionWatcher.collectMetadata is not implemented");
+        request: SessionWatchRequest,
+        batch: NormalizedSessionBatch,
+        previous?: SessionMetadataState,
+    ): SessionMetadataState {
+        return collectSessionMetadata(request, batch, previous);
+    }
+
+    async restoreMetadata(
+        request: SessionWatchRequest,
+        through: SessionCaptureCheckpoint,
+        generation: string,
+        options?: Pick<SessionCaptureOptions, "stateDirectory" | "maxRecords">,
+    ): Promise<RestoredSessionMetadata> {
+        return restoreSessionMetadata(request, through, generation, options);
     }
 
     async filterForPrivacy(

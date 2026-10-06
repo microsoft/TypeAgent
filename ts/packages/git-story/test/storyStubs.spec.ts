@@ -41,7 +41,7 @@ const watchRequest: SessionWatchRequest = {
     metadata: { clientName: "Copilot CLI", models: [] },
 };
 
-test.each(["processUpdates", "captureUpdates"] as const)(
+test.each(["processUpdates"] as const)(
     "session watcher rejects %s until implemented",
     async (method) => {
         await expect(
@@ -49,22 +49,3 @@ test.each(["processUpdates", "captureUpdates"] as const)(
         ).rejects.toThrow(`SessionWatcher.${method} is not implemented`);
     },
 );
-
-test("session watcher rejects normalization until implemented", () => {
-    expect(() =>
-        new SessionWatcher().normalizeEvents(watchRequest, {
-            records: [],
-            nextCheckpoint: {
-                sessionId: watchRequest.sessionId,
-                transcriptPath: watchRequest.transcriptPath,
-                sourceByteOffset: "0",
-            },
-        }),
-    ).toThrow("SessionWatcher.normalizeEvents is not implemented");
-});
-
-test("session watcher rejects metadata collection until implemented", () => {
-    expect(() =>
-        new SessionWatcher().collectMetadata(watchRequest, []),
-    ).toThrow("SessionWatcher.collectMetadata is not implemented");
-});
