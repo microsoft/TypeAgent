@@ -780,6 +780,31 @@ describe("createAndExecutePowerShellFlow", () => {
             ["PWD", process.cwd()],
         ])("preserves the safe path alias %s", async (alias, expected) => {
             const { agent, context } = await createAgentHarness();
+            if (alias === "USERPROFILE") {
+                // Keep alias validation independent of hosted-runner cold-start time.
+                const warmup = await executeScript(
+                    {
+                        script: "Write-Output 'ready'",
+                        parameters: {},
+                        provenance: "generated",
+                        sandbox: {
+                            maxExecutionTime: 90,
+                        },
+                    },
+                    {
+                        sessionContext: context.sessionContext,
+                        definition: {
+                            actionName: "approvedLocalWarmup",
+                            displayName: "Approved local warmup",
+                            description:
+                                "Warm the approved-local PowerShell broker",
+                            parameters: [],
+                            grammarPatterns: [],
+                        },
+                    },
+                );
+                expect(warmup.success).toBe(true);
+            }
             const result = await agent.executeAction?.(
                 {
                     schemaName: "powershell",
