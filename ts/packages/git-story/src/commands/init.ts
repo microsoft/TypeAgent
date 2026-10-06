@@ -17,6 +17,20 @@ const COPILOT_HOOKS = {
     agentStop: "git story hooks copilot agent-stop",
 };
 
+// VS Code loads every `*.json` in `.github/hooks`. git-story owns this file,
+// so init rewrites it whole and excludes it like COPILOT_SETTINGS.
+const VSCODE_HOOKS = ".github/hooks/git-story.json";
+const VSCODE_HOOKS_CONFIG = {
+    hooks: {
+        SessionStart: [
+            {
+                type: "command",
+                command: "git story hooks vscode session-start",
+            },
+        ],
+    },
+};
+
 // Each git hook gets a shell script that forwards git's args and stdin to
 // `git-story hooks git <hook>`. `exec` hands the script's stdin to the
 // command, so hooks that receive input (e.g. pre-push) keep it.
@@ -84,13 +98,26 @@ export const initCommand = new Command("init")
         const lines = fs.existsSync(exclude)
             ? fs.readFileSync(exclude, "utf8").split("\n")
             : [];
-        if (!lines.includes(COPILOT_SETTINGS)) {
-            fs.mkdirSync(path.dirname(exclude), { recursive: true });
-            fs.appendFileSync(exclude, `${COPILOT_SETTINGS}\n`);
+        for (const file of [COPILOT_SETTINGS, VSCODE_HOOKS]) {
+            if (!lines.includes(file)) {
+                fs.mkdirSync(path.dirname(exclude), { recursive: true });
+                fs.appendFileSync(exclude, `${file}\n`);
+            }
         }
         const copilotMessage = `Registered Copilot hooks in ${settingsPath}`;
         process.stdout.write(`${copilotMessage}\n`);
         cliLogger.info(copilotMessage);
+
+        // VS Code agent hooks.
+        const vscodePath = path.join(root, VSCODE_HOOKS);
+        fs.mkdirSync(path.dirname(vscodePath), { recursive: true });
+        fs.writeFileSync(
+            vscodePath,
+            JSON.stringify(VSCODE_HOOKS_CONFIG, null, 4) + "\n",
+        );
+        const vscodeMessage = `Registered VS Code hooks in ${vscodePath}`;
+        process.stdout.write(`${vscodeMessage}\n`);
+        cliLogger.info(vscodeMessage);
 
         // Writes one git hook script. `--git-path hooks/<hook>` honors
         // `core.hooksPath` and worktrees.

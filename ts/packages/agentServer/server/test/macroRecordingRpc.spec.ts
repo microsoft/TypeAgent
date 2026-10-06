@@ -272,6 +272,52 @@ describe("macro recording RPC", () => {
         await expect(connection.inspectMacro(approved)).resolves.toMatchObject({
             state: "approved",
         });
+        const selected = await connection.armMacroRecording({
+            sessionId: "learning-session",
+            learning: true,
+            cwd: instanceDir,
+        });
+        await connection.claimMacroRecording({
+            sessionId: "learning-session",
+            cwd: instanceDir,
+            promptHash: createHash("sha256").update("Read data").digest("hex"),
+        });
+        const learningTrace = await connection.finalizeMacroRecording({
+            tokenId: selected.id,
+            trace: {
+                schemaVersion: 1,
+                sessionId: "learning-session",
+                cwd: instanceDir,
+                prompt: "Read data",
+                response: "Done",
+                startedAt: "2026-09-30T10:00:00.000Z",
+                completedAt: "2026-09-30T10:00:01.000Z",
+                toolCalls: [
+                    {
+                        toolCallId: "read-learning",
+                        name: "read",
+                        mcpServerName: "typeagent-workspace",
+                        arguments: {},
+                        result: {},
+                        status: "completed",
+                    },
+                ],
+            },
+        });
+        const state =
+            await connection.getMacroRecordingState("learning-session");
+        expect(state.learningJob).toMatchObject({
+            jobId: learningTrace.learningJobId,
+            status: "queued",
+        });
+        await connection.cancelMacroLearningJob(state.learningJob!.jobId);
+        expect(
+            (await connection.getMacroRecordingState("learning-session"))
+                .learningJob,
+        ).toMatchObject({
+            status: "cancelled",
+            error: "Learning job was cancelled.",
+        });
         await connection.close();
     });
 });

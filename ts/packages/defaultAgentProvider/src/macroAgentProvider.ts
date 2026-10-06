@@ -40,6 +40,9 @@ export function getMacroInputSchema(macro: CopilotToolMacro) {
                 {
                     description: input.description,
                     ...(input.valueType ? { type: input.valueType } : {}),
+                    ...(input.valueType === "object"
+                        ? { additionalProperties: true }
+                        : {}),
                 },
             ]),
         ),

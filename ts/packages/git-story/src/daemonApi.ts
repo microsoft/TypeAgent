@@ -34,6 +34,7 @@ export const DaemonIdentitySchema = z.object({ pid: z.number().int() });
 export const SessionRegistrationSchema = z.object({
     projectPath: absolutePath,
     sessionId: z.string().min(1),
+    transcriptPath: absolutePath.optional(),
     metadata: z.object({
         clientName: z.string(),
         models: z.array(z.string()),
