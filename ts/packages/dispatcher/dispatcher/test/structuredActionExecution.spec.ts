@@ -169,6 +169,17 @@ describe("real structured dispatcher execution", () => {
                 entered.push(params.value);
                 expect(actionContext.activityContext).toBeUndefined();
                 switch (params.mode) {
+                    case "security": {
+                        const selected = await actionContext.sessionContext
+                            .requestSecurityApproval!({
+                            message: "Execute local code?",
+                            choices: ["Run", "Cancel"],
+                            defaultId: 1,
+                        });
+                        actionContext.abortSignal?.throwIfAborted();
+                        if (selected === 0) callbacks++;
+                        return complete();
+                    }
                     case "nestedSetup":
                         await processCommandNoLock(
                             "@config agent setup guarded",
@@ -487,6 +498,58 @@ describe("real structured dispatcher execution", () => {
             serverProvider.notifyDisconnected();
         };
     }
+
+    test.each([false, true])(
+        "model continuations cannot provide missing security approval (rpc=%s)",
+        async (rpc) => {
+            if (rpc) await useAgentRpc();
+            const outer = await dispatcher.executeAction(
+                await request("write", "security"),
+            );
+            const result = await answer(outer, {
+                type: "confirmation",
+                approved: true,
+            });
+            expect(result.status).not.toBe("completed");
+            expect(result.status).not.toBe("requires_interaction");
+            expect(callbacks).toBe(0);
+            expect(broadcasts).toEqual([]);
+        },
+    );
+
+    test.each([false, true])(
+        "only the dedicated UI response grants security approval (rpc=%s)",
+        async (rpc) => {
+            let ready!: () => void;
+            let approve!: (choice: number) => void;
+            const called = new Promise<void>((resolve) => {
+                ready = resolve;
+            });
+            const response = new Promise<number>((resolve) => {
+                approve = resolve;
+            });
+            context.clientIO.requestSecurityApproval = async (_id, request) => {
+                expect(request.defaultId).toBe(1);
+                ready();
+                return response;
+            };
+            if (rpc) await useAgentRpc();
+            const outer = await dispatcher.executeAction(
+                await request("write", "security"),
+            );
+            const running = answer(outer, {
+                type: "confirmation",
+                approved: true,
+            });
+            await called;
+            expect(callbacks).toBe(0);
+            expect(liveContext?.executionOrigin).toBe("structured");
+            expect(broadcasts).toEqual([]);
+            approve(0);
+            expect((await running).status).toBe("completed");
+            expect(callbacks).toBe(1);
+        },
+    );
 
     async function request(
         actionName = "write",

@@ -1745,6 +1745,30 @@ describe("blocking prompt ordering (reasoning ask_user)", () => {
     });
 });
 
+describe("security approval prompt cancellation", () => {
+    it("removes the card, settles the promise and ignores stale buttons", async () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        const controller = new AbortController();
+        const approval = panel.addChoicePrompt(
+            "Authorize project script",
+            [
+                { label: "Run", value: 0 },
+                { label: "Cancel", value: 1 },
+            ],
+            { defaultValue: 1, signal: controller.signal },
+        );
+        const button = root.querySelector<HTMLButtonElement>(".choice-button")!;
+        expect(root.textContent).toContain("Authorize project script");
+        const rejected = expect(approval).rejects.toThrow("Stopped");
+        controller.abort(new Error("Stopped"));
+        await rejected;
+        expect(root.querySelector(".choice-panel")).toBeNull();
+        expect(root.textContent).not.toContain("Authorize project script");
+        button.click();
+        await expect(approval).rejects.toThrow("Stopped");
+    });
+});
+
 // The reasoning engine renders each "Thinking" block as a <details> that
 // carries a per-block token estimate in a `data-thinking-tokens` attribute.
 // The panel moves that into the step bubble's metrics row (where the other

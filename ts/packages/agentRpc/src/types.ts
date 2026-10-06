@@ -172,6 +172,10 @@ export type AgentContextInvokeFunctions = {
         choices?: string[] | undefined;
         defaultId?: number | undefined;
     }) => Promise<number>;
+    requestSecurityApproval: (param: {
+        contextId: number;
+        request: import("@typeagent/agent-sdk").SecurityApprovalRequest;
+    }) => Promise<number>;
 
     queueToggleTransientAgent: (
         contextId: number,
@@ -308,6 +312,7 @@ export type ActionContextParams = ContextParams & {
     actionContextId: number;
     activityContext: ActivityContext | undefined;
     isFromReasoningLoop: boolean;
+    executionOrigin?: import("@typeagent/agent-sdk").ActionContext["executionOrigin"];
     workingDirectory: string | undefined;
 };
 

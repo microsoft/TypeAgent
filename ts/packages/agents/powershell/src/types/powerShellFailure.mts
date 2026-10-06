@@ -9,13 +9,13 @@ export type PowerShellFailureKind =
     | "invalidParameters"
     | "scriptFailure"
     | "policyDenied"
+    | "integrityFailure"
     | "cancelled"
     | "partialSideEffects";
 
 const retryableFailures = new Set<PowerShellFailureKind>([
     "unknownFlow",
     "invalidParameters",
-    "scriptFailure",
 ]);
 
 export function createPowerShellFailure(
@@ -45,7 +45,7 @@ export function createPowerShellExecutionFailure(
         return createPowerShellFailure(
             "cancelled",
             "PowerShell execution was cancelled.",
-            { retryable: false },
+            { retryable: false, mayHaveSideEffects: result.duration > 0 },
         );
     }
     const error = result.stderr || `Script exited with code ${result.exitCode}`;
@@ -58,7 +58,10 @@ export function createPowerShellExecutionFailure(
     ) {
         return createPowerShellFailure("policyDenied", error, {
             retryable: false,
+            mayHaveSideEffects: result.duration > 0,
         });
     }
-    return createPowerShellFailure("scriptFailure", error);
+    return createPowerShellFailure("scriptFailure", error, {
+        mayHaveSideEffects: true,
+    });
 }

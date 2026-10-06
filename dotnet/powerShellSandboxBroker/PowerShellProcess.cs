@@ -3,12 +3,14 @@
 
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 namespace TypeAgent.PowerShellSandboxBroker;
 
-internal sealed class AppContainerProcess : IDisposable
+internal sealed class PowerShellProcess : IDisposable
 {
     private readonly string profileName;
     private readonly IntPtr packageSid;
@@ -19,7 +21,7 @@ internal sealed class AppContainerProcess : IDisposable
     private readonly SafeFileHandle stderrRead;
     private bool disposed;
 
-    private AppContainerProcess(
+    private PowerShellProcess(
         string profileName,
         IntPtr packageSid,
         string profilePath,
@@ -37,11 +39,18 @@ internal sealed class AppContainerProcess : IDisposable
         this.stderrRead = stderrRead;
     }
 
-    internal static (AppContainerProcess Process, string ProfilePath) Start(
+    internal static (PowerShellProcess Process, string ProfilePath) Start(
         string scriptHostPath,
         string requestJson,
-        bool diagnostics)
+        bool diagnostics,
+        bool approvedLocal = false,
+        string? workingDirectory = null)
     {
+        if (approvedLocal)
+        {
+            return StartApprovedLocal(scriptHostPath, requestJson, diagnostics,
+                workingDirectory ?? throw new ArgumentException("An approved working directory is required."));
+        }
         var profileName = $"TypeAgent.PowerShell.{Guid.NewGuid():N}";
         var hr = NativeMethods.CreateAppContainerProfile(
             profileName,
@@ -90,7 +99,9 @@ internal sealed class AppContainerProcess : IDisposable
                     profilePath,
                     privateHostPath,
                     privateRequestPath,
-                    diagnostics),
+                    diagnostics,
+                    approvedLocal: false,
+                    workingDirectory: profilePath),
                 profilePath);
         }
         catch
@@ -112,13 +123,46 @@ internal sealed class AppContainerProcess : IDisposable
         }
     }
 
-    private static AppContainerProcess StartProcess(
+    private static (PowerShellProcess Process, string ProfilePath) StartApprovedLocal(
+        string scriptHostPath, string requestJson, bool diagnostics, string workingDirectory)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"TypeAgent.PowerShell.{Guid.NewGuid():N}");
+        using var identity = WindowsIdentity.GetCurrent();
+        var security = new DirectorySecurity();
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        security.AddAccessRule(new FileSystemAccessRule(
+            identity.User ?? throw new InvalidOperationException("The current Windows user has no SID."),
+            FileSystemRights.FullControl,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+            PropagationFlags.None,
+            AccessControlType.Allow));
+        new DirectoryInfo(directory).Create(security);
+        try
+        {
+            var host = Path.Combine(directory, "scriptHost.ps1");
+            var request = Path.Combine(directory, "request.json");
+            File.Copy(scriptHostPath, host);
+            File.WriteAllText(request, requestJson, new UTF8Encoding(false));
+            return (StartProcess("", IntPtr.Zero, directory, host, request, diagnostics,
+                approvedLocal: true, workingDirectory), directory);
+        }
+        catch
+        {
+            ClearProfile(directory);
+            if (Directory.Exists(directory)) Directory.Delete(directory);
+            throw;
+        }
+    }
+
+    private static PowerShellProcess StartProcess(
         string profileName,
         IntPtr packageSid,
         string profilePath,
         string scriptHostPath,
         string requestPath,
-        bool diagnostics)
+        bool diagnostics,
+        bool approvedLocal,
+        string workingDirectory)
     {
         var pipeAttributes = new NativeMethods.SecurityAttributes
         {
@@ -175,30 +219,29 @@ internal sealed class AppContainerProcess : IDisposable
             nuint attributeListSize = 0;
             NativeMethods.InitializeProcThreadAttributeList(
                 IntPtr.Zero,
-                2,
+                approvedLocal ? 1 : 2,
                 0,
                 ref attributeListSize);
             attributeList = Marshal.AllocHGlobal((nint)attributeListSize);
             if (!NativeMethods.InitializeProcThreadAttributeList(
                     attributeList,
-                    2,
+                    approvedLocal ? 1 : 2,
                     0,
                     ref attributeListSize))
             {
                 throw NativeMethods.LastError("InitializeProcThreadAttributeList failed.");
             }
 
-            var securityCapabilities = new NativeMethods.SecurityCapabilities
+            if (!approvedLocal)
             {
-                AppContainerSid = packageSid,
-            };
-            securityCapabilitiesPointer = Marshal.AllocHGlobal(
-                Marshal.SizeOf<NativeMethods.SecurityCapabilities>());
-            Marshal.StructureToPtr(
-                securityCapabilities,
-                securityCapabilitiesPointer,
-                false);
-            if (!NativeMethods.UpdateProcThreadAttribute(
+                var securityCapabilities = new NativeMethods.SecurityCapabilities
+                {
+                    AppContainerSid = packageSid,
+                };
+                securityCapabilitiesPointer = Marshal.AllocHGlobal(
+                    Marshal.SizeOf<NativeMethods.SecurityCapabilities>());
+                Marshal.StructureToPtr(securityCapabilities, securityCapabilitiesPointer, false);
+                if (!NativeMethods.UpdateProcThreadAttribute(
                     attributeList,
                     0,
                     NativeMethods.ProcThreadAttributeSecurityCapabilities,
@@ -206,8 +249,9 @@ internal sealed class AppContainerProcess : IDisposable
                     (nuint)Marshal.SizeOf<NativeMethods.SecurityCapabilities>(),
                     IntPtr.Zero,
                     IntPtr.Zero))
-            {
-                throw NativeMethods.LastError("Adding AppContainer attributes failed.");
+                {
+                    throw NativeMethods.LastError("Adding AppContainer attributes failed.");
+                }
             }
 
             var inheritedHandles = new[]
@@ -233,8 +277,10 @@ internal sealed class AppContainerProcess : IDisposable
                 throw NativeMethods.LastError("Adding inherited-handle attributes failed.");
             }
 
-            job = CreateJob();
-            environmentPointer = CreateEnvironmentBlock(profilePath);
+            job = CreateJob(approvedLocal);
+            environmentPointer = approvedLocal
+                ? CreateApprovedEnvironmentBlock()
+                : CreateEnvironmentBlock(profilePath);
 
             var powerShellPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.System),
@@ -243,7 +289,8 @@ internal sealed class AppContainerProcess : IDisposable
                 "powershell.exe");
             var commandLine = new StringBuilder(
                 $"\"{powerShellPath}\" -NoLogo -NoProfile -NonInteractive " +
-                $"-ExecutionPolicy Bypass -File \"{scriptHostPath}\" " +
+                (approvedLocal ? "" : "-ExecutionPolicy Bypass ") +
+                $"-File \"{scriptHostPath}\" " +
                 $"-RequestPath \"{requestPath}\"" +
                 (diagnostics ? " -Diagnostics" : ""));
             var startupInfo = new NativeMethods.StartupInfoEx
@@ -272,7 +319,7 @@ internal sealed class AppContainerProcess : IDisposable
                     true,
                     creationFlags,
                     environmentPointer,
-                    profilePath,
+                    workingDirectory,
                     ref startupInfo,
                     out processInformation))
             {
@@ -295,7 +342,7 @@ internal sealed class AppContainerProcess : IDisposable
             stderrWrite = IntPtr.Zero;
             standardInput.Dispose();
 
-            return new AppContainerProcess(
+            return new PowerShellProcess(
                 profileName,
                 packageSid,
                 profilePath,
@@ -393,6 +440,11 @@ internal sealed class AppContainerProcess : IDisposable
         {
             throw NativeMethods.LastError("WaitForSingleObject failed.");
         }
+        // Descendants can keep the pipes open after the root exits.
+        if (!NativeMethods.TerminateJobObject(job, 1))
+        {
+            throw NativeMethods.LastError("Terminating the PowerShell job failed.");
+        }
 
         var (Text, Truncated) = await stdoutTask;
         var stderr = await stderrTask;
@@ -400,7 +452,7 @@ internal sealed class AppContainerProcess : IDisposable
         stopwatch.Stop();
         var errorCode = timedOut
             ? "broker.timeout"
-            : stderr.Text.Contains(
+            : exitCode != 0 && stderr.Text.Contains(
                 "policy denied",
                 StringComparison.OrdinalIgnoreCase)
                 ? "broker.policyDenied"
@@ -421,7 +473,7 @@ internal sealed class AppContainerProcess : IDisposable
             ErrorCode: cancelled ? "broker.cancelled" : errorCode);
     }
 
-    private static IntPtr CreateJob()
+    private static IntPtr CreateJob(bool approvedLocal)
     {
         var job = NativeMethods.CreateJobObjectW(IntPtr.Zero, null);
         if (job == IntPtr.Zero)
@@ -433,10 +485,10 @@ internal sealed class AppContainerProcess : IDisposable
             BasicLimitInformation = new NativeMethods.JobObjectBasicLimitInformation
             {
                 LimitFlags =
-                    NativeMethods.JobObjectLimitActiveProcess |
+                    (approvedLocal ? 0 : NativeMethods.JobObjectLimitActiveProcess) |
                     NativeMethods.JobObjectLimitDieOnUnhandledException |
                     NativeMethods.JobObjectLimitKillOnJobClose,
-                ActiveProcessLimit = 1,
+                ActiveProcessLimit = approvedLocal ? 0u : 1u,
             },
         };
         var pointer = Marshal.AllocHGlobal(
@@ -462,6 +514,48 @@ internal sealed class AppContainerProcess : IDisposable
             Marshal.FreeHGlobal(pointer);
         }
     }
+
+    private static IntPtr CreateApprovedEnvironmentBlock()
+    {
+        var variables = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in ApprovedEnvironmentVariables)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (value is not null) variables[name] = value;
+        }
+        variables["POWERSHELL_TELEMETRY_OPTOUT"] = "1";
+        variables.TryAdd("PATHEXT", ".COM;.EXE;.BAT;.CMD");
+        variables["PSModulePath"] = WindowsPowerShellModulePath();
+        var block = string.Join('\0', variables.Select(pair => $"{pair.Key}={pair.Value}")) + "\0\0";
+        return Marshal.StringToHGlobalUni(block);
+    }
+
+    private static string WindowsPowerShellModulePath()
+    {
+        var defaults = new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "WindowsPowerShell", "Modules"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsPowerShell", "Modules"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "Modules"),
+        };
+        var inherited = (Environment.GetEnvironmentVariable("PSModulePath") ?? "")
+            .Split(';', StringSplitOptions.RemoveEmptyEntries);
+        // A Node host launched from pwsh inherits PowerShell 7's runtime modules.
+        // They can shadow incompatible Windows PowerShell modules such as Utility.
+        var compatible = inherited.Where(path =>
+            !Path.GetFileName(Path.TrimEndingDirectorySeparator(path)).Equals("Modules", StringComparison.OrdinalIgnoreCase) ||
+            !File.Exists(Path.Combine(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(path)) ?? "", "pwsh.exe")));
+        return string.Join(';', defaults.Concat(compatible).Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static readonly string[] ApprovedEnvironmentVariables =
+    [
+        "APPDATA", "COMSPEC", "HOME", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS", "OS", "PATH", "PATHEXT", "PROCESSOR_ARCHITECTURE",
+        "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "PSModulePath",
+        "SYSTEMROOT", "TEMP", "TMP", "USERDOMAIN", "USERNAME", "USERPROFILE", "WINDIR",
+        "LANG", "LC_ALL", "SSH_AUTH_SOCK",
+    ];
 
     private static IntPtr CreateEnvironmentBlock(string profilePath)
     {
@@ -522,15 +616,27 @@ internal sealed class AppContainerProcess : IDisposable
         stderrRead.Dispose();
         NativeMethods.CloseHandle(process);
         NativeMethods.CloseHandle(job);
-        NativeMethods.FreeSid(packageSid);
+        if (packageSid != IntPtr.Zero) NativeMethods.FreeSid(packageSid);
         ClearProfile(profilePath);
-        _ = NativeMethods.DeleteAppContainerProfile(profileName);
+        if (profileName.Length > 0)
+        {
+            _ = NativeMethods.DeleteAppContainerProfile(profileName);
+        }
+        else if (Directory.Exists(profilePath))
+        {
+            Directory.Delete(profilePath);
+        }
     }
 
     private static void ClearProfile(string path)
     {
         if (!Directory.Exists(path))
         {
+            return;
+        }
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+        {
+            Directory.Delete(path, recursive: false);
             return;
         }
         foreach (var entry in Directory.EnumerateFileSystemEntries(path))
