@@ -285,6 +285,134 @@ test("replacement retains revision/history checks and forget retains server toke
     });
 });
 
+test("forget shows progress, prevents duplicate submissions and waits for refresh", async () => {
+    const manager = mountMemoryManagement(host);
+    await manager.selectCorpus("a");
+    await manager.selectSource("source");
+    value("forgetSourceButton").click();
+    await settle();
+    let finishForget!: () => void;
+    invoke.mockImplementationOnce(
+        () => new Promise<void>((resolve) => (finishForget = resolve)),
+    );
+    let finishRefresh!: () => void;
+    host.changed = jest.fn(
+        () => new Promise<void>((resolve) => (finishRefresh = resolve)),
+    );
+    host.sources = jest.fn(async () => ({ items: [], total: 0 }));
+    host.sourceForgotten = jest.fn();
+    const confirm = value<HTMLButtonElement>("confirmForgetButton");
+    const dialog = value<HTMLDialogElement>("forgetDialog");
+    const cancel = dialog.querySelector<HTMLButtonElement>(
+        "[data-close-dialog]",
+    )!;
+    confirm.click();
+    confirm.dispatchEvent(new Event("click"));
+    await settle();
+    expect(
+        invoke.mock.calls.filter(([method]) => method === "memoryForgetSource"),
+    ).toHaveLength(1);
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.textContent).toBe("Forgetting...");
+    expect(cancel.disabled).toBe(true);
+    expect(dialog.getAttribute("aria-busy")).toBe("true");
+    expect(value("forgetStatus").textContent).toContain(
+        "rebuilding the corpus index",
+    );
+    const escape = new Event("cancel", { cancelable: true });
+    dialog.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(true);
+    cancel.click();
+    expect(dialog.open).toBe(true);
+    finishForget();
+    await settle();
+    expect(value("forgetStatus").textContent).toBe(
+        "Source forgotten. Refreshing memory...",
+    );
+    expect(dialog.open).toBe(true);
+    expect(host.sourceForgotten).not.toHaveBeenCalled();
+    finishRefresh();
+    await settle();
+    expect(dialog.open).toBe(false);
+    expect(dialog.hasAttribute("aria-busy")).toBe(false);
+    expect(cancel.disabled).toBe(false);
+    expect(value<HTMLTextAreaElement>("contentEditor").value).toBe("");
+    expect(value("sourceCount").textContent).toBe("0 total");
+    expect(host.sourceForgotten).toHaveBeenCalledWith("a", "source", "Source");
+});
+
+test("forget failures stay visible in the modal and retain confirmation for retry", async () => {
+    const manager = mountMemoryManagement(host);
+    await manager.selectCorpus("a");
+    await manager.selectSource("source");
+    host.sourceForgotten = jest.fn();
+    value("forgetSourceButton").click();
+    await settle();
+    invoke.mockImplementationOnce(async () => {
+        throw new Error("Index rebuild failed");
+    });
+    value("confirmForgetButton").click();
+    await settle();
+    expect(value<HTMLDialogElement>("forgetDialog").open).toBe(true);
+    expect(value("forgetStatus").textContent).toBe(
+        "Could not forget source: Index rebuild failed",
+    );
+    expect(value("errorBanner").textContent).toBe(
+        "Operation failed: Index rebuild failed",
+    );
+    expect(value<HTMLButtonElement>("confirmForgetButton").disabled).toBe(
+        false,
+    );
+    expect(value<HTMLTextAreaElement>("contentEditor").value).toBe("Original");
+    expect(host.sourceForgotten).not.toHaveBeenCalled();
+    value("confirmForgetButton").click();
+    await settle();
+    expect(
+        invoke.mock.calls.filter(([method]) => method === "memoryForgetSource"),
+    ).toEqual([
+        [
+            "memoryForgetSource",
+            {
+                corpusId: "a",
+                sourceId: "source",
+                confirmationToken: "server-token",
+            },
+        ],
+        [
+            "memoryForgetSource",
+            {
+                corpusId: "a",
+                sourceId: "source",
+                confirmationToken: "server-token",
+            },
+        ],
+    ]);
+    expect(value<HTMLDialogElement>("forgetDialog").open).toBe(false);
+    expect(host.sourceForgotten).toHaveBeenCalledTimes(1);
+});
+
+test("a refresh failure after forgetting is not reported as a failed deletion", async () => {
+    const manager = mountMemoryManagement(host);
+    await manager.selectCorpus("a");
+    await manager.selectSource("source");
+    value("forgetSourceButton").click();
+    await settle();
+    host.changed = jest.fn(async () => {
+        throw new Error("Snapshot unavailable");
+    });
+    value("confirmForgetButton").click();
+    await settle();
+    expect(value("forgetStatus").textContent).toBe(
+        "Source forgotten, but refresh failed: Snapshot unavailable",
+    );
+    expect(value<HTMLTextAreaElement>("contentEditor").value).toBe("");
+    expect(value<HTMLButtonElement>("confirmForgetButton").disabled).toBe(true);
+    value<HTMLDialogElement>("forgetDialog")
+        .querySelector<HTMLButtonElement>("[data-close-dialog]")!
+        .click();
+    expect(value<HTMLDialogElement>("forgetDialog").open).toBe(false);
+});
+
 test("candidate review/save retains citations and candidate identity", async () => {
     const manager = mountMemoryManagement(host);
     await manager.reviewCandidate("a", "candidate");
@@ -361,6 +489,72 @@ test("unsaved edits block navigation and failures preserve editable drafts", asy
         "draft",
     );
     expect(value("connectionState").textContent).toContain("operation failed");
+});
+
+test.each(["\r\n", "\r", "\n"])(
+    "viewing source content with %j line endings does not prompt on navigation",
+    async (newline) => {
+        const content = ["# Source", "", "Unchanged content", ""].join(newline);
+        const originalInvoke = invoke.getMockImplementation()!;
+        invoke.mockImplementation(async (method, params) =>
+            method === "memoryGetSourceContent"
+                ? {
+                      content,
+                      offset: 0,
+                      totalChars: content.length,
+                      corpusId: "a",
+                      sourceId: "source",
+                      revisionId: "r1",
+                  }
+                : originalInvoke(method, params),
+        );
+        const manager = mountMemoryManagement(host);
+        await manager.selectCorpus("a");
+        await manager.selectSource("source");
+        const editor = value<HTMLTextAreaElement>("contentEditor");
+        expect(editor.value).toBe("# Source\n\nUnchanged content\n");
+        expect(manager.discardChanges()).toBe(true);
+        await manager.selectSource("source");
+        await manager.selectCorpus("b");
+        expect(window.confirm).not.toHaveBeenCalled();
+
+        await manager.selectSource("source");
+        const baseline = editor.value;
+        editor.value += "Actual edit";
+        editor.dispatchEvent(new Event("input"));
+        window.confirm = jest.fn(() => false);
+        expect(manager.discardChanges()).toBe(false);
+        expect(editor.value).toContain("Actual edit");
+        window.confirm = jest.fn(() => true);
+        expect(manager.discardChanges()).toBe(true);
+        expect(editor.value).toBe(baseline);
+        expect(manager.discardChanges()).toBe(true);
+        await manager.selectCorpus("a");
+        expect(window.confirm).toHaveBeenCalledTimes(1);
+    },
+);
+
+test("saving a procedure with normalized line endings stays clean when reloading fails", async () => {
+    const manager = mountMemoryManagement(host);
+    await manager.selectCorpus("a");
+    await manager.selectProcedure("procedure");
+    value<HTMLTextAreaElement>("procedureEditor").value += "Edited";
+    invoke.mockImplementationOnce(async () => ({
+        ...version,
+        version: 4,
+        markdown: "# Saved\r\n\r\nEdited\r\n",
+    }));
+    invoke.mockImplementationOnce(async () => {
+        throw new Error("Reload unavailable");
+    });
+    value("saveProcedureButton").click();
+    await settle();
+    expect(value("errorBanner").textContent).toContain("Reload unavailable");
+    expect(value<HTMLTextAreaElement>("procedureEditor").value).toBe(
+        "# Saved\n\nEdited\n",
+    );
+    expect(manager.discardChanges()).toBe(true);
+    expect(window.confirm).not.toHaveBeenCalled();
 });
 
 test("hub errors distinguish offline transport from operation failure", async () => {
@@ -756,6 +950,43 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
             ([method]) => method === "memoryHubExplore",
         ),
     ).toHaveLength(overviewCalls);
+    history.replaceState({}, "", "#/library/a/source");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    value("forgetSourceButton").click();
+    await settle();
+    const beforeForgetRefresh = viewInvoke.getMockImplementation()!;
+    viewInvoke.mockImplementation((method: string, params: unknown) =>
+        method === "memoryHubSnapshot"
+            ? Promise.reject(new Error("Snapshot refresh unavailable"))
+            : beforeForgetRefresh(method, params),
+    );
+    value("confirmForgetButton").click();
+    await settle();
+    expect(value("forgetStatus").textContent).toBe(
+        "Source forgotten, but refresh failed: Snapshot refresh unavailable",
+    );
+    expect(value<HTMLDialogElement>("forgetDialog").open).toBe(true);
+    expect(document.querySelector(".alert-success")).toBeNull();
+    value<HTMLDialogElement>("forgetDialog")
+        .querySelector<HTMLButtonElement>("[data-close-dialog]")!
+        .click();
+    viewInvoke.mockImplementation(beforeForgetRefresh);
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    value("forgetSourceButton").click();
+    await settle();
+    value("confirmForgetButton").click();
+    await settle();
+    jest.advanceTimersByTime(1);
+    await settle();
+    expect(value<HTMLDialogElement>("forgetDialog").open).toBe(false);
+    expect(location.hash).toBe("#/library");
+    expect(value("hubDrawer").classList.contains("hidden")).toBe(true);
+    expect(value("sourceCount").textContent).toBe("0 total");
+    expect(document.querySelector(".alert-success")?.textContent).toBe(
+        'Forgot source "Source".',
+    );
     history.replaceState({}, "", "#/settings");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();

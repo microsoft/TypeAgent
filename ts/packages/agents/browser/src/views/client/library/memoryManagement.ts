@@ -50,6 +50,7 @@ export interface MemoryManagementHost {
     changed(): Promise<void>;
     openSource(corpusId: string, sourceId: string): void;
     openProcedure(corpusId: string, procedureId: string): void;
+    sourceForgotten?(corpusId: string, sourceId: string, title: string): void;
 }
 
 export function mountMemoryManagement(host: MemoryManagementHost) {
@@ -145,6 +146,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     let jobPageIndex = 0;
     let pendingReplacement: string | undefined;
     let pendingForget: MemoryCenterForgetPreview | undefined;
+    let forgetting = false;
     let activityPage: MemoryCenterPage<MemoryCenterActivity> = {
         items: [],
         total: 0,
@@ -495,14 +497,16 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     function renderContent(): void {
         if (!contentPage) {
             contentEditor.value = "";
+            originalPageContent = contentEditor.value;
             contentPreview.replaceChildren();
             contentRange.textContent = "";
             element<HTMLButtonElement>("contentPrevious").disabled = true;
             element<HTMLButtonElement>("contentNext").disabled = true;
             return;
         }
-        originalPageContent = contentPage.content;
         contentEditor.value = contentPage.content;
+        // Textareas normalize CRLF and CR line endings to LF.
+        originalPageContent = contentEditor.value;
         contentPreview.innerHTML = renderMarkdown(contentPage.content);
         void renderMermaidIn(contentPreview);
         void renderMathIn(contentPreview);
@@ -1221,6 +1225,10 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     dialog("forgetDialog").addEventListener("close", () => {
         pendingForget = undefined;
         element<HTMLDivElement>("forgetPreview").replaceChildren();
+        element<HTMLParagraphElement>("forgetStatus").textContent = "";
+    });
+    dialog("forgetDialog").addEventListener("cancel", (event) => {
+        if (forgetting) event.preventDefault();
     });
 
     element<HTMLButtonElement>("refreshButton").addEventListener(
@@ -1379,7 +1387,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
                 });
                 isNewProcedure = false;
                 candidateId = undefined;
-                originalProcedureContent = selectedProcedure.markdown;
+                renderProcedureEditor();
                 procedureSearch.value = "";
                 await loadHowTos();
                 if (selectedProcedure)
@@ -1601,6 +1609,9 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
                     `Confirmation expires ${new Date(pendingForget.expiresAt).toLocaleString()}.`,
                     "item-subtitle",
                 );
+                element<HTMLParagraphElement>("forgetStatus").textContent = "";
+                element<HTMLButtonElement>("confirmForgetButton").disabled =
+                    false;
                 dialog("forgetDialog").showModal();
             });
         },
@@ -1609,20 +1620,64 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         "click",
         () => {
             void run(async () => {
-                if (!pendingForget) return;
-                await invoke("memoryForgetSource", {
-                    corpusId: pendingForget.corpusId,
-                    sourceId: pendingForget.sourceId,
-                    confirmationToken: pendingForget.confirmationToken,
-                });
-                pendingForget = undefined;
-                selectedSource = undefined;
-                contentPage = undefined;
-                dialog("forgetDialog").close();
-                renderSource();
-                renderContent();
-                renderKnowledge();
-                await refreshActiveCorpus();
+                if (forgetting) return;
+                const confirmation = pendingForget;
+                const status = element<HTMLParagraphElement>("forgetStatus");
+                if (!confirmation) {
+                    status.textContent =
+                        "Reopen Forget source to obtain a new confirmation.";
+                    throw new Error(status.textContent);
+                }
+                const title = selectedSource?.title ?? confirmation.sourceId;
+                const confirm = element<HTMLButtonElement>(
+                    "confirmForgetButton",
+                );
+                const cancel = dialog(
+                    "forgetDialog",
+                ).querySelector<HTMLButtonElement>("[data-close-dialog]")!;
+                forgetting = true;
+                let forgotten = false;
+                confirm.disabled = true;
+                cancel.disabled = true;
+                confirm.textContent = "Forgetting...";
+                dialog("forgetDialog").setAttribute("aria-busy", "true");
+                status.textContent =
+                    "Forgetting source and rebuilding the corpus index. This may take a while and cannot be cancelled once started.";
+                try {
+                    await invokeMemory("memoryForgetSource", {
+                        corpusId: confirmation.corpusId,
+                        sourceId: confirmation.sourceId,
+                        confirmationToken: confirmation.confirmationToken,
+                    });
+                    forgotten = true;
+                    pendingForget = undefined;
+                    selectedSource = undefined;
+                    contentPage = undefined;
+                    renderSource();
+                    renderContent();
+                    renderKnowledge();
+                    status.textContent =
+                        "Source forgotten. Refreshing memory...";
+                    await host.changed();
+                    await refreshActiveCorpus();
+                    dialog("forgetDialog").close();
+                    host.sourceForgotten?.(
+                        confirmation.corpusId,
+                        confirmation.sourceId,
+                        title,
+                    );
+                } catch (error) {
+                    const message =
+                        error instanceof Error ? error.message : String(error);
+                    status.textContent = `${forgotten ? "Source forgotten, but refresh failed" : "Could not forget source"}: ${message}`;
+                    throw error;
+                } finally {
+                    forgetting = false;
+                    confirm.disabled = forgotten;
+                    cancel.disabled = false;
+                    confirm.textContent = "Forget source";
+                    dialog("forgetDialog").removeAttribute("aria-busy");
+                }
             });
         },
     );
@@ -1686,7 +1741,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         return true;
     }
     window.addEventListener("beforeunload", (event) => {
-        if (hasUnsavedChanges()) {
+        if (forgetting || hasUnsavedChanges()) {
             event.preventDefault();
             event.returnValue = "";
         }
