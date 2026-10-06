@@ -823,9 +823,9 @@ export type AzureChatModelName =
     | "GPT_5_NANO"
     | "GPT_5_CHAT"
     | "GPT_4_1"
-    | "GPT_5_6_LUNA";
+    | "GPT_6_LUNA";
 
-export const GPT_5_6_LUNA: AzureChatModelName = "GPT_5_6_LUNA";
+export const GPT_6_LUNA: AzureChatModelName = "GPT_6_LUNA";
 export const GPT_4_1: AzureChatModelName = "GPT_4_1";
 export const GPT_5: AzureChatModelName = "GPT_5";
 export const GPT_5_NANO: AzureChatModelName = "GPT_5_NANO";

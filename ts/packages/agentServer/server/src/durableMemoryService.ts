@@ -25,7 +25,7 @@ export function createDurableMemoryService(
                     64,
                     undefined,
                     openai.createChatModel(
-                        openai.GPT_5_6_LUNA,
+                        openai.GPT_6_LUNA,
                         undefined,
                         undefined,
                         ["website-knowledge", "durable-index"],

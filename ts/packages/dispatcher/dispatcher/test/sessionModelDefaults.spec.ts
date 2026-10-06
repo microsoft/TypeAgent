@@ -5,10 +5,10 @@ import { openai, resolveTarget } from "@typeagent/aiclient";
 import { Session } from "../src/context/session.js";
 
 describe("session translation model", () => {
-    test("defaults to GPT_5_6_LUNA and resolves to GPT-6 Luna in Copilot mode", async () => {
+    test("defaults to GPT_6_LUNA and resolves to GPT-6 Luna in Copilot mode", async () => {
         const session = await Session.create();
         const model = session.getConfig().translation.model;
-        expect(model).toBe(openai.GPT_5_6_LUNA);
+        expect(model).toBe(openai.GPT_6_LUNA);
         expect(resolveTarget("copilot", model)).toBe("gpt-6-luna");
         expect(session.getConfig().translation.reasoningEffort).toBe("medium");
     });
@@ -23,7 +23,7 @@ describe("session translation model", () => {
         session.updateSettings({
             translation: { model: null, reasoningEffort: "high" },
         });
-        expect(session.getConfig().translation.model).toBe(openai.GPT_5_6_LUNA);
+        expect(session.getConfig().translation.model).toBe(openai.GPT_6_LUNA);
         expect(session.getConfig().translation.reasoningEffort).toBe("high");
         expect(
             resolveTarget("copilot", session.getConfig().translation.model),
