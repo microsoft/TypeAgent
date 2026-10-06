@@ -10,12 +10,12 @@ import {
 
 describe("search timing", () => {
     const originalFlag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
-    const originalLog = console.log;
+    const originalWarn = console.warn;
     let logs: string[];
 
     beforeEach(() => {
         logs = [];
-        console.log = (line: unknown) => {
+        console.warn = (line: unknown) => {
             logs.push(String(line));
         };
     });
@@ -26,7 +26,7 @@ describe("search timing", () => {
         } else {
             process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = originalFlag;
         }
-        console.log = originalLog;
+        console.warn = originalWarn;
     });
 
     test("disabled tracing performs no clocks or logs and preserves return values", async () => {
@@ -172,7 +172,7 @@ describe("search timing", () => {
 
     test("a broken diagnostic sink cannot affect the work result or error", async () => {
         process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
-        console.log = () => {
+        console.warn = () => {
             throw new Error("sink offline");
         };
         const error = new Error("work failed");

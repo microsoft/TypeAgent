@@ -71,7 +71,7 @@ function emitTiming(
         ),
     );
     try {
-        console.log(
+        console.warn(
             `[memory-search-timing] ${JSON.stringify({
                 timestamp: new Date().toISOString(),
                 traceId: context.traceId,

@@ -19,7 +19,7 @@ loading is single-flight, and shutdown drains the complete preparation/read
 lifetime before releasing storage.
 
 Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` on the host process to enable correlated
-Memory Hub search diagnostics. Lines prefixed `[memory-search-timing]` contain
+Memory Hub search diagnostics on stderr. Lines prefixed `[memory-search-timing]` contain
 JSON with a trace ID, scope, stage, elapsed milliseconds, status and non-content
 metadata. The Hub propagates one ID through retrieval, insights and answer
 generation, including service/RPC calls. Spans distinguish corpus fan-out,

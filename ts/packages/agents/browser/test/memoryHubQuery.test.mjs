@@ -215,10 +215,10 @@ test("query insights use exact returned-source knowledge and carry real capture 
 
 test("tracing preserves disabled call shapes and correlates concurrent Hub requests", async () => {
     const originalFlag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
-    const originalLog = console.log;
+    const originalWarn = console.warn;
     const logs = [];
     try {
-        console.log = (line) => logs.push(String(line));
+        console.warn = (line) => logs.push(String(line));
         const { service, query, calls } = fixture();
         service.getSource = async () => ({ activeRevisionId: "r1" });
         const reads = [];
@@ -286,7 +286,7 @@ test("tracing preserves disabled call shapes and correlates concurrent Hub reque
         assert.ok(!logs.join("\n").includes("private search"));
         assert.ok(!logs.join("\n").includes("Check the worker"));
     } finally {
-        console.log = originalLog;
+        console.warn = originalWarn;
         if (originalFlag === undefined)
             delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
         else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = originalFlag;
