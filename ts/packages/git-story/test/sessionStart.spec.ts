@@ -53,7 +53,9 @@ async function until(
 beforeEach(async () => {
     jest.spyOn(daemonLogger, "info").mockImplementation(() => {});
     jest.spyOn(daemonLogger, "error").mockImplementation(() => {});
-    directory = await fs.mkdtemp(path.join(os.tmpdir(), "git-story-api-"));
+    directory = await fs.realpath(
+        await fs.mkdtemp(path.join(os.tmpdir(), "git-story-api-")),
+    );
     delivered = [];
     privacyInputs = [];
     redactEvidence = false;
@@ -483,17 +485,25 @@ test("missing source casing keeps persisted capture identity on repeat and resta
             metadata: { ...input.metadata, models: ["conflicting"] },
         }),
     ).rejects.toThrow("conflicts");
-    if (process.platform !== "win32") {
-        await expect(
-            client.registerSession({
-                ...input,
-                transcriptPath: path.join(
-                    directory,
-                    "Transcripts",
-                    "Events.jsonl",
-                ),
-            }),
-        ).rejects.toThrow("conflicts");
+    const alternateCase = path.join(directory, "TRANSCRIPTS", "EVENTS.JSONL");
+    let sameFile = false;
+    try {
+        sameFile =
+            (await fs.realpath(alternateCase)) ===
+            (await fs.realpath(diskPath));
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const alternateRegistration = client.registerSession({
+        ...input,
+        transcriptPath: alternateCase,
+    });
+    if (sameFile) {
+        expect((await alternateRegistration).transcriptPath).toBe(
+            accepted.transcriptPath,
+        );
+    } else {
+        await expect(alternateRegistration).rejects.toThrow("conflicts");
     }
     await restartManager();
     await fs.appendFile(
