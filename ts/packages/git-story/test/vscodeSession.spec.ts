@@ -23,8 +23,9 @@ test("VS Code SessionStart maps to a watch request with its transcript", () => {
         },
         repo,
     );
+    expect(fs.realpathSync(registration.projectPath)).toBe(repo);
     expect(toSessionWatchRequest(registration)).toEqual({
-        projectPath: repo,
+        projectPath: registration.projectPath,
         sessionId: "s7",
         transcriptPath: transcript,
         metadata: { clientName: "vscode-copilot", models: [] },
