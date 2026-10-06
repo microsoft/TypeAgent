@@ -1,8 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai, resolveTarget } from "@typeagent/aiclient";
+import {
+    configFromEnvRecord,
+    getRuntimeConfig,
+    openai,
+    resolveTarget,
+    setRuntimeConfig,
+} from "@typeagent/aiclient";
 import { Session } from "../src/context/session.js";
+import { resolveTranslationModelSettings } from "../src/translation/translateRequest.js";
 
 describe("session translation model", () => {
     test("defaults to GPT_6_LUNA and resolves to GPT-6 Luna in Copilot mode", async () => {
@@ -28,5 +35,45 @@ describe("session translation model", () => {
         expect(
             resolveTarget("copilot", session.getConfig().translation.model),
         ).toBe("gpt-6-luna");
+    });
+});
+
+describe("translation model fallback", () => {
+    const originalConfig = getRuntimeConfig();
+
+    afterEach(() => {
+        setRuntimeConfig(originalConfig);
+    });
+
+    test("omits reasoning effort when GPT-6 falls back to GPT-4.1", () => {
+        setRuntimeConfig(
+            configFromEnvRecord({
+                AZURE_OPENAI_ENDPOINT_GPT_4_1_EASTUS: "https://gpt-4-1",
+                AZURE_OPENAI_API_KEY_GPT_4_1_EASTUS: "identity",
+            }),
+        );
+
+        expect(
+            resolveTranslationModelSettings(openai.GPT_6_LUNA, "medium"),
+        ).toEqual({
+            model: openai.GPT_4_1,
+            reasoningEffort: undefined,
+        });
+    });
+
+    test("preserves reasoning effort when the configured model is available", () => {
+        setRuntimeConfig(
+            configFromEnvRecord({
+                AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS: "https://gpt-6-luna",
+                AZURE_OPENAI_API_KEY_GPT_6_LUNA_EASTUS: "identity",
+            }),
+        );
+
+        expect(
+            resolveTranslationModelSettings(openai.GPT_6_LUNA, "medium"),
+        ).toEqual({
+            model: openai.GPT_6_LUNA,
+            reasoningEffort: "medium",
+        });
     });
 });
