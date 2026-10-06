@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import { daemonStateDirectory } from "./daemonState.js";
 
 // One log file per process kind per local day. Old days are pruned.
 //
@@ -16,7 +16,7 @@ import path from "node:path";
 // Retention is read from ~/.typeagent/git-story/config.json, e.g.
 // { "logs": { "retentionDays": 2 } }. git-story never writes this file; when it
 // is missing or invalid, 2 days (today and yesterday) are kept.
-export const GIT_STORY_DIR = path.join(os.homedir(), ".typeagent", "git-story");
+export const GIT_STORY_DIR = daemonStateDirectory();
 const LOGS_DIR = "logs";
 const CONFIG_FILE = "config.json";
 const DEFAULT_RETENTION_DAYS = 2;

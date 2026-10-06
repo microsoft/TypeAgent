@@ -1,7 +1,7 @@
 # git-story
 
 Attaches the agent sessions that led to a commit to that commit. This package
-includes a CLI scaffold and Session Watcher lifecycle; commit-story generation
+includes a CLI, local daemon, and Session Watcher lifecycle; commit-story generation
 is not implemented yet.
 
 Git runs any `git-<name>` binary on `PATH` as `git <name>`, so the
@@ -12,11 +12,10 @@ $ cd ts/packages/git-story
 $ pnpm build
 $ npm link            # puts git-story on PATH
 $ git story init   # registers Copilot CLI and git hooks for this repo
-$ echo '{"sessionId":"s1","timestamp":0,"cwd":".","prompt":"hi"}' | git story hooks copilot user-prompt-submitted
-git-story userPromptSubmitted: session=s1
+$ git story hooks copilot user-prompt-submitted  # receives Copilot JSON on stdin
 {}
 $ echo input | git story hooks git pre-commit a b
-git-story pre-commit: args=["a","b"] stdin="input\n"
+git-story pre-commit: received 2 arguments
 ```
 
 `init` registers the `userPromptSubmitted`, `sessionStart`, and `agentStop`
@@ -34,23 +33,232 @@ This is a placeholder for the git-story summary.
 
 ## Daemon
 
-`git story daemon start|stop|restart|status` manages one HTTP API server per
-user, shared by all projects. It binds `127.0.0.1:51703` and keeps
-its pid and port in `~/.typeagent/git-story/daemon.json`, log in
-`~/.typeagent/git-story/daemon.log` (`~` is the user home directory on macOS and
-Windows).
+`git story daemon start|stop|restart|status` manages one HTTP server and **one
+SessionWatcher** per user, shared by all projects and sessions. The default is
+`127.0.0.1:51703`. Private local state is under `~/.typeagent/git-story`;
+`daemon.json` atomically contains the PID, bound port, and random per-instance
+credential. `daemon.lock` exclusively owns that state directory, even when a
+different port is requested. Logs are `logs/yy/mm/dd/daemon.log` and `cli.log`.
+Use a user-private state directory and protect its inherited Windows ACLs;
+POSIX directories/files are created with modes 0700/0600.
 
-Each request names its project by absolute path in the `project` query
-parameter:
+**Compatibility change:** all HTTP routes now require the local bearer credential,
+including identity, operational status and Git commit reads. The shared typed
+`daemonClient` transparently reads the credential/port from `daemon.json`; old
+unauthenticated curl clients must migrate. Credentials never go in CLI arguments.
+Loopback Host validation rejects DNS rebinding, and Origin/cross-site browser
+requests are rejected even with a credential. JSON mutations have a 64 KiB body
+limit and bounded transport timeouts; rejected values and dependency exceptions
+are not echoed. Git-story commit read semantics remain unchanged.
+
+### Explicit trusted composition
+
+There is **no production privacy policy or delivery destination**. Without an
+adapter the daemon serves reads, but registration fails with 503 before
+capture. Startup environment variable `GIT_STORY_ADAPTER` must name an absolute
+local module file exporting:
+
+```typescript
+export function createSessionWatcherDependencies(): {
+  privacyFilter: SessionPrivacyFilter;
+  approvedUpdateDestination: ApprovedUpdateDestination;
+} {
+  return {
+    privacyFilter: applicationPrivacyPolicy,
+    approvedUpdateDestination: applicationDestination,
+  };
+}
+```
+
+The factory may be async. Both functions are validated; only those two fields are
+selected. This is **trusted executable application code**, not a sandbox/plugin
+download or an HTTP option. Hooks cannot select adapters. Detached startup
+inherits the explicit environment; repeat that configuration for subsequent
+start/restart commands. Adapter load failures abort startup without echoing module
+exceptions. Actual Neumem extraction/story building remain out of scope.
+
+Local-only configuration (never accepted over HTTP):
+
+| Variable                 | Default                  | Purpose                                               |
+| ------------------------ | ------------------------ | ----------------------------------------------------- |
+| `GIT_STORY_STATE_DIR`    | `~/.typeagent/git-story` | Absolute private daemon/receipt/capture/log directory |
+| `GIT_STORY_COPILOT_HOME` | OS home                  | Absolute home containing `.copilot/session-state`     |
+| `GIT_STORY_PORT`         | `51703`                  | Loopback port; `0` selects an ephemeral port          |
+| `GIT_STORY_MAX_RECORDS`  | `1000`                   | Complete records per batch, integer 1–1000            |
+| `GIT_STORY_ADAPTER`      | unset                    | Absolute trusted local composition module             |
+
+### Hooks, admission and status
+
+The real Copilot `sessionStart` input uses camelCase `sessionId` and `cwd`.
+The hook resolves the Git project root, submits through the shared client, and
+always returns `{}`. Invalid/missing daemon/input and 2-second HTTP timeouts are
+reported generically without interrupting the agent. Neither prompt submission
+nor **agentStop** ends monitoring: agentStop means a turn ended, not a session
+ended. Hook stdin is bounded; no prompt, tool content, or raw input is logged.
+`init` preserves user settings and hooks and updates only exactly owned entries.
+
+`POST /api/sessions` returns **202 starting**, not ready or successfully delivered.
+The daemon drains asynchronously so a slow initial destination does not exceed the
+hook timeout. Repeated identical registrations share the existing admission;
+changed project/seed metadata is a 409 conflict. Projects use filesystem-canonical
+absolute directories; session IDs must be safe single components on Windows and
+POSIX. Managed capture supports only `copilot-cli`, deriving
+`<home>/.copilot/session-state/<sessionId>/events.jsonl` unless the authenticated
+registration supplies an explicit absolute `transcriptPath`. Existing source
+ancestors are canonicalized (including directory symlinks/junctions) even for a
+missing file; aliases cannot assign the same source to another session.
+Explicit sources must contain Copilot CLI event records, not arbitrary native
+transcript formats. No adapter can be selected through HTTP or hook input.
+At most 1024 retained sessions are admitted.
+
+**VS Code compatibility limitation:** `init` also preserves/registers the incoming
+`.github/hooks/git-story.json` `SessionStart` hook, and `hooks vscode session-start`
+preserves `session_id`, `transcript_path`, and workspace `cwd` in registration.
+There is no native VS Code transcript normalizer. The daemon explicitly rejects
+`vscode-copilot` with **503 unsupported transcript format before capture**, even
+when it supplies an absolute path. The hook warns safely and returns `{}` so the
+agent continues. This is hook/transport compatibility, **not functional VS Code
+capture**. Unknown clients cannot enable capture by supplying a path either.
+
+Authenticated `GET /api/sessions`, exposed by `git story daemon sessions`, reports
+identities/source locations, starting/active/blocked/stopped admission state,
+lifecycle phase, monitoring, read checkpoint, diagnostic codes/ranges and failure
+receipts, **never event payloads or registration metadata**. Active plus
+`phase: waiting` means monitoring a missing file/parent, not successful capture.
+Ownership checks compare incoming canonical paths with persisted source identities,
+without probing every historical source. An inaccessible old source does not block
+unrelated registrations. Changing symlink/junction targets after registration is
+unsupported; historical alias recovery is deferred. On Windows, equivalent path casing reuses the original
+persisted transcript spelling for checkpoints, capture state and generated IDs.
+`GET /api/daemon` exposes PID, configured, and stopping.
 
 ```text
 $ git story daemon start
-Started (pid 70006) at http://127.0.0.1:51703
-$ curl -G http://127.0.0.1:51703/api/story/commits/79f77a3 --data-urlencode project=/Users/me/repo
-{"hash":"79f77a337c682a14ec7df45d309c4856cf3bf236","subject":"hello story"}
+$ git story daemon register <absolute-project> <copilot-session-id>
+$ git story daemon sessions
+$ git story daemon stop
 ```
 
-Routes are in `src/server/router.ts`; handlers are in `src/server/routes/`.
+`POST /api/daemon/stop` closes admission/notifications immediately, drains admitted
+pipeline work/current delivery, then closes HTTP and removes only its owned state.
+It does not use SIGTERM to terminate Windows processes. A drain can stop between
+batches, leaving unread backlog for restart. CLI stop waits up to ten seconds;
+if a dependency is still running it reports **still stopping**, never force-kills
+or deletes live ownership. Repeated stop is idempotent. There is no force-kill CLI.
+After a crash, an abandoned lock is intentionally not stolen: an operator must
+verify the recorded owner has exited before removing that exact lock offline.
+A matching live PID alone is not sufficient proof of daemon identity.
+
+### Failures and supported recovery boundary
+
+The supported workflow is one daemon monitoring local append-only Copilot CLI
+transcripts. Clean stop/restart resumes bounded reads and restores metadata without
+republishing old events. Atomic receipts retain failures; a persisted processing
+phase left by an interruption also becomes **blocked**, with `recoveryRequired: true`.
+Repeated registration or restart never clears that block or skips to later records.
+Other sessions continue independently.
+
+**Fine-grained replay is not implemented.** There is no daemon replay CLI/API,
+failure-range recovery, or automatic clearing of blocked sources. TODO: design
+explicit operator reconciliation before supporting replay. Preserve the transcript,
+capture state and receipt for manual investigation and reconciliation with the
+configured destination; do not delete state or change the session ID to bypass a
+block. No supported in-product unblock operation is provided.
+
+**Read progress is not delivery acknowledgement.** Capture precedes delivery and a
+destination can accept an update before failing. A processing read cursor is not a
+safe retry boundary. Receipt-write failure can prevent the latest failure from
+reaching disk; live status retains `reportingFailed`. There is no delivery journal
+or crash-exact guarantee. TODO: arbitrary transcript rewrites, concurrent direct
+capture from other processes and historical alias retargeting are outside the
+single-owner append-only contract.
+
+### Reproducible real CLI proof
+
+After building this package and its dependencies, from the package directory:
+
+```text
+node scripts/daemonIntegrationDemo.mjs
+```
+
+This assertion-driven script starts the **compiled CLI's real detached daemon**,
+runs `init` and real hook stdin, uses real authenticated HTTP and temporary JSONL
+files, and verifies waiting, bounded batches, partial tails, two sessions,
+redaction, duplicate hooks, delayed-delivery shutdown, metadata restoration without
+old-event publication, persistent failure/interruption blocking, rejection of the
+removed replay command/API, and HTTP rejection.
+The interruption proof copies real receipt/capture files while delivery is pending,
+then drains/stops the original process before starting the isolated snapshot.
+Its adapter is explicitly a **fixture-only allow-list filter and fsynced temporary
+sink**, not a production privacy policy or extraction service. It prints actual
+commands/results and cleans its isolated repository/home/state/adapter/sink and
+processes. It never reads real user transcripts or touches the existing user daemon.
+
+### Teammate live-session proof
+
+Build once from `ts/`: `pnpm exec fluid-build git-story -t build --dep`.
+From `ts/packages/git-story`, deterministic synthetic validation is:
+
+```text
+node scripts/daemonIntegrationDemo.mjs
+node scripts/liveSessionWatcherSmoke.mjs
+```
+
+To monitor **your explicitly selected** Copilot CLI conversation, copy its session
+ID from your CLI/session UI or the name of its known
+`~/.copilot/session-state/<id>` directory. The script never discovers or scans
+sessions. Use `--transcript <absolute-path>` if your transcript lives elsewhere.
+
+```text
+node scripts/liveSessionWatcherDemo.mjs --help
+node scripts/liveSessionWatcherDemo.mjs --session <your-session-id> --duration 120
+```
+
+The optional `--output-dir <absolute-directory>` selects a new evidence location.
+By default, a uniquely named evidence directory is created under the OS temporary
+directory and printed. Existing evidence logs are never overwritten. Operational
+daemon state is separate and temporary; it is cleaned after graceful shutdown,
+while evidence remains. No shared daemon, hook configuration, transcript, Azure
+credential or private adapter is changed. The harness launches the compiled
+daemon entry with isolated ownership, an ephemeral loopback port and authenticated
+registration. It requires no model/feed credentials at runtime.
+
+The default initial history limit is **32 MiB**. Larger transcripts fail with
+guidance to raise `--max-history-bytes`; no history is silently skipped. All history
+within the limit is drained in `--batch-size` batches (default 100, maximum 1000).
+Later appends continue until Ctrl+C or the finite `--duration` expires
+(default 0 means Ctrl+C). A marker does **not** stop the watcher.
+
+After `LIVE` appears, send a user message consisting only of
+`LIVE-WATCHER-CHECK-<unique-label>` (letters, digits, `_` and `-`, up to 80 label
+characters). Each such marker with a native event ID produces an immediate
+receipt linking its exact text and ID to its logged batch. Ordinary event output
+is aggregated every two seconds to avoid a console feedback storm.
+
+```json
+{"kind":"REGISTERED","state":"starting"}
+{"kind":"LIVE","batches":3,"events":217,"markers":0}
+{"kind":"MARKER","batch":4,"nativeId":"event-id","id":"event-id","marker":"LIVE-WATCHER-CHECK-demo","log":"batches.jsonl"}
+```
+
+Output also distinguishes `WAITING` (check the selected path/session), `CATCH_UP`,
+`BLOCKED`, `STOPPING`, and `STOPPED`. Counts are observations, not a percentage
+coverage claim. `batches.jsonl` retains **every** approved batch in order, with
+batch number, timestamp, session ID, event/model counts, safe event/native IDs,
+categories, and allowed markers. `receipts.jsonl` records operational snapshots;
+`proof.jsonl` retains all console receipts. There is no “last five” truncation.
+Raw assistant/user/tool text, arguments, results, filenames, model names and other
+semantic metadata are excluded from batch evidence. Configuration and operational
+receipts intentionally identify the selected local source path.
+
+The bundled structural allowlist is a **test fixture, not production privacy**.
+It accepts marker text only when the entire user message matches the narrow
+pattern; native IDs containing characters outside the fixture's safe ID alphabet
+are omitted. Source failures remain blocked, with no supported automatic recovery.
+If shutdown cannot drain within 15 seconds, the script reports `STILL_STOPPING`,
+retains ownership state, and does not force-kill. Portable Node APIs are used;
+the synthetic child-process smoke has been executed on Windows, not claimed as
+executed on macOS/Linux.
 
 ## Session Watcher
 
@@ -81,9 +289,9 @@ locations so rereading an event reuses its assigned ID.
 `captureSessionUpdates` in `src/sessionCapture.ts`. Batch capture, normalization,
 metadata collection/restoration, and the privacy/approved-update boundary are
 implemented, as are the managed watch/process/stop methods described below.
-Production privacy policy and delivery are injected dependencies. These batch methods start no
-monitoring and do not connect the existing daemon/hook registration scaffolding
-to capture or a VS Code adapter.
+Production privacy policy and delivery are injected dependencies. These batch
+methods start no monitoring; the daemon above uses the managed lifecycle. A
+VS Code transcript adapter is not implemented.
 
 ### Managed lifecycle
 
@@ -170,8 +378,9 @@ node scripts/sessionWatcherDemo.mjs
 The demo asserts waiting readiness, bounded catch-up, redacted output, stopped
 notifications, restart metadata restoration without old-event publication, and
 explicit failure isolation without silently advancing later batches. It never reads user
-transcripts or starts the user's daemon. Daemon/hook lifecycle wiring and a
-production privacy policy/destination remain separate work.
+transcripts or starts the user's daemon. For full CLI/daemon/hook evidence use
+`daemonIntegrationDemo.mjs` above. Production privacy policy/destination remain
+separate work.
 
 **Supported workflow:** local, append-only Copilot CLI transcripts owned by one
 daemon. The daemon owns cross-process exclusion; standalone capture callers must
@@ -340,10 +549,10 @@ replacement for restored history. It may include `parentSessionId`, `startedAt`,
 and `lastEventTimestamp` in addition to `clientName` and `models`.
 These optional fields also survive the daemon client's serialization and the
 server's registration validation, including registrations with an explicit
-absolute `transcriptPath` (for example, the VS Code hook). Without one, the
-daemon retains the client's default location. Registering a VS Code path does
-not add a native VS Code transcript adapter; normalization still expects the
-documented CLI event shapes. Parent IDs must be strings; timestamps must
+absolute `transcriptPath`. Without one, the daemon retains the CLI client's
+default location. VS Code hook transport preserves the same fields, but managed
+VS Code registration returns 503 before capture because no native adapter exists.
+Normalization expects the documented CLI event shapes. Parent IDs must be strings; timestamps must
 be parseable date-times with a timezone, using the same validation as transcript
 normalization. Invalid optional values are rejected, not silently discarded.
 
@@ -420,9 +629,8 @@ const restored = await watcher.restoreMetadata(
 `SessionWatcher` accepts optional `privacyFilter` and
 `approvedUpdateDestination` constructor dependencies. No production filter or
 destination is provided: filtering without a filter and publishing without a
-destination fail explicitly. Watching, stopping, and `processUpdates` remain
-unimplemented; batch capture, normalization, and metadata collection/restoration
-are available separately.
+destination fail explicitly. Managed watching, stopping, and `processUpdates`
+are implemented; batch helpers remain available separately.
 
 The filter receives a private snapshot of the **whole** `NormalizedSessionUpdate`:
 project path, session ID, every event field (including messages, tool arguments,

@@ -5,6 +5,7 @@ import { Command } from "commander";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import { cliLogger } from "../logger.js";
 
 // Copilot CLI reads repo-level hooks from this file. The `.local` variant is
@@ -17,8 +18,8 @@ const COPILOT_HOOKS = {
     agentStop: "git story hooks copilot agent-stop",
 };
 
-// VS Code loads every `*.json` in `.github/hooks`. git-story owns this file,
-// so init rewrites it whole and excludes it like COPILOT_SETTINGS.
+// VS Code loads every `*.json` in `.github/hooks`. Preserve user entries even
+// when they share this file; exclude it like COPILOT_SETTINGS.
 const VSCODE_HOOKS = ".github/hooks/git-story.json";
 const VSCODE_HOOKS_CONFIG = {
     hooks: {
@@ -36,6 +37,13 @@ const VSCODE_HOOKS_CONFIG = {
 // command, so hooks that receive input (e.g. pre-push) keep it.
 // Marks scripts written by init, so init never overwrites a user's own hook.
 const GIT_HOOK_MARKER = "# git-story hook";
+const SettingsSchema = z
+    .object({
+        hooks: z
+            .record(z.string(), z.array(z.record(z.string(), z.unknown())))
+            .optional(),
+    })
+    .passthrough();
 const gitHookScript = (hook: string) =>
     `#!/bin/sh\n${GIT_HOOK_MARKER}\nexec git-story hooks git ${hook} "$@"\n`;
 
@@ -60,14 +68,17 @@ export const initCommand = new Command("init")
         const root = git("rev-parse", "--show-toplevel");
         const settingsPath = path.join(root, COPILOT_SETTINGS);
         let settings: {
-            hooks?: Record<string, Record<string, unknown>[]>;
+            hooks?: Record<string, Record<string, unknown>[]> | undefined;
             [key: string]: unknown;
         } = {};
         if (fs.existsSync(settingsPath)) {
             try {
-                settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-            } catch (e) {
-                const message = `Failed to parse ${settingsPath}: ${(e as Error).message}`;
+                settings = SettingsSchema.parse(
+                    JSON.parse(fs.readFileSync(settingsPath, "utf8")),
+                );
+            } catch {
+                const message =
+                    "Invalid Copilot settings; existing file was not changed";
                 process.stderr.write(`${message}\n`);
                 cliLogger.error(message);
                 process.exitCode = 1;
@@ -79,7 +90,12 @@ export const initCommand = new Command("init")
         for (const [name, command] of Object.entries(COPILOT_HOOKS)) {
             settings.hooks[name] = [
                 ...(settings.hooks[name] ?? []).filter(
-                    (h) => h.bash !== command,
+                    (h) =>
+                        !(
+                            h.type === "command" &&
+                            h.bash === command &&
+                            h.powershell === command
+                        ),
                 ),
                 { type: "command", bash: command, powershell: command },
             ];
@@ -108,12 +124,43 @@ export const initCommand = new Command("init")
         process.stdout.write(`${copilotMessage}\n`);
         cliLogger.info(copilotMessage);
 
-        // VS Code agent hooks.
+        // VS Code hook registration is supported, but native transcript capture
+        // fails closed until a format adapter exists.
         const vscodePath = path.join(root, VSCODE_HOOKS);
+        let vscodeSettings: z.infer<typeof SettingsSchema> = {};
+        if (fs.existsSync(vscodePath)) {
+            try {
+                vscodeSettings = SettingsSchema.parse(
+                    JSON.parse(fs.readFileSync(vscodePath, "utf8")),
+                );
+            } catch {
+                process.stderr.write(
+                    "Invalid VS Code hooks; existing file was not changed\n",
+                );
+                cliLogger.error(
+                    "Invalid VS Code hooks; existing file was not changed",
+                );
+                process.exitCode = 1;
+                return;
+            }
+        }
+        vscodeSettings.hooks ??= {};
+        const owned = VSCODE_HOOKS_CONFIG.hooks.SessionStart[0]!;
+        vscodeSettings.hooks.SessionStart = [
+            ...(vscodeSettings.hooks.SessionStart ?? []).filter(
+                (entry) =>
+                    !(
+                        Object.keys(entry).length === 2 &&
+                        entry.type === owned.type &&
+                        entry.command === owned.command
+                    ),
+            ),
+            owned,
+        ];
         fs.mkdirSync(path.dirname(vscodePath), { recursive: true });
         fs.writeFileSync(
             vscodePath,
-            JSON.stringify(VSCODE_HOOKS_CONFIG, null, 4) + "\n",
+            JSON.stringify(sortKeys(vscodeSettings), null, 4) + "\n",
         );
         const vscodeMessage = `Registered VS Code hooks in ${vscodePath}`;
         process.stdout.write(`${vscodeMessage}\n`);
@@ -127,7 +174,8 @@ export const initCommand = new Command("init")
             );
             if (
                 fs.existsSync(hookPath) &&
-                !fs.readFileSync(hookPath, "utf8").includes(GIT_HOOK_MARKER)
+                fs.readFileSync(hookPath, "utf8").replaceAll("\r\n", "\n") !==
+                    gitHookScript(hook)
             ) {
                 const message = `Skipped ${hookPath}: existing hook not owned by git-story`;
                 process.stderr.write(`${message}\n`);
