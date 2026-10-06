@@ -336,15 +336,32 @@ export class KnowProCorpusIndex implements CorpusIndex {
         limit: number,
         tags?: string[],
     ): Promise<CorpusIndexMatch[]> {
+        return kp.timeSearchStage(
+            "knowpro.index.search",
+            () => this.searchCore(query, limit, tags),
+            { limit, tagCount: tags?.length ?? 0 },
+        );
+    }
+
+    private async searchCore(
+        query: string,
+        limit: number,
+        tags?: string[],
+    ): Promise<CorpusIndexMatch[]> {
         const matches = new Map<number, number>();
-        if (this.memory !== undefined) {
+        const memory = this.memory;
+        if (memory !== undefined) {
             const options = kp.createLanguageSearchOptionsTypical();
             options.maxMessageMatches = limit;
             options.maxKnowledgeMatches = limit;
-            const result = await this.memory.searchWithLanguage(
-                query,
-                options,
-                tags === undefined ? undefined : { tags },
+            const result = await kp.timeSearchStage(
+                "knowpro.index.languageSearch",
+                () =>
+                    memory.searchWithLanguage(
+                        query,
+                        options,
+                        tags === undefined ? undefined : { tags },
+                    ),
             );
             if (!result.success) {
                 throw new Error(result.message);

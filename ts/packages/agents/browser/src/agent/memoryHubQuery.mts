@@ -20,6 +20,13 @@ import type {
 } from "@typeagent/browser-control-rpc/viewRpc";
 import type { MemoryCenterCorpus } from "@typeagent/browser-control-rpc/serviceTypes";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import {
+    currentSearchTraceId,
+    isSearchTimingEnabled,
+    runWithSearchTiming,
+    timeSearchStage,
+} from "@typeagent/knowpro";
 import { loadMemoryHubCorpora, mapMemoryHubCorpora } from "./memoryHub.mjs";
 import { timed } from "./memoryHubQuerySupport.mjs";
 import { memoryHubSearchInsights } from "./memoryHubSearchInsights.mjs";
@@ -40,10 +47,12 @@ export async function queryCorpora(
     service: MemoryHubReadService,
     corpusId?: string,
 ) {
-    return timed(
-        loadMemoryHubCorpora(
-            { memoryListCorpora: () => service.listCorpora() },
-            corpusId,
+    return timeSearchStage("hub.corpusListing", () =>
+        timed(
+            loadMemoryHubCorpora(
+                { memoryListCorpora: () => service.listCorpora() },
+                corpusId,
+            ),
         ),
     );
 }
@@ -123,8 +132,10 @@ async function documentResults(
     request: MemoryHubSearchRequest,
     result: MemoryHubSearchResult,
 ): Promise<MemoryHubEvidence[]> {
+    const traceId = currentSearchTraceId();
     const searched = await timed(
         service.search({
+            ...(traceId === undefined ? {} : { traceId }),
             corpusId: corpus.corpusId,
             query: request.query,
             limit: 100,
@@ -181,8 +192,10 @@ async function procedureResults(
     if (!service.searchProcedures)
         throw new Error("Procedure retrieval is unavailable in this host.");
     const deadline = Date.now() + 30_000;
+    const traceId = currentSearchTraceId();
     const matches = await timed(
         service.searchProcedures({
+            ...(traceId === undefined ? {} : { traceId }),
             corpusId: corpus.corpusId,
             query: request.query,
             states: ["saved", "stale"],
@@ -239,8 +252,10 @@ async function conversationResults(
         throw new Error(
             "The host has not provided the current conversation identity.",
         );
+    const traceId = currentSearchTraceId();
     const searched = await timed(
         service.searchEvents({
+            ...(traceId === undefined ? {} : { traceId }),
             corpusId: corpus.corpusId,
             query: request.query,
             limit: 100,
@@ -325,7 +340,14 @@ async function collectResults(
         work: () => Promise<MemoryHubEvidence[]>,
     ) => {
         try {
-            const list = await work();
+            const list = await timeSearchStage(
+                operation === "search"
+                    ? "hub.documentRetrieval"
+                    : operation === "procedures"
+                      ? "hub.procedureRetrieval"
+                      : "hub.conversationRetrieval",
+                work,
+            );
             if (list.some((item) => !Number.isFinite(item.score)))
                 throw new Error(
                     "Memory retrieval returned a non-finite score.",
@@ -464,68 +486,98 @@ export function createMemoryHubQueryFunctions(
 ): Pick<MemoryHubFunctions, "memoryHubSearch" | "memoryHubEvidence"> {
     return {
         async memoryHubSearch(request) {
-            validateRequest(request);
-            const service = getService();
-            const corpora = await queryCorpora(service, request.corpusId);
-            const result: MemoryHubSearchResult = {
-                query: request.query.trim(),
-                matches: [],
-                ranking: "reciprocal-rank-fusion",
-                warnings: [],
-                errors: [],
-            };
-            result.matches = fuseEvidence(
-                await collectResults(
-                    service,
-                    corpora,
-                    request,
-                    result,
-                    getConversationId(),
-                ),
-                request.limit ?? 30,
-            );
-            result.insights = await memoryHubSearchInsights(
-                service,
-                request,
-                result.matches,
-            );
-            result.errors.sort(
-                (a, b) =>
-                    a.corpusId.localeCompare(b.corpusId) ||
-                    a.operation.localeCompare(b.operation),
-            );
-            result.warnings = [...new Set(result.warnings)].sort();
-            result.warnings.push(
-                "Results are a bounded evidence selection, not complete corpus totals. Procedure retrieval is limited to 100 candidates per corpus.",
-            );
-            if (request.generateAnswer && result.matches.length) {
-                result.warnings.push(
-                    "Answer context uses at most 20 evidence records, 800 characters per excerpt and 32,000 characters overall. Open cited evidence to inspect the original.",
-                );
-                try {
-                    result.answer = await timed(
-                        synthesize(result.query, result.matches),
-                    );
-                    const ids = new Set(result.matches.map((item) => item.id));
-                    if (
-                        (result.answer.status !== "noAnswer" &&
-                            !result.answer.citationIds.length) ||
-                        result.answer.citationIds.some((id) => !ids.has(id))
-                    ) {
-                        delete result.answer;
-                        throw new Error(
-                            "Answer generation returned unsupported citations.",
+            return runWithSearchTiming(
+                isSearchTimingEnabled() ? randomUUID() : undefined,
+                "memoryHub.search",
+                () =>
+                    timeSearchStage("hub.total", async () => {
+                        validateRequest(request);
+                        const service = getService();
+                        const corpora = await queryCorpora(
+                            service,
+                            request.corpusId,
                         );
-                    }
-                } catch (error) {
-                    result.errors.push({
-                        corpusId: "*",
-                        operation: "answer",
-                        message: message(error),
-                    });
-                }
-            }
-            return result;
+                        const result: MemoryHubSearchResult = {
+                            query: request.query.trim(),
+                            matches: [],
+                            ranking: "reciprocal-rank-fusion",
+                            warnings: [],
+                            errors: [],
+                        };
+                        const lists = await timeSearchStage(
+                            "hub.retrieval",
+                            () =>
+                                collectResults(
+                                    service,
+                                    corpora,
+                                    request,
+                                    result,
+                                    getConversationId(),
+                                ),
+                        );
+                        result.matches = timeSearchStage("hub.fusion", () =>
+                            fuseEvidence(lists, request.limit ?? 30),
+                        );
+                        result.insights = await timeSearchStage(
+                            "hub.insights",
+                            () =>
+                                memoryHubSearchInsights(
+                                    service,
+                                    request,
+                                    result.matches,
+                                ),
+                        );
+                        result.errors.sort(
+                            (a, b) =>
+                                a.corpusId.localeCompare(b.corpusId) ||
+                                a.operation.localeCompare(b.operation),
+                        );
+                        result.warnings = [...new Set(result.warnings)].sort();
+                        result.warnings.push(
+                            "Results are a bounded evidence selection, not complete corpus totals. Procedure retrieval is limited to 100 candidates per corpus.",
+                        );
+                        if (request.generateAnswer && result.matches.length) {
+                            result.warnings.push(
+                                "Answer context uses at most 20 evidence records, 800 characters per excerpt and 32,000 characters overall. Open cited evidence to inspect the original.",
+                            );
+                            try {
+                                result.answer = await timeSearchStage(
+                                    "hub.synthesis",
+                                    () =>
+                                        timed(
+                                            synthesize(
+                                                result.query,
+                                                result.matches,
+                                            ),
+                                        ),
+                                );
+                                const ids = new Set(
+                                    result.matches.map((item) => item.id),
+                                );
+                                if (
+                                    (result.answer.status !== "noAnswer" &&
+                                        !result.answer.citationIds.length) ||
+                                    result.answer.citationIds.some(
+                                        (id) => !ids.has(id),
+                                    )
+                                ) {
+                                    delete result.answer;
+                                    throw new Error(
+                                        "Answer generation returned unsupported citations.",
+                                    );
+                                }
+                            } catch (error) {
+                                result.errors.push({
+                                    corpusId: "*",
+                                    operation: "answer",
+                                    message: message(error),
+                                });
+                            }
+                        }
+                        return result;
+                    }),
+                { generateAnswer: request.generateAnswer ?? false },
+            );
         },
         memoryHubEvidence: (request) => evidenceContent(getService(), request),
     };
