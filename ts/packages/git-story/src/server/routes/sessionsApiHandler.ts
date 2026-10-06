@@ -34,20 +34,17 @@ const TRANSCRIPT_PATHS = new Map<string, (sessionId: string) => string>([
 // watching is not implemented yet.
 export const sessions = new Map<string, SessionWatchRequest>();
 
-// Adds the client's transcriptPath to a registration. Undefined for a
-// client without a known transcript location.
+// Resolves the transcriptPath: the one the client sent, else the client's
+// known location. Undefined when neither exists.
 export function toSessionWatchRequest(
     registration: SessionRegistration,
 ): SessionWatchRequest | undefined {
-    const transcriptPath = TRANSCRIPT_PATHS.get(
-        registration.metadata.clientName,
-    );
-    return transcriptPath
-        ? {
-              ...registration,
-              transcriptPath: transcriptPath(registration.sessionId),
-          }
-        : undefined;
+    const transcriptPath =
+        registration.transcriptPath ??
+        TRANSCRIPT_PATHS.get(registration.metadata.clientName)?.(
+            registration.sessionId,
+        );
+    return transcriptPath ? { ...registration, transcriptPath } : undefined;
 }
 
 // POST /api/sessions: records a session for later capture.
