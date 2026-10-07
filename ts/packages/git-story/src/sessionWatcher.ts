@@ -2,6 +2,12 @@
 // Licensed under the MIT License.
 
 import { deserialize, serialize } from "node:v8";
+import {
+    SessionLifecycle,
+    type SessionLifecycleOptions,
+    type SessionWatcherStatus,
+    type SessionWatchRequestIdentity,
+} from "./sessionLifecycle.js";
 import type { SessionMetadata } from "./gitCommitStory.js";
 import {
     captureSessionUpdates,
@@ -27,6 +33,13 @@ export type {
     RestoredSessionMetadata,
     SessionMetadataState,
 } from "./sessionMetadata.js";
+export type {
+    SessionLifecycleOptions,
+    SessionProcessingFailure,
+    SessionProcessingStage,
+    SessionWatcherStatus,
+    SessionWatchRequestIdentity,
+} from "./sessionLifecycle.js";
 
 export type {
     CapturedSessionRecord,
@@ -145,7 +158,7 @@ export type ApprovedUpdateDestination = (
     update: NormalizedSessionUpdate,
 ) => void | Promise<void>;
 
-export type SessionWatcherDependencies = {
+export type SessionWatcherDependencies = SessionLifecycleOptions & {
     privacyFilter?: SessionPrivacyFilter;
     approvedUpdateDestination?: ApprovedUpdateDestination;
 };
@@ -170,6 +183,7 @@ function snapshotUpdate(
 }
 
 export class SessionWatcher {
+    readonly #lifecycle: SessionLifecycle;
     readonly #privacyFilter: SessionPrivacyFilter | undefined;
     readonly #approvedUpdateDestination: ApprovedUpdateDestination | undefined;
     readonly #approvedUpdates = new WeakMap<
@@ -180,49 +194,37 @@ export class SessionWatcher {
     constructor({
         privacyFilter,
         approvedUpdateDestination,
+        ...lifecycleOptions
     }: SessionWatcherDependencies = {}) {
         this.#privacyFilter = privacyFilter;
         this.#approvedUpdateDestination = approvedUpdateDestination;
+        this.#lifecycle = new SessionLifecycle(
+            this,
+            () =>
+                typeof this.#privacyFilter === "function" &&
+                typeof this.#approvedUpdateDestination === "function",
+            lifecycleOptions,
+        );
     }
 
-    async watch(_request: SessionWatchRequest): Promise<void> {
-        // Pseudocode:
-        // Validate the GHCP session identity and transcript path.
-        // Register one watch per project/session and load its last-read checkpoint.
-        // Validate the checkpoint's session/transcript and resume byte offset.
-        // Restore generated-ID assignments separately from the read checkpoint.
-        // Catch up existing records, then schedule processUpdates on source changes.
-        // Serialize processing per session; coalesce notifications without losing updates.
-        // Resolve when monitoring is established, not when the session ends.
-        // Surface setup failures here and later processing failures through daemon reporting.
-        throw new Error("SessionWatcher.watch is not implemented");
+    async watch(request: SessionWatchRequest): Promise<void> {
+        return this.#lifecycle.watch(request);
     }
 
     async stop(): Promise<void> {
-        // Pseudocode:
-        // Stop accepting notifications for all sessions watched by this instance.
-        // Dispose subscriptions/timers and await in-flight processing.
-        // Keep the last-read checkpoints; release readers and session state.
-        // Surface shutdown failures; repeated stops should be safe once implemented.
-        throw new Error("SessionWatcher.stop is not implemented");
+        return this.#lifecycle.stop();
+    }
+
+    getStatus(
+        request: SessionWatchRequestIdentity,
+    ): SessionWatcherStatus | undefined {
+        return this.#lifecycle.getStatus(request);
     }
 
     async processUpdates(
-        _request: SessionWatchRequest,
-        _checkpoint?: SessionCaptureCheckpoint,
+        request: SessionWatchRequest,
     ): Promise<SessionCaptureCheckpoint> {
-        // Pseudocode:
-        // captured = await captureUpdates(request, checkpoint).
-        // Capture has persisted read progress, independently of ingestion.
-        // batch = normalizeEvents(request, captured); surface batch.diagnostics.
-        // state = collectMetadata(request, batch, previous generation-bound state).
-        // events = batch.events; metadata = state.metadata.
-        // approved = await filterForPrivacy({ projectPath, sessionId, events, metadata }).
-        // If approved is not null, await publishUpdate(approved).
-        // Return captured.nextCheckpoint; it does not certify downstream delivery.
-        // Surface processing/delivery errors; recovery after capture requires separate replay.
-        // Do not log or publish raw records or pre-filter metadata.
-        throw new Error("SessionWatcher.processUpdates is not implemented");
+        return this.#lifecycle.processUpdates(request);
     }
 
     async captureUpdates(

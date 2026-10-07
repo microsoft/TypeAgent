@@ -1,7 +1,7 @@
 # git-story
 
-Attaches the agent sessions that led to a commit to that commit. This package is
-includes a CLI scaffold and Session Watcher foundations; commit-story generation
+Attaches the agent sessions that led to a commit to that commit. This package
+includes a CLI scaffold and Session Watcher lifecycle; commit-story generation
 is not implemented yet.
 
 Git runs any `git-<name>` binary on `PATH` as `git <name>`, so the
@@ -80,10 +80,98 @@ locations so rereading an event reuses its assigned ID.
 `SessionWatcher.captureUpdates(request, checkpoint?, options?)` delegates to
 `captureSessionUpdates` in `src/sessionCapture.ts`. Batch capture, normalization,
 metadata collection/restoration, and the privacy/approved-update boundary are
-implemented. Watch/stop and processing remain separate work; production privacy
-policy and delivery are injected dependencies. These batch methods start no
+implemented, as are the managed watch/process/stop methods described below.
+Production privacy policy and delivery are injected dependencies. These batch methods start no
 monitoring and do not connect the existing daemon/hook registration scaffolding
 to capture or a VS Code adapter.
+
+### Managed lifecycle
+
+`new SessionWatcher({ privacyFilter, approvedUpdateDestination, capture?,
+reconcileIntervalMs?, onStatus? })` manages multiple project/session registrations
+in one process. `capture` accepts `stateDirectory` and `maxRecords`; defaults are
+the batch capture defaults. Both privacy and destination dependencies are required
+before lifecycle capture, even if a filter might exclude all updates. No default
+pass-through policy or no-op destination is supplied. No-argument construction
+still supports the independent batch helpers.
+
+- `watch(request): Promise<void>` establishes filesystem notifications and drains
+  existing complete records in bounded batches. It resolves after that initial
+  catch-up, **not** at session end. If the file or its parent does not exist yet,
+  monitoring is established on the nearest existing ancestor and readiness is
+  explicitly `phase: "waiting", monitoring: true`. This is not a claim that capture
+  succeeded. Permission, configuration, and initial processing failures reject.
+- `processUpdates(request)` uses the same
+  per-source queue as watch notifications and drains complete-record backlog,
+  returning a **read checkpoint**, never a delivery acknowledgement. It resumes
+  from persisted read progress; arbitrary cursor replay is not a lifecycle API.
+- `getStatus(requestIdentity)` returns a detached snapshot or `undefined` for an
+  unknown registration. Status phases are `waiting`, `processing`, `idle`,
+  `failed`, and `stopped`; `monitoring` distinguishes watched from direct-only
+  sources. Status includes generation/read checkpoint, the last nonempty
+  diagnostics batch, a cumulative diagnostic count, and any failure evidence.
+- `stop()` immediately closes notifications and timers, then waits for admitted
+  work and its current delivery. A drain may stop between batches; remaining
+  backlog stays unread. Repeated calls are safe. **Stop is terminal**: create a
+  new instance to resume; watch/process reject after stop. Failure evidence is
+  preserved after stop instead of being replaced by a healthy/stopped status.
+
+Identical registrations are idempotent. Changing a registered project/session's
+transcript or seed metadata rejects; assigning the same session/transcript capture
+source to a different project also rejects, because they would share a read cursor.
+The registration seed is copied and never replaced with accumulated observations.
+One daemon owns the local append-only Copilot CLI transcripts. Its queue serializes
+all managed work for each capture source. Unmanaged capture or another watcher
+must not process the same source concurrently.
+
+Filesystem notifications are coalesced. A stat-based reconciliation timer (default
+1000 ms) compares file identity, size, and high-resolution timestamps, recovering
+missed notifications, file creation, and replacement/recreated parents. Unchanged
+files and permanently partial tails do not trigger capture every tick. Filesystem
+watch errors fail that registration explicitly. Arbitrary in-place history rewrites
+are outside the append-only contract.
+
+On first processing after restart, metadata is privately restored through the
+first consumed record's boundary, including malformed-record diagnostics. Current
+records are then normalized and processed normally; restoration never publishes
+history. A generation change discards old observations. Metadata-only output is
+filtered/delivered once per initialized generation and thereafter only when
+metadata meaningfully changes. Events always pass the actual whole-update
+`filterForPrivacy` method, and only its opaque approval handle reaches
+`publishUpdate`. `null` is intentional exclusion, not processing failure.
+
+`onStatus(identity, status)` receives sanitized local operational evidence,
+including every diagnostic batch (also batches without events). It contains source
+paths and IDs but never transcript payloads, metadata content, dependency error
+text, or exception causes; it is not privacy-approved external output. Keep this
+callback local. Async callbacks are awaited; do not await reentrant watch/process/
+stop calls from callbacks or pipeline dependencies. A callback throw/rejection
+fails that source closed with `reportingFailed: true`, retrievable via `getStatus`.
+If reporting a processing failure also fails, the original failure is retained.
+Without a callback, callers must inspect status for background failures.
+
+Processing failures are **terminal for that source in this instance**. They close
+monitoring and block later processing rather than silently skipping into subsequent
+batches. Status retains the stage and read progress; `captureMayHaveAdvanced` is
+conservative when capture itself throws. Capture persists before delivery, so
+restarting with the saved read cursor is **not delivery recovery**. The owning
+daemon must persist a blocked registration after failed/interrupted processing
+rather than automatically resuming it. TODO: add operator recovery for failed
+delivery if needed; fine-grained failure replay is deliberately deferred. There
+is no durable ingestion queue, automatic retry, or exactly-once guarantee.
+
+Standalone synthetic evidence (compiled module, real temporary JSONL files,
+fixture-only allow-list filter and in-memory destination):
+
+```text
+node scripts/sessionWatcherDemo.mjs
+```
+
+The demo asserts waiting readiness, bounded catch-up, redacted output, stopped
+notifications, restart metadata restoration without old-event publication, and
+explicit failure isolation without silently advancing later batches. It never reads user
+transcripts or starts the user's daemon. Daemon/hook lifecycle wiring and a
+production privacy policy/destination remain separate work.
 
 **Supported workflow:** local, append-only Copilot CLI transcripts owned by one
 daemon. The daemon owns cross-process exclusion; standalone capture callers must
