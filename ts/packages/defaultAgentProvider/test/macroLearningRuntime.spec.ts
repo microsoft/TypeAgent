@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { jest } from "@jest/globals";
-import type { MacroLearningRuntime } from "@typeagent/copilot-macros";
+import {
+    induceMacroFromTrace,
+    type MacroLearningBuild,
+    type MacroLearningRuntime,
+} from "@typeagent/copilot-macros";
 import {
     createMacroLearningRuntime,
     validateMacroGrammar,
@@ -28,7 +32,196 @@ const trace: Parameters<MacroLearningRuntime["extract"]>[0] = {
     ],
 };
 
+async function buildFixture(
+    filePath = "pnpm-workspace.yaml",
+    request = `Read ${filePath} for me`,
+) {
+    const recording = structuredClone(trace);
+    recording.prompt = request;
+    recording.toolCalls[0].arguments = { path: filePath };
+    const baseline = await induceMacroFromTrace(
+        "source-1",
+        recording,
+        "macro-1",
+        "Read a file",
+        "Read a workspace file",
+        recording.completedAt,
+    );
+    const recipe = {
+        schemaVersion: 1 as const,
+        traceId: "source-1",
+        request,
+        toolCallIds: ["call-1"],
+        description: "Read a workspace file",
+        uncertainties: [],
+    };
+    const build: MacroLearningBuild = {
+        name: baseline.name,
+        description: baseline.description,
+        inputs: [
+            {
+                name: "step_1_path",
+                description: "File path",
+                required: true,
+                secret: false,
+                valueType: "string",
+            },
+        ],
+        steps: baseline.steps.map((step) => ({
+            ...step,
+            arguments: {
+                kind: "template",
+                value: { path: filePath },
+                bindings: [
+                    {
+                        path: ["path"],
+                        expression: { kind: "input", name: "step_1_path" },
+                    },
+                ],
+            },
+        })),
+        exampleInputs: { step_1_path: filePath },
+        requests: [
+            request,
+            `Show the contents of ${filePath} for me`,
+            `Open ${filePath} for me`,
+            `Display ${filePath} for me`,
+        ],
+    };
+    return { recording, baseline, recipe, build };
+}
+
 describe("macro learning runtime", () => {
+    it("accepts grounded request variants without a correction query", async () => {
+        const { recording, baseline, recipe, build } = await buildFixture();
+        const query = jest.fn<MacroLearningQuery>(async () =>
+            JSON.stringify(build),
+        );
+
+        await expect(
+            createMacroLearningRuntime(query).build(
+                recipe,
+                recording,
+                baseline,
+                new AbortController().signal,
+            ),
+        ).resolves.toEqual(build);
+        expect(query).toHaveBeenCalledTimes(1);
+    });
+
+    it("corrects a variant that omits a required filename once", async () => {
+        const { recording, baseline, recipe, build } = await buildFixture();
+        const invalid = structuredClone(build);
+        invalid.requests[2] = "Open the workspace configuration for me";
+        const query = jest
+            .fn<MacroLearningQuery>()
+            .mockResolvedValueOnce(JSON.stringify(invalid))
+            .mockResolvedValueOnce(JSON.stringify(build));
+
+        await expect(
+            createMacroLearningRuntime(query).build(
+                recipe,
+                recording,
+                baseline,
+                new AbortController().signal,
+            ),
+        ).resolves.toEqual(build);
+        expect(query).toHaveBeenCalledTimes(2);
+        const feedback = JSON.parse(
+            query.mock.calls[1][0].split("\nEVIDENCE:\n")[1],
+        );
+        expect(feedback.previousBuild).toEqual(invalid);
+        expect(feedback.groundingError).toContain("step_1_path");
+        expect(feedback.groundingError).toContain(invalid.requests[2]);
+    });
+
+    it("rejects ungrounded variants after one correction attempt", async () => {
+        const { recording, baseline, recipe, build } = await buildFixture();
+        build.requests[2] = "Open the workspace configuration for me";
+        const query = jest.fn<MacroLearningQuery>(async () =>
+            JSON.stringify(build),
+        );
+
+        await expect(
+            createMacroLearningRuntime(query).build(
+                recipe,
+                recording,
+                baseline,
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow(
+            "does not contain required string input 'step_1_path'",
+        );
+        expect(query).toHaveBeenCalledTimes(2);
+    });
+
+    it("accepts JSON-escaped file paths in the original request", async () => {
+        const filePath = "C:\\repo\\config.json";
+        const { recording, baseline, recipe, build } = await buildFixture(
+            filePath,
+            `Use the read tool with ${JSON.stringify({ path: filePath })} for me`,
+        );
+        const query = jest.fn<MacroLearningQuery>(async () =>
+            JSON.stringify(build),
+        );
+
+        await expect(
+            createMacroLearningRuntime(query).build(
+                recipe,
+                recording,
+                baseline,
+                new AbortController().signal,
+            ),
+        ).resolves.toEqual(build);
+        expect(query).toHaveBeenCalledTimes(1);
+    });
+
+    it("preserves cancellation during the correction query", async () => {
+        const { recording, baseline, recipe, build } = await buildFixture();
+        const invalid = structuredClone(build);
+        invalid.requests[2] = "Open the workspace configuration for me";
+        const controller = new AbortController();
+        const query = jest
+            .fn<MacroLearningQuery>()
+            .mockResolvedValueOnce(JSON.stringify(invalid))
+            .mockImplementationOnce(async () => {
+                controller.abort(new Error("correction cancelled"));
+                return JSON.stringify(build);
+            });
+
+        await expect(
+            createMacroLearningRuntime(query).build(
+                recipe,
+                recording,
+                baseline,
+                controller.signal,
+            ),
+        ).rejects.toThrow("correction cancelled");
+        expect(query).toHaveBeenCalledTimes(2);
+    });
+
+    it("identifies the request rejected by grammar parameter validation", async () => {
+        const { baseline, build } = await buildFixture();
+        const request = "Open the workspace configuration for me";
+        const query = jest.fn<MacroLearningQuery>(async () => "{}");
+
+        await expect(
+            createMacroLearningRuntime(query).generateGrammar(
+                {
+                    ...baseline,
+                    inputs: build.inputs,
+                    steps: build.steps,
+                    version: 2,
+                    state: "approved",
+                },
+                build.exampleInputs,
+                [request],
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow(`request 1/1 ${JSON.stringify(request)}`);
+        expect(query).not.toHaveBeenCalled();
+    });
+
     it("accepts the shared generator's omitted parameters for a zero-input action only", () => {
         const rule = `<Start> = show my agenda -> { actionName: "lookup" };`;
         expect(() =>

@@ -626,8 +626,12 @@ the task-argument shortcut is an SDK extension command.
 
 The successful recording queues background recipe extraction, generalized
 macro building, offline evidence validation, and grammar generation. Learning
-does not execute the task again. Inspect status for the candidate/version or a
-specific failure; the original answer does not wait for model generation.
+does not execute the task again. Before grammar generation, every request must
+preserve each required string example value, allowing JSON escaping. Missing
+values receive one model correction attempt within the existing build-stage
+deadline; an invalid correction still fails. Grammar errors identify the rejected
+request. Inspect status for the candidate/version or a specific failure; the
+original answer does not wait for model generation.
 Extraction receives result availability and JSON types, not the recorded result
 bodies. It describes the procedure (for example, read a file and return the new
 result), not the previous answer's contents. Withheld contents alone are not
@@ -716,8 +720,10 @@ Restarting does not retry a failed extraction or grammar job. Preparing the same
 saved trace, or recording the same request and tool arguments again, returns the
 existing job. After fixing a learning failure, rebuild and restart agent-server,
 reload the plugin, then explicitly record a different harmless example, such as
-reading `README.md` instead of `package.json` from `ts`. Do not delete saved job
-data or create a manual draft to force a retry.
+reading `pnpm-workspace.yaml` instead of `package.json` from `ts`. Avoid the
+workspace `README.md` for this smoke test: its API-key placeholders trigger
+secret redaction and make the trace ineligible for learning. Do not delete saved
+job data or create a manual draft to force a retry.
 
 ### Legacy manual lifecycle
 
