@@ -148,40 +148,6 @@ describe("PowerShell execution authorization without feature gates", () => {
         await expect(readFile(marker, "utf8")).rejects.toThrow();
     });
 
-    it.each([undefined, false, true])(
-        "runs an approved invocation on Windows with obsolete gates set to %s",
-        async (enabled) => {
-            if (enabled !== undefined) {
-                await writeFile(
-                    join(directory, "config.local.yaml"),
-                    `powershell:\n  dynamicExecution:\n    enabled: ${enabled}\n  brokerExecution:\n    enabled: ${enabled}\n`,
-                );
-            }
-            const approval = approvalContext();
-            const result = await executeScript(request, approval);
-            expect(
-                approval.sessionContext.requestSecurityApproval,
-            ).toHaveBeenCalledTimes(1);
-            if (process.platform === "win32") {
-                expect(result).toMatchObject({
-                    success: true,
-                    stdout: expect.stringMatching(/^ran\s*$/),
-                    stderr: "",
-                });
-                await expect(readFile(marker, "utf8")).resolves.toMatch(
-                    /authorized/,
-                );
-            } else {
-                expect(result).toMatchObject({
-                    success: false,
-                    stdout: "",
-                    errorCode: "broker.unavailable",
-                });
-                await expect(readFile(marker, "utf8")).rejects.toThrow();
-            }
-        },
-    );
-
     it("does not fall back to another launcher when the approved broker is unavailable", async () => {
         process.env.TYPEAGENT_POWERSHELL_BROKER = join(
             directory,

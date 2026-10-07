@@ -1032,16 +1032,18 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
             );
             await createStoredFlow(agent, context, "commandFlow");
 
-            const result = await agent.executeCommand?.(
-                ["run"],
-                {
-                    args: { flowName: "commandFlow" },
-                    flags: {},
-                },
-                context,
+            await expect(
+                agent.executeCommand?.(
+                    ["run"],
+                    {
+                        args: { flowName: "commandFlow" },
+                        flags: {},
+                    },
+                    context,
+                ),
+            ).rejects.toThrow(
+                "PowerShell execution was not authorized. No script was executed.",
             );
-
-            expectPolicyDenied(result);
         });
     });
 
@@ -1353,6 +1355,59 @@ Set-Content -LiteralPath $Path -Value "repaired"`,
             if (fixtureDirectory)
                 await rm(fixtureDirectory, { recursive: true, force: true });
         });
+
+        itOnWindows.each([undefined, false, true])(
+            "runs an approved invocation with obsolete gates set to %s",
+            async (enabled) => {
+                const originalConfigDir = process.env.TYPEAGENT_CONFIG_DIR;
+                const directory = await mkdtemp(
+                    join(tmpdir(), "typeagent-powershell-no-gates-"),
+                );
+                try {
+                    process.env.TYPEAGENT_CONFIG_DIR = directory;
+                    if (enabled !== undefined) {
+                        await writeFile(
+                            join(directory, "config.local.yaml"),
+                            `powershell:\n  dynamicExecution:\n    enabled: ${enabled}\n  brokerExecution:\n    enabled: ${enabled}\n`,
+                        );
+                    }
+                    const marker = join(directory, "executed.txt");
+                    const popup = jest.fn(async () => 0);
+                    const { agent, context } = await createAgentHarness(
+                        undefined,
+                        undefined,
+                        undefined,
+                        popup,
+                    );
+                    const result = await agent.executeAction?.(
+                        {
+                            schemaName: "powershell",
+                            actionName: "testPowerShellFlow",
+                            parameters: {
+                                script: "param([string]$Path)\nSet-Content -LiteralPath $Path -Value 'authorized'\nWrite-Output 'ran'",
+                                testParameters: JSON.stringify({
+                                    Path: marker,
+                                }),
+                            },
+                        },
+                        context,
+                    );
+                    expect(popup).toHaveBeenCalledTimes(1);
+                    expect(result).not.toHaveProperty("error");
+                    expect(result).toMatchObject({
+                        displayContent: expect.stringContaining("ran"),
+                    });
+                    await expect(readFile(marker, "utf8")).resolves.toMatch(
+                        /authorized/,
+                    );
+                } finally {
+                    if (originalConfigDir === undefined)
+                        delete process.env.TYPEAGENT_CONFIG_DIR;
+                    else process.env.TYPEAGENT_CONFIG_DIR = originalConfigDir;
+                    await rm(directory, { recursive: true, force: true });
+                }
+            },
+        );
 
         itOnWindows.each([
             "findDuplicates",
