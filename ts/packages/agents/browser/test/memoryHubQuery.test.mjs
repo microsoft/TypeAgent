@@ -213,6 +213,86 @@ test("query insights use exact returned-source knowledge and carry real capture 
     assert.match(result.insights.message, /Not corpus-wide statistics/);
 });
 
+test("tracing preserves disabled call shapes and correlates concurrent Hub requests", async () => {
+    const originalFlag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+    const originalWarn = console.warn;
+    const logs = [];
+    try {
+        console.warn = (line) => logs.push(String(line));
+        const { service, query, calls } = fixture();
+        service.getSource = async () => ({ activeRevisionId: "r1" });
+        const reads = [];
+        const procedures = [];
+        const searchProcedures = service.searchProcedures;
+        service.searchProcedures = async (request) => {
+            procedures.push(request);
+            return searchProcedures(request);
+        };
+        service.getSourceKnowledge = async (...args) => {
+            reads.push(args);
+            return service.getKnowledgeGraph(args[0]);
+        };
+        delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        await query.memoryHubSearch({ query: "private search" });
+        assert.equal(logs.length, 0);
+        assert.ok(
+            calls.every(([, request]) => !Object.hasOwn(request, "traceId")),
+        );
+        assert.ok(
+            procedures.every((request) => !Object.hasOwn(request, "traceId")),
+        );
+        assert.ok(reads.every((args) => args.length === 2));
+        calls.length = 0;
+        procedures.length = 0;
+        reads.length = 0;
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        await Promise.all([
+            query.memoryHubSearch({
+                query: "private search",
+                generateAnswer: true,
+            }),
+            query.memoryHubSearch({
+                query: "another private search",
+                generateAnswer: true,
+            }),
+        ]);
+        const entries = logs.map((line) =>
+            JSON.parse(line.replace("[memory-search-timing] ", "")),
+        );
+        const ids = new Set(entries.map((entry) => entry.traceId));
+        assert.equal(ids.size, 2);
+        assert.ok(calls.every(([, request]) => ids.has(request.traceId)));
+        assert.ok(procedures.every((request) => ids.has(request.traceId)));
+        assert.ok(reads.every((args) => args.length === 3 && ids.has(args[2])));
+        for (const id of ids) {
+            assert.match(id, /^[a-f0-9-]{36}$/);
+            const stages = new Set(
+                entries
+                    .filter((entry) => entry.traceId === id)
+                    .map((entry) => entry.stage),
+            );
+            for (const stage of [
+                "hub.total",
+                "hub.corpusListing",
+                "hub.retrieval",
+                "hub.fusion",
+                "hub.documentRetrieval",
+                "hub.procedureRetrieval",
+                "hub.insights",
+                "hub.synthesis",
+            ])
+                assert.ok(stages.has(stage), stage);
+        }
+        assert.ok(!logs.join("\n").includes("private search"));
+        assert.ok(!logs.join("\n").includes("Check the worker"));
+    } finally {
+        console.warn = originalWarn;
+        if (originalFlag === undefined)
+            delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = originalFlag;
+    }
+});
+
 test("historical or unavailable source knowledge is explicit and never substitutes Browser memory insights", async () => {
     const { service, query } = fixture();
     let reads = 0;
