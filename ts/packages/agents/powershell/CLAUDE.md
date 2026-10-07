@@ -42,9 +42,10 @@ competing store instances or revoke the root flow approvals on disable.
 
 ## Execution authorization
 
-The dynamic and broker YAML gates control execution availability. When both are
-enabled, authorization-required current-user execution is the default; there is
-no additional mode flag. Gate availability never grants script approval.
+Dynamic flows require trusted user authorization and the Windows execution
+broker, without execution feature flags. The obsolete `dynamicExecution.enabled`
+and `brokerExecution.enabled` settings are ignored, including explicit false
+values. No configuration setting grants script approval.
 
 Approved-local execution is not a sandbox. Its central runner requires trusted
 UI authorization, including before tests, drafts, and repairs. The model cannot
