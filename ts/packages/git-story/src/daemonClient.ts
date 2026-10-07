@@ -3,7 +3,6 @@
 
 import type { z } from "zod";
 import {
-    DAEMON_PORT,
     DAEMON_ROUTE,
     DaemonIdentitySchema,
     ErrorResponseSchema,
@@ -11,12 +10,15 @@ import {
     SESSIONS_ROUTE,
     SessionAcceptedSchema,
     SessionRegistrationSchema,
+    SessionListSchema,
+    DaemonStoppingSchema,
     StoryCommitSchema,
     type DaemonIdentity,
     type SessionAccepted,
 } from "./daemonApi.js";
 import type { StoryCommit } from "./server/routes/storyCommitsApiHandler.js";
 import type { SessionRegistration } from "./sessionWatcher.js";
+import { readDaemonState } from "./daemonState.js";
 
 // Typed HTTP client for the git-story daemon API. One method per route;
 // zod validates request bodies before sending and responses on receipt, so
@@ -26,9 +28,17 @@ import type { SessionRegistration } from "./sessionWatcher.js";
 //   -> POST http://127.0.0.1:51703/api/sessions -> {"sessionId":"s7"}
 export class GitStoryDaemonClient {
     constructor(
-        private readonly port: number,
-        private readonly timeoutMs: number,
-    ) {}
+        private readonly port?: number,
+        private readonly timeoutMs = 2000,
+        private readonly token?: string,
+    ) {
+        if (
+            !Number.isSafeInteger(timeoutMs) ||
+            timeoutMs < 1 ||
+            timeoutMs > 120000
+        )
+            throw new Error("Invalid daemon client timeout");
+    }
 
     // GET /api/daemon
     async identity(): Promise<DaemonIdentity> {
@@ -44,6 +54,19 @@ export class GitStoryDaemonClient {
             "POST",
             SESSIONS_ROUTE,
             SessionRegistrationSchema.parse(request),
+        );
+    }
+
+    async sessions() {
+        return this.request(SessionListSchema, "GET", SESSIONS_ROUTE);
+    }
+
+    async stop() {
+        return this.request(
+            DaemonStoppingSchema,
+            "POST",
+            `${DAEMON_ROUTE}/stop`,
+            {},
         );
     }
 
@@ -64,18 +87,23 @@ export class GitStoryDaemonClient {
         path: string,
         body?: unknown,
     ): Promise<T> {
+        const state = this.port === undefined ? readDaemonState() : undefined;
+        const port = this.port ?? state?.port;
+        const token = this.token ?? state?.token;
+        if (!port || !token) throw new Error("Daemon is not running");
         const init: RequestInit = {
             method,
             signal: AbortSignal.timeout(this.timeoutMs),
+            headers: { Authorization: `Bearer ${token}` },
         };
         if (body !== undefined) {
-            init.headers = { "Content-Type": "application/json" };
+            init.headers = {
+                ...init.headers,
+                "Content-Type": "application/json",
+            };
             init.body = JSON.stringify(body);
         }
-        const res = await fetch(
-            `http://${LOOPBACK_HOST}:${this.port}${path}`,
-            init,
-        );
+        const res = await fetch(`http://${LOOPBACK_HOST}:${port}${path}`, init);
         const json: unknown = await res.json();
         if (!res.ok) {
             const error = ErrorResponseSchema.safeParse(json);
@@ -94,6 +122,6 @@ const DAEMON_TIMEOUT_MS = 2000;
 
 // The one client every CLI command uses.
 export const daemonClient = new GitStoryDaemonClient(
-    DAEMON_PORT,
+    undefined,
     DAEMON_TIMEOUT_MS,
 );

@@ -31,12 +31,12 @@ export const storyCommitsApiHandler = async (c: Context) => {
         !fs.statSync(project, { throwIfNoEntry: false })?.isDirectory()
     ) {
         return c.json(
-            { error: `project must be an absolute directory path: ${project}` },
+            { error: "project must be an absolute directory path" },
             400,
         );
     }
     if (!HASH_PATTERN.test(hash)) {
-        return c.json({ error: `Invalid commit hash: ${hash}` }, 400);
+        return c.json({ error: "Invalid commit hash" }, 400);
     }
     let stdout: string;
     try {
@@ -46,10 +46,7 @@ export const storyCommitsApiHandler = async (c: Context) => {
             { cwd: project, windowsHide: true },
         ));
     } catch {
-        return c.json(
-            { error: `Commit not found: ${hash} in ${project}` },
-            404,
-        );
+        return c.json({ error: "Commit not found" }, 404);
     }
     const [full, subject] = stdout.trimEnd().split("\n");
     const body: StoryCommit = { hash: full, subject };

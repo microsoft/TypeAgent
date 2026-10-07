@@ -4,257 +4,176 @@
 import { Command } from "commander";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { DAEMON_PORT } from "../daemonApi.js";
-import { daemonClient } from "../daemonClient.js";
-import { cliLogger, daemonLogger } from "../logger.js";
+import { setTimeout as sleep } from "node:timers/promises";
+import { daemonClient, GitStoryDaemonClient } from "../daemonClient.js";
+import {
+    daemonStateDirectory,
+    readDaemonState,
+    type DaemonState,
+} from "../daemonState.js";
+import { daemonLogger } from "../logger.js";
 
-// One daemon per user, shared by every project. Each API request names its
-// project by absolute path, so the daemon does not depend on any cwd.
-//
-//   git story daemon start   (from any directory)
-//     └─ spawns detached `node daemonMain.js` (no CLI command)
-//          └─ listens on 127.0.0.1:51703 (DAEMON_PORT)
-//          └─ writes ~/.typeagent/git-story/daemon.json {"pid":4242,"port":51703}
-//   GET /api/story/commits/739e112?project=/Users/me/repo
-//   GET /api/story/commits/739e112?project=C:\Users\me\repo  (URL-encoded)
-//   git story daemon status  -> reads daemon.json, asks the port for its pid
-//   git story daemon stop    -> kills pid; stale daemon.json is cleaned up
-//
-// Single instance: the bound port is the lock. The OS lets one process
-// listen on 127.0.0.1:51703; a second daemon fails with EADDRINUSE. The OS
-// frees it when the holder exits or crashes, so no stale lock survives.
-// Only the port holder writes daemon.json; others only read it.
-//
-// `~` is os.homedir(): /Users/me on macOS, C:\Users\me on Windows.
-// Shared TypeAgent user dir, as in packages/config.
-const STATE_DIR = path.join(".typeagent", "git-story");
-const STATE_FILE = "daemon.json";
-const START_TIMEOUT_MS = 5000;
-const STOP_TIMEOUT_MS = 5000;
-const POLL_MS = 50;
-
-type DaemonState = { pid: number; port: number };
-
-// Entry point `start` spawns; not exposed as a CLI command.
 const DAEMON_MAIN = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "../daemonMain.js",
 );
+const url = (state: DaemonState) => `http://127.0.0.1:${state.port}`;
+const clientFor = (state: DaemonState) =>
+    new GitStoryDaemonClient(state.port, 2000, state.token);
 
-const stateDir = () => path.join(os.homedir(), STATE_DIR);
-
-function isAlive(pid: number): boolean {
+async function running(): Promise<DaemonState | undefined> {
+    const state = readDaemonState();
+    if (!state) return undefined;
     try {
-        process.kill(pid, 0);
-        return true;
-    } catch (e) {
-        // EPERM: the process exists but belongs to another user.
-        return (e as NodeJS.ErrnoException).code === "EPERM";
-    }
-}
-
-// True when the daemon port reports `state.pid`. A live pid alone
-// is not enough: after a crash or reboot the OS can reuse it.
-async function answersAsDaemon(state: DaemonState): Promise<boolean> {
-    try {
-        return (await daemonClient.identity()).pid === state.pid;
-    } catch {
-        return false;
-    }
-}
-
-// Running daemon's state, or undefined for a missing, corrupt, or stale
-// file. Never deletes: only the port holder owns the file.
-async function readState(): Promise<DaemonState | undefined> {
-    const file = path.join(stateDir(), STATE_FILE);
-    let state: Partial<DaemonState> | null;
-    try {
-        state = JSON.parse(fs.readFileSync(file, "utf8"));
+        return (await clientFor(state).identity()).pid === state.pid
+            ? state
+            : undefined;
     } catch {
         return undefined;
     }
-    // A corrupt file (e.g. `null`) is stale state, not a crash.
-    if (
-        Number.isInteger(state?.pid) &&
-        Number.isInteger(state?.port) &&
-        isAlive(state!.pid!) &&
-        (await answersAsDaemon(state as DaemonState))
-    )
-        return state as DaemonState;
-    return undefined;
 }
-
-// Removes the state file only if `pid` still owns it, so a stopping daemon
-// never deletes a newer daemon's state.
-function removeStateIfOwned(pid: number): void {
-    const file = path.join(stateDir(), STATE_FILE);
-    try {
-        if (JSON.parse(fs.readFileSync(file, "utf8"))?.pid !== pid) return;
-    } catch {
-        return;
-    }
-    fs.rmSync(file, { force: true });
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-const url = (s: DaemonState) => `http://127.0.0.1:${s.port}`;
 
 async function start(): Promise<void> {
-    const running = await readState();
-    if (running) {
+    const current = await running();
+    if (current) {
         process.stdout.write(
-            `Already running (pid ${running.pid}) at ${url(running)}\n`,
+            `Already running (pid ${current.pid}) at ${url(current)}\n`,
         );
         return;
     }
-    const dir = stateDir();
-    fs.mkdirSync(dir, { recursive: true });
-    // Uncaught output and crash traces use the daily daemon log.
+    const directory = daemonStateDirectory();
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     const logFile = daemonLogger.file();
-    if (!path.isAbsolute(logFile)) {
-        const message = "Failed to resolve daemon log path";
-        process.stderr.write(`${message}\n`);
-        process.exitCode = 1;
-        return;
-    }
-    let log: number;
-    try {
-        fs.mkdirSync(path.dirname(logFile), { recursive: true, mode: 0o700 });
-        log = fs.openSync(logFile, "a", 0o600);
-    } catch (e) {
-        const message = `Failed to open daemon log ${logFile}: ${(e as Error).message}`;
-        process.stderr.write(`${message}\n`);
-        cliLogger.error(message);
-        process.exitCode = 1;
-        return;
-    }
-    // cwd is the state dir so the daemon never holds a project directory
-    // open (Windows cannot delete a directory that is some process's cwd).
-    // windowsHide: no console window on Windows.
+    fs.mkdirSync(path.dirname(logFile), { recursive: true, mode: 0o700 });
+    const log = fs.openSync(logFile, "a", 0o600);
+    // Inherit explicit local adapter/state settings, never credentials in argv.
     const child = spawn(process.execPath, [DAEMON_MAIN], {
-        cwd: dir,
+        cwd: directory,
         detached: true,
         stdio: ["ignore", log, log],
         windowsHide: true,
     });
+    let exited = false;
+    child.once("exit", () => {
+        exited = true;
+    });
+    child.once("error", () => {
+        exited = true;
+    });
     child.unref();
     fs.closeSync(log);
-    // Wait for the daemon to write its state; fail fast if it exits first.
-    let exited = false;
-    child.once("exit", () => (exited = true));
-    for (let t = 0; t < START_TIMEOUT_MS && !exited; t += POLL_MS) {
-        const state = await readState();
-        if (state && state.pid === child.pid) {
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+        const state = await running();
+        if (state) {
             process.stdout.write(
-                `Started (pid ${state.pid}) at ${url(state)}\n`,
+                `${state.pid === child.pid ? "Started" : "Already running"} (pid ${state.pid}) at ${url(state)}\n`,
             );
             return;
         }
-        await sleep(POLL_MS);
+        await sleep(50);
     }
-    // The child exits when a concurrent start won.
-    const winner = await readState();
+    const winner = await running();
     if (winner) {
         process.stdout.write(
             `Already running (pid ${winner.pid}) at ${url(winner)}\n`,
         );
         return;
     }
-    if (!exited) child.kill();
-    process.stderr.write(`Failed to start daemon, see ${logFile}\n`);
-    cliLogger.error(`Failed to start daemon, see ${logFile}`);
+    process.stderr.write(
+        exited
+            ? "Daemon failed to start; inspect the local daemon log. An abandoned daemon.lock requires deliberate offline cleanup.\n"
+            : "Daemon startup is still pending; inspect status and the local daemon log. No process was killed.\n",
+    );
     process.exitCode = 1;
 }
 
 async function stop(): Promise<void> {
-    const state = await readState();
+    const state = await running();
     if (!state) {
-        process.stdout.write("Not running\n");
+        process.stdout.write(
+            "Not running (no authenticated owner responded)\n",
+        );
         return;
     }
-    // SIGTERM runs the daemon's cleanup on macOS/Linux. Windows has no signals:
-    // Node terminates the process, and the next readState drops the stale file.
-    process.kill(state.pid, "SIGTERM");
-    for (let t = 0; t < STOP_TIMEOUT_MS; t += POLL_MS) {
-        if (!isAlive(state.pid)) {
-            removeStateIfOwned(state.pid);
-            process.stdout.write(`Stopped (pid ${state.pid})\n`);
+    await clientFor(state).stop();
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+        const current = readDaemonState();
+        if (!current || current.token !== state.token) {
+            process.stdout.write(
+                `Stopped (pid ${state.pid}); admitted work drained\n`,
+            );
             return;
         }
-        await sleep(POLL_MS);
+        await sleep(50);
     }
-    process.stderr.write(`Daemon (pid ${state.pid}) did not stop\n`);
+    process.stderr.write(
+        "Daemon is still stopping; no process was killed or ownership state removed. Check status again.\n",
+    );
     process.exitCode = 1;
 }
 
-// Daemon body, run by daemonMain.js in the process `start` spawns. Writes the state file once
-// listening, removes it on SIGTERM/SIGINT.
-// Fails (see daemon.log) when the port is in use.
-export async function runDaemon(): Promise<void> {
-    const port = DAEMON_PORT;
-    const file = path.join(stateDir(), STATE_FILE);
-    // Loaded here so CLI commands and hooks never load the HTTP server.
-    const { startServer } = await import("../server/server.js");
-    let server: Awaited<ReturnType<typeof startServer>>;
+// Avoid displaying dependency, filesystem, or transport errors that can contain
+// credentials or transcript content. Operational detail is available in receipts.
+const action = (run: () => Promise<void>) => async () => {
     try {
-        server = await startServer(port);
-    } catch (e) {
-        const message = `Cannot listen on port ${port}: ${(e as Error).message}`;
-        process.stderr.write(`${message}\n`);
-        daemonLogger.error(message);
+        await run();
+    } catch {
+        process.stderr.write(
+            "Daemon command failed; inspect local ownership and authenticated session status.\n",
+        );
         process.exitCode = 1;
-        return;
     }
-    // Holding the port makes this the only daemon: publish its state.
-    // Write then rename so readers never see a partial file.
-    const state: DaemonState = { pid: process.pid, port };
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(state) + "\n");
-    fs.renameSync(tmp, file);
-    process.stdout.write(`Listening at ${url(state)}\n`);
-    daemonLogger.info(`Listening at ${url(state)}`);
-    const shutdown = () => {
-        // Before close: the port is still held, so no new daemon can have
-        // written its state yet.
-        removeStateIfOwned(process.pid);
-        server.close(() => process.exit(0));
-        // Do not wait on keep-alive connections.
-        server.closeAllConnections();
-    };
-    process.once("SIGTERM", shutdown);
-    process.once("SIGINT", shutdown);
-}
+};
 
-// `daemon`: manages the per-user HTTP API server.
 export const daemonCommand = new Command("daemon").description(
-    "Manage the git-story API server shared by all projects",
+    "Manage the per-user git-story daemon",
 );
-
-daemonCommand.command("start").description("Start the daemon").action(start);
-
-daemonCommand.command("stop").description("Stop the daemon").action(stop);
-
-daemonCommand
-    .command("restart")
-    .description("Restart the daemon")
-    .action(async () => {
+daemonCommand.command("start").action(action(start));
+daemonCommand.command("stop").action(action(stop));
+daemonCommand.command("restart").action(
+    action(async () => {
         await stop();
         if (!process.exitCode) await start();
-    });
-
-daemonCommand
-    .command("status")
-    .description("Show whether the daemon is running")
-    .action(async () => {
-        const state = await readState();
+    }),
+);
+daemonCommand.command("status").action(
+    action(async () => {
+        const state = await running();
         process.stdout.write(
             state
-                ? `Running (pid ${state.pid}) at ${url(state)}\n`
+                ? JSON.stringify({
+                      ...(await clientFor(state).identity()),
+                      url: url(state),
+                  }) + "\n"
                 : "Not running\n",
         );
-    });
+    }),
+);
+daemonCommand
+    .command("sessions")
+    .description("Show local operational receipts, without payloads")
+    .action(
+        action(async () => {
+            process.stdout.write(
+                JSON.stringify(await daemonClient.sessions(), null, 2) + "\n",
+            );
+        }),
+    );
+daemonCommand
+    .command("register")
+    .argument("<project>", "absolute project directory")
+    .argument("<session>", "Copilot session ID")
+    .action(async (projectPath: string, sessionId: string) =>
+        action(async () => {
+            const receipt = await daemonClient.registerSession({
+                projectPath,
+                sessionId,
+                metadata: { clientName: "copilot-cli", models: [] },
+            });
+            process.stdout.write(JSON.stringify(receipt) + "\n");
+        })(),
+    );
