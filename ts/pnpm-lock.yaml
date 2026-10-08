@@ -6035,6 +6035,9 @@ importers:
       '@typeagent/knowpro':
         specifier: workspace:*
         version: link:../../knowPro
+      isomorphic-git:
+        specifier: 1.37.4
+        version: 1.37.4
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
@@ -12551,6 +12554,9 @@ packages:
     resolution: {integrity: sha1-UJyfymDq+FA0xoKYOBiOTkyP+ys=}
     engines: {node: '>= 0.4'}
 
+  async-lock@1.4.1:
+    resolution: {integrity: sha512-Az2ZTpuytrtqENulXwO3GGv1Bztugx6TT37NIo7imr/Qo0gsYiGtSdBa2B6fsXhTpVZDNfu1Qn3pk531e3q+nQ==}
+
   async-mutex@0.4.0:
     resolution: {integrity: sha1-roBIzU0ErOlDR1B1BLPPFeYxwl8=}
 
@@ -12998,6 +13004,9 @@ packages:
   clean-css@5.3.3:
     resolution: {integrity: sha1-szBlPNO9a3UAnMJccUyue5M1HM0=}
     engines: {node: '>= 10.0'}
+
+  clean-git-ref@2.0.1:
+    resolution: {integrity: sha512-bLSptAy2P0s6hU4PzuIMKmMJJSE6gLXGH1cntDu7bWJUksvuM+7ReOK61mozULErYvP6a15rnYl0zFDef+pyPw==}
 
   clean-stack@2.2.0:
     resolution: {integrity: sha1-7oRy27Ep5yezHooQpCfe6d/kAIs=}
@@ -13841,6 +13850,9 @@ packages:
   diff-sequences@29.6.3:
     resolution: {integrity: sha1-Ter4lNEUB8Ue/IQYAS+ecLhOqSE=}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
+
+  diff3@0.0.3:
+    resolution: {integrity: sha512-iSq8ngPOt0K53A6eVr4d5Kn6GNrM2nQZtC740pzIriHtn4pOQ2lyzEXQMBeVcWERN0ye7fhBsk9PbLLQOnUx/g==}
 
   diff@4.0.4:
     resolution: {integrity: sha1-em2/2jJfJfB1F+m1GPiXwIMy4H0=}
@@ -15477,6 +15489,11 @@ packages:
     resolution: {integrity: sha1-TkMekrEalzFjaqH5yNHMvP2reN8=}
     engines: {node: '>=0.10.0'}
 
+  isomorphic-git@1.37.4:
+    resolution: {integrity: sha512-fNnCEJtI1refeVxysiuqGP9cubUoLibUS6UIDUWSy5Op6sVdFwGv/SpzfhMFiDkfgYoXKqurZ+LVxEeesy+T0Q==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   isomorphic-ws@5.0.0:
     resolution: {integrity: sha1-5VKRSJEuy5tFG0btRNU9rhzgS78=}
     peerDependencies:
@@ -16481,6 +16498,9 @@ packages:
 
   minimist@1.2.8:
     resolution: {integrity: sha1-waRk52kzAuCCoHXO4MBXdBrEdyw=}
+
+  minimisted@2.0.1:
+    resolution: {integrity: sha512-1oPjfuLQa2caorJUM8HV8lGgWCc0qqAO1MNv/k05G4qslmsndV/5WdNZrqCiyqiz3wohia2Ij2B7w2Dr7/IyrA==}
 
   minipass@4.2.8:
     resolution: {integrity: sha1-8AEPZDk+z8HRzLX1gryvRfSOGjo=}
@@ -18041,6 +18061,11 @@ packages:
   setprototypeof@1.2.0:
     resolution: {integrity: sha1-ZsmiSnP5/CjL5msJ/tPTPcrxtCQ=}
 
+  sha.js@2.4.12:
+    resolution: {integrity: sha512-8LzC5+bvI45BjpfXU8V5fdU2mfeKiQe1D1gIMn7XUlF3OTUrpdJpPPH4EMAnF0DsHHdSZqCdSss5qCmJKuiO3w==}
+    engines: {node: '>= 0.10'}
+    hasBin: true
+
   shallow-clone@0.1.2:
     resolution: {integrity: sha1-WQnodLp3EG1zrEFM/sH/yofZcGA=}
     engines: {node: '>=0.10.0'}
@@ -18642,6 +18667,10 @@ packages:
 
   tmpl@1.0.5:
     resolution: {integrity: sha1-hoPguQK7nCDE9ybjwLafNlGMB8w=}
+
+  to-buffer@1.2.2:
+    resolution: {integrity: sha512-db0E3UJjcFhpDhAF4tLo03oli3pwl3dbnzXOUIlRKrp+ldk/VUxzpWYZENsw2SZiuBjHAk7DfB0VU7NKdpb6sw==}
+    engines: {node: '>= 0.4'}
 
   to-regex-range@5.0.1:
     resolution: {integrity: sha1-FkjESq58jZiKMmAY7XL1tN0DkuQ=}
@@ -26774,6 +26803,8 @@ snapshots:
 
   async-function@1.0.0: {}
 
+  async-lock@1.4.1: {}
+
   async-mutex@0.4.0:
     dependencies:
       tslib: 2.8.1
@@ -27303,6 +27334,8 @@ snapshots:
   clean-css@5.3.3:
     dependencies:
       source-map: 0.6.1
+
+  clean-git-ref@2.0.1: {}
 
   clean-stack@2.2.0: {}
 
@@ -28276,6 +28309,8 @@ snapshots:
   devtools-protocol@0.0.1566079: {}
 
   diff-sequences@29.6.3: {}
+
+  diff3@0.0.3: {}
 
   diff@4.0.4: {}
 
@@ -30399,6 +30434,20 @@ snapshots:
 
   isobject@3.0.1: {}
 
+  isomorphic-git@1.37.4:
+    dependencies:
+      async-lock: 1.4.1
+      clean-git-ref: 2.0.1
+      crc-32: 1.2.2
+      diff3: 0.0.3
+      ignore: 5.3.2
+      minimisted: 2.0.1
+      pako: 1.0.11
+      pify: 4.0.1
+      readable-stream: 4.5.2
+      sha.js: 2.4.12
+      simple-get: 4.0.1
+
   isomorphic-ws@5.0.0(ws@8.21.3):
     dependencies:
       ws: 8.21.3
@@ -32445,6 +32494,10 @@ snapshots:
 
   minimist@1.2.8: {}
 
+  minimisted@2.0.1:
+    dependencies:
+      minimist: 1.2.8
+
   minipass@4.2.8: {}
 
   minipass@7.1.2: {}
@@ -33152,8 +33205,7 @@ snapshots:
 
   picospinner@2.0.0: {}
 
-  pify@4.0.1:
-    optional: true
+  pify@4.0.1: {}
 
   pirates@4.0.7: {}
 
@@ -34465,6 +34517,12 @@ snapshots:
 
   setprototypeof@1.2.0: {}
 
+  sha.js@2.4.12:
+    dependencies:
+      inherits: 2.0.4
+      safe-buffer: 5.2.1
+      to-buffer: 1.2.2
+
   shallow-clone@0.1.2:
     dependencies:
       is-extendable: 0.1.1
@@ -35202,6 +35260,12 @@ snapshots:
   tmp@0.2.7: {}
 
   tmpl@1.0.5: {}
+
+  to-buffer@1.2.2:
+    dependencies:
+      isarray: 2.0.5
+      safe-buffer: 5.2.1
+      typed-array-buffer: 1.0.3
 
   to-regex-range@5.0.1:
     dependencies:

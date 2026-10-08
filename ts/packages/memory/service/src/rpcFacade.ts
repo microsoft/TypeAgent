@@ -8,6 +8,7 @@ import type {
     PersonalHowToService,
 } from "./types.js";
 import { validateProcedureSaveRequest } from "./agentEdition.js";
+import type { MemoryViewService } from "./viewTypes.js";
 
 export interface MemoryJobWaitOptions {
     signal?: AbortSignal;
@@ -20,15 +21,35 @@ function unsupportedCapability(operation: string): Promise<never> {
 }
 
 export function createMemoryServiceRpcFacade(
+    service: MemoryService & PersonalHowToService & MemoryViewService,
+): MemoryService & PersonalHowToService & MemoryViewService;
+export function createMemoryServiceRpcFacade(
     service: MemoryService & PersonalHowToService,
 ): MemoryService & PersonalHowToService;
 export function createMemoryServiceRpcFacade(
     service: MemoryService,
 ): MemoryService;
 export function createMemoryServiceRpcFacade(
-    service: MemoryService & Partial<PersonalHowToService>,
-): MemoryService & PersonalHowToService {
+    service: MemoryService & Partial<PersonalHowToService & MemoryViewService>,
+): MemoryService & PersonalHowToService & MemoryViewService {
     return {
+        listViews: (...args) =>
+            service.listViews?.(...args) ??
+            unsupportedCapability("view drafts"),
+        getView: (...args) =>
+            service.getView?.(...args) ?? unsupportedCapability("view drafts"),
+        saveViewDraft: (...args) =>
+            service.saveViewDraft?.(...args) ??
+            unsupportedCapability("view drafts"),
+        archiveView: (...args) =>
+            service.archiveView?.(...args) ??
+            unsupportedCapability("view drafts"),
+        getViewHistory: (...args) =>
+            service.getViewHistory?.(...args) ??
+            unsupportedCapability("view history"),
+        publishView: (...args) =>
+            service.publishView?.(...args) ??
+            unsupportedCapability("view publication"),
         createCorpus: (...args) => service.createCorpus(...args),
         listCorpora: (...args) => service.listCorpora(...args),
         getCorpus: (...args) => service.getCorpus(...args),

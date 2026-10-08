@@ -497,6 +497,12 @@ export interface SourceKnowledgeSuppressionRequest
 }
 
 export interface MemoryServiceCapabilities {
+    derivedViews?: {
+        kinds: Array<"troubleshootingGuide">;
+        drafts: true;
+        history: true;
+        publication: false;
+    };
     chatProvider?: string;
     embeddingProvider?: string;
     features: {

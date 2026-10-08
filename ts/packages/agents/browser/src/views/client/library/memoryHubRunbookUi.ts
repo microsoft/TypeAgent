@@ -144,7 +144,7 @@ export function rbReadOnlyEdition(document: ProcedureDocument) {
         return root;
     }
     root.append(
-        rbNode("h3", "Agent edition (read-only)"),
+        rbNode("h3", "Agent edition - executable adaptation (read-only)"),
         rbNode("p", `Goal: ${edition.goal}`),
         rbNode("p", `Review: ${edition.review.state}`),
         rbNode("p", `Applicability: ${edition.applicability.join("; ")}`),

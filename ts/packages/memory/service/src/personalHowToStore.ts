@@ -3,7 +3,6 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import {
-    access,
     mkdir,
     readFile,
     readdir,
@@ -22,10 +21,29 @@ import {
 } from "./agentEdition.js";
 import {
     procedureFromMarkdown,
-    procedureToMarkdown,
     validateProcedureDocument as validateDocument,
 } from "./procedureMarkdown.js";
+import { ViewHistory } from "./viewHistory.js";
 import { retryProcedurePublication } from "./procedurePublication.js";
+import {
+    versionRelationships,
+    authoredRelationships,
+    materializeDefinition,
+} from "./viewRelationships.js";
+import {
+    guideFromProcedure,
+    procedureFromGuide,
+    assertViewIdentifier,
+    viewSourceKey,
+} from "./viewContent.js";
+import type {
+    ViewVersion,
+    ViewSaveRequest,
+    ViewArchiveRequest,
+    ViewReadRequest,
+    ViewHistoryEntry,
+    ViewSnapshot,
+} from "./viewTypes.js";
 export * from "./procedureMarkdown.js";
 import type {
     PersonalHowToSettings,
@@ -45,31 +63,26 @@ interface ProcedureIndex {
     indexGeneration?: string;
 }
 
+interface ViewStoreState {
+    index: ProcedureIndex;
+    views: Record<string, ViewVersion[]>;
+}
+
+function viewVersions(state: ViewStoreState, viewId: string): ViewVersion[] {
+    return Object.prototype.hasOwnProperty.call(state.views, viewId)
+        ? state.views[viewId]
+        : [];
+}
+
 export type ProcedureIndexPublisher = (
     corpusId: string,
     procedures: ProcedureSummary[],
 ) => Promise<string>;
 
-interface StoredVersionMetadata {
-    corpusId: string;
-    procedureId: string;
-    version: number;
-    state: "saved" | "stale" | "archived";
-    createdAt: string;
-    jsonHash: string;
-    markdownHash: string;
-    basedOnCandidateId?: string;
-    previousVersion?: number;
-}
-
 const emptyIndex: ProcedureIndex = { candidates: [], procedures: [] };
 
 function timestamp(): string {
     return new Date().toISOString();
-}
-
-function hash(value: string): string {
-    return createHash("sha256").update(value).digest("hex");
 }
 
 function validateIdentifier(kind: string, value: string): void {
@@ -150,101 +163,245 @@ async function writeAtomic(filePath: string, value: string): Promise<void> {
     }
 }
 
-function procedureHeading(title: string): boolean {
-    return /\b(how to|steps?|procedure|instructions?|workflow|checklist|setup|install(?:ation)?|configur(?:e|ation)|deploy(?:ment)?|publish|troubleshoot)\b/i.test(
-        title,
-    );
-}
+export { detectProcedureCandidates } from "./procedureDetector.js";
 
-function listStep(line: string): string | undefined {
-    const match =
-        /^\s*(?:\d+[.)]\s+|[-*+]\s+\[[ xX]\]\s+)(?<step>.+?)\s*$/.exec(line);
-    return match?.groups?.step;
-}
-
-function headingAt(line: string): string | undefined {
-    const markdown = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
-    if (markdown !== null) {
-        return markdown[1];
-    }
-    if (listStep(line) !== undefined) {
-        return undefined;
-    }
-    const plain = line.trim().replace(/:\s*$/, "");
-    return procedureHeading(plain) ? plain : undefined;
-}
-
-export function detectProcedureCandidates(
-    corpusId: string,
-    sourceId: string,
-    revisionId: string,
-    content: string,
-): ProcedureCandidateCreateRequest[] {
-    const lines = content.replace(/\r\n?/g, "\n").split("\n");
-    const headings = lines
-        .map((line, index) => {
-            const heading = headingAt(line);
-            return heading === undefined ? undefined : { heading, index };
-        })
-        .filter(
-            (
-                item,
-            ): item is {
-                heading: string;
-                index: number;
-            } => item !== undefined,
-        );
-    let documentTitle: string | undefined;
-    const firstMarkdownHeading = lines.find((line) =>
-        /^\s{0,3}#\s+/.test(line),
-    );
-    if (firstMarkdownHeading !== undefined) {
-        documentTitle = headingAt(firstMarkdownHeading);
-    }
-    const detected: ProcedureCandidateCreateRequest[] = [];
-    for (const [headingIndex, item] of headings.entries()) {
-        if (!procedureHeading(item.heading)) {
-            continue;
-        }
-        const end = headings[headingIndex + 1]?.index ?? lines.length;
-        const steps = lines
-            .slice(item.index + 1, end)
-            .map(listStep)
-            .filter((step): step is string => step !== undefined);
-        if (steps.length < 2) {
-            continue;
-        }
-        const title =
-            /^(steps?|instructions?|procedure|checklist)$/i.test(
-                item.heading,
-            ) && documentTitle !== undefined
-                ? documentTitle
-                : item.heading;
-        const identity = `${sourceId}\n${revisionId}\n${item.index}\n${title}\n${steps.join("\n")}`;
-        detected.push({
-            corpusId,
-            candidateId: `auto:${hash(identity).slice(0, 32)}`,
-            state: "detected",
-            title,
-            steps,
-            citations: [
-                {
-                    sourceId,
-                    revisionId,
-                    locator: `lines ${item.index + 1}-${end}`,
-                },
-            ],
-        });
-    }
-    return detected;
-}
-
-export class PersonalHowToStore {
+export class TypedViewStore {
+    private readonly pending = new Map<string, ViewVersion[]>();
     public constructor(
         private readonly rootDirectory: string,
         private readonly publishIndex: ProcedureIndexPublisher,
         private readonly runbookBindingValidator?: RunbookBindingValidator,
+        private readonly actor = "local-owner",
     ) {}
+
+    private history(corpusId: string): ViewHistory<ViewStoreState> {
+        validateIdentifier("corpus ID", corpusId);
+        return new ViewHistory(this.howToDirectory(corpusId), () => ({
+            index: structuredClone(emptyIndex),
+            views: {},
+        }));
+    }
+
+    private entries(state: ViewStoreState): Record<string, string> {
+        return Object.fromEntries(
+            Object.entries(state.views).map(([id, versions]) => [
+                `view-${encodeURIComponent(id)}.json`,
+                canonicalize(versions),
+            ]),
+        );
+    }
+
+    public async listViews(corpusId: string): Promise<ViewSnapshot> {
+        const snapshot = await this.history(corpusId).read();
+        return {
+            head: snapshot.head,
+            views: Object.values(snapshot.state.views).map(
+                (versions) => versions[versions.length - 1],
+            ),
+        };
+    }
+
+    public async getView(
+        request: ViewReadRequest,
+    ): Promise<ViewVersion | undefined> {
+        assertViewIdentifier("view ID", request.viewId);
+        const state = (await this.history(request.corpusId).read()).state;
+        const versions = viewVersions(state, request.viewId);
+        return request.revisionId === undefined
+            ? versions.at(-1)
+            : versions.find(
+                  (version) => version.revisionId === request.revisionId,
+              );
+    }
+
+    public async saveViewDraft(
+        request: ViewSaveRequest,
+    ): Promise<ViewHistoryEntry> {
+        const history = this.history(request.corpusId);
+        const { head, state } = await history.read();
+        if (head !== request.expectedHead)
+            throw new Error("View history head conflict");
+        const versions = viewVersions(state, request.viewId);
+        const current = versions.at(-1);
+        if ((current?.version ?? 0) !== request.expectedVersion)
+            throw new Error("View version conflict");
+        if (current?.compatibility)
+            throw new Error(
+                "Edit saved runbooks through the procedure compatibility API",
+            );
+        if (current?.state === "archived")
+            throw new Error(`Cannot edit a ${current.state} view`);
+        const version: ViewVersion = {
+            corpusId: request.corpusId,
+            viewId: request.viewId,
+            revisionId: randomUUID(),
+            version: request.expectedVersion + 1,
+            state: "draft",
+            createdAt: timestamp(),
+            actor: this.actor,
+            provenance: "human",
+            ...(current ? { baseRevisionId: current.revisionId } : {}),
+            definition: materializeDefinition(
+                request.definition,
+                current?.definition,
+            ),
+            content: structuredClone(request.content),
+            relationships: [],
+        };
+        version.relationships = versionRelationships(
+            version,
+            request.relationships,
+        );
+        state.views[request.viewId] = [...versions, version];
+        const commitId = await history.commit(
+            head,
+            state,
+            this.entries(state),
+            this.actor,
+            `Draft ${request.viewId} revision ${version.revisionId}; base ${version.baseRevisionId ?? "none"}`,
+        );
+        return { commitId, version };
+    }
+
+    public async archiveView(
+        request: ViewArchiveRequest,
+    ): Promise<ViewHistoryEntry> {
+        const history = this.history(request.corpusId);
+        const { head, state } = await history.read();
+        if (head !== request.expectedHead)
+            throw new Error("View history head conflict");
+        const versions = viewVersions(state, request.viewId);
+        const current = versions.at(-1);
+        if (!current) throw new Error(`Unknown view '${request.viewId}'`);
+        if (current.version !== request.expectedVersion)
+            throw new Error("View version conflict");
+        if (current.compatibility)
+            throw new Error(
+                "Archive saved runbooks through the procedure compatibility API",
+            );
+        if (current.state === "archived")
+            throw new Error("View is already archived");
+        const version: ViewVersion = {
+            ...current,
+            revisionId: randomUUID(),
+            version: current.version + 1,
+            baseRevisionId: current.revisionId,
+            state: "archived",
+            actor: this.actor,
+            createdAt: timestamp(),
+        };
+        version.relationships = versionRelationships(
+            version,
+            authoredRelationships(current),
+        );
+        state.views[request.viewId] = [...versions, version];
+        const commitId = await history.commit(
+            head,
+            state,
+            this.entries(state),
+            this.actor,
+            `Archive ${request.viewId}`,
+        );
+        return { commitId, version };
+    }
+
+    public async getViewHistory(
+        request: ViewReadRequest,
+    ): Promise<ViewHistoryEntry[]> {
+        assertViewIdentifier("view ID", request.viewId);
+        const commits = (
+            await this.history(request.corpusId).history()
+        ).reverse();
+        const seen = new Set<string>();
+        const entries = commits.flatMap(({ commitId, state }) => {
+            const versions = viewVersions(state, request.viewId);
+            return versions.flatMap((version) => {
+                if (seen.has(version.revisionId)) return [];
+                seen.add(version.revisionId);
+                return [{ commitId, version }];
+            });
+        });
+        return entries
+            .reverse()
+            .filter(
+                (entry) =>
+                    request.revisionId === undefined ||
+                    entry.version.revisionId === request.revisionId,
+            );
+    }
+
+    private sanitize(state: ViewStoreState, sourceId: string): ViewStoreState {
+        const affected = new Set(
+            Object.entries(state.views).flatMap(([id, versions]) =>
+                versions.some((version) => {
+                    const content = [
+                        version.content,
+                        ...(version.generation
+                            ? [version.generation.content]
+                            : []),
+                    ];
+                    const references = content.flatMap((item) => {
+                        const evidence = getProcedureEvidenceReferences(item);
+                        return [...evidence.citations, ...evidence.assets];
+                    });
+                    return (
+                        version.definition.selector.sources.some(
+                            (source) => source.sourceId === sourceId,
+                        ) ||
+                        references.some(
+                            (citation) => citation.sourceId === sourceId,
+                        )
+                    );
+                })
+                    ? [id]
+                    : [],
+            ),
+        );
+        state.views = Object.fromEntries(
+            Object.entries(state.views).filter(([id]) => !affected.has(id)),
+        );
+        state.index.procedures = state.index.procedures.filter(
+            (item) => !affected.has(item.procedureId),
+        );
+        state.index.candidates = state.index.candidates.filter((candidate) => {
+            const references = getProcedureEvidenceReferences(candidate);
+            return ![...references.citations, ...references.assets].some(
+                (citation) => citation.sourceId === sourceId,
+            );
+        });
+        delete state.index.indexGeneration;
+        return state;
+    }
+
+    public async forgetSource(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<void> {
+        await this.history(corpusId).purge(
+            sourceId,
+            (state, id) => this.sanitize(state, id),
+            (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
+        );
+        await this.rebuildIndex(corpusId);
+    }
+
+    public async recover(corpusId: string): Promise<void> {
+        await this.history(corpusId).recoverPurge(
+            (state, id) => this.sanitize(state, id),
+            (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
+        );
+    }
+
+    private async removeSearchIndex(corpusId: string): Promise<void> {
+        await retryProcedurePublication(() =>
+            rm(path.join(this.howToDirectory(corpusId), "search-index"), {
+                recursive: true,
+                force: true,
+            }),
+        );
+    }
 
     public async getIndexGeneration(
         corpusId: string,
@@ -269,11 +426,15 @@ export class PersonalHowToStore {
         corpusId: string,
         index: ProcedureIndex,
     ): Promise<void> {
-        index.indexGeneration = await this.publishIndex(
-            corpusId,
-            index.procedures,
-        );
-        await this.writeIndex(corpusId, index);
+        try {
+            index.indexGeneration = await this.publishIndex(
+                corpusId,
+                index.procedures,
+            );
+            await this.writeIndex(corpusId, index);
+        } finally {
+            this.pending.delete(corpusId);
+        }
     }
 
     public async getSettings(corpusId: string): Promise<PersonalHowToSettings> {
@@ -637,6 +798,45 @@ export class PersonalHowToStore {
         activeRevisionId?: string,
     ): Promise<void> {
         const index = await this.readIndex(corpusId);
+        const history = this.history(corpusId);
+        const snapshot = await history.read();
+        let draftChanged = false;
+        for (const [id, versions] of Object.entries(snapshot.state.views)) {
+            const current = versions.at(-1)!;
+            if (
+                current.compatibility ||
+                current.state !== "draft" ||
+                !current.definition.selector.sources.some(
+                    (source) =>
+                        source.sourceId === sourceId &&
+                        source.revisionId !== activeRevisionId,
+                )
+            )
+                continue;
+            const next: ViewVersion = {
+                ...current,
+                revisionId: randomUUID(),
+                version: current.version + 1,
+                baseRevisionId: current.revisionId,
+                state: "stale",
+                actor: "memory-service",
+                createdAt: timestamp(),
+            };
+            next.relationships = versionRelationships(
+                next,
+                authoredRelationships(current),
+            );
+            snapshot.state.views[id] = [...versions, next];
+            draftChanged = true;
+        }
+        if (draftChanged)
+            await history.commit(
+                snapshot.head,
+                snapshot.state,
+                this.entries(snapshot.state),
+                "memory-service",
+                "Invalidate changed source revisions",
+            );
         let changed = false;
         for (const summary of index.procedures) {
             if (summary.state !== "saved") {
@@ -647,13 +847,15 @@ export class PersonalHowToStore {
                 summary.procedureId,
                 summary.latestVersion,
             );
-            const references = getProcedureEvidenceReferences(current.document);
-            const citations = [...references.citations, ...references.assets];
-            const dependsOnChangedRevision = citations.some(
-                (citation) =>
-                    citation.sourceId === sourceId &&
-                    citation.revisionId !== activeRevisionId,
-            );
+            const typed = snapshot.state.views[summary.procedureId]?.at(-1);
+            if (!typed)
+                throw new Error("Saved procedure has no typed view version");
+            const dependsOnChangedRevision =
+                typed.definition.selector.sources.some(
+                    (source) =>
+                        source.sourceId === sourceId &&
+                        source.revisionId !== activeRevisionId,
+                );
             if (!dependsOnChangedRevision) {
                 continue;
             }
@@ -732,60 +934,90 @@ export class PersonalHowToStore {
                 ),
             };
         }
-        const canonicalJson = canonicalize(document);
-        const markdown = procedureToMarkdown(document);
-        const createdAt = timestamp();
-        const metadata: StoredVersionMetadata = {
-            corpusId,
-            procedureId,
-            version,
-            state,
-            createdAt,
-            jsonHash: hash(canonicalJson),
-            markdownHash: hash(markdown),
-            ...(basedOnCandidateId === undefined ? {} : { basedOnCandidateId }),
-            ...(previousVersion === undefined ? {} : { previousVersion }),
-        };
-        const versionDirectory = this.versionDirectory(
-            corpusId,
-            procedureId,
-            version,
-        );
-        const stagingDirectory = `${versionDirectory}.${randomUUID()}.tmp`;
-        await rm(versionDirectory, { recursive: true, force: true });
-        await mkdir(stagingDirectory, { recursive: true });
-        try {
-            await Promise.all([
-                writeFile(
-                    path.join(stagingDirectory, "procedure.json"),
-                    canonicalJson,
-                    "utf8",
-                ),
-                writeFile(
-                    path.join(stagingDirectory, "procedure.md"),
-                    markdown,
-                    "utf8",
-                ),
-                writeFile(
-                    path.join(stagingDirectory, "version.json"),
-                    canonicalize(metadata),
-                    "utf8",
-                ),
-            ]);
-            await mkdir(path.dirname(versionDirectory), { recursive: true });
-            await retryProcedurePublication(() =>
-                rename(stagingDirectory, versionDirectory),
+        const snapshot = (await this.history(corpusId).read()).state;
+        const current = viewVersions(snapshot, procedureId).at(-1);
+        if (current && !current.compatibility)
+            throw new Error(
+                "A draft view cannot be overwritten through procedure APIs",
             );
-        } catch (error) {
-            await rm(stagingDirectory, { recursive: true, force: true });
-            throw error;
-        }
-        return {
-            ...metadata,
-            document: structuredClone(document),
-            canonicalJson,
-            markdown,
+        const generatedCandidate =
+            basedOnCandidateId === undefined
+                ? undefined
+                : snapshot.index.candidates.find(
+                      (candidate) =>
+                          candidate.candidateId === basedOnCandidateId,
+                  );
+        const generatedContent =
+            generatedCandidate === undefined
+                ? undefined
+                : guideFromProcedure(generatedCandidate);
+        const generation =
+            generatedContent === undefined
+                ? current?.generation
+                : {
+                      candidateId: basedOnCandidateId!,
+                      content: generatedContent,
+                      fingerprint: createHash("sha256")
+                          .update(canonicalize(generatedContent))
+                          .digest("hex"),
+                  };
+        const evidence = [
+            getProcedureEvidenceReferences(document),
+            ...(generation
+                ? [getProcedureEvidenceReferences(generation.content)]
+                : []),
+        ].flatMap(({ citations, assets }) => [...citations, ...assets]);
+        const next: ViewVersion = {
+            corpusId,
+            viewId: procedureId,
+            revisionId: randomUUID(),
+            version,
+            state: state === "saved" ? "draft" : state,
+            createdAt: timestamp(),
+            actor: this.actor,
+            provenance: "procedure",
+            ...(current ? { baseRevisionId: current.revisionId } : {}),
+            ...(generation === undefined ? {} : { generation }),
+            definition: materializeDefinition(
+                {
+                    viewId: procedureId,
+                    kind: "procedure",
+                    selector: {
+                        kind: "sources",
+                        sources: [
+                            ...new Map(
+                                evidence.map((citation) => [
+                                    viewSourceKey(citation),
+                                    {
+                                        sourceId: citation.sourceId,
+                                        revisionId: citation.revisionId,
+                                    },
+                                ]),
+                            ).values(),
+                        ],
+                    },
+                },
+                current?.definition,
+            ),
+            content: guideFromProcedure(document, current),
+            relationships: [],
+            compatibility: {
+                state,
+                ...(basedOnCandidateId === undefined
+                    ? {}
+                    : { basedOnCandidateId }),
+                ...(previousVersion === undefined ? {} : { previousVersion }),
+            },
         };
+        next.relationships = versionRelationships(
+            next,
+            current ? authoredRelationships(current) : [],
+        );
+        this.pending.set(corpusId, [
+            ...(this.pending.get(corpusId) ?? []),
+            next,
+        ]);
+        return procedureFromGuide(next);
     }
 
     private async readVersion(
@@ -793,51 +1025,25 @@ export class PersonalHowToStore {
         procedureId: string,
         version: number,
     ): Promise<ProcedureVersion> {
-        let directory = this.versionDirectory(corpusId, procedureId, version);
-        try {
-            await access(directory);
-        } catch (error) {
-            if (
-                (error as NodeJS.ErrnoException).code !== "ENOENT" ||
-                !procedureId.includes(":")
-            ) {
-                throw error;
-            }
-            directory = path.join(
-                this.howToDirectory(corpusId),
-                "procedures",
-                procedureId,
-                "versions",
-                version.toString().padStart(8, "0"),
+        const staged = this.pending
+            .get(corpusId)
+            ?.find(
+                (item) =>
+                    item.viewId === procedureId && item.version === version,
             );
-        }
-        const [json, markdown, metadata] = await Promise.all([
-            readFile(path.join(directory, "procedure.json"), "utf8"),
-            readFile(path.join(directory, "procedure.md"), "utf8"),
-            readJson<StoredVersionMetadata>(
-                path.join(directory, "version.json"),
-            ),
-        ]);
-        if (
-            metadata === undefined ||
-            metadata.corpusId !== corpusId ||
-            metadata.procedureId !== procedureId ||
-            metadata.version !== version ||
-            metadata.jsonHash !== hash(json) ||
-            metadata.markdownHash !== hash(markdown)
-        ) {
+        const snapshot = (await this.history(corpusId).read()).state;
+        const stored =
+            staged ??
+            viewVersions(snapshot, procedureId).find(
+                (item) => item.version === version,
+            );
+        if (!stored)
             throw new Error(
-                `Procedure '${procedureId}' version ${version} is corrupt`,
+                `Unknown procedure '${procedureId}' version ${version}`,
             );
-        }
-        const document = JSON.parse(json) as ProcedureDocument;
-        validateDocument(document);
-        if (procedureToMarkdown(document) !== markdown) {
-            throw new Error(
-                `Procedure '${procedureId}' version ${version} projections do not match`,
-            );
-        }
-        return { ...metadata, document, canonicalJson: json, markdown };
+        const result = procedureFromGuide(stored);
+        validateDocument(result.document);
+        return result;
     }
 
     private setSummary(index: ProcedureIndex, version: ProcedureVersion): void {
@@ -858,14 +1064,33 @@ export class PersonalHowToStore {
     }
 
     private async readIndex(corpusId: string): Promise<ProcedureIndex> {
-        return structuredClone(
-            (await readJson<ProcedureIndex>(this.indexPath(corpusId))) ??
-                emptyIndex,
-        );
+        return (await this.history(corpusId).read()).state.index;
     }
 
-    private writeIndex(corpusId: string, index: ProcedureIndex): Promise<void> {
-        return writeAtomic(this.indexPath(corpusId), canonicalize(index));
+    private async writeIndex(
+        corpusId: string,
+        index: ProcedureIndex,
+    ): Promise<void> {
+        const history = this.history(corpusId);
+        const { head, state } = await history.read();
+        state.index = index;
+        for (const version of this.pending.get(corpusId) ?? []) {
+            state.views[version.viewId] = [
+                ...viewVersions(state, version.viewId),
+                version,
+            ];
+        }
+        try {
+            await history.commit(
+                head,
+                state,
+                this.entries(state),
+                this.actor,
+                "Save procedure state",
+            );
+        } finally {
+            this.pending.delete(corpusId);
+        }
     }
 
     private defaultSettings(): PersonalHowToSettings {
@@ -884,22 +1109,6 @@ export class PersonalHowToStore {
     private settingsPath(corpusId: string): string {
         return path.join(this.howToDirectory(corpusId), "settings.json");
     }
-
-    private indexPath(corpusId: string): string {
-        return path.join(this.howToDirectory(corpusId), "index.json");
-    }
-
-    private versionDirectory(
-        corpusId: string,
-        procedureId: string,
-        version: number,
-    ): string {
-        return path.join(
-            this.howToDirectory(corpusId),
-            "procedures",
-            encodeURIComponent(procedureId),
-            "versions",
-            String(version).padStart(8, "0"),
-        );
-    }
 }
+
+export { TypedViewStore as PersonalHowToStore };

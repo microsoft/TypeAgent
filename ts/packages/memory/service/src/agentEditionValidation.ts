@@ -160,7 +160,7 @@ export function canonicalizeProcedure(value: unknown): string {
 }
 
 export function getProcedureEvidenceReferences(
-    document: ProcedureDocument,
+    document: Pick<ProcedureDocument, "citations" | "agentEdition">,
 ): ProcedureEvidenceReferences {
     const edition = document.agentEdition;
     const citations = [

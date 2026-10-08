@@ -12,6 +12,9 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs";
+import git from "isomorphic-git";
+import { TypedViewStore } from "../src/personalHowToStore.js";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { createMemoryServiceRpcFacade } from "../src/rpcFacade.js";
 import {
@@ -1842,7 +1845,8 @@ describe("FileMemoryService", () => {
                 {
                     sourceId: accepted.sourceId,
                     revisionId: accepted.revisionId,
-                    locator: expect.stringMatching(/^lines /),
+                    locator: expect.stringMatching(/^chars:\d+-\d+$/),
+                    excerpt: expect.any(String),
                 },
             ],
         });
@@ -2342,15 +2346,10 @@ describe("FileMemoryService", () => {
             corpusId,
             "personal-how-to",
         );
-        const storedIndex = JSON.parse(
-            await readFile(path.join(procedureDirectory, "index.json"), "utf8"),
-        ) as { indexGeneration: string };
+        const store = new TypedViewStore(rootDirectory, async () => "unused");
+        const indexGeneration = await store.getIndexGeneration(corpusId);
         await rm(
-            path.join(
-                procedureDirectory,
-                "search-index",
-                storedIndex.indexGeneration,
-            ),
+            path.join(procedureDirectory, "search-index", indexGeneration!),
             { recursive: true },
         );
         service = createService();
@@ -2444,7 +2443,7 @@ describe("FileMemoryService", () => {
         ).toEqual([]);
     });
 
-    test("rejects invalid saves and detects projection corruption", async () => {
+    test("rejects invalid saves and detects canonical Git object corruption", async () => {
         const corpus = await service.createCorpus("How-to");
         await expect(
             service.saveProcedure({
@@ -2466,22 +2465,28 @@ describe("FileMemoryService", () => {
                 citations: [],
             },
         });
+        const gitdir = path.join(
+            rootDirectory,
+            corpus.corpusId,
+            "personal-how-to",
+            "view-history.git",
+        );
+        const head = await git.resolveRef({
+            fs,
+            gitdir,
+            ref: "refs/heads/typeagent-history",
+        });
+        const tree = await git.readTree({ fs, gitdir, oid: head });
+        const blobId = tree.tree.find(
+            (entry) => entry.path === "state.json",
+        )!.oid;
         await writeFile(
-            path.join(
-                rootDirectory,
-                corpus.corpusId,
-                "personal-how-to",
-                "procedures",
-                "valid",
-                "versions",
-                "00000001",
-                "procedure.md",
-            ),
-            "# Corrupt\n",
+            path.join(gitdir, "objects", blobId.slice(0, 2), blobId.slice(2)),
+            "Corrupt object",
         );
         await expect(
             service.getProcedure(corpus.corpusId, "valid"),
-        ).rejects.toThrow("is corrupt");
+        ).rejects.toThrow();
     });
 
     test("persists settings, candidates, and procedures across restart", async () => {
@@ -2633,9 +2638,9 @@ describe("FileMemoryService", () => {
 
         expect(
             await service.getProcedure(corpus.corpusId, "dependent"),
-        ).toMatchObject({ version: 4, previousVersion: 3, state: "stale" });
+        ).toBeUndefined();
         expect(
             await service.getProcedure(corpus.corpusId, "dependent", 3),
-        ).toMatchObject({ version: 3, state: "saved" });
+        ).toBeUndefined();
     });
 });

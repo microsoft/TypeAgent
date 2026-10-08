@@ -466,13 +466,22 @@ export function mountMemoryHubRunbooks(
             "Skill",
             "History",
         ] satisfies DetailTab[]) {
-            const button = rbButton(name, () => {
-                tab = name;
-                renderDetail();
-                detailHost
-                    .querySelector<HTMLButtonElement>(`[data-tab="${name}"]`)
-                    ?.focus();
-            });
+            const button = rbButton(
+                name === "Overview"
+                    ? "Guide"
+                    : name === "Steps"
+                      ? "Agent edition (optional)"
+                      : name,
+                () => {
+                    tab = name;
+                    renderDetail();
+                    detailHost
+                        .querySelector<HTMLButtonElement>(
+                            `[data-tab="${name}"]`,
+                        )
+                        ?.focus();
+                },
+            );
             button.setAttribute("role", "tab");
             button.setAttribute("aria-selected", String(tab === name));
             button.id = `runbook-${instanceId}-${name}`;
@@ -516,6 +525,10 @@ export function mountMemoryHubRunbooks(
                 "p",
                 `${detail.corpusName} · procedure state ${detail.procedure?.state ?? detail.candidate?.state ?? "new draft"} · version ${detail.procedure?.version ?? "not saved"}`,
             ),
+            rbNode(
+                "p",
+                "Guide is the human-readable derived document. Editing and saving creates a guide version, not a change to the original source. The optional agent edition adapts this guide for executable steps and requires its own safety review.",
+            ),
             rbNode("p", detail.warnings.join("\n"), "runbook-warning"),
             detailStatus,
             tabs,
@@ -554,7 +567,7 @@ export function mountMemoryHubRunbooks(
         const editor = rbNode("div", undefined, "runbook-fields");
         editor.append(
             rbSelect(
-                "Human guide editor",
+                "Derived Guide editor (original source unchanged)",
                 editorMode,
                 ["Structured human guide", "Compatible Markdown"],
                 (value) => {
@@ -628,8 +641,14 @@ export function mountMemoryHubRunbooks(
         const preview = rbNode("div");
         preview.dataset.runbookPreview = "true";
         preview.append(draftPreview());
-        editor.append(preview);
-        columns.append(editor);
+        body.append(rbNode("h3", "Guide"), preview);
+        const editing = rbNode("details");
+        editing.open = draft.dirty;
+        editing.append(
+            rbNode("summary", "Edit derived Guide (original source unchanged)"),
+            editor,
+        );
+        columns.append(editing);
         if (detail.candidate) {
             const originalHost = rbNode("div");
             columns.append(originalHost);

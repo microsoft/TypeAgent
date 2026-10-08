@@ -27,6 +27,8 @@ packages/knowPro/test/data
 packages/knowPro/test/data/**/*.json
 packages/knowPro/test/data
 packages/memory/conversation/test/data
+# Preserve exact source bytes/CRLF for detector citation fixtures.
+packages/memory/service/test/data/guides
 examples/websiteAliases/data
 
 
@@ -61,4 +63,3 @@ packages/agents/browserControlRpc/src/converters/pdfToMarkdown/export.js
 packages/agents/browserControlRpc/src/converters/pdfToMarkdown/source-manifest.json
 packages/agents/browserControlRpc/test/pdfToMarkdown/*-parity.json
 tools/scripts/converters/pdfToMarkdown/patches/**
-
