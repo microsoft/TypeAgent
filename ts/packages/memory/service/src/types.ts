@@ -270,6 +270,7 @@ export interface JobListRequest {
 }
 
 export interface MemorySearchRequest {
+    traceId?: string;
     corpusId: string;
     query: string;
     limit?: number;
@@ -424,6 +425,7 @@ export interface MemoryEventListRequest extends MemoryEventFilter {
 }
 
 export interface MemoryEventSearchRequest extends MemoryEventFilter {
+    traceId?: string;
     corpusId: string;
     query: string;
     limit?: number;
@@ -608,6 +610,7 @@ export interface ProcedureListRequest {
 }
 
 export interface ProcedureSearchRequest extends ProcedureListRequest {
+    traceId?: string;
     query: string;
     limit?: number;
 }
@@ -661,6 +664,7 @@ export interface MemoryService {
     getSourceKnowledge(
         corpusId: string,
         sourceId: string,
+        traceId?: string,
     ): Promise<MemoryKnowledgeGraph>;
     listSourceKnowledgeSuppressions?(
         corpusId: string,
