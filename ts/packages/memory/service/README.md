@@ -288,6 +288,10 @@ first quarantines the history, removes every affected candidate/view revision,
 creates a sanitized baseline repository, and removes the **entire old object
 database**, including unreachable objects. This resets corpus commit history,
 invalidating prior expected heads; unrelated view revision content is retained.
+The quarantine remains until the old procedure search index is removed as well.
+Restart recovery repeats this cleanup before reopening history; a crash before
+index rebuilding therefore cannot retain forgotten search text, even if no
+procedure summaries survive.
 An interrupted purge leaves all view/history reads explicitly unavailable until
 restart recovery completes. Deleting a ref or running ordinary Git GC would
 not erase retained private blobs and is not the purge mechanism. This is not

@@ -10,7 +10,10 @@ import type {
     ViewRelationshipInput,
     ViewArchiveRequest,
 } from "./viewTypes.js";
-import { assertViewIdentifier } from "./viewContent.js";
+import {
+    assertViewIdentifier,
+    viewSourceKey as sourceKey,
+} from "./viewContent.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -20,10 +23,6 @@ function text(value: unknown, label: string): asserts value is string {
 function onlyKeys(value: object, keys: string[], label: string): void {
     if (Object.keys(value).some((key) => !keys.includes(key)))
         throw new Error(`Unsupported ${label} field or operation`);
-}
-
-function sourceKey(source: { sourceId: string; revisionId: string }): string {
-    return `${source.sourceId}\n${source.revisionId}`;
 }
 
 function validateSelector(selector: ViewSourceSelector): Set<string> {

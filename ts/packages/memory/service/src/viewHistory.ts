@@ -33,7 +33,8 @@ export type ViewHistoryFaultPoint =
     | "commit"
     | "ref"
     | "purge-prepared"
-    | "purge-swapped";
+    | "purge-swapped"
+    | "purge-cleaned";
 
 export class ViewHistory<T> {
     private readonly gitdir: string;
@@ -245,10 +246,16 @@ export class ViewHistory<T> {
         sourceId: string,
         sanitize: (state: T, sourceId: string) => T,
         views: (state: T) => Record<string, string>,
+        removeDerivedData?: () => Promise<void>,
     ): Promise<void> {
         const release = await this.lock();
         try {
-            await this.purgeLocked(sourceId, sanitize, views);
+            await this.purgeLocked(
+                sourceId,
+                sanitize,
+                views,
+                removeDerivedData,
+            );
         } finally {
             await release();
         }
@@ -258,6 +265,7 @@ export class ViewHistory<T> {
         sourceId: string,
         sanitize: (state: T, sourceId: string) => T,
         views: (state: T) => Record<string, string>,
+        removeDerivedData?: () => Promise<void>,
     ): Promise<void> {
         const operation = (await exists(this.gate))
             ? (JSON.parse(await readFile(this.gate, "utf8")) as {
@@ -303,6 +311,8 @@ export class ViewHistory<T> {
                 rename(path.join(replacement, "view-history.git"), this.gitdir),
             );
         await this.checkpoint?.("purge-swapped");
+        await removeDerivedData?.();
+        await this.checkpoint?.("purge-cleaned");
         // Removing the entire old object database, not GC, removes retained/unreachable blobs.
         await retryProcedurePublication(() =>
             rm(discarded, { recursive: true, force: true }),
@@ -316,11 +326,17 @@ export class ViewHistory<T> {
     public async recoverPurge(
         sanitize: (state: T, sourceId: string) => T,
         views: (state: T) => Record<string, string>,
+        removeDerivedData?: () => Promise<void>,
     ): Promise<void> {
         if (!(await exists(this.gate))) return;
         const operation = JSON.parse(await readFile(this.gate, "utf8")) as {
             sourceId: string;
         };
-        await this.purge(operation.sourceId, sanitize, views);
+        await this.purge(
+            operation.sourceId,
+            sanitize,
+            views,
+            removeDerivedData,
+        );
     }
 }

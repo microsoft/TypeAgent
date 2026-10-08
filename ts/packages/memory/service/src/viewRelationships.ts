@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { createHash, randomUUID } from "node:crypto";
+import { viewSourceKey } from "./viewContent.js";
 import type {
     ViewVersion,
     ViewRelationship,
@@ -67,7 +68,7 @@ export function versionRelationships(
         },
         ...version.definition.selector.sources.map(
             (source): ViewRelationship => ({
-                id: `dependency:${createHash("sha256").update(source.sourceId).digest("hex").slice(0, 24)}`,
+                id: `dependency:${createHash("sha256").update(viewSourceKey(source)).digest("hex").slice(0, 24)}`,
                 schemaVersion: 1,
                 predicate: "dependsOn",
                 family: "dependency",

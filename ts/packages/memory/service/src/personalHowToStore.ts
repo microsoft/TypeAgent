@@ -24,6 +24,7 @@ import {
     validateProcedureDocument as validateDocument,
 } from "./procedureMarkdown.js";
 import { ViewHistory } from "./viewHistory.js";
+import { retryProcedurePublication } from "./procedurePublication.js";
 import {
     versionRelationships,
     authoredRelationships,
@@ -33,6 +34,7 @@ import {
     guideFromProcedure,
     procedureFromGuide,
     assertViewIdentifier,
+    viewSourceKey,
 } from "./viewContent.js";
 import type {
     ViewVersion,
@@ -379,6 +381,7 @@ export class TypedViewStore {
             sourceId,
             (state, id) => this.sanitize(state, id),
             (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
         );
         await this.rebuildIndex(corpusId);
     }
@@ -387,6 +390,16 @@ export class TypedViewStore {
         await this.history(corpusId).recoverPurge(
             (state, id) => this.sanitize(state, id),
             (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
+        );
+    }
+
+    private async removeSearchIndex(corpusId: string): Promise<void> {
+        await retryProcedurePublication(() =>
+            rm(path.join(this.howToDirectory(corpusId), "search-index"), {
+                recursive: true,
+                force: true,
+            }),
         );
     }
 
@@ -974,7 +987,7 @@ export class TypedViewStore {
                         sources: [
                             ...new Map(
                                 evidence.map((citation) => [
-                                    `${citation.sourceId}:${citation.revisionId}`,
+                                    viewSourceKey(citation),
                                     {
                                         sourceId: citation.sourceId,
                                         revisionId: citation.revisionId,

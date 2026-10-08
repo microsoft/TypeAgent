@@ -11,6 +11,13 @@ import type {
 import { canonicalizeProcedure } from "./agentEdition.js";
 import { procedureToMarkdown } from "./procedureMarkdown.js";
 
+export function viewSourceKey(source: {
+    sourceId: string;
+    revisionId: string;
+}): string {
+    return `${source.sourceId}\n${source.revisionId}`;
+}
+
 function sectionRole(heading: string): ViewSection["role"] {
     if (/prerequisites|preconditions/i.test(heading)) return "prerequisites";
     if (/verification|expected result/i.test(heading)) return "verification";

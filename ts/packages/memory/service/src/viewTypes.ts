@@ -33,8 +33,8 @@ export type ViewEndpoint =
 export interface ViewRelationshipInput {
     id: string;
     predicate: "supportedBy" | "dependsOn";
-    from: ViewEndpoint;
-    to: ViewEndpoint;
+    from: Extract<ViewEndpoint, { kind: "section" }>;
+    to: Extract<ViewEndpoint, { kind: "source" }>;
     citations: ViewCitation[];
 }
 export type ViewRelationship =
@@ -59,15 +59,16 @@ interface GuideFields {
     title: string;
     summary?: string;
     sections: ViewSection[];
-    citations: ProcedureSourceCitation[];
     agentEdition?: AgentEdition;
     compatibilityFields?: Record<string, unknown>;
 }
 export interface TroubleshootingGuideContent extends GuideFields {
     kind: "troubleshootingGuide";
+    citations: ViewCitation[];
 }
 export interface ProcedureViewContent extends GuideFields {
     kind: "procedure";
+    citations: ProcedureSourceCitation[];
 }
 export interface ViewDefinitionInput {
     viewId: string;
