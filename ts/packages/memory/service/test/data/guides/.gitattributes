@@ -1,0 +1,2 @@
+# Preserve imported fixture bytes, including CRLF and terminal blank lines.
+* -text whitespace=cr-at-eol,-blank-at-eof

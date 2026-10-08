@@ -331,7 +331,9 @@ describe("memory validation acceptance", () => {
                         steps: expect.arrayContaining([
                             "Run the focused memory service tests against an isolated data root.",
                             "Verify that the Aurora-7 runbook cites the active AR-204 source revision.",
-                            "Record the validation commit and test transcript in ENG-4821.",
+                            expect.stringContaining(
+                                "Record the validation commit and test transcript in ENG-4821.",
+                            ),
                         ]),
                     }),
                 ]),

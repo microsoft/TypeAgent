@@ -257,7 +257,8 @@ describe("Runbook workspace", () => {
         const value = [...host.querySelectorAll("button")].find(
             (item) =>
                 item.textContent === text ||
-                item.getAttribute("aria-label") === text,
+                item.getAttribute("aria-label") === text ||
+                item.dataset.tab === text,
         );
         if (!value) throw new Error(`Missing button ${text}`);
         value.click();
@@ -1121,7 +1122,9 @@ describe("Runbook workspace", () => {
         overview?.dispatchEvent(
             new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
         );
-        expect(document.activeElement?.textContent).toBe("Steps");
+        expect(document.activeElement?.textContent).toBe(
+            "Agent edition (optional)",
+        );
         expect(
             host
                 .querySelector('[data-tab="Steps"]')

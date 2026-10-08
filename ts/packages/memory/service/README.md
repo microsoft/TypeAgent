@@ -148,9 +148,15 @@ not replacement source IDs.
 Runbook synthesis is opt-in: how-to `enabled` and `detectCandidates`, plus
 `preferences.runbook.buildAgentEdition === true`. The other exact runbook keys
 are `describeImages`, `mcpTools`, `approvedAutomations`; optional
-`preferences.extractionGuidance` is supplied to synthesis. Existing deterministic
-candidate detection remains the seed and old behavior is unchanged when the
-preference is absent. HTML is eligible for synthesis, not the Markdown detector.
+`preferences.extractionGuidance` is supplied to synthesis. Deterministic candidate
+detection remains a separate seed, not a substitute for configured full-document
+synthesis. It now selects task/Guide boundaries, ignores fenced headings and
+ordinary command/continuation prose, and retains multiline actions, prerequisites,
+guards, verification and recovery. Citations use exact end-exclusive UTF-16
+`chars:START-END` offsets and the original source excerpt, including CRLF.
+HTML is eligible for synthesis, not the Markdown detector. The five copied
+synthetic memoryDemo import guides under `test/data/guides` are offline detector
+fixtures only; reviewer/gold answers are not synthesis input.
 `listRunbookJobs(corpusId)` (latest 100) and `getRunbookJob(jobId)` expose
 separate durable post-commit classification/result jobs for Activity/Inbox:
 state, reason/confidence/classification, candidate IDs, warnings and timestamps.
@@ -200,10 +206,10 @@ holding the corpus write queue: cited revisions must be retained and current,
 excerpt offsets must match retained/redacted text, human text must be faithful,
 and referenced asset bytes must pass their stored digest. Historical or missing
 evidence and guessed locations cannot be reviewed as current runbooks.
-Replacement, forget and clear also reject obsolete-source candidates that have
-agent editions, including linked-source and asset dependencies. They remain
-stored as rejected records; original human-only detector candidates retain
-their existing behavior.
+Replacement rejects obsolete-source candidates with agent editions, including
+linked-source and asset dependencies. Forget removes affected candidates and
+all affected view/procedure versions from the shared store and physically
+replaces its Git object database; see the draft pilot privacy boundary below.
 Golden-set quality, live vision parity, safe redacted pixel previews and full
 Phase 4 qualification remain separate work.
 
@@ -217,9 +223,142 @@ heading remain human sections unless marked); use
 `procedureToMarkdown` / `procedureFromMarkdown` for lossless edition round trips.
 The human `steps` and edition `humanText` remain separate from derived
 `agentInstruction`. Saving never re-synthesizes or overwrites human edits.
-Atomic version-directory publication uses up to five attempts for transient
-Windows handle locks with bounded backoff; exhausted and non-transient failures retain
-the normal error/cleanup behavior rather than claiming a saved version.
+Procedure versions now use the same typed view/history persistence as draft
+Guides. Procedure JSON/Markdown and hashes are deterministic compatibility
+projections, not independent canonical versions. Index preparation precedes the
+atomic history-ref commit; failed preparations do not save a procedure version.
+
+## Developer draft Views pilot (W1/W2)
+
+`new FileMemoryService(privateStore, { viewDrafts: true })` enables the local
+developer/demo capability. It is **off by default**. `getCapabilities()` then
+advertises `derivedViews: { kinds: ["troubleshootingGuide"], drafts: true,
+history: true, publication: false }`. Only new `troubleshootingGuide` drafts are supported:
+wiki, projectBrief, timeline, automatic generation, merge overlays, publication
+and derived search are not fabricated or silently substituted with procedures.
+
+`listViews(corpusId)` returns `{ head, views }`, including pending drafts and
+explicit lifecycle state. `getView({ corpusId, viewId, revisionId? })` reads an
+exact per-view revision. `saveViewDraft` creates at `expectedVersion: 0` or edits
+an existing draft with both `expectedVersion` and the exact corpus `expectedHead`.
+`archiveView` uses the same concurrency boundary. `getViewHistory` returns
+`{ commitId, version }` entries; per-view `revisionId` is distinct from the
+corpus commit ID. `publishView` explicitly rejects the request. Drafts never
+enter procedure search. Existing saved runbooks retain their procedure/edition/
+skill APIs and distinct `procedure` content/definition kind; they cannot be
+overwritten via the generic draft editor.
+
+Definitions select explicit source IDs and exact active revision IDs. Content
+has stable typed section IDs and roles, not a generic procedure-step array.
+Directed relationships have stable IDs, versioned schema/families, predicates,
+typed endpoints and exact revision-aware supporting citations. Human
+`supportedBy` and `dependsOn` assertions are directed from sections to source
+revisions and remain explicitly unreviewed. System-owned `generatedFrom` lineage
+connects the exact view revision to its immutable definition revision; selector
+membership creates source-version `dependsOn` edges, not fabricated evidence
+assertions. Definition revisions remain stable for content-only edits.
+Saves validate endpoint existence, source
+membership/current revisions and UTF-16 excerpts under the corpus write queue.
+Actor attribution comes from the local service owner's OS identity, never a
+request-supplied actor. Each edit records its exact base revision. Saving a
+generated runbook candidate also retains the exact original candidate content
+and fingerprint separately from the human saved content for later merging.
+Manual drafts have no invented generated base.
+
+`TypedViewStore` generalizes the existing procedure persistence;
+`PersonalHowToStore` remains its compatibility export. Both workflows use one
+private **bare** `personal-how-to/view-history.git` repository per corpus. The
+authoritative state is the tree referenced by `refs/heads/typeagent-history`, so
+there is no competing current-file pointer/cache to recover. The pinned
+isomorphic-git library writes blobs, trees, commits and the single internal ref;
+runtime needs no Git executable, working tree, index, staging area or remote.
+The ref uses the existing atomic JSON/file replacement helper. Object/tree/
+commit preparation failures leave current state and readable history unchanged.
+Expected-head checks and a repository lock prevent lost updates; unchanged
+per-view tree entries retain their blob OIDs. Unreachable failed-preparation
+objects are never served through the view APIs.
+History retains complete typed snapshots; this pilot does not automatically pack
+objects or prune revisions. Storage growth and long-history read latency must be
+qualified before enabling recurring generation. Privacy purge is independent of
+ordinary retention and also removes unreachable failed-preparation objects.
+
+Replacement marks affected drafts stale, without changing exact historical
+versions. Source forget (including event forget with linked-source deletion)
+first quarantines the history, removes every affected candidate/view revision,
+creates a sanitized baseline repository, and removes the **entire old object
+database**, including unreachable objects. This resets corpus commit history,
+invalidating prior expected heads; unrelated view revision content is retained.
+An interrupted purge leaves all view/history reads explicitly unavailable until
+restart recovery completes. Deleting a ref or running ordinary Git GC would
+not erase retained private blobs and is not the purge mechanism. This is not
+a claim of secure erasure from filesystem snapshots, backups or external copies.
+
+This is pre-release storage, with no mandatory migration or import tool.
+An old procedure index without the new history explicitly errors: choose a
+fresh private store/corpus, or reset only a specifically chosen disposable
+corpus with the existing explicit management confirmation. No automatic reset
+or deletion of a running server/user corpus is performed.
+
+### Runnable local CLI
+
+Build from `ts` with `pnpm exec fluid-build packages\memory\service -t build`
+(the root `build` script also passes `.`, which can build unrelated packages).
+From `ts\packages\memory\service`:
+
+```powershell
+node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts create-corpus "Draft pilot"
+node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts corpora
+node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts list <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts save draft-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts history <corpusId> pressure-guide
+```
+
+Use the returned corpus ID and `list.head` in the following request (a new
+empty corpus has `head: null`). An imported source can be selected via the
+`sources` and `source` commands; citations must refer to the exact returned
+revision and source character ranges. A manual unsourced draft is also valid:
+
+```json
+{
+  "corpusId": "<returned corpusId>",
+  "viewId": "pressure-guide",
+  "expectedVersion": 0,
+  "expectedHead": null,
+  "definition": {
+    "viewId": "pressure-guide",
+    "kind": "troubleshootingGuide",
+    "selector": { "kind": "sources", "sources": [] }
+  },
+  "content": {
+    "kind": "troubleshootingGuide",
+    "title": "Pressure diagnosis",
+    "sections": [
+      {
+        "id": "inspect",
+        "role": "diagnostic",
+        "heading": "Inspect pressure",
+        "body": "Correlate pressure with affected requests before choosing a mitigation."
+      }
+    ],
+    "citations": []
+  },
+  "relationships": []
+}
+```
+
+Change `body`/typed relationships, use `expectedVersion: 1` and the returned
+`commitId` as `expectedHead`, then `save` again. Each CLI invocation closes its
+service: the next `read` or `history` invocation demonstrates restart consistency.
+Archive with `archive request.json` containing corpus/view IDs, expected version
+and expected head. `publish` fails explicitly with the draft-only limitation.
+The store must not be owned by a running server; the service storage lock enforces
+this. The CLI never resets data. Its service/RPC façade is the pilot consumer;
+remote MCP/browser generic Views authoring is not advertised by this layer.
+The existing browser Runbook deep links remain intact: Guide is the primary
+human-readable document, its editor explicitly leaves original sources unchanged,
+and Agent edition is an optional executable adaptation, not a peer source.
+
+## Canonical agent edition details
 
 An edition contains `goal`, `applicability`, `inputs`, `preconditions`, stable-ID
 `steps`, `verification`, `rollback`, `synthesis`, and `review`. Inputs have

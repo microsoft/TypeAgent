@@ -14,6 +14,17 @@ import {
     writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { userInfo } from "node:os";
+import type {
+    MemoryViewService,
+    ViewSaveRequest,
+    ViewArchiveRequest,
+    ViewReadRequest,
+    ViewHistoryEntry,
+    ViewSnapshot,
+    ViewVersion,
+} from "./viewTypes.js";
+import { validateViewDraft, validateViewArchive } from "./viewValidation.js";
 import lockfile from "proper-lockfile";
 import {
     currentSearchTraceId,
@@ -241,6 +252,8 @@ interface PreparedCorpusIndex {
 }
 
 export interface FileMemoryServiceOptions {
+    /** Local developer/demo capability. Drafts only; ordinary installations leave this off. */
+    viewDrafts?: boolean;
     runbookBindingValidator?: RunbookBindingValidator;
     runbookSynthesizer?: RunbookSynthesizer;
     runbookModelEndpoint?: string;
@@ -833,7 +846,10 @@ function defaultCapabilities(): MemoryServiceCapabilities {
     };
 }
 
-export class FileMemoryService implements MemoryService, PersonalHowToService {
+export class FileMemoryService
+    implements MemoryService, PersonalHowToService, MemoryViewService
+{
+    private readonly viewDrafts: boolean;
     private readonly indexFactory: CorpusIndexFactory;
     private readonly procedureIndexFactory: CorpusIndexFactory;
     private readonly eventIndexFactory: CorpusIndexFactory;
@@ -858,6 +874,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         private readonly rootDirectory: string,
         options: FileMemoryServiceOptions = {},
     ) {
+        this.viewDrafts = options.viewDrafts === true;
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
         this.procedureIndexFactory =
             options.procedureIndexFactory ?? this.indexFactory;
@@ -897,6 +914,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             (corpusId, procedures) =>
                 this.publishProcedureIndex(corpusId, procedures),
             options.runbookBindingValidator,
+            userInfo().username,
         );
     }
 
@@ -905,6 +923,16 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             return Promise.reject(new Error("Memory service is closed"));
         }
         this.initializePromise ??= this.acquireStorageLock().then(async () => {
+            const directories = await readdir(this.rootDirectory, {
+                withFileTypes: true,
+            });
+            for (const directory of directories) {
+                if (
+                    directory.isDirectory() &&
+                    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(directory.name)
+                )
+                    await this.personalHowToStore.recover(directory.name);
+            }
             await this.pruneStoredChanges();
             await this.recoverInterruptedJobs();
             await this.batchStore.recover();
@@ -1683,6 +1711,10 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                     },
                 ),
             );
+            await this.personalHowToStore.forgetSource(
+                request.corpusId,
+                request.sourceId,
+            );
             await this.rebuildAndActivate(
                 request.corpusId,
                 runtime,
@@ -2068,6 +2100,13 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                       )
                     : [];
             if (deletableSourceIds.length > 0) {
+                for (const sourceId of deletableSourceIds) {
+                    await this.personalHowToStore.forgetSource(
+                        request.corpusId,
+                        sourceId,
+                    );
+                    await this.runbookJobs.purge(request.corpusId, sourceId);
+                }
                 const sourceIds = new Set(deletableSourceIds);
                 const candidateManifest = structuredClone(runtime.manifest);
                 candidateManifest.sources = candidateManifest.sources.filter(
@@ -2242,7 +2281,124 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
 
     public async getCapabilities(): Promise<MemoryServiceCapabilities> {
         await this.initialize();
-        return structuredClone(this.capabilities);
+        return {
+            ...structuredClone(this.capabilities),
+            ...(this.viewDrafts
+                ? {
+                      derivedViews: {
+                          kinds: [
+                              "troubleshootingGuide",
+                          ] as Array<"troubleshootingGuide">,
+                          drafts: true as const,
+                          history: true as const,
+                          publication: false as const,
+                      },
+                  }
+                : {}),
+        };
+    }
+
+    private async requireViews(corpusId: string): Promise<CorpusRuntime> {
+        if (!this.viewDrafts)
+            throw new Error(
+                "Memory view drafts are not supported; enable the developer/demo capability",
+            );
+        await this.initialize();
+        validateIdentifier("corpus ID", corpusId);
+        return this.getCorpusRuntime(corpusId);
+    }
+
+    public async listViews(corpusId: string): Promise<ViewSnapshot> {
+        const runtime = await this.requireViews(corpusId);
+        return runtime.access.read(() =>
+            this.personalHowToStore.listViews(corpusId),
+        );
+    }
+
+    public async getView(
+        request: ViewReadRequest,
+    ): Promise<ViewVersion | undefined> {
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.personalHowToStore.getView(request),
+        );
+    }
+
+    public async saveViewDraft(
+        request: ViewSaveRequest,
+    ): Promise<ViewHistoryEntry> {
+        validateViewDraft(request);
+        await this.requireViews(request.corpusId);
+        return this.enqueueWrite(request.corpusId, async () => {
+            const runtime = await this.getCorpusRuntime(request.corpusId);
+            for (const selected of request.definition.selector.sources) {
+                const source = runtime.manifest.sources.find(
+                    (item) => item.sourceId === selected.sourceId,
+                );
+                if (!source || source.activeRevisionId !== selected.revisionId)
+                    throw new Error(
+                        "Selected source revision is missing or stale",
+                    );
+            }
+            const citations = [
+                ...request.content.citations,
+                ...request.relationships.flatMap((edge) => edge.citations),
+            ];
+            for (const citation of citations) {
+                const source = runtime.manifest.sources.find(
+                    (item) => item.sourceId === citation.sourceId,
+                );
+                const revision = source?.revisions.find(
+                    (item) => item.revisionId === citation.revisionId,
+                );
+                const match = /^chars:(\d+)-(\d+)$/.exec(
+                    citation.locator ?? "",
+                );
+                const start = Number(match?.[1]);
+                const end = Number(match?.[2]);
+                if (
+                    !revision ||
+                    !match ||
+                    !Number.isSafeInteger(start) ||
+                    !Number.isSafeInteger(end) ||
+                    start < 0 ||
+                    end <= start ||
+                    end > revision.content.length ||
+                    revision.content.slice(start, end) !== citation.excerpt
+                )
+                    throw new Error(
+                        "View citation does not match the exact retained source revision",
+                    );
+            }
+            return this.personalHowToStore.saveViewDraft(request);
+        });
+    }
+
+    public async archiveView(
+        request: ViewArchiveRequest,
+    ): Promise<ViewHistoryEntry> {
+        validateViewArchive(request);
+        await this.requireViews(request.corpusId);
+        validateIdentifier("view ID", request.viewId);
+        return this.enqueueWrite(request.corpusId, () =>
+            this.personalHowToStore.archiveView(request),
+        );
+    }
+
+    public async getViewHistory(
+        request: ViewReadRequest,
+    ): Promise<ViewHistoryEntry[]> {
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.personalHowToStore.getViewHistory(request),
+        );
+    }
+
+    public async publishView(request: ViewReadRequest): Promise<never> {
+        await this.requireViews(request.corpusId);
+        throw new Error(
+            "Memory view publication is not supported; this pilot is draft-only",
+        );
     }
 
     public async answer(

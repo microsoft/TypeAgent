@@ -33,6 +33,7 @@
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
+    "isomorphic-git": "1.37.4",
     "proper-lockfile": "^4.1.2",
     "typechat": "^0.1.1"
   },
