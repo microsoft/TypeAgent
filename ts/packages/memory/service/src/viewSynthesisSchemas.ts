@@ -5,6 +5,11 @@ import type {
     JsonSchemaType,
     StructuredOutputJsonSchema,
 } from "@typeagent/aiclient";
+import {
+    factKinds,
+    factStatuses,
+    sourceDispositions,
+} from "./viewInventory.js";
 
 const text: JsonSchemaType = { type: "string" };
 const boolean: JsonSchemaType = { type: "boolean" };
@@ -19,116 +24,143 @@ function object(properties: Record<string, JsonSchemaType>): JsonSchemaType {
 function array(items: JsonSchemaType): JsonSchemaType {
     return { type: "array", items };
 }
-const section = object({
-    id: text,
-    role: {
-        type: "string",
-        enum: [
-            "description",
-            "prerequisites",
-            "diagnostic",
-            "guard",
-            "verification",
-            "recovery",
-            "context",
-        ],
-    },
-    heading: text,
-    body: text,
-});
-export const viewContextTopics = [
-    "goalApplicability",
-    "prerequisites",
-    "diagnosticTrajectory",
-    "attemptedRejectedDeferred",
-    "causalEvidence",
-    "verificationRecovery",
-    "authoritySimulation",
-    "rollbackEscalation",
-    "reuseProjectStatus",
-    "temporalUncertainty",
-] as const;
-
-function references(passageIds: string[]): JsonSchemaType {
-    return array(object({ passageId: { type: "string", enum: passageIds } }));
+function choice(values: readonly string[]): JsonSchemaType {
+    return { type: "string", enum: [...values] };
 }
-
-export function createViewConstructionSchema(
-    passageIds: string[],
+function schema(
+    name: string,
+    properties: Record<string, JsonSchemaType>,
 ): StructuredOutputJsonSchema {
-    const citations = references(passageIds);
-    return {
-        name: "memory_troubleshooting_construction",
-        strict: true,
-        schema: object({
-            content: object({
-                kind: { type: "string", enum: ["troubleshootingGuide"] },
-                title: text,
-                summary: text,
-                sections: array(section),
-                citations,
-            }),
-            relationships: array(
-                object({ id: text, sectionId: text, citations }),
-            ),
-            outcome: {
-                type: "string",
-                enum: ["diagnosticOnly", "verifiedRecovery"],
-            },
-            missingEvidence: array(text),
-        }),
-    };
+    return { name, strict: true, schema: object(properties) };
 }
-
-export function createViewSupportSchema(
+export function createViewInventorySchema(
     passageIds: string[],
     sourceIds: string[],
-    guidePassageIds: string[],
 ): StructuredOutputJsonSchema {
-    return {
-        name: "memory_troubleshooting_evidence_audit",
-        strict: true,
-        schema: object({
-            supported: boolean,
+    return schema("memory_source_fact_inventory", {
+        items: array(
+            object({
+                key: text,
+                kind: choice(factKinds),
+                status: choice(factStatuses),
+                statement: text,
+                measurements: array(
+                    object({ quantity: text, unit: text, context: text }),
+                ),
+                occurredAt: text,
+                learnedAt: text,
+                passageIds: array(choice(passageIds)),
+            }),
+        ),
+        sourceDecisions: array(
+            object({
+                sourceId: choice(sourceIds),
+                passageIds: array(choice(passageIds)),
+                disposition: choice(sourceDispositions),
+                itemKeys: array(text),
+                reason: text,
+            }),
+        ),
+    });
+}
+export function createViewInventoryCheckSchema(
+    itemIds: string[],
+    decisionIds: string[],
+    passageIds: string[],
+    sourceIds: string[],
+): StructuredOutputJsonSchema {
+    return schema("memory_source_inventory_check", {
+        supported: boolean,
+        items: array(
+            object({
+                itemId: choice(itemIds),
+                supported: boolean,
+                reason: text,
+            }),
+        ),
+        decisions: array(
+            object({
+                decisionId: choice(decisionIds),
+                supported: boolean,
+                reason: text,
+            }),
+        ),
+        missingFacts: array(
+            object({
+                sourceId: choice(sourceIds),
+                passageIds: array(choice(passageIds)),
+                description: text,
+            }),
+        ),
+        reasons: array(text),
+    });
+}
+export function createInventoryConstructionSchema(
+    itemIds: string[],
+): StructuredOutputJsonSchema {
+    return schema("memory_inventory_guide_construction", {
+        content: object({
+            title: text,
+            summary: text,
             sections: array(
-                object({ sectionId: text, supported: boolean, reason: text }),
-            ),
-            relationships: array(
-                object({ edgeId: text, supported: boolean, reason: text }),
-            ),
-            sourceChecks: array(
                 object({
-                    sourceId: { type: "string", enum: sourceIds },
-                    reason: text,
-                    requiredFindings: array(
-                        object({
-                            passageId: { type: "string", enum: passageIds },
-                            claim: text,
-                            covered: boolean,
-                            sectionIds: array(text),
-                            guidePassageIds: array({
-                                type: "string",
-                                enum: guidePassageIds,
-                            }),
-                        }),
-                    ),
+                    id: text,
+                    role: choice([
+                        "description",
+                        "prerequisites",
+                        "diagnostic",
+                        "guard",
+                        "verification",
+                        "recovery",
+                        "context",
+                    ]),
+                    heading: text,
+                    prose: text,
+                    inventoryIds: array(choice(itemIds)),
                 }),
             ),
-            contextChecks: array(
-                object({
-                    topic: { type: "string", enum: [...viewContextTopics] },
-                    supported: boolean,
-                    reason: text,
-                    citations: references(passageIds),
-                    sectionIds: array(text),
-                    guidePassageIds: array({
-                        type: "string",
-                        enum: guidePassageIds,
-                    }),
-                }),
-            ),
-            missingContext: array(text),
-            reasons: array(text),
         }),
-    };
+        exclusions: array(
+            object({
+                itemId: choice(itemIds),
+                reason: choice(["duplicate", "outsideScope"]),
+                duplicateOf: text,
+                justification: text,
+            }),
+        ),
+        outcome: choice(["diagnosticOnly", "verifiedRecovery"]),
+        missingEvidence: array(text),
+    });
+}
+export function createInventorySupportSchema(
+    sectionIds: string[],
+    edgeIds: string[],
+    exclusionIds: string[],
+): StructuredOutputJsonSchema {
+    return schema("memory_inventory_artifact_support", {
+        supported: boolean,
+        sections: array(
+            object({
+                sectionId: choice(sectionIds),
+                supported: boolean,
+                reason: text,
+            }),
+        ),
+        relationships: array(
+            object({
+                edgeId: choice(edgeIds),
+                supported: boolean,
+                reason: text,
+            }),
+        ),
+        exclusions: array(
+            object({
+                itemId: exclusionIds.length ? choice(exclusionIds) : text,
+                supported: boolean,
+                reason: text,
+            }),
+        ),
+        missingContext: array(text),
+        reasons: array(text),
+    });
 }

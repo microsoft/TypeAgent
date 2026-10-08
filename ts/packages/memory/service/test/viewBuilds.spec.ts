@@ -24,8 +24,7 @@ import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { labelViewInput } from "../src/viewSynthesisEvidence.js";
-import { viewContextTopics } from "../src/viewSynthesisSchemas.js";
+import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
 
 function output(
     input: ViewBuildSnapshot,
@@ -893,37 +892,45 @@ describe("durable draft builds and explicit edit merge", () => {
             "New headroom warning",
         );
     });
-    test("restart reconciles a durable running job as interrupted and retry admits a new guarded build", async () => {
-        const request = await fixture();
-        const completed = await wait(await service.buildViews(request));
-        await service.close();
-        const history = new ViewHistory<{
-            builds: Record<string, ViewBuildJob>;
-            views: Record<string, ViewVersion[]>;
-            index: unknown;
-        }>(path.join(root, request.corpusId, "personal-how-to"), () => ({
-            builds: {},
-            views: {},
-            index: {},
-        }));
-        const { head, state } = await history.read();
-        state.builds[completed.jobId].state = "running";
-        state.builds[completed.jobId].results[0].state = "generating";
-        await history.commit(
-            head,
-            state,
-            {},
-            "test-crash-fixture",
-            "Simulate durable interrupted execution",
-        );
-        service = open();
-        const interrupted = (await service.getViewBuild(completed))!;
-        expect(interrupted.state).toBe("interrupted");
-        expect(interrupted.results[0].reason).toContain("Service restarted");
-        const retried = await wait(await service.retryViewBuild(interrupted));
-        expect(retried.jobId).not.toBe(interrupted.jobId);
-        expect(retried.state).toBe("complete");
-    });
+    test.each(["generating", "inventorying", "checkingInventory"] as const)(
+        "restart reconciles durable %s as interrupted and retry admits a new guarded build",
+        async (stage) => {
+            const request = await fixture();
+            const completed = await wait(await service.buildViews(request));
+            await service.close();
+            const history = new ViewHistory<{
+                builds: Record<string, ViewBuildJob>;
+                views: Record<string, ViewVersion[]>;
+                index: unknown;
+            }>(path.join(root, request.corpusId, "personal-how-to"), () => ({
+                builds: {},
+                views: {},
+                index: {},
+            }));
+            const { head, state } = await history.read();
+            state.builds[completed.jobId].state = "running";
+            state.builds[completed.jobId].results[0].state = stage;
+            await history.commit(
+                head,
+                state,
+                {},
+                "test-crash-fixture",
+                "Simulate durable interrupted execution",
+            );
+            service = open();
+            const interrupted = (await service.getViewBuild(completed))!;
+            expect(interrupted.state).toBe("interrupted");
+            expect(interrupted.results[0].state).toBe("interrupted");
+            expect(interrupted.results[0].reason).toContain(
+                "Service restarted",
+            );
+            const retried = await wait(
+                await service.retryViewBuild(interrupted),
+            );
+            expect(retried.jobId).not.toBe(interrupted.jobId);
+            expect(retried.state).toBe("complete");
+        },
+    );
     test("compiled CLI builds, inspects and resolves using configured loopback model across separate lifetimes", async () => {
         const request = await fixture();
         await service.close();
@@ -960,129 +967,11 @@ describe("durable draft builds and explicit edit merge", () => {
                     (message) => message.role === "user",
                 )?.content;
                 if (!prompt) throw new Error("Missing synthetic model prompt");
-                const evidence = JSON.parse(prompt) as
-                    | ReturnType<typeof labelViewInput>
-                    | {
-                          input: ReturnType<typeof labelViewInput>;
-                          output: ViewSynthesisOutput;
-                      };
-                const required =
-                    "output" in evidence
-                        ? [
-                              "supported",
-                              "sections",
-                              "relationships",
-                              "missingContext",
-                              "reasons",
-                              "sourceChecks",
-                              "contextChecks",
-                          ]
-                        : [
-                              "content",
-                              "relationships",
-                              "outcome",
-                              "missingEvidence",
-                          ];
-                if (
-                    !required.every((field) =>
-                        schema.schema.required.includes(field),
-                    )
-                )
-                    throw new Error(
-                        "Structured output omits required constructor/audit contract",
-                    );
-                const candidate = output(
-                    "output" in evidence ? evidence.input : evidence,
+                const answer = inventoryTestAnswer(
+                    schema.name,
+                    JSON.parse(prompt),
                     modelBody,
                 );
-                const answer =
-                    "output" in evidence
-                        ? {
-                              supported: true,
-                              missingContext: [],
-                              reasons: [],
-                              sections: evidence.output.content.sections.map(
-                                  (section) => ({
-                                      sectionId: section.id,
-                                      supported: true,
-                                      reason: "Controlled loopback assessment",
-                                  }),
-                              ),
-                              relationships: evidence.output.relationships.map(
-                                  (edge) => ({
-                                      edgeId: edge.id,
-                                      supported: true,
-                                      reason: "Controlled loopback assessment",
-                                  }),
-                              ),
-                              sourceChecks: evidence.input.inputs.map(
-                                  (source) => ({
-                                      sourceId: source.sourceId,
-                                      reason: "Controlled loopback source assessment",
-                                      requiredFindings: source.passages.map(
-                                          (passage) => ({
-                                              passageId: passage.passageId,
-                                              claim: "Controlled synthetic evidence",
-                                              covered: true,
-                                              sectionIds: [
-                                                  evidence.output.content
-                                                      .sections[0].id,
-                                              ],
-                                              guidePassageIds: ["g0-0"],
-                                          }),
-                                      ),
-                                  }),
-                              ),
-                              contextChecks: viewContextTopics.map((topic) => ({
-                                  topic,
-                                  supported: true,
-                                  reason: "Controlled loopback context assessment",
-                                  citations: [
-                                      {
-                                          passageId:
-                                              evidence.input.inputs[0]
-                                                  .passages[0].passageId,
-                                      },
-                                  ],
-                                  sectionIds: [
-                                      evidence.output.content.sections[0].id,
-                                  ],
-                                  guidePassageIds: ["g0-0"],
-                              })),
-                          }
-                        : {
-                              ...candidate,
-                              content: {
-                                  ...candidate.content,
-                                  citations: [
-                                      {
-                                          passageId:
-                                              evidence.inputs[0].passages[0]
-                                                  .passageId,
-                                      },
-                                  ],
-                              },
-                              relationships: candidate.relationships.map(
-                                  (edge) => {
-                                      if (edge.from.kind !== "section")
-                                          throw new Error(
-                                              "Controlled constructor requires section endpoints",
-                                          );
-                                      return {
-                                          id: edge.id,
-                                          sectionId: edge.from.sectionId,
-                                          citations: [
-                                              {
-                                                  passageId:
-                                                      evidence.inputs[0]
-                                                          .passages[0]
-                                                          .passageId,
-                                              },
-                                          ],
-                                      };
-                                  },
-                              ),
-                          };
                 response.writeHead(200, { "content-type": "application/json" });
                 response.end(
                     JSON.stringify({
@@ -1232,8 +1121,10 @@ describe("durable draft builds and explicit edit merge", () => {
                 "carefully",
             );
             expect([...schemas].sort()).toEqual([
-                "memory_troubleshooting_construction",
-                "memory_troubleshooting_evidence_audit",
+                "memory_inventory_artifact_support",
+                "memory_inventory_guide_construction",
+                "memory_source_fact_inventory",
+                "memory_source_inventory_check",
             ]);
         } finally {
             await new Promise<void>((resolve, reject) =>

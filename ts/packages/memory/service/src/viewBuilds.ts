@@ -9,6 +9,7 @@ import type {
     ViewSynthesisOutput,
     ViewVersion,
 } from "./viewTypes.js";
+import { validateInventoryAudit } from "./viewInventory.js";
 import { mergeView } from "./viewMerge.js";
 import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
@@ -122,6 +123,12 @@ export class ViewBuildRunner {
         viewId: string,
         state: ViewBuildTargetResult["state"],
         reason: string,
+        evidence?: Partial<
+            Pick<
+                ViewBuildTargetResult,
+                "inventory" | "inventoryAudit" | "coverage"
+            >
+        >,
     ): Promise<void> {
         await this.owner.update(job.corpusId, job.jobId, (current) => {
             const result = current.results.find(
@@ -131,7 +138,53 @@ export class ViewBuildRunner {
             if (current.state === "cancelled") return;
             result.state = state;
             result.reason = reason;
+            Object.assign(result, evidence);
         });
+    }
+
+    private async prepareInventory(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<
+        Pick<ViewBuildTargetResult, "inventory" | "inventoryAudit"> | undefined
+    > {
+        if (!this.adapter.inventory && !this.adapter.checkInventory)
+            return undefined;
+        if (!this.adapter.inventory || !this.adapter.checkInventory)
+            throw new Error(
+                "Evidence-first adapters require both inventory and independent source checking",
+            );
+        await this.result(
+            job,
+            result.viewId,
+            "inventorying",
+            "Extracting facts and context before any guide exists",
+        );
+        const inventory = await abortable(
+            this.adapter.inventory(result.snapshot, signal),
+            signal,
+        );
+        await this.result(
+            job,
+            result.viewId,
+            "checkingInventory",
+            "Independently checking complete sources against inventory",
+            { inventory },
+        );
+        const inventoryAudit = await abortable(
+            this.adapter.checkInventory(result.snapshot, inventory, signal),
+            signal,
+        );
+        await this.result(
+            job,
+            result.viewId,
+            "checkingInventory",
+            "Source-to-inventory assessment recorded",
+            { inventoryAudit },
+        );
+        validateInventoryAudit(result.snapshot, inventory, inventoryAudit);
+        return { inventory, inventoryAudit };
     }
 
     private async target(
@@ -143,13 +196,17 @@ export class ViewBuildRunner {
             () =>
                 this.cancel(
                     job.jobId,
-                    "View synthesis exceeded 120 second limit",
+                    "Evidence-first synthesis exceeded 300 second limit",
                 ),
-            120_000,
+            300_000,
         );
         let validation = false;
         try {
             signal.throwIfAborted();
+            validation = true;
+            const evidence = await this.prepareInventory(job, result, signal);
+            const inventory = evidence?.inventory;
+            validation = false;
             await this.result(
                 job,
                 result.viewId,
@@ -157,17 +214,23 @@ export class ViewBuildRunner {
                 "Synthesizing complete labeled retained inputs",
             );
             const candidate = await abortable(
-                this.adapter.generate(result.snapshot, signal),
+                this.adapter.generate(result.snapshot, signal, inventory),
                 signal,
             );
             signal.throwIfAborted();
+            if (inventory) {
+                candidate.inventory = inventory;
+                if (evidence?.inventoryAudit)
+                    candidate.inventoryAudit = evidence.inventoryAudit;
+            }
             validation = true;
             validateConstructedGuide(result.snapshot, candidate);
             await this.result(
                 job,
                 result.viewId,
                 "validating",
-                "Checking claim support and required context",
+                "Checking actual artifact coverage, exclusions and semantic support",
+                candidate.coverage ? { coverage: candidate.coverage } : {},
             );
             validateSupport(
                 candidate,

@@ -41,6 +41,7 @@ import {
     validateConstructedGuide,
     validateSupport,
 } from "./viewSynthesis.js";
+import { inventoryEvidence } from "./viewInventoryCoverage.js";
 import {
     validateBuildRequest,
     validateConflictResolution,
@@ -2416,6 +2417,7 @@ export class FileMemoryService
                 missingEvidence: [
                     "Human edit retains generation evidence limits",
                 ],
+                ...inventoryEvidence(prior.generation),
             };
             validateConstructedGuide(prior.generation.input, output);
             validateSupport(
@@ -2728,7 +2730,7 @@ export class FileMemoryService
         const conflict = await this.getViewConflict(request);
         if (!conflict || conflict.state !== "pending")
             throw new Error("Unknown or already resolved view conflict");
-        const output =
+        const selected =
             request.choice === "generated"
                 ? conflict.candidate
                 : request.choice === "combined"
@@ -2739,6 +2741,13 @@ export class FileMemoryService
                             .content as ViewSynthesisOutput["content"],
                         relationships: authoredRelationships(conflict.human),
                     };
+        const output: ViewSynthesisOutput = {
+            content: selected.content,
+            relationships: selected.relationships,
+            outcome: selected.outcome,
+            missingEvidence: selected.missingEvidence,
+            ...inventoryEvidence(conflict.candidate),
+        };
         validateConstructedGuide(conflict.input, output);
         validateSupport(
             output,

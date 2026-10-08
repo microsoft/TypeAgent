@@ -26,6 +26,10 @@ import {
 import { ViewHistory } from "./viewHistory.js";
 import { retryProcedurePublication } from "./procedurePublication.js";
 import {
+    inventoryCoverage,
+    inventoryEvidence,
+} from "./viewInventoryCoverage.js";
+import {
     versionRelationships,
     authoredRelationships,
     materializeDefinition,
@@ -277,6 +281,15 @@ export class TypedViewStore {
             request.relationships,
             current?.generation !== undefined,
         );
+        if (version.generation?.inventory) {
+            version.generation.coverage = inventoryCoverage({
+                content: request.content,
+                relationships: request.relationships,
+                outcome: version.generation.outcome ?? "diagnosticOnly",
+                missingEvidence: ["Human edits retain source inventory limits"],
+                ...inventoryEvidence(version.generation),
+            });
+        }
         state.views[request.viewId] = [...versions, version];
         const commitId = await history.commit(
             head,
@@ -393,9 +406,13 @@ export class TypedViewStore {
             job.updatedAt = timestamp();
             for (const result of job.results) {
                 if (
-                    ["pending", "generating", "validating"].includes(
-                        result.state,
-                    )
+                    [
+                        "pending",
+                        "inventorying",
+                        "checkingInventory",
+                        "generating",
+                        "validating",
+                    ].includes(result.state)
                 ) {
                     result.state = "interrupted";
                     result.reason =
@@ -465,6 +482,7 @@ export class TypedViewStore {
                 "Validated draft saved; no publication, review or execution authority";
             result.revisionId = version.revisionId;
             result.missingEvidence = candidate.missingEvidence;
+            if (merged.coverage) result.coverage = merged.coverage;
         }
         job.updatedAt = timestamp();
         await this.commitBuildState(
@@ -570,6 +588,7 @@ export class TypedViewStore {
                 relationships: structuredClone(candidate.relationships),
                 input,
                 outcome: candidate.outcome,
+                ...inventoryEvidence(merged),
             },
             edits,
             relationships: [],

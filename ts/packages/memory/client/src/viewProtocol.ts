@@ -21,6 +21,112 @@ const citation = source.extend({
     locator: z.string().regex(/^chars:\d+-\d+$/),
     excerpt: text,
 });
+const inventory = z.object({
+    schemaVersion: z.literal(1),
+    sourceFingerprint: hash,
+    fingerprint: hash,
+    items: z
+        .object({
+            id,
+            key: id,
+            kind: z.enum([
+                "goal",
+                "measurement",
+                "approach",
+                "prerequisite",
+                "authority",
+                "recovery",
+                "outcome",
+                "unresolved",
+                "reuseWarning",
+                "timing",
+                "background",
+            ]),
+            status: z.enum([
+                "observed",
+                "proposed",
+                "attempted",
+                "rejected",
+                "deferred",
+                "confirmed",
+                "unknown",
+                "blocked",
+                "notApplicable",
+            ]),
+            statement: text,
+            measurements: z
+                .object({ quantity: text, unit: text, context: text })
+                .array()
+                .max(16),
+            occurredAt: z.string().max(200),
+            learnedAt: z.string().max(200),
+            citations: citation.array().min(1).max(2000),
+        })
+        .array()
+        .min(1)
+        .max(128),
+    sourceDecisions: z
+        .object({
+            id,
+            sourceId: id,
+            passageIds: id.array().min(1).max(2000),
+            disposition: z.enum([
+                "represented",
+                "metadata",
+                "duplicate",
+                "outsideScope",
+            ]),
+            itemIds: id.array().max(128),
+            reason: z.string().min(1).max(1800),
+        })
+        .array()
+        .max(2000),
+});
+const inventoryAudit = z.object({
+    supported: z.boolean(),
+    items: z
+        .object({ itemId: id, supported: z.boolean(), reason: text })
+        .array()
+        .max(128),
+    decisions: z
+        .object({ decisionId: id, supported: z.boolean(), reason: text })
+        .array()
+        .max(2000),
+    missingFacts: z
+        .object({
+            sourceId: id,
+            passageIds: id.array().max(2000),
+            description: text,
+        })
+        .array()
+        .max(2000),
+    reasons: text.array().max(2000),
+});
+const coverage = z.object({
+    inventoryFingerprint: hash,
+    items: z
+        .object({
+            itemId: id,
+            state: z.enum(["covered", "excluded"]),
+            sectionId: id.optional(),
+            locator: z
+                .string()
+                .regex(/^chars:\d+-\d+$/)
+                .optional(),
+            excerpt: text.optional(),
+            justification: z.string().min(1).max(1800).optional(),
+            exclusion: z.enum(["duplicate", "outsideScope"]).optional(),
+            duplicateOf: id.optional(),
+        })
+        .array()
+        .max(128),
+    reuseEligibility: z.enum(["diagnosticOnly", "requiresFreshEvidence"]),
+});
+const inventoryEvidence = {
+    inventory: inventory.optional(),
+    inventoryAudit: inventoryAudit.optional(),
+    coverage: coverage.optional(),
+};
 const section = z.strictObject({
     id,
     role: z.enum([
@@ -164,6 +270,8 @@ export const viewBuildJobSchema = z.object({
             snapshot,
             state: z.enum([
                 "pending",
+                "inventorying",
+                "checkingInventory",
                 "generating",
                 "validating",
                 "draft",
@@ -180,6 +288,7 @@ export const viewBuildJobSchema = z.object({
             revisionId: id.optional(),
             conflictId: z.string().uuid().optional(),
             missingEvidence: z.string().array().optional(),
+            ...inventoryEvidence,
         })
         .array()
         .max(32),
@@ -249,6 +358,7 @@ export const viewVersionSchema = z.object({
             relationships: edge.array().optional(),
             input: snapshot.optional(),
             outcome: z.enum(["diagnosticOnly", "verifiedRecovery"]).optional(),
+            ...inventoryEvidence,
         })
         .optional(),
     edits: edits.optional(),
@@ -291,7 +401,7 @@ export const viewConflictSchema = z.object({
     input: snapshot,
     base: viewVersionSchema.shape.generation.optional(),
     human: viewVersionSchema,
-    candidate: viewSynthesisSchema,
+    candidate: viewSynthesisSchema.extend(inventoryEvidence),
     targets: text.array(),
     reason: text,
     resolutionRevisionId: id.optional(),

@@ -161,6 +161,63 @@ describe("Memory Hub draft build and conflict controls", () => {
         click(host, "Compare and resolve conflict");
         await settle();
     }
+    test("receipt inspection exposes source-first inventory, independent check and actual artifact coverage without claiming qualification", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViewBuilds"
+                ? Promise.resolve([
+                      {
+                          ...job,
+                          state: "failed",
+                          results: [
+                              {
+                                  ...job.results[0],
+                                  state: "blocked",
+                                  inventory: {
+                                      fingerprint,
+                                      items: [
+                                          {
+                                              id: "fact:capacity",
+                                              statement:
+                                                  "Capacity blocked pending owner review",
+                                          },
+                                      ],
+                                  },
+                                  inventoryAudit: {
+                                      supported: false,
+                                      reasons: ["Headroom omitted"],
+                                  },
+                                  coverage: {
+                                      inventoryFingerprint: fingerprint,
+                                      reuseEligibility: "diagnosticOnly",
+                                      items: [],
+                                  },
+                              },
+                          ],
+                      },
+                  ])
+                : original(method, params),
+        );
+        await panel.refresh();
+        expect(host.querySelector("details summary")!.textContent).toContain(
+            "source-first inventory",
+        );
+        const inspection = JSON.parse(
+            host.querySelector("details pre")!.textContent!,
+        );
+        expect(inspection.inventory.items[0].statement).toContain(
+            "pending owner review",
+        );
+        expect(inspection.sourceCheck.supported).toBe(false);
+        expect(inspection.finalCoverage.reuseEligibility).toBe(
+            "diagnosticOnly",
+        );
+        expect(host.textContent).toContain(
+            "not guarantees of semantic completeness",
+        );
+        expect(host.textContent).toContain("not reusable recovery");
+        expect(errors).toEqual([]);
+    });
     test("resolved conflicts retain their exact comparison but cannot be resolved again", async () => {
         const original = invoke.getMockImplementation()!;
         invoke.mockImplementation(async (method, params) => {

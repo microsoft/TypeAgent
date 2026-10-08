@@ -272,18 +272,42 @@ The configured constructor and independent evidence audit use strict structured
 model-output schemas. Providers without schema support fail explicitly; there is
 no JSON-only fallback, fabricated result or citation repair. Schema compliance
 does not replace exact-character, relationship coverage or semantic/context checks.
-Construction selects snapshot-scoped paragraph `passageId` references, constrained
-by the model schema. The service resolves them to the retained source/revision,
-exact UTF-16 locator and unchanged excerpt; the model does not manufacture hashes
-or count offsets. Unknown references and mixed-source relationships fail explicitly.
-The independent audit extracts required findings from every selected source and
-checks ten explicit safety/context topics in addition to every section and edge.
-An overall positive verdict cannot override uncovered findings or missing coverage.
-Positive coverage must identify exact generated-guide passages in the claimed
-sections. Required quantitative findings must retain their stated numeric literals
-in that prose; a generic statement or a source citation alone is not coverage.
-These structural coverage checks supplement rather than replace semantic review;
-a saved draft receipt is not a claim of live-model quality qualification.
+The `evidence-first-v5` adapter extracts a typed source-only fact/context inventory
+**before any guide prose is generated or shown**. A second model call checks every
+item and source disposition against all complete frozen inputs. Measurements retain
+quantity/unit/comparison context; hypotheses and decisions retain observed/proposed/
+attempted/rejected/deferred/confirmed/unknown/blocked state. Authority, prerequisites,
+recovery limits, unresolved owner review, reuse warnings and occurrence/learned time
+remain explicit. Every retained paragraph has an inspectable source disposition;
+metadata, duplication and background/outside-scope decisions require specific
+witnesses and independent checking, not blanket irrelevance.
+
+Construction selects stable inventory identities and writes connective prose.
+The host renders explicitly selected inventory statements and their typed fields
+as actual section passages. This is the new construction contract, not heuristic
+concatenation of raw sources or repair of an invalid legacy relationship payload.
+The host derives `supportedBy` edges grouped by section and exact source revision,
+with immutable source/revision/UTF-16 locator/excerpt provenance.
+All required inventory passages must occur in the **final merged artifact**.
+Exact duplicate exclusions require a covered equal witness; outside-scope exclusions
+are limited to independently checked background and are audited again.
+Coverage metadata alone cannot pass the gate. Narrative edits remain editable;
+removing/changing protected fact passages blocks saving rather than silently
+overwriting human work. Rebuild with changed evidence to revise facts.
+Source-decision witnesses cite every selected exact passage. Metadata exclusions
+are limited to exact source identity/title passages, not substantive paragraphs.
+Verified recovery requires both checked confirmed recovery and observed-outcome
+items; incident closure alone cannot authorize recovery or project completion.
+
+Receipts and generated/history/conflict versions retain `inventory`, `inventoryAudit`
+and `coverage`, including precise final artifact locators and diagnostic-only versus
+fresh-evidence-required reuse eligibility. CLI status/inspection, MCP and the Hub's
+inventory inspection disclose these artifacts. Forget removes the entire dependent
+job/view/conflict/history payload, including inventory and coverage.
+The bounded evidence-first target timeout is 300 seconds for the additional stages.
+Source-to-inventory checking is model-based and can still omit/misinterpret evidence:
+deterministic provenance/coverage is not deterministic semantic completeness.
+A saved draft or positive audit is not a live-quality qualification.
 An unresolved checkpoint may produce `diagnosticOnly` with explicit missing
 evidence and cited recovery/escalation limits; it never invents a confirmed fix.
 
@@ -331,7 +355,7 @@ head/target guards and retries only unsuccessful targets. Changed source
 selectors require a new build. Cancellation stops future materialization even
 if a provider is still unwinding its request; already saved drafts remain.
 Limits are 32 targets, 32 exact sources per target, 120000 complete input
-characters and a 120-second per-target synthesis/validation deadline; there is
+characters and a 300-second per-target inventory/construction/validation deadline; there is
 no silent truncation or heuristic generation fallback.
 
 ### Explicit edits and conflicts (W4)

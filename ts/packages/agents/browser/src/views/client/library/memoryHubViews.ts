@@ -262,6 +262,32 @@ export function mountMemoryHubViews(
                     `Input fingerprint: ${result.snapshot.fingerprint}; exact sources: ${result.snapshot.inputs.map((source) => `${source.sourceId}@${source.revisionId}`).join(", ")}`,
                 ),
             );
+            if (result.inventory) {
+                const details = rbNode("details");
+                details.append(
+                    rbNode(
+                        "summary",
+                        "Inspect source-first inventory, source check and final artifact coverage",
+                    ),
+                    rbNode(
+                        "p",
+                        "Source-to-inventory and semantic checks are model-based, not guarantees of semantic completeness. Diagnostic-only drafts are not reusable recovery.",
+                    ),
+                    rbNode(
+                        "pre",
+                        JSON.stringify(
+                            {
+                                inventory: result.inventory,
+                                sourceCheck: result.inventoryAudit,
+                                finalCoverage: result.coverage,
+                            },
+                            null,
+                            2,
+                        ),
+                    ),
+                );
+                receipt.append(details);
+            }
             if (result.missingEvidence?.length)
                 receipt.append(
                     rbNode(
@@ -372,7 +398,7 @@ export function mountMemoryHubViews(
             rbNode("h4", `Edit ${view.viewId} version ${view.version}`),
             rbNode(
                 "p",
-                "Content and relationships are separate structured edits. Saving checks exact evidence and semantic/context support; unsupported edits are blocked.",
+                "Content and relationships are separate structured edits. Narrative remains editable; checked fact/context passages must remain somewhere in the final artifact. Rebuild with changed evidence to revise facts. Saving checks exact evidence and semantic/context support; unsupported edits are blocked.",
             ),
             content,
             edges,

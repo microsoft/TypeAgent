@@ -97,6 +97,9 @@ export interface ViewVersion {
         relationships?: ViewRelationshipInput[];
         input?: ViewBuildSnapshot;
         outcome?: ViewSynthesisOutput["outcome"];
+        inventory?: ViewFactInventory;
+        inventoryAudit?: ViewInventoryAudit;
+        coverage?: ViewInventoryCoverage;
     };
     edits?: ViewEditOperation[];
     definition: ViewDefinition;
@@ -202,6 +205,86 @@ export interface ViewSynthesisOutput {
     relationships: ViewRelationshipInput[];
     outcome: "diagnosticOnly" | "verifiedRecovery";
     missingEvidence: string[];
+    inventory?: ViewFactInventory;
+    inventoryAudit?: ViewInventoryAudit;
+    coverage?: ViewInventoryCoverage;
+}
+export type ViewFactKind =
+    | "goal"
+    | "measurement"
+    | "approach"
+    | "prerequisite"
+    | "authority"
+    | "recovery"
+    | "outcome"
+    | "unresolved"
+    | "reuseWarning"
+    | "timing"
+    | "background";
+export type ViewFactStatus =
+    | "observed"
+    | "proposed"
+    | "attempted"
+    | "rejected"
+    | "deferred"
+    | "confirmed"
+    | "unknown"
+    | "blocked"
+    | "notApplicable";
+export interface ViewInventoryItem {
+    id: string;
+    key: string;
+    kind: ViewFactKind;
+    status: ViewFactStatus;
+    statement: string;
+    measurements: Array<{ quantity: string; unit: string; context: string }>;
+    occurredAt: string;
+    learnedAt: string;
+    citations: ViewCitation[];
+}
+export interface ViewSourceDecision {
+    id: string;
+    sourceId: string;
+    passageIds: string[];
+    disposition: "represented" | "metadata" | "duplicate" | "outsideScope";
+    itemIds: string[];
+    reason: string;
+}
+export interface ViewFactInventory {
+    schemaVersion: 1;
+    sourceFingerprint: string;
+    fingerprint: string;
+    items: ViewInventoryItem[];
+    sourceDecisions: ViewSourceDecision[];
+}
+export interface ViewInventoryAudit {
+    supported: boolean;
+    items: Array<{ itemId: string; supported: boolean; reason: string }>;
+    decisions: Array<{
+        decisionId: string;
+        supported: boolean;
+        reason: string;
+    }>;
+    missingFacts: Array<{
+        sourceId: string;
+        passageIds: string[];
+        description: string;
+    }>;
+    reasons: string[];
+}
+export interface ViewInventoryCoverage {
+    inventoryFingerprint: string;
+    items: Array<{
+        itemId: string;
+        state: "covered" | "excluded";
+        sectionId?: string;
+        locator?: string;
+        excerpt?: string;
+        justification?: string;
+        exclusion?: "duplicate" | "outsideScope";
+        duplicateOf?: string;
+    }>;
+    reuseEligibility: "diagnosticOnly" | "requiresFreshEvidence";
 }
 export interface ViewSupportReport {
     supported: boolean;
@@ -213,12 +296,23 @@ export interface ViewSupportReport {
     }>;
     missingContext: string[];
     reasons: string[];
+    exclusions?: Array<{ itemId: string; supported: boolean; reason: string }>;
 }
 export interface ViewSynthesisAdapter {
     identity: string;
+    inventory?(
+        input: ViewBuildSnapshot,
+        signal: AbortSignal,
+    ): Promise<ViewFactInventory>;
+    checkInventory?(
+        input: ViewBuildSnapshot,
+        inventory: ViewFactInventory,
+        signal: AbortSignal,
+    ): Promise<ViewInventoryAudit>;
     generate(
         input: ViewBuildSnapshot,
         signal: AbortSignal,
+        inventory?: ViewFactInventory,
     ): Promise<ViewSynthesisOutput>;
     validate(
         input: ViewBuildSnapshot,
@@ -228,6 +322,8 @@ export interface ViewSynthesisAdapter {
 }
 export type ViewBuildResultState =
     | "pending"
+    | "inventorying"
+    | "checkingInventory"
     | "generating"
     | "validating"
     | "draft"
@@ -247,6 +343,9 @@ export interface ViewBuildTargetResult {
     revisionId?: string;
     conflictId?: string;
     missingEvidence?: string[];
+    inventory?: ViewFactInventory;
+    inventoryAudit?: ViewInventoryAudit;
+    coverage?: ViewInventoryCoverage;
 }
 export interface ViewBuildJob {
     jobId: string;
