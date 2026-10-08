@@ -2,6 +2,37 @@
 
 Transport-independent durable memory corpus service.
 
+## Indexed reads and search diagnostics
+
+Document and procedure indexes are reused in memory while their published
+generation and persisted-file fingerprint remain unchanged. Fingerprints check
+schema, semantic-data, embedding-file and projection/readiness-marker metadata;
+schema validation and recovery still run when these change. A restart loads
+the published generation again. This does not cache queries or model responses.
+
+Prepared document/procedure searches, source knowledge, corpus knowledge and
+document answering can share a per-corpus read reservation. Preparation and
+mutations remain exclusive: ingestion, reindexing, forgetting and procedure
+updates wait for existing readers, and later readers wait behind a queued
+writer. Each async read retains its snapshot until completion. Cold runtime
+loading is single-flight, and shutdown drains the complete preparation/read
+lifetime before releasing storage.
+
+Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` on the host process to enable correlated
+Memory Hub search diagnostics on stderr. Lines prefixed `[memory-search-timing]` contain
+JSON with a trace ID, scope, stage, elapsed milliseconds, status and non-content
+metadata. The Hub propagates one ID through retrieval, insights and answer
+generation, including service/RPC calls. Spans distinguish corpus fan-out,
+queue waits, index checks/cache hits, validation/loading/rebuilding, KnowPro
+translation/execution/fallback and synthesis. Overlapping spans are not
+additive. The ISO UTC `timestamp` marks completion; subtract `elapsedMs` to
+reconstruct span starts and identify overlaps and the critical path. Disabled
+tracing does not emit logs or collect timing spans.
+
+Queries, source excerpts, prompts, tokens and raw error messages are excluded.
+Tracing does not change retrieval limits, model selection or when the Hub
+returns its evidence and answer.
+
 ## Revision assets, acquired batches, and post-commit runbook jobs
 
 `IngestionSource.assets?: RevisionAssetInput[]` accepts already-acquired bytes

@@ -249,8 +249,14 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.getSourceContent(request);
     }
 
-    public getSourceKnowledge(corpusId: string, sourceId: string) {
-        return this.service.getSourceKnowledge(corpusId, sourceId);
+    public getSourceKnowledge(
+        corpusId: string,
+        sourceId: string,
+        traceId?: string,
+    ) {
+        return traceId === undefined
+            ? this.service.getSourceKnowledge(corpusId, sourceId)
+            : this.service.getSourceKnowledge(corpusId, sourceId, traceId);
     }
 
     public ingestDocument(
@@ -542,6 +548,7 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
     public getSourceKnowledge(
         corpusId: string,
         sourceId: string,
+        _traceId?: string,
     ): Promise<MemoryKnowledgeGraph> {
         return this.invoke(
             memoryToolNames.sourceKnowledgeGet,
@@ -672,9 +679,10 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
     public searchEvents(
         request: MemoryEventSearchRequest,
     ): Promise<MemoryEventSearchResult> {
+        const { traceId: _traceId, ...mcpRequest } = request;
         return this.invoke(
             memoryToolNames.eventSearch,
-            request,
+            mcpRequest,
             eventSearchResultSchema,
         );
     }
@@ -690,7 +698,12 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
     }
 
     public search(request: MemorySearchRequest): Promise<MemorySearchResult> {
-        return this.invoke(memoryToolNames.search, request, searchResultSchema);
+        const { traceId: _traceId, ...mcpRequest } = request;
+        return this.invoke(
+            memoryToolNames.search,
+            mcpRequest,
+            searchResultSchema,
+        );
     }
 
     public answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult> {
@@ -843,9 +856,10 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
     public searchProcedures(
         request: ProcedureSearchRequest,
     ): Promise<ProcedureSearchMatch[]> {
+        const { traceId: _traceId, ...mcpRequest } = request;
         return this.invoke(
             memoryToolNames.procedureSearch,
-            request,
+            mcpRequest,
             procedureSearchMatchSchema.array(),
         );
     }

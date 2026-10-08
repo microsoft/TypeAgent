@@ -16,6 +16,13 @@ import {
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import {
+    currentSearchTraceId,
+    recordSearchTiming,
+    runWithSearchTiming,
+    timeSearchStage,
+} from "@typeagent/knowpro";
+import { CorpusAccess } from "./corpusAccess.js";
+import {
     getProcedureEvidenceReferences,
     normalizeAgentEditionDocument,
     type RunbookBindingValidator,
@@ -54,6 +61,7 @@ import {
 import { createKnowProCorpusIndex } from "./knowProCorpusIndex.js";
 import {
     classifyIndexSchema,
+    indexFingerprint,
     stampIndexSchema,
     type IndexKind,
 } from "./indexSchema.js";
@@ -221,7 +229,15 @@ interface CorpusRuntime {
     suppressedEventKeys: Set<string>;
     suppressedConversations: Set<string>;
     suppressedTurns: Set<string>;
-    writeTail: Promise<void>;
+    access: CorpusAccess;
+    documentIndex?: PreparedCorpusIndex;
+    procedureIndex?: PreparedCorpusIndex;
+}
+
+interface PreparedCorpusIndex {
+    generation: string | undefined;
+    index: CorpusIndex;
+    fingerprint: string;
 }
 
 export interface FileMemoryServiceOptions {
@@ -828,6 +844,8 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     private readonly runbookJobs: RunbookJobStore;
     private readonly runbookMultimodal: boolean;
     private readonly corpora = new Map<string, CorpusRuntime>();
+    private readonly corpusLoads = new Map<string, Promise<CorpusRuntime>>();
+    private readonly indexedReads = new Set<Promise<unknown>>();
     private readonly jobs = new Map<string, IngestionJobStatus>();
     private readonly jobWrites = new Map<string, Promise<void>>();
     private readonly controllers = new Map<string, AbortController>();
@@ -908,8 +926,12 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         await this.runbookJobs.close();
         await Promise.allSettled([
             this.rootWriteTail,
-            ...[...this.corpora.values()].map((runtime) => runtime.writeTail),
+            ...this.corpusLoads.values(),
+            ...this.indexedReads,
         ]);
+        await Promise.allSettled(
+            [...this.corpora.values()].map((runtime) => runtime.access.idle()),
+        );
         await this.releaseLock?.();
         this.releaseLock = undefined;
     }
@@ -953,7 +975,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
                 suppressedEventKeys: new Set(),
                 suppressedConversations: new Set(),
                 suppressedTurns: new Set(),
-                writeTail: Promise.resolve(),
+                access: new CorpusAccess(),
             });
             return structuredClone(corpus);
         });
@@ -1110,6 +1132,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             await this.writeEvents(corpusId, [], suppressions);
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
+            await this.rememberDocumentIndex(corpusId, runtime);
             runtime.events = [];
             runtime.eventIdempotency.clear();
             this.setEventSuppressions(runtime, suppressions);
@@ -1361,17 +1384,33 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     public async getSourceKnowledge(
         corpusId: string,
         sourceId: string,
+        traceId?: string,
+    ): Promise<MemoryKnowledgeGraph> {
+        return runWithSearchTiming(traceId, "service.knowledge", () =>
+            timeSearchStage("service.total", () =>
+                this.readSourceKnowledge(corpusId, sourceId),
+            ),
+        );
+    }
+
+    private async readSourceKnowledge(
+        corpusId: string,
+        sourceId: string,
     ): Promise<MemoryKnowledgeGraph> {
         await this.initialize();
-        const source = await this.getSource(corpusId, sourceId);
-        if (source === undefined) {
-            throw new Error(`Unknown source '${sourceId}'`);
-        }
-        return this.enqueueWrite(corpusId, async () => {
-            const runtime = await this.getCorpusRuntime(corpusId);
-            await this.ensureDocumentIndex(corpusId, runtime);
-            const graph = await runtime.index.getKnowledgeGraph(
-                new Set([sourceId]),
+        validateIdentifier("corpus ID", corpusId);
+        validateIdentifier("source ID", sourceId);
+        return this.enqueueDocumentRead(corpusId, async (runtime) => {
+            if (
+                !runtime.manifest.sources.some(
+                    (source) => source.sourceId === sourceId,
+                )
+            )
+                throw new Error(`Unknown source '${sourceId}'`);
+            const graph = await timeSearchStage(
+                "knowledge.graph",
+                () => runtime.index.getKnowledgeGraph(new Set([sourceId])),
+                { corpusId },
             );
             return applyKnowledgeSuppressions(
                 graph,
@@ -1907,6 +1946,16 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     public async searchEvents(
         request: MemoryEventSearchRequest,
     ): Promise<MemoryEventSearchResult> {
+        return runWithSearchTiming(request.traceId, "service.events", () =>
+            timeSearchStage("service.total", () =>
+                this.searchEventIndex(request),
+            ),
+        );
+    }
+
+    private async searchEventIndex(
+        request: MemoryEventSearchRequest,
+    ): Promise<MemoryEventSearchResult> {
         await this.initialize();
         this.validateEventFilterRequest(request);
         const query = request.query.trim();
@@ -2068,6 +2117,16 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     public async search(
         request: MemorySearchRequest,
     ): Promise<MemorySearchResult> {
+        return runWithSearchTiming(request.traceId, "service.documents", () =>
+            timeSearchStage("service.total", () =>
+                this.searchDocuments(request),
+            ),
+        );
+    }
+
+    private async searchDocuments(
+        request: MemorySearchRequest,
+    ): Promise<MemorySearchResult> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
         validateSearchDateRange(request);
@@ -2075,9 +2134,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (query.length === 0) {
             throw new Error("Search query cannot be empty");
         }
-        return this.enqueueWrite(request.corpusId, async () => {
-            const runtime = await this.getCorpusRuntime(request.corpusId);
-            await this.ensureDocumentIndex(request.corpusId, runtime);
+        return this.enqueueDocumentRead(request.corpusId, async (runtime) => {
             const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
             const candidates = await runtime.index.search(query, limit * 4);
             const matches = this.toEvidence(
@@ -2210,9 +2267,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<MemoryAnswerResult | undefined> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
-        return this.enqueueWrite(request.corpusId, async () => {
-            const runtime = await this.getCorpusRuntime(request.corpusId);
-            await this.ensureDocumentIndex(request.corpusId, runtime);
+        return this.enqueueDocumentRead(request.corpusId, async (runtime) => {
             const index = runtime.index;
             if (index.answer === undefined) {
                 if (request.answerMode === "synthesized") {
@@ -2312,9 +2367,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     ): Promise<MemoryKnowledgeGraph> {
         await this.initialize();
         validateIdentifier("corpus ID", corpusId);
-        return this.enqueueWrite(corpusId, async () => {
-            const runtime = await this.getCorpusRuntime(corpusId);
-            await this.ensureDocumentIndex(corpusId, runtime);
+        return this.enqueueDocumentRead(corpusId, async (runtime) => {
             return applyKnowledgeSuppressions(
                 await runtime.index.getKnowledgeGraph(),
                 runtime.manifest.knowledgeSuppressions ?? [],
@@ -2589,79 +2642,72 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
     public async searchProcedures(
         request: ProcedureSearchRequest,
     ): Promise<ProcedureSearchMatch[]> {
+        return runWithSearchTiming(request.traceId, "service.procedures", () =>
+            timeSearchStage("service.total", () =>
+                this.searchProcedureIndex(request),
+            ),
+        );
+    }
+
+    private async searchProcedureIndex(
+        request: ProcedureSearchRequest,
+    ): Promise<ProcedureSearchMatch[]> {
         await this.initialize();
         validateIdentifier("corpus ID", request.corpusId);
         if (request.query.trim().length === 0) {
             throw new Error("Procedure search query cannot be empty");
         }
-        return this.enqueueWrite(request.corpusId, async () => {
-            const summaries = await this.personalHowToStore.list(request);
-            if (summaries.length === 0) {
-                return [];
-            }
-            let generation = await this.personalHowToStore.getIndexGeneration(
-                request.corpusId,
-            );
-            if (
-                generation === undefined ||
-                (await classifyIndexSchema(
-                    this.procedureIndexDirectory(request.corpusId, generation),
-                    "procedures",
-                    true,
-                )) !== "current" ||
-                !(await this.hasReadyMarker(
-                    this.procedureIndexDirectory(request.corpusId, generation),
-                ))
-            ) {
-                await this.personalHowToStore.rebuildIndex(request.corpusId);
-                generation = await this.personalHowToStore.getIndexGeneration(
-                    request.corpusId,
+        return this.enqueueRead(
+            request.corpusId,
+            async (runtime) =>
+                (await this.personalHowToStore.list(request)).length === 0 ||
+                (await this.procedureIndexReady(request.corpusId, runtime)),
+            (runtime) => this.ensureProcedureIndex(request.corpusId, runtime),
+            async (runtime) => {
+                const summaries = await this.personalHowToStore.list(request);
+                if (summaries.length === 0) {
+                    return [];
+                }
+                const index = runtime.procedureIndex?.index;
+                if (index === undefined)
+                    throw new Error("Procedure index was not prepared");
+                const limit = Math.max(1, Math.min(request.limit ?? 20, 100));
+                const tags = request.states?.map(
+                    (state) => `procedure-state:${state}`,
                 );
-            }
-            if (generation === undefined) {
-                throw new Error("Procedure index generation is missing");
-            }
-            const index = this.procedureIndexFactory(
-                request.corpusId,
-                this.procedureIndexDirectory(request.corpusId, generation),
-            );
-            await index.initialize();
-            const limit = Math.max(1, Math.min(request.limit ?? 20, 100));
-            const tags = request.states?.map(
-                (state) => `procedure-state:${state}`,
-            );
-            const matches = await index.search(
-                request.query.trim(),
-                limit,
-                tags,
-            );
-            const byId = new Map(
-                summaries.map((summary) => [summary.procedureId, summary]),
-            );
-            return Promise.all(
-                matches.map(async (match) => {
-                    const procedure = byId.get(match.sourceId);
-                    if (
-                        procedure === undefined ||
-                        match.revisionId !== String(procedure.latestVersion)
-                    ) {
-                        throw new Error(
-                            `Procedure index contains an unexpected version of '${match.sourceId}'`,
-                        );
-                    }
-                    return {
-                        procedure,
-                        version:
-                            await this.personalHowToStore.readIndexedVersion(
-                                request.corpusId,
-                                procedure.procedureId,
-                                procedure.latestVersion,
-                            ),
-                        score: match.score,
-                    };
-                }),
-            );
-        });
+                const matches = await index.search(
+                    request.query.trim(),
+                    limit,
+                    tags,
+                );
+                const byId = new Map(
+                    summaries.map((summary) => [summary.procedureId, summary]),
+                );
+                return Promise.all(
+                    matches.map(async (match) => {
+                        const procedure = byId.get(match.sourceId);
+                        if (
+                            procedure === undefined ||
+                            match.revisionId !== String(procedure.latestVersion)
+                        ) {
+                            throw new Error(
+                                `Procedure index contains an unexpected version of '${match.sourceId}'`,
+                            );
+                        }
+                        return {
+                            procedure,
+                            version:
+                                await this.personalHowToStore.readIndexedVersion(
+                                    request.corpusId,
+                                    procedure.procedureId,
+                                    procedure.latestVersion,
+                                ),
+                            score: match.score,
+                        };
+                    }),
+                );
+            },
+        );
     }
 
     public async archiveProcedure(
@@ -2765,6 +2811,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             );
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
+            await this.rememberDocumentIndex(corpusId, runtime);
         } catch (error) {
             await rm(candidateDirectory, { recursive: true, force: true });
             throw error;
@@ -3092,6 +3139,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             );
             runtime.manifest = candidateManifest;
             runtime.index = candidateIndex;
+            await this.rememberDocumentIndex(request.corpusId, runtime);
             candidateIndexDirectory = undefined;
             committed = true;
             job.warnings.push(
@@ -3399,7 +3447,13 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         operation: () => Promise<T>,
     ): Promise<T> {
         const runtime = await this.getCorpusRuntime(corpusId);
+        const queuedAt = currentSearchTraceId() ? performance.now() : undefined;
         const run = async () => {
+            if (queuedAt !== undefined)
+                recordSearchTiming("queue.wait", performance.now() - queuedAt, {
+                    corpusId,
+                    access: "write",
+                });
             const changes = pruneChangeReceipts(runtime.manifest.changes);
             if (changes.length !== (runtime.manifest.changes ?? []).length) {
                 const candidate = { ...runtime.manifest, changes };
@@ -3408,12 +3462,71 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             }
             return operation();
         };
-        const queued = runtime.writeTail.then(run, run);
-        runtime.writeTail = queued.then(
-            () => undefined,
-            () => undefined,
+        return runtime.access.write(run);
+    }
+
+    private enqueueRead<T>(
+        corpusId: string,
+        ready: (runtime: CorpusRuntime) => Promise<boolean>,
+        prepare: (runtime: CorpusRuntime) => Promise<void>,
+        operation: (runtime: CorpusRuntime) => Promise<T>,
+    ): Promise<T> {
+        const read = this.readPreparedIndex(
+            corpusId,
+            ready,
+            prepare,
+            operation,
         );
-        return queued;
+        this.indexedReads.add(read);
+        void read.then(
+            () => this.indexedReads.delete(read),
+            () => this.indexedReads.delete(read),
+        );
+        return read;
+    }
+
+    private async readPreparedIndex<T>(
+        corpusId: string,
+        ready: (runtime: CorpusRuntime) => Promise<boolean>,
+        prepare: (runtime: CorpusRuntime) => Promise<void>,
+        operation: (runtime: CorpusRuntime) => Promise<T>,
+    ): Promise<T> {
+        const runtime = await this.getCorpusRuntime(corpusId);
+        while (true) {
+            const queuedAt = currentSearchTraceId()
+                ? performance.now()
+                : undefined;
+            const result = await runtime.access.read(async () => {
+                if (queuedAt !== undefined)
+                    recordSearchTiming(
+                        "queue.wait",
+                        performance.now() - queuedAt,
+                        {
+                            corpusId,
+                            access: "read",
+                        },
+                    );
+                if (!(await ready(runtime))) return { ready: false as const };
+                return {
+                    ready: true as const,
+                    value: await operation(runtime),
+                };
+            });
+            if (result.ready) return result.value;
+            await this.enqueueWrite(corpusId, () => prepare(runtime));
+        }
+    }
+
+    private enqueueDocumentRead<T>(
+        corpusId: string,
+        operation: (runtime: CorpusRuntime) => Promise<T>,
+    ): Promise<T> {
+        return this.enqueueRead(
+            corpusId,
+            (runtime) => this.documentIndexReady(corpusId, runtime),
+            (runtime) => this.ensureDocumentIndex(corpusId, runtime),
+            operation,
+        );
     }
 
     private async getCorpusRuntime(corpusId: string): Promise<CorpusRuntime> {
@@ -3421,6 +3534,20 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         if (cached !== undefined) {
             return cached;
         }
+        let loading = this.corpusLoads.get(corpusId);
+        if (loading === undefined) {
+            loading = this.loadCorpusRuntime(corpusId);
+            this.corpusLoads.set(corpusId, loading);
+        }
+        try {
+            return await loading;
+        } finally {
+            if (this.corpusLoads.get(corpusId) === loading)
+                this.corpusLoads.delete(corpusId);
+        }
+    }
+
+    private async loadCorpusRuntime(corpusId: string): Promise<CorpusRuntime> {
         const manifest = await readJson<CorpusManifest>(
             this.manifestPath(corpusId),
         );
@@ -3464,7 +3591,7 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
             suppressedEventKeys: new Set(),
             suppressedConversations: new Set(),
             suppressedTurns: new Set(),
-            writeTail: Promise.resolve(),
+            access: new CorpusAccess(),
         };
         this.setEventSuppressions(runtime, eventSuppressions);
         for (const event of events) {
@@ -3492,31 +3619,173 @@ export class FileMemoryService implements MemoryService, PersonalHowToService {
         corpusId: string,
         runtime: CorpusRuntime,
     ): Promise<void> {
+        if (await this.documentIndexReady(corpusId, runtime)) return;
         const generation = runtime.manifest.indexGeneration;
         if (generation !== undefined) {
             validateIdentifier("index generation", generation);
             const directory = this.indexDirectory(corpusId, generation);
             if (
-                (await classifyIndexSchema(
-                    directory,
-                    "documents",
-                    runtime.manifest.sources.length > 0,
+                (await timeSearchStage(
+                    "index.validate",
+                    () =>
+                        classifyIndexSchema(
+                            directory,
+                            "documents",
+                            runtime.manifest.sources.length > 0,
+                        ),
+                    { corpusId, indexKind: "documents" },
                 )) === "current"
             ) {
-                await runtime.index.initialize();
+                await timeSearchStage(
+                    "index.load",
+                    () => runtime.index.initialize(),
+                    {
+                        corpusId,
+                        indexKind: "documents",
+                    },
+                );
+                await this.rememberDocumentIndex(corpusId, runtime);
                 return;
             }
             await rm(directory, { recursive: true, force: true });
         } else if (runtime.manifest.sources.length === 0) {
-            await runtime.index.initialize();
+            await timeSearchStage(
+                "index.load",
+                () => runtime.index.initialize(),
+                {
+                    corpusId,
+                    indexKind: "documents",
+                },
+            );
+            await this.rememberDocumentIndex(corpusId, runtime);
             return;
         }
-        await this.rebuildAndActivate(
-            corpusId,
-            runtime,
-            structuredClone(runtime.manifest),
-            new AbortController().signal,
+        await timeSearchStage(
+            "index.rebuild",
+            () =>
+                this.rebuildAndActivate(
+                    corpusId,
+                    runtime,
+                    structuredClone(runtime.manifest),
+                    new AbortController().signal,
+                ),
+            { corpusId, indexKind: "documents" },
         );
+    }
+
+    private async documentIndexReady(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<boolean> {
+        return timeSearchStage(
+            "index.check",
+            async () => {
+                const prepared = runtime.documentIndex;
+                const hit =
+                    prepared !== undefined &&
+                    prepared.index === runtime.index &&
+                    prepared.generation === runtime.manifest.indexGeneration &&
+                    prepared.fingerprint ===
+                        (await indexFingerprint(
+                            this.indexDirectory(corpusId, prepared.generation),
+                            "documents",
+                        ));
+                recordSearchTiming("index.cache", 0, {
+                    corpusId,
+                    indexKind: "documents",
+                    hit,
+                });
+                return hit;
+            },
+            { corpusId, indexKind: "documents" },
+        );
+    }
+
+    private async rememberDocumentIndex(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<void> {
+        runtime.documentIndex = {
+            generation: runtime.manifest.indexGeneration,
+            index: runtime.index,
+            fingerprint: await indexFingerprint(
+                this.indexDirectory(corpusId, runtime.manifest.indexGeneration),
+                "documents",
+            ),
+        };
+    }
+
+    private async procedureIndexReady(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<boolean> {
+        return timeSearchStage(
+            "index.check",
+            async () => {
+                const prepared = runtime.procedureIndex;
+                const generation =
+                    await this.personalHowToStore.getIndexGeneration(corpusId);
+                const hit =
+                    prepared !== undefined &&
+                    generation !== undefined &&
+                    prepared.generation === generation &&
+                    prepared.fingerprint ===
+                        (await indexFingerprint(
+                            this.procedureIndexDirectory(corpusId, generation),
+                            "procedures",
+                        ));
+                recordSearchTiming("index.cache", 0, {
+                    corpusId,
+                    indexKind: "procedures",
+                    hit,
+                });
+                return hit;
+            },
+            { corpusId, indexKind: "procedures" },
+        );
+    }
+
+    private async ensureProcedureIndex(
+        corpusId: string,
+        runtime: CorpusRuntime,
+    ): Promise<void> {
+        if (await this.procedureIndexReady(corpusId, runtime)) return;
+        let generation =
+            await this.personalHowToStore.getIndexGeneration(corpusId);
+        const currentDirectory =
+            generation === undefined
+                ? undefined
+                : this.procedureIndexDirectory(corpusId, generation);
+        if (
+            currentDirectory === undefined ||
+            (await timeSearchStage(
+                "index.validate",
+                () => classifyIndexSchema(currentDirectory, "procedures", true),
+                { corpusId, indexKind: "procedures" },
+            )) !== "current" ||
+            !(await this.hasReadyMarker(currentDirectory))
+        ) {
+            await timeSearchStage(
+                "index.rebuild",
+                () => this.personalHowToStore.rebuildIndex(corpusId),
+                { corpusId, indexKind: "procedures" },
+            );
+            generation =
+                await this.personalHowToStore.getIndexGeneration(corpusId);
+        }
+        if (generation === undefined)
+            throw new Error("Procedure index generation is missing");
+        const directory = this.procedureIndexDirectory(corpusId, generation);
+        const index = this.procedureIndexFactory(corpusId, directory);
+        await timeSearchStage("index.load", () => index.initialize(), {
+            corpusId,
+            indexKind: "procedures",
+        });
+        runtime.procedureIndex = {
+            generation,
+            index,
+            fingerprint: await indexFingerprint(directory, "procedures"),
+        };
     }
 
     private indexDirectory(corpusId: string, indexGeneration?: string): string {

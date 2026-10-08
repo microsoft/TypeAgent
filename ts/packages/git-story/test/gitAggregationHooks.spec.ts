@@ -55,6 +55,7 @@ StoryAggregator.prototype.aggregate = async (request) => {
         GIT_CONFIG_GLOBAL: path.join(directory, "gitconfig"),
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_TERMINAL_PROMPT: "0",
+        GIT_STORY_STATE_DIR: path.join(directory, "state"),
     };
     const run = (args: string[]) => {
         const result = spawnSync("git", args, {
@@ -141,6 +142,36 @@ test("branch checkout, switch, and detached checkout aggregate; file checkout do
     );
     expect(calls()).toEqual([]);
 });
+
+test.each(["rebase", "amend"])(
+    "post-rewrite %s drains input above the agent JSON size limit",
+    (command) => {
+        const { repo, run, clearCalls, calls, expectAggregationAtHead } =
+            createRepository();
+        run(["commit", "-q", "--allow-empty", "-m", "initial"]);
+        const head = run(["rev-parse", "HEAD"]);
+        const input = `${head} ${head}\n`.repeat(1024);
+        expect(Buffer.byteLength(input)).toBeGreaterThan(64 * 1024);
+        const inputFile = path.join(repo, "..", "rewritten-commits.txt");
+        fs.writeFileSync(inputFile, input);
+
+        clearCalls();
+        run([
+            "hook",
+            "run",
+            `--to-stdin=${inputFile}`,
+            "post-rewrite",
+            "--",
+            command,
+        ]);
+        if (command === "rebase") {
+            expect(calls()).toHaveLength(1);
+            expectAggregationAtHead();
+        } else {
+            expect(calls()).toEqual([]);
+        }
+    },
+);
 
 test.each(["--ff-only", "--no-rebase", "--rebase"])(
     "git pull %s aggregates the resulting history without blocking on failure",

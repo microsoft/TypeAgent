@@ -12,6 +12,8 @@ import { Argument, Command } from "commander";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { z } from "zod";
+import { SessionIdSchema } from "../daemonApi.js";
 import { daemonClient } from "../daemonClient.js";
 import { cliLogger } from "../logger.js";
 import type { SessionRegistration } from "../sessionWatcher.js";
@@ -20,10 +22,29 @@ import { StoryAggregator } from "../storyAggregator.js";
 // Reads all of stdin. Hooks get their payload here (Copilot JSON, or lines
 // git pipes to hooks such as pre-push). Returns "" when stdin is a terminal.
 async function readStdin(): Promise<string> {
-    if (process.stdin.isTTY) return "";
     const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+    let bytes = 0;
+    await consumeStdin((buffer) => {
+        bytes += buffer.length;
+        if (bytes > 64 * 1024) throw new Error("Hook input too large");
+        chunks.push(buffer);
+    });
     return Buffer.concat(chunks).toString("utf8");
+}
+
+async function consumeStdin(onChunk: (buffer: Buffer) => void): Promise<void> {
+    if (process.stdin.isTTY) return;
+    const timer = setTimeout(
+        () => process.stdin.destroy(new Error("Hook input timed out")),
+        2000,
+    );
+    try {
+        for await (const chunk of process.stdin) {
+            onChunk(Buffer.from(chunk));
+        }
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 // `hooks`: agent and git hook handlers. Placeholder output until story
@@ -32,15 +53,23 @@ export const hooksCommand = new Command("hooks").description(
     "Agent and git hook handlers",
 );
 
-// Reads a Copilot hook payload and logs its session id.
-// Empty stdin (manual run) is treated as `{}`.
-async function readCopilotInput<T extends BaseHookInput>(
+const HookIdentitySchema = z.object({
+    sessionId: SessionIdSchema,
+    cwd: z.string().refine(path.isAbsolute),
+    timestamp: z.number().finite().nonnegative(),
+});
+
+// Hook errors must not block the agent or echo untrusted input.
+async function readCopilotInput(
     hook: string,
-): Promise<Partial<T>> {
-    const input = JSON.parse((await readStdin()) || "{}") as Partial<T>;
-    process.stderr.write(`git-story ${hook}: session=${input.sessionId}\n`);
-    cliLogger.info(`${hook} session=${input.sessionId}`);
-    return input;
+): Promise<BaseHookInput | undefined> {
+    try {
+        return HookIdentitySchema.parse(JSON.parse(await readStdin()));
+    } catch {
+        process.stderr.write(`git-story ${hook}: invalid input ignored\n`);
+        cliLogger.warn(`${hook}: invalid input ignored`);
+        return undefined;
+    }
 }
 
 const COPILOT_CLIENT_NAME = "copilot-cli";
@@ -51,6 +80,8 @@ function projectPath(cwd: string): string {
         cwd,
         encoding: "utf8",
         windowsHide: true,
+        timeout: 1000,
+        stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     return path.resolve(root);
 }
@@ -99,10 +130,16 @@ async function registerSession(
 ): Promise<void> {
     try {
         const body = build();
-        await daemonClient.registerSession(body);
-        cliLogger.info(`sessionStart registered: ${body.sessionId}`);
-    } catch (e) {
-        cliLogger.info(`sessionStart not registered: ${(e as Error).message}`);
+        const receipt = await daemonClient.registerSession(body);
+        process.stderr.write(`git-story sessionStart: ${receipt.state}\n`);
+        cliLogger.info(`sessionStart: ${receipt.state}`);
+    } catch {
+        process.stderr.write(
+            "git-story sessionStart: registration unavailable; agent continues\n",
+        );
+        cliLogger.warn(
+            "sessionStart: registration unavailable; agent continues",
+        );
     }
 }
 
@@ -125,10 +162,8 @@ copilotCommand
     .command("session-start")
     .description("Handle the Copilot sessionStart hook")
     .action(async () => {
-        const input = await readCopilotInput<SessionStartInput>("sessionStart");
-        await registerSession(() =>
-            sessionRegistration(input as SessionStartInput),
-        );
+        const input = await readCopilotInput("sessionStart");
+        if (input) await registerSession(() => sessionRegistration(input));
         const output: SessionStartOutput = {};
         process.stdout.write(`${JSON.stringify(output)}\n`);
     });
@@ -148,12 +183,13 @@ const VSCODE_CLIENT_NAME = "vscode-copilot";
 // transcript_path are optional). VS Code runs the hook in the workspace
 // folder, so `cwd` is only present when the hook entry sets one.
 // See https://code.visualstudio.com/docs/copilot/customization/hooks
-type VSCodeHookInput = {
-    hook_event_name: string;
-    session_id?: string;
-    transcript_path?: string;
-    cwd?: string;
-};
+const VSCodeHookSchema = z.object({
+    hook_event_name: z.literal("SessionStart"),
+    session_id: SessionIdSchema.optional(),
+    transcript_path: z.string().refine(path.isAbsolute).optional(),
+    cwd: z.string().refine(path.isAbsolute).optional(),
+});
+type VSCodeHookInput = z.infer<typeof VSCodeHookSchema>;
 
 // Builds the daemon registration for a VS Code SessionStart payload. VS Code
 // passes the transcript path, so it is sent as-is.
@@ -181,13 +217,18 @@ hooksCommand
     .command("session-start")
     .description("Handle the VS Code SessionStart hook")
     .action(async () => {
-        const input = JSON.parse(
-            (await readStdin()) || "{}",
-        ) as VSCodeHookInput;
-        cliLogger.info(`vscode SessionStart session=${input.session_id}`);
-        await registerSession(() =>
-            vscodeSessionRegistration(input, process.cwd()),
-        );
+        try {
+            const input = VSCodeHookSchema.parse(JSON.parse(await readStdin()));
+            await registerSession(() =>
+                vscodeSessionRegistration(input, process.cwd()),
+            );
+            process.stderr.write(
+                "git-story vscode: native transcript capture is not supported; agent continues\n",
+            );
+        } catch {
+            process.stderr.write("git-story vscode: invalid input ignored\n");
+            cliLogger.warn("vscode SessionStart: invalid input ignored");
+        }
         process.stdout.write("{}\n");
     });
 
@@ -201,8 +242,8 @@ gitCommand
     .description("Handle the git pre-commit hook")
     .argument("[args...]", "arguments git passed to the hook")
     .action(async (args: string[]) => {
-        const input = await readStdin();
-        const message = `git-story pre-commit: args=${JSON.stringify(args)} stdin=${JSON.stringify(input)}`;
+        await readStdin();
+        const message = `git-story pre-commit: received ${args.length} arguments`;
         process.stdout.write(`${message}\n`);
         cliLogger.info(message);
     });
@@ -246,7 +287,13 @@ gitCommand
     .description("Aggregate stories after a rebase")
     .argument("<command>", "command that rewrote commits")
     .action(async (command: string) => {
-        await readStdin();
+        try {
+            await consumeStdin(() => {});
+        } catch {
+            cliLogger.warn(
+                "post-rewrite: failed to drain stdin; continuing without rewrite input",
+            );
+        }
         if (command !== "rebase") return;
         await aggregateStoriesAfterGitChange("post-rewrite", process.cwd());
     });
