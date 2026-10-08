@@ -8,7 +8,7 @@ import type {
     SessionStartOutput,
     UserPromptSubmittedOutput,
 } from "@typeagent/agent-harness-hooks/copilot-cli";
-import { Command } from "commander";
+import { Argument, Command } from "commander";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -17,25 +17,31 @@ import { SessionIdSchema } from "../daemonApi.js";
 import { daemonClient } from "../daemonClient.js";
 import { cliLogger } from "../logger.js";
 import type { SessionRegistration } from "../sessionWatcher.js";
+import { StoryAggregator } from "../storyAggregator.js";
 
 // Reads all of stdin. Hooks get their payload here (Copilot JSON, or lines
 // git pipes to hooks such as pre-push). Returns "" when stdin is a terminal.
 async function readStdin(): Promise<string> {
-    if (process.stdin.isTTY) return "";
     const chunks: Buffer[] = [];
     let bytes = 0;
+    await consumeStdin((buffer) => {
+        bytes += buffer.length;
+        if (bytes > 64 * 1024) throw new Error("Hook input too large");
+        chunks.push(buffer);
+    });
+    return Buffer.concat(chunks).toString("utf8");
+}
+
+async function consumeStdin(onChunk: (buffer: Buffer) => void): Promise<void> {
+    if (process.stdin.isTTY) return;
     const timer = setTimeout(
         () => process.stdin.destroy(new Error("Hook input timed out")),
         2000,
     );
     try {
         for await (const chunk of process.stdin) {
-            const buffer = Buffer.from(chunk);
-            bytes += buffer.length;
-            if (bytes > 64 * 1024) throw new Error("Hook input too large");
-            chunks.push(buffer);
+            onChunk(Buffer.from(chunk));
         }
-        return Buffer.concat(chunks).toString("utf8");
     } finally {
         clearTimeout(timer);
     }
@@ -78,6 +84,29 @@ function projectPath(cwd: string): string {
         stdio: ["ignore", "pipe", "ignore"],
     }).trim();
     return path.resolve(root);
+}
+
+type StoryAggregatorLike = Pick<StoryAggregator, "aggregate">;
+
+// Runs aggregation at the repository's current HEAD. Post hooks must not make
+// a completed git operation look unsuccessful, so failures are logged only.
+export async function aggregateStoriesAfterGitChange(
+    hook: string,
+    cwd: string,
+    aggregator: StoryAggregatorLike = new StoryAggregator(),
+): Promise<void> {
+    try {
+        const root = projectPath(cwd);
+        await aggregator.aggregate({
+            projectPath: root,
+            revision: "HEAD",
+        });
+        cliLogger.info(`${hook}: story aggregation completed`);
+    } catch (e) {
+        cliLogger.warn(
+            `${hook}: story aggregation not completed: ${(e as Error).message}`,
+        );
+    }
 }
 
 // Builds the daemon registration for a Copilot sessionStart payload.
@@ -236,4 +265,51 @@ gitCommand
         if (message.split("\n").includes(COMMIT_TRAILER)) return;
         fs.writeFileSync(file, `${message.trimEnd()}\n\n${COMMIT_TRAILER}\n`);
         cliLogger.info(`prepare-commit-msg: appended trailer to ${file}`);
+    });
+
+gitCommand
+    .command("post-commit")
+    .description("Aggregate stories after a git commit")
+    .action(async () => {
+        await aggregateStoriesAfterGitChange("post-commit", process.cwd());
+    });
+
+gitCommand
+    .command("post-merge")
+    .description("Aggregate stories after a merge or non-rebase pull")
+    .argument("[squash]", "whether the merge was a squash merge")
+    .action(async () => {
+        await aggregateStoriesAfterGitChange("post-merge", process.cwd());
+    });
+
+gitCommand
+    .command("post-rewrite")
+    .description("Aggregate stories after a rebase")
+    .argument("<command>", "command that rewrote commits")
+    .action(async (command: string) => {
+        try {
+            await consumeStdin(() => {});
+        } catch {
+            cliLogger.warn(
+                "post-rewrite: failed to drain stdin; continuing without rewrite input",
+            );
+        }
+        if (command !== "rebase") return;
+        await aggregateStoriesAfterGitChange("post-rewrite", process.cwd());
+    });
+
+gitCommand
+    .command("post-checkout")
+    .description("Aggregate stories after a branch checkout or switch")
+    .argument("<previous-head>", "previous HEAD")
+    .argument("<new-head>", "new HEAD")
+    .addArgument(
+        new Argument(
+            "<flag>",
+            "1 for branch checkout; 0 for file checkout",
+        ).choices(["0", "1"]),
+    )
+    .action(async (_previousHead: string, _newHead: string, flag: string) => {
+        if (flag === "0") return;
+        await aggregateStoriesAfterGitChange("post-checkout", process.cwd());
     });

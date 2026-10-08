@@ -22,14 +22,47 @@ git-story pre-commit: received 2 arguments
 Copilot hooks in `.github/copilot/settings.local.json` and adds that
 file to `.git/info/exclude`, so it stays local to the clone.
 
-`init` also writes `pre-commit` and `prepare-commit-msg` scripts to the git
-hooks directory (honors `core.hooksPath`). Each script runs
+`init` also writes `pre-commit`, `prepare-commit-msg`, `post-commit`,
+`post-merge`, `post-rewrite`, and `post-checkout` scripts to the git hooks
+directory (honors `core.hooksPath`). Each script runs
 `exec git-story hooks git <hook> "$@"`,
 so git's hook arguments and stdin reach the command unchanged. `init` does not
 overwrite a hook that it did not write.
 
 `prepare-commit-msg` appends a `typeagent` line to the commit message, once.
 This is a placeholder for the git-story summary.
+
+`post-commit` requests aggregation at the new `HEAD`. Git has no `post-pull`
+hook, so `post-merge` handles pulls that merge or fast-forward and
+`post-rewrite` handles pulls that rewrite commits through rebase.
+Rewrite input is streamed and discarded without the agent JSON size limit;
+the two-second input timeout remains, and drain failures are logged without
+preventing aggregation.
+`post-checkout` handles branch checkouts, detached-HEAD checkouts, and
+`git switch`; file-only checkouts do not request aggregation. A pull that
+reports "Already up to date" does not trigger aggregation through these hooks.
+Aggregation failures are logged and do not change the result of the completed
+git operation. Existing installations must rerun `git story init` to install
+the new hooks.
+
+## Story Aggregator
+
+The Session Watcher and Story Aggregator operate on different data. The watcher
+captures private session evidence, normalizes it, and sends privacy-approved
+updates to a configured destination. A Story Builder can use that evidence to
+produce a portable `GitCommitStory`. The aggregator reads only published stories
+from Git commit messages and submits those stories to searchable memory.
+
+Aggregation resolves a fixed revision, classifies commits with missing,
+malformed, or unsupported stories separately, and reports destination acceptance
+separately from completed indexing. It must also reconcile rewritten history so
+stories from commits that are no longer reachable do not remain searchable.
+
+The current post-git hooks call the aggregator scaffold directly; this PR does
+not add an HTTP aggregation-trigger API. Before history scanning is implemented,
+aggregation admission should move behind the daemon so the hooks can submit a
+bounded asynchronous request instead of scanning Git history during
+`git commit`, `git pull`, or branch checkout.
 
 ## Daemon
 
