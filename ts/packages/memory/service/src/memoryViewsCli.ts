@@ -87,7 +87,7 @@ async function waitForViewBuild(
     return job;
 }
 
-const buildCommands = new Map<
+const viewCommands = new Map<
     string,
     (rpc: MemoryViewService, values: string[]) => Promise<unknown>
 >([
@@ -142,6 +142,48 @@ const buildCommands = new Map<
             return rpc.resolveViewConflict(request);
         },
     ],
+    ["policy", (rpc, values) => rpc.getViewPublicationPolicy(values[0])],
+    [
+        "set-policy",
+        async (rpc, values) => {
+            const request: ViewPublicationPolicyUpdate = JSON.parse(
+                await readFile(values[0], "utf8"),
+            );
+            return rpc.updateViewPublicationPolicy(request);
+        },
+    ],
+    [
+        "publication",
+        (rpc, values) =>
+            rpc.getViewPublication({ corpusId: values[0], viewId: values[1] }),
+    ],
+    [
+        "publish",
+        async (rpc, values) => {
+            const request: ViewPublishRequest = JSON.parse(
+                await readFile(values[0], "utf8"),
+            );
+            return rpc.publishView(request);
+        },
+    ],
+    [
+        "retry-index",
+        async (rpc, values) => {
+            const request: ViewPublishRequest = JSON.parse(
+                await readFile(values[0], "utf8"),
+            );
+            return rpc.retryViewIndex(request);
+        },
+    ],
+    [
+        "search",
+        (rpc, values) =>
+            rpc.searchViews({
+                corpusId: values[0],
+                query: values[1],
+                freshness: "current",
+            }),
+    ],
 ]);
 
 export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
@@ -167,8 +209,8 @@ export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
     });
     const rpc = createMemoryServiceRpcFacade(service);
     try {
-        const build = buildCommands.get(command);
-        if (build) return await build(rpc, values);
+        const operation = viewCommands.get(command);
+        if (operation) return await operation(rpc, values);
         switch (command) {
             case "corpora":
                 return await rpc.listCorpora();
@@ -213,34 +255,6 @@ export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
                 );
                 return await rpc.archiveView(request);
             }
-            case "publish":
-            case "retry-index": {
-                const request: ViewPublishRequest = JSON.parse(
-                    await readFile(values[0], "utf8"),
-                );
-                return command === "publish"
-                    ? await rpc.publishView(request)
-                    : await rpc.retryViewIndex(request);
-            }
-            case "policy":
-                return await rpc.getViewPublicationPolicy(values[0]);
-            case "set-policy": {
-                const request: ViewPublicationPolicyUpdate = JSON.parse(
-                    await readFile(values[0], "utf8"),
-                );
-                return await rpc.updateViewPublicationPolicy(request);
-            }
-            case "publication":
-                return await rpc.getViewPublication({
-                    corpusId: values[0],
-                    viewId: values[1],
-                });
-            case "search":
-                return await rpc.searchViews({
-                    corpusId: values[0],
-                    query: values[1],
-                    freshness: "current",
-                });
         }
         throw new Error(usage);
     } finally {

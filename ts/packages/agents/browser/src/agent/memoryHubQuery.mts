@@ -536,6 +536,13 @@ async function evidenceContent(
         });
     }
     if (request.kind === "view") {
+        return publishedViewEvidence(service, request);
+    }
+
+    async function publishedViewEvidence(
+        service: MemoryHubReadService,
+        request: MemoryHubEvidenceRequest,
+    ): Promise<MemoryHubEvidenceContent> {
         if (
             !request.revisionId ||
             !service.getView ||
