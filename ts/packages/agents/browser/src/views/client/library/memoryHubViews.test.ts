@@ -94,6 +94,14 @@ describe("Memory Hub draft build and conflict controls", () => {
                     return snapshot;
                 case "memoryListViewBuilds":
                     return [];
+                case "memoryGetViewPublicationPolicy":
+                    return { revision: 0, autoPublish: true, views: {} };
+                case "memoryGetViewPublication":
+                    return {
+                        viewId: "guide",
+                        indexState: "absent",
+                        reason: "No published revision",
+                    };
                 case "memoryListSources":
                     return {
                         items: [
@@ -150,13 +158,118 @@ describe("Memory Hub draft build and conflict controls", () => {
         panel.dispose();
         jest.useRealTimers();
     });
+    test("corpus, view inheritance and build override controls send optimistic settings without spoofed actors", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation((method, params) =>
+            method === "memoryUpdateViewPublicationPolicy"
+                ? Promise.resolve({
+                      revision: 1,
+                      autoPublish: false,
+                      views: {},
+                  })
+                : original(method, params),
+        );
+        await panel.refresh();
+        const corpus = host.querySelector<HTMLSelectElement>(
+            '[aria-label="Corpus auto-publish after build"]',
+        )!;
+        corpus.value = "off";
+        click(host, "Save corpus publication setting");
+        await settle();
+        expect(invoke).toHaveBeenCalledWith(
+            "memoryUpdateViewPublicationPolicy",
+            {
+                corpusId: "c",
+                expectedHead: head,
+                expectedRevision: 0,
+                autoPublish: false,
+            },
+        );
+        click(host, "Guide (draft, v1)");
+        const viewPolicy = host.querySelector<HTMLSelectElement>(
+            '[aria-label="View auto-publish after build"]',
+        )!;
+        viewPolicy.value = "inherit";
+        click(host, "Save view publication override");
+        await settle();
+        expect(invoke).toHaveBeenCalledWith(
+            "memoryUpdateViewPublicationPolicy",
+            {
+                corpusId: "c",
+                viewId: "guide",
+                expectedHead: head,
+                expectedRevision: 0,
+                autoPublish: null,
+            },
+        );
+        const buildPolicy = host.querySelector<HTMLSelectElement>(
+            '[aria-label="Build auto-publish after build"]',
+        )!;
+        buildPolicy.value = "off";
+        buildPolicy.dispatchEvent(new Event("change"));
+        expect(host.textContent).toContain("Off (build override)");
+        host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+        host.querySelector<HTMLInputElement>(
+            '[aria-label="Stable view ID"]',
+        )!.value = "new-guide";
+        click(host, "Build views");
+        await settle();
+        expect(invoke).toHaveBeenCalledWith(
+            "memoryBuildViews",
+            expect.objectContaining({ publication: false }),
+        );
+    });
+    test("Publish and Retry index use exact revision/head guards and preserve explicit failures", async () => {
+        const original = invoke.getMockImplementation()!;
+        invoke.mockImplementation((method, params) => {
+            if (method === "memoryGetViewPublication")
+                return Promise.resolve({
+                    viewId: "guide",
+                    publishedRevisionId: "v1",
+                    indexState: "failed",
+                    reason: "Index failed",
+                });
+            if (
+                method === "memoryPublishView" ||
+                method === "memoryRetryViewIndex"
+            )
+                return Promise.reject(
+                    new Error("Exact artifact validation required"),
+                );
+            return original(method, params);
+        });
+        await panel.refresh();
+        click(host, "Guide (draft, v1)");
+        click(host, "Publish exact revision");
+        await settle();
+        expect(invoke).toHaveBeenCalledWith("memoryPublishView", {
+            corpusId: "c",
+            viewId: "guide",
+            revisionId: "v1",
+            expectedHead: head,
+            expectedVersion: 1,
+        });
+        expect(host.textContent).toContain(
+            "Exact artifact validation required",
+        );
+        click(host, "Retry index");
+        await settle();
+        expect(invoke).toHaveBeenCalledWith("memoryRetryViewIndex", {
+            corpusId: "c",
+            viewId: "guide",
+            revisionId: "v1",
+            expectedHead: head,
+            expectedVersion: 1,
+        });
+        expect(errors).toHaveLength(2);
+    });
     async function openConflict(): Promise<void> {
         await panel.refresh();
         host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
         host.querySelector<HTMLInputElement>(
             '[aria-label="Stable view ID"]',
         )!.value = "guide";
-        click(host, "Build (draft only)");
+        click(host, "Build views");
         await settle();
         click(host, "Compare and resolve conflict");
         await settle();
@@ -298,7 +411,7 @@ describe("Memory Hub draft build and conflict controls", () => {
         host.querySelector<HTMLInputElement>(
             '[aria-label="Stable view ID"]',
         )!.value = "guide";
-        click(host, "Build (draft only)");
+        click(host, "Build views");
         await settle();
         expect(invoke).toHaveBeenCalledWith(
             "memoryBuildViews",
@@ -383,7 +496,7 @@ describe("Memory Hub draft build and conflict controls", () => {
         host.querySelector<HTMLInputElement>(
             '[aria-label="Stable view ID"]',
         )!.value = "guide";
-        click(host, "Build (draft only)");
+        click(host, "Build views");
         await settle();
         click(host, "Guide (draft, v1)");
         const editor = host.querySelector<HTMLTextAreaElement>(
@@ -426,7 +539,7 @@ describe("Memory Hub draft build and conflict controls", () => {
         host.querySelector<HTMLInputElement>(
             '[aria-label="Stable view ID"]',
         )!.value = "guide";
-        click(host, "Build (draft only)");
+        click(host, "Build views");
         await settle();
         scope = "new";
         panel.scopeChanged();
@@ -452,12 +565,11 @@ describe("Memory Hub draft build and conflict controls", () => {
         host.querySelector<HTMLInputElement>(
             '[aria-label="Stable view ID"]',
         )!.value = "new-guide";
-        click(host, "Build (draft only)");
+        click(host, "Build views");
         await settle();
         expect(invoke).toHaveBeenCalledWith("memoryBuildViews", {
             corpusId: "c",
             expectedHead: head,
-            publication: false,
             targets: [
                 {
                     expectedVersion: 0,

@@ -76,6 +76,12 @@ import type {
     ViewVersion,
     ViewHistoryEntry,
     ViewMergeConflict,
+    ViewPublishRequest,
+    ViewPublicationStatus,
+    ViewPublicationPolicy,
+    ViewPublicationPolicyUpdate,
+    ViewSearchRequest,
+    ViewSearchMatch,
 } from "@typeagent/memory-service";
 import {
     viewToolNames,
@@ -84,6 +90,9 @@ import {
     viewVersionSchema,
     viewHistoryEntrySchema,
     viewConflictSchema,
+    viewPublicationPolicySchema,
+    viewPublicationStatusSchema,
+    viewSearchMatchSchema,
 } from "./viewProtocol.js";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
 import { validateProcedureSaveRequest } from "@typeagent/memory-service/agent-edition-validation";
@@ -185,7 +194,37 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
             unsupportedCapability("view history")
         );
     }
-    public publishView(request: ViewReadRequest) {
+    public getViewPublicationPolicy(corpusId: string) {
+        return (
+            this.service.getViewPublicationPolicy?.(corpusId) ??
+            unsupportedCapability("view publication policy")
+        );
+    }
+    public updateViewPublicationPolicy(request: ViewPublicationPolicyUpdate) {
+        return (
+            this.service.updateViewPublicationPolicy?.(request) ??
+            unsupportedCapability("view publication policy")
+        );
+    }
+    public getViewPublication(request: ViewReadRequest) {
+        return (
+            this.service.getViewPublication?.(request) ??
+            unsupportedCapability("view publication")
+        );
+    }
+    public retryViewIndex(request: ViewPublishRequest) {
+        return (
+            this.service.retryViewIndex?.(request) ??
+            unsupportedCapability("view index retry")
+        );
+    }
+    public searchViews(request: ViewSearchRequest) {
+        return (
+            this.service.searchViews?.(request) ??
+            unsupportedCapability("published view search")
+        );
+    }
+    public publishView(request: ViewPublishRequest) {
         return (
             this.service.publishView?.(request) ??
             unsupportedCapability("view publication")
@@ -569,11 +608,56 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             viewHistoryEntrySchema.array(),
         );
     }
-    public publishView(request: ViewReadRequest): Promise<never> {
+    public getViewPublicationPolicy(
+        corpusId: string,
+    ): Promise<ViewPublicationPolicy> {
+        return this.invoke(
+            viewToolNames.getViewPublicationPolicy,
+            { corpusId },
+            viewPublicationPolicySchema,
+        );
+    }
+    public updateViewPublicationPolicy(
+        request: ViewPublicationPolicyUpdate,
+    ): Promise<ViewPublicationPolicy> {
+        return this.invoke(
+            viewToolNames.updateViewPublicationPolicy,
+            request,
+            viewPublicationPolicySchema,
+        );
+    }
+    public getViewPublication(
+        request: ViewReadRequest,
+    ): Promise<ViewPublicationStatus> {
+        return this.invoke(
+            viewToolNames.getViewPublication,
+            request,
+            viewPublicationStatusSchema,
+        );
+    }
+    public retryViewIndex(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
+        return this.invoke(
+            viewToolNames.retryViewIndex,
+            request,
+            viewPublicationStatusSchema,
+        );
+    }
+    public searchViews(request: ViewSearchRequest): Promise<ViewSearchMatch[]> {
+        return this.invoke(
+            viewToolNames.searchViews,
+            request,
+            viewSearchMatchSchema.array(),
+        );
+    }
+    public publishView(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
         return this.invoke(
             viewToolNames.publishView,
             request,
-            viewVersionSchema,
+            viewPublicationStatusSchema,
         );
     }
     public buildViews(request: ViewBuildRequest): Promise<ViewBuildJob> {

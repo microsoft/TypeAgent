@@ -187,8 +187,14 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
             saved.version.edits?.some((edit) => edit.target === "title"),
         ).toBe(true);
         await expect(
-            client.publishView({ corpusId: corpus.corpusId, viewId: "guide" }),
-        ).rejects.toThrow("draft-only");
+            client.publishView({
+                corpusId: corpus.corpusId,
+                viewId: "guide",
+                revisionId: saved.version.revisionId,
+                expectedVersion: saved.version.version,
+                expectedHead: saved.commitId,
+            }),
+        ).rejects.toThrow("complete source inventory");
         await client.close();
         await host.close();
         host = await MemoryServiceHost.start(open());
@@ -247,7 +253,7 @@ test("wire rejects spoofed actors, unsupported kinds and publication permissions
     expect(
         viewBuildRequestSchema.safeParse({ ...request, publication: true })
             .success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
         viewBuildRequestSchema.safeParse({
             ...request,

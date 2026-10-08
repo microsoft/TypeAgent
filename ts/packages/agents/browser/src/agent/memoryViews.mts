@@ -16,6 +16,12 @@ type ViewMethods = Pick<
     | "memorySaveViewDraft"
     | "memoryArchiveView"
     | "memoryViewHistory"
+    | "memoryGetViewPublicationPolicy"
+    | "memoryUpdateViewPublicationPolicy"
+    | "memoryGetViewPublication"
+    | "memoryPublishView"
+    | "memoryRetryViewIndex"
+    | "memorySearchViews"
     | "memoryBuildViews"
     | "memoryGetViewBuild"
     | "memoryListViewBuilds"
@@ -36,6 +42,15 @@ export function createMemoryViewFunctions(
         memorySaveViewDraft: (request) => views().saveViewDraft(request),
         memoryArchiveView: (request) => views().archiveView(request),
         memoryViewHistory: (request) => views().getViewHistory(request),
+        memoryGetViewPublicationPolicy: ({ corpusId }) =>
+            views().getViewPublicationPolicy(corpusId),
+        memoryUpdateViewPublicationPolicy: (request) =>
+            views().updateViewPublicationPolicy(request),
+        memoryGetViewPublication: (request) =>
+            views().getViewPublication(request),
+        memoryPublishView: (request) => views().publishView(request),
+        memoryRetryViewIndex: (request) => views().retryViewIndex(request),
+        memorySearchViews: (request) => views().searchViews(request),
         memoryBuildViews: (request) => views().buildViews(request),
         memoryGetViewBuild: (request) => views().getViewBuild(request),
         memoryListViewBuilds: ({ corpusId }) =>

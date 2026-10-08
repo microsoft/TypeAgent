@@ -599,7 +599,8 @@ export const capabilitiesSchema = z.object({
             kinds: z.literal("troubleshootingGuide").array(),
             drafts: z.literal(true),
             history: z.literal(true),
-            publication: z.literal(false),
+            publication: z.literal(true),
+            search: z.literal(true),
             builds: z.literal(true).optional(),
             editMerging: z.literal(true).optional(),
         })

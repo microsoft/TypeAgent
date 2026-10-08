@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
@@ -26,6 +26,19 @@ let alter: (name: string, response: unknown) => unknown = (_name, value) =>
 let pausedStage: string | undefined;
 let pause: Promise<void> | undefined;
 const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
+const embeddings: string[] = [];
+const offlineEmbedding = {
+    maxBatchSize: 8,
+    generateEmbedding: async (text: string) => {
+        embeddings.push(text);
+        return {
+            success: true as const,
+            data: Array.from({ length: 1536 }, (_, index) =>
+                index === 0 ? 1 : 0,
+            ),
+        };
+    },
+};
 const complete = jest.fn(
     async (
         messages: Array<{ role: string; content: string }>,
@@ -47,27 +60,89 @@ const complete = jest.fn(
 );
 jest.unstable_mockModule("@typeagent/aiclient", () => ({
     ...actual,
+    tryCreateEmbeddingModel: () => offlineEmbedding,
     openai: { ...actual.openai, createChatModel: () => ({ complete }) },
 }));
 const { FileMemoryService } = await import("../src/fileMemoryService.js");
 const { waitForMemoryJob } = await import("../src/rpcFacade.js");
 const { validateConstructedGuide } = await import("../src/viewSynthesis.js");
 const { renderInventoryItem } = await import("../src/viewInventory.js");
+const { createKnowProCorpusIndex } = await import(
+    "../src/knowProCorpusIndex.js"
+);
+const { createDocMemorySettings } = await import(
+    "@typeagent/conversation-memory"
+);
+const { viewHash } = await import("../src/viewMerge.js");
+const { effectiveViewPublicationPolicy } = await import(
+    "../src/viewPublication.js"
+);
+
+test("all boolean and inherited publication precedence combinations retain false", () => {
+    for (const corpus of [false, true])
+        for (const view of [null, false, true])
+            for (const build of [undefined, false, true]) {
+                const policy = effectiveViewPublicationPolicy(
+                    {
+                        revision: 7,
+                        autoPublish: corpus,
+                        views: { guide: { revision: 4, autoPublish: view } },
+                    },
+                    "guide",
+                    build,
+                );
+                expect(policy.autoPublish).toBe(build ?? view ?? corpus);
+                expect(policy.origin).toBe(
+                    build !== undefined
+                        ? "build"
+                        : view !== null
+                          ? "view"
+                          : "corpus",
+                );
+                expect([policy.corpusRevision, policy.viewRevision]).toEqual([
+                    7, 4,
+                ]);
+            }
+});
 
 describe("actual configured evidence-first adapter and durable service", () => {
     let root: string;
     let service: InstanceType<typeof FileMemoryService>;
     let corpusId: string;
+    let indexFailure: boolean;
+    let publicationFault: "intent" | "index" | undefined;
+    class ControlledIndex extends FakeProcedureCorpusIndex {
+        public async rebuild(
+            documents: Parameters<FakeProcedureCorpusIndex["rebuild"]>[0],
+        ): Promise<void> {
+            if (
+                indexFailure &&
+                documents.some(
+                    (document) => document.source.sourceId === "guide",
+                )
+            )
+                throw new Error("Controlled view indexing failure");
+            await super.rebuild(documents);
+        }
+    }
     const open = () =>
         new FileMemoryService(root, {
             viewDrafts: true,
             indexFactory: (_id: string, directory: string) =>
-                new FakeProcedureCorpusIndex(directory),
+                new ControlledIndex(directory),
+            viewPublicationCheckpoint: async (point) => {
+                if (point === publicationFault)
+                    throw new Error(
+                        `Controlled publication interruption after ${point}`,
+                    );
+            },
         });
     beforeEach(async () => {
         calls.length = 0;
         alter = (_name, value) => value;
         pausedStage = undefined;
+        indexFailure = false;
+        publicationFault = undefined;
         pause = undefined;
         root = await mkdtemp(
             path.join(os.tmpdir(), "inventory-configured-offline-"),
@@ -153,6 +228,457 @@ describe("actual configured evidence-first adapter and durable service", () => {
         }
         throw new Error("Configured adapter did not reach paused stage");
     }
+    async function guardedPublication(retry = false) {
+        const snapshot = await service.listViews(corpusId);
+        const view = snapshot.views[0];
+        if (!view || !snapshot.head)
+            throw new Error("Missing exact publication target");
+        const published = await service.getViewPublication({
+            corpusId,
+            viewId: view.viewId,
+        });
+        const request = {
+            corpusId,
+            viewId: view.viewId,
+            revisionId: retry
+                ? published.publishedRevisionId!
+                : view.revisionId,
+            expectedHead: snapshot.head,
+            expectedVersion: view.version,
+        };
+        return retry
+            ? service.retryViewIndex(request)
+            : service.publishView(request);
+    }
+    const search = () =>
+        service.searchViews({
+            corpusId,
+            query: "Inspect pressure",
+            freshness: "current",
+        });
+    test("default-on publishes exact validated artifact, survives restart, and disabled capability never retrieves stored publication", async () => {
+        const job = await build();
+        expect(job.results[0].state).toBe("searchable");
+        const result = job.results[0].publication!;
+        expect(result.publishedRevisionId).toBe(job.results[0].revisionId);
+        expect(result.indexedRevisionId).toBe(result.publishedRevisionId);
+        const matches = await search();
+        expect(matches).toHaveLength(1);
+        expect(matches[0].view.revisionId).toBe(result.indexedRevisionId);
+        expect(matches[0]).toMatchObject({
+            review: "unreviewed",
+            freshness: "current",
+            corroboration: "derived",
+        });
+        const before = (await service.listViews(corpusId)).head;
+        expect(await guardedPublication()).toEqual(result);
+        expect((await service.listViews(corpusId)).head).toBe(before);
+        await service.close();
+        service = new FileMemoryService(root, {
+            indexFactory: (_id, directory) =>
+                new FakeProcedureCorpusIndex(directory),
+        });
+        await expect(search()).rejects.toThrow("not supported");
+        await service.close();
+        service = open();
+        expect((await search())[0].view.revisionId).toBe(
+            result.indexedRevisionId,
+        );
+    });
+    test("view off, one-run build on, explicit build false and inherited corpus policy never mutate saved settings", async () => {
+        await service.updateViewPublicationPolicy({
+            corpusId,
+            expectedHead: (await service.listViews(corpusId)).head,
+            expectedRevision: 0,
+            viewId: "guide",
+            autoPublish: false,
+        });
+        const draft = await build();
+        expect(draft.results[0].state).toBe("draft");
+        expect(await search()).toEqual([]);
+        const snapshot = await service.listViews(corpusId);
+        const overridden = await wait(
+            await service.buildViews({
+                ...draft.request,
+                expectedHead: snapshot.head,
+                targets: [
+                    {
+                        ...draft.request.targets[0],
+                        expectedVersion: snapshot.views[0].version,
+                    },
+                ],
+                publication: true,
+            }),
+        );
+        expect(overridden.results[0].snapshot.publicationPolicy).toMatchObject({
+            autoPublish: true,
+            origin: "build",
+        });
+        expect(overridden.results[0].state).toBe("searchable");
+        expect(
+            (await service.getViewPublicationPolicy(corpusId)).views.guide
+                .autoPublish,
+        ).toBe(false);
+        const offSnapshot = await service.listViews(corpusId);
+        const off = await wait(
+            await service.buildViews({
+                ...draft.request,
+                expectedHead: offSnapshot.head,
+                targets: [
+                    {
+                        ...draft.request.targets[0],
+                        expectedVersion: offSnapshot.views[0].version,
+                    },
+                ],
+                publication: false,
+            }),
+        );
+        expect(off.results[0].state).toBe("draft");
+        expect((await search())[0].view.revisionId).toBe(
+            overridden.results[0].revisionId,
+        );
+        expect((await guardedPublication()).indexState).toBe("ready");
+    });
+    test("policy changes during inventory pause publication and preserve an actionable stale receipt", async () => {
+        pausedStage = "memory_source_fact_inventory";
+        let release: (() => void) | undefined;
+        pause = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const job = await admit();
+        await awaitPausedStage();
+        await service.updateViewPublicationPolicy({
+            corpusId,
+            expectedHead: (await service.listViews(corpusId)).head,
+            expectedRevision: 0,
+            autoPublish: false,
+        });
+        release!();
+        expect((await wait(job)).results[0].state).toBe("stale");
+        expect(await search()).toEqual([]);
+    });
+    test("index failure reports published but not searchable, and explicit retry does not rebuild or republish", async () => {
+        indexFailure = true;
+        const job = await build();
+        expect(job.results[0].state).toBe("published");
+        const failed = await service.getViewPublication({
+            corpusId,
+            viewId: "guide",
+        });
+        expect(failed.indexState).toBe("failed");
+        expect(failed.reason).toContain("Controlled view indexing failure");
+        expect(failed.indexedRevisionId).toBeUndefined();
+        expect(await search()).toEqual([]);
+        const callCount = calls.length;
+        indexFailure = false;
+        await service.close();
+        service = open();
+        const indexed = await guardedPublication(true);
+        expect(indexed.publishedRevisionId).toBe(failed.publishedRevisionId);
+        expect(indexed.indexedRevisionId).toBe(failed.publishedRevisionId);
+        expect(indexed.intent).toEqual(failed.intent);
+        expect(calls).toHaveLength(callCount);
+        expect(await search()).toHaveLength(1);
+    });
+    test.each(["intent", "index"] as const)(
+        "restart after durable %s boundary keeps exact publication pending until explicit index retry",
+        async (point) => {
+            publicationFault = point;
+            const job = await build();
+            expect(job.results[0].state).toBe("failed");
+            const pending = await service.getViewPublication({
+                corpusId,
+                viewId: "guide",
+            });
+            expect(pending.indexState).toBe("pending");
+            expect(await search()).toEqual([]);
+            const callCount = calls.length;
+            await service.close();
+            publicationFault = undefined;
+            service = open();
+            const indexed = await guardedPublication(true);
+            expect(indexed.intent).toEqual(pending.intent);
+            expect(indexed.indexedRevisionId).toBe(pending.publishedRevisionId);
+            expect(calls).toHaveLength(callCount);
+        },
+    );
+    test("archive removes publication and indexes without touching canonical source content or unrelated runbooks", async () => {
+        await build();
+        const sources = await service.listSources(corpusId);
+        const before = await service.listViews(corpusId);
+        const view = before.views[0];
+        await service.archiveView({
+            corpusId,
+            viewId: view.viewId,
+            expectedVersion: view.version,
+            expectedHead: before.head!,
+        });
+        expect(await search()).toEqual([]);
+        expect(
+            (
+                await service.getViewPublication({
+                    corpusId,
+                    viewId: view.viewId,
+                })
+            ).publishedRevisionId,
+        ).toBeUndefined();
+        expect(await service.listSources(corpusId)).toEqual(sources);
+        await expect(
+            stat(
+                path.join(
+                    root,
+                    corpusId,
+                    "personal-how-to",
+                    "view-search-index",
+                    viewHash(view.viewId),
+                ),
+            ),
+        ).rejects.toThrow();
+    });
+    test("a mismatched index never labels old content as current and explicit retry repairs only the published revision", async () => {
+        await build();
+        const publication = await service.getViewPublication({
+            corpusId,
+            viewId: "guide",
+        });
+        const ready = path.join(
+            root,
+            corpusId,
+            "personal-how-to",
+            "view-search-index",
+            viewHash("guide"),
+            viewHash(publication.publishedRevisionId!),
+            "ready",
+        );
+        await writeFile(ready, "different-revision", "utf8");
+        await expect(search()).rejects.toThrow(
+            "does not match the exact revision",
+        );
+        const callCount = calls.length;
+        await guardedPublication(true);
+        expect(calls).toHaveLength(callCount);
+        expect((await search())[0].view.revisionId).toBe(
+            publication.publishedRevisionId,
+        );
+    });
+    test("validated human edits publish explicitly with exact head and version guards while source replacement excludes stale publication", async () => {
+        await build();
+        const first = await service.listViews(corpusId);
+        const view = first.views[0];
+        const content = structuredClone(
+            view.content,
+        ) as ViewSynthesisOutput["content"];
+        content.sections[0].body = content.sections[0].body.replace(
+            "Inspect pressure.",
+            "Inspect pressure carefully.",
+        );
+        const saved = await service.saveViewDraft({
+            corpusId,
+            viewId: view.viewId,
+            expectedHead: first.head,
+            expectedVersion: view.version,
+            definition: {
+                viewId: view.viewId,
+                kind: "troubleshootingGuide",
+                selector: view.definition.selector,
+            },
+            content,
+            relationships: authoredRelationships(view),
+        });
+        expect((await search())[0].view.revisionId).toBe(view.revisionId);
+        await expect(
+            service.publishView({
+                corpusId,
+                viewId: view.viewId,
+                revisionId: saved.version.revisionId,
+                expectedHead: first.head!,
+                expectedVersion: saved.version.version,
+            }),
+        ).rejects.toThrow("head or target revision conflict");
+        const published = await guardedPublication();
+        expect(published.publishedRevisionId).toBe(saved.version.revisionId);
+        expect((await search())[0].view.content.sections[0].body).toContain(
+            "carefully",
+        );
+        const replacement = await service.ingestDocument({
+            corpusId,
+            source: {
+                sourceId: "phase",
+                sourceType: "text",
+                title: "phase",
+                text: "Changed phase evidence.",
+            },
+        });
+        expect((await waitForMemoryJob(service, replacement.jobId)).state).toBe(
+            "complete",
+        );
+        expect(await search()).toEqual([]);
+        await expect(guardedPublication()).rejects.toThrow(
+            "Archived or stale view cannot be published",
+        );
+    });
+    test("new agent paragraph and clean human edit are searchable as the exact merged revision without a review stamp", async () => {
+        await build();
+        const snapshot = await service.listViews(corpusId);
+        const view = snapshot.views[0];
+        if (view.content.kind !== "troubleshootingGuide")
+            throw new Error("Expected guide");
+        const content = structuredClone(view.content);
+        content.sections[0].body = content.sections[0].body.replace(
+            "Inspect pressure.",
+            "Inspect pressure carefully.",
+        );
+        await service.saveViewDraft({
+            corpusId,
+            viewId: view.viewId,
+            expectedVersion: view.version,
+            expectedHead: snapshot.head,
+            definition: {
+                viewId: view.viewId,
+                kind: "troubleshootingGuide",
+                selector: view.definition.selector,
+            },
+            content,
+            relationships: authoredRelationships(view),
+        });
+        alter = (name, answer) => {
+            if (name === "memory_inventory_guide_construction") {
+                const content = evidenceRecord(evidenceRecord(answer).content);
+                const section = evidenceRecord(
+                    evidenceArray(content.sections)[1],
+                );
+                section.prose =
+                    "Inspect pressure.\n\nPreserve approval boundaries.\n\nNew independent agent paragraph.\n";
+            }
+            return answer;
+        };
+        const job = await build();
+        expect(job.results[0].state).toBe("searchable");
+        const matches = await service.searchViews({
+            corpusId,
+            query: "New independent agent paragraph",
+            freshness: "current",
+        });
+        expect(matches).toHaveLength(1);
+        expect(matches[0].view.provenance).toBe("merged");
+        expect(matches[0].view.content.sections[0].body).toContain("carefully");
+        expect(matches[0].review).toBe("unreviewed");
+    });
+    test("real KnowPro persisted embeddings retrieve an exact published revision through a paraphrased query", async () => {
+        await service.close();
+        let queryTerm = "bottleneck";
+        let textOnly = false;
+        const languageModel = {
+            completionSettings: {},
+            complete: async () => ({
+                success: true as const,
+                data: JSON.stringify({
+                    searchExpressions: [
+                        {
+                            rewrittenQuery: "Investigate bottlenecks",
+                            filters: [
+                                {
+                                    entitySearchTerms: [
+                                        {
+                                            name: queryTerm,
+                                            isNamePronoun: false,
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                }),
+            }),
+        };
+        const create = () =>
+            new FileMemoryService(root, {
+                viewDrafts: true,
+                indexFactory: (_id, directory) =>
+                    new FakeProcedureCorpusIndex(directory),
+                procedureIndexFactory: (id, directory) =>
+                    createKnowProCorpusIndex(id, directory, () => {
+                        const settings = createDocMemorySettings(
+                            64,
+                            undefined,
+                            languageModel,
+                        );
+                        if (textOnly) {
+                            settings.embeddingModel = undefined;
+                            const related =
+                                settings.conversationSettings
+                                    .relatedTermIndexSettings
+                                    .embeddingIndexSettings;
+                            if (related) related.embeddingModel = undefined;
+                            settings.conversationSettings.threadSettings.embeddingModel =
+                                undefined;
+                            settings.conversationSettings.messageTextIndexSettings.embeddingIndexSettings.embeddingModel =
+                                undefined;
+                        }
+                        const knowledge = {
+                            entities: [
+                                { name: "pressure", type: ["diagnostic"] },
+                            ],
+                            actions: [],
+                            inverseActions: [],
+                            topics: ["pressure"],
+                        };
+                        settings.conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
+                            {
+                                settings: { maxContextLength: 10000 },
+                                extract: async () => knowledge,
+                                extractWithRetry: async () => ({
+                                    success: true as const,
+                                    data: knowledge,
+                                }),
+                            };
+                        return settings;
+                    }),
+            });
+        service = create();
+        const job = await build();
+        expect(job.results[0].state).toBe("searchable");
+        const revisionId = job.results[0].revisionId!;
+        const directory = path.join(
+            root,
+            corpusId,
+            "personal-how-to",
+            "view-search-index",
+            viewHash("guide"),
+            viewHash(revisionId),
+        );
+        expect(
+            (await stat(path.join(directory, "corpus_embeddings.bin"))).size,
+        ).toBeGreaterThan(0);
+        await service.close();
+        service = create();
+        const before = embeddings.length;
+        const matches = await service.searchViews({
+            corpusId,
+            query: "Investigate bottlenecks",
+            freshness: "current",
+        });
+        expect(matches.length).toBeGreaterThan(0);
+        expect(
+            matches.every((match) => match.view.revisionId === revisionId),
+        ).toBe(true);
+        expect(embeddings.length).toBeGreaterThan(before);
+        await service.close();
+        textOnly = true;
+        queryTerm = "pressure";
+        service = create();
+        const beforeText = embeddings.length;
+        const exact = await service.searchViews({
+            corpusId,
+            query: "pressure",
+            freshness: "current",
+        });
+        expect(exact.length).toBeGreaterThan(0);
+        expect(
+            exact.every((match) => match.view.revisionId === revisionId),
+        ).toBe(true);
+        expect(embeddings).toHaveLength(beforeText);
+    });
     test("source inventory and independent source check precede any candidate; coverage survives receipt/protocol shape", async () => {
         const job = await build();
         expect(job.state).toBe("complete");
@@ -455,6 +981,34 @@ describe("actual configured evidence-first adapter and durable service", () => {
     });
     test("forget removes inventory, coverage, candidate and durable history payload eligibility", async () => {
         const job = await build();
+        const before = await service.listViews(corpusId);
+        const sources = await service.listSources(corpusId);
+        const limits = sources.find((source) => source.sourceId === "limits")!;
+        const unrelated = await wait(
+            await service.buildViews({
+                corpusId,
+                expectedHead: before.head,
+                targets: [
+                    {
+                        expectedVersion: 0,
+                        definition: {
+                            viewId: "limits-guide",
+                            kind: "troubleshootingGuide",
+                            selector: {
+                                kind: "sources",
+                                sources: [
+                                    {
+                                        sourceId: limits.sourceId,
+                                        revisionId: limits.activeRevisionId!,
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                ],
+            }),
+        );
+        expect(unrelated.results[0].state).toBe("searchable");
         const preview = await service.previewForgetSource(corpusId, "phase");
         await service.forgetSource({
             corpusId,
@@ -464,10 +1018,45 @@ describe("actual configured evidence-first adapter and durable service", () => {
         expect(
             await service.getViewBuild({ corpusId, jobId: job.jobId }),
         ).toBeUndefined();
-        expect((await service.listViews(corpusId)).views).toHaveLength(0);
+        expect(
+            (await service.listViews(corpusId)).views.map(
+                (view) => view.viewId,
+            ),
+        ).toEqual(["limits-guide"]);
         expect(
             await service.getViewHistory({ corpusId, viewId: "guide" }),
         ).toHaveLength(0);
+        expect((await search()).map((match) => match.view.viewId)).toEqual([
+            "limits-guide",
+        ]);
+        expect(
+            (await service.getViewPublication({ corpusId, viewId: "guide" }))
+                .publishedRevisionId,
+        ).toBeUndefined();
+        await expect(
+            stat(
+                path.join(
+                    root,
+                    corpusId,
+                    "personal-how-to",
+                    "view-search-index",
+                    viewHash("guide"),
+                ),
+            ),
+        ).rejects.toThrow();
+        await service.close();
+        service = open();
+        expect((await search()).map((match) => match.view.viewId)).toEqual([
+            "limits-guide",
+        ]);
+        expect(
+            (
+                await service.getViewPublication({
+                    corpusId,
+                    viewId: "limits-guide",
+                })
+            ).indexedRevisionId,
+        ).toBe(unrelated.results[0].revisionId);
     });
     test("forged coverage cannot stand in for actual inventory content", async () => {
         await build();
@@ -628,6 +1217,17 @@ describe("actual configured evidence-first adapter and durable service", () => {
         };
         const job = await build();
         expect(job.results[0].state).toBe("conflicted");
+        expect(await search()).toEqual([]);
+        expect(
+            (await service.getViewPublication({ corpusId, viewId: "guide" }))
+                .blockedReason,
+        ).toContain("pending merge conflict");
+        await expect(guardedPublication()).rejects.toThrow(
+            "pending merge conflict",
+        );
+        await expect(guardedPublication(true)).rejects.toThrow(
+            "pending merge conflict",
+        );
         const conflict = (await service.getViewConflict({
             corpusId,
             conflictId: job.results[0].conflictId!,

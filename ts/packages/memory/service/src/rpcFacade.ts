@@ -24,6 +24,21 @@ export function createMemoryServiceRpcFacade(
     service: MemoryService & Partial<PersonalHowToService & MemoryViewService>,
 ): MemoryService & PersonalHowToService & MemoryViewService {
     return {
+        getViewPublicationPolicy: (...args) =>
+            service.getViewPublicationPolicy?.(...args) ??
+            unsupportedCapability("view publication policy"),
+        updateViewPublicationPolicy: (...args) =>
+            service.updateViewPublicationPolicy?.(...args) ??
+            unsupportedCapability("view publication policy"),
+        getViewPublication: (...args) =>
+            service.getViewPublication?.(...args) ??
+            unsupportedCapability("view publication"),
+        retryViewIndex: (...args) =>
+            service.retryViewIndex?.(...args) ??
+            unsupportedCapability("view index retry"),
+        searchViews: (...args) =>
+            service.searchViews?.(...args) ??
+            unsupportedCapability("published view search"),
         buildViews: (...args) =>
             service.buildViews?.(...args) ??
             unsupportedCapability("view builds"),

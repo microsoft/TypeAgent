@@ -10,6 +10,9 @@ import type {
     ViewSaveRequest,
     ViewBuildRequest,
     ViewConflictResolution,
+    ViewPublishRequest,
+    ViewPublicationPolicyUpdate,
+    ViewSearchRequest,
 } from "@typeagent/memory-service";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import {
@@ -26,6 +29,12 @@ import {
     viewConflictReadSchema,
     viewConflictSchema,
     viewResolutionSchema,
+    viewPublicationPolicySchema,
+    viewPublicationPolicyUpdateSchema,
+    viewPublicationStatusSchema,
+    viewPublishRequestSchema,
+    viewSearchRequestSchema,
+    viewSearchMatchSchema,
 } from "@typeagent/memory-client";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -37,6 +46,65 @@ export function registerViewTools(
 ): void {
     const views = createMemoryServiceRpcFacade(service);
     const corpus = z.strictObject({ corpusId: z.string().min(1).max(200) });
+    server.registerTool(
+        viewToolNames.getViewPublicationPolicy,
+        {
+            description:
+                "Read saved corpus and view auto-publish policy, with optimistic revisions.",
+            inputSchema: corpus,
+            outputSchema: z.object({ result: viewPublicationPolicySchema }),
+        },
+        async ({ corpusId }) =>
+            run(() => views.getViewPublicationPolicy(corpusId)),
+    );
+    server.registerTool(
+        viewToolNames.updateViewPublicationPolicy,
+        {
+            description:
+                "Update corpus default or view override with exact history and policy revision guards. False is off; null inherits only for a view.",
+            inputSchema: viewPublicationPolicyUpdateSchema,
+            outputSchema: z.object({ result: viewPublicationPolicySchema }),
+        },
+        async (request) =>
+            run(() =>
+                views.updateViewPublicationPolicy(
+                    request as ViewPublicationPolicyUpdate,
+                ),
+            ),
+    );
+    server.registerTool(
+        viewToolNames.getViewPublication,
+        {
+            description:
+                "Inspect latest built, published and indexed exact revision pointers and index failures.",
+            inputSchema: viewReadRequestSchema,
+            outputSchema: z.object({ result: viewPublicationStatusSchema }),
+        },
+        async (request) =>
+            run(() => views.getViewPublication(request as ViewReadRequest)),
+    );
+    server.registerTool(
+        viewToolNames.retryViewIndex,
+        {
+            description:
+                "Retry indexing the same published exact revision; never rebuild or republish.",
+            inputSchema: viewPublishRequestSchema,
+            outputSchema: z.object({ result: viewPublicationStatusSchema }),
+        },
+        async (request) =>
+            run(() => views.retryViewIndex(request as ViewPublishRequest)),
+    );
+    server.registerTool(
+        viewToolNames.searchViews,
+        {
+            description:
+                "Search only exact published/indexed, authorized current troubleshooting guides. Derived evidence is not independent corroboration.",
+            inputSchema: viewSearchRequestSchema,
+            outputSchema: z.object({ result: viewSearchMatchSchema.array() }),
+        },
+        async (request) =>
+            run(() => views.searchViews(request as ViewSearchRequest)),
+    );
     server.registerTool(
         viewToolNames.listViews,
         {
@@ -93,11 +161,13 @@ export function registerViewTools(
     server.registerTool(
         viewToolNames.publishView,
         {
-            description: "Explicitly unsupported: memory views are draft-only.",
-            inputSchema: viewReadRequestSchema,
+            description:
+                "Publish an exact current independently validated artifact with head/version guards. Human review never overrides evidence validation.",
+            inputSchema: viewPublishRequestSchema,
+            outputSchema: z.object({ result: viewPublicationStatusSchema }),
         },
         async (request) =>
-            run(() => views.publishView(request as ViewReadRequest)),
+            run(() => views.publishView(request as ViewPublishRequest)),
     );
     server.registerTool(
         viewToolNames.buildViews,

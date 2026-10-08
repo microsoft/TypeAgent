@@ -8,7 +8,9 @@ import type {
     ViewSynthesisAdapter,
     ViewSynthesisOutput,
     ViewVersion,
+    ViewPublicationProof,
 } from "./viewTypes.js";
+import { publicationProof } from "./viewPublication.js";
 import { validateInventoryAudit } from "./viewInventory.js";
 import { mergeView } from "./viewMerge.js";
 import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
@@ -35,6 +37,7 @@ export interface ViewBuildOwner {
         merged: ViewSynthesisOutput,
         conflicts: string[],
         signal: AbortSignal,
+        proof?: ViewPublicationProof,
     ): Promise<void>;
 }
 
@@ -266,15 +269,19 @@ export class ViewBuildRunner {
                 candidate,
                 result.snapshot.definition.selector.sources,
             );
+            let proof: ViewPublicationProof | undefined;
             if (!conflicts.length) {
                 validation = true;
                 validateConstructedGuide(result.snapshot, output);
-                validateSupport(
+                const support = await abortable(
+                    this.adapter.validate(result.snapshot, output, signal),
+                    signal,
+                );
+                validateSupport(output, support);
+                proof = publicationProof(
+                    result.snapshot.fingerprint,
                     output,
-                    await abortable(
-                        this.adapter.validate(result.snapshot, output, signal),
-                        signal,
-                    ),
+                    support,
                 );
             }
             validation = false;
@@ -286,6 +293,7 @@ export class ViewBuildRunner {
                 output,
                 conflicts,
                 signal,
+                proof,
             );
         } catch (error) {
             const state =
@@ -310,7 +318,13 @@ export class ViewBuildRunner {
         await this.owner.update(job.corpusId, job.jobId, (current) => {
             if (current.state === "cancelled") return;
             const saved = current.results.filter((result) =>
-                ["draft", "merged", "skipped"].includes(result.state),
+                [
+                    "draft",
+                    "merged",
+                    "published",
+                    "searchable",
+                    "skipped",
+                ].includes(result.state),
             ).length;
             current.state =
                 saved === current.results.length

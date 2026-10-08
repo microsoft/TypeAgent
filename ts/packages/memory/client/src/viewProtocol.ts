@@ -194,7 +194,7 @@ export const viewBuildRequestSchema = z.strictObject({
         .min(1)
         .max(32),
     bounds: bounds.optional(),
-    publication: z.literal(false).optional(),
+    publication: z.boolean().optional(),
 });
 export const viewSaveRequestSchema = z.strictObject({
     corpusId: id,
@@ -234,6 +234,56 @@ export const viewResolutionSchema = z.strictObject({
     choice: z.enum(["human", "generated", "combined"]),
     combined: viewSynthesisSchema.optional(),
 });
+export const viewEffectivePolicySchema = z.object({
+    autoPublish: z.boolean(),
+    origin: z.enum(["build", "view", "corpus"]),
+    corpusRevision: z.number().int().nonnegative(),
+    viewRevision: z.number().int().nonnegative(),
+    buildOverride: z.boolean().optional(),
+});
+export const viewPublicationPolicySchema = z.object({
+    revision: z.number().int().nonnegative(),
+    autoPublish: z.boolean(),
+    views: z.record(
+        z.string(),
+        z.object({
+            revision: z.number().int().nonnegative(),
+            autoPublish: z.boolean().nullable(),
+        }),
+    ),
+});
+export const viewPublicationPolicyUpdateSchema = z.strictObject({
+    corpusId: id,
+    expectedHead: head.nullable(),
+    expectedRevision: z.number().int().nonnegative(),
+    autoPublish: z.boolean().nullable(),
+    viewId: id.optional(),
+});
+export const viewPublishRequestSchema = z.strictObject({
+    corpusId: id,
+    viewId: id,
+    revisionId: id,
+    expectedVersion: z.number().int().positive(),
+    expectedHead: head,
+});
+export const viewPublicationStatusSchema = z.object({
+    viewId: id,
+    latestBuiltRevisionId: id.optional(),
+    publishedRevisionId: id.optional(),
+    indexedRevisionId: id.optional(),
+    intent: z
+        .object({ revisionId: id, actor: text, createdAt: z.string() })
+        .optional(),
+    indexState: z.enum(["absent", "pending", "failed", "ready"]),
+    reason: z.string(),
+    blockedReason: z.string().optional(),
+});
+export const viewSearchRequestSchema = z.strictObject({
+    corpusId: id,
+    query: text,
+    limit: z.number().int().min(1).max(100).optional(),
+    freshness: z.literal("current"),
+});
 const snapshot = z.object({
     corpusId: id,
     actor: text,
@@ -256,6 +306,7 @@ const snapshot = z.object({
     pipeline: z.literal("troubleshooting-v1"),
     model: text,
     fingerprint: hash,
+    publicationPolicy: viewEffectivePolicySchema.optional(),
 });
 export const viewBuildJobSchema = z.object({
     jobId: z.string().uuid(),
@@ -273,7 +324,7 @@ export const viewBuildJobSchema = z.object({
         "cancelled",
         "interrupted",
     ]),
-    publication: z.literal(false),
+    publication: z.boolean(),
     results: z
         .object({
             viewId: id,
@@ -286,6 +337,8 @@ export const viewBuildJobSchema = z.object({
                 "validating",
                 "draft",
                 "merged",
+                "published",
+                "searchable",
                 "conflicted",
                 "blocked",
                 "stale",
@@ -299,6 +352,7 @@ export const viewBuildJobSchema = z.object({
             conflictId: z.string().uuid().optional(),
             missingEvidence: z.string().array().optional(),
             ...inventoryEvidence,
+            publication: viewPublicationStatusSchema.optional(),
         })
         .array()
         .max(32),
@@ -340,6 +394,42 @@ export const viewVersionSchema = z.object({
     actor: text,
     baseRevisionId: id.optional(),
     provenance: z.enum(["human", "procedure", "generated", "merged"]),
+    validation: z
+        .object({
+            artifactFingerprint: hash,
+            inputFingerprint: hash,
+            support: z.object({
+                supported: z.boolean(),
+                sections: z
+                    .object({
+                        sectionId: id,
+                        supported: z.boolean(),
+                        reason: z.string(),
+                    })
+                    .array()
+                    .max(1000),
+                relationships: z
+                    .object({
+                        edgeId: id,
+                        supported: z.boolean(),
+                        reason: z.string(),
+                    })
+                    .array()
+                    .max(1000),
+                missingContext: z.string().array().max(1000),
+                reasons: z.string().array().max(1000),
+                exclusions: z
+                    .object({
+                        itemId: id,
+                        supported: z.boolean(),
+                        reason: z.string(),
+                    })
+                    .array()
+                    .max(128)
+                    .optional(),
+            }),
+        })
+        .optional(),
     definition: z.object({
         viewId: id,
         revisionId: id,
@@ -368,6 +458,7 @@ export const viewVersionSchema = z.object({
             relationships: edge.array().optional(),
             input: snapshot.optional(),
             outcome: z.enum(["diagnosticOnly", "verifiedRecovery"]).optional(),
+            missingEvidence: z.string().array().max(100).optional(),
             ...inventoryEvidence,
         })
         .optional(),
@@ -392,6 +483,15 @@ export const viewSnapshotSchema = z.object({
 export const viewHistoryEntrySchema = z.object({
     commitId: head,
     version: viewVersionSchema,
+});
+export const viewSearchMatchSchema = z.object({
+    view: viewVersionSchema,
+    score: z.number(),
+    snippet: z.string(),
+    review: z.literal("unreviewed"),
+    freshness: z.literal("current"),
+    evidence: citation.array(),
+    corroboration: z.literal("derived"),
 });
 export const viewConflictSchema = z.object({
     event: z.object({
@@ -424,6 +524,11 @@ export const viewToolNames = {
     archiveView: "memory_view_archive",
     getViewHistory: "memory_view_history",
     publishView: "memory_view_publish",
+    getViewPublicationPolicy: "memory_view_publication_policy",
+    updateViewPublicationPolicy: "memory_view_publication_policy_update",
+    getViewPublication: "memory_view_publication_status",
+    retryViewIndex: "memory_view_index_retry",
+    searchViews: "memory_views_search",
     buildViews: "memory_views_build",
     getViewBuild: "memory_view_build_get",
     listViewBuilds: "memory_view_builds_list",

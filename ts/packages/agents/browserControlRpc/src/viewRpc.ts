@@ -30,7 +30,7 @@ export type MemoryHubSearchRequest = {
 
 export type MemoryHubEvidence = {
     id: string;
-    kind: "source" | "procedure" | "conversation";
+    kind: "source" | "procedure" | "conversation" | "view";
     corpusId: string;
     corpusName: string;
     objectId: string;
@@ -45,6 +45,17 @@ export type MemoryHubEvidence = {
     canonicalUri?: string;
     procedureVersion?: number;
     procedureState?: "saved" | "stale" | "archived";
+    viewKind?: "troubleshootingGuide";
+    viewVersion?: number;
+    viewProvenance?: "human" | "procedure" | "generated" | "merged";
+    review?: "unreviewed";
+    freshness?: "current";
+    evidenceSources?: Array<{
+        sourceId: string;
+        revisionId: string;
+        locator: string;
+        excerpt: string;
+    }>;
     conversationId?: string;
     turnId?: string;
     eventTime?: string;
@@ -208,6 +219,7 @@ export type MemoryHubError = {
     operation:
         | "candidates"
         | "procedures"
+        | "views"
         | "jobs"
         | "sources"
         | "search"
@@ -377,6 +389,12 @@ export const viewMethods = [
     "memorySaveViewDraft",
     "memoryArchiveView",
     "memoryViewHistory",
+    "memoryGetViewPublicationPolicy",
+    "memoryUpdateViewPublicationPolicy",
+    "memoryGetViewPublication",
+    "memoryPublishView",
+    "memoryRetryViewIndex",
+    "memorySearchViews",
     "memoryBuildViews",
     "memoryGetViewBuild",
     "memoryListViewBuilds",

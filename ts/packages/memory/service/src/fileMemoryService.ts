@@ -33,7 +33,19 @@ import type {
     ViewMergeConflict,
     ViewConflictResolution,
     ViewSynthesisOutput,
+    ViewPublicationPolicy,
+    ViewPublicationPolicyUpdate,
+    ViewPublicationStatus,
+    ViewPublishRequest,
+    ViewSearchRequest,
+    ViewSearchMatch,
+    ViewPublicationProof,
 } from "./viewTypes.js";
+import {
+    assertPublicationProof,
+    effectiveViewPublicationPolicy,
+    publicationProof,
+} from "./viewPublication.js";
 import { ViewBuildRunner, ViewBuildStaleError } from "./viewBuilds.js";
 import { viewHash } from "./viewMerge.js";
 import { validateIsoTimestamp } from "./timestampValidation.js";
@@ -276,8 +288,9 @@ interface PreparedCorpusIndex {
 }
 
 export interface FileMemoryServiceOptions {
-    /** Local developer/demo capability. Drafts only; ordinary installations leave this off. */
+    /** Opt-in derived views; ordinary installations leave this off. */
     viewDrafts?: boolean;
+    viewPublicationCheckpoint?: (point: "intent" | "index") => Promise<void>;
     viewSynthesisAdapter?: ViewSynthesisAdapter;
     runbookBindingValidator?: RunbookBindingValidator;
     runbookSynthesizer?: RunbookSynthesizer;
@@ -848,6 +861,7 @@ export class FileMemoryService
     implements MemoryService, PersonalHowToService, MemoryViewService
 {
     private readonly viewDrafts: boolean;
+    private readonly viewPublicationCheckpoint: FileMemoryServiceOptions["viewPublicationCheckpoint"];
     private readonly viewAdapter: ViewSynthesisAdapter;
     private readonly viewBuilds: ViewBuildRunner;
     private readonly indexFactory: CorpusIndexFactory;
@@ -874,6 +888,7 @@ export class FileMemoryService
         private readonly rootDirectory: string,
         options: FileMemoryServiceOptions = {},
     ) {
+        this.viewPublicationCheckpoint = options.viewPublicationCheckpoint;
         this.viewDrafts = options.viewDrafts === true;
         this.viewAdapter =
             options.viewSynthesisAdapter ??
@@ -892,18 +907,71 @@ export class FileMemoryService
                     corpusId: input.corpusId,
                     viewId: input.definition.viewId,
                 }),
-            materialize: (job, result, candidate, merged, conflicts, signal) =>
+            materialize: (
+                job,
+                result,
+                candidate,
+                merged,
+                conflicts,
+                signal,
+                proof,
+            ) =>
                 this.enqueueWrite(job.corpusId, async () => {
                     signal.throwIfAborted();
                     await this.recheckViewInput(result.snapshot);
-                    await this.personalHowToStore.materializeViewBuild(
-                        job.corpusId,
-                        job.jobId,
-                        result.viewId,
-                        candidate,
-                        merged,
-                        conflicts,
-                    );
+                    const saved =
+                        await this.personalHowToStore.materializeViewBuild(
+                            job.corpusId,
+                            job.jobId,
+                            result.viewId,
+                            candidate,
+                            merged,
+                            conflicts,
+                            proof,
+                        );
+                    if (
+                        !conflicts.length &&
+                        saved.revisionId &&
+                        result.snapshot.publicationPolicy?.autoPublish
+                    ) {
+                        const snapshot =
+                            await this.personalHowToStore.listViews(
+                                job.corpusId,
+                            );
+                        const view = snapshot.views.find(
+                            (entry) => entry.viewId === result.viewId,
+                        );
+                        if (!view || !snapshot.head)
+                            throw new Error(
+                                "Materialized build target is missing",
+                            );
+                        const publication = await this.publishViewLocked({
+                            corpusId: job.corpusId,
+                            viewId: view.viewId,
+                            revisionId: view.revisionId,
+                            expectedVersion: view.version,
+                            expectedHead: snapshot.head,
+                        });
+                        await this.personalHowToStore.updateViewBuild(
+                            job.corpusId,
+                            job.jobId,
+                            (current) => {
+                                const receipt = current.results.find(
+                                    (entry) => entry.viewId === view.viewId,
+                                );
+                                if (!receipt)
+                                    throw new Error(
+                                        "Publication receipt target is missing",
+                                    );
+                                receipt.publication = publication;
+                                receipt.state =
+                                    publication.indexState === "ready"
+                                        ? "searchable"
+                                        : "published";
+                                receipt.reason = publication.reason;
+                            },
+                        );
+                    }
                 }),
         });
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
@@ -963,6 +1031,7 @@ export class FileMemoryService
                     /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(directory.name)
                 ) {
                     await this.personalHowToStore.recover(directory.name);
+                    await this.cleanArchivedViewIndexes(directory.name);
                     await this.personalHowToStore.recoverViewBuilds(
                         directory.name,
                     );
@@ -1031,6 +1100,10 @@ export class FileMemoryService
             };
             const manifest: CorpusManifest = { corpus, sources: [] };
             await writeJsonAtomic(this.manifestPath(corpusId), manifest);
+            if (this.viewDrafts)
+                await this.personalHowToStore.initializeViewPublicationPolicy(
+                    corpusId,
+                );
             const index = this.createIndex(corpusId);
             this.corpora.set(corpusId, {
                 manifest,
@@ -2334,7 +2407,8 @@ export class FileMemoryService
                           ] as Array<"troubleshootingGuide">,
                           drafts: true as const,
                           history: true as const,
-                          publication: false as const,
+                          publication: true as const,
+                          search: true as const,
                       },
                   }
                 : {}),
@@ -2376,6 +2450,7 @@ export class FileMemoryService
             corpusId: request.corpusId,
             viewId: request.viewId,
         });
+        let proof: ViewPublicationProof | undefined;
         if (prior?.generation?.input) {
             if (
                 viewHash(prior.definition.selector) !==
@@ -2388,19 +2463,22 @@ export class FileMemoryService
                 content: request.content,
                 relationships: request.relationships,
                 outcome: prior.generation.outcome ?? "diagnosticOnly",
-                missingEvidence: [
+                missingEvidence: prior.generation.missingEvidence ?? [
                     "Human edit retains generation evidence limits",
                 ],
                 ...inventoryEvidence(prior.generation),
             };
             validateConstructedGuide(prior.generation.input, output);
-            validateSupport(
+            const support = await this.viewAdapter.validate(
+                prior.generation.input,
                 output,
-                await this.viewAdapter.validate(
-                    prior.generation.input,
-                    output,
-                    new AbortController().signal,
-                ),
+                new AbortController().signal,
+            );
+            validateSupport(output, support);
+            proof = publicationProof(
+                prior.generation.input.fingerprint,
+                output,
+                support,
             );
         }
         return this.enqueueWrite(request.corpusId, async () => {
@@ -2444,7 +2522,7 @@ export class FileMemoryService
                         "View citation does not match the exact retained source revision",
                     );
             }
-            return this.personalHowToStore.saveViewDraft(request);
+            return this.personalHowToStore.saveViewDraft(request, proof);
         });
     }
 
@@ -2454,9 +2532,11 @@ export class FileMemoryService
         validateViewArchive(request);
         await this.requireViews(request.corpusId);
         validateIdentifier("view ID", request.viewId);
-        return this.enqueueWrite(request.corpusId, () =>
-            this.personalHowToStore.archiveView(request),
-        );
+        return this.enqueueWrite(request.corpusId, async () => {
+            const archived = await this.personalHowToStore.archiveView(request);
+            await this.cleanArchivedViewIndexes(request.corpusId);
+            return archived;
+        });
     }
 
     public async getViewHistory(
@@ -2468,17 +2548,362 @@ export class FileMemoryService
         );
     }
 
-    public async publishView(request: ViewReadRequest): Promise<never> {
-        await this.requireViews(request.corpusId);
-        throw new Error(
-            "Memory view publication is not supported; memory views are draft-only",
+    public async getViewPublicationPolicy(
+        corpusId: string,
+    ): Promise<ViewPublicationPolicy> {
+        const runtime = await this.requireViews(corpusId);
+        return runtime.access.read(() =>
+            this.personalHowToStore.getViewPublicationPolicy(corpusId),
         );
+    }
+
+    public async updateViewPublicationPolicy(
+        request: ViewPublicationPolicyUpdate,
+    ): Promise<ViewPublicationPolicy> {
+        await this.requireViews(request.corpusId);
+        if (
+            Object.keys(request).some(
+                (key) =>
+                    ![
+                        "corpusId",
+                        "expectedHead",
+                        "expectedRevision",
+                        "autoPublish",
+                        "viewId",
+                    ].includes(key),
+            ) ||
+            !Number.isSafeInteger(request.expectedRevision) ||
+            request.expectedRevision < 0 ||
+            (request.autoPublish !== null &&
+                typeof request.autoPublish !== "boolean")
+        )
+            throw new Error(
+                "Invalid publication policy update; actor is service-owned",
+            );
+        return this.enqueueWrite(request.corpusId, () =>
+            this.personalHowToStore.updateViewPublicationPolicy(request),
+        );
+    }
+
+    public async getViewPublication(
+        request: ViewReadRequest,
+    ): Promise<ViewPublicationStatus> {
+        const runtime = await this.requireViews(request.corpusId);
+        validateIdentifier("view ID", request.viewId);
+        return runtime.access.read(() =>
+            this.personalHowToStore.getViewPublication(request),
+        );
+    }
+
+    public async publishView(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
+        await this.requireViews(request.corpusId);
+        this.validateViewPublishRequest(request);
+        return this.enqueueWrite(request.corpusId, () =>
+            this.publishViewLocked(request),
+        );
+    }
+
+    private validateViewPublishRequest(request: ViewPublishRequest): void {
+        if (
+            Object.keys(request).some(
+                (key) =>
+                    ![
+                        "corpusId",
+                        "viewId",
+                        "revisionId",
+                        "expectedVersion",
+                        "expectedHead",
+                    ].includes(key),
+            ) ||
+            !/^[0-9a-f]{40}$/.test(request.expectedHead) ||
+            !Number.isSafeInteger(request.expectedVersion) ||
+            request.expectedVersion < 1
+        )
+            throw new Error(
+                "Publication requires exact expected head, version and revision; actor is service-owned",
+            );
+        validateIdentifier("view ID", request.viewId);
+        validateIdentifier("revision ID", request.revisionId);
+    }
+
+    private async assertViewPublicationFresh(
+        version: ViewVersion,
+    ): Promise<void> {
+        if (version.state !== "draft")
+            throw new Error(
+                "Archived or stale view cannot be published or searched",
+            );
+        assertPublicationProof(version);
+        const runtime = await this.getCorpusRuntime(version.corpusId);
+        for (const input of version.generation!.input!.inputs) {
+            const source = runtime.manifest.sources.find(
+                (entry) => entry.sourceId === input.sourceId,
+            );
+            const revision = source?.revisions.find(
+                (entry) => entry.revisionId === input.revisionId,
+            );
+            if (
+                !revision ||
+                revision.state !== "ready" ||
+                source?.activeRevisionId !== input.revisionId ||
+                viewHash(revision.content) !== input.contentHash
+            )
+                throw new ViewBuildStaleError(
+                    "Publication evidence was changed, forgotten or is no longer the exact accessible current revision; rebuild first",
+                );
+        }
+    }
+
+    private async publishViewLocked(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
+        const view = await this.personalHowToStore.getView(request);
+        if (!view) throw new Error("Publication revision is missing");
+        await this.assertViewPublicationFresh(view);
+        const publication = await this.personalHowToStore.publishView(request);
+        if (publication.indexState === "ready") return publication;
+        await this.viewPublicationCheckpoint?.("intent");
+        return this.indexViewLocked(view);
+    }
+
+    public async retryViewIndex(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
+        await this.requireViews(request.corpusId);
+        this.validateViewPublishRequest(request);
+        return this.enqueueWrite(request.corpusId, async () => {
+            const snapshot = await this.personalHowToStore.listViews(
+                request.corpusId,
+            );
+            const publication =
+                await this.personalHowToStore.getViewPublication(request);
+            if (publication.blockedReason)
+                throw new Error(publication.blockedReason);
+            const current = snapshot.views.find(
+                (entry) => entry.viewId === request.viewId,
+            );
+            if (
+                snapshot.head !== request.expectedHead ||
+                current?.version !== request.expectedVersion ||
+                publication.publishedRevisionId !== request.revisionId
+            )
+                throw new Error(
+                    "Index retry head, target or published revision conflict",
+                );
+            const published = await this.personalHowToStore.getView(request);
+            if (!published || current.state === "archived")
+                throw new Error(
+                    "Published revision is unavailable or archived",
+                );
+            await this.assertViewPublicationFresh(published);
+            return this.indexViewLocked(published);
+        });
+    }
+
+    private viewIndexDirectory(
+        version: Pick<ViewVersion, "corpusId" | "viewId" | "revisionId">,
+    ): string {
+        return path.join(
+            this.rootDirectory,
+            version.corpusId,
+            "personal-how-to",
+            "view-search-index",
+            viewHash(version.viewId),
+            viewHash(version.revisionId),
+        );
+    }
+
+    private async indexViewLocked(
+        view: ViewVersion,
+    ): Promise<ViewPublicationStatus> {
+        const directory = this.viewIndexDirectory(view);
+        const content = [
+            view.content.title,
+            view.content.summary ?? "",
+            ...view.content.sections.map(
+                (section) => `## ${section.heading}\n\n${section.body}`,
+            ),
+        ].join("\n\n");
+        try {
+            await mkdir(directory, { recursive: true });
+            const index = this.procedureIndexFactory(view.corpusId, directory);
+            await index.rebuild(
+                [
+                    {
+                        source: {
+                            corpusId: view.corpusId,
+                            sourceId: view.viewId,
+                            sourceType: "markdown",
+                            title: view.content.title,
+                            activeRevisionId: view.revisionId,
+                        },
+                        revision: {
+                            revisionId: view.revisionId,
+                            sourceId: view.viewId,
+                            contentHash: viewHash(content),
+                            mimeType: "text/markdown",
+                            pipelineVersion,
+                            state: "ready",
+                        },
+                        content,
+                        pipeline: { mode: "content" },
+                    },
+                ],
+                new AbortController().signal,
+                async () => {},
+            );
+            await stampIndexSchema(directory, "views", true);
+            await writeFile(
+                path.join(directory, "ready"),
+                view.revisionId,
+                "utf8",
+            );
+        } catch (error) {
+            await rm(directory, { recursive: true, force: true });
+            return this.personalHowToStore.updateViewIndex(
+                view.corpusId,
+                view.viewId,
+                view.revisionId,
+                `Indexing failed: ${redactRunbookText(error instanceof Error ? error.message : String(error))}`,
+            );
+        }
+        await this.viewPublicationCheckpoint?.("index");
+        return this.personalHowToStore.updateViewIndex(
+            view.corpusId,
+            view.viewId,
+            view.revisionId,
+        );
+    }
+
+    private async cleanArchivedViewIndexes(corpusId: string): Promise<void> {
+        for (const viewId of await this.personalHowToStore.getViewIndexCleanup(
+            corpusId,
+        )) {
+            await rm(
+                path.join(
+                    this.rootDirectory,
+                    corpusId,
+                    "personal-how-to",
+                    "view-search-index",
+                    viewHash(viewId),
+                ),
+                { recursive: true, force: true },
+            );
+            await this.personalHowToStore.completeViewIndexCleanup(
+                corpusId,
+                viewId,
+            );
+        }
+    }
+
+    public async searchViews(
+        request: ViewSearchRequest,
+    ): Promise<ViewSearchMatch[]> {
+        const runtime = await this.requireViews(request.corpusId);
+        if (
+            Object.keys(request).some(
+                (key) =>
+                    !["corpusId", "query", "limit", "freshness"].includes(key),
+            ) ||
+            !request.query.trim() ||
+            request.freshness !== "current" ||
+            (request.limit !== undefined &&
+                (!Number.isSafeInteger(request.limit) ||
+                    request.limit < 1 ||
+                    request.limit > 100))
+        )
+            throw new Error(
+                "Derived search requires a nonempty query and explicit current freshness",
+            );
+        return runtime.access.read(async () => {
+            const snapshot = await this.personalHowToStore.listViews(
+                request.corpusId,
+            );
+            const results: ViewSearchMatch[] = [];
+            for (const current of snapshot.views) {
+                if (current.compatibility || current.state === "archived")
+                    continue;
+                const publication =
+                    await this.personalHowToStore.getViewPublication({
+                        corpusId: request.corpusId,
+                        viewId: current.viewId,
+                    });
+                if (
+                    publication.blockedReason ||
+                    !publication.publishedRevisionId ||
+                    publication.indexState !== "ready" ||
+                    publication.indexedRevisionId !==
+                        publication.publishedRevisionId
+                )
+                    continue;
+                const view = await this.personalHowToStore.getView({
+                    corpusId: request.corpusId,
+                    viewId: current.viewId,
+                    revisionId: publication.publishedRevisionId,
+                });
+                if (!view)
+                    throw new Error(
+                        "Published view pointer references a missing revision",
+                    );
+                try {
+                    await this.assertViewPublicationFresh(view);
+                } catch (error) {
+                    if (error instanceof ViewBuildStaleError) continue;
+                    throw error;
+                }
+                const directory = this.viewIndexDirectory(view);
+                if (
+                    (await classifyIndexSchema(directory, "views", true)) !==
+                        "current" ||
+                    (await readFile(path.join(directory, "ready"), "utf8")) !==
+                        view.revisionId
+                )
+                    throw new Error(
+                        "Published view index is missing or does not match the exact revision; retry indexing",
+                    );
+                const index = this.procedureIndexFactory(
+                    request.corpusId,
+                    directory,
+                );
+                await index.initialize();
+                for (const match of await index.search(
+                    request.query.trim(),
+                    request.limit ?? 20,
+                )) {
+                    if (
+                        match.sourceId !== view.viewId ||
+                        match.revisionId !== view.revisionId
+                    )
+                        throw new Error(
+                            "Derived index returned a different published revision",
+                        );
+                    results.push({
+                        view,
+                        score: match.score,
+                        snippet: match.snippet,
+                        review: "unreviewed",
+                        freshness: "current",
+                        evidence:
+                            view.content.kind === "troubleshootingGuide"
+                                ? view.content.citations
+                                : [],
+                        corroboration: "derived",
+                    });
+                }
+            }
+            return results
+                .sort((a, b) => b.score - a.score)
+                .slice(0, request.limit ?? 20);
+        });
     }
 
     private async snapshotViewTarget(
         corpusId: string,
         target: ViewBuildTarget,
         bounds: ViewBuildRequest["bounds"],
+        buildOverride?: boolean,
     ): Promise<ViewBuildSnapshot> {
         const runtime = await this.getCorpusRuntime(corpusId);
         const current = await this.personalHowToStore.getView({
@@ -2558,6 +2983,13 @@ export class FileMemoryService
             inputs,
             pipeline: "troubleshooting-v1" as const,
             model: this.viewAdapter.identity,
+            publicationPolicy: effectiveViewPublicationPolicy(
+                await this.personalHowToStore.getViewPublicationPolicy(
+                    corpusId,
+                ),
+                target.definition.viewId,
+                buildOverride,
+            ),
         };
         return { ...snapshot, fingerprint: viewHash(snapshot) };
     }
@@ -2570,6 +3002,7 @@ export class FileMemoryService
                 expectedVersion: input.expectedVersion,
             },
             input.bounds,
+            input.publicationPolicy?.buildOverride,
         );
         if (snapshot.fingerprint !== input.fingerprint)
             throw new ViewBuildStaleError(
@@ -2599,6 +3032,7 @@ export class FileMemoryService
                             request.corpusId,
                             target,
                             request.bounds,
+                            request.publication,
                         ),
                     );
                 const admitted = await this.personalHowToStore.admitViewBuild(
@@ -2727,17 +3161,19 @@ export class FileMemoryService
             ...inventoryEvidence(conflict.candidate),
         };
         validateConstructedGuide(conflict.input, output);
-        validateSupport(
+        const support = await this.viewAdapter.validate(
+            conflict.input,
             output,
-            await this.viewAdapter.validate(
-                conflict.input,
-                output,
-                new AbortController().signal,
-            ),
+            new AbortController().signal,
         );
+        validateSupport(output, support);
         return this.enqueueWrite(request.corpusId, async () => {
             await this.recheckViewInput(conflict.input);
-            return this.personalHowToStore.resolveViewConflict(request, output);
+            return this.personalHowToStore.resolveViewConflict(
+                request,
+                output,
+                publicationProof(conflict.input.fingerprint, output, support),
+            );
         });
     }
 

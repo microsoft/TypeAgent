@@ -208,6 +208,7 @@ test("complete real synthetic sources: early, eight-document closure, then two e
             const current = await service.listViews(corpus.corpusId);
             let job = await service.buildViews({
                 corpusId: corpus.corpusId,
+                publication: false,
                 expectedHead: current.head,
                 bounds: {
                     learnedBefore:

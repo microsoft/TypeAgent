@@ -66,6 +66,7 @@ function fixture() {
                 warnings: ["Fixture warning"],
             };
         },
+        getCapabilities: async () => ({}),
         searchProcedures: async (_request) => [
             {
                 procedure: {
@@ -323,12 +324,72 @@ test("historical or unavailable source knowledge is explicit and never substitut
     assert.equal(failed.matches.length > 0, true);
 });
 
+test("All memory retains partial derived-search errors and does not count views as independent answer evidence", async () => {
+    const { service, synthesize } = fixture();
+    const synthesized = [];
+    const query = createMemoryHubQueryFunctions(
+        () => service,
+        () => "conversation-1",
+        async (question, evidence) => {
+            synthesized.push(evidence);
+            return synthesize(question, evidence);
+        },
+    );
+    service.getCapabilities = async () => ({ derivedViews: { search: true } });
+    service.searchViews = async ({ corpusId }) => {
+        if (corpusId === "b") throw new Error("Derived index unavailable");
+        return [
+            {
+                view: {
+                    viewId: "derived",
+                    revisionId: "exact-r",
+                    version: 3,
+                    content: { title: "Derived guide" },
+                    createdAt: time,
+                    provenance: "merged",
+                },
+                score: 1,
+                snippet: "New agent paragraph",
+                review: "unreviewed",
+                freshness: "current",
+                evidence: [
+                    {
+                        sourceId: "shared",
+                        revisionId: "r1",
+                        locator: "chars:0-6",
+                        excerpt: "Worker",
+                    },
+                ],
+            },
+        ];
+    };
+    const result = await query.memoryHubSearch({
+        query: "worker",
+        generateAnswer: true,
+    });
+    const view = result.matches.find((evidence) => evidence.kind === "view");
+    assert.equal(view.revisionId, "exact-r");
+    assert.equal(view.viewProvenance, "merged");
+    assert.equal(view.review, "unreviewed");
+    assert.ok(
+        result.errors.some(
+            (error) =>
+                error.corpusId === "b" &&
+                error.operation === "views" &&
+                error.message === "Derived index unavailable",
+        ),
+    );
+    assert.equal(synthesized.length, 1);
+    assert.ok(synthesized[0].every((evidence) => evidence.kind !== "view"));
+});
+
 test("mixed search preserves corpus/version/turn identity and synthesizes once over merged evidence", async () => {
     const { query, calls } = fixture();
     const result = await query.memoryHubSearch({
         query: "worker",
         generateAnswer: true,
     });
+
     assert.equal(result.matches.length, 5);
     assert.equal(result.matches.filter((m) => m.kind === "source").length, 2);
     assert.equal(result.ranking, "reciprocal-rank-fusion");

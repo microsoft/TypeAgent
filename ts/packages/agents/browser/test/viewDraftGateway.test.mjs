@@ -190,10 +190,44 @@ test("real views HTTP/parent IPC routes draft builds to the file-backed service 
         "Read only. No confirmed recovery. Fresh approval required.",
     );
     assert.equal(
-        (await invoke("memoryBuildViews", { ...request, publication: true }))
+        (await invoke("memoryBuildViews", { ...request, publication: "on" }))
             .status,
         400,
     );
     const html = await (await fetch(`${base}/library/memoryHub.html`)).text();
+    const policy = await invoke("memoryGetViewPublicationPolicy", {
+        corpusId: corpus.corpusId,
+    });
+    assert.equal(policy.status, 200);
+    assert.equal(policy.body.data.autoPublish, true);
+    const update = await invoke("memoryUpdateViewPublicationPolicy", {
+        corpusId: corpus.corpusId,
+        expectedHead: views.body.data.head,
+        expectedRevision: 0,
+        viewId: "guide",
+        autoPublish: false,
+    });
+    assert.equal(update.status, 200);
+    assert.equal(update.body.data.views.guide.autoPublish, false);
+    assert.equal(
+        (
+            await invoke("memoryPublishView", {
+                corpusId: corpus.corpusId,
+                viewId: "guide",
+                actor: "spoof",
+            })
+        ).status,
+        400,
+    );
+    assert.deepEqual(
+        (
+            await invoke("memorySearchViews", {
+                corpusId: corpus.corpusId,
+                query: "Read only",
+                freshness: "current",
+            })
+        ).body.data,
+        [],
+    );
     assert.match(html, /hubDraftViews/);
 });

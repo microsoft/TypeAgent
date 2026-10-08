@@ -8,6 +8,7 @@ import {
     type PersonalHowToService,
     type MemoryEvent,
     type ProcedureSearchMatch,
+    type MemoryViewService,
 } from "@typeagent/memory-service";
 import type {
     MemoryHubAnswer,
@@ -33,7 +34,7 @@ import { memoryHubSearchInsights } from "./memoryHubSearchInsights.mjs";
 export { timed } from "./memoryHubQuerySupport.mjs";
 
 export type MemoryHubReadService = MemoryService &
-    Partial<PersonalHowToService>;
+    Partial<PersonalHowToService & MemoryViewService>;
 export type MemoryHubSynthesizer = (
     question: string,
     evidence: MemoryHubEvidence[],
@@ -293,6 +294,75 @@ async function conversationResults(
     }));
 }
 
+async function viewResults(
+    service: MemoryHubReadService,
+    corpus: MemoryCenterCorpus,
+    request: MemoryHubSearchRequest,
+): Promise<MemoryHubEvidence[]> {
+    const capabilities = await timed(service.getCapabilities());
+    if (!capabilities.derivedViews?.search) return [];
+    if (!service.searchViews)
+        throw new Error("Published view retrieval is unavailable in this host");
+    const matches = await timed(
+        service.searchViews({
+            corpusId: corpus.corpusId,
+            query: request.query,
+            limit: 100,
+            freshness: "current",
+        }),
+    );
+    const results: MemoryHubEvidence[] = [];
+    for (const match of matches) {
+        if (!inDateRange(match.view.createdAt, request)) continue;
+        if (request.tags?.length || request.sourceTypes?.length) {
+            const sources = await Promise.all(
+                match.evidence.map((citation) =>
+                    timed(
+                        service.getSource(corpus.corpusId, citation.sourceId),
+                    ),
+                ),
+            );
+            if (
+                !sources.some(
+                    (source) =>
+                        source &&
+                        (!request.sourceTypes?.length ||
+                            request.sourceTypes.includes(source.sourceType)) &&
+                        (!request.tags?.length ||
+                            request.tags.every((tag) =>
+                                source.tags?.includes(tag),
+                            )),
+                )
+            )
+                continue;
+        }
+        results.push({
+            id: JSON.stringify([
+                "view",
+                corpus.corpusId,
+                match.view.viewId,
+                match.view.revisionId,
+            ]),
+            kind: "view",
+            corpusId: corpus.corpusId,
+            corpusName: corpus.name,
+            objectId: match.view.viewId,
+            title: match.view.content.title,
+            snippet: match.snippet,
+            score: match.score,
+            rank: results.length + 1,
+            revisionId: match.view.revisionId,
+            viewVersion: match.view.version,
+            viewKind: "troubleshootingGuide",
+            viewProvenance: match.view.provenance,
+            review: match.review,
+            freshness: match.freshness,
+            evidenceSources: match.evidence,
+        });
+    }
+    return results;
+}
+
 export function fuseEvidence(
     lists: MemoryHubEvidence[][],
     limit: number,
@@ -336,7 +406,7 @@ async function collectResults(
     const lists: MemoryHubEvidence[][] = [];
     const collect = async (
         corpus: MemoryCenterCorpus,
-        operation: "search" | "procedures" | "conversations",
+        operation: "search" | "procedures" | "conversations" | "views",
         work: () => Promise<MemoryHubEvidence[]>,
     ) => {
         try {
@@ -373,6 +443,9 @@ async function collectResults(
                 ),
                 collect(corpus, "procedures", () =>
                     procedureResults(service, corpus, request),
+                ),
+                collect(corpus, "views", () =>
+                    viewResults(service, corpus, request),
                 ),
             ]);
         }
@@ -462,6 +535,59 @@ async function evidenceContent(
             procedureVersion: version.version,
         });
     }
+    if (request.kind === "view") {
+        if (
+            !request.revisionId ||
+            !service.getView ||
+            !service.getViewPublication ||
+            !service.getCapabilities
+        )
+            throw new Error("Exact published view evidence is unavailable");
+        if (!(await service.getCapabilities()).derivedViews?.search)
+            throw new Error("Published views are disabled");
+        const publication = await service.getViewPublication({
+            corpusId: request.corpusId,
+            viewId: request.objectId,
+        });
+        if (
+            publication.blockedReason ||
+            publication.publishedRevisionId !== request.revisionId ||
+            publication.indexedRevisionId !== request.revisionId ||
+            publication.indexState !== "ready"
+        )
+            throw new Error(
+                "This published/indexed view revision is no longer current",
+            );
+        const view = await service.getView({
+            corpusId: request.corpusId,
+            viewId: request.objectId,
+            revisionId: request.revisionId,
+        });
+        const current = await service.getView({
+            corpusId: request.corpusId,
+            viewId: request.objectId,
+        });
+        if (!view || current?.state === "archived")
+            throw new Error("Published view is unavailable or archived");
+        for (const selected of view.definition.selector.sources) {
+            const source = await service.getSource(
+                request.corpusId,
+                selected.sourceId,
+            );
+            if (source?.activeRevisionId !== selected.revisionId)
+                throw new Error(
+                    "Published view evidence has changed; rebuild first",
+                );
+        }
+        const text = [
+            view.content.title,
+            view.content.summary ?? "",
+            ...view.content.sections.map(
+                (section) => `## ${section.heading}\n\n${section.body}`,
+            ),
+        ].join("\n\n");
+        return pageText(view.content.title, text, request, request);
+    }
     const event = validateConversation(
         await timed(service.getEvent(request.corpusId, request.objectId)),
     );
@@ -524,7 +650,9 @@ export function createMemoryHubQueryFunctions(
                                 memoryHubSearchInsights(
                                     service,
                                     request,
-                                    result.matches,
+                                    result.matches.filter(
+                                        (evidence) => evidence.kind !== "view",
+                                    ),
                                 ),
                         );
                         result.errors.sort(
@@ -536,7 +664,12 @@ export function createMemoryHubQueryFunctions(
                         result.warnings.push(
                             "Results are a bounded evidence selection, not complete corpus totals. Procedure retrieval is limited to 100 candidates per corpus.",
                         );
-                        if (request.generateAnswer && result.matches.length) {
+                        if (
+                            request.generateAnswer &&
+                            result.matches.some(
+                                (evidence) => evidence.kind !== "view",
+                            )
+                        ) {
                             result.warnings.push(
                                 "Answer context uses at most 20 evidence records, 800 characters per excerpt and 32,000 characters overall. Open cited evidence to inspect the original.",
                             );
@@ -547,7 +680,11 @@ export function createMemoryHubQueryFunctions(
                                         timed(
                                             synthesize(
                                                 result.query,
-                                                result.matches,
+                                                result.matches.filter(
+                                                    (evidence) =>
+                                                        evidence.kind !==
+                                                        "view",
+                                                ),
                                             ),
                                         ),
                                 );
@@ -573,6 +710,17 @@ export function createMemoryHubQueryFunctions(
                                     message: message(error),
                                 });
                             }
+                        } else if (
+                            request.generateAnswer &&
+                            result.matches.length
+                        ) {
+                            result.answer = {
+                                status: "noAnswer",
+                                text: "Only derived guides matched. Open their original evidence before making an independently corroborated answer.",
+                                mode: "extractive",
+                                citationIds: [],
+                                followUps: [],
+                            };
                         }
                         return result;
                     }),

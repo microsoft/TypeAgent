@@ -74,7 +74,10 @@ function recentQueries(): string[] {
     }
 }
 function exactRequest(evidence: MemoryHubEvidence): MemoryHubEvidenceRequest {
-    if (evidence.kind === "source" && !evidence.revisionId)
+    if (
+        (evidence.kind === "source" || evidence.kind === "view") &&
+        !evidence.revisionId
+    )
         throw new Error(
             "Exact source revision is unavailable; latest content is not substituted.",
         );
@@ -97,11 +100,13 @@ function exactRequest(evidence: MemoryHubEvidence): MemoryHubEvidenceRequest {
 }
 function provenanceText(evidence: MemoryHubEvidence): string {
     const identity =
-        evidence.kind === "procedure"
-            ? `Procedure version ${evidence.procedureVersion ?? "unavailable"}`
-            : evidence.kind === "source"
-              ? "Captured source revision"
-              : "Conversation event";
+        evidence.kind === "view"
+            ? `${evidence.viewKind} v${evidence.viewVersion} @ ${evidence.revisionId} · ${evidence.viewProvenance} · ${evidence.review} · ${evidence.freshness} · derived, not independent corroboration`
+            : evidence.kind === "procedure"
+              ? `Procedure version ${evidence.procedureVersion ?? "unavailable"}`
+              : evidence.kind === "source"
+                ? "Captured source revision"
+                : "Conversation event";
     const event = evidence.eventTime ? new Date(evidence.eventTime) : undefined;
     const date = event
         ? Number.isFinite(event.getTime())
@@ -345,6 +350,38 @@ export function mountMemoryHubSearch(
     }
     function latestManagement(evidence: MemoryHubEvidence) {
         management.replaceChildren();
+        if (evidence.kind === "view")
+            for (const source of evidence.evidenceSources ?? [])
+                management.append(
+                    action(
+                        `Inspect original evidence ${source.sourceId} @ ${source.revisionId} (${source.locator})`,
+                        () => {
+                            void openEvidence(
+                                {
+                                    id: JSON.stringify([
+                                        "source",
+                                        evidence.corpusId,
+                                        source.sourceId,
+                                        source.revisionId,
+                                        source.locator,
+                                    ]),
+                                    kind: "source",
+                                    corpusId: evidence.corpusId,
+                                    corpusName: evidence.corpusName,
+                                    objectId: source.sourceId,
+                                    sourceId: source.sourceId,
+                                    revisionId: source.revisionId,
+                                    title: source.sourceId,
+                                    snippet: source.excerpt,
+                                    score: evidence.score,
+                                    rank: evidence.rank,
+                                    locator: source.locator,
+                                },
+                                management,
+                            );
+                        },
+                    ),
+                );
         if (evidence.kind === "source")
             management.append(
                 action(

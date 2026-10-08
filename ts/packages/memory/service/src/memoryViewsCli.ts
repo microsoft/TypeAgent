@@ -13,9 +13,11 @@ import type {
     ViewConflictResolution,
     ViewBuildJob,
     MemoryViewService,
+    ViewPublishRequest,
+    ViewPublicationPolicyUpdate,
 } from "./viewTypes.js";
 
-const usage = `Developer draft-only views:
+const usage = `Opt-in derived views:
 node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <command> [arguments]
   corpora
   create-corpus <name>
@@ -33,9 +35,14 @@ node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <comman
   retry <corpusId> <jobId>
   inspect <corpusId> <conflictId>
   resolve <request.json>
-  publish <corpusId> <viewId> (explicitly unsupported)
+  policy <corpusId>
+  set-policy <request.json>
+  publication <corpusId> <viewId>
+  publish <request.json>
+  retry-index <request.json>
+  search <corpusId> <query>
 The store must not be owned by a running server. Actor comes from the local OS identity.
-Build uses configured synthesis. No reset, source deletion, publication or execution is performed.`;
+Build uses configured synthesis. Eligible artifacts can publish and index. No reset, source deletion, skill approval or execution is performed.`;
 
 const argumentCounts = new Map<string, readonly [number, number]>([
     ["corpora", [0, 0]],
@@ -54,7 +61,12 @@ const argumentCounts = new Map<string, readonly [number, number]>([
     ["retry", [2, 2]],
     ["inspect", [2, 2]],
     ["resolve", [1, 1]],
-    ["publish", [2, 2]],
+    ["publish", [1, 1]],
+    ["retry-index", [1, 1]],
+    ["policy", [1, 1]],
+    ["set-policy", [1, 1]],
+    ["publication", [2, 2]],
+    ["search", [2, 2]],
 ]);
 
 async function waitForViewBuild(
@@ -202,9 +214,32 @@ export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
                 return await rpc.archiveView(request);
             }
             case "publish":
-                return await rpc.publishView({
+            case "retry-index": {
+                const request: ViewPublishRequest = JSON.parse(
+                    await readFile(values[0], "utf8"),
+                );
+                return command === "publish"
+                    ? await rpc.publishView(request)
+                    : await rpc.retryViewIndex(request);
+            }
+            case "policy":
+                return await rpc.getViewPublicationPolicy(values[0]);
+            case "set-policy": {
+                const request: ViewPublicationPolicyUpdate = JSON.parse(
+                    await readFile(values[0], "utf8"),
+                );
+                return await rpc.updateViewPublicationPolicy(request);
+            }
+            case "publication":
+                return await rpc.getViewPublication({
                     corpusId: values[0],
                     viewId: values[1],
+                });
+            case "search":
+                return await rpc.searchViews({
+                    corpusId: values[0],
+                    query: values[1],
+                    freshness: "current",
                 });
         }
         throw new Error(usage);

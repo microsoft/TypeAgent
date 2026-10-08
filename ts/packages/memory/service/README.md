@@ -228,14 +228,14 @@ Guides. Procedure JSON/Markdown and hashes are deterministic compatibility
 projections, not independent canonical versions. Index preparation precedes the
 atomic history-ref commit; failed preparations do not save a procedure version.
 
-## Opt-in draft memory views
+## Opt-in derived memory views
 
 `new FileMemoryService(privateStore, { viewDrafts: true })` enables the local
 developer/demo capability. It is **off by default**. `getCapabilities()` then
 advertises `derivedViews: { kinds: ["troubleshootingGuide"], drafts: true,
-history: true, builds: true, editMerging: true, publication: false }`. Only
-`troubleshootingGuide` drafts are supported. Wiki, projectBrief, timeline,
-automatic scheduling, publication and derived search remain unsupported; they
+history: true, builds: true, editMerging: true, publication: true, search: true }`. Only
+`troubleshootingGuide` is supported. Wiki, projectBrief, timeline and
+automatic scheduling remain unsupported; they
 are never silently substituted with procedures.
 
 `listViews(corpusId)` returns `{ head, views }`, including pending drafts and
@@ -244,7 +244,7 @@ exact per-view revision. `saveViewDraft` creates at `expectedVersion: 0` or edit
 an existing draft with both `expectedVersion` and the exact corpus `expectedHead`.
 `archiveView` uses the same concurrency boundary. `getViewHistory` returns
 `{ commitId, version }` entries; per-view `revisionId` is distinct from the
-corpus commit ID. `publishView` explicitly rejects the request. Drafts never
+corpus commit ID. `publishView` requires an exact validated revision and optimistic guards. Drafts never
 enter procedure search. Existing saved runbooks retain their procedure/edition/
 skill APIs and distinct `procedure` content/definition kind; they cannot be
 overwritten via the generic draft editor.
@@ -314,7 +314,7 @@ A saved draft or positive audit is not a live-quality qualification.
 An unresolved checkpoint may produce `diagnosticOnly` with explicit missing
 evidence and cited recovery/escalation limits; it never invents a confirmed fix.
 
-`buildViews({ corpusId, expectedHead, targets, bounds?, publication?: false })`
+`buildViews({ corpusId, expectedHead, targets, bounds?, publication?: boolean })`
 admits a durable manual job. Each target supplies `expectedVersion` and a
 `definition` with a stable view ID, `kind: "troubleshootingGuide"` and an explicit
 revision-aware source selector. Admission freezes complete retained input text,
@@ -397,6 +397,77 @@ Build receipts retain their original outcomes after resolution. The Hub identifi
 the separate saved draft revision and keeps resolved or superseded-target conflict
 comparisons read-only rather than offering an invalid repeat resolution.
 
+### Publication policy and revision-matched search
+
+Pending merge conflicts block publication, index retry, default derived search
+and the exact derived-evidence reader without erasing the previous durable
+publication/index pointers. Resolve and validate the conflict first.
+Archive receipts identify the archive history entry; read `listViews` for the
+current concurrency head after durable index cleanup.
+
+Within the explicit capability, corpus auto-publish defaults **on**. Ordinary
+installations remain off: enabling this capability is not live-quality
+qualification. `getViewPublicationPolicy(corpusId)` returns
+`{ revision, autoPublish, views: { [viewId]: { revision, autoPublish } } }`.
+`updateViewPublicationPolicy` accepts corpus ID, expected history head,
+expected policy revision, optional view ID and `autoPublish`. A view's `null`
+means Inherit; corpus settings cannot inherit. The service assigns the actor.
+Resolution is build boolean override > saved view boolean override > corpus
+boolean. False is never inheritance. Overrides appear with their origin and
+configuration revisions in frozen build snapshots and receipts. Changing policy
+during synthesis rejects the old snapshot. A one-build override does not mutate
+saved policy. Turning off does not unpublish an existing version.
+
+Publication requires the exact final artifact's source-first inventory,
+independent source check, actual artifact coverage and independent semantic
+support audit. These are revision-bound proofs, not human-review stamps. A
+manual unsourced draft cannot acquire publication authority by saving or
+reviewing. Build from the selected retained revisions first, then use **Save
+explicit edits** to independently validate supported narrative changes and
+**Publish exact revision** when auto-publish is off. Missing facts, unsupported
+claims, unknown generated bases, conflicts and stale/forgotten sources block
+publication with actionable reasons. No source, skill or resource is changed.
+
+`getViewPublication({ corpusId, viewId })` returns distinct latest built,
+published and indexed revision IDs, durable publication intent, index state and
+reason. The single history-ref commit publishes the intent and revision before
+any index side effect. Index failure returns Published with failed indexing;
+pending/failed is never searchable. `retryViewIndex` requires exact published
+revision, current target version and history head, and indexes that revision
+without another synthesis or publication. Restart preserves pending work for
+explicit retry, including an interruption after the index files were written.
+
+`searchViews({ corpusId, query, freshness: "current", limit? })` uses the existing
+corpus-index abstraction and KnowPro's structured/embedding-backed path. Only an
+eligible published revision with the same indexed revision and exact readiness
+marker is returned. Current-source freshness is mandatory; retained stale views
+are inspectable in history, not substituted into default retrieval. Results expose
+kind, version, generated/human-merged provenance, unreviewed state, freshness and
+original citations. Named corpus and All memory searches include derived results
+and preserve per-corpus failures. Derived results are not independent corroboration:
+answer synthesis uses original/source evidence rather than counting a guide again.
+The evidence reader opens the exact published version and original retained
+source revisions, never a newer label over old indexed text.
+
+Archived indexes have durable cleanup work retried on reopen. Source forget
+rotates history and removes affected view index directories before the privacy
+quarantine clears; unrelated views/indexes and ordinary runbook semantics remain
+intact. Corpus clear removes the service-owned view history and indexes. Local
+deletion is not secure erasure of SSD blocks, external backups or exported copies;
+those require the deployment owner's separate retention/erasure policy.
+
+CLI commands include `policy`, `set-policy request.json`,
+`publication <corpusId> <viewId>`, `publish request.json`,
+`retry-index request.json` and `search <corpusId> <query>`. The Hub exposes corpus
+settings, view Inherit/On/Off and one-build Inherit/On/Off controls, effective
+policy, per-target progress, Publish and Retry index.
+
+The configured `gpt-4o-2024-11-20` model remains **live-unqualified**: the frozen
+source run failed inventory witness coverage before prose or saving. Publication
+does not weaken that gate or make human review a validation override. Offline
+configured-adapter/embedding tests demonstrate runtime contracts only, not live
+distillation quality.
+
 ### Real consuming surfaces
 
 The agent server and standalone memory MCP owner pass the developer flag
@@ -405,7 +476,7 @@ and invalid values fail. Use a fresh task-owned profile/store and alternate port
 Building this worktree does not alter an already running server.
 The Memory Hub Runbooks page exposes a developer draft Views panel only when
 capabilities advertise builds. Choose a named corpus, select exact current
-evidence, choose a stable view ID, then **Build (draft only)**. Inspect durable
+evidence, choose a stable view ID, then **Build views**. Inspect durable
 progress/receipts, edit stable structured sections and typed relationships,
 inspect history, or open the three-input conflict comparison and resolve
 explicitly. Polling does not replace an active editor.
@@ -414,7 +485,7 @@ Browser host validation, agent-side handlers, extension forwarding, RPC facade,
 in-process client and real MCP tools route to the owning memory service.
 The MCP surface includes `memory_views_build`, `memory_view_build_get`,
 `memory_view_builds_list`, cancellation/retry, draft CRUD/history and conflict
-inspection/resolution. `memory_view_publish` rejects publication explicitly.
+inspection/resolution, publication policy, exact publication, index retry and derived search.
 
 The compiled CLI loads existing configured models (never fetches keys) and uses
 the same service methods:
@@ -494,7 +565,7 @@ revision and source character ranges. A manual unsourced draft is also valid:
   "corpusId": "<returned corpusId>",
   "viewId": "pressure-guide",
   "expectedVersion": 0,
-  "expectedHead": null,
+  "expectedHead": "<head returned by list>",
   "definition": {
     "viewId": "pressure-guide",
     "kind": "troubleshootingGuide",
@@ -521,10 +592,11 @@ Change `body`/typed relationships, use `expectedVersion: 1` and the returned
 `commitId` as `expectedHead`, then `save` again. Each CLI invocation closes its
 service: the next `read` or `history` invocation demonstrates restart consistency.
 Archive with `archive request.json` containing corpus/view IDs, expected version
-and expected head. `publish` fails explicitly with the draft-only limitation.
+and expected head. `publish request.json` requires corpus/view/revision IDs,
+expected version and expected head; unsourced manual drafts are not publishable.
 The store must not be owned by a running server; the service storage lock enforces
 this. The CLI never resets data. CLI, service/RPC, MCP and browser consumers use
-the same opt-in draft-view capability.
+the same opt-in derived-view capability.
 The existing browser Runbook deep links remain intact: Guide is the primary
 human-readable document, its editor explicitly leaves original sources unchanged,
 and Agent edition is an optional executable adaptation, not a peer source.

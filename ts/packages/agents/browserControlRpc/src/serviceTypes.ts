@@ -21,6 +21,12 @@ import type {
     ViewVersion,
     ViewHistoryEntry,
     ViewMergeConflict,
+    ViewPublishRequest,
+    ViewPublicationStatus,
+    ViewPublicationPolicy,
+    ViewPublicationPolicyUpdate,
+    ViewSearchRequest,
+    ViewSearchMatch,
 } from "@typeagent/memory-service";
 
 // =============================================
@@ -228,6 +234,22 @@ export type MemoryCenterActivityFilter = {
 };
 
 export type MemoryCenterInvokeFunctions = {
+    memoryGetViewPublicationPolicy(params: {
+        corpusId: string;
+    }): Promise<ViewPublicationPolicy>;
+    memoryUpdateViewPublicationPolicy(
+        params: ViewPublicationPolicyUpdate,
+    ): Promise<ViewPublicationPolicy>;
+    memoryGetViewPublication(
+        params: ViewReadRequest,
+    ): Promise<ViewPublicationStatus>;
+    memoryPublishView(
+        params: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus>;
+    memoryRetryViewIndex(
+        params: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus>;
+    memorySearchViews(params: ViewSearchRequest): Promise<ViewSearchMatch[]>;
     memoryViewCapabilities(params: {}): Promise<MemoryServiceCapabilities>;
     memoryListViews(params: { corpusId: string }): Promise<ViewSnapshot>;
     memoryGetView(params: ViewReadRequest): Promise<ViewVersion | undefined>;
