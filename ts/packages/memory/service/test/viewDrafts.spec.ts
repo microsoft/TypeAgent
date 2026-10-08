@@ -659,6 +659,40 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         expect(corpora).toEqual([corpus]);
     });
 
+    test.each<[string, string[]]>([
+        ["corpora", ["extra"]],
+        ["create-corpus", []],
+        ["create-corpus", ["name", "extra"]],
+        ["list", []],
+        ["list", ["corpus", "extra"]],
+        ["sources", []],
+        ["sources", ["corpus", "extra"]],
+        ["source", ["corpus"]],
+        ["source", ["corpus", "source", "revision", "extra"]],
+        ["read", ["corpus"]],
+        ["read", ["corpus", "view", "revision", "extra"]],
+        ["history", ["corpus"]],
+        ["history", ["corpus", "view", "extra"]],
+        ["save", []],
+        ["save", ["request.json", "extra"]],
+        ["archive", []],
+        ["archive", ["request.json", "extra"]],
+        ["publish", ["corpus"]],
+        ["publish", ["corpus", "view", "extra"]],
+        ["toString", []],
+        ["unknown", []],
+    ])("CLI rejects invalid %s arguments", async (command, values) => {
+        await expect(
+            runMemoryViewsCli([
+                "--store",
+                root,
+                "--enable-view-drafts",
+                command,
+                ...values,
+            ]),
+        ).rejects.toThrow("Developer draft-only");
+    });
+
     test("compiled CLI entrypoint runs with no Git executable on PATH", async () => {
         await service.close();
         const script = fileURLToPath(
