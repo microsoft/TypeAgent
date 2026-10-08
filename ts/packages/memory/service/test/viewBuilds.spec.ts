@@ -24,6 +24,8 @@ import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { labelViewInput } from "../src/viewSynthesisEvidence.js";
+import { viewContextTopics } from "../src/viewSynthesisSchemas.js";
 
 function output(
     input: ViewBuildSnapshot,
@@ -959,8 +961,11 @@ describe("durable draft builds and explicit edit merge", () => {
                 )?.content;
                 if (!prompt) throw new Error("Missing synthetic model prompt");
                 const evidence = JSON.parse(prompt) as
-                    | ViewBuildSnapshot
-                    | { input: ViewBuildSnapshot; output: ViewSynthesisOutput };
+                    | ReturnType<typeof labelViewInput>
+                    | {
+                          input: ReturnType<typeof labelViewInput>;
+                          output: ViewSynthesisOutput;
+                      };
                 const required =
                     "output" in evidence
                         ? [
@@ -969,6 +974,8 @@ describe("durable draft builds and explicit edit merge", () => {
                               "relationships",
                               "missingContext",
                               "reasons",
+                              "sourceChecks",
+                              "contextChecks",
                           ]
                         : [
                               "content",
@@ -984,6 +991,10 @@ describe("durable draft builds and explicit edit merge", () => {
                     throw new Error(
                         "Structured output omits required constructor/audit contract",
                     );
+                const candidate = output(
+                    "output" in evidence ? evidence.input : evidence,
+                    modelBody,
+                );
                 const answer =
                     "output" in evidence
                         ? {
@@ -1004,8 +1015,74 @@ describe("durable draft builds and explicit edit merge", () => {
                                       reason: "Controlled loopback assessment",
                                   }),
                               ),
+                              sourceChecks: evidence.input.inputs.map(
+                                  (source) => ({
+                                      sourceId: source.sourceId,
+                                      reason: "Controlled loopback source assessment",
+                                      requiredFindings: source.passages.map(
+                                          (passage) => ({
+                                              passageId: passage.passageId,
+                                              claim: "Controlled synthetic evidence",
+                                              covered: true,
+                                              sectionIds: [
+                                                  evidence.output.content
+                                                      .sections[0].id,
+                                              ],
+                                              guidePassageIds: ["g0-0"],
+                                          }),
+                                      ),
+                                  }),
+                              ),
+                              contextChecks: viewContextTopics.map((topic) => ({
+                                  topic,
+                                  supported: true,
+                                  reason: "Controlled loopback context assessment",
+                                  citations: [
+                                      {
+                                          passageId:
+                                              evidence.input.inputs[0]
+                                                  .passages[0].passageId,
+                                      },
+                                  ],
+                                  sectionIds: [
+                                      evidence.output.content.sections[0].id,
+                                  ],
+                                  guidePassageIds: ["g0-0"],
+                              })),
                           }
-                        : output(evidence, modelBody);
+                        : {
+                              ...candidate,
+                              content: {
+                                  ...candidate.content,
+                                  citations: [
+                                      {
+                                          passageId:
+                                              evidence.inputs[0].passages[0]
+                                                  .passageId,
+                                      },
+                                  ],
+                              },
+                              relationships: candidate.relationships.map(
+                                  (edge) => {
+                                      if (edge.from.kind !== "section")
+                                          throw new Error(
+                                              "Controlled constructor requires section endpoints",
+                                          );
+                                      return {
+                                          id: edge.id,
+                                          sectionId: edge.from.sectionId,
+                                          citations: [
+                                              {
+                                                  passageId:
+                                                      evidence.inputs[0]
+                                                          .passages[0]
+                                                          .passageId,
+                                              },
+                                          ],
+                                      };
+                                  },
+                              ),
+                          };
                 response.writeHead(200, { "content-type": "application/json" });
                 response.end(
                     JSON.stringify({

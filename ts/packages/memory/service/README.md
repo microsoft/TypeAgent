@@ -272,6 +272,20 @@ The configured constructor and independent evidence audit use strict structured
 model-output schemas. Providers without schema support fail explicitly; there is
 no JSON-only fallback, fabricated result or citation repair. Schema compliance
 does not replace exact-character, relationship coverage or semantic/context checks.
+Construction selects snapshot-scoped paragraph `passageId` references, constrained
+by the model schema. The service resolves them to the retained source/revision,
+exact UTF-16 locator and unchanged excerpt; the model does not manufacture hashes
+or count offsets. Unknown references and mixed-source relationships fail explicitly.
+The independent audit extracts required findings from every selected source and
+checks ten explicit safety/context topics in addition to every section and edge.
+An overall positive verdict cannot override uncovered findings or missing coverage.
+Positive coverage must identify exact generated-guide passages in the claimed
+sections. Required quantitative findings must retain their stated numeric literals
+in that prose; a generic statement or a source citation alone is not coverage.
+These structural coverage checks supplement rather than replace semantic review;
+a saved draft receipt is not a claim of live-model quality qualification.
+An unresolved checkpoint may produce `diagnosticOnly` with explicit missing
+evidence and cited recovery/escalation limits; it never invents a confirmed fix.
 
 `buildViews({ corpusId, expectedHead, targets, bounds?, publication?: false })`
 admits a durable manual job. Each target supplies `expectedVersion` and a
