@@ -8,6 +8,15 @@ import {
     runbookViewSchemas,
 } from "./runbookViewSchemas.mjs";
 import { runbookImportViewSchemas } from "./runbookImportSchemas.mjs";
+import {
+    viewReadRequestSchema,
+    viewSaveRequestSchema,
+    viewArchiveRequestSchema,
+    viewBuildRequestSchema,
+    viewBuildJobRequestSchema,
+    viewConflictReadSchema,
+    viewResolutionSchema,
+} from "@typeagent/memory-client";
 import type {
     ViewMethod,
     ViewRequest,
@@ -54,8 +63,39 @@ const neighborhood = {
 const graph = { maxNodes: optionalCount, includeConnectivity: boolean };
 const importId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
 
+function protocolInput(schema: {
+    safeParse(value: unknown): {
+        success: boolean;
+        error?: { message: string };
+    };
+}): z.ZodType {
+    // Client and browser use different pinned Zod versions; share validation without mixing their internals.
+    return z.unknown().superRefine((value, context) => {
+        const result = schema.safeParse(value);
+        if (!result.success)
+            context.addIssue({
+                code: "custom",
+                message:
+                    result.error?.message ?? "Invalid view protocol request",
+            });
+    });
+}
+
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
+    memoryViewCapabilities: empty,
+    memoryListViews: z.strictObject(corpus),
+    memoryGetView: protocolInput(viewReadRequestSchema),
+    memorySaveViewDraft: protocolInput(viewSaveRequestSchema),
+    memoryArchiveView: protocolInput(viewArchiveRequestSchema),
+    memoryViewHistory: protocolInput(viewReadRequestSchema),
+    memoryBuildViews: protocolInput(viewBuildRequestSchema),
+    memoryGetViewBuild: protocolInput(viewBuildJobRequestSchema),
+    memoryListViewBuilds: z.strictObject(corpus),
+    memoryCancelViewBuild: protocolInput(viewBuildJobRequestSchema),
+    memoryRetryViewBuild: protocolInput(viewBuildJobRequestSchema),
+    memoryGetViewConflict: protocolInput(viewConflictReadSchema),
+    memoryResolveViewConflict: protocolInput(viewResolutionSchema),
     ...runbookViewSchemas,
     ...runbookImportViewSchemas,
     memoryHubSearch: z.strictObject({

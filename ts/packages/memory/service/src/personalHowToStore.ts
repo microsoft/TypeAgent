@@ -43,7 +43,20 @@ import type {
     ViewReadRequest,
     ViewHistoryEntry,
     ViewSnapshot,
+    ViewBuildJob,
+    ViewBuildRequest,
+    ViewBuildSnapshot,
+    ViewBuildTargetResult,
+    ViewSynthesisOutput,
+    ViewMergeConflict,
+    ViewConflictResolution,
 } from "./viewTypes.js";
+import {
+    recordViewEdits,
+    rebaseViewEdits,
+    reconcileResolutionEdits,
+    viewHash,
+} from "./viewMerge.js";
 export * from "./procedureMarkdown.js";
 import type {
     PersonalHowToSettings,
@@ -66,6 +79,8 @@ interface ProcedureIndex {
 interface ViewStoreState {
     index: ProcedureIndex;
     views: Record<string, ViewVersion[]>;
+    builds?: Record<string, ViewBuildJob>;
+    conflicts?: Record<string, ViewMergeConflict>;
 }
 
 function viewVersions(state: ViewStoreState, viewId: string): ViewVersion[] {
@@ -240,6 +255,15 @@ export class TypedViewStore {
             createdAt: timestamp(),
             actor: this.actor,
             provenance: "human",
+            ...(current?.generation
+                ? { generation: structuredClone(current.generation) }
+                : {}),
+            edits: recordViewEdits(
+                current,
+                request.content,
+                request.relationships,
+                this.actor,
+            ),
             ...(current ? { baseRevisionId: current.revisionId } : {}),
             definition: materializeDefinition(
                 request.definition,
@@ -251,6 +275,7 @@ export class TypedViewStore {
         version.relationships = versionRelationships(
             version,
             request.relationships,
+            current?.generation !== undefined,
         );
         state.views[request.viewId] = [...versions, version];
         const commitId = await history.commit(
@@ -259,6 +284,377 @@ export class TypedViewStore {
             this.entries(state),
             this.actor,
             `Draft ${request.viewId} revision ${version.revisionId}; base ${version.baseRevisionId ?? "none"}`,
+        );
+        return { commitId, version };
+    }
+
+    private async commitBuildState(
+        corpusId: string,
+        head: string | null,
+        state: ViewStoreState,
+        message: string,
+    ): Promise<string> {
+        return this.history(corpusId).commit(
+            head,
+            state,
+            this.entries(state),
+            this.actor,
+            message,
+        );
+    }
+
+    public async listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
+        const { state } = await this.history(corpusId).read();
+        return Object.values(state.builds ?? {})
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .slice(0, 100);
+    }
+
+    public async getViewBuild(
+        corpusId: string,
+        jobId: string,
+    ): Promise<ViewBuildJob | undefined> {
+        assertViewIdentifier("build job ID", jobId);
+        const { state } = await this.history(corpusId).read();
+        return state.builds?.[jobId];
+    }
+
+    public async admitViewBuild(
+        request: ViewBuildRequest,
+        snapshots: ViewBuildSnapshot[],
+    ): Promise<{ job: ViewBuildJob; admitted: boolean }> {
+        const { head, state } = await this.history(request.corpusId).read();
+        const fingerprint = viewHash({ request, snapshots });
+        const existing = Object.values(state.builds ?? {}).find(
+            (job) => job.fingerprint === fingerprint,
+        );
+        if (existing) return { job: existing, admitted: false };
+        if (head !== request.expectedHead)
+            throw new Error("View history head conflict at build admission");
+        const timestamp = new Date().toISOString();
+        const job: ViewBuildJob = {
+            jobId: randomUUID(),
+            corpusId: request.corpusId,
+            fingerprint,
+            request: structuredClone(request),
+            actor: this.actor,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            state: "running",
+            publication: false,
+            results: snapshots.map((snapshot) => ({
+                viewId: snapshot.definition.viewId,
+                snapshot,
+                state: "pending",
+                reason: "Queued for cross-source synthesis",
+            })),
+        };
+        state.builds ??= {};
+        state.builds[job.jobId] = job;
+        await this.commitBuildState(
+            request.corpusId,
+            head,
+            state,
+            `Admit draft build ${job.jobId}`,
+        );
+        return { job, admitted: true };
+    }
+
+    public async updateViewBuild(
+        corpusId: string,
+        jobId: string,
+        update: (job: ViewBuildJob) => void,
+    ): Promise<ViewBuildJob> {
+        const { head, state } = await this.history(corpusId).read();
+        const job = state.builds?.[jobId];
+        if (!job)
+            throw new Error(
+                "View build was removed or forgotten; cannot persist a result",
+            );
+        update(job);
+        job.updatedAt = timestamp();
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Build receipt ${jobId}`,
+        );
+        return job;
+    }
+
+    public async recoverViewBuilds(corpusId: string): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        const running = Object.values(state.builds ?? {}).filter(
+            (job) => job.state === "running",
+        );
+        if (!running.length) return;
+        for (const job of running) {
+            job.state = "interrupted";
+            job.updatedAt = timestamp();
+            for (const result of job.results) {
+                if (
+                    ["pending", "generating", "validating"].includes(
+                        result.state,
+                    )
+                ) {
+                    result.state = "interrupted";
+                    result.reason =
+                        "Service restarted before durable materialization; explicit retry required";
+                }
+            }
+        }
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Reconcile interrupted draft builds",
+        );
+    }
+
+    public async getViewConflict(
+        corpusId: string,
+        conflictId: string,
+    ): Promise<ViewMergeConflict | undefined> {
+        assertViewIdentifier("conflict ID", conflictId);
+        return (await this.history(corpusId).read()).state.conflicts?.[
+            conflictId
+        ];
+    }
+
+    public async materializeViewBuild(
+        corpusId: string,
+        jobId: string,
+        viewId: string,
+        candidate: ViewSynthesisOutput,
+        merged: ViewSynthesisOutput,
+        conflicts: string[],
+    ): Promise<ViewBuildTargetResult> {
+        const { head, state } = await this.history(corpusId).read();
+        const job = state.builds?.[jobId];
+        const result = job?.results.find((entry) => entry.viewId === viewId);
+        if (!job || !result || job.state !== "running")
+            throw new Error("Build is no longer eligible for materialization");
+        const current = viewVersions(state, viewId).at(-1);
+        if (
+            (current?.version ?? 0) !== result.snapshot.expectedVersion ||
+            current?.revisionId !== result.snapshot.targetRevisionId ||
+            current?.state === "archived"
+        )
+            throw new Error("View target changed during build");
+        if (conflicts.length) {
+            if (!current)
+                throw new Error("A missing target cannot have edit conflicts");
+            this.recordMergeConflict(
+                state,
+                job,
+                result,
+                current,
+                candidate,
+                conflicts,
+            );
+        } else {
+            const version = this.generatedVersion(
+                result.snapshot,
+                current,
+                candidate,
+                merged,
+            );
+            state.views[viewId] = [...viewVersions(state, viewId), version];
+            result.state = version.provenance === "merged" ? "merged" : "draft";
+            result.reason =
+                "Validated draft saved; no publication, review or execution authority";
+            result.revisionId = version.revisionId;
+            result.missingEvidence = candidate.missingEvidence;
+        }
+        job.updatedAt = timestamp();
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Materialize draft build ${jobId}: ${viewId} ${result.state}`,
+        );
+        return result;
+    }
+
+    private recordMergeConflict(
+        state: ViewStoreState,
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        current: ViewVersion,
+        candidate: ViewSynthesisOutput,
+        targets: string[],
+    ): void {
+        const identity = viewHash({
+            viewId: current.viewId,
+            current: current.revisionId,
+            input: result.snapshot.fingerprint,
+            candidate,
+            targets,
+        });
+        state.conflicts ??= {};
+        let conflict = Object.values(state.conflicts).find(
+            (entry) => entry.identity === identity,
+        );
+        if (!conflict) {
+            conflict = {
+                event: {
+                    kind: "viewMergeConflict",
+                    editIds: (current.edits ?? [])
+                        .filter((edit) => edit.status !== "cleared")
+                        .map((edit) => edit.id),
+                    evidence: result.snapshot.inputs.map(
+                        ({ sourceId, revisionId }) => ({
+                            sourceId,
+                            revisionId,
+                        }),
+                    ),
+                },
+                conflictId: randomUUID(),
+                identity,
+                corpusId: job.corpusId,
+                viewId: current.viewId,
+                jobId: job.jobId,
+                createdAt: timestamp(),
+                actor: "memory-view-generator",
+                state: "pending",
+                expectedRevisionId: current.revisionId,
+                input: result.snapshot,
+                base: current.generation,
+                human: current,
+                candidate,
+                targets,
+                reason: "Explicit edits cannot be preserved safely; authenticated resolution required",
+            };
+            state.conflicts[conflict.conflictId] = conflict;
+        }
+        result.state = "conflicted";
+        result.conflictId = conflict.conflictId;
+        result.reason = conflict.reason;
+    }
+
+    private generatedVersion(
+        input: ViewBuildSnapshot,
+        current: ViewVersion | undefined,
+        candidate: ViewSynthesisOutput,
+        merged: ViewSynthesisOutput,
+    ): ViewVersion & {
+        generation: NonNullable<ViewVersion["generation"]>;
+        edits: NonNullable<ViewVersion["edits"]>;
+    } {
+        const candidateId = randomUUID();
+        const edits = rebaseViewEdits(current, candidate, merged, candidateId);
+        const version: ViewVersion & {
+            generation: NonNullable<ViewVersion["generation"]>;
+            edits: NonNullable<ViewVersion["edits"]>;
+        } = {
+            corpusId: input.corpusId,
+            viewId: input.definition.viewId,
+            revisionId: randomUUID(),
+            version: (current?.version ?? 0) + 1,
+            state: "draft",
+            createdAt: timestamp(),
+            actor: "memory-view-generator",
+            ...(current ? { baseRevisionId: current.revisionId } : {}),
+            provenance: edits.some((edit) => edit.status !== "cleared")
+                ? "merged"
+                : "generated",
+            definition: materializeDefinition(
+                input.definition,
+                current?.definition,
+            ),
+            content: structuredClone(merged.content),
+            generation: {
+                candidateId,
+                content: structuredClone(candidate.content),
+                fingerprint: viewHash(candidate.content),
+                relationships: structuredClone(candidate.relationships),
+                input,
+                outcome: candidate.outcome,
+            },
+            edits,
+            relationships: [],
+        };
+        version.relationships = versionRelationships(
+            version,
+            merged.relationships,
+            true,
+        );
+        return version;
+    }
+
+    public async resolveViewConflict(
+        request: ViewConflictResolution,
+        output: ViewSynthesisOutput,
+    ): Promise<ViewHistoryEntry> {
+        const { head, state } = await this.history(request.corpusId).read();
+        const conflict = state.conflicts?.[request.conflictId];
+        const current = conflict && viewVersions(state, conflict.viewId).at(-1);
+        if (
+            head !== request.expectedHead ||
+            !conflict ||
+            conflict.state !== "pending" ||
+            !current ||
+            current.version !== request.expectedVersion ||
+            current.revisionId !== request.expectedRevisionId ||
+            current.revisionId !== conflict.expectedRevisionId ||
+            request.inputFingerprint !== conflict.input.fingerprint
+        )
+            throw new Error(
+                "Conflict resolution head/target/input guard changed",
+            );
+        const version = this.generatedVersion(
+            conflict.input,
+            current,
+            conflict.candidate,
+            output,
+        );
+        version.actor = this.actor;
+        version.provenance = "human";
+        if (request.choice === "generated")
+            version.edits = (current.edits ?? []).map((edit) => ({
+                ...edit,
+                status: "cleared",
+            }));
+        else {
+            const baseline = {
+                ...version,
+                content: conflict.candidate.content,
+                edits: [],
+                relationships: versionRelationships(
+                    version,
+                    conflict.candidate.relationships,
+                    true,
+                ),
+            };
+            const fresh = recordViewEdits(
+                baseline,
+                output.content,
+                output.relationships,
+                this.actor,
+            );
+            version.edits = reconcileResolutionEdits(
+                current,
+                version.edits,
+                fresh,
+                output,
+            );
+        }
+        version.relationships = versionRelationships(
+            version,
+            output.relationships,
+            true,
+        );
+        state.views[version.viewId] = [
+            ...viewVersions(state, version.viewId),
+            version,
+        ];
+        conflict.state = "resolved";
+        conflict.resolutionRevisionId = version.revisionId;
+        const commitId = await this.commitBuildState(
+            request.corpusId,
+            head,
+            state,
+            `Resolve view conflict ${conflict.conflictId} by ${this.actor}`,
         );
         return { commitId, version };
     }
@@ -293,6 +689,7 @@ export class TypedViewStore {
         version.relationships = versionRelationships(
             version,
             authoredRelationships(current),
+            current.generation?.input !== undefined,
         );
         state.views[request.viewId] = [...versions, version];
         const commitId = await history.commit(
@@ -359,6 +756,26 @@ export class TypedViewStore {
         );
         state.views = Object.fromEntries(
             Object.entries(state.views).filter(([id]) => !affected.has(id)),
+        );
+        state.builds = Object.fromEntries(
+            Object.entries(state.builds ?? {}).filter(
+                ([, job]) =>
+                    !job.results.some(
+                        (result) =>
+                            result.snapshot.inputs.some(
+                                (input) => input.sourceId === sourceId,
+                            ) || affected.has(result.viewId),
+                    ),
+            ),
+        );
+        state.conflicts = Object.fromEntries(
+            Object.entries(state.conflicts ?? {}).filter(
+                ([, conflict]) =>
+                    !affected.has(conflict.viewId) &&
+                    !conflict.input.inputs.some(
+                        (input) => input.sourceId === sourceId,
+                    ),
+            ),
         );
         state.index.procedures = state.index.procedures.filter(
             (item) => !affected.has(item.procedureId),
@@ -825,6 +1242,7 @@ export class TypedViewStore {
             next.relationships = versionRelationships(
                 next,
                 authoredRelationships(current),
+                current.generation?.input !== undefined,
             );
             snapshot.state.views[id] = [...versions, next];
             draftChanged = true;

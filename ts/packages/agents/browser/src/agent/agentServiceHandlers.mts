@@ -24,6 +24,7 @@ import { createMemoryHubCaptureFunctions } from "./memoryHubCapture.mjs";
 import { createMemoryHubRunbookFunctions } from "./memoryHubRunbooks.mjs";
 import { addRunbookInbox } from "./memoryHubRunbookInbox.mjs";
 import { createMemoryHubRunbookImportFunctions } from "./memoryHubRunbookImports.mjs";
+import { createMemoryViewFunctions } from "./memoryViews.mjs";
 import {
     ensureBrowserViewHost,
     type BrowserViewDomainFunctions,
@@ -137,6 +138,7 @@ export function createAgentInvokeHandlers(
         memoryCreateCorpus: ({ name, description }) =>
             getMemoryService().createCorpus(name, description),
         memoryListCorpora: () => getMemoryService().listCorpora(),
+        ...createMemoryViewFunctions(getMemoryService),
         memoryGetCorpus: ({ corpusId }) =>
             getMemoryService().getCorpus(corpusId),
         memoryListSources: (params) =>

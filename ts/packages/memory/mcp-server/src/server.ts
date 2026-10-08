@@ -4,7 +4,10 @@
 
 import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import { loadConfigSync } from "@typeagent/config";
-import { FileMemoryService } from "@typeagent/memory-service";
+import {
+    FileMemoryService,
+    parseViewDraftCapability,
+} from "@typeagent/memory-service";
 import { fileURLToPath } from "node:url";
 import { MemoryMcpServer } from "./memoryMcpServer.js";
 
@@ -14,7 +17,14 @@ initRuntimeConfigFromProcessEnv();
 const rootDirectory =
     process.env.TYPEAGENT_MEMORY_DIR ??
     fileURLToPath(new URL("../../data", import.meta.url));
-const service = new FileMemoryService(rootDirectory);
+const service = new FileMemoryService(rootDirectory, {
+    viewDrafts: parseViewDraftCapability(
+        process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS,
+    ),
+    ...(process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT
+        ? { runbookModelEndpoint: process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT }
+        : {}),
+});
 const server = new MemoryMcpServer(service);
 
 const close = async () => {

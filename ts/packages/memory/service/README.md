@@ -228,14 +228,15 @@ Guides. Procedure JSON/Markdown and hashes are deterministic compatibility
 projections, not independent canonical versions. Index preparation precedes the
 atomic history-ref commit; failed preparations do not save a procedure version.
 
-## Developer draft Views pilot (W1/W2)
+## Developer draft Views pilot (W1-W4)
 
 `new FileMemoryService(privateStore, { viewDrafts: true })` enables the local
 developer/demo capability. It is **off by default**. `getCapabilities()` then
 advertises `derivedViews: { kinds: ["troubleshootingGuide"], drafts: true,
-history: true, publication: false }`. Only new `troubleshootingGuide` drafts are supported:
-wiki, projectBrief, timeline, automatic generation, merge overlays, publication
-and derived search are not fabricated or silently substituted with procedures.
+history: true, builds: true, editMerging: true, publication: false }`. Only
+`troubleshootingGuide` drafts are supported. Wiki, projectBrief, timeline,
+automatic scheduling, publication and derived search remain unsupported; they
+are never silently substituted with procedures.
 
 `listViews(corpusId)` returns `{ head, views }`, including pending drafts and
 explicit lifecycle state. `getView({ corpusId, viewId, revisionId? })` reads an
@@ -264,6 +265,131 @@ request-supplied actor. Each edit records its exact base revision. Saving a
 generated runbook candidate also retains the exact original candidate content
 and fingerprint separately from the human saved content for later merging.
 Manual drafts have no invented generated base.
+
+### Cross-source Build views (W3)
+
+The configured constructor and independent evidence audit use strict structured
+model-output schemas. Providers without schema support fail explicitly; there is
+no JSON-only fallback, fabricated result or citation repair. Schema compliance
+does not replace exact-character, relationship coverage or semantic/context checks.
+
+`buildViews({ corpusId, expectedHead, targets, bounds?, publication?: false })`
+admits a durable manual job. Each target supplies `expectedVersion` and a
+`definition` with a stable view ID, `kind: "troubleshootingGuide"` and an explicit
+revision-aware source selector. Admission freezes complete retained input text,
+source membership, current exact revisions, content hashes, target and definition
+revisions, authenticated OS actor, temporal bounds and configured pipeline/model
+identity. Their fingerprint is persisted with every per-target receipt.
+There is no browser-owned job store or duplicate canonical view store.
+
+Bounds are `learnedBefore`, `occurredFrom` and `occurredTo`, all ISO timestamps.
+Learned time uses source `capturedAt`; occurrence bounds use `sourceModifiedAt`.
+A source outside a bound, or lacking its required timestamp, is rejected, not
+silently truncated. Record-level occurrence/knowledge distinctions remain in
+the complete labeled source text. A later replacement cannot masquerade as an
+earlier available revision. Select only the early documents for an early
+checkpoint; do not import review gold or authoring expectations as memory.
+
+The configured synthesis adapter follows the established runbook model path.
+It receives complete inputs and exact paragraph locators, constructs a
+conditional guide with goal/applicability, prerequisites, diagnostic trajectory,
+guards, verification, recovery/escalation and reuse context, and distinguishes
+diagnostic-only from verified recovery. Structural and exact UTF-16 citation
+validation is followed by a separate model-based semantic/context audit covering
+every section and relationship. Matching offsets alone cannot pass that audit.
+Merged or explicitly resolved prose is audited again. This audit is not a
+formal proof or live-quality qualification; controlled offline responses test
+the protocol and lifecycle separately from configured-model quality.
+
+Model generation runs outside corpus writes. Before materialization, the service
+rechecks source/access/target/definition fingerprints under its write queue.
+Concurrent saves, replaced/forgotten evidence, cancellation and archived targets
+cannot overwrite the current draft. Receipts expose `draft`, `merged`,
+`conflicted`, `blocked`, `stale`, `failed`, `cancelled` and `interrupted` per target;
+partial batches are not all-success. The saved draft and result revision enter
+the same history commit. A restart reconciles pending/running targets as
+interrupted, without undoing already materialized targets or pretending success.
+
+`getViewBuild({ corpusId, jobId })`, `listViewBuilds(corpusId)`,
+`cancelViewBuild` and `retryViewBuild` inspect/control jobs. Exact repeated
+admissions return the original durable receipt; an explicit retry uses current
+head/target guards and retries only unsuccessful targets. Changed source
+selectors require a new build. Cancellation stops future materialization even
+if a provider is still unwinding its request; already saved drafts remain.
+Limits are 32 targets, 32 exact sources per target, 120000 complete input
+characters and a 120-second per-target synthesis/validation deadline; there is
+no silent truncation or heuristic generation fallback.
+
+### Explicit edits and conflicts (W4)
+
+Saving a draft captures stable edit IDs, stable section/semantic-edge targets,
+OS actor/time, exact generated base identity/fingerprint, old values/hashes,
+new values or deletion, and persistent status. Review alone is not an edit.
+Unknown/baseless human content is never classified as unedited. Generated,
+unedited content can be replaced without fabricated human-review stamps.
+
+Pinned `node-diff3` merges exact old generated base/current human/new candidate
+line arrays, retaining CRLF, whitespace and fenced code. Independent changes
+and paragraph append merge; identical changes converge; overlap,
+deletion/modification and ambiguous insertion positions conflict. The bound is
+120000 characters and 4000 lines per prose field. No LLM chooses a merge winner.
+Relationships merge separately by predicate and semantic endpoint identity,
+not rendered JSON: human additions retain human provenance and removals persist
+as tombstones even if the generator re-identifies edge IDs. Retained edits are
+rebased to the new generated base without losing their original attribution.
+
+A `viewMergeConflict` event records metadata-only evidence/edit references and
+a deduplicated identity. Its authorized comparison retains exact base/human/new
+content in the same private history. Current content stays untouched.
+`getViewConflict({ corpusId, conflictId })` inspects it.
+`resolveViewConflict` requires the expected current revision/version, history
+head, input fingerprint and explicit `human`, `generated` or `combined` choice.
+Combined supplies a complete `ViewSynthesisOutput`; every choice is evidence-
+and context-validated before saving. Resolution and overlays are durable and
+later builds preserve retained edits. Unchanged resolved edits keep their IDs,
+actors and original timestamps; newly selected or changed values receive explicit
+resolver-attributed operations, while superseded operations remain cleared.
+Untracked section or relationship changes cannot hide behind another tracked edit.
+Forgotten sources purge dependent builds,
+conflicts, edit payloads, generations and history objects, not just visible refs.
+Build receipts retain their original outcomes after resolution. The Hub identifies
+the separate saved draft revision and keeps resolved or superseded-target conflict
+comparisons read-only rather than offering an invalid repeat resolution.
+
+### Real consuming surfaces
+
+The agent server and standalone memory MCP owner pass the developer flag
+explicitly via `TYPEAGENT_MEMORY_VIEW_DRAFTS=true`; unset/false remains off,
+and invalid values fail. Use a fresh task-owned profile/store and alternate port.
+Building this worktree does not alter an already running server.
+The Memory Hub Runbooks page exposes a developer draft Views panel only when
+capabilities advertise builds. Choose a named corpus, select exact current
+evidence, choose a stable view ID, then **Build (draft only)**. Inspect durable
+progress/receipts, edit stable structured sections and typed relationships,
+inspect history, or open the three-input conflict comparison and resolve
+explicitly. Polling does not replace an active editor.
+
+Browser host validation, agent-side handlers, extension forwarding, RPC facade,
+in-process client and real MCP tools route to the owning memory service.
+The MCP surface includes `memory_views_build`, `memory_view_build_get`,
+`memory_view_builds_list`, cancellation/retry, draft CRUD/history and conflict
+inspection/resolution. `memory_view_publish` rejects publication explicitly.
+
+The compiled CLI loads existing configured models (never fetches keys) and uses
+the same service methods:
+
+```powershell
+node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts build build-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts builds <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts status <corpusId> <jobId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts inspect <corpusId> <conflictId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts resolve resolution-request.json
+```
+
+`build` and `retry` wait for the terminal receipt before releasing their private
+store. `cancel` and `retry` also take `<corpusId> <jobId>`. Do not point this
+exclusive CLI owner at a running server's store. Use MCP/Hub to control live
+jobs in the actual owning service.
 
 `TypedViewStore` generalizes the existing procedure persistence;
 `PersonalHowToStore` remains its compatibility export. Both workflows use one

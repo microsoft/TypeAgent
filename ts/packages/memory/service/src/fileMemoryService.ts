@@ -23,7 +23,29 @@ import type {
     ViewHistoryEntry,
     ViewSnapshot,
     ViewVersion,
+    ViewBuildRequest,
+    ViewBuildJob,
+    ViewBuildJobRequest,
+    ViewBuildSnapshot,
+    ViewBuildTarget,
+    ViewSynthesisAdapter,
+    ViewConflictReadRequest,
+    ViewMergeConflict,
+    ViewConflictResolution,
+    ViewSynthesisOutput,
 } from "./viewTypes.js";
+import { ViewBuildRunner, ViewBuildStaleError } from "./viewBuilds.js";
+import { viewHash } from "./viewMerge.js";
+import {
+    createConfiguredViewSynthesisAdapter,
+    validateConstructedGuide,
+    validateSupport,
+} from "./viewSynthesis.js";
+import {
+    validateBuildRequest,
+    validateConflictResolution,
+} from "./viewBuildValidation.js";
+import { authoredRelationships } from "./viewRelationships.js";
 import { validateViewDraft, validateViewArchive } from "./viewValidation.js";
 import lockfile from "proper-lockfile";
 import {
@@ -254,6 +276,7 @@ interface PreparedCorpusIndex {
 export interface FileMemoryServiceOptions {
     /** Local developer/demo capability. Drafts only; ordinary installations leave this off. */
     viewDrafts?: boolean;
+    viewSynthesisAdapter?: ViewSynthesisAdapter;
     runbookBindingValidator?: RunbookBindingValidator;
     runbookSynthesizer?: RunbookSynthesizer;
     runbookModelEndpoint?: string;
@@ -850,6 +873,8 @@ export class FileMemoryService
     implements MemoryService, PersonalHowToService, MemoryViewService
 {
     private readonly viewDrafts: boolean;
+    private readonly viewAdapter: ViewSynthesisAdapter;
+    private readonly viewBuilds: ViewBuildRunner;
     private readonly indexFactory: CorpusIndexFactory;
     private readonly procedureIndexFactory: CorpusIndexFactory;
     private readonly eventIndexFactory: CorpusIndexFactory;
@@ -875,6 +900,37 @@ export class FileMemoryService
         options: FileMemoryServiceOptions = {},
     ) {
         this.viewDrafts = options.viewDrafts === true;
+        this.viewAdapter =
+            options.viewSynthesisAdapter ??
+            createConfiguredViewSynthesisAdapter(options.runbookModelEndpoint);
+        this.viewBuilds = new ViewBuildRunner(this.viewAdapter, {
+            update: (corpusId, jobId, update) =>
+                this.enqueueWrite(corpusId, () =>
+                    this.personalHowToStore.updateViewBuild(
+                        corpusId,
+                        jobId,
+                        update,
+                    ),
+                ),
+            current: (input) =>
+                this.getView({
+                    corpusId: input.corpusId,
+                    viewId: input.definition.viewId,
+                }),
+            materialize: (job, result, candidate, merged, conflicts, signal) =>
+                this.enqueueWrite(job.corpusId, async () => {
+                    signal.throwIfAborted();
+                    await this.recheckViewInput(result.snapshot);
+                    await this.personalHowToStore.materializeViewBuild(
+                        job.corpusId,
+                        job.jobId,
+                        result.viewId,
+                        candidate,
+                        merged,
+                        conflicts,
+                    );
+                }),
+        });
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
         this.procedureIndexFactory =
             options.procedureIndexFactory ?? this.indexFactory;
@@ -930,8 +986,12 @@ export class FileMemoryService
                 if (
                     directory.isDirectory() &&
                     /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(directory.name)
-                )
+                ) {
                     await this.personalHowToStore.recover(directory.name);
+                    await this.personalHowToStore.recoverViewBuilds(
+                        directory.name,
+                    );
+                }
             }
             await this.pruneStoredChanges();
             await this.recoverInterruptedJobs();
@@ -952,6 +1012,7 @@ export class FileMemoryService
         }
         await this.batchStore.close();
         await this.runbookJobs.close();
+        const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
         await Promise.allSettled([
             this.rootWriteTail,
             ...this.corpusLoads.values(),
@@ -962,6 +1023,8 @@ export class FileMemoryService
         );
         await this.releaseLock?.();
         this.releaseLock = undefined;
+        const viewFailure = viewClosure[0];
+        if (viewFailure.status === "rejected") throw viewFailure.reason;
     }
 
     public async createCorpus(
@@ -1097,6 +1160,7 @@ export class FileMemoryService
         validateIdentifier("corpus ID", corpusId);
         await this.batchStore.purge(corpusId);
         await this.runbookJobs.purge(corpusId);
+        this.viewBuilds.forget(corpusId);
         let clearedCount = 0;
         await this.enqueueWrite(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
@@ -1659,6 +1723,7 @@ export class FileMemoryService
         if (Date.parse(pendingForget.expiresAt) <= Date.now())
             throw new Error("Source forget confirmation has expired");
         await this.batchStore.cancelSource(request.corpusId, request.sourceId);
+        this.viewBuilds.forget(request.corpusId, request.sourceId);
         let result: SourceForgetResult | undefined;
         await this.enqueueWrite(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
@@ -2101,6 +2166,7 @@ export class FileMemoryService
                     : [];
             if (deletableSourceIds.length > 0) {
                 for (const sourceId of deletableSourceIds) {
+                    this.viewBuilds.forget(request.corpusId, sourceId);
                     await this.personalHowToStore.forgetSource(
                         request.corpusId,
                         sourceId,
@@ -2286,6 +2352,8 @@ export class FileMemoryService
             ...(this.viewDrafts
                 ? {
                       derivedViews: {
+                          builds: true as const,
+                          editMerging: true as const,
                           kinds: [
                               "troubleshootingGuide",
                           ] as Array<"troubleshootingGuide">,
@@ -2329,6 +2397,36 @@ export class FileMemoryService
     ): Promise<ViewHistoryEntry> {
         validateViewDraft(request);
         await this.requireViews(request.corpusId);
+        const prior = await this.getView({
+            corpusId: request.corpusId,
+            viewId: request.viewId,
+        });
+        if (prior?.generation?.input) {
+            if (
+                viewHash(prior.definition.selector) !==
+                viewHash(request.definition.selector)
+            )
+                throw new Error(
+                    "Generated guide source selection must change through an explicit rebuild",
+                );
+            const output: ViewSynthesisOutput = {
+                content: request.content,
+                relationships: request.relationships,
+                outcome: prior.generation.outcome ?? "diagnosticOnly",
+                missingEvidence: [
+                    "Human edit retains generation evidence limits",
+                ],
+            };
+            validateConstructedGuide(prior.generation.input, output);
+            validateSupport(
+                output,
+                await this.viewAdapter.validate(
+                    prior.generation.input,
+                    output,
+                    new AbortController().signal,
+                ),
+            );
+        }
         return this.enqueueWrite(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
             for (const selected of request.definition.selector.sources) {
@@ -2399,6 +2497,261 @@ export class FileMemoryService
         throw new Error(
             "Memory view publication is not supported; this pilot is draft-only",
         );
+    }
+
+    private async snapshotViewTarget(
+        corpusId: string,
+        target: ViewBuildTarget,
+        bounds: ViewBuildRequest["bounds"],
+    ): Promise<ViewBuildSnapshot> {
+        const runtime = await this.getCorpusRuntime(corpusId);
+        const current = await this.personalHowToStore.getView({
+            corpusId,
+            viewId: target.definition.viewId,
+        });
+        if (
+            (current?.version ?? 0) !== target.expectedVersion ||
+            current?.compatibility ||
+            current?.state === "archived"
+        )
+            throw new ViewBuildStaleError(
+                "View target version is stale, archived, or belongs to the procedure compatibility workflow",
+            );
+        const inputs = target.definition.selector.sources.map((selected) => {
+            const source = runtime.manifest.sources.find(
+                (entry) => entry.sourceId === selected.sourceId,
+            );
+            const revision = source?.revisions.find(
+                (entry) => entry.revisionId === selected.revisionId,
+            );
+            if (
+                !source ||
+                !revision ||
+                revision.state !== "ready" ||
+                source.activeRevisionId !== selected.revisionId
+            )
+                throw new ViewBuildStaleError(
+                    "Selected source is unavailable or no longer the current exact retained revision",
+                );
+            const learnedAt = revision.capturedAt;
+            const occurredAt = revision.sourceModifiedAt;
+            if (
+                (bounds?.learnedBefore &&
+                    (!learnedAt ||
+                        Date.parse(learnedAt) >
+                            Date.parse(bounds.learnedBefore))) ||
+                (bounds?.occurredFrom &&
+                    (!occurredAt ||
+                        Date.parse(occurredAt) <
+                            Date.parse(bounds.occurredFrom))) ||
+                (bounds?.occurredTo &&
+                    (!occurredAt ||
+                        Date.parse(occurredAt) > Date.parse(bounds.occurredTo)))
+            )
+                throw new ViewBuildStaleError(
+                    "Selected complete source is outside the temporal bounds or lacks a required timestamp; no source truncation is applied",
+                );
+            return {
+                ...selected,
+                title: source.title,
+                content: revision.content,
+                contentHash: viewHash(revision.content),
+                ...(learnedAt === undefined ? {} : { learnedAt }),
+                ...(occurredAt === undefined ? {} : { occurredAt }),
+            };
+        });
+        if (
+            inputs.reduce((count, input) => count + input.content.length, 0) >
+            120_000
+        )
+            throw new Error(
+                "Complete view inputs exceed 120000 UTF-16 characters; no truncation applied",
+            );
+        const snapshot = {
+            corpusId,
+            actor: userInfo().username,
+            definition: structuredClone(target.definition),
+            ...(current
+                ? {
+                      definitionRevisionId: current.definition.revisionId,
+                      targetRevisionId: current.revisionId,
+                  }
+                : {}),
+            expectedVersion: target.expectedVersion,
+            bounds: bounds ?? {},
+            inputs,
+            pipeline: "troubleshooting-v1" as const,
+            model: this.viewAdapter.identity,
+        };
+        return { ...snapshot, fingerprint: viewHash(snapshot) };
+    }
+
+    private async recheckViewInput(input: ViewBuildSnapshot): Promise<void> {
+        const snapshot = await this.snapshotViewTarget(
+            input.corpusId,
+            {
+                definition: input.definition,
+                expectedVersion: input.expectedVersion,
+            },
+            input.bounds,
+        );
+        if (snapshot.fingerprint !== input.fingerprint)
+            throw new ViewBuildStaleError(
+                "View definition, membership, access, target or retained source changed during generation",
+            );
+    }
+
+    public async buildViews(request: ViewBuildRequest): Promise<ViewBuildJob> {
+        validateBuildRequest(request);
+        await this.requireViews(request.corpusId);
+        const existing = (await this.listViewBuilds(request.corpusId)).find(
+            (job) =>
+                viewHash(job.request) === viewHash(request) &&
+                job.results.every(
+                    (result) =>
+                        result.snapshot.model === this.viewAdapter.identity,
+                ),
+        );
+        if (existing) return existing;
+        const admitted = await this.enqueueWrite(request.corpusId, async () => {
+            this.viewBuilds.assertCapacity();
+            const snapshots: ViewBuildSnapshot[] = [];
+            for (const target of request.targets)
+                snapshots.push(
+                    await this.snapshotViewTarget(
+                        request.corpusId,
+                        target,
+                        request.bounds,
+                    ),
+                );
+            const admitted = await this.personalHowToStore.admitViewBuild(
+                request,
+                snapshots,
+            );
+            if (admitted.admitted) this.viewBuilds.start(admitted.job);
+            return admitted;
+        });
+        return admitted.job;
+    }
+
+    public async listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
+        const runtime = await this.requireViews(corpusId);
+        return runtime.access.read(() =>
+            this.personalHowToStore.listViewBuilds(corpusId),
+        );
+    }
+
+    public async getViewBuild(
+        request: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob | undefined> {
+        const runtime = await this.requireViews(request.corpusId);
+        this.viewBuilds.assertPersistence(request.jobId);
+        return runtime.access.read(() =>
+            this.personalHowToStore.getViewBuild(
+                request.corpusId,
+                request.jobId,
+            ),
+        );
+    }
+
+    public async cancelViewBuild(
+        request: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob> {
+        const job = await this.getViewBuild(request);
+        if (!job) throw new Error("Unknown view build");
+        if (job.state !== "running") return job;
+        this.viewBuilds.cancel(job.jobId);
+        return this.enqueueWrite(request.corpusId, () =>
+            this.personalHowToStore.updateViewBuild(
+                request.corpusId,
+                request.jobId,
+                (current) => {
+                    for (const result of current.results)
+                        if (
+                            ["pending", "generating", "validating"].includes(
+                                result.state,
+                            )
+                        ) {
+                            result.state = "cancelled";
+                            result.reason =
+                                "Cancellation stops materialization; already saved drafts remain";
+                        }
+                    current.state = "cancelled";
+                },
+            ),
+        );
+    }
+
+    public async retryViewBuild(
+        request: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob> {
+        const job = await this.getViewBuild(request);
+        if (!job || job.state === "running")
+            throw new Error("Retry requires an existing terminal view build");
+        const targets: ViewBuildTarget[] = [];
+        for (const result of job.results.filter(
+            (result) => !["draft", "merged", "skipped"].includes(result.state),
+        )) {
+            const view = await this.getView({
+                corpusId: job.corpusId,
+                viewId: result.viewId,
+            });
+            targets.push({
+                definition: result.snapshot.definition,
+                expectedVersion: view?.version ?? 0,
+            });
+        }
+        if (!targets.length) throw new Error("Build has no retryable targets");
+        return this.buildViews({
+            ...job.request,
+            expectedHead: (await this.listViews(job.corpusId)).head,
+            targets,
+        });
+    }
+
+    public async getViewConflict(
+        request: ViewConflictReadRequest,
+    ): Promise<ViewMergeConflict | undefined> {
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.personalHowToStore.getViewConflict(
+                request.corpusId,
+                request.conflictId,
+            ),
+        );
+    }
+
+    public async resolveViewConflict(
+        request: ViewConflictResolution,
+    ): Promise<ViewHistoryEntry> {
+        validateConflictResolution(request);
+        const conflict = await this.getViewConflict(request);
+        if (!conflict || conflict.state !== "pending")
+            throw new Error("Unknown or already resolved view conflict");
+        const output =
+            request.choice === "generated"
+                ? conflict.candidate
+                : request.choice === "combined"
+                  ? request.combined!
+                  : {
+                        ...conflict.candidate,
+                        content: conflict.human
+                            .content as ViewSynthesisOutput["content"],
+                        relationships: authoredRelationships(conflict.human),
+                    };
+        validateConstructedGuide(conflict.input, output);
+        validateSupport(
+            output,
+            await this.viewAdapter.validate(
+                conflict.input,
+                output,
+                new AbortController().signal,
+            ),
+        );
+        return this.enqueueWrite(request.corpusId, async () => {
+            await this.recheckViewInput(conflict.input);
+            return this.personalHowToStore.resolveViewConflict(request, output);
+        });
     }
 
     public async answer(

@@ -8,6 +8,19 @@ import type {
     ProcedureSourceCitation,
     ProcedureSummary,
     ProcedureVersion,
+    MemoryServiceCapabilities,
+    ViewBuildRequest,
+    ViewBuildJobRequest,
+    ViewBuildJob,
+    ViewReadRequest,
+    ViewSaveRequest,
+    ViewArchiveRequest,
+    ViewConflictReadRequest,
+    ViewConflictResolution,
+    ViewSnapshot,
+    ViewVersion,
+    ViewHistoryEntry,
+    ViewMergeConflict,
 } from "@typeagent/memory-service";
 
 // =============================================
@@ -215,6 +228,25 @@ export type MemoryCenterActivityFilter = {
 };
 
 export type MemoryCenterInvokeFunctions = {
+    memoryViewCapabilities(params: {}): Promise<MemoryServiceCapabilities>;
+    memoryListViews(params: { corpusId: string }): Promise<ViewSnapshot>;
+    memoryGetView(params: ViewReadRequest): Promise<ViewVersion | undefined>;
+    memorySaveViewDraft(params: ViewSaveRequest): Promise<ViewHistoryEntry>;
+    memoryArchiveView(params: ViewArchiveRequest): Promise<ViewHistoryEntry>;
+    memoryViewHistory(params: ViewReadRequest): Promise<ViewHistoryEntry[]>;
+    memoryBuildViews(params: ViewBuildRequest): Promise<ViewBuildJob>;
+    memoryGetViewBuild(
+        params: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob | undefined>;
+    memoryListViewBuilds(params: { corpusId: string }): Promise<ViewBuildJob[]>;
+    memoryCancelViewBuild(params: ViewBuildJobRequest): Promise<ViewBuildJob>;
+    memoryRetryViewBuild(params: ViewBuildJobRequest): Promise<ViewBuildJob>;
+    memoryGetViewConflict(
+        params: ViewConflictReadRequest,
+    ): Promise<ViewMergeConflict | undefined>;
+    memoryResolveViewConflict(
+        params: ViewConflictResolution,
+    ): Promise<ViewHistoryEntry>;
     memoryCreateCorpus(params: {
         name: string;
         description?: string;

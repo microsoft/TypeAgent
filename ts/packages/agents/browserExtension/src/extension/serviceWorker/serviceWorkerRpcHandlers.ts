@@ -68,6 +68,25 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryListCorpora: (params) => forward("memoryListCorpora", params),
         memoryGetCorpus: (params) => forward("memoryGetCorpus", params),
         memoryListSources: (params) => forward("memoryListSources", params),
+        memoryViewCapabilities: (params) =>
+            forward("memoryViewCapabilities", params),
+        memoryListViews: (params) => forward("memoryListViews", params),
+        memoryGetView: (params) => forward("memoryGetView", params),
+        memorySaveViewDraft: (params) => forward("memorySaveViewDraft", params),
+        memoryArchiveView: (params) => forward("memoryArchiveView", params),
+        memoryViewHistory: (params) => forward("memoryViewHistory", params),
+        memoryBuildViews: (params) => forward("memoryBuildViews", params),
+        memoryGetViewBuild: (params) => forward("memoryGetViewBuild", params),
+        memoryListViewBuilds: (params) =>
+            forward("memoryListViewBuilds", params),
+        memoryCancelViewBuild: (params) =>
+            forward("memoryCancelViewBuild", params),
+        memoryRetryViewBuild: (params) =>
+            forward("memoryRetryViewBuild", params),
+        memoryGetViewConflict: (params) =>
+            forward("memoryGetViewConflict", params),
+        memoryResolveViewConflict: (params) =>
+            forward("memoryResolveViewConflict", params),
         memoryGetSource: (params) => forward("memoryGetSource", params),
         memoryGetSourceContent: (params) =>
             forward("memoryGetSourceContent", params),
