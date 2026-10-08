@@ -10,6 +10,7 @@ import type {
     ViewSynthesisOutput,
 } from "./viewTypes.js";
 import { viewHash } from "./viewMerge.js";
+import { viewSourceKey } from "./viewContent.js";
 import { renderInventoryItem } from "./viewInventory.js";
 import {
     evidenceArray,
@@ -64,7 +65,7 @@ function evidenceEdges(
 ): ViewRelationshipInput[] {
     const groups = new Map<string, ViewInventoryItem["citations"]>();
     for (const citation of items.flatMap((item) => item.citations)) {
-        const key = viewHash([citation.sourceId, citation.revisionId]);
+        const key = viewSourceKey(citation);
         const group = groups.get(key) ?? [];
         if (
             !group.some(

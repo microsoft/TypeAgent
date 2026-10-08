@@ -90,14 +90,10 @@ export function versionRelationships(
 }
 
 export function edgeIdentity(edge: ViewRelationshipInput): string {
-    const endpoint = (value: ViewRelationshipInput["to"]) =>
-        value.kind === "source"
-            ? ["source", value.sourceId]
-            : ["section", value.viewId, value.sectionId];
     return JSON.stringify([
         edge.predicate,
-        endpoint(edge.from),
-        endpoint(edge.to),
+        ["section", edge.from.viewId, edge.from.sectionId],
+        ["source", edge.to.sourceId],
     ]);
 }
 

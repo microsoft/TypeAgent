@@ -152,6 +152,8 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
         expect(job.results[0].state).toBe("draft");
         const snapshot = await client.listViews(corpus.corpusId);
         const view = snapshot.views[0];
+        if (view.content.kind !== "troubleshootingGuide")
+            throw new Error("Expected a generated troubleshooting guide");
         expect(view.generation?.input?.inputs[0].content).toContain(
             "Read only",
         );
@@ -164,7 +166,6 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
             definition,
             content: {
                 ...view.content,
-                kind: "troubleshootingGuide",
                 title: "Explicit human title",
             },
             relationships: view.relationships.flatMap((edge) =>
