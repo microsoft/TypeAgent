@@ -351,7 +351,7 @@ wikipedia:
 
 reasoning:
   timeoutMs: 1200000 # reasoning-loop timeout (0 = disabled)
-  copilotModel: gpt-5.6-sol # override default Copilot reasoning model
+  copilotModel: gpt-6-sol # override default Copilot reasoning model
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Embedding provider                                              ║
