@@ -1023,13 +1023,14 @@ describe("durable draft builds and explicit edit merge", () => {
             await writeFile(file, JSON.stringify(request));
             const environment = {
                 ...process.env,
-                TYPEAGENT_RUNBOOK_MODEL_ENDPOINT: "openai:W3_LOOPBACK",
-                OPENAI_ENDPOINT_W3_LOOPBACK: `http://127.0.0.1:${address.port}/chat/completions`,
-                OPENAI_API_KEY_W3_LOOPBACK: "synthetic-test-token-not-a-secret",
-                OPENAI_MODEL_W3_LOOPBACK: "synthetic-test-model",
-                OPENAI_ORGANIZATION_W3_LOOPBACK: "synthetic-test",
-                OPENAI_RESPONSE_FORMAT_W3_LOOPBACK: "1",
-                ENABLE_MODEL_REQUEST_LOGGING_W3_LOOPBACK: "false",
+                TYPEAGENT_RUNBOOK_MODEL_ENDPOINT: "openai:VIEW_BUILD_LOOPBACK",
+                OPENAI_ENDPOINT_VIEW_BUILD_LOOPBACK: `http://127.0.0.1:${address.port}/chat/completions`,
+                OPENAI_API_KEY_VIEW_BUILD_LOOPBACK:
+                    "synthetic-test-token-not-a-secret",
+                OPENAI_MODEL_VIEW_BUILD_LOOPBACK: "synthetic-test-model",
+                OPENAI_ORGANIZATION_VIEW_BUILD_LOOPBACK: "synthetic-test",
+                OPENAI_RESPONSE_FORMAT_VIEW_BUILD_LOOPBACK: "1",
+                ENABLE_MODEL_REQUEST_LOGGING_VIEW_BUILD_LOOPBACK: "false",
             };
             const run = (command: string[]) =>
                 promisify(execFile)(
@@ -1053,7 +1054,7 @@ describe("durable draft builds and explicit edit merge", () => {
                     (await run(["history", request.corpusId, "guide-0"]))
                         .stdout,
                 )[0].version.generation.input.model,
-            ).toContain("W3_LOOPBACK");
+            ).toContain("VIEW_BUILD_LOOPBACK");
             const listed: { head: string; views: ViewVersion[] } = JSON.parse(
                 (await run(["list", request.corpusId])).stdout,
             );

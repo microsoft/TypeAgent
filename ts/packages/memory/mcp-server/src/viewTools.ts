@@ -93,8 +93,7 @@ export function registerViewTools(
     server.registerTool(
         viewToolNames.publishView,
         {
-            description:
-                "Explicitly unsupported: developer pilot is draft-only.",
+            description: "Explicitly unsupported: memory views are draft-only.",
             inputSchema: viewReadRequestSchema,
         },
         async (request) =>

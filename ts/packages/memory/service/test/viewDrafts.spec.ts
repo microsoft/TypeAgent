@@ -39,7 +39,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         await rm(root, { recursive: true, force: true });
     });
     async function fixture(): Promise<ViewSaveRequest> {
-        const corpus = await service.createCorpus("Draft pilot");
+        const corpus = await service.createCorpus("Draft views");
         const result = await service.ingestDocument({
             corpusId: corpus.corpusId,
             source: {
@@ -644,9 +644,9 @@ describe("typed draft views: service, history, privacy and CLI", () => {
             root,
             "--enable-view-drafts",
             "create-corpus",
-            "CLI pilot",
+            "CLI views",
         ]);
-        expect(corpus).toMatchObject({ name: "CLI pilot" });
+        expect(corpus).toMatchObject({ name: "CLI views" });
         await expect(
             runMemoryViewsCli(["--store", root, "list"]),
         ).rejects.toThrow("Developer draft-only");
@@ -706,12 +706,12 @@ describe("typed draft views: service, history, privacy and CLI", () => {
                 root,
                 "--enable-view-drafts",
                 "create-corpus",
-                "Executable CLI pilot",
+                "Executable CLI views",
             ],
             { env: { ...process.env, PATH: "" } },
         );
         expect(JSON.parse(stdout)).toMatchObject({
-            name: "Executable CLI pilot",
+            name: "Executable CLI views",
         });
     });
 

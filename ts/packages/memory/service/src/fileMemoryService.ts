@@ -2497,7 +2497,7 @@ export class FileMemoryService
     public async publishView(request: ViewReadRequest): Promise<never> {
         await this.requireViews(request.corpusId);
         throw new Error(
-            "Memory view publication is not supported; this pilot is draft-only",
+            "Memory view publication is not supported; memory views are draft-only",
         );
     }
 

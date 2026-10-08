@@ -209,7 +209,7 @@ evidence and guessed locations cannot be reviewed as current runbooks.
 Replacement rejects obsolete-source candidates with agent editions, including
 linked-source and asset dependencies. Forget removes affected candidates and
 all affected view/procedure versions from the shared store and physically
-replaces its Git object database; see the draft pilot privacy boundary below.
+replaces its Git object database; see the draft-view privacy boundary below.
 Golden-set quality, live vision parity, safe redacted pixel previews and full
 Phase 4 qualification remain separate work.
 
@@ -228,7 +228,7 @@ Guides. Procedure JSON/Markdown and hashes are deterministic compatibility
 projections, not independent canonical versions. Index preparation precedes the
 atomic history-ref commit; failed preparations do not save a procedure version.
 
-## Developer draft Views pilot (W1-W4)
+## Opt-in draft memory views
 
 `new FileMemoryService(privateStore, { viewDrafts: true })` enables the local
 developer/demo capability. It is **off by default**. `getCapabilities()` then
@@ -266,7 +266,7 @@ generated runbook candidate also retains the exact original candidate content
 and fingerprint separately from the human saved content for later merging.
 Manual drafts have no invented generated base.
 
-### Cross-source Build views (W3)
+### Cross-source Build views
 
 The configured constructor and independent evidence audit use strict structured
 model-output schemas. Providers without schema support fail explicitly; there is
@@ -361,7 +361,7 @@ Limits are 32 targets, 32 exact sources per target, 120000 complete input
 characters and a 300-second per-target inventory/construction/validation deadline; there is
 no silent truncation or heuristic generation fallback.
 
-### Explicit edits and conflicts (W4)
+### Explicit edits and conflicts
 
 Saving a draft captures stable edit IDs, stable section/semantic-edge targets,
 OS actor/time, exact generated base identity/fingerprint, old values/hashes,
@@ -420,11 +420,11 @@ The compiled CLI loads existing configured models (never fetches keys) and uses
 the same service methods:
 
 ```powershell
-node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts build build-request.json
-node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts builds <corpusId>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts status <corpusId> <jobId>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts inspect <corpusId> <conflictId>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts resolve resolution-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts build build-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts builds <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts status <corpusId> <jobId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts inspect <corpusId> <conflictId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts resolve resolution-request.json
 ```
 
 `build` and `retry` wait for the terminal receipt before releasing their private
@@ -444,7 +444,7 @@ commit preparation failures leave current state and readable history unchanged.
 Expected-head checks and a repository lock prevent lost updates; unchanged
 per-view tree entries retain their blob OIDs. Unreachable failed-preparation
 objects are never served through the view APIs.
-History retains complete typed snapshots; this pilot does not automatically pack
+History retains complete typed snapshots; the store does not automatically pack
 objects or prune revisions. Storage growth and long-history read latency must be
 qualified before enabling recurring generation. Privacy purge is independent of
 ordinary retention and also removes unreachable failed-preparation objects.
@@ -477,11 +477,11 @@ Build from `ts` with `pnpm exec fluid-build packages\memory\service -t build`
 From `ts\packages\memory\service`:
 
 ```powershell
-node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts create-corpus "Draft pilot"
-node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts corpora
-node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts list <corpusId>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts save draft-request.json
-node dist\memoryViewsCli.js --store C:\Temp\memory-views-pilot --enable-view-drafts history <corpusId> pressure-guide
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts create-corpus "Draft views"
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts corpora
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts list <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts save draft-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts history <corpusId> pressure-guide
 ```
 
 Use the returned corpus ID and `list.head` in the following request (a new
@@ -523,8 +523,8 @@ service: the next `read` or `history` invocation demonstrates restart consistenc
 Archive with `archive request.json` containing corpus/view IDs, expected version
 and expected head. `publish` fails explicitly with the draft-only limitation.
 The store must not be owned by a running server; the service storage lock enforces
-this. The CLI never resets data. Its service/RPC façade is the pilot consumer;
-remote MCP/browser generic Views authoring is not advertised by this layer.
+this. The CLI never resets data. CLI, service/RPC, MCP and browser consumers use
+the same opt-in draft-view capability.
 The existing browser Runbook deep links remain intact: Guide is the primary
 human-readable document, its editor explicitly leaves original sources unchanged,
 and Agent edition is an optional executable adaptation, not a peer source.

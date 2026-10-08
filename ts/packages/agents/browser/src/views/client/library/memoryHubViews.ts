@@ -54,7 +54,7 @@ export function mountMemoryHubViews(
     const drafts = rbNode("div");
     const comparison = rbNode("div");
     root.append(
-        rbNode("h3", "Views (developer pilot, draft only)"),
+        rbNode("h3", "Views (draft only)"),
         rbNode(
             "p",
             "Distill selected exact retained revisions into a conditional troubleshooting guide. No publication, search indexing, skill approval or execution.",
