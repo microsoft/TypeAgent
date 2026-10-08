@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { detectProcedureCandidates } from "../src/procedureDetector.js";
 import {
     procedureFromMarkdown,
@@ -49,6 +51,44 @@ const cases = [
 ];
 
 describe("deterministic guide extraction (no model or reviewer/gold inputs)", () => {
+    test.each([" ", "\t", "\u00a0", "\v"])(
+        "ATX titles retain whitespace and closing-hash semantics for %j",
+        (space) => {
+            const content = `##${space}How to inspect${space}###${space}\n1. Inspect.\n2. Verify.`;
+            const [candidate] = detect(content);
+            expect(candidate.title).toBe("How to inspect");
+            expect(candidate.steps).toEqual(["Inspect.", "Verify."]);
+            expect(candidate.citations[0].excerpt).toBe(content);
+        },
+    );
+
+    test("hashes without separating whitespace remain part of the title", () => {
+        const [candidate] = detect(
+            "# How to inspect###\n1. Inspect.\n2. Verify.",
+        );
+        expect(candidate.title).toBe("How to inspect###");
+    });
+
+    test("long whitespace inputs finish within a bounded subprocess", async () => {
+        const module = new URL("../procedureDetector.js", import.meta.url);
+        const script = `
+            import { detectProcedureCandidates } from ${JSON.stringify(module.href)};
+            const inputs = [
+                "\\n".repeat(32000),
+                "# Notes" + "\\t".repeat(32000) + "x\\n1. Inspect.\\n2. Verify.",
+                "# How to inspect" + "\\t".repeat(32000) + "x\\n1. Inspect.\\n2. Verify.",
+            ];
+            process.stdout.write(JSON.stringify(inputs.map((text) =>
+                detectProcedureCandidates("corpus", "source", "revision", text).length)));
+        `;
+        const { stdout } = await promisify(execFile)(
+            process.execPath,
+            ["--input-type=module", "-e", script],
+            { timeout: 10000 },
+        );
+        expect(JSON.parse(stdout)).toEqual([0, 0, 1]);
+    }, 15000);
+
     test.each(cases)("%s", async (_label, file, ...required) => {
         const content = await readFile(
             new URL(`../../test/data/guides/${file}`, import.meta.url),

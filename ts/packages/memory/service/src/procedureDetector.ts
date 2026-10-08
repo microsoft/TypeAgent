@@ -19,6 +19,20 @@ interface Heading {
     line: number;
 }
 
+function markdownHeading(
+    text: string,
+): { title: string; level: number } | undefined {
+    const marker = /^ {0,3}(#{1,6})\s/.exec(text);
+    if (!marker) return undefined;
+    let title = text.slice(marker[0].length).trim();
+    let end = title.length;
+    while (end > 0 && title[end - 1] === "#") end--;
+    if (end > 0 && end < title.length && /\s/.test(title[end - 1])) {
+        title = title.slice(0, end).trimEnd();
+    }
+    return { title, level: marker[1].length };
+}
+
 function scan(content: string): { lines: Line[]; headings: Heading[] } {
     const lines: Line[] = [];
     const headings: Heading[] = [];
@@ -28,7 +42,7 @@ function scan(content: string): { lines: Line[]; headings: Heading[] } {
     const pattern = /[^\r\n]*(?:\r\n|\r|\n|$)/g;
     for (const match of content.matchAll(pattern)) {
         if (!match[0]) break;
-        const text = match[0].replace(/[\r\n]+$/, "");
+        const text = match[0].replace(/\r?\n$|\r$/, "");
         const marker = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(text);
         const fenced = fence !== undefined || marker !== null;
         if (marker) {
@@ -44,7 +58,7 @@ function scan(content: string): { lines: Line[]; headings: Heading[] } {
         if (frontmatter && lines.length > 0 && text === "---") {
             frontmatter = false;
         } else if (!frontmatter && !fenced) {
-            const markdown = /^ {0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$/.exec(text);
+            const markdown = markdownHeading(text);
             // Plain headings must be labels, not commands or continuation prose.
             const plain =
                 /^(How to [^.!?]+|Steps|Procedure|Instructions|Checklist|Workflow):\s*$/i.exec(
@@ -52,8 +66,8 @@ function scan(content: string): { lines: Line[]; headings: Heading[] } {
                 );
             if (markdown || plain)
                 headings.push({
-                    title: markdown?.[2] ?? plain![1],
-                    level: markdown?.[1].length ?? 2,
+                    title: markdown?.title ?? plain![1],
+                    level: markdown?.level ?? 2,
                     line: lines.length,
                 });
         }
