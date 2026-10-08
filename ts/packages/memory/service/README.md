@@ -288,6 +288,9 @@ as actual section passages. This is the new construction contract, not heuristic
 concatenation of raw sources or repair of an invalid legacy relationship payload.
 The host derives `supportedBy` edges grouped by section and exact source revision,
 with immutable source/revision/UTF-16 locator/excerpt provenance.
+Assertion IDs hash the view, stable section and exact source/revision tuple.
+Edit/tombstone matching remains semantic, so a revision-specific new assertion ID
+cannot undo an explicit human removal.
 All required inventory passages must occur in the **final merged artifact**.
 Exact duplicate exclusions require a covered equal witness; outside-scope exclusions
 are limited to independently checked background and are audited again.

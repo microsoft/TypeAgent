@@ -64,7 +64,7 @@ function evidenceEdges(
 ): ViewRelationshipInput[] {
     const groups = new Map<string, ViewInventoryItem["citations"]>();
     for (const citation of items.flatMap((item) => item.citations)) {
-        const key = `${citation.sourceId}\n${citation.revisionId}`;
+        const key = viewHash([citation.sourceId, citation.revisionId]);
         const group = groups.get(key) ?? [];
         if (
             !group.some(
@@ -77,7 +77,7 @@ function evidenceEdges(
         groups.set(key, group);
     }
     return [...groups.values()].map((citations) => ({
-        id: `support:${viewHash([sectionId, citations[0].sourceId]).slice(0, 32)}`,
+        id: `support:${viewHash([input.definition.viewId, sectionId, citations[0].sourceId, citations[0].revisionId]).slice(0, 32)}`,
         predicate: "supportedBy",
         from: { kind: "section", viewId: input.definition.viewId, sectionId },
         to: {

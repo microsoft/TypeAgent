@@ -936,6 +936,7 @@ describe("durable draft builds and explicit edit merge", () => {
         await service.close();
         let modelBody = "Inspect pressure.\n\nPreserve approval boundaries.\n";
         const schemas = new Set<string>();
+        const modelFailures: unknown[] = [];
         const model = createServer(async (incoming, response) => {
             try {
                 const chunks: Buffer[] = [];
@@ -988,13 +989,11 @@ describe("durable draft builds and explicit edit merge", () => {
                     }),
                 );
             } catch (error) {
+                modelFailures.push(error);
                 response.writeHead(500, { "content-type": "application/json" });
                 response.end(
                     JSON.stringify({
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
+                        error: "Synthetic loopback model request failed",
                     }),
                 );
             }
@@ -1006,6 +1005,17 @@ describe("durable draft builds and explicit edit merge", () => {
             const address = model.address();
             if (!address || typeof address === "string")
                 throw new Error("Missing loopback model port");
+            const malformed = await fetch(
+                `http://127.0.0.1:${address.port}/chat/completions`,
+                { method: "POST", body: "PRIVATE_LOOPBACK_INPUT" },
+            );
+            expect(malformed.status).toBe(500);
+            expect(await malformed.json()).toEqual({
+                error: "Synthetic loopback model request failed",
+            });
+            expect(modelFailures).toHaveLength(1);
+            expect(modelFailures[0]).toBeInstanceOf(SyntaxError);
+            modelFailures.length = 0;
             const cli = fileURLToPath(
                 new URL("../memoryViewsCli.js", import.meta.url),
             );
@@ -1131,6 +1141,7 @@ describe("durable draft builds and explicit edit merge", () => {
                 model.close((error) => (error ? reject(error) : resolve())),
             );
             service = open();
+            expect(modelFailures).toEqual([]);
         }
     }, 120000);
 });

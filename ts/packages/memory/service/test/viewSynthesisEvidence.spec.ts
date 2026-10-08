@@ -322,6 +322,13 @@ describe("actual configured evidence-first adapter and durable service", () => {
                     edge.to.sourceId === "phase"
                 ),
         );
+        const originalSupport = relationships.find(
+            (edge) =>
+                edge.from.kind === "section" &&
+                edge.from.sectionId === "description" &&
+                edge.to.kind === "source" &&
+                edge.to.sourceId === "phase",
+        )!;
         await service.saveViewDraft({
             corpusId,
             viewId: view.viewId,
@@ -335,12 +342,41 @@ describe("actual configured evidence-first adapter and durable service", () => {
             content,
             relationships,
         });
+        const replacement = await service.ingestDocument({
+            corpusId,
+            source: {
+                sourceId: "phase",
+                sourceType: "text",
+                title: "phase",
+                text: "Acquisition 38 milliseconds versus SQL execution 4 milliseconds.\n\nQuery hypothesis rejected.\n\nScale deferred, not attempted.",
+                capturedAt: "2026-10-03T10:00:00Z",
+            },
+        });
+        expect((await waitForMemoryJob(service, replacement.jobId)).state).toBe(
+            "complete",
+        );
         expect((await build()).state).toBe("complete");
         expect((await build()).state).toBe("complete");
         const current = await service.listViews(corpusId);
         expect(current.views[0].content.sections[0].body).toContain(
             "carefully",
         );
+        expect(current.views[0].content.sections[0].body).toContain(
+            "Acquisition 38 milliseconds",
+        );
+        const refreshedSupport = authoredRelationships(current.views[0]).find(
+            (edge) =>
+                edge.from.kind === "section" &&
+                edge.from.sectionId === "description" &&
+                edge.to.kind === "source" &&
+                edge.to.sourceId === "phase",
+        )!;
+        expect(refreshedSupport.id).not.toBe(originalSupport.id);
+        expect(refreshedSupport.to).toEqual({
+            kind: "source",
+            sourceId: "phase",
+            revisionId: replacement.revisionId,
+        });
         expect(
             current.views[0].relationships.some(
                 (edge) =>
@@ -377,7 +413,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
                 definition: {
                     viewId: view.viewId,
                     kind: "troubleshootingGuide",
-                    selector: view.definition.selector,
+                    selector: current.views[0].definition.selector,
                 },
                 content: incomplete,
                 relationships: authoredRelationships(current.views[0]),

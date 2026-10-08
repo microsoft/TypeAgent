@@ -36,6 +36,7 @@ test("configured adapter inventory and final coverage survive authenticated MCP,
         path.join(os.tmpdir(), "inventory-mcp-offline-"),
     );
     const stages: string[] = [];
+    const modelFailures: unknown[] = [];
     const model = createServer(async (request, response) => {
         try {
             const chunks: Buffer[] = [];
@@ -75,8 +76,13 @@ test("configured adapter inventory and final coverage survive authenticated MCP,
                 }),
             );
         } catch (error) {
+            modelFailures.push(error);
             response.writeHead(500, { "content-type": "application/json" });
-            response.end(JSON.stringify({ error: String(error) }));
+            response.end(
+                JSON.stringify({
+                    error: "Synthetic loopback model request failed",
+                }),
+            );
         }
     });
     await new Promise<void>((resolve) => model.listen(0, "127.0.0.1", resolve));
@@ -102,6 +108,17 @@ test("configured adapter inventory and final coverage survive authenticated MCP,
                 new FakeProcedureCorpusIndex(directory),
         });
     try {
+        const malformed = await fetch(
+            `http://127.0.0.1:${address.port}/chat/completions`,
+            { method: "POST", body: "PRIVATE_LOOPBACK_INPUT" },
+        );
+        expect(malformed.status).toBe(500);
+        expect(await malformed.json()).toEqual({
+            error: "Synthetic loopback model request failed",
+        });
+        expect(modelFailures).toHaveLength(1);
+        expect(modelFailures[0]).toBeInstanceOf(SyntaxError);
+        modelFailures.length = 0;
         for (const [key, value] of Object.entries(environment)) {
             if (key in process.env)
                 throw new Error(
@@ -212,5 +229,6 @@ test("configured adapter inventory and final coverage survive authenticated MCP,
         );
         for (const key of installed) delete process.env[key];
         await rm(root, { recursive: true, force: true });
+        expect(modelFailures).toEqual([]);
     }
 });
