@@ -335,7 +335,12 @@ test("All memory retains partial derived-search errors and does not count views 
             return synthesize(question, evidence);
         },
     );
-    service.getCapabilities = async () => ({ derivedViews: { search: true } });
+    service.getCapabilities = async () => ({
+        derivedViews: {
+            search: true,
+            kinds: ["troubleshootingGuide", "projectBrief"],
+        },
+    });
     service.searchViews = async ({ corpusId }) => {
         if (corpusId === "b") throw new Error("Derived index unavailable");
         return [
@@ -344,7 +349,10 @@ test("All memory retains partial derived-search errors and does not count views 
                     viewId: "derived",
                     revisionId: "exact-r",
                     version: 3,
-                    content: { title: "Derived guide" },
+                    content: {
+                        kind: "troubleshootingGuide",
+                        title: "Derived guide",
+                    },
                     createdAt: time,
                     provenance: "merged",
                 },

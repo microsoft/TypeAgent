@@ -1213,6 +1213,7 @@ export class FileMemoryService
         let clearedCount = 0;
         await this.enqueueWrite(corpusId, async () => {
             const runtime = await this.getCorpusRuntime(corpusId);
+            await this.personalHowToStore.clearDerivedViews(corpusId);
             if (runtime.manifest.indexGeneration !== undefined) {
                 await classifyIndexSchema(
                     this.indexDirectory(

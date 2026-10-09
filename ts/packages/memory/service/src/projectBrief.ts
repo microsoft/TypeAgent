@@ -206,7 +206,8 @@ function fieldEvidence(
         (item) =>
             item.kind === kind &&
             item.status === "confirmed" &&
-            pattern.test(item.statement),
+            pattern.test(item.statement) &&
+            item.citations.some((citation) => pattern.test(citation.excerpt)),
     );
 }
 
@@ -232,176 +233,236 @@ function validateSectionEvidence(
             );
         return item;
     });
-    const fact = (id: string, kind: ViewInventoryItem["kind"]) => {
-        const item = items.find((item) => item.id === id && item.kind === kind);
-        if (!item)
-            throw new Error(
-                `Project ${kind} field requires a checked ${kind} fact`,
-            );
-        return item;
-    };
     switch (details.kind) {
+        case "goalsScope":
+            if (!items.some((item) => item.kind === "goal"))
+                throw new Error(
+                    "Project brief goals/scope require a checked goal fact",
+                );
+            break;
         case "owners":
-            for (const assignment of details.assignments) {
-                const item = fact(assignment.inventoryId, "owner");
-                if (
-                    !item.statement.includes(assignment.responsibility) ||
-                    (assignment.owner !== null &&
-                        (!item.statement.includes(assignment.owner) ||
-                            !item.citations.some((citation) =>
-                                citation.excerpt.includes(assignment.owner!),
-                            ))) ||
-                    (assignment.state === "known" &&
-                        item.status !== "confirmed") ||
-                    (assignment.state !== "known" &&
-                        !["unknown", "blocked"].includes(item.status))
-                )
-                    throw new Error(
-                        "Project ownership is not supported by the checked source fact",
-                    );
-            }
+            validateOwnership(details, items);
             break;
         case "status":
-            for (const [kind, state] of [
-                ["projectStatus", details.project],
-                ["incidentStatus", details.incident],
-                ["capacity", details.capacity],
-            ] as const) {
-                if (!items.some((item) => item.kind === kind))
-                    throw new Error(`Project status lacks ${kind} context`);
-                if (
-                    ["unknown", "notApplicable"].includes(state) &&
-                    !items.some(
-                        (item) => item.kind === kind && item.status === state,
-                    )
-                )
-                    throw new Error(
-                        `Project ${kind} unknown/not-applicable state differs from checked evidence`,
-                    );
-            }
-            if (
-                details.project !== "unknown" &&
-                !fieldEvidence(
-                    items,
-                    "projectStatus",
-                    new RegExp(
-                        `\\bproject(?: status)?\\s*(?:is|:)?\\s*${details.project}\\b`,
-                        "i",
-                    ),
-                )
-            )
-                throw new Error(
-                    "Project status requires explicit project evidence; incident closure is not project completion",
-                );
-            if (
-                details.incident !== "unknown" &&
-                details.incident !== "notApplicable" &&
-                !fieldEvidence(
-                    items,
-                    "incidentStatus",
-                    new RegExp(
-                        `\\bincident(?: status)?\\s*(?:is|:)?\\s*${details.incident}\\b`,
-                        "i",
-                    ),
-                )
-            )
-                throw new Error(
-                    "Incident status requires explicit incident evidence",
-                );
-            if (
-                details.capacity === "validated" &&
-                !fieldEvidence(
-                    items,
-                    "capacity",
-                    /\bcapacity(?: validation)?\s*(?:is|:)?\s*validated\b/i,
-                )
-            )
-                throw new Error(
-                    "Capacity validation requires confirmed source evidence",
-                );
-            if (
-                items.some(
-                    (item) =>
-                        item.kind === "capacity" && item.status === "blocked",
-                ) &&
-                details.capacity !== "pendingOwnerReview"
-            )
-                throw new Error(
-                    "Blocked capacity validation must remain pending owner review",
-                );
-            if (
-                details.capacity === "pendingOwnerReview" &&
-                !items.some(
-                    (item) =>
-                        item.kind === "capacity" && item.status === "blocked",
-                )
-            )
-                throw new Error(
-                    "Pending capacity review requires a blocked source fact",
-                );
+            validateStatus(details, items);
             break;
         case "milestones":
-            for (const entry of details.items) {
-                const item = fact(entry.inventoryId, "milestone");
-                if (
-                    entry.status !== item.status ||
-                    (entry.date !== null &&
-                        (!item.statement.includes(entry.date) ||
-                            !item.citations.some((citation) =>
-                                citation.excerpt.includes(entry.date!),
-                            )))
-                )
-                    throw new Error(
-                        "Milestone status/date must retain the source's provisional commitment",
-                    );
-            }
+            validateMilestones(details, items);
             break;
         case "decisions":
             for (const entry of details.items)
-                if (fact(entry.inventoryId, "decision").status !== entry.status)
+                if (
+                    checkedFact(items, entry.inventoryId, "decision").status !==
+                    entry.status
+                )
                     throw new Error(
                         "Decision state differs from checked evidence",
                     );
             break;
         case "risks":
-            for (const entry of details.items) {
-                const item = fact(entry.inventoryId, "risk");
-                const expected =
-                    item.status === "blocked"
-                        ? "blocked"
-                        : item.status === "confirmed" &&
-                            /\b(?:risk|blocker)(?: is|:)? resolved\b/i.test(
-                                item.statement,
-                            )
-                          ? "resolved"
-                          : item.status === "unknown"
-                            ? "unknown"
-                            : "open";
-                if (entry.status !== expected)
-                    throw new Error("Risk state differs from checked evidence");
-            }
+            validateRisks(details, items);
             break;
         case "context":
-            if (
-                details.asOf !== null &&
-                !items.some(
-                    (item) =>
-                        item.kind === "projectAsOf" &&
-                        item.status === "confirmed" &&
-                        item.statement.includes(details.asOf!) &&
-                        /\bproject (?:knowledge )?as.of\b/i.test(
-                            item.statement,
-                        ) &&
-                        item.citations.some((citation) =>
-                            citation.excerpt.includes(details.asOf!),
-                        ),
-                )
-            )
-                throw new Error(
-                    "Project as-of requires record evidence, not source capture/modified time",
-                );
+            validateContext(details, items);
             break;
     }
+}
+
+function checkedFact(
+    items: ViewInventoryItem[],
+    id: string,
+    kind: ViewInventoryItem["kind"],
+): ViewInventoryItem {
+    const item = items.find((item) => item.id === id && item.kind === kind);
+    if (!item)
+        throw new Error(
+            `Project ${kind} field requires a checked ${kind} fact`,
+        );
+    return item;
+}
+
+function validateOwnership(
+    details: Extract<ProjectBriefDetails, { kind: "owners" }>,
+    items: ViewInventoryItem[],
+): void {
+    for (const assignment of details.assignments) {
+        const item = checkedFact(items, assignment.inventoryId, "owner");
+        if (
+            !item.statement.includes(assignment.responsibility) ||
+            !item.citations.some((citation) =>
+                citation.excerpt.includes(assignment.responsibility),
+            ) ||
+            (assignment.owner !== null &&
+                (!item.statement.includes(assignment.owner) ||
+                    !item.citations.some((citation) =>
+                        citation.excerpt.includes(assignment.owner!),
+                    ))) ||
+            (assignment.state === "known" && item.status !== "confirmed") ||
+            (assignment.state !== "known" &&
+                !["unknown", "blocked"].includes(item.status))
+        )
+            throw new Error(
+                "Project ownership is not supported by the checked source fact",
+            );
+    }
+}
+
+function validateStatus(
+    details: Extract<ProjectBriefDetails, { kind: "status" }>,
+    items: ViewInventoryItem[],
+): void {
+    for (const [kind, state] of [
+        ["projectStatus", details.project],
+        ["incidentStatus", details.incident],
+        ["capacity", details.capacity],
+    ] as const) {
+        if (!items.some((item) => item.kind === kind))
+            throw new Error(`Project status lacks ${kind} context`);
+        if (
+            ["unknown", "notApplicable"].includes(state) &&
+            !items.some((item) => item.kind === kind && item.status === state)
+        )
+            throw new Error(
+                `Project ${kind} unknown/not-applicable state differs from checked evidence`,
+            );
+    }
+    if (
+        details.project !== "unknown" &&
+        !fieldEvidence(
+            items,
+            "projectStatus",
+            new RegExp(
+                `\\bproject(?: status)?\\s*(?:is|:)?\\s*${details.project}\\b`,
+                "i",
+            ),
+        )
+    )
+        throw new Error(
+            "Project status requires explicit project evidence; incident closure is not project completion",
+        );
+    if (
+        details.incident !== "unknown" &&
+        details.incident !== "notApplicable" &&
+        !fieldEvidence(
+            items,
+            "incidentStatus",
+            new RegExp(
+                `\\bincident(?: status)?\\s*(?:is|:)?\\s*${details.incident}\\b`,
+                "i",
+            ),
+        )
+    )
+        throw new Error("Incident status requires explicit incident evidence");
+    validateCapacity(details.capacity, items);
+}
+
+function validateCapacity(
+    state: Extract<ProjectBriefDetails, { kind: "status" }>["capacity"],
+    items: ViewInventoryItem[],
+): void {
+    if (
+        state === "validated" &&
+        !fieldEvidence(
+            items,
+            "capacity",
+            /\bcapacity(?: validation)?\s*(?:is|:)?\s*validated\b/i,
+        )
+    )
+        throw new Error(
+            "Capacity validation requires confirmed source evidence",
+        );
+    const blocked = items.some(
+        (item) => item.kind === "capacity" && item.status === "blocked",
+    );
+    if (blocked && state !== "pendingOwnerReview")
+        throw new Error(
+            "Blocked capacity validation must remain pending owner review",
+        );
+    if (state === "pendingOwnerReview" && !blocked)
+        throw new Error(
+            "Pending capacity review requires a blocked source fact",
+        );
+}
+
+function validateMilestones(
+    details: Extract<ProjectBriefDetails, { kind: "milestones" }>,
+    items: ViewInventoryItem[],
+): void {
+    for (const entry of details.items) {
+        const item = checkedFact(items, entry.inventoryId, "milestone");
+        if (
+            entry.status !== item.status ||
+            (entry.date !== null &&
+                (!item.statement.includes(entry.date) ||
+                    !item.citations.some((citation) =>
+                        citation.excerpt.includes(entry.date!),
+                    )))
+        )
+            throw new Error(
+                "Milestone status/date must retain the source's provisional commitment",
+            );
+    }
+}
+
+function validateRisks(
+    details: Extract<ProjectBriefDetails, { kind: "risks" }>,
+    items: ViewInventoryItem[],
+): void {
+    for (const entry of details.items) {
+        const item = checkedFact(items, entry.inventoryId, "risk");
+        const expected =
+            item.status === "blocked"
+                ? "blocked"
+                : item.status === "confirmed" &&
+                    /\b(?:risk|blocker)(?: is|:)? resolved\b/i.test(
+                        item.statement,
+                    ) &&
+                    item.citations.some((citation) =>
+                        /\b(?:risk|blocker)(?: is|:)? resolved\b/i.test(
+                            citation.excerpt,
+                        ),
+                    )
+                  ? "resolved"
+                  : item.status === "unknown"
+                    ? "unknown"
+                    : "open";
+        if (entry.status !== expected)
+            throw new Error("Risk state differs from checked evidence");
+    }
+}
+
+function validateContext(
+    details: Extract<ProjectBriefDetails, { kind: "context" }>,
+    items: ViewInventoryItem[],
+): void {
+    if (
+        !items.some((item) =>
+            ["timing", "projectAsOf", "background"].includes(item.kind),
+        )
+    )
+        throw new Error(
+            "Project brief context requires checked context or unknown timing evidence",
+        );
+    if (
+        details.asOf !== null &&
+        !items.some(
+            (item) =>
+                item.kind === "projectAsOf" &&
+                item.status === "confirmed" &&
+                item.statement.includes(details.asOf!) &&
+                /\bproject (?:knowledge )?as.of\b/i.test(item.statement) &&
+                item.citations.some(
+                    (citation) =>
+                        citation.excerpt.includes(details.asOf!) &&
+                        /\bproject (?:knowledge )?as.of\b/i.test(
+                            citation.excerpt,
+                        ),
+                ),
+        )
+    )
+        throw new Error(
+            "Project as-of requires record evidence, not source capture/modified time",
+        );
 }
 
 export function emptyProjectBrief(): ProjectBriefContent {

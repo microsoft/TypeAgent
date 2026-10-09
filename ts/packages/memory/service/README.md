@@ -359,6 +359,9 @@ recovery requirements do not apply. Exact-artifact proof, policy precedence,
 edit attribution, bounded merge/conflicts, history, publication/index retry,
 privacy quarantine and published-only search use the same owning store.
 Positive model audits are not semantic-quality guarantees.
+Explicit corpus clear also purges derived revisions, proofs, jobs, conflicts,
+policy overrides and indexes from the recoverable private history; legacy procedure
+compatibility behavior and other corpora are preserved.
 
 In Memory Hub, choose a **named corpus**, select exact retained revisions, choose
 **Project brief** in **View kind**, set a stable view ID and choose **Build views**.

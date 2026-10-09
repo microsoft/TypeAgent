@@ -120,7 +120,7 @@ unknown/pendingOwnerReview/validated/notApplicable. Blocked capacity remains pen
 Owners have responsibility, known/unknown/unassigned state, owner (null unless a confirmed recorded name), inventoryId.
 Milestones have inventoryId, source status (proposed/confirmed/blocked/deferred/unknown), date (null unless explicitly recorded).
 Decisions have inventoryId and the checked fact status. Risks have inventoryId and open/blocked/resolved/unknown status.
-Risk confirmed means explicitly resolved; observed/proposed risks remain open.
+Resolved risks require explicit confirmed resolution; confirmed or observed open risks remain open.
 Context has asOf (null if unknown), basis unknown/recordEvidence, inventoryIds. Never use capture or modified metadata
 as project knowledge time. A known asOf requires a confirmed projectAsOf fact, not a generic timing fact.
 goalsScope details contain kind and inventoryIds.

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
@@ -283,6 +283,9 @@ describe("project brief configured adapter, publication and lifecycle", () => {
         "missingFact",
         "citation",
         "sourceCheck",
+        "inventedFact",
+        "badStatus",
+        "missingAuditContext",
     ])("%s cannot publish despite a positive support stub", async (mode) => {
         alter = (name, value) => {
             const raw = evidenceRecord(value);
@@ -301,6 +304,23 @@ describe("project brief configured adapter, publication and lifecycle", () => {
                 evidenceRecord(evidenceArray(raw.items)[0]).passageIds = [
                     "not-retained",
                 ];
+            if (
+                mode === "inventedFact" &&
+                name === "memory_source_fact_inventory"
+            ) {
+                const item = evidenceArray(raw.items)
+                    .map(evidenceRecord)
+                    .find((item) => item.kind === "projectStatus");
+                if (!item) throw new Error("Missing source status fixture");
+                item.statement = "Project status: complete";
+            }
+            if (
+                mode === "missingAuditContext" &&
+                name === "memory_inventory_artifact_support"
+            )
+                raw.missingContext = [
+                    "Required owner review context is unsupported",
+                ];
             if (name !== "memory_project_brief_construction") return value;
             const sections = evidenceArray(
                 evidenceRecord(raw.content).sections,
@@ -310,6 +330,9 @@ describe("project brief configured adapter, publication and lifecycle", () => {
                     sections.find((section) => section.role === role)!.details,
                 );
             if (mode === "completion") detail("status").project = "complete";
+            if (mode === "inventedFact") detail("status").project = "complete";
+            if (mode === "badStatus")
+                detail("status").project = "incidentClosed";
             if (mode === "capacity") detail("status").capacity = "validated";
             if (mode === "owner") {
                 const owner = evidenceRecord(
@@ -344,7 +367,7 @@ describe("project brief configured adapter, publication and lifecycle", () => {
             calls.some(
                 (call) => call.name === "memory_inventory_artifact_support",
             ),
-        ).toBe(false);
+        ).toBe(mode === "missingAuditContext");
         expect(await search()).toHaveLength(0);
     });
     test("explicit edits survive clean source rebuild; publication, evidence, replacement, forget and restart are exact", async () => {
@@ -378,6 +401,26 @@ describe("project brief configured adapter, publication and lifecycle", () => {
             publication.indexedRevisionId,
         );
         expect(await search(["troubleshootingGuide"])).toHaveLength(0);
+        const requestPath = path.join(root, "project-brief-build.json");
+        await writeFile(
+            requestPath,
+            JSON.stringify({
+                corpusId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                publication: false,
+                targets: [
+                    {
+                        expectedVersion: 0,
+                        definition: {
+                            viewId: "payments-cli-brief",
+                            kind: "projectBrief",
+                            selector: (await current()).view.definition
+                                .selector,
+                        },
+                    },
+                ],
+            }),
+        );
         await service.close();
         const cli = await runMemoryViewsCli([
             "--store",
@@ -388,6 +431,18 @@ describe("project brief configured adapter, publication and lifecycle", () => {
             "payments-brief",
         ]);
         expect(cli).toMatchObject({ content: { kind: "projectBrief" } });
+        expect(
+            await runMemoryViewsCli([
+                "--store",
+                root,
+                "--enable-view-drafts",
+                "build",
+                requestPath,
+            ]),
+        ).toMatchObject({
+            state: "complete",
+            results: [{ state: "draft" }],
+        });
         service = open(false);
         await expect(search()).rejects.toThrow("not supported");
         await service.close();
@@ -429,7 +484,7 @@ describe("project brief configured adapter, publication and lifecycle", () => {
         expect((await service.listViews(corpusId)).views).toHaveLength(0);
         expect(await service.listViewBuilds(corpusId)).toHaveLength(0);
     });
-    test("overlapping explicit narrative edits keep current content and create a durable conflict; archive survives reopening", async () => {
+    test("overlapping explicit edits keep current content, resolve durably and archive across reopening", async () => {
         await build();
         const edited = structuredClone((await current()).content);
         edited.sections[0].body = edited.sections[0].body.replace(
@@ -450,6 +505,28 @@ describe("project brief configured adapter, publication and lifecycle", () => {
             conflictId: job.results[0].conflictId!,
         });
         expect(conflict?.targets).toContain("section:goalsScope");
+        if (!conflict) throw new Error("Missing durable project conflict");
+        const before = await current();
+        const resolved = await service.resolveViewConflict({
+            corpusId,
+            conflictId: conflict.conflictId,
+            expectedHead: before.snapshot.head!,
+            expectedVersion: before.view.version,
+            expectedRevisionId: before.view.revisionId,
+            inputFingerprint: conflict.input.fingerprint,
+            choice: "human",
+        });
+        expect(resolved.version.content.sections[0].body).toContain(
+            "Human project context.",
+        );
+        expect(
+            (
+                await service.getViewConflict({
+                    corpusId,
+                    conflictId: conflict.conflictId,
+                })
+            )?.state,
+        ).toBe("resolved");
         const { snapshot, view } = await current();
         await service.archiveView({
             corpusId,
@@ -461,6 +538,68 @@ describe("project brief configured adapter, publication and lifecycle", () => {
         await service.close();
         service = open();
         expect((await current()).view.state).toBe("archived");
+    });
+    test("unknown human draft cannot publish without a checked generated base", async () => {
+        await build();
+        const { snapshot, content, view } = await current();
+        const draft = await service.saveViewDraft({
+            corpusId,
+            viewId: "human-project-brief",
+            expectedVersion: 0,
+            expectedHead: snapshot.head,
+            definition: {
+                viewId: "human-project-brief",
+                kind: "projectBrief",
+                selector: view.definition.selector,
+            },
+            content,
+            relationships: [],
+        });
+        await expect(
+            service.publishView({
+                corpusId,
+                viewId: "human-project-brief",
+                revisionId: draft.version.revisionId,
+                expectedVersion: draft.version.version,
+                expectedHead: (await service.listViews(corpusId)).head!,
+            }),
+        ).rejects.toThrow("known generated base");
+        expect(await search()).toHaveLength(0);
+    });
+    test("corpus clear removes brief publications, build receipts and history across restart without touching another corpus", async () => {
+        await build(true);
+        const unrelated = await service.createCorpus("Unrelated notes");
+        const source = await service.ingestDocument({
+            corpusId: unrelated.corpusId,
+            source: {
+                sourceId: "notes",
+                sourceType: "text",
+                title: "Notes",
+                text: "Retain these unrelated notes.",
+            },
+        });
+        await waitForMemoryJob(service, source.jobId);
+        await service.clearCorpus(corpusId);
+        expect(await search()).toHaveLength(0);
+        expect((await service.listViews(corpusId)).views).toHaveLength(0);
+        expect(
+            await service.getViewHistory({
+                corpusId,
+                viewId: "payments-brief",
+            }),
+        ).toHaveLength(0);
+        expect(await service.listViewBuilds(corpusId)).toHaveLength(0);
+        await service.close();
+        service = open();
+        expect((await service.listViews(corpusId)).views).toHaveLength(0);
+        expect(
+            (
+                await service.getSourceContent({
+                    corpusId: unrelated.corpusId,
+                    sourceId: "notes",
+                })
+            ).content,
+        ).toBe("Retain these unrelated notes.");
     });
     test("human typed fields are checked against actual final content and cannot bypass publication evidence", async () => {
         await build();
