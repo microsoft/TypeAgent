@@ -147,8 +147,11 @@ export function hydrateInventoryConstruction(
     inventory: ViewFactInventory,
     value: unknown,
 ): ViewSynthesisOutput {
-    if (input.definition.kind === "timeline")
-        return hydrateTimelineConstruction(input, inventory, value);
+    if (input.definition.kind === "timeline") {
+        const output = hydrateTimelineConstruction(input, inventory, value);
+        output.coverage = inventoryCoverage(output);
+        return output;
+    }
     if (inventory.sourceFingerprint !== input.fingerprint)
         throw new Error("Construction inventory/input fingerprint mismatch");
     const raw = evidenceRecord(value);

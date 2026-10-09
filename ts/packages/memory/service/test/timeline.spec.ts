@@ -14,6 +14,7 @@ import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
 import { timelineTestAnswer } from "./timelineTestModel.js";
 import { authoredRelationships } from "../src/viewRelationships.js";
 import { timelineTimestamp } from "../src/timeline.js";
+import { hydrateInventoryConstruction } from "../src/viewInventoryCoverage.js";
 import { projectSources } from "./projectBriefTestModel.js";
 
 const runtimeJest = import.meta.jest;
@@ -229,6 +230,33 @@ describe("timeline configured service pipeline", () => {
         }))!;
         expect(view.content.kind).toBe("timeline");
         const content = view.content as TimelineContent;
+        const construction = calls.find(
+            (call) => call.name === "memory_timeline_construction",
+        );
+        if (
+            !construction ||
+            !view.generation?.input ||
+            !view.generation.inventory
+        )
+            throw new Error("Expected frozen configured timeline construction");
+        const hydrated = hydrateInventoryConstruction(
+            view.generation.input,
+            view.generation.inventory,
+            timelineTestAnswer(
+                construction.name,
+                JSON.parse(construction.input),
+                prose,
+            ),
+        );
+        expect(hydrated.coverage?.inventoryFingerprint).toBe(
+            view.generation.inventory.fingerprint,
+        );
+        expect(hydrated.coverage?.items.map((item) => item.itemId)).toEqual(
+            view.generation.inventory.items.map((item) => item.id),
+        );
+        expect(
+            hydrated.coverage?.items.every((item) => item.state === "covered"),
+        ).toBe(true);
         expect(content.sections.map((record) => record.id)).toEqual([
             late.eventId,
             early.eventId,
