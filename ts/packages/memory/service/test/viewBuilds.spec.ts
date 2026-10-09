@@ -177,6 +177,7 @@ describe("human-added edge merge regressions", () => {
         const request: ViewBuildRequest = {
             corpusId: corpus.corpusId,
             expectedHead: null,
+            publication: false,
             targets: [
                 {
                     expectedVersion: 0,
