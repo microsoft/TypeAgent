@@ -6,6 +6,7 @@ import { validateViewDraft } from "./viewValidation.js";
 import { assertViewIdentifier } from "./viewContent.js";
 import { validateIsoTimestamp } from "./timestampValidation.js";
 import { emptyProjectBrief } from "./projectBrief.js";
+import { emptyWiki } from "./wiki.js";
 
 export function parseViewDraftCapability(value: string | undefined): boolean {
     if (value === undefined || value === "false") return false;
@@ -92,21 +93,23 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
                               },
                           ],
                       }
-                    : target.definition?.kind === "projectBrief"
-                      ? emptyProjectBrief()
-                      : {
-                            kind: "troubleshootingGuide",
-                            title: "Build validation",
-                            sections: [
-                                {
-                                    id: "context",
-                                    role: "context",
-                                    heading: "Context",
-                                    body: "Selected evidence",
-                                },
-                            ],
-                            citations: [],
-                        },
+                    : target.definition?.kind === "wiki"
+                      ? emptyWiki()
+                      : target.definition?.kind === "projectBrief"
+                        ? emptyProjectBrief()
+                        : {
+                              kind: "troubleshootingGuide",
+                              title: "Build validation",
+                              sections: [
+                                  {
+                                      id: "context",
+                                      role: "context",
+                                      heading: "Context",
+                                      body: "Selected evidence",
+                                  },
+                              ],
+                              citations: [],
+                          },
             relationships: [],
         });
         const id = target.definition.viewId;

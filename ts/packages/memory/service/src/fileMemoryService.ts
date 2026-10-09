@@ -2452,10 +2452,12 @@ export class FileMemoryService
                               "troubleshootingGuide",
                               "projectBrief",
                               "timeline",
+                              "wiki",
                           ] as Array<
                               | "troubleshootingGuide"
                               | "projectBrief"
                               | "timeline"
+                              | "wiki"
                           >,
                           drafts: true as const,
                           history: true as const,
@@ -2504,7 +2506,11 @@ export class FileMemoryService
         });
         if (prior && prior.content.kind !== request.content.kind)
             throw new Error("An existing view cannot change kind");
-        if (request.content.kind === "timeline" && !prior?.generation?.input)
+        if (
+            (request.content.kind === "timeline" ||
+                request.content.kind === "wiki") &&
+            !prior?.generation?.input
+        )
             throw new Error(
                 "Timeline drafts must begin with a grounded Build views result",
             );
@@ -2925,13 +2931,14 @@ export class FileMemoryService
             request.freshness !== "current" ||
             (request.kinds !== undefined &&
                 (!Array.isArray(request.kinds) ||
-                    request.kinds.length > 3 ||
+                    request.kinds.length > 4 ||
                     request.kinds.some(
                         (kind) =>
                             ![
                                 "troubleshootingGuide",
                                 "projectBrief",
                                 "timeline",
+                                "wiki",
                             ].includes(kind),
                     ))) ||
             (request.limit !== undefined &&
@@ -3150,9 +3157,11 @@ export class FileMemoryService
             pipeline:
                 target.definition.kind === "timeline"
                     ? ("timeline-v1" as const)
-                    : target.definition.kind === "projectBrief"
-                      ? ("project-brief-v1" as const)
-                      : ("troubleshooting-v1" as const),
+                    : target.definition.kind === "wiki"
+                      ? ("wiki-v1" as const)
+                      : target.definition.kind === "projectBrief"
+                        ? ("project-brief-v1" as const)
+                        : ("troubleshooting-v1" as const),
             model: this.viewAdapter.identity,
             publicationPolicy: effectiveViewPublicationPolicy(
                 await this.personalHowToStore.getViewPublicationPolicy(

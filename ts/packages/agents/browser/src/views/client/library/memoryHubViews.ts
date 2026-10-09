@@ -18,6 +18,7 @@ import { invokeMemory, invokeView } from "./viewClient";
 import { rbButton, rbError, rbNode } from "./memoryHubRunbookUi";
 import { createProjectBriefEditor } from "./memoryHubProjectBrief";
 import { createTimelineEditor } from "./memoryHubTimeline";
+import { createWikiEditor } from "./memoryHubWiki";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
 
 function jsonEditor(label: string, value: unknown): HTMLTextAreaElement {
@@ -106,7 +107,7 @@ export function mountMemoryHubViews(
         rbNode("h3", "Views"),
         rbNode(
             "p",
-            "Distill retained document revisions or canonical events into an evidence-linked timeline, project brief or conditional troubleshooting guide. Publication and index readiness are separate; neither grants human review, skill approval or execution. Configured synthesis remains live-unqualified.",
+            "Distill retained document revisions or canonical events into a bounded knowledge wiki, evidence-linked timeline, project brief or conditional troubleshooting guide. Publication and index readiness are separate; neither grants human review, skill approval or execution. Configured synthesis remains live-unqualified.",
         ),
         status,
         controls,
@@ -158,7 +159,8 @@ export function mountMemoryHubViews(
             (kind): kind is ViewKind =>
                 kind === "troubleshootingGuide" ||
                 kind === "projectBrief" ||
-                kind === "timeline",
+                kind === "timeline" ||
+                kind === "wiki",
         );
         if (root.hidden) return;
         const corpusId = options.scope();
@@ -311,11 +313,13 @@ export function mountMemoryHubViews(
             const option = document.createElement("option");
             option.value = kind;
             option.textContent =
-                kind === "timeline"
-                    ? "Evidence-linked timeline"
-                    : kind === "projectBrief"
-                      ? "Project brief"
-                      : "Troubleshooting guide";
+                kind === "wiki"
+                    ? "Knowledge wiki"
+                    : kind === "timeline"
+                      ? "Evidence-linked timeline"
+                      : kind === "projectBrief"
+                        ? "Project brief"
+                        : "Troubleshooting guide";
             kindPicker.append(option);
         }
         const cutoff = document.createElement("input");
@@ -741,12 +745,23 @@ export function mountMemoryHubViews(
                   )
                 : undefined;
         const content =
-            projectEditor || timelineEditor
+            projectEditor || timelineEditor || view.content.kind === "wiki"
                 ? undefined
                 : jsonEditor(
                       "Draft content with stable section IDs",
                       view.content,
                   );
+        const wikiEditor =
+            view.content.kind === "wiki"
+                ? createWikiEditor(
+                      view.content,
+                      editableEdges(view),
+                      () => {
+                          dirty = true;
+                      },
+                      (citation) => showTimelineEvidence(view, citation),
+                  )
+                : undefined;
         const edges = jsonEditor("Typed relationships", editableEdges(view));
         const retainedEdges = new Map(
             editableEdges(view).map((edge) => [edge.id, edge]),
@@ -806,8 +821,11 @@ export function mountMemoryHubViews(
                 "p",
                 "Content and relationships are separate structured edits. Narrative remains editable; checked fact/context passages must remain somewhere in the final artifact. Rebuild with changed evidence to revise facts. Saving checks exact evidence and semantic/context support; unsupported edits are blocked.",
             ),
-            timelineEditor?.element ?? projectEditor?.element ?? content!,
-            ...(timelineEditor
+            wikiEditor?.element ??
+                timelineEditor?.element ??
+                projectEditor?.element ??
+                content!,
+            ...(timelineEditor || wikiEditor
                 ? []
                 : projectEditor
                   ? [projectEvidence]
@@ -847,18 +865,22 @@ export function mountMemoryHubViews(
                             kind: view.content.kind as ViewKind,
                             selector: view.definition.selector,
                         },
-                        content: timelineEditor
-                            ? timelineEditor.read()
-                            : projectEditor
-                              ? projectEditor.read()
-                              : (JSON.parse(
-                                    content!.value,
-                                ) as DerivedViewContent),
-                        relationships: timelineEditor
-                            ? timelineEditor.relationships()
-                            : projectEditor
-                              ? [...retainedEdges.values()]
-                              : JSON.parse(edges.value),
+                        content: wikiEditor
+                            ? wikiEditor.read()
+                            : timelineEditor
+                              ? timelineEditor.read()
+                              : projectEditor
+                                ? projectEditor.read()
+                                : (JSON.parse(
+                                      content!.value,
+                                  ) as DerivedViewContent),
+                        relationships: wikiEditor
+                            ? wikiEditor.relationships()
+                            : timelineEditor
+                              ? timelineEditor.relationships()
+                              : projectEditor
+                                ? [...retainedEdges.values()]
+                                : JSON.parse(edges.value),
                     });
                     dirty = false;
                     comparison.replaceChildren();
@@ -925,7 +947,8 @@ export function mountMemoryHubViews(
                 rbNode(
                     "pre",
                     value?.content.kind === "projectBrief" ||
-                        value?.content.kind === "timeline"
+                        value?.content.kind === "timeline" ||
+                        value?.content.kind === "wiki"
                         ? viewContentToText(value.content)
                         : JSON.stringify(
                               value ?? "No known generated base",
@@ -988,12 +1011,25 @@ export function mountMemoryHubViews(
                   )
                 : undefined;
         const combined =
-            combinedBrief || combinedTimeline
+            combinedBrief ||
+            combinedTimeline ||
+            conflict.candidate.content.kind === "wiki"
                 ? undefined
                 : jsonEditor(
                       "Explicit combined resolution",
                       conflict.candidate,
                   );
+        const combinedWiki =
+            conflict.candidate.content.kind === "wiki"
+                ? createWikiEditor(
+                      conflict.candidate.content,
+                      conflict.candidate.relationships,
+                      () => {
+                          dirty = true;
+                      },
+                      (citation) => showTimelineEvidence(current, citation),
+                  )
+                : undefined;
         if (combined)
             combined.oninput = () => {
                 dirty = true;
@@ -1012,7 +1048,10 @@ export function mountMemoryHubViews(
         }
         comparison.append(
             choice,
-            combinedTimeline?.element ?? combinedBrief?.element ?? combined!,
+            combinedWiki?.element ??
+                combinedTimeline?.element ??
+                combinedBrief?.element ??
+                combined!,
             rbButton("Resolve explicitly and save draft", () => {
                 void action(async () => {
                     const selected = choice.value as
@@ -1021,19 +1060,26 @@ export function mountMemoryHubViews(
                         | "combined";
                     const output: ViewSynthesisOutput | undefined =
                         selected === "combined"
-                            ? combinedTimeline
+                            ? combinedWiki
                                 ? {
                                       ...conflict.candidate,
-                                      content: combinedTimeline.read(),
+                                      content: combinedWiki.read(),
                                       relationships:
-                                          combinedTimeline.relationships(),
+                                          combinedWiki.relationships(),
                                   }
-                                : combinedBrief
+                                : combinedTimeline
                                   ? {
                                         ...conflict.candidate,
-                                        content: combinedBrief.read(),
+                                        content: combinedTimeline.read(),
+                                        relationships:
+                                            combinedTimeline.relationships(),
                                     }
-                                  : JSON.parse(combined!.value)
+                                  : combinedBrief
+                                    ? {
+                                          ...conflict.candidate,
+                                          content: combinedBrief.read(),
+                                      }
+                                    : JSON.parse(combined!.value)
                             : undefined;
                     const saved = await invokeMemory(
                         "memoryResolveViewConflict",

@@ -39,6 +39,7 @@ import {
     compareRunbook,
 } from "./memoryHubRunbookOriginals.mjs";
 import { readRunbookAsset } from "./memoryHubRunbookAssets.mjs";
+import { sourceViewUsage } from "./memoryHubViewUsage.mjs";
 
 type Service = MemoryService & PersonalHowToService;
 const procedureMethods: ReadonlyArray<keyof PersonalHowToService> = [
@@ -622,6 +623,11 @@ export function createMemoryHubRunbookFunctions(
                     });
                 }
             }
+            const viewItems = await sourceViewUsage(
+                memory,
+                request.corpusId,
+                request.sourceId,
+            );
             return {
                 ...pageItems(
                     items,
@@ -629,6 +635,30 @@ export function createMemoryHubRunbookFunctions(
                     pageScope([request.corpusId, request.sourceId, items]),
                 ),
                 warnings: catalogResult.warnings,
+                ...(viewItems
+                    ? {
+                          views: pageItems(
+                              viewItems,
+                              {
+                                  ...(request.pageSize === undefined
+                                      ? {}
+                                      : { pageSize: request.pageSize }),
+                                  ...(request.viewContinuationToken ===
+                                  undefined
+                                      ? {}
+                                      : {
+                                            continuationToken:
+                                                request.viewContinuationToken,
+                                        }),
+                              },
+                              pageScope([
+                                  request.corpusId,
+                                  request.sourceId,
+                                  viewItems,
+                              ]),
+                          ),
+                      }
+                    : {}),
             };
         },
         memoryHubSuggestBindings: (request) =>

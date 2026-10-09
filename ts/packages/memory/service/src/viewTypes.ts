@@ -4,7 +4,11 @@
 import type { ProcedureSourceCitation } from "./types.js";
 import type { AgentEdition } from "./agentEdition.js";
 
-export type ViewKind = "troubleshootingGuide" | "projectBrief" | "timeline";
+export type ViewKind =
+    | "troubleshootingGuide"
+    | "projectBrief"
+    | "timeline"
+    | "wiki";
 export type ViewState = "draft" | "stale" | "archived";
 export interface ViewCitation extends ProcedureSourceCitation {
     locator: string;
@@ -40,10 +44,36 @@ export interface ViewSection {
         | "milestones"
         | "decisions"
         | "risks"
-        | "event";
+        | "event"
+        | "page";
     heading: string;
     body: string;
-    details?: ProjectBriefDetails | TimelineRecordDetails;
+    details?: ProjectBriefDetails | TimelineRecordDetails | WikiPageDetails;
+}
+export interface WikiPageDetails {
+    kind: "page";
+    taxonomy: "concept" | "system" | "project";
+    inventoryIds: string[];
+    mergedPageIds: string[];
+}
+export type WikiPage = Omit<ViewSection, "role" | "details"> & {
+    role: "page";
+    details: WikiPageDetails;
+};
+export interface WikiIndexEntry {
+    pageId: string;
+    title: string;
+    taxonomy: WikiPageDetails["taxonomy"];
+}
+export interface WikiContent {
+    kind: "wiki";
+    title: string;
+    summary?: string;
+    index: WikiIndexEntry[];
+    sections: WikiPage[];
+    citations: ViewCitation[];
+    agentEdition?: never;
+    compatibilityFields?: never;
 }
 export interface TimelineRecordDetails {
     kind: "event";
@@ -148,7 +178,8 @@ export interface ProjectBriefContent {
 export type DerivedViewContent =
     | TroubleshootingGuideContent
     | ProjectBriefContent
-    | TimelineContent;
+    | TimelineContent
+    | WikiContent;
 export type ViewEndpoint =
     | { kind: "section"; viewId: string; sectionId: string }
     | {
@@ -171,13 +202,21 @@ export interface TimelineCorrectionRelationshipInput {
     to: Extract<ViewEndpoint, { kind: "section" }>;
     citations: ViewCitation[];
 }
+export interface WikiPageRelationshipInput {
+    id: string;
+    predicate: "relatedTo" | "contradicts";
+    from: Extract<ViewEndpoint, { kind: "section" }>;
+    to: Extract<ViewEndpoint, { kind: "section" }>;
+    citations: ViewCitation[];
+}
 export type ViewRelationshipInput =
     | ViewEvidenceRelationshipInput
-    | TimelineCorrectionRelationshipInput;
+    | TimelineCorrectionRelationshipInput
+    | WikiPageRelationshipInput;
 export type ViewRelationship =
     | (ViewRelationshipInput & {
           schemaVersion: 1;
-          family: "evidence" | "dependency";
+          family: "evidence" | "dependency" | "knowledge";
           origin: "human" | "generator";
           reviewState: "unreviewed";
       })
@@ -348,7 +387,11 @@ export interface ViewBuildSnapshot {
     bounds: ViewBuildBounds;
     inputs: ViewRetainedInput[];
     selectionFingerprint?: string;
-    pipeline: "troubleshooting-v1" | "project-brief-v1" | "timeline-v1";
+    pipeline:
+        | "troubleshooting-v1"
+        | "project-brief-v1"
+        | "timeline-v1"
+        | "wiki-v1";
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
@@ -360,7 +403,8 @@ export interface ViewSynthesisOutput {
         | "diagnosticOnly"
         | "verifiedRecovery"
         | "projectSummary"
-        | "chronology";
+        | "chronology"
+        | "knowledgePages";
     missingEvidence: string[];
     inventory?: ViewFactInventory;
     inventoryAudit?: ViewInventoryAudit;

@@ -255,7 +255,7 @@ test("wire rejects spoofed actors, unsupported kinds and publication permissions
                     ...request.targets[0],
                     definition: {
                         ...request.targets[0].definition,
-                        kind: "wiki",
+                        kind: "unsupportedOntology",
                     },
                 },
             ],

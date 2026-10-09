@@ -46,8 +46,18 @@ const {
     new URL("../../../service/dist/test/timelineTestModel.js", import.meta.url)
         .href
 );
+const {
+    wikiTestAnswer,
+}: typeof import("../../service/dist/test/wikiTestModel.js") = await import(
+    new URL("../../../service/dist/test/wikiTestModel.js", import.meta.url).href
+);
 
-test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
+test.each([
+    "troubleshootingGuide",
+    "projectBrief",
+    "timeline",
+    "wiki",
+] as const)(
     "configured %s inventory and final coverage survive authenticated MCP, history and reopen",
     async (kind) => {
         const root = await mkdtemp(
@@ -78,11 +88,13 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                     );
                 stages.push(schema.name);
                 const answer = (
-                    kind === "timeline"
-                        ? timelineTestAnswer
-                        : kind === "projectBrief"
-                          ? projectBriefTestAnswer
-                          : inventoryTestAnswer
+                    kind === "wiki"
+                        ? wikiTestAnswer
+                        : kind === "timeline"
+                          ? timelineTestAnswer
+                          : kind === "projectBrief"
+                            ? projectBriefTestAnswer
+                            : inventoryTestAnswer
                 )(schema.name, JSON.parse(user.content));
                 response.writeHead(200, { "content-type": "application/json" });
                 response.end(
@@ -116,11 +128,13 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
         if (!address || typeof address === "string")
             throw new Error("Offline model listener unavailable");
         const endpoint =
-            kind === "timeline"
-                ? "TIMELINE_OFFLINE"
-                : kind === "projectBrief"
-                  ? "PROJECT_BRIEF_OFFLINE"
-                  : "V5_OFFLINE";
+            kind === "wiki"
+                ? "WIKI_OFFLINE"
+                : kind === "timeline"
+                  ? "TIMELINE_OFFLINE"
+                  : kind === "projectBrief"
+                    ? "PROJECT_BRIEF_OFFLINE"
+                    : "V5_OFFLINE";
         const environment = {
             [`OPENAI_ENDPOINT_${endpoint}`]: `http://127.0.0.1:${address.port}/chat/completions`,
             [`OPENAI_API_KEY_${endpoint}`]:
@@ -227,11 +241,13 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
             expect(stages).toEqual([
                 "memory_source_fact_inventory",
                 "memory_source_inventory_check",
-                kind === "timeline"
-                    ? "memory_timeline_construction"
-                    : kind === "projectBrief"
-                      ? "memory_project_brief_construction"
-                      : "memory_inventory_guide_construction",
+                kind === "wiki"
+                    ? "memory_wiki_construction"
+                    : kind === "timeline"
+                      ? "memory_timeline_construction"
+                      : kind === "projectBrief"
+                        ? "memory_project_brief_construction"
+                        : "memory_inventory_guide_construction",
                 "memory_inventory_artifact_support",
                 "memory_inventory_artifact_support",
             ]);
@@ -406,6 +422,205 @@ test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
                     }),
                 ).toBeDefined();
             }
+            const edited = (await client.getView({
+                corpusId: corpus.corpusId,
+                viewId: "guide",
+            }))!;
+            if (edited.content.kind === "procedure")
+                throw new Error("Expected derived artifact");
+            const authored = edited.relationships.flatMap((edge) => {
+                if (edge.origin === "system") return [];
+                const {
+                    schemaVersion: _schema,
+                    family: _family,
+                    origin: _origin,
+                    reviewState: _review,
+                    ...input
+                } = edge;
+                return [input];
+            });
+            const humanTitle = `Human maintained ${kind}`;
+            await client.saveViewDraft({
+                corpusId: corpus.corpusId,
+                viewId: "guide",
+                expectedVersion: edited.version,
+                expectedHead: (await client.listViews(corpus.corpusId)).head,
+                definition: {
+                    viewId: "guide",
+                    kind,
+                    selector: edited.definition.selector,
+                },
+                content: { ...edited.content, title: humanTitle },
+                relationships: authored,
+            });
+            const draft = (await client.getView({
+                corpusId: corpus.corpusId,
+                viewId: "guide",
+            }))!;
+            expect(
+                draft.edits!.some(
+                    (edit) =>
+                        edit.target === "title" && edit.actor === draft.actor,
+                ),
+            ).toBe(true);
+            const draftSearch = await client.searchViews({
+                corpusId: corpus.corpusId,
+                query: humanTitle,
+                freshness: "current",
+                kinds: [kind],
+            });
+            expect(
+                draftSearch.some(
+                    (match) => match.view.revisionId === draft.revisionId,
+                ),
+            ).toBe(false);
+            async function rebuild(revisionId: string) {
+                if (!client) throw new Error("Missing offline client");
+                const snapshot = await client.listViews(corpus.corpusId);
+                let job = await client.buildViews({
+                    corpusId: corpus.corpusId,
+                    expectedHead: snapshot.head,
+                    publication: true,
+                    targets: [
+                        {
+                            expectedVersion: snapshot.views.find(
+                                (view) => view.viewId === "guide",
+                            )!.version,
+                            definition: {
+                                viewId: "guide",
+                                kind,
+                                selector:
+                                    kind === "timeline"
+                                        ? {
+                                              kind: "timelineEvidence",
+                                              events: [],
+                                              sources: [
+                                                  {
+                                                      sourceId: source.sourceId,
+                                                      revisionId,
+                                                  },
+                                              ],
+                                          }
+                                        : {
+                                              kind: "sources",
+                                              sources: [
+                                                  {
+                                                      sourceId: source.sourceId,
+                                                      revisionId,
+                                                  },
+                                              ],
+                                          },
+                            },
+                        },
+                    ],
+                });
+                for (
+                    let tries = 0;
+                    job.state === "running" && tries < 1000;
+                    tries++
+                ) {
+                    await new Promise<void>((resolve) =>
+                        setTimeout(resolve, 10),
+                    );
+                    job = (await client.getViewBuild({
+                        corpusId: corpus.corpusId,
+                        jobId: job.jobId,
+                    }))!;
+                }
+                expect(job.results[0]).toMatchObject({ state: "searchable" });
+                expect(job.results[0].snapshot.publicationPolicy).toMatchObject(
+                    { autoPublish: true, origin: "build" },
+                );
+            }
+            await rebuild(source.revisionId);
+            const merged = (await client.getView({
+                corpusId: corpus.corpusId,
+                viewId: "guide",
+            }))!;
+            expect(merged.content.title).toBe(humanTitle);
+            expect(merged.provenance).toBe("merged");
+            expect(
+                merged
+                    .edits!.filter((edit) => edit.status !== "cleared")
+                    .every((edit) => edit.actor === draft.actor),
+            ).toBe(true);
+            expect(
+                (
+                    await client.searchViews({
+                        corpusId: corpus.corpusId,
+                        query: humanTitle,
+                        freshness: "current",
+                        kinds: [kind],
+                    })
+                )[0].view.revisionId,
+            ).toBe(merged.revisionId);
+            const retained = await client.getSourceContent({
+                corpusId: corpus.corpusId,
+                sourceId: source.sourceId,
+                revisionId: source.revisionId,
+            });
+            const replacement = await client.replaceSource({
+                corpusId: corpus.corpusId,
+                sourceId: source.sourceId,
+                expectedActiveRevisionId: source.revisionId,
+                source: {
+                    sourceType: "text",
+                    title: "Synthetic evidence updated",
+                    text: `${retained.content}\n\nContext: Additional capacity observation remains unresolved.`,
+                },
+            });
+            await client.waitForJob(replacement.jobId);
+            expect(
+                await client.searchViews({
+                    corpusId: corpus.corpusId,
+                    query: humanTitle,
+                    freshness: "current",
+                    kinds: [kind],
+                }),
+            ).toEqual([]);
+            await rebuild(replacement.revisionId);
+            const updated = (await client.getView({
+                corpusId: corpus.corpusId,
+                viewId: "guide",
+            }))!;
+            expect(updated.content.title).toBe(humanTitle);
+            expect(
+                updated.content.citations.every(
+                    (citation) =>
+                        citation.revisionId === replacement.revisionId,
+                ),
+            ).toBe(true);
+            await client.archiveView({
+                corpusId: corpus.corpusId,
+                viewId: "guide",
+                expectedVersion: updated.version,
+                expectedHead: (await client.listViews(corpus.corpusId)).head!,
+            });
+            expect(
+                await client.searchViews({
+                    corpusId: corpus.corpusId,
+                    query: humanTitle,
+                    freshness: "current",
+                    kinds: [kind],
+                }),
+            ).toEqual([]);
+            const preview = await client.previewForgetSource(
+                corpus.corpusId,
+                source.sourceId,
+            );
+            await client.forgetSource({
+                corpusId: corpus.corpusId,
+                sourceId: source.sourceId,
+                confirmationToken: preview.confirmationToken,
+            });
+            expect(
+                await client.getViewHistory({
+                    corpusId: corpus.corpusId,
+                    viewId: "guide",
+                }),
+            ).toEqual([]);
+            expect(await client.listViewBuilds(corpus.corpusId)).toEqual([]);
+            expect((await client.listViews(corpus.corpusId)).views).toEqual([]);
         } finally {
             await client?.close();
             await host?.close();

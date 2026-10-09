@@ -21,6 +21,7 @@ import { mountRunbookBinding } from "./memoryHubRunbookBinding";
 import { mountRunbookSkills } from "./memoryHubRunbookSkills";
 import { mountRunbookSynthesis } from "./memoryHubRunbookSynthesis";
 import { createRunbookNavigation } from "./memoryHubRunbookNavigation";
+import { renderDerivedViewUsage } from "./memoryHubViewUsage";
 import {
     rbButton,
     rbIconButton,
@@ -1090,6 +1091,7 @@ export function mountMemoryHubRunbooks(
         body: HTMLElement,
         sourceId: string,
         continuationToken?: string,
+        viewContinuationToken?: string,
     ) {
         if (!detail) return;
         const generation = epoch;
@@ -1101,6 +1103,7 @@ export function mountMemoryHubRunbooks(
                 sourceId,
                 continuationToken,
                 pageSize: 25,
+                ...(viewContinuationToken ? { viewContinuationToken } : {}),
             });
             if (
                 disposed ||
@@ -1117,7 +1120,7 @@ export function mountMemoryHubRunbooks(
                 ),
                 rbNode("p", page.warnings.join("\n"), "runbook-warning"),
             );
-            for (const item of page.items)
+            for (const item of viewContinuationToken ? [] : page.items)
                 card.append(
                     rbButton(
                         `${item.procedure.document.title} · version ${item.procedure.version} · ${item.skills.length} linked catalog revisions`,
@@ -1131,7 +1134,31 @@ export function mountMemoryHubRunbooks(
                         },
                     ),
                 );
-            if (page.nextContinuationToken)
+            if (page.views && !continuationToken) {
+                card.append(
+                    renderDerivedViewUsage(
+                        page.views.items,
+                        page.views.total,
+                        (operation) => {
+                            void operation().catch((error) =>
+                                report(error, detailStatus),
+                            );
+                        },
+                    ),
+                );
+                if (page.views.nextContinuationToken)
+                    card.append(
+                        rbButton("More derived source dependencies", () => {
+                            void usedBy(
+                                body,
+                                sourceId,
+                                undefined,
+                                page.views!.nextContinuationToken,
+                            );
+                        }),
+                    );
+            }
+            if (page.nextContinuationToken && !viewContinuationToken)
                 card.append(
                     rbButton("More source dependencies", () => {
                         void usedBy(body, sourceId, page.nextContinuationToken);
