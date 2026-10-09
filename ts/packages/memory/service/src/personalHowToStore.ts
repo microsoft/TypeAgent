@@ -1073,6 +1073,12 @@ export class TypedViewStore {
         revisionId: string,
         error?: string,
     ): Promise<ViewPublicationStatus> {
+        if (
+            viewId === "__proto__" ||
+            viewId === "constructor" ||
+            viewId === "prototype"
+        )
+            throw new Error("Invalid view identifier");
         const { head, state } = await this.history(corpusId).read();
         const publication = state.publications?.[viewId];
         if (!publication || publication.publishedRevisionId !== revisionId)
