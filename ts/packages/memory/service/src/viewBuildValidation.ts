@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { ViewBuildRequest, ViewConflictResolution } from "./viewTypes.js";
+import type {
+    DerivedViewContent,
+    ViewKind,
+    ViewBuildRequest,
+    ViewConflictResolution,
+} from "./viewTypes.js";
 import { validateViewDraft } from "./viewValidation.js";
 import { assertViewIdentifier } from "./viewContent.js";
 import { validateIsoTimestamp } from "./timestampValidation.js";
@@ -62,54 +67,7 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             expectedVersion: target.expectedVersion,
             expectedHead: request.expectedHead,
             definition: target.definition,
-            content:
-                target.definition?.kind === "timeline"
-                    ? {
-                          kind: "timeline",
-                          title: "Timeline selection validation",
-                          generatedAt: "2026-01-01T00:00:00.000Z",
-                          citations: [],
-                          sections: [
-                              {
-                                  id: "validation",
-                                  role: "event",
-                                  heading: "Record",
-                                  body: "Selected evidence",
-                                  details: {
-                                      kind: "event",
-                                      identity: {
-                                          kind: "documentRecord",
-                                          sourceId: "validation",
-                                          sourceRecordId: "validation",
-                                      },
-                                      eventType: "unknown",
-                                      state: "unknown",
-                                      outcome: null,
-                                      occurredAt: null,
-                                      learnedAt: null,
-                                      capturedAt: null,
-                                      inventoryIds: [],
-                                  },
-                              },
-                          ],
-                      }
-                    : target.definition?.kind === "wiki"
-                      ? emptyWiki()
-                      : target.definition?.kind === "projectBrief"
-                        ? emptyProjectBrief()
-                        : {
-                              kind: "troubleshootingGuide",
-                              title: "Build validation",
-                              sections: [
-                                  {
-                                      id: "context",
-                                      role: "context",
-                                      heading: "Context",
-                                      body: "Selected evidence",
-                                  },
-                              ],
-                              citations: [],
-                          },
+            content: selectionValidationContent(target.definition?.kind),
             relationships: [],
         });
         const id = target.definition.viewId;
@@ -127,6 +85,54 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             throw new Error(
                 "Each target must select 1 to 32 exact retained source revisions",
             );
+    }
+
+    function selectionValidationContent(kind: ViewKind): DerivedViewContent {
+        if (kind === "wiki") return emptyWiki();
+        if (kind === "projectBrief") return emptyProjectBrief();
+        if (kind === "timeline")
+            return {
+                kind: "timeline",
+                title: "Timeline selection validation",
+                generatedAt: "2026-01-01T00:00:00.000Z",
+                citations: [],
+                sections: [
+                    {
+                        id: "validation",
+                        role: "event",
+                        heading: "Record",
+                        body: "Selected evidence",
+                        details: {
+                            kind: "event",
+                            identity: {
+                                kind: "documentRecord",
+                                sourceId: "validation",
+                                sourceRecordId: "validation",
+                            },
+                            eventType: "unknown",
+                            state: "unknown",
+                            outcome: null,
+                            occurredAt: null,
+                            learnedAt: null,
+                            capturedAt: null,
+                            inventoryIds: [],
+                        },
+                    },
+                ],
+            };
+        return {
+            kind: "troubleshootingGuide",
+            title: "Build validation",
+            citations: [],
+            sections: [
+                {
+                    id: "context",
+                    role: "context",
+                    heading: "Context",
+                    body: "Selected evidence",
+                },
+            ],
+        };
     }
     validateBounds(request.bounds);
 }
