@@ -4,6 +4,7 @@
 import type { ViewBuildRequest, ViewConflictResolution } from "./viewTypes.js";
 import { validateViewDraft } from "./viewValidation.js";
 import { assertViewIdentifier } from "./viewContent.js";
+import { validateIsoTimestamp } from "./timestampValidation.js";
 
 export function parseViewDraftCapability(value: string | undefined): boolean {
     if (value === undefined || value === "false") return false;
@@ -97,12 +98,9 @@ function validateBounds(value: ViewBuildRequest["bounds"]): void {
     )
         throw new Error("Unsupported temporal bounds");
     for (const date of Object.values(bounds)) {
-        if (
-            typeof date !== "string" ||
-            !/^\d{4}-\d\d-\d\dT/.test(date) ||
-            !Number.isFinite(Date.parse(date))
-        )
+        if (typeof date !== "string")
             throw new Error("Temporal bounds require ISO timestamps");
+        validateIsoTimestamp("temporal bound", date);
     }
     if (
         bounds.occurredFrom &&

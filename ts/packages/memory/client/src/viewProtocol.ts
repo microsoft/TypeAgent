@@ -152,6 +152,9 @@ const edge = z.strictObject({
     predicate: z.enum(["supportedBy", "dependsOn"]),
     from: sectionEndpoint,
     to: sourceEndpoint,
+    citations: citation.array().min(1),
+});
+const requestEdge = edge.extend({
     citations: citation.array().min(1).max(1000),
 });
 const content = z.strictObject({
@@ -159,13 +162,20 @@ const content = z.strictObject({
     title: text,
     summary: text.optional(),
     sections: section.array().min(1).max(1000),
+    citations: citation.array(),
+});
+const requestContent = content.extend({
     citations: citation.array().max(1000),
 });
 export const viewSynthesisSchema = z.strictObject({
-    content,
-    relationships: edge.array().max(1000),
+    content: requestContent,
+    relationships: requestEdge.array().max(1000),
     outcome: z.enum(["diagnosticOnly", "verifiedRecovery"]),
     missingEvidence: text.array().max(100),
+});
+const viewSynthesisResponseSchema = viewSynthesisSchema.extend({
+    content,
+    relationships: edge.array(),
 });
 const bounds = z.strictObject({
     learnedBefore: z.iso.datetime({ offset: true }).optional(),
@@ -192,8 +202,8 @@ export const viewSaveRequestSchema = z.strictObject({
     expectedHead: head.nullable(),
     expectedVersion: z.number().int().nonnegative(),
     definition: viewDefinitionSchema,
-    content,
-    relationships: edge.array().max(1000),
+    content: requestContent,
+    relationships: requestEdge.array().max(1000),
 });
 export const viewReadRequestSchema = z.strictObject({
     corpusId: id,
@@ -401,7 +411,7 @@ export const viewConflictSchema = z.object({
     input: snapshot,
     base: viewVersionSchema.shape.generation.optional(),
     human: viewVersionSchema,
-    candidate: viewSynthesisSchema.extend(inventoryEvidence),
+    candidate: viewSynthesisResponseSchema.extend(inventoryEvidence),
     targets: text.array(),
     reason: text,
     resolutionRevisionId: id.optional(),

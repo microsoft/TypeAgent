@@ -36,6 +36,7 @@ import type {
 } from "./viewTypes.js";
 import { ViewBuildRunner, ViewBuildStaleError } from "./viewBuilds.js";
 import { viewHash } from "./viewMerge.js";
+import { validateIsoTimestamp } from "./timestampValidation.js";
 import {
     createConfiguredViewSynthesisAdapter,
     validateConstructedGuide,
@@ -515,34 +516,7 @@ function validateTimestamp(kind: string, value: string): void {
 }
 
 function validateSearchTimestamp(kind: string, value: string): void {
-    const match =
-        /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(
-            value,
-        );
-    if (match === null || !Number.isFinite(Date.parse(value))) {
-        throw new Error(`Invalid search ${kind}; expected an ISO timestamp`);
-    }
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-    const days = [
-        31,
-        leapYear ? 29 : 28,
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
-    ][month - 1];
-    if (days === undefined || day < 1 || day > days) {
-        throw new Error(`Invalid search ${kind}; expected an ISO timestamp`);
-    }
+    validateIsoTimestamp(`search ${kind}`, value);
 }
 
 function validateSearchDateRange(
@@ -2616,22 +2590,26 @@ export class FileMemoryService
         );
         if (existing) return existing;
         const admitted = await this.enqueueWrite(request.corpusId, async () => {
-            this.viewBuilds.assertCapacity();
-            const snapshots: ViewBuildSnapshot[] = [];
-            for (const target of request.targets)
-                snapshots.push(
-                    await this.snapshotViewTarget(
-                        request.corpusId,
-                        target,
-                        request.bounds,
-                    ),
+            const reservation = this.viewBuilds.reserve();
+            try {
+                const snapshots: ViewBuildSnapshot[] = [];
+                for (const target of request.targets)
+                    snapshots.push(
+                        await this.snapshotViewTarget(
+                            request.corpusId,
+                            target,
+                            request.bounds,
+                        ),
+                    );
+                const admitted = await this.personalHowToStore.admitViewBuild(
+                    request,
+                    snapshots,
                 );
-            const admitted = await this.personalHowToStore.admitViewBuild(
-                request,
-                snapshots,
-            );
-            if (admitted.admitted) this.viewBuilds.start(admitted.job);
-            return admitted;
+                if (admitted.admitted) reservation.start(admitted.job);
+                return admitted;
+            } finally {
+                reservation.release();
+            }
         });
         return admitted.job;
     }

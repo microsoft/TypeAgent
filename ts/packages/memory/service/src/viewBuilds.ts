@@ -48,6 +48,7 @@ export class ViewBuildRunner {
         ViewBuildRuntimeScope & { error: Error }
     >();
     private readonly purged = new Set<string>();
+    private reservations = 0;
     private tail: Promise<void> = Promise.resolve();
     public constructor(
         private readonly adapter: ViewSynthesisAdapter,
@@ -86,8 +87,27 @@ export class ViewBuildRunner {
     }
 
     public assertCapacity(): void {
-        if (this.controllers.size >= 32)
+        if (this.controllers.size + this.reservations >= 32)
             throw new Error("View build queue limit exceeded");
+    }
+
+    public reserve(): { start(job: ViewBuildJob): void; release(): void } {
+        this.assertCapacity();
+        this.reservations++;
+        let active = true;
+        const release = () => {
+            if (!active) return;
+            active = false;
+            this.reservations--;
+        };
+        return {
+            start: (job) => {
+                if (!active) throw new Error("View build reservation released");
+                release();
+                this.start(job);
+            },
+            release,
+        };
     }
 
     public cancel(
@@ -241,7 +261,11 @@ export class ViewBuildRunner {
             );
             validation = false;
             const current = await this.owner.current(result.snapshot);
-            const { output, conflicts } = mergeView(current, candidate);
+            const { output, conflicts } = mergeView(
+                current,
+                candidate,
+                result.snapshot.definition.selector.sources,
+            );
             if (!conflicts.length) {
                 validation = true;
                 validateConstructedGuide(result.snapshot, output);

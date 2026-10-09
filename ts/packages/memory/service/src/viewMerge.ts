@@ -4,10 +4,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { diff3Merge, diffIndices } from "node-diff3";
 import { canonicalizeProcedure } from "./agentEdition.js";
+import { viewSourceKey } from "./viewContent.js";
 import type {
     TroubleshootingGuideContent,
     ViewEditOperation,
     ViewRelationshipInput,
+    ViewSourceSelector,
     ViewSynthesisOutput,
     ViewVersion,
 } from "./viewTypes.js";
@@ -174,6 +176,8 @@ function mergeSection(
 export function mergeView(
     current: ViewVersion | undefined,
     candidate: ViewSynthesisOutput,
+    sources: ViewSourceSelector["sources"] = current?.definition.selector
+        .sources ?? [],
 ): {
     output: ViewSynthesisOutput;
     conflicts: string[];
@@ -197,6 +201,7 @@ export function mergeView(
         authoredRelationships(current),
     );
     const next = values(candidate.content, candidate.relationships);
+    const selected = new Set(sources.map(viewSourceKey));
     const tracked = new Set(edits.map((edit) => edit.target));
     for (const target of new Set([...base.keys(), ...human.keys()]))
         if (
@@ -215,7 +220,7 @@ export function mergeView(
             continue;
         }
         if (edit.target.startsWith("edge:")) {
-            mergeEdge(edit, next, output, conflicts);
+            mergeEdge(edit, next, output, conflicts, selected);
         } else {
             mergeContent(edit.target, base, human, next, output, conflicts);
         }
@@ -228,6 +233,7 @@ function mergeEdge(
     next: Map<string, unknown>,
     output: ViewSynthesisOutput,
     conflicts: string[],
+    selected: Set<string>,
 ): void {
     const identity = edit.target.slice(5);
     const proposed = next.get(edit.target) as ViewRelationshipInput | undefined;
@@ -241,10 +247,16 @@ function mergeEdge(
         return;
     }
     if (
-        old &&
-        proposed &&
-        viewHash({ ...old, id: proposed.id }) !== viewHash(proposed) &&
-        viewHash(human) !== viewHash(proposed)
+        (human &&
+            (!selected.has(viewSourceKey(human.to)) ||
+                human.citations.some(
+                    (citation) => !selected.has(viewSourceKey(citation)),
+                ))) ||
+        (proposed &&
+            viewHash(old && { ...old, id: proposed.id }) !==
+                viewHash(proposed) &&
+            viewHash(human && { ...human, id: proposed.id }) !==
+                viewHash(proposed))
     ) {
         conflicts.push(edit.target);
         return;

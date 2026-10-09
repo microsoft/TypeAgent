@@ -12,12 +12,16 @@ import type {
     ViewBuildSnapshot,
     ViewSaveRequest,
     ViewVersion,
+    ViewRelationshipInput,
 } from "../src/viewTypes.js";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
 import { mergeProse, mergeView } from "../src/viewMerge.js";
-import { authoredRelationships } from "../src/viewRelationships.js";
+import {
+    authoredRelationships,
+    edgeIdentity,
+} from "../src/viewRelationships.js";
 import { ViewHistory } from "../src/viewHistory.js";
 import { ViewBuildRunner } from "../src/viewBuilds.js";
 import { createServer } from "node:http";
@@ -25,6 +29,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
+import { validateBuildRequest } from "../src/viewBuildValidation.js";
+import { PersonalHowToStore } from "../src/personalHowToStore.js";
 
 function output(
     input: ViewBuildSnapshot,
@@ -99,6 +105,240 @@ function support(
     };
 }
 
+describe("human-added edge merge regressions", () => {
+    let root: string;
+    let service: FileMemoryService;
+    let added: ViewRelationshipInput | undefined;
+
+    beforeEach(async () => {
+        root = await mkdtemp(path.join(os.tmpdir(), "memory-added-edges-"));
+        added = undefined;
+        service = new FileMemoryService(root, {
+            viewDrafts: true,
+            indexFactory: (_id, directory) =>
+                new FakeProcedureCorpusIndex(directory),
+            viewSynthesisAdapter: {
+                identity: "offline-edge-merge-model",
+                generate: async (input) => {
+                    const candidate = output(input);
+                    if (added)
+                        candidate.relationships.push(structuredClone(added));
+                    return candidate;
+                },
+                validate: async (_input, candidate) => support(candidate, true),
+            },
+        });
+    });
+    afterEach(async () => {
+        await service.close();
+        await rm(root, { recursive: true, force: true });
+    });
+
+    async function build(request: ViewBuildRequest): Promise<ViewBuildJob> {
+        const current = await service.listViews(request.corpusId);
+        const job = await service.buildViews({
+            ...request,
+            expectedHead: current.head,
+            targets: request.targets.map((target) => ({
+                ...target,
+                expectedVersion: current.views[0]?.version ?? 0,
+            })),
+        });
+        for (let tries = 0; tries < 1000; tries++) {
+            const result = await service.getViewBuild(job);
+            if (!result) throw new Error("Missing durable build");
+            if (result.state !== "running") return result;
+            await new Promise<void>((resolve) => setTimeout(resolve, 10));
+        }
+        throw new Error("Build did not terminate");
+    }
+
+    async function fixture(citationOnly = false) {
+        const corpus = await service.createCorpus("Human-added edges");
+        const sources = [];
+        for (const sourceId of ["evidence", "secondary"]) {
+            const source = await service.ingestDocument({
+                corpusId: corpus.corpusId,
+                source: {
+                    sourceId,
+                    sourceType: "text",
+                    title: sourceId,
+                    text: "Inspect pressure. Preserve approval boundaries. No verified resolution.",
+                },
+            });
+            expect((await waitForMemoryJob(service, source.jobId)).state).toBe(
+                "complete",
+            );
+            sources.push({
+                sourceId: source.sourceId,
+                revisionId: source.revisionId,
+            });
+        }
+        const request: ViewBuildRequest = {
+            corpusId: corpus.corpusId,
+            expectedHead: null,
+            targets: [
+                {
+                    expectedVersion: 0,
+                    definition: {
+                        viewId: "edge-guide",
+                        kind: "troubleshootingGuide",
+                        selector: { kind: "sources", sources },
+                    },
+                },
+            ],
+        };
+        expect((await build(request)).results[0].state).toBe("draft");
+        const snapshot = await service.listViews(request.corpusId);
+        const prior = snapshot.views[0];
+        const human: ViewRelationshipInput = {
+            ...authoredRelationships(prior)[0],
+            id: "human-added",
+            predicate: "dependsOn",
+            to: { kind: "source", ...sources[citationOnly ? 1 : 0] },
+        };
+        const saved = await service.saveViewDraft({
+            corpusId: request.corpusId,
+            viewId: prior.viewId,
+            expectedHead: snapshot.head,
+            expectedVersion: prior.version,
+            definition: request.targets[0].definition,
+            content: prior.content as ViewSaveRequest["content"],
+            relationships: [...authoredRelationships(prior), human],
+        });
+        const target = `edge:${edgeIdentity(human)}`;
+        expect(
+            saved.version.edits!.find((edit) => edit.target === target),
+        ).not.toHaveProperty("oldValue");
+        return { request, human, saved: saved.version, target };
+    }
+
+    test("equivalent human and generated additions with differing IDs merge repeatedly", async () => {
+        const { request, human } = await fixture();
+        for (const id of ["generated-added", "reidentified-added"]) {
+            added = { ...human, id };
+            expect((await build(request)).results[0].state).toBe("merged");
+            const current = (await service.listViews(request.corpusId))
+                .views[0];
+            expect(
+                authoredRelationships(current).filter(
+                    (edge) => edgeIdentity(edge) === edgeIdentity(human),
+                ),
+            ).toEqual([human]);
+        }
+    });
+
+    test("divergent generated addition of the same semantic edge becomes a resolvable conflict", async () => {
+        const { request, human, saved, target } = await fixture();
+        added = {
+            ...human,
+            id: "generated-added",
+            citations: [
+                {
+                    ...human.citations[0],
+                    locator: "chars:0-17",
+                    excerpt: "Inspect pressure.",
+                },
+            ],
+        };
+        const job = await build(request);
+        expect(job.results[0].state).toBe("conflicted");
+        const conflict = (await service.getViewConflict({
+            corpusId: request.corpusId,
+            conflictId: job.results[0].conflictId!,
+        }))!;
+        expect(conflict.targets).toContain(target);
+        expect((await service.listViews(request.corpusId)).views[0]).toEqual(
+            saved,
+        );
+        const resolved = await service.resolveViewConflict({
+            corpusId: request.corpusId,
+            conflictId: conflict.conflictId,
+            expectedHead: (await service.listViews(request.corpusId)).head!,
+            expectedVersion: saved.version,
+            expectedRevisionId: saved.revisionId,
+            inputFingerprint: conflict.input.fingerprint,
+            choice: "human",
+        });
+        expect(authoredRelationships(resolved.version)).toContainEqual(human);
+        expect((await build(request)).results[0].state).toBe("merged");
+    });
+
+    test.each([false, true])(
+        "stale human-added references conflict rather than block after revision selection changes (citation only: %s)",
+        async (citationOnly) => {
+            const { request, human, target } = await fixture(citationOnly);
+            const previous = request.targets[0].definition.selector.sources[0];
+            const replacement = await service.ingestDocument({
+                corpusId: request.corpusId,
+                source: {
+                    sourceId: previous.sourceId,
+                    sourceType: "text",
+                    title: "Refreshed evidence",
+                    text: "Inspect pressure. Preserve approval boundaries. Fresh evidence without verified recovery.",
+                },
+                pipeline: {
+                    updatePolicy: "retainRevisionHistory",
+                    expectedActiveRevisionId: previous.revisionId,
+                },
+            });
+            expect(
+                (await waitForMemoryJob(service, replacement.jobId)).state,
+            ).toBe("complete");
+            request.targets[0].definition.selector.sources[0] = {
+                sourceId: replacement.sourceId,
+                revisionId: replacement.revisionId,
+            };
+            if (!citationOnly)
+                added = {
+                    ...human,
+                    id: "refreshed-generated-added",
+                    to: {
+                        kind: "source",
+                        sourceId: replacement.sourceId,
+                        revisionId: replacement.revisionId,
+                    },
+                    citations: [
+                        {
+                            ...human.citations[0],
+                            revisionId: replacement.revisionId,
+                            locator: "chars:0-17",
+                            excerpt: "Inspect pressure.",
+                        },
+                    ],
+                };
+            const prior = (await service.listViews(request.corpusId)).views[0];
+            const job = await build(request);
+            expect(job.results[0].state).toBe("conflicted");
+            const conflict = (await service.getViewConflict({
+                corpusId: request.corpusId,
+                conflictId: job.results[0].conflictId!,
+            }))!;
+            expect(conflict.targets).toContain(target);
+            expect(
+                (await service.listViews(request.corpusId)).views[0],
+            ).toEqual(prior);
+            expect(authoredRelationships(conflict.human)).toContainEqual(human);
+            const resolved = await service.resolveViewConflict({
+                corpusId: request.corpusId,
+                conflictId: conflict.conflictId,
+                expectedHead: (await service.listViews(request.corpusId)).head!,
+                expectedVersion: prior.version,
+                expectedRevisionId: prior.revisionId,
+                inputFingerprint: conflict.input.fingerprint,
+                choice: "generated",
+            });
+            expect(resolved.version.content).toEqual(
+                conflict.candidate.content,
+            );
+            expect(authoredRelationships(resolved.version)).not.toContainEqual(
+                human,
+            );
+            expect((await build(request)).results[0].state).toBe("draft");
+        },
+    );
+});
+
 describe("durable draft builds and explicit edit merge", () => {
     let root: string;
     let service: FileMemoryService;
@@ -148,8 +388,32 @@ describe("durable draft builds and explicit edit merge", () => {
         await service.close();
         await rm(root, { recursive: true, force: true });
     });
-    async function fixture(count = 1): Promise<ViewBuildRequest> {
-        const corpus = await service.createCorpus("Build fixture");
+    it.each([
+        "2026-01-01T00:00:00",
+        "2026-02-30T00:00:00Z",
+        "2026-02-29T00:00:00Z",
+        "2026-04-31T00:00:00+01:00",
+    ])("rejects invalid temporal bound %s", async (timestamp) => {
+        const request = await fixture();
+        request.bounds = { learnedBefore: timestamp };
+        await expect(service.buildViews(request)).rejects.toThrow(
+            "expected an ISO timestamp",
+        );
+        expect(generate).not.toHaveBeenCalled();
+    });
+    it.each(["2024-02-29T00:00:00Z", "2026-01-01T00:00:00.123+05:30"])(
+        "accepts valid temporal bound %s",
+        async (timestamp) => {
+            const request = await fixture();
+            request.bounds = { learnedBefore: timestamp };
+            expect(() => validateBuildRequest(request)).not.toThrow();
+        },
+    );
+    async function fixture(
+        count = 1,
+        name = "Build fixture",
+    ): Promise<ViewBuildRequest> {
+        const corpus = await service.createCorpus(name);
         const source = await service.ingestDocument({
             corpusId: corpus.corpusId,
             source: {
@@ -382,6 +646,141 @@ describe("durable draft builds and explicit edit merge", () => {
             expect((await service.listViews(request.corpusId)).views).toEqual(
                 [],
             );
+        },
+    );
+    test("cross-corpus admission reserves the last runner slot before persistence", async () => {
+        const first = await fixture();
+        const second = await fixture(1, "Second build fixture");
+        expect(second.corpusId).not.toBe(first.corpusId);
+        const runner = (service as unknown as { viewBuilds: ViewBuildRunner })
+            .viewBuilds;
+        const reservations = Array.from({ length: 31 }, () => runner.reserve());
+        let entered!: () => void;
+        let release!: () => void;
+        const admissionEntered = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        const admissionGate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        let releaseGeneration!: () => void;
+        const generationGate = new Promise<void>((resolve) => {
+            releaseGeneration = resolve;
+        });
+        generate.mockImplementation(async (input) => {
+            await generationGate;
+            return output(input);
+        });
+        const original = PersonalHowToStore.prototype.admitViewBuild;
+        const admission = import.meta.jest
+            .spyOn(PersonalHowToStore.prototype, "admitViewBuild")
+            .mockImplementationOnce(async function (
+                this: PersonalHowToStore,
+                request,
+                snapshots,
+            ) {
+                entered();
+                await admissionGate;
+                return original.call(this, request, snapshots);
+            });
+        let accepted: Promise<ViewBuildJob> | undefined;
+        let rejected: Promise<ViewBuildJob> | undefined;
+        try {
+            accepted = service.buildViews(first);
+            await admissionEntered;
+            rejected = service.buildViews(second);
+            await expect(rejected).rejects.toThrow(
+                "View build queue limit exceeded",
+            );
+            expect(admission).toHaveBeenCalledTimes(1);
+            release();
+            const admitted = await accepted;
+            expect(await service.listViewBuilds(second.corpusId)).toEqual([]);
+            expect(() => runner.reserve()).toThrow(
+                "View build queue limit exceeded",
+            );
+            releaseGeneration();
+            const job = await wait(admitted);
+            expect(job.state).toBe("complete");
+            await runner.close();
+            const available = runner.reserve();
+            available.release();
+        } finally {
+            release();
+            releaseGeneration();
+            try {
+                await Promise.allSettled([accepted, rejected]);
+                await runner.close();
+            } finally {
+                admission.mockRestore();
+                for (const reservation of reservations) reservation.release();
+            }
+        }
+    });
+    test.each(["snapshot", "rejection", "error", "idempotent"] as const)(
+        "runner reservation is released after %s admission",
+        async (mode) => {
+            const request = await fixture();
+            const existing = await wait(await service.buildViews(request));
+            const runner = (
+                service as unknown as { viewBuilds: ViewBuildRunner }
+            ).viewBuilds;
+            await runner.close();
+            const next = {
+                ...request,
+                expectedHead: (await service.listViews(request.corpusId)).head,
+                targets: request.targets.map((target) => ({
+                    ...target,
+                    definition: { ...target.definition, viewId: "next-guide" },
+                })),
+            };
+            const reservations = Array.from({ length: 31 }, () =>
+                runner.reserve(),
+            );
+            const admission = import.meta.jest.spyOn(
+                PersonalHowToStore.prototype,
+                "admitViewBuild",
+            );
+            try {
+                if (mode === "snapshot") {
+                    next.targets[0].expectedVersion = 1;
+                    await expect(service.buildViews(next)).rejects.toThrow();
+                    expect(admission).not.toHaveBeenCalled();
+                } else if (mode === "idempotent") {
+                    admission.mockResolvedValueOnce({
+                        job: existing,
+                        admitted: false,
+                    });
+                    expect(await service.buildViews(next)).toEqual(existing);
+                } else {
+                    if (mode === "rejection")
+                        next.expectedHead = request.expectedHead;
+                    else
+                        admission.mockRejectedValueOnce(
+                            new Error("Injected admission failure"),
+                        );
+                    await expect(service.buildViews(next)).rejects.toThrow(
+                        mode === "rejection"
+                            ? "View history head conflict at build admission"
+                            : "Injected admission failure",
+                    );
+                }
+                const available = runner.reserve();
+                available.release();
+                available.release();
+                expect(() => runner.assertCapacity()).not.toThrow();
+                const lastSlot = runner.reserve();
+                expect(() => runner.reserve()).toThrow(
+                    "View build queue limit exceeded",
+                );
+                lastSlot.release();
+                expect(await service.listViewBuilds(request.corpusId)).toEqual([
+                    existing,
+                ]);
+            } finally {
+                admission.mockRestore();
+                for (const reservation of reservations) reservation.release();
+            }
         },
     );
     test("finished runner persistence errors stay explicit and source forget erases their retained payload", async () => {
