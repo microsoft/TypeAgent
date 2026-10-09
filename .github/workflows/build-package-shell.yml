@@ -42,33 +42,48 @@ jobs:
         run: |
           git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
-        continue-on-error: true
         with:
-          filters: |
-            ts:
-              - "ts/**"
-              - "dotnet/powerShellSandboxBroker/**"
-              - ".github/workflows/build-package-shell.yml"
+          # Full history so the CI scope can diff against the base.
+          fetch-depth: 0
+      # Package the shell unless the PR is confined to the fast-lane packages
+      # (tools/scripts/ciScope.mjs FAST_PACKAGES), which the shell doesn't
+      # ship.  Non-PR runs always package.
+      - name: Determine CI scope
+        id: changes
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        working-directory: ts
+        run: |
+          mode=full
+          if [ "$EVENT" = pull_request ]; then
+            git fetch --no-tags origin "$BASE_REF" || true
+            mode=$(GITHUB_OUTPUT= node tools/scripts/ciScope.mjs --base "origin/$BASE_REF" \
+              --full-trigger dotnet/powerShellSandboxBroker/ \
+              --full-trigger .github/workflows/build-package-shell.yml \
+              | sed -n 's/^CI scope: //p') || mode=full
+          fi
+          echo "CI scope: ${mode:-full}"
+          if [ "${mode:-full}" = full ]; then echo "ts=true"; else echo "ts=false"; fi >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.ts != 'false' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
       - name: Build
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           pnpm run build:shell
@@ -79,7 +94,7 @@ jobs:
       # blocked builds. This is a bug in electron-builder, it's not smart enough to retry acquiring the archive.
       # Disabling for now.
       # - name: Electron Builder Cache
-      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+      #   if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.ts != 'false' }}
       #   uses: actions/cache@v4
       #   with:
       #     key: electron | ${{ runner.os }} | ${{ runner.arch }} | ${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -89,7 +104,7 @@ jobs:
       #     restore-keys: |
       #       electron | ${{ runner.os }} | ${{ runner.arch }}
       - name: Package - shell
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.ts != 'false' }}
         working-directory: ts
         shell: bash
         run: |
@@ -107,7 +122,7 @@ jobs:
           exit 1
 
       # - uses: actions/upload-artifact@v5
-      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+      #   if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.ts != 'false' }}
       #   name: Upload build artifact
       #   with:
       #     name: typeagent-shell-${{ matrix.os }}-${{ github.run_number }}

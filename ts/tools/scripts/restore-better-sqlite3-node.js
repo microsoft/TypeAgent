@@ -39,6 +39,11 @@ const entries = fs
     .filter((e) => e.startsWith("better-sqlite3@"));
 
 if (entries.length === 0) {
+    // Partial installs (e.g. the CI fast lane) may not include better-sqlite3.
+    if (process.env.TYPEAGENT_BETTER_SQLITE3_OPTIONAL === "1") {
+        console.log("No better-sqlite3 installations found; skipping");
+        process.exit(0);
+    }
     console.error("No better-sqlite3 installations found in", pnpmDir);
     process.exit(1);
 }
