@@ -2512,7 +2512,7 @@ export class FileMemoryService
             !prior?.generation?.input
         )
             throw new Error(
-                "Timeline drafts must begin with a grounded Build views result",
+                "Timeline and wiki drafts must begin with a grounded Build views result",
             );
         let proof: ViewPublicationProof | undefined;
         if (prior?.generation?.input) {
