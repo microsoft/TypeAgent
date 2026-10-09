@@ -168,19 +168,12 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
                 ...view.content,
                 title: "Explicit human title",
             },
-            relationships: view.relationships.flatMap((edge) =>
-                edge.origin === "system"
-                    ? []
-                    : [
-                          {
-                              id: edge.id,
-                              predicate: edge.predicate,
-                              from: edge.from,
-                              to: edge.to,
-                              citations: edge.citations,
-                          },
-                      ],
-            ),
+            relationships: view.relationships.flatMap((edge) => {
+                if (edge.origin === "system") return [];
+                const { schemaVersion, family, origin, reviewState, ...input } =
+                    edge;
+                return [input];
+            }),
         });
         expect(saved.version.actor).toBe(os.userInfo().username);
         expect(

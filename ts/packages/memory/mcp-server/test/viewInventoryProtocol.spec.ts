@@ -40,8 +40,14 @@ const {
             import.meta.url,
         ).href
     );
+const {
+    timelineTestAnswer,
+}: typeof import("../../service/dist/test/timelineTestModel.js") = await import(
+    new URL("../../../service/dist/test/timelineTestModel.js", import.meta.url)
+        .href
+);
 
-test.each(["troubleshootingGuide", "projectBrief"] as const)(
+test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
     "configured %s inventory and final coverage survive authenticated MCP, history and reopen",
     async (kind) => {
         const root = await mkdtemp(
@@ -72,9 +78,11 @@ test.each(["troubleshootingGuide", "projectBrief"] as const)(
                     );
                 stages.push(schema.name);
                 const answer = (
-                    kind === "projectBrief"
-                        ? projectBriefTestAnswer
-                        : inventoryTestAnswer
+                    kind === "timeline"
+                        ? timelineTestAnswer
+                        : kind === "projectBrief"
+                          ? projectBriefTestAnswer
+                          : inventoryTestAnswer
                 )(schema.name, JSON.parse(user.content));
                 response.writeHead(200, { "content-type": "application/json" });
                 response.end(
@@ -108,7 +116,11 @@ test.each(["troubleshootingGuide", "projectBrief"] as const)(
         if (!address || typeof address === "string")
             throw new Error("Offline model listener unavailable");
         const endpoint =
-            kind === "projectBrief" ? "PROJECT_BRIEF_OFFLINE" : "V5_OFFLINE";
+            kind === "timeline"
+                ? "TIMELINE_OFFLINE"
+                : kind === "projectBrief"
+                  ? "PROJECT_BRIEF_OFFLINE"
+                  : "V5_OFFLINE";
         const environment = {
             [`OPENAI_ENDPOINT_${endpoint}`]: `http://127.0.0.1:${address.port}/chat/completions`,
             [`OPENAI_API_KEY_${endpoint}`]:
@@ -164,12 +176,17 @@ test.each(["troubleshootingGuide", "projectBrief"] as const)(
                     sourceType: "text",
                     title: "Synthetic evidence",
                     text:
-                        kind === "projectBrief"
-                            ? `${projectSources.charter}\n\n${projectSources.baseline}`
-                            : "Capacity is blocked pending owner review. No recovery is confirmed.",
+                        kind === "timeline"
+                            ? "## Record capacity\nClassification: observation\nState: blocked\nOccurred at: 2026-10-05T08:45:00Z\nRecorded / known at: 2026-10-06T08:05:00Z\nCapacity is blocked pending owner review."
+                            : kind === "projectBrief"
+                              ? `${projectSources.charter}\n\n${projectSources.baseline}`
+                              : "Capacity is blocked pending owner review. No recovery is confirmed.",
                 },
             });
             await client.waitForJob(source.jobId);
+            const sources = [
+                { sourceId: source.sourceId, revisionId: source.revisionId },
+            ];
             let job: ViewBuildJob = await client.buildViews({
                 corpusId: corpus.corpusId,
                 expectedHead: (await client.listViews(corpus.corpusId)).head,
@@ -179,15 +196,14 @@ test.each(["troubleshootingGuide", "projectBrief"] as const)(
                         definition: {
                             viewId: "guide",
                             kind,
-                            selector: {
-                                kind: "sources",
-                                sources: [
-                                    {
-                                        sourceId: source.sourceId,
-                                        revisionId: source.revisionId,
-                                    },
-                                ],
-                            },
+                            selector:
+                                kind === "timeline"
+                                    ? {
+                                          kind: "timelineEvidence",
+                                          events: [],
+                                          sources,
+                                      }
+                                    : { kind: "sources", sources },
                         },
                     },
                 ],
@@ -211,9 +227,11 @@ test.each(["troubleshootingGuide", "projectBrief"] as const)(
             expect(stages).toEqual([
                 "memory_source_fact_inventory",
                 "memory_source_inventory_check",
-                kind === "projectBrief"
-                    ? "memory_project_brief_construction"
-                    : "memory_inventory_guide_construction",
+                kind === "timeline"
+                    ? "memory_timeline_construction"
+                    : kind === "projectBrief"
+                      ? "memory_project_brief_construction"
+                      : "memory_inventory_guide_construction",
                 "memory_inventory_artifact_support",
                 "memory_inventory_artifact_support",
             ]);
@@ -258,7 +276,7 @@ test.each(["troubleshootingGuide", "projectBrief"] as const)(
                 result.coverage!.items.map((item) => item.excerpt).join("\n"),
             ).toContain("pending owner review");
             expect(result.coverage!.reuseEligibility).toBe(
-                kind === "projectBrief"
+                kind !== "troubleshootingGuide"
                     ? "requiresFreshEvidence"
                     : "diagnosticOnly",
             );
@@ -298,6 +316,96 @@ test.each(["troubleshootingGuide", "projectBrief"] as const)(
             });
             expect(retry.intent).toEqual(publication.intent);
             expect(stages).toHaveLength(5);
+            if (kind === "timeline") {
+                const canonical = (
+                    await client.appendEvent({
+                        corpusId: corpus.corpusId,
+                        idempotencyKey: "canonical-correction",
+                        producer: {
+                            producerId: "observer",
+                            producerType: "test",
+                        },
+                        eventType: "configurationCorrection",
+                        sourceKind: "system",
+                        eventTime: "2026-10-05T08:45:00Z",
+                        observedAt: "2026-10-06T08:05:00Z",
+                        content:
+                            "Configuration change learned the following day.",
+                    })
+                ).event;
+                let eventJob = await client.buildViews({
+                    corpusId: corpus.corpusId,
+                    expectedHead: (await client.listViews(corpus.corpusId))
+                        .head,
+                    publication: false,
+                    targets: [
+                        {
+                            expectedVersion: 0,
+                            definition: {
+                                viewId: "canonical-timeline",
+                                kind: "timeline",
+                                selector: {
+                                    kind: "timelineEvidence",
+                                    sources: [],
+                                    events: [{ eventId: canonical.eventId }],
+                                },
+                            },
+                        },
+                    ],
+                });
+                for (
+                    let tries = 0;
+                    eventJob.state === "running" && tries < 1000;
+                    tries++
+                ) {
+                    await new Promise<void>((resolve) =>
+                        setTimeout(resolve, 10),
+                    );
+                    eventJob = (await client.getViewBuild({
+                        corpusId: corpus.corpusId,
+                        jobId: eventJob.jobId,
+                    }))!;
+                }
+                expect(eventJob.results[0].state).toBe("draft");
+                const eventView = (await client.getView({
+                    corpusId: corpus.corpusId,
+                    viewId: "canonical-timeline",
+                }))!;
+                expect(eventView.content.kind).toBe("timeline");
+                expect(eventView.content.sections[0]).toMatchObject({
+                    id: canonical.eventId,
+                    role: "event",
+                    details: {
+                        identity: {
+                            kind: "canonicalEvent",
+                            eventId: canonical.eventId,
+                        },
+                        occurredAt: "2026-10-05T08:45:00.000Z",
+                        learnedAt: "2026-10-06T08:05:00.000Z",
+                        capturedAt: canonical.createdAt,
+                    },
+                });
+                expect(eventView.content.citations[0]).toMatchObject({
+                    evidence: { kind: "event", eventId: canonical.eventId },
+                });
+                await client.forgetEvents({
+                    corpusId: corpus.corpusId,
+                    eventIds: [canonical.eventId],
+                    forgetLinkedSources: false,
+                });
+                expect(
+                    await client.getView({
+                        corpusId: corpus.corpusId,
+                        viewId: "canonical-timeline",
+                    }),
+                ).toBeUndefined();
+                expect(
+                    await client.getView({
+                        corpusId: corpus.corpusId,
+                        viewId: "guide",
+                    }),
+                ).toBeDefined();
+            }
         } finally {
             await client?.close();
             await host?.close();

@@ -1149,8 +1149,11 @@ describe("durable draft builds and explicit edit merge", () => {
         let identity = "first-agent-edge";
         generate.mockImplementation(async (input) => {
             const candidate = output(input);
+            const support = candidate.relationships[0];
+            if (support.predicate !== "supportedBy")
+                throw new Error("Expected guide source evidence");
             candidate.relationships.push({
-                ...candidate.relationships[0],
+                ...support,
                 id: identity,
                 predicate: "dependsOn",
             });
@@ -1161,8 +1164,11 @@ describe("durable draft builds and explicit edit merge", () => {
         const edges = authoredRelationships(prior).filter(
             (edge) => edge.id !== identity,
         );
+        const support = edges[1];
+        if (support.predicate !== "supportedBy")
+            throw new Error("Expected guide source evidence");
         edges.push({
-            ...edges[1],
+            ...support,
             id: "human-dependency",
             predicate: "dependsOn",
         });

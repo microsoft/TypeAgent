@@ -27,6 +27,8 @@ import type {
     ViewPublicationPolicyUpdate,
     ViewSearchRequest,
     ViewSearchMatch,
+    MemoryEvent,
+    MemoryEventListRequest,
 } from "@typeagent/memory-service";
 
 // =============================================
@@ -274,6 +276,9 @@ export type MemoryCenterInvokeFunctions = {
         description?: string;
     }): Promise<MemoryCenterCorpus>;
     memoryListCorpora(params: {}): Promise<MemoryCenterCorpus[]>;
+    memoryListEvents(
+        params: MemoryEventListRequest,
+    ): Promise<MemoryCenterPage<MemoryEvent>>;
     memoryGetCorpus(params: {
         corpusId: string;
     }): Promise<MemoryCenterCorpusStatus | undefined>;

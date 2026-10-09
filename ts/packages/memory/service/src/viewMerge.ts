@@ -9,6 +9,7 @@ import type {
     DerivedViewContent,
     ViewSection,
     ProjectBriefDetails,
+    TimelineRecordDetails,
     ViewEditOperation,
     ViewRelationshipInput,
     ViewSourceSelector,
@@ -166,11 +167,20 @@ function mergeSection(
     const heading = mergeValue(base.heading, human.heading, generated.heading);
     const body = mergeValue(base.body, human.body, generated.body);
     const role = mergeValue(base.role, human.role, generated.role);
-    const details = mergeProjectDetails(
-        base.details,
-        human.details,
-        generated.details,
-    );
+    const details =
+        base.details?.kind === "event" ||
+        human.details?.kind === "event" ||
+        generated.details?.kind === "event"
+            ? mergeTimelineDetails(
+                  base.details,
+                  human.details,
+                  generated.details,
+              )
+            : mergeProjectDetails(
+                  base.details,
+                  human.details,
+                  generated.details,
+              );
     if (
         typeof heading !== "string" ||
         typeof body !== "string" ||
@@ -188,6 +198,20 @@ function mergeSection(
             ? { details: details as NonNullable<ViewSection["details"]> }
             : {}),
     };
+}
+
+function mergeTimelineDetails(
+    base: ViewSection["details"],
+    human: ViewSection["details"],
+    generated: ViewSection["details"],
+): TimelineRecordDetails | undefined {
+    if (
+        base?.kind !== "event" ||
+        human?.kind !== "event" ||
+        generated?.kind !== "event"
+    )
+        return undefined;
+    return mergeBriefFields(base, human, generated);
 }
 
 function mergeTypedField<T>(base: T, human: T, generated: T): T | undefined {
@@ -384,7 +408,8 @@ function mergeEdge(
     }
     if (
         (human &&
-            (!selected.has(viewSourceKey(human.to)) ||
+            ((human.to.kind === "source" &&
+                !selected.has(viewSourceKey(human.to))) ||
                 human.citations.some(
                     (citation) => !selected.has(viewSourceKey(citation)),
                 ))) ||
@@ -444,13 +469,32 @@ function mergeContent(
         else {
             const section = merged as ViewSection;
             if (output.content.kind === "projectBrief") {
-                if (!section.details || section.role !== section.details.kind) {
+                if (
+                    !section.details ||
+                    section.details.kind === "event" ||
+                    section.role !== section.details.kind
+                ) {
                     conflicts.push(target);
                     return;
                 }
                 const typed = {
                     ...section,
                     role: section.details.kind,
+                    details: section.details,
+                };
+                if (index < 0) output.content.sections.push(typed);
+                else output.content.sections[index] = typed;
+            } else if (output.content.kind === "timeline") {
+                if (
+                    section.role !== "event" ||
+                    section.details?.kind !== "event"
+                ) {
+                    conflicts.push(target);
+                    return;
+                }
+                const typed = {
+                    ...section,
+                    role: "event" as const,
                     details: section.details,
                 };
                 if (index < 0) output.content.sections.push(typed);

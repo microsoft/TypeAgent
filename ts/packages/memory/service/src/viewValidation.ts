@@ -15,6 +15,7 @@ import {
     viewSourceKey as sourceKey,
 } from "./viewContent.js";
 import { projectBriefRoles, validateProjectBrief } from "./projectBrief.js";
+import { validateTimeline } from "./timeline.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -27,11 +28,22 @@ function onlyKeys(value: object, keys: string[], label: string): void {
 }
 
 function validateSelector(selector: ViewSourceSelector): Set<string> {
-    if (selector?.kind !== "sources" || !Array.isArray(selector.sources))
+    if (
+        !["sources", "timelineEvidence"].includes(selector?.kind) ||
+        !Array.isArray(selector.sources)
+    )
         throw new Error(
             "Only explicit revision-aware source selectors are supported",
         );
-    onlyKeys(selector, ["kind", "sources"], "source selector");
+    onlyKeys(
+        selector,
+        [
+            "kind",
+            "sources",
+            ...(selector.kind === "timelineEvidence" ? ["events"] : []),
+        ],
+        "source selector",
+    );
     const sources = new Set<string>();
     for (const source of selector.sources) {
         if (!source || typeof source !== "object")
@@ -44,13 +56,24 @@ function validateSelector(selector: ViewSourceSelector): Set<string> {
             throw new Error("Duplicate selected source revision");
         sources.add(key);
     }
+    if (selector.kind === "timelineEvidence") {
+        if (!Array.isArray(selector.events))
+            throw new Error(
+                "Timeline selection requires an explicit events array",
+            );
+        for (const event of selector.events) {
+            onlyKeys(event, ["eventId"], "selected event");
+            assertViewIdentifier("event ID", event.eventId);
+            const key = `event:${event.eventId}`;
+            if (sources.has(key))
+                throw new Error("Duplicate selected canonical event");
+            sources.add(key);
+        }
+    }
     return sources;
 }
 
-function validateSections(
-    sections: ViewSection[],
-    project: boolean,
-): Set<string> {
+function validateSections(sections: ViewSection[], kind: string): Set<string> {
     if (!Array.isArray(sections) || !sections.length)
         throw new Error("At least one guide section is required");
     const ids = new Set<string>();
@@ -60,22 +83,31 @@ function validateSections(
         assertViewIdentifier("section ID", section.id);
         onlyKeys(
             section,
-            ["id", "role", "heading", "body", ...(project ? ["details"] : [])],
+            [
+                "id",
+                "role",
+                "heading",
+                "body",
+                ...(kind !== "troubleshootingGuide" ? ["details"] : []),
+            ],
             "view section",
         );
         if (ids.has(section.id)) throw new Error("Duplicate section ID");
         ids.add(section.id);
-        const allowed: readonly string[] = project
-            ? projectBriefRoles
-            : [
-                  "description",
-                  "prerequisites",
-                  "diagnostic",
-                  "guard",
-                  "verification",
-                  "recovery",
-                  "context",
-              ];
+        const allowed: readonly string[] =
+            kind === "timeline"
+                ? ["event"]
+                : kind === "projectBrief"
+                  ? projectBriefRoles
+                  : [
+                        "description",
+                        "prerequisites",
+                        "diagnostic",
+                        "guard",
+                        "verification",
+                        "recovery",
+                        "context",
+                    ];
         if (!allowed.includes(section.role))
             throw new Error("Unsupported guide section role");
         text(section.heading, "Section heading");
@@ -85,7 +117,14 @@ function validateSections(
 }
 
 function validateCitation(value: ViewCitation, sources: Set<string>): void {
-    if (!value || !sources.has(sourceKey(value)))
+    if (
+        !value ||
+        !sources.has(
+            value.evidence
+                ? `event:${value.evidence.eventId}`
+                : sourceKey(value),
+        )
+    )
         throw new Error("Citation is outside the selected source revisions");
     if (
         typeof value.locator !== "string" ||
@@ -95,9 +134,18 @@ function validateCitation(value: ViewCitation, sources: Set<string>): void {
     text(value.excerpt, "Citation excerpt");
     onlyKeys(
         value,
-        ["sourceId", "revisionId", "locator", "excerpt"],
+        ["sourceId", "revisionId", "locator", "excerpt", "evidence"],
         "view citation",
     );
+    if (value.evidence) {
+        onlyKeys(value.evidence, ["kind", "eventId"], "event evidence");
+        if (
+            value.evidence.kind !== "event" ||
+            value.evidence.eventId !== value.sourceId ||
+            !/^[0-9a-f]{64}$/.test(value.revisionId)
+        )
+            throw new Error("Invalid canonical event citation provenance");
+    }
 }
 
 function endpointKey(
@@ -107,8 +155,18 @@ function endpointKey(
     sections: Set<string>,
 ): string {
     if (value?.kind === "source") {
-        onlyKeys(value, ["kind", "sourceId", "revisionId"], "source endpoint");
-        if (!sources.has(sourceKey(value)))
+        onlyKeys(
+            value,
+            ["kind", "sourceId", "revisionId", "evidence"],
+            "source endpoint",
+        );
+        if (
+            !sources.has(
+                value.evidence
+                    ? `event:${value.evidence.eventId}`
+                    : sourceKey(value),
+            )
+        )
             throw new Error(
                 "Relationship endpoint is outside selected revisions",
             );
@@ -144,11 +202,33 @@ function validateRelationships(
         );
         if (ids.has(edge.id)) throw new Error("Duplicate relationship ID");
         ids.add(edge.id);
-        if (!["supportedBy", "dependsOn"].includes(edge.predicate))
+        if (
+            !["supportedBy", "dependsOn", "corrects", "supersedes"].includes(
+                edge.predicate,
+            )
+        )
             throw new Error("Unsupported relationship predicate");
-        if (edge.from?.kind !== "section" || edge.to?.kind !== "source")
+        const correction =
+            edge.predicate === "corrects" || edge.predicate === "supersedes";
+        if (
+            edge.from?.kind !== "section" ||
+            (correction
+                ? edge.to?.kind !== "section"
+                : edge.to?.kind !== "source")
+        )
             throw new Error(
                 "Supported guide relationships are directed from a section to a source revision",
+            );
+        if (
+            correction &&
+            (request.content.kind !== "timeline" ||
+                edge.from.sectionId ===
+                    (edge.to.kind === "section"
+                        ? edge.to.sectionId
+                        : undefined))
+        )
+            throw new Error(
+                "Corrections require distinct existing timeline records",
             );
         if (edge.id.startsWith("lineage:") || edge.id.startsWith("dependency:"))
             throw new Error("System relationship identities are reserved");
@@ -164,6 +244,19 @@ function validateRelationships(
             throw new Error("Relationships require exact supporting citations");
         for (const citation of edge.citations)
             validateCitation(citation, sources);
+        if (
+            edge.to.kind === "source" &&
+            edge.citations.some(
+                (citation) =>
+                    sourceKey(citation) !==
+                    sourceKey(
+                        edge.to as Extract<ViewEndpoint, { kind: "source" }>,
+                    ),
+            )
+        )
+            throw new Error(
+                "Evidence relationship citations must match its exact target",
+            );
     }
 }
 
@@ -198,7 +291,7 @@ export function validateViewDraft(request: ViewSaveRequest): void {
     )
         throw new Error("Expected view history head is required");
     if (
-        !["troubleshootingGuide", "projectBrief"].includes(
+        !["troubleshootingGuide", "projectBrief", "timeline"].includes(
             request.definition?.kind,
         ) ||
         request.content?.kind !== request.definition?.kind
@@ -212,13 +305,21 @@ export function validateViewDraft(request: ViewSaveRequest): void {
         "view definition",
     );
     const sources = validateSelector(request.definition.selector);
+    if (
+        (request.content.kind === "timeline") !==
+        (request.definition.selector.kind === "timelineEvidence")
+    )
+        throw new Error(
+            "Timeline requires discriminated canonical-event/document selection",
+        );
     text(request.content.title, "Guide title");
     const sections = validateSections(
         request.content.sections,
-        request.content.kind === "projectBrief",
+        request.content.kind,
     );
     if (request.content.kind === "projectBrief")
         validateProjectBrief(request.content);
+    if (request.content.kind === "timeline") validateTimeline(request.content);
     if (request.content.agentEdition !== undefined)
         throw new Error(
             "Agent editions are edited through the runbook compatibility workflow",
@@ -229,7 +330,14 @@ export function validateViewDraft(request: ViewSaveRequest): void {
         );
     onlyKeys(
         request.content,
-        ["kind", "title", "summary", "sections", "citations"],
+        [
+            "kind",
+            "title",
+            "summary",
+            "sections",
+            "citations",
+            ...(request.content.kind === "timeline" ? ["generatedAt"] : []),
+        ],
         "guide content",
     );
     if (request.content.summary !== undefined)

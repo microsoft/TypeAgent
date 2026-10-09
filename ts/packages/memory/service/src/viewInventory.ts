@@ -97,11 +97,12 @@ function hydrateItem(
         occurredAt: optionalTiming(raw.occurredAt),
         learnedAt: optionalTiming(raw.learnedAt),
         citations: selected.map(
-            ({ sourceId, revisionId, locator, excerpt }) => ({
+            ({ sourceId, revisionId, locator, excerpt, evidence }) => ({
                 sourceId,
                 revisionId,
                 locator,
                 excerpt,
+                ...(evidence ? { evidence } : {}),
             }),
         ),
     };

@@ -21,6 +21,7 @@ export class ViewBuildStaleError extends Error {}
 interface ViewBuildRuntimeScope {
     corpusId: string;
     sources: Set<string>;
+    events: Set<string>;
 }
 
 export interface ViewBuildOwner {
@@ -70,7 +71,17 @@ export class ViewBuildRunner {
             corpusId: job.corpusId,
             sources: new Set(
                 job.results.flatMap((result) =>
-                    result.snapshot.inputs.map((input) => input.sourceId),
+                    result.snapshot.definition.selector.sources.map(
+                        (input) => input.sourceId,
+                    ),
+                ),
+            ),
+            events: new Set(
+                job.results.flatMap(
+                    (result) =>
+                        result.snapshot.definition.selector.events?.map(
+                            (event) => event.eventId,
+                        ) ?? [],
                 ),
             ),
         };
@@ -139,6 +150,20 @@ export class ViewBuildRunner {
                 );
             }
         }
+    }
+
+    public forgetEvent(corpusId: string, eventId: string): void {
+        for (const [jobId, failure] of this.failures)
+            if (failure.corpusId === corpusId && failure.events.has(eventId))
+                this.failures.delete(jobId);
+        for (const [jobId, item] of this.controllers)
+            if (item.corpusId === corpusId && item.events.has(eventId)) {
+                this.purged.add(jobId);
+                this.failures.delete(jobId);
+                item.controller.abort(
+                    new ViewBuildStaleError("Canonical event evidence removed"),
+                );
+            }
     }
 
     private async result(
@@ -226,6 +251,18 @@ export class ViewBuildRunner {
         let validation = false;
         try {
             signal.throwIfAborted();
+            if (
+                result.snapshot.definition.kind === "timeline" &&
+                !result.snapshot.inputs.some((input) => input.records?.length)
+            ) {
+                await this.result(
+                    job,
+                    result.viewId,
+                    "skipped",
+                    "Empty eligible timeline checkpoint; no new artifact or publication was created",
+                );
+                return;
+            }
             validation = true;
             const evidence = await this.prepareInventory(job, result, signal);
             const inventory = evidence?.inventory;
@@ -267,7 +304,7 @@ export class ViewBuildRunner {
             const { output, conflicts } = mergeView(
                 current,
                 candidate,
-                result.snapshot.definition.selector.sources,
+                result.snapshot.inputs,
             );
             let proof: ViewPublicationProof | undefined;
             if (!conflicts.length) {
