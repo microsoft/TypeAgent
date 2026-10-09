@@ -341,6 +341,56 @@ describe("bounded wiki evidence, edits, publication and managed lifecycle", () =
         ).not.toContain("payments-wiki");
     });
 
+    test.each(["supportedBy", "dependsOn"] as const)(
+        "wiki %s citations cannot authorize another selected source target",
+        async (predicate) => {
+            await build();
+            const secondary = await ingest(
+                "secondary",
+                "Other retained evidence.",
+            );
+            const { snapshot, view, content } = await current();
+            const relationships = authoredRelationships(view);
+            relationships.push({
+                ...relationships[0],
+                id: "invalid-selected-target",
+                predicate,
+                to: {
+                    kind: "source",
+                    sourceId: secondary.sourceId,
+                    revisionId: secondary.revisionId,
+                },
+            });
+            const stageCount = stages.length;
+            await expect(
+                service.saveViewDraft({
+                    corpusId,
+                    viewId: view.viewId,
+                    expectedHead: snapshot.head,
+                    expectedVersion: view.version,
+                    definition: {
+                        viewId: view.viewId,
+                        kind: "wiki",
+                        selector: {
+                            kind: "sources",
+                            sources: [
+                                ...view.definition.selector.sources,
+                                {
+                                    sourceId: secondary.sourceId,
+                                    revisionId: secondary.revisionId,
+                                },
+                            ],
+                        },
+                    },
+                    content,
+                    relationships,
+                }),
+            ).rejects.toThrow("citations must match its exact target");
+            expect(stages).toHaveLength(stageCount);
+            expect((await current()).snapshot).toEqual(snapshot);
+        },
+    );
+
     test("replace, archive, forget, clear and disabled reopen clean managed copies while preserving unrelated records", async () => {
         await build(true);
         await ingest("unrelated", "Unrelated retained privacy sentinel.");
