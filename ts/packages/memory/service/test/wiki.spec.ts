@@ -346,6 +346,16 @@ describe("bounded wiki evidence, edits, publication and managed lifecycle", () =
         await ingest("unrelated", "Unrelated retained privacy sentinel.");
         await build(true, "unrelated-wiki", "unrelated");
         const original = await current();
+        const oldHistoryObject = path.join(
+            root,
+            corpusId,
+            "personal-how-to",
+            "view-history.git",
+            "objects",
+            original.snapshot.head!.slice(0, 2),
+            original.snapshot.head!.slice(2),
+        );
+        expect((await readFile(oldHistoryObject)).length).toBeGreaterThan(0);
         await service.close();
         service = open(false);
         expect((await service.getCapabilities()).derivedViews).toBeUndefined();
@@ -385,6 +395,12 @@ describe("bounded wiki evidence, edits, publication and managed lifecycle", () =
             await service.getViewHistory({ corpusId, viewId: "payments-wiki" }),
         ).toEqual([]);
         expect(await service.listViewBuilds(corpusId)).toHaveLength(1);
+        await expect(readFile(oldHistoryObject)).rejects.toMatchObject({
+            code: "ENOENT",
+        });
+        expect(await managedText(path.join(root, corpusId))).not.toContain(
+            "Reporting-query",
+        );
         expect(
             (await service.listViews(corpusId)).views.map(
                 (view) => view.viewId,
