@@ -248,8 +248,7 @@ atomic history-ref commit; failed preparations do not save a procedure version.
 developer/demo capability. It is **off by default**. `getCapabilities()` then
 advertises `derivedViews: { kinds: ["troubleshootingGuide", "projectBrief", "timeline", "wiki"], drafts: true,
 history: true, builds: true, editMerging: true, publication: true, search: true }`.
-Wiki and automatic scheduling remain unsupported; they
-are never silently substituted with procedures.
+Automatic scheduling remains unsupported.
 
 `listViews(corpusId)` returns `{ head, views }`, including pending drafts and
 explicit lifecycle state. `getView({ corpusId, viewId, revisionId? })` reads an

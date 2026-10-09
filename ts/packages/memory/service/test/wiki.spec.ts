@@ -178,6 +178,31 @@ describe("bounded wiki evidence, edits, publication and managed lifecycle", () =
             kinds: ["wiki"],
         });
 
+    test("ungrounded wiki creation names both grounded view kinds without saving", async () => {
+        expect((await build()).results[0].state).toBe("draft");
+        const { snapshot, view, content } = await current();
+        const stageCount = stages.length;
+        await expect(
+            service.saveViewDraft({
+                corpusId,
+                viewId: "ungrounded-wiki",
+                expectedHead: snapshot.head,
+                expectedVersion: 0,
+                definition: {
+                    viewId: "ungrounded-wiki",
+                    kind: "wiki",
+                    selector: view.definition.selector,
+                },
+                content,
+                relationships: [],
+            }),
+        ).rejects.toThrow(
+            "Timeline and wiki drafts must begin with a grounded Build views result",
+        );
+        expect(stages).toHaveLength(stageCount);
+        expect((await service.listViews(corpusId)).head).toBe(snapshot.head);
+    });
+
     test("configured source-first pipeline emits typed index/pages, exact proof and honest unresolved context", async () => {
         const job = await build(true);
         expect({
