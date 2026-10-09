@@ -23,7 +23,6 @@ import {
     timelineCorrectionSupported,
     timelineTimestamp,
 } from "./timeline.js";
-import { inventoryCoverage } from "./viewInventoryCoverage.js";
 
 export function hydrateTimelineConstruction(
     input: ViewBuildSnapshot,
@@ -201,6 +200,5 @@ export function hydrateTimelineConstruction(
         input,
         output.content as Extract<typeof output.content, { kind: "timeline" }>,
     );
-    output.coverage = inventoryCoverage(output);
     return output;
 }
