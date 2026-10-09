@@ -45,7 +45,7 @@ node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <comman
   retry-index <request.json>
   search <corpusId> <query>
 The store must not be owned by a running server. Actor comes from the local OS identity.
-Build accepts troubleshootingGuide, projectBrief or timeline definitions and uses configured synthesis. Timelines use timelineEvidence selectors with exact document revisions and canonical event IDs, with host-enforced knowledge/occurrence bounds. Fixed readers have no execution/skill controls. Eligible artifacts can publish and index; live synthesis remains unqualified. No reset, source deletion, skill approval or execution is performed.`;
+Build accepts troubleshootingGuide, projectBrief, timeline or wiki definitions and uses configured synthesis. Wikis use bounded concept/system/project pages with stable identities and exact page/source proof; renames preserve identity and merges retain facts and citations. Timelines use timelineEvidence selectors with exact document revisions and canonical event IDs, with host-enforced knowledge/occurrence bounds. Fixed readers have no execution/skill controls. Eligible artifacts can publish and index; live synthesis remains unqualified. No reset, source deletion, skill approval or execution is performed.`;
 
 const argumentCounts = new Map<string, readonly [number, number]>([
     ["corpora", [0, 0]],

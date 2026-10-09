@@ -498,7 +498,9 @@ export interface SourceKnowledgeSuppressionRequest
 
 export interface MemoryServiceCapabilities {
     derivedViews?: {
-        kinds: Array<"troubleshootingGuide" | "projectBrief" | "timeline">;
+        kinds: Array<
+            "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki"
+        >;
         drafts: true;
         history: true;
         publication: true;

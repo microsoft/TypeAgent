@@ -26,7 +26,9 @@ export type MemoryHubSearchRequest = {
     dateFrom?: string;
     dateTo?: string;
     conversationScope?: "none" | "current" | "all";
-    viewKinds?: Array<"troubleshootingGuide" | "projectBrief" | "timeline">;
+    viewKinds?: Array<
+        "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki"
+    >;
 };
 
 export type MemoryHubEvidence = {
@@ -46,7 +48,7 @@ export type MemoryHubEvidence = {
     canonicalUri?: string;
     procedureVersion?: number;
     procedureState?: "saved" | "stale" | "archived";
-    viewKind?: "troubleshootingGuide" | "projectBrief" | "timeline";
+    viewKind?: "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki";
     viewVersion?: number;
     viewProvenance?: "human" | "procedure" | "generated" | "merged";
     review?: "unreviewed";

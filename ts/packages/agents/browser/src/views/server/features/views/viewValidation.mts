@@ -123,9 +123,9 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         dateTo: z.iso.datetime({ offset: true }).optional(),
         conversationScope: z.enum(["none", "current", "all"]).optional(),
         viewKinds: z
-            .enum(["troubleshootingGuide", "projectBrief", "timeline"])
+            .enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"])
             .array()
-            .max(3)
+            .max(4)
             .optional(),
     }),
     memoryHubEvidence: z.discriminatedUnion("kind", [

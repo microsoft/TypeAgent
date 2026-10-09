@@ -597,7 +597,12 @@ export const capabilitiesSchema = z.object({
     derivedViews: z
         .object({
             kinds: z
-                .enum(["troubleshootingGuide", "projectBrief", "timeline"])
+                .enum([
+                    "troubleshootingGuide",
+                    "projectBrief",
+                    "timeline",
+                    "wiki",
+                ])
                 .array(),
             drafts: z.literal(true),
             history: z.literal(true),
