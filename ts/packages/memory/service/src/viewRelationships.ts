@@ -120,7 +120,13 @@ export function authoredRelationships(
 ): ViewRelationshipInput[] {
     return version.relationships.flatMap((edge) => {
         if (edge.origin === "system") return [];
-        const { schemaVersion, family, origin, reviewState, ...input } = edge;
+        const {
+            schemaVersion: _schemaVersion,
+            family: _family,
+            origin: _origin,
+            reviewState: _reviewState,
+            ...input
+        } = edge;
         return [input];
     });
 }
