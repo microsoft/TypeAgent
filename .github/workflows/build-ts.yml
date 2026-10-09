@@ -25,6 +25,12 @@ permissions:
 
 env:
   NODE_OPTIONS: --max_old_space_size=8192
+  # Fast lane: a change confined to FAST_LANE_DIR builds and tests only
+  # FAST_LANE_PACKAGE (and its dependencies) on a single matrix leg.
+  FAST_LANE_PACKAGE: git-story
+  FAST_LANE_DIR: ts/packages/git-story
+  FAST_LANE_OS: ubuntu-latest
+  FAST_LANE_NODE: 22
 
 jobs:
   build_ts:
@@ -47,45 +53,88 @@ jobs:
         with:
           # Full history so the changed-files lint can diff against the base.
           fetch-depth: 0
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
-        continue-on-error: true
-        with:
-          filters: |
-            ts:
-              - "ts/**"
-              - ".github/workflows/build-ts.yml"
+      # Decide how much CI this change needs (PRs and merge queue alike):
+      #   skip - nothing under ts/ (or this workflow) changed
+      #   fast - only FAST_LANE_DIR changed; one FAST_LANE_OS/FAST_LANE_NODE
+      #          leg builds and tests FAST_LANE_PACKAGE and its dependencies;
+      #          the other matrix legs skip (and report success).
+      #   full - anything else; push to main and manual runs are always full,
+      #          which backstops the fast lane after merge.
+      - name: Determine CI scope
+        id: scope
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          MERGE_GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          LEG_OS: ${{ matrix.os }}
+          LEG_NODE: ${{ matrix.version }}
+        run: |
+          base=""
+          case "$EVENT" in
+            pull_request)
+              git fetch --no-tags origin "$BASE_REF"
+              base="$(git merge-base "origin/$BASE_REF" HEAD)" ;;
+            merge_group)
+              base="$MERGE_GROUP_BASE" ;;
+          esac
+          # Pathspecs instead of regexes; any git error falls back to full.
+          mode=full
+          if [ -n "$base" ] && git rev-parse -q --verify "$base^{commit}" >/dev/null; then
+            if git diff --quiet "$base" HEAD -- ts .github/workflows/build-ts.yml; then
+              mode=skip
+            elif git diff --quiet "$base" HEAD -- ts ":(exclude)$FAST_LANE_DIR" .github/workflows/build-ts.yml; then
+              mode=fast
+            fi
+          fi
+          run=true
+          if [ "$mode" = skip ]; then run=false; fi
+          if [ "$mode" = fast ] && [ "$LEG_OS/$LEG_NODE" != "$FAST_LANE_OS/$FAST_LANE_NODE" ]; then run=false; fi
+          echo "CI scope: $mode (run on this leg: $run)"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         with:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
         run: |
-          pnpm install --frozen-lockfile --strict-peer-dependencies
+          if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
+            pnpm install --frozen-lockfile --strict-peer-dependencies --filter . --filter "$FAST_LANE_PACKAGE..."
+          else
+            pnpm install --frozen-lockfile --strict-peer-dependencies
+          fi
       - name: Build
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
         run: |
-          npm run build
+          if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
+            pnpm --filter "$FAST_LANE_PACKAGE..." run build
+          else
+            npm run build
+          fi
       # On pull requests only changed files are checked (fast); the
       # format-pr workflow auto-fixes them.  Other events check the whole repo.
       - name: Lint
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git fetch --no-tags origin "${{ github.base_ref }}"
             node tools/scripts/prettier-changed.mjs --base "origin/${{ github.base_ref }}"
+          elif [ "${{ steps.scope.outputs.mode }}" = fast ]; then
+            node tools/scripts/prettier-changed.mjs --base "${{ steps.scope.outputs.base }}"
           else
             npm run lint
           fi
@@ -97,7 +146,7 @@ jobs:
       # // code-complexity-allow markers.  Tune the thresholds down as hotspots
       # get refactored.
       - name: Complexity ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'pull_request' && steps.scope.outputs.run == 'true' }}
         working-directory: ts
         shell: bash
         run: |
@@ -110,7 +159,7 @@ jobs:
       # base branch.  Syntactic rules only, so it is fast; the count can only
       # trend down.  Run `npm run code-lint` locally to see the full report.
       - name: Lint ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'pull_request' && steps.scope.outputs.run == 'true' }}
         working-directory: ts
         shell: bash
         run: |
@@ -121,7 +170,7 @@ jobs:
       # set for HEAD and for the merge base (via a throwaway git worktree), so
       # this step is heavier than the others (madge runs twice).
       - name: Circular dependency ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'pull_request' && steps.scope.outputs.run == 'true' }}
         working-directory: ts
         shell: bash
         run: |
@@ -131,14 +180,14 @@ jobs:
       # (.only/fit/fdescribe) and no newly skipped tests (.skip/xit/xdescribe)
       # in changed files.  A small, fixable problem -> a hard gate, not a ratchet.
       - name: Test debt gate
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'pull_request' && steps.scope.outputs.run == 'true' }}
         working-directory: ts
         shell: bash
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-debt -- --gate --base "origin/${{ github.base_ref }}"
       - name: Restore better-sqlite3 for Node.js
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' && steps.scope.outputs.mode == 'full' }}
         working-directory: ts
         run: |
           pnpm run postinstall:better-sqlite3-node-restore
@@ -147,14 +196,19 @@ jobs:
       # Flaky tests are reported as annotations / a step summary but do not fail
       # the build; the final retry package suite must otherwise pass.
       - name: Test
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.run == 'true' }}
         working-directory: ts
         env:
           TYPEAGENT_SKIP_POWERSHELL_BROKER_TESTS: ${{ runner.os == 'Windows' && '1' || '0' }}
+        shell: bash
         run: |
-          node tools/scripts/runTestLocalWithSummary.mjs
+          if [ "${{ steps.scope.outputs.mode }}" = fast ]; then
+            pnpm --filter "$FAST_LANE_PACKAGE" test
+          else
+            node tools/scripts/runTestLocalWithSummary.mjs
+          fi
       - name: UI tests (requires display)
-        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') && runner.os == 'Linux' }}
+        if: ${{ steps.scope.outputs.run == 'true' && steps.scope.outputs.mode == 'full' && runner.os == 'Linux' }}
         working-directory: ts
         run: |
           Xvfb :99 -screen 0 1600x1200x24 &
