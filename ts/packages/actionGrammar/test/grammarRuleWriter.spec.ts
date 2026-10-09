@@ -35,6 +35,24 @@ function validateRoundTrip(grammar: string) {
 }
 
 describe("Formatting layout", () => {
+    describe("rule references", () => {
+        it("preserves an optional rule-reference suffix", () => {
+            const source = "<test> = <greeting>? world;";
+
+            expect(fmt(source)).toBe(`${source}\n`);
+            roundTrip(source);
+        });
+
+        it("does not turn a separated question mark into a suffix", () => {
+            roundTrip("<test> = <greeting> ? world;");
+            roundTrip("<test> = <greeting> /* comment */ ? world;");
+        });
+
+        it("keeps an adjacent escaped question mark literal", () => {
+            roundTrip("<test> = <greeting>\\? world;");
+        });
+    });
+
     describe("rule alternatives — flat vs broken", () => {
         it("single alt always flat", () => {
             // No alternates — always stays on one line
