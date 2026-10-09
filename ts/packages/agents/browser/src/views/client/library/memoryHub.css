@@ -18,6 +18,37 @@ body[data-memory-hub] {
   display: none !important;
 }
 
+.hub-draft-views {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.hub-draft-views fieldset label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.hub-draft-views textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 12px 0;
+  font-family: monospace;
+}
+.hub-draft-views pre {
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.hub-draft-views button,
+.hub-draft-views input:not([type="checkbox"]) {
+  margin: 6px 8px 6px 0;
+}
+
 /* Top bar */
 .hub-top {
   display: flex;

@@ -63,7 +63,28 @@ import type {
     RevisionAssetReadRequest,
     RunbookJobResult,
     RunbookSynthesisRequest,
+    MemoryViewService,
+    ViewBuildRequest,
+    ViewBuildJobRequest,
+    ViewBuildJob,
+    ViewReadRequest,
+    ViewSaveRequest,
+    ViewArchiveRequest,
+    ViewConflictReadRequest,
+    ViewConflictResolution,
+    ViewSnapshot,
+    ViewVersion,
+    ViewHistoryEntry,
+    ViewMergeConflict,
 } from "@typeagent/memory-service";
+import {
+    viewToolNames,
+    viewBuildJobSchema,
+    viewSnapshotSchema,
+    viewVersionSchema,
+    viewHistoryEntrySchema,
+    viewConflictSchema,
+} from "./viewProtocol.js";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
 import { validateProcedureSaveRequest } from "@typeagent/memory-service/agent-edition-validation";
 import type { z } from "zod";
@@ -114,7 +135,8 @@ export interface MemoryClientCallOptions {
 
 export interface MemoryServiceClient
     extends MemoryService,
-        PersonalHowToService {
+        PersonalHowToService,
+        MemoryViewService {
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
@@ -128,8 +150,89 @@ export interface MemoryServiceClient
 
 export class InProcessMemoryServiceClient implements MemoryServiceClient {
     public constructor(
-        private readonly service: MemoryService & PersonalHowToService,
+        private readonly service: MemoryService &
+            PersonalHowToService &
+            Partial<MemoryViewService>,
     ) {}
+
+    public listViews(corpusId: string) {
+        return (
+            this.service.listViews?.(corpusId) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public getView(request: ViewReadRequest) {
+        return (
+            this.service.getView?.(request) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public saveViewDraft(request: ViewSaveRequest) {
+        return (
+            this.service.saveViewDraft?.(request) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public archiveView(request: ViewArchiveRequest) {
+        return (
+            this.service.archiveView?.(request) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public getViewHistory(request: ViewReadRequest) {
+        return (
+            this.service.getViewHistory?.(request) ??
+            unsupportedCapability("view history")
+        );
+    }
+    public publishView(request: ViewReadRequest) {
+        return (
+            this.service.publishView?.(request) ??
+            unsupportedCapability("view publication")
+        );
+    }
+    public buildViews(request: ViewBuildRequest) {
+        return (
+            this.service.buildViews?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public getViewBuild(request: ViewBuildJobRequest) {
+        return (
+            this.service.getViewBuild?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public listViewBuilds(corpusId: string) {
+        return (
+            this.service.listViewBuilds?.(corpusId) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public cancelViewBuild(request: ViewBuildJobRequest) {
+        return (
+            this.service.cancelViewBuild?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public retryViewBuild(request: ViewBuildJobRequest) {
+        return (
+            this.service.retryViewBuild?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public getViewConflict(request: ViewConflictReadRequest) {
+        return (
+            this.service.getViewConflict?.(request) ??
+            unsupportedCapability("view conflicts")
+        );
+    }
+    public resolveViewConflict(request: ViewConflictResolution) {
+        return (
+            this.service.resolveViewConflict?.(request) ??
+            unsupportedCapability("view conflicts")
+        );
+    }
 
     public createCorpus(name: string, description?: string) {
         return this.service.createCorpus(name, description);
@@ -429,6 +532,107 @@ export type MemoryMcpTransportConfig =
 type MemoryMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
 
 export class McpMemoryServiceClient implements MemoryServiceClient {
+    public listViews(corpusId: string): Promise<ViewSnapshot> {
+        return this.invoke(
+            viewToolNames.listViews,
+            { corpusId },
+            viewSnapshotSchema,
+        );
+    }
+    public getView(request: ViewReadRequest): Promise<ViewVersion | undefined> {
+        return this.invoke<ViewVersion | null>(
+            viewToolNames.getView,
+            request,
+            viewVersionSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public saveViewDraft(request: ViewSaveRequest): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.saveViewDraft,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
+    public archiveView(request: ViewArchiveRequest): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.archiveView,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
+    public getViewHistory(
+        request: ViewReadRequest,
+    ): Promise<ViewHistoryEntry[]> {
+        return this.invoke(
+            viewToolNames.getViewHistory,
+            request,
+            viewHistoryEntrySchema.array(),
+        );
+    }
+    public publishView(request: ViewReadRequest): Promise<never> {
+        return this.invoke(
+            viewToolNames.publishView,
+            request,
+            viewVersionSchema,
+        );
+    }
+    public buildViews(request: ViewBuildRequest): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.buildViews,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public getViewBuild(
+        request: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob | undefined> {
+        return this.invoke<ViewBuildJob | null>(
+            viewToolNames.getViewBuild,
+            request,
+            viewBuildJobSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
+        return this.invoke(
+            viewToolNames.listViewBuilds,
+            { corpusId },
+            viewBuildJobSchema.array(),
+        );
+    }
+    public cancelViewBuild(
+        request: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.cancelViewBuild,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public retryViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.retryViewBuild,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public getViewConflict(
+        request: ViewConflictReadRequest,
+    ): Promise<ViewMergeConflict | undefined> {
+        return this.invoke<ViewMergeConflict | null>(
+            viewToolNames.getViewConflict,
+            request,
+            viewConflictSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public resolveViewConflict(
+        request: ViewConflictResolution,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.resolveViewConflict,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
     private constructor(
         private readonly client: Client,
         private readonly timeoutMs: number | undefined,

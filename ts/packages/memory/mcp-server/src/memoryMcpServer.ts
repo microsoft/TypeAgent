@@ -91,6 +91,7 @@ import type {
 } from "@typeagent/memory-service";
 import { validateProcedureSaveRequest } from "@typeagent/memory-service";
 import { z } from "zod";
+import { registerViewTools } from "./viewTools.js";
 
 const corpusCreateInputSchema = z.object({
     name: z.string().min(1),
@@ -140,6 +141,9 @@ export class MemoryMcpServer {
             version: "0.0.1",
         });
         this.registerTools();
+        registerViewTools(this.server, service, (operation) =>
+            this.run(operation),
+        );
         this.registerResources();
     }
 

@@ -34,6 +34,7 @@ export function materializeDefinition(
 export function versionRelationships(
     version: ViewVersion,
     authored: ViewRelationshipInput[],
+    generated = false,
 ): ViewRelationship[] {
     const from = {
         kind: "view" as const,
@@ -49,7 +50,15 @@ export function versionRelationships(
                     edge.predicate === "supportedBy"
                         ? "evidence"
                         : "dependency",
-                origin: "human",
+                origin:
+                    generated &&
+                    !version.edits?.some(
+                        (edit) =>
+                            edit.target === `edge:${edgeIdentity(edge)}` &&
+                            edit.status !== "cleared",
+                    )
+                        ? "generator"
+                        : "human",
                 reviewState: "unreviewed",
             }),
         ),
@@ -80,11 +89,19 @@ export function versionRelationships(
     ];
 }
 
+export function edgeIdentity(edge: ViewRelationshipInput): string {
+    return JSON.stringify([
+        edge.predicate,
+        ["section", edge.from.viewId, edge.from.sectionId],
+        ["source", edge.to.sourceId],
+    ]);
+}
+
 export function authoredRelationships(
     version: ViewVersion,
 ): ViewRelationshipInput[] {
     return version.relationships.flatMap((edge) =>
-        edge.origin === "human"
+        edge.origin !== "system"
             ? [
                   {
                       id: edge.id,

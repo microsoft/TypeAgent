@@ -31,9 +31,11 @@
   },
   "dependencies": {
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
     "isomorphic-git": "1.37.4",
+    "node-diff3": "3.2.0",
     "proper-lockfile": "^4.1.2",
     "typechat": "^0.1.1"
   },

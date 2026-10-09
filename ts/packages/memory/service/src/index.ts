@@ -12,3 +12,5 @@ export * from "./batchImport.js";
 export * from "./runbookPipeline.js";
 export * from "./runbookSynthesizer.js";
 export * from "./viewTypes.js";
+export * from "./viewSynthesis.js";
+export { parseViewDraftCapability } from "./viewBuildValidation.js";

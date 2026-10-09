@@ -21,18 +21,30 @@ function unsupportedCapability(operation: string): Promise<never> {
 }
 
 export function createMemoryServiceRpcFacade(
-    service: MemoryService & PersonalHowToService & MemoryViewService,
-): MemoryService & PersonalHowToService & MemoryViewService;
-export function createMemoryServiceRpcFacade(
-    service: MemoryService & PersonalHowToService,
-): MemoryService & PersonalHowToService;
-export function createMemoryServiceRpcFacade(
-    service: MemoryService,
-): MemoryService;
-export function createMemoryServiceRpcFacade(
     service: MemoryService & Partial<PersonalHowToService & MemoryViewService>,
 ): MemoryService & PersonalHowToService & MemoryViewService {
     return {
+        buildViews: (...args) =>
+            service.buildViews?.(...args) ??
+            unsupportedCapability("view builds"),
+        getViewBuild: (...args) =>
+            service.getViewBuild?.(...args) ??
+            unsupportedCapability("view builds"),
+        listViewBuilds: (...args) =>
+            service.listViewBuilds?.(...args) ??
+            unsupportedCapability("view builds"),
+        cancelViewBuild: (...args) =>
+            service.cancelViewBuild?.(...args) ??
+            unsupportedCapability("view build cancellation"),
+        retryViewBuild: (...args) =>
+            service.retryViewBuild?.(...args) ??
+            unsupportedCapability("view build retry"),
+        getViewConflict: (...args) =>
+            service.getViewConflict?.(...args) ??
+            unsupportedCapability("view conflicts"),
+        resolveViewConflict: (...args) =>
+            service.resolveViewConflict?.(...args) ??
+            unsupportedCapability("view conflict resolution"),
         listViews: (...args) =>
             service.listViews?.(...args) ??
             unsupportedCapability("view drafts"),

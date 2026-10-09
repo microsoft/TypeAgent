@@ -29,6 +29,7 @@ packages/knowPro/test/data
 packages/memory/conversation/test/data
 # Preserve exact source bytes/CRLF for detector citation fixtures.
 packages/memory/service/test/data/guides
+packages/memory/service/test/fixtures/distillation
 examples/websiteAliases/data
 
 

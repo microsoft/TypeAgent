@@ -8,6 +8,7 @@ import {
     McpMemoryServiceClient,
     InProcessMemoryServiceClient,
     memoryToolNames,
+    viewToolNames,
     changeReceiptSchema,
 } from "@typeagent/memory-client";
 import type {
@@ -909,7 +910,10 @@ describe("MemoryMcpServer", () => {
     test("advertises the complete memory tool surface", async () => {
         const tools = await client.listTools();
         expect(tools.tools.map((tool) => tool.name).sort()).toEqual(
-            Object.values(memoryToolNames).sort(),
+            [
+                ...Object.values(memoryToolNames),
+                ...Object.values(viewToolNames),
+            ].sort(),
         );
     });
 

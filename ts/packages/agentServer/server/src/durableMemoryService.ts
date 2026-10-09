@@ -6,6 +6,7 @@ import { createDocMemorySettings } from "@typeagent/conversation-memory";
 import {
     FileMemoryService,
     createKnowProCorpusIndex,
+    parseViewDraftCapability,
     type RunbookBindingValidator,
 } from "@typeagent/memory-service";
 import { getConfiguredRunbookModelOptions } from "./runbookModelOptions.js";
@@ -15,6 +16,9 @@ export function createDurableMemoryService(
     runbookBindingValidator?: RunbookBindingValidator,
 ): FileMemoryService {
     return new FileMemoryService(rootDirectory, {
+        viewDrafts: parseViewDraftCapability(
+            process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS,
+        ),
         ...getConfiguredRunbookModelOptions(),
         ...(runbookBindingValidator === undefined
             ? {}

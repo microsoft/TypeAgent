@@ -17,6 +17,7 @@ import { mountMemoryHubChanges } from "./memoryHubChanges";
 import { mountMemoryHubImports } from "./memoryHubImports";
 import { mountMemoryHubCapture } from "./memoryHubCapture";
 import { mountMemoryHubRunbooks } from "./memoryHubRunbooks";
+import { mountMemoryHubViews } from "./memoryHubViews";
 import { mountMemoryHubPreferences } from "./memoryHubPreferences";
 import { mountMemoryHubRunbookImports } from "./memoryHubRunbookImports";
 import { mountMemoryHubWebMaintenance } from "./memoryHubWebMaintenance";
@@ -68,6 +69,7 @@ let changesPanel: ReturnType<typeof mountMemoryHubChanges>;
 let importsPanel: ReturnType<typeof mountMemoryHubImports>;
 let capturePanel: ReturnType<typeof mountMemoryHubCapture>;
 let runbooksPanel: ReturnType<typeof mountMemoryHubRunbooks>;
+let draftViewsPanel: ReturnType<typeof mountMemoryHubViews>;
 let preferencesPanel: ReturnType<typeof mountMemoryHubPreferences>;
 let runbookImportsPanel: ReturnType<typeof mountMemoryHubRunbookImports>;
 let webMaintenancePanel: ReturnType<typeof mountMemoryHubWebMaintenance>;
@@ -122,6 +124,7 @@ function discardChanges(): boolean {
     return (
         manager.discardChanges() &&
         (runbooksPanel?.discardChanges() ?? true) &&
+        (draftViewsPanel?.discardChanges() ?? true) &&
         (preferencesPanel?.discardChanges() ?? true) &&
         (viewPreferencesPanel?.discardChanges() ?? true) &&
         (runbookImportsPanel?.discardChanges() ?? true)
@@ -1465,6 +1468,15 @@ export async function mountMemoryHub(): Promise<void> {
     await loadManagement();
     mountPhaseTwo();
     mountRunbooks();
+    draftViewsPanel = mountMemoryHubViews(el("hubDraftViews"), {
+        scope: () => scope || undefined,
+        onError: (error) => {
+            void hubAction(async () => {
+                throw error;
+            });
+        },
+    });
+    await draftViewsPanel.refresh();
     mountRunbookImports();
     const onError = (error: unknown) => {
         void hubAction(async () => {
@@ -1570,6 +1582,7 @@ export async function mountMemoryHub(): Promise<void> {
         localStorage.setItem(SCOPE_KEY, scope);
         invalidateDiscovery();
         runbooksPanel.scopeChanged();
+        draftViewsPanel.scopeChanged();
         preferencesPanel.scopeChanged();
         runbookImportsPanel.scopeChanged();
         renderErrors();

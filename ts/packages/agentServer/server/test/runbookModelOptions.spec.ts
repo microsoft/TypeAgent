@@ -8,6 +8,8 @@ const constructors: Array<{ root: string; options: FileMemoryServiceOptions }> =
     [];
 const hasEndpoint = jest.fn<(endpoint: string) => boolean>();
 const createChatModel = jest.fn();
+const parseViewDraftCapability =
+    jest.fn<(value: string | undefined) => boolean>();
 jest.unstable_mockModule("@typeagent/aiclient", () => ({
     openai: { hasChatModelEndpoint: hasEndpoint, createChatModel },
     PROVIDER_MODES: ["azure", "openai", "copilot", "ollama"],
@@ -22,6 +24,7 @@ jest.unstable_mockModule("@typeagent/memory-service", () => ({
         }
     },
     createKnowProCorpusIndex: jest.fn(),
+    parseViewDraftCapability,
 }));
 const { getConfiguredRunbookModelOptions } = await import(
     "../src/runbookModelOptions.js"
@@ -33,13 +36,16 @@ const { createDurableMemoryService } = await import(
 describe("explicit configured runbook image capability", () => {
     const originalEndpoint = process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT;
     const originalDeclaration = process.env.TYPEAGENT_RUNBOOK_MULTIMODAL;
+    const originalViewDrafts = process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS;
 
     beforeEach(() => {
         constructors.length = 0;
         hasEndpoint.mockReset().mockReturnValue(true);
         createChatModel.mockClear();
+        parseViewDraftCapability.mockReset().mockReturnValue(false);
         delete process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT;
         delete process.env.TYPEAGENT_RUNBOOK_MULTIMODAL;
+        delete process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS;
     });
     afterAll(() => {
         if (originalEndpoint === undefined)
@@ -48,6 +54,9 @@ describe("explicit configured runbook image capability", () => {
         if (originalDeclaration === undefined)
             delete process.env.TYPEAGENT_RUNBOOK_MULTIMODAL;
         else process.env.TYPEAGENT_RUNBOOK_MULTIMODAL = originalDeclaration;
+        if (originalViewDrafts === undefined)
+            delete process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS;
+        else process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS = originalViewDrafts;
     });
 
     test("keeps unknown/default models manual without endpoint discovery or model creation", () => {
@@ -143,6 +152,23 @@ describe("explicit configured runbook image capability", () => {
             }),
         ).toThrow("must be true or false");
     });
+
+    test.each<[string | undefined, boolean]>([
+        [undefined, false],
+        ["false", false],
+        ["true", true],
+    ])(
+        "shared owned-service factory forwards draft capability %s without eager model calls",
+        (value, enabled) => {
+            if (value !== undefined)
+                process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS = value;
+            parseViewDraftCapability.mockReturnValue(enabled);
+            createDurableMemoryService("draft-capability");
+            expect(parseViewDraftCapability).toHaveBeenCalledWith(value);
+            expect(constructors[0].options.viewDrafts).toBe(enabled);
+            expect(createChatModel).not.toHaveBeenCalled();
+        },
+    );
 
     test.each(["true", "false"])(
         "shared owned-service factory forwards declaration %s without eager model calls",

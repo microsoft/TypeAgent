@@ -594,6 +594,16 @@ export const knowledgeGraphSchema = z.object({
 });
 
 export const capabilitiesSchema = z.object({
+    derivedViews: z
+        .object({
+            kinds: z.literal("troubleshootingGuide").array(),
+            drafts: z.literal(true),
+            history: z.literal(true),
+            publication: z.literal(false),
+            builds: z.literal(true).optional(),
+            editMerging: z.literal(true).optional(),
+        })
+        .optional(),
     chatProvider: z.string().optional(),
     embeddingProvider: z.string().optional(),
     features: z.object({
