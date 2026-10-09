@@ -235,13 +235,13 @@ describe("bounded wiki evidence, edits, publication and managed lifecycle", () =
                 "Human definitions",
             );
         const humanSave = await save(original.content);
-        const humanEdits = humanSave.edits!.filter(
+        const humanEdits = humanSave.version.edits!.filter(
             (edit) => edit.status !== "cleared",
         );
         expect(humanEdits.length).toBeGreaterThan(0);
-        expect(humanEdits.every((edit) => edit.actor === humanSave.actor)).toBe(
-            true,
-        );
+        expect(
+            humanEdits.every((edit) => edit.actor === humanSave.version.actor),
+        ).toBe(true);
         alter = (name, output) => {
             if (name !== "memory_wiki_construction") return output;
             const raw = evidenceRecord(output);
