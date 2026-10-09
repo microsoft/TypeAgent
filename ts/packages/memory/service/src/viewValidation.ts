@@ -281,7 +281,8 @@ function validateRelationships(
             validateCitation(citation, sources);
         const target = edge.to;
         if (
-            request.content.kind === "timeline" &&
+            (request.content.kind === "timeline" ||
+                request.content.kind === "wiki") &&
             target.kind === "source" &&
             edge.citations.some(
                 (citation) => sourceKey(citation) !== sourceKey(target),
