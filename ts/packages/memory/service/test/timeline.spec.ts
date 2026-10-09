@@ -366,6 +366,51 @@ describe("timeline configured service pipeline", () => {
             ).toEqual(["rejected", "proposed"]);
         }
     });
+    test("human-added canonical evidence relationships remain selected across repeated rebuilds", async () => {
+        const canonical = await event(
+            "Retained canonical dependency evidence.",
+        );
+        expect(
+            (await build(undefined, [canonical.eventId])).results[0].state,
+        ).toBe("draft");
+        const snapshot = await service.listViews(corpusId);
+        const view = snapshot.views[0];
+        if (view.content.kind !== "timeline")
+            throw new Error("Expected canonical timeline content");
+        const support = authoredRelationships(view)[0];
+        if (support.to.kind !== "source")
+            throw new Error("Expected canonical source evidence endpoint");
+        const dependency = {
+            ...support,
+            id: "human-canonical-dependency",
+            predicate: "dependsOn" as const,
+            to: support.to,
+        };
+        await service.saveViewDraft({
+            corpusId,
+            viewId: view.viewId,
+            expectedHead: snapshot.head,
+            expectedVersion: view.version,
+            definition: {
+                viewId: view.viewId,
+                kind: "timeline",
+                selector: view.definition.selector,
+            },
+            content: view.content,
+            relationships: [...authoredRelationships(view), dependency],
+        });
+        for (let iteration = 0; iteration < 2; iteration++) {
+            expect(
+                (await build(undefined, [canonical.eventId])).results[0].state,
+            ).toBe("merged");
+            const rebuilt = (await service.listViews(corpusId)).views[0];
+            expect(
+                authoredRelationships(rebuilt).find(
+                    (edge) => edge.id === dependency.id,
+                ),
+            ).toEqual(dependency);
+        }
+    });
     test("fenced examples cannot create record boundaries or override grounded fields", async () => {
         await ingest(
             [

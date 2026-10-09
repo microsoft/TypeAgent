@@ -12,7 +12,7 @@ import type {
     TimelineRecordDetails,
     ViewEditOperation,
     ViewRelationshipInput,
-    ViewSourceSelector,
+    ViewCitation,
     ViewSynthesisOutput,
     ViewVersion,
 } from "./viewTypes.js";
@@ -334,8 +334,9 @@ function mergeOwnersDetails(
 export function mergeView(
     current: ViewVersion | undefined,
     candidate: ViewSynthesisOutput,
-    sources: ViewSourceSelector["sources"] = current?.definition.selector
-        .sources ?? [],
+    sources: Array<
+        Pick<ViewCitation, "sourceId" | "revisionId" | "evidence">
+    > = current?.definition.selector.sources ?? [],
 ): {
     output: ViewSynthesisOutput;
     conflicts: string[];
