@@ -17,6 +17,7 @@ import {
     assertBatchImportRequest,
     batchImportRequestByteLimit,
     measureBatchImportBytes,
+    MemoryBatchStore,
     type MemoryBatchImportRequest,
 } from "../src/batchImport.js";
 import {
@@ -36,7 +37,22 @@ import type {
     IngestionJobStatus,
 } from "../src/types.js";
 
+function deferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>((finish) => {
+        resolve = finish;
+    });
+    return { promise, resolve };
+}
+
 class AbortableIndex extends FakeProcedureCorpusIndex {
+    public constructor(
+        directory: string,
+        private readonly blocked?: () => void,
+    ) {
+        super(directory);
+    }
+
     public override async rebuild(
         documents: IndexedDocument[],
         signal?: AbortSignal,
@@ -44,6 +60,7 @@ class AbortableIndex extends FakeProcedureCorpusIndex {
         if (documents.some((document) => document.source.title === "Blocked")) {
             if (!signal) throw new Error("Expected ingestion abort signal");
             signal.throwIfAborted();
+            this.blocked?.();
             await new Promise<never>((_resolve, reject) =>
                 signal.addEventListener("abort", () => reject(signal.reason), {
                     once: true,
@@ -1117,8 +1134,10 @@ describe("revision assets and post-commit runbook ingestion", () => {
 
     test("batch cancellation aborts real underlying ingestion, not just presentation state", async () => {
         await service.close();
+        const blocked = deferred();
         service = new FileMemoryService(root, {
-            indexFactory: (_corpus, directory) => new AbortableIndex(directory),
+            indexFactory: (_corpus, directory) =>
+                new AbortableIndex(directory, blocked.resolve),
             runbookSynthesizer: async (input) => output(input),
         });
         const corpus = await service.createCorpus("cancel");
@@ -1135,6 +1154,7 @@ describe("revision assets and post-commit runbook ingestion", () => {
                 },
             ],
         });
+        await blocked.promise;
         const active = await waitFor(
             () => service.getBatchImport(batch.batchId),
             (batch) => batch.members[0].jobId !== undefined,
@@ -1153,12 +1173,7 @@ describe("revision assets and post-commit runbook ingestion", () => {
         expect(await service.listSources(corpus.corpusId)).toEqual([]);
     });
 
-    test("forgetting a source cancels only its batch members and preserves unrelated captures", async () => {
-        await service.close();
-        service = new FileMemoryService(root, {
-            indexFactory: (_corpus, directory) => new AbortableIndex(directory),
-            runbookSynthesizer: async (input) => output(input),
-        });
+    test("forgetting a source removes only its completed batch members and preserves unrelated captures", async () => {
         const corpus = await service.createCorpus("forget-batch");
         await capture({
             corpusId: corpus.corpusId,
@@ -1181,7 +1196,7 @@ describe("revision assets and post-commit runbook ingestion", () => {
                     source: {
                         sourceId: "guide",
                         sourceType: "markdown",
-                        title: "Blocked",
+                        title: "Updated guide",
                         markdown: `${content}\nChanged`,
                     },
                 },
@@ -1197,7 +1212,7 @@ describe("revision assets and post-commit runbook ingestion", () => {
         });
         await waitFor(
             () => service.getBatchImport(batch.batchId),
-            (batch) => batch.members[0].jobId !== undefined,
+            (batch) => batch.state === "complete",
         );
         await expect(
             service.forgetSource({
@@ -1228,6 +1243,85 @@ describe("revision assets and post-commit runbook ingestion", () => {
                 (source) => source.sourceId,
             ),
         ).toEqual(["other"]);
+    });
+
+    test("source-scoped cancellation aborts only its admitted job and preserves unrelated captures", async () => {
+        await service.close();
+        service = new FileMemoryService(root, {
+            indexFactory: (_corpus, directory) => new AbortableIndex(directory),
+            runbookSynthesizer: async (input) => output(input),
+        });
+        const corpus = await service.createCorpus("selective-cancel");
+        const entered = deferred();
+        const resume = deferred();
+        const cancelled: string[] = [];
+        let unrelatedJobId: string | undefined;
+        const store = new MemoryBatchStore(root, {
+            ingestDocument: async (request) => {
+                if (request.source.sourceId === "guide") {
+                    entered.resolve();
+                    await resume.promise;
+                }
+                const result = await service.ingestDocument(request);
+                if (request.source.sourceId === "other")
+                    unrelatedJobId = result.jobId;
+                return result;
+            },
+            getJob: (jobId) => service.getJob(jobId),
+            cancelJob: (jobId) => {
+                cancelled.push(jobId);
+                return service.cancelJob(jobId);
+            },
+        });
+        try {
+            const batch = await store.start({
+                corpusId: corpus.corpusId,
+                idempotencyKey: "selective-cancel",
+                documents: [
+                    {
+                        source: {
+                            sourceId: "guide",
+                            sourceType: "markdown",
+                            title: "Blocked",
+                            markdown: content,
+                        },
+                    },
+                    {
+                        source: {
+                            sourceId: "other",
+                            sourceType: "text",
+                            title: "Other",
+                            text: "Unrelated reference material",
+                        },
+                    },
+                ],
+            });
+            await entered.promise;
+            await waitFor(
+                async () =>
+                    unrelatedJobId === undefined
+                        ? undefined
+                        : service.getJob(unrelatedJobId),
+                (job) => job?.state === "complete",
+            );
+            const cancelling = store.cancelSource(corpus.corpusId, "guide");
+            resume.resolve();
+            await cancelling;
+            const retained = await store.get(batch.batchId);
+            expect(retained.members.map((member) => member.state)).toEqual([
+                "cancelled",
+                "complete",
+            ]);
+            expect(cancelled).toEqual([retained.members[0].jobId]);
+            expect(
+                (await service.listSources(corpus.corpusId)).map(
+                    (source) => source.sourceId,
+                ),
+            ).toEqual(["other"]);
+        } finally {
+            resume.resolve();
+            await store.close();
+        }
     });
 
     test("acquisition rejections and opaque client keys persist; lookup recovers lost responses without new content", async () => {

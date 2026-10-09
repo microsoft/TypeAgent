@@ -2,6 +2,20 @@
 
 Transport-independent durable memory corpus service.
 
+## Offline regression tests
+
+Batch cancellation tests synchronize at admission and index-entry barriers.
+Source-forget confirmation tests wait for completed commits before refreshing
+stale preview tokens; an index held open until cancellation must not also block
+the write reservation needed to obtain that preview.
+
+The configured-model CLI regression uses a loopback HTTP server, two compiled
+CLI subprocesses for build/status persistence, and the exported CLI for remaining
+commands. Every command opens and closes its own service. This retains real
+structured-output requests and edit/conflict coverage without repeatedly paying
+for cold process startup. Test environment and model runtime configuration are
+restored afterward.
+
 ## Indexed reads and search diagnostics
 
 Document and procedure indexes are reused in memory while their published
