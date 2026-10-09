@@ -17,25 +17,17 @@ reuse, creation, fallthrough, and failure without parsing display text.
 
 ## Dynamic execution security
 
-Generated, imported, edited, and seeded flows require both
-`powershell.dynamicExecution.enabled` and
-`powershell.brokerExecution.enabled` in trusted YAML configuration. Both default
-to false. When enabled, flows always use authorization-required local execution.
-There is no additional mode-selection flag, and enabling execution does not
-automatically approve any script.
+Generated, imported, edited, and seeded flows always require trusted user
+authorization and the Windows execution broker. No execution feature flags or
+mode-selection settings are required. Missing approval or an unavailable broker
+prevents execution; there is no unrestricted fallback.
+
+The former `powershell.dynamicExecution.enabled` and
+`powershell.brokerExecution.enabled` settings are no longer read, including
+explicit false values. Remove these obsolete entries from existing configuration.
+Their removal makes execution available for approval, not automatically approved.
 
 ### Approved-local execution
-
-To run saved samples and ordinary local scripts, enable the existing operational
-gates in `config.local.yaml` (merge into the existing `powershell` section):
-
-```yaml
-powershell:
-  dynamicExecution:
-    enabled: true
-  brokerExecution:
-    enabled: true
-```
 
 PowerShell flows execute local code with the current user's privileges, subject
 to operating-system policy. TypeAgent requires authorization before executing a
@@ -98,7 +90,7 @@ including across out-of-process agent calls. Only positively identified direct
 user calls may reuse it; reasoning, structured tool calls and unknown callers
 cannot. Teardown and `@powershell revoke` invalidate outstanding permits.
 
-Use `@powershell show <flowName>` to inspect execution availability and version status.
+Use `@powershell show <flowName>` to inspect execution requirements and version status.
 Use `@powershell revoke` to clear remembered approvals for the session.
 
 New recipes and generated action schemas no longer request `allowedCmdlets`.

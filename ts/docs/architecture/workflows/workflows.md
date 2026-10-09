@@ -299,10 +299,9 @@ type names are preserved where they match code.
 
 ## PowerShell
 
-PowerShell manages parameterized scripts. When its two operational gates are
-enabled, it runs explicitly authorized code with the current user's privileges,
-subject to OS policy. This is not an arbitrary-code sandbox, and there is no
-additional execution-mode feature flag.
+PowerShell manages parameterized scripts. It runs explicitly authorized code
+with the current user's privileges, subject to OS policy, without execution
+feature flags. This is not an arbitrary-code sandbox.
 
 ### Capture paths
 
@@ -345,17 +344,18 @@ PowerShell supports two creation paths:
 
 ```
   Flow or candidate -> central powershellRunner
-    -> existing trusted YAML operational gates
     -> trusted UI authorization and version/invocation verification
     -> Windows broker (bounded JSON over stdin)
     -> private request file and scriptHost.ps1
     -> structured parameters, output, timeouts, owned-process cleanup
 ```
 
-Both `powershell.dynamicExecution.enabled` and
-`powershell.brokerExecution.enabled` must be true in trusted YAML. They default
-to false. When enabled, authorization-required local execution is the default.
-These gates never grant permission for a script to execute without authorization.
+Dynamic flows require trusted user authorization and the Windows execution
+broker without execution feature flags. The former
+`powershell.dynamicExecution.enabled` and `powershell.brokerExecution.enabled`
+settings are ignored, including explicit false values, and can be removed from
+existing configuration. Missing authorization or an unavailable broker prevents
+execution.
 
 Reviewed package-owned namespace actions remain a separate trusted path.
 Mutable flow metadata cannot select that reviewed-static API.
@@ -369,8 +369,8 @@ never falls back to protocol v1 or another tool after a denied approval.
 
 ### Approved-local execution
 
-With both existing gates enabled, every new or changed script requires authorization before
-execution, including generated tests, drafts, and repairs. Import and
+Every new or changed script requires authorization before execution, including
+generated tests, drafts, and repairs. Import and
 registration do not confer approval.
 
 The initial trusted UI shows a compact flow/working-directory/arguments summary

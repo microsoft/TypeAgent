@@ -60,10 +60,6 @@ import {
 import type { PowerShellAgentContext } from "./types/powerShellAgentContext.mjs";
 import { executeNamespaceAction } from "./namespaces/actionHandlerRegistry.mjs";
 import type { PowerShellAction } from "./namespaces/namespaceActionHandler.mjs";
-import {
-    getPowerShellExecutionGates,
-    isDynamicPowerShellExecutionEnabled,
-} from "./config/executionGates.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:powershell:handler");
@@ -72,14 +68,6 @@ const SAMPLES_DIR = join(__dirname, "..", "samples");
 
 const flowMutationTails = new Map<string, Promise<void>>();
 const repairAttempts = new WeakSet<object>();
-
-function createDynamicExecutionDenied(): ActionResult {
-    return createPowerShellFailure(
-        "policyDenied",
-        "Dynamic PowerShell execution is disabled by policy.",
-        { retryable: false },
-    );
-}
 
 async function withFlowMutationLock<T>(
     flowName: string,
@@ -141,9 +129,6 @@ async function executeFlowScript(
     flowName: string,
     store: PowerShellStore,
 ): Promise<ActionResult> {
-    if (!isDynamicPowerShellExecutionEnabled()) {
-        return createDynamicExecutionDenied();
-    }
     const snapshot = await store.getExecutionSnapshot(flowName);
     if (
         !snapshot ||
@@ -542,10 +527,6 @@ async function executeDraftRecipe(
     suppliedParameters: Record<string, unknown>,
     context: ActionContext<PowerShellAgentContext>,
 ): Promise<{ output: string } | { error: ActionResult }> {
-    if (!isDynamicPowerShellExecutionEnabled()) {
-        return { error: createDynamicExecutionDenied() };
-    }
-
     const executionParameters: Record<string, unknown> = {};
     mapParamsToFlowDefs(
         suppliedParameters,
@@ -1192,10 +1173,6 @@ async function handlePowerShellFlowAction(
         }
 
         case "testPowerShellFlow": {
-            if (!isDynamicPowerShellExecutionEnabled()) {
-                return createDynamicExecutionDenied();
-            }
-
             // Execute a script without registering it (test-then-register pattern)
             const params = action.parameters as Record<string, unknown>;
             const scriptBody = params.script as string;
@@ -1610,10 +1587,6 @@ class RunHandler implements CommandHandler {
         context: ActionContext<PowerShellAgentContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        if (!isDynamicPowerShellExecutionEnabled()) {
-            return createDynamicExecutionDenied();
-        }
-
         const store = _agentStore;
         if (!store) {
             throw new Error("Script flow store not available");
@@ -1758,10 +1731,9 @@ class ShowHandler implements CommandHandler {
         );
         const snapshot = await store.getExecutionSnapshot(flowName);
 
-        const gates = getPowerShellExecutionGates();
         const executionLines = [
             "Execution: approved local code (NOT sandboxed)",
-            `    Availability: ${gates.dynamicExecution.enabled && gates.brokerExecution.enabled ? "enabled" : "disabled by configuration"}`,
+            "    Requires trusted user approval and the Windows execution broker",
             "    Files, network, modules and native programs: current user privileges after authorization",
             `    Approval: ${scriptApprovalStatus(
                 {

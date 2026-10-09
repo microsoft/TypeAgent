@@ -6,7 +6,6 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { getPowerShellExecutionGates } from "../config/executionGates.mjs";
 import type { ScriptExecutionProvenance } from "../types/scriptRecipe.js";
 import { executeBrokeredPowerShell } from "./windowsSandboxBroker.mjs";
 import {
@@ -125,17 +124,6 @@ export async function executeScript(
             "PowerShell policy denied execution because script provenance is missing or unknown.",
         );
     }
-    const gates = getPowerShellExecutionGates();
-    if (!gates.dynamicExecution.enabled) {
-        return createPolicyDeniedResult(
-            "PowerShell policy denied dynamic script execution because it is disabled.",
-        );
-    }
-    if (!gates.brokerExecution.enabled) {
-        return createPolicyDeniedResult(
-            "PowerShell policy denied dynamic script execution because broker execution is disabled.",
-        );
-    }
     if (!approval) {
         return createPolicyDeniedResult(
             "PowerShell requires an interactive authorization context.",
@@ -190,12 +178,6 @@ async function executeApprovedLocalScript(
             "PowerShell execution was not authorized. No script was executed.",
         );
     }
-    const gates = getPowerShellExecutionGates();
-    if (!gates.dynamicExecution.enabled || !gates.brokerExecution.enabled) {
-        return createPolicyDeniedResult(
-            "Approved-local PowerShell was disabled before execution.",
-        );
-    }
     request.abortSignal?.throwIfAborted();
     try {
         await request.onAuthorized?.();
@@ -205,14 +187,9 @@ async function executeApprovedLocalScript(
         );
     }
     request.abortSignal?.throwIfAborted();
-    const launchGates = getPowerShellExecutionGates();
-    if (
-        !launchGates.dynamicExecution.enabled ||
-        !launchGates.brokerExecution.enabled ||
-        !consumeScriptApproval(approved, approval)
-    ) {
+    if (!consumeScriptApproval(approved, approval)) {
         return createPolicyDeniedResult(
-            "PowerShell authorization was revoked, execution was disabled, or its snapshot changed. No script was executed.",
+            "PowerShell authorization was revoked or its snapshot changed. No script was executed.",
         );
     }
     const profile = request.profiler?.measure(

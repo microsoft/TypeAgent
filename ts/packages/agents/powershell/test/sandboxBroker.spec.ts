@@ -21,27 +21,16 @@ const describeOnWindows =
 const BROKER_TEST_TIMEOUT_SECONDS = 30;
 
 describeOnWindows("legacy restricted broker protocol compatibility", () => {
-    const originalConfigDir = process.env.TYPEAGENT_CONFIG_DIR;
     const originalBrokerPath = process.env.TYPEAGENT_POWERSHELL_BROKER;
     let configDirectory: string;
 
     beforeEach(async () => {
         configDirectory = await mkdtemp(
-            join(tmpdir(), "typeagent-powershell-broker-config-"),
-        );
-        process.env.TYPEAGENT_CONFIG_DIR = configDirectory;
-        await writeFile(
-            join(configDirectory, "config.local.yaml"),
-            "powershell:\n  dynamicExecution:\n    enabled: true\n  brokerExecution:\n    enabled: true\n",
+            join(tmpdir(), "typeagent-powershell-broker-"),
         );
     });
 
     afterEach(async () => {
-        if (originalConfigDir === undefined) {
-            delete process.env.TYPEAGENT_CONFIG_DIR;
-        } else {
-            process.env.TYPEAGENT_CONFIG_DIR = originalConfigDir;
-        }
         if (originalBrokerPath === undefined) {
             delete process.env.TYPEAGENT_POWERSHELL_BROKER;
         } else {
