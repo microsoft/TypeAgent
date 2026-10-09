@@ -32,6 +32,14 @@ export const factKinds = [
     "unresolved",
     "reuseWarning",
     "timing",
+    "projectStatus",
+    "projectAsOf",
+    "incidentStatus",
+    "capacity",
+    "owner",
+    "milestone",
+    "decision",
+    "risk",
     "background",
 ] as const;
 export const factStatuses = [

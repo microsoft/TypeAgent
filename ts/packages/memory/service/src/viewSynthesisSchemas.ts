@@ -10,6 +10,8 @@ import {
     factStatuses,
     sourceDispositions,
 } from "./viewInventory.js";
+import type { ViewKind } from "./viewTypes.js";
+import { projectBriefRoles } from "./projectBrief.js";
 
 const text: JsonSchemaType = { type: "string" };
 const boolean: JsonSchemaType = { type: "boolean" };
@@ -97,40 +99,133 @@ export function createViewInventoryCheckSchema(
 }
 export function createInventoryConstructionSchema(
     itemIds: string[],
+    kind: ViewKind = "troubleshootingGuide",
 ): StructuredOutputJsonSchema {
-    return schema("memory_inventory_guide_construction", {
-        content: object({
-            title: text,
-            summary: text,
-            sections: array(
+    const ids = array(choice(itemIds));
+    const reference = { inventoryId: choice(itemIds) };
+    const nullableText: JsonSchemaType = { anyOf: [text, { type: "null" }] };
+    const details: JsonSchemaType = {
+        anyOf: [
+            object({ kind: choice(["goalsScope"]), inventoryIds: ids }),
+            object({
+                kind: choice(["owners"]),
+                assignments: array(
+                    object({
+                        ...reference,
+                        responsibility: text,
+                        state: choice(["known", "unknown", "unassigned"]),
+                        owner: nullableText,
+                    }),
+                ),
+            }),
+            object({
+                kind: choice(["status"]),
+                project: choice(["unknown", "active", "blocked", "complete"]),
+                incident: choice([
+                    "unknown",
+                    "open",
+                    "closed",
+                    "notApplicable",
+                ]),
+                capacity: choice([
+                    "unknown",
+                    "pendingOwnerReview",
+                    "validated",
+                    "notApplicable",
+                ]),
+                inventoryIds: ids,
+            }),
+            object({
+                kind: choice(["milestones"]),
+                items: array(
+                    object({
+                        ...reference,
+                        status: choice([
+                            "proposed",
+                            "confirmed",
+                            "blocked",
+                            "deferred",
+                            "unknown",
+                        ]),
+                        date: nullableText,
+                    }),
+                ),
+            }),
+            object({
+                kind: choice(["decisions"]),
+                items: array(
+                    object({ ...reference, status: choice(factStatuses) }),
+                ),
+            }),
+            object({
+                kind: choice(["risks"]),
+                items: array(
+                    object({
+                        ...reference,
+                        status: choice([
+                            "open",
+                            "blocked",
+                            "resolved",
+                            "unknown",
+                        ]),
+                    }),
+                ),
+            }),
+            object({
+                kind: choice(["context"]),
+                asOf: nullableText,
+                basis: choice(["unknown", "recordEvidence"]),
+                inventoryIds: ids,
+            }),
+        ],
+    };
+    return schema(
+        kind === "projectBrief"
+            ? "memory_project_brief_construction"
+            : "memory_inventory_guide_construction",
+        {
+            content: object({
+                title: text,
+                summary: text,
+                sections: array(
+                    object({
+                        id: text,
+                        role: choice(
+                            kind === "projectBrief"
+                                ? projectBriefRoles
+                                : [
+                                      "description",
+                                      "prerequisites",
+                                      "diagnostic",
+                                      "guard",
+                                      "verification",
+                                      "recovery",
+                                      "context",
+                                  ],
+                        ),
+                        heading: text,
+                        prose: text,
+                        inventoryIds: array(choice(itemIds)),
+                        ...(kind === "projectBrief" ? { details } : {}),
+                    }),
+                ),
+            }),
+            exclusions: array(
                 object({
-                    id: text,
-                    role: choice([
-                        "description",
-                        "prerequisites",
-                        "diagnostic",
-                        "guard",
-                        "verification",
-                        "recovery",
-                        "context",
-                    ]),
-                    heading: text,
-                    prose: text,
-                    inventoryIds: array(choice(itemIds)),
+                    itemId: choice(itemIds),
+                    reason: choice(["duplicate", "outsideScope"]),
+                    duplicateOf: text,
+                    justification: text,
                 }),
             ),
-        }),
-        exclusions: array(
-            object({
-                itemId: choice(itemIds),
-                reason: choice(["duplicate", "outsideScope"]),
-                duplicateOf: text,
-                justification: text,
-            }),
-        ),
-        outcome: choice(["diagnosticOnly", "verifiedRecovery"]),
-        missingEvidence: array(text),
-    });
+            outcome: choice(
+                kind === "projectBrief"
+                    ? ["projectSummary"]
+                    : ["diagnosticOnly", "verifiedRecovery"],
+            ),
+            missingEvidence: array(text),
+        },
+    );
 }
 export function createInventorySupportSchema(
     sectionIds: string[],

@@ -5,6 +5,7 @@ import type { ViewBuildRequest, ViewConflictResolution } from "./viewTypes.js";
 import { validateViewDraft } from "./viewValidation.js";
 import { assertViewIdentifier } from "./viewContent.js";
 import { validateIsoTimestamp } from "./timestampValidation.js";
+import { emptyProjectBrief } from "./projectBrief.js";
 
 export function parseViewDraftCapability(value: string | undefined): boolean {
     if (value === undefined || value === "false") return false;
@@ -60,19 +61,22 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             expectedVersion: target.expectedVersion,
             expectedHead: request.expectedHead,
             definition: target.definition,
-            content: {
-                kind: "troubleshootingGuide",
-                title: "Build validation",
-                sections: [
-                    {
-                        id: "context",
-                        role: "context",
-                        heading: "Context",
-                        body: "Selected evidence",
-                    },
-                ],
-                citations: [],
-            },
+            content:
+                target.definition?.kind === "projectBrief"
+                    ? emptyProjectBrief()
+                    : {
+                          kind: "troubleshootingGuide",
+                          title: "Build validation",
+                          sections: [
+                              {
+                                  id: "context",
+                                  role: "context",
+                                  heading: "Context",
+                                  body: "Selected evidence",
+                              },
+                          ],
+                          citations: [],
+                      },
             relationships: [],
         });
         const id = target.definition.viewId;

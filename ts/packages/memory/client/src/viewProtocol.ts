@@ -14,7 +14,7 @@ export const viewSelectorSchema = z.strictObject({
 });
 export const viewDefinitionSchema = z.strictObject({
     viewId: id,
-    kind: z.literal("troubleshootingGuide"),
+    kind: z.enum(["troubleshootingGuide", "projectBrief"]),
     selector: viewSelectorSchema,
 });
 const citation = source.extend({
@@ -40,6 +40,14 @@ const inventory = z.object({
                 "unresolved",
                 "reuseWarning",
                 "timing",
+                "projectStatus",
+                "projectAsOf",
+                "incidentStatus",
+                "capacity",
+                "owner",
+                "milestone",
+                "decision",
+                "risk",
                 "background",
             ]),
             status: z.enum([
@@ -127,6 +135,90 @@ const inventoryEvidence = {
     inventoryAudit: inventoryAudit.optional(),
     coverage: coverage.optional(),
 };
+const factStatus = z.enum([
+    "observed",
+    "proposed",
+    "attempted",
+    "rejected",
+    "deferred",
+    "confirmed",
+    "unknown",
+    "blocked",
+    "notApplicable",
+]);
+const inventoryIds = id.array().min(1).max(128);
+const reference = { inventoryId: id };
+const projectDetails = z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("goalsScope"), inventoryIds }),
+    z.strictObject({
+        kind: z.literal("owners"),
+        assignments: z
+            .strictObject({
+                ...reference,
+                responsibility: text,
+                state: z.enum(["known", "unknown", "unassigned"]),
+                owner: text.nullable(),
+            })
+            .array()
+            .min(1)
+            .max(128),
+    }),
+    z.strictObject({
+        kind: z.literal("status"),
+        project: z.enum(["unknown", "active", "blocked", "complete"]),
+        incident: z.enum(["unknown", "open", "closed", "notApplicable"]),
+        capacity: z.enum([
+            "unknown",
+            "pendingOwnerReview",
+            "validated",
+            "notApplicable",
+        ]),
+        inventoryIds,
+    }),
+    z.strictObject({
+        kind: z.literal("milestones"),
+        items: z
+            .strictObject({
+                ...reference,
+                status: z.enum([
+                    "proposed",
+                    "confirmed",
+                    "blocked",
+                    "deferred",
+                    "unknown",
+                ]),
+                date: text.nullable(),
+            })
+            .array()
+            .min(1)
+            .max(128),
+    }),
+    z.strictObject({
+        kind: z.literal("decisions"),
+        items: z
+            .strictObject({ ...reference, status: factStatus })
+            .array()
+            .min(1)
+            .max(128),
+    }),
+    z.strictObject({
+        kind: z.literal("risks"),
+        items: z
+            .strictObject({
+                ...reference,
+                status: z.enum(["open", "blocked", "resolved", "unknown"]),
+            })
+            .array()
+            .min(1)
+            .max(128),
+    }),
+    z.strictObject({
+        kind: z.literal("context"),
+        asOf: text.nullable(),
+        basis: z.enum(["unknown", "recordEvidence"]),
+        inventoryIds,
+    }),
+]);
 const section = z.strictObject({
     id,
     role: z.enum([
@@ -137,9 +229,16 @@ const section = z.strictObject({
         "verification",
         "recovery",
         "context",
+        "goalsScope",
+        "owners",
+        "status",
+        "milestones",
+        "decisions",
+        "risks",
     ]),
     heading: text,
     body: text,
+    details: projectDetails.optional(),
 });
 const sectionEndpoint = z.strictObject({
     kind: z.literal("section"),
@@ -157,20 +256,26 @@ const edge = z.strictObject({
 const requestEdge = edge.extend({
     citations: citation.array().min(1).max(1000),
 });
-const content = z.strictObject({
+const guideContent = z.strictObject({
     kind: z.literal("troubleshootingGuide"),
     title: text,
     summary: text.optional(),
     sections: section.array().min(1).max(1000),
     citations: citation.array(),
 });
-const requestContent = content.extend({
-    citations: citation.array().max(1000),
+const projectContent = guideContent.extend({
+    kind: z.literal("projectBrief"),
+    sections: section.extend({ details: projectDetails }).array().length(7),
 });
+const content = z.discriminatedUnion("kind", [guideContent, projectContent]);
+const requestContent = z.discriminatedUnion("kind", [
+    guideContent.extend({ citations: citation.array().max(1000) }),
+    projectContent.extend({ citations: citation.array().max(1000) }),
+]);
 export const viewSynthesisSchema = z.strictObject({
     content: requestContent,
     relationships: requestEdge.array().max(1000),
-    outcome: z.enum(["diagnosticOnly", "verifiedRecovery"]),
+    outcome: z.enum(["diagnosticOnly", "verifiedRecovery", "projectSummary"]),
     missingEvidence: text.array().max(100),
 });
 const viewSynthesisResponseSchema = viewSynthesisSchema.extend({
@@ -283,6 +388,11 @@ export const viewSearchRequestSchema = z.strictObject({
     query: text,
     limit: z.number().int().min(1).max(100).optional(),
     freshness: z.literal("current"),
+    kinds: z
+        .enum(["troubleshootingGuide", "projectBrief"])
+        .array()
+        .max(2)
+        .optional(),
 });
 const snapshot = z.object({
     corpusId: id,
@@ -303,7 +413,7 @@ const snapshot = z.object({
         .array()
         .min(1)
         .max(32),
-    pipeline: z.literal("troubleshooting-v1"),
+    pipeline: z.enum(["troubleshooting-v1", "project-brief-v1"]),
     model: text,
     fingerprint: hash,
     publicationPolicy: viewEffectivePolicySchema.optional(),
@@ -433,23 +543,28 @@ export const viewVersionSchema = z.object({
     definition: z.object({
         viewId: id,
         revisionId: id,
-        kind: z.enum(["troubleshootingGuide", "procedure"]),
+        kind: z.enum(["troubleshootingGuide", "projectBrief", "procedure"]),
         selector: viewSelectorSchema.extend({ sources: source.array() }),
     }),
-    content: z.object({
-        kind: z.enum(["troubleshootingGuide", "procedure"]),
-        title: text,
-        summary: text.optional(),
-        sections: section.extend({ heading: z.string().max(120000) }).array(),
-        citations: source
-            .extend({
-                locator: z.string().optional(),
-                excerpt: z.string().optional(),
-            })
-            .array(),
-        compatibilityFields: z.record(z.string(), z.unknown()).optional(),
-        agentEdition: z.unknown().optional(),
-    }),
+    content: z.union([
+        projectContent,
+        z.object({
+            kind: z.enum(["troubleshootingGuide", "procedure"]),
+            title: text,
+            summary: text.optional(),
+            sections: section
+                .extend({ heading: z.string().max(120000) })
+                .array(),
+            citations: source
+                .extend({
+                    locator: z.string().optional(),
+                    excerpt: z.string().optional(),
+                })
+                .array(),
+            compatibilityFields: z.record(z.string(), z.unknown()).optional(),
+            agentEdition: z.unknown().optional(),
+        }),
+    ]),
     generation: z
         .object({
             candidateId: id,
@@ -457,7 +572,9 @@ export const viewVersionSchema = z.object({
             fingerprint: hash,
             relationships: edge.array().optional(),
             input: snapshot.optional(),
-            outcome: z.enum(["diagnosticOnly", "verifiedRecovery"]).optional(),
+            outcome: z
+                .enum(["diagnosticOnly", "verifiedRecovery", "projectSummary"])
+                .optional(),
             missingEvidence: z.string().array().max(100).optional(),
             ...inventoryEvidence,
         })

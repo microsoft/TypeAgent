@@ -232,10 +232,9 @@ atomic history-ref commit; failed preparations do not save a procedure version.
 
 `new FileMemoryService(privateStore, { viewDrafts: true })` enables the local
 developer/demo capability. It is **off by default**. `getCapabilities()` then
-advertises `derivedViews: { kinds: ["troubleshootingGuide"], drafts: true,
-history: true, builds: true, editMerging: true, publication: true, search: true }`. Only
-`troubleshootingGuide` is supported. Wiki, projectBrief, timeline and
-automatic scheduling remain unsupported; they
+advertises `derivedViews: { kinds: ["troubleshootingGuide", "projectBrief"], drafts: true,
+history: true, builds: true, editMerging: true, publication: true, search: true }`.
+Wiki, timeline, record-level event selectors and automatic scheduling remain unsupported; they
 are never silently substituted with procedures.
 
 `listViews(corpusId)` returns `{ head, views }`, including pending drafts and
@@ -273,7 +272,7 @@ model-output schemas. Providers without schema support fail explicitly; there is
 no JSON-only fallback, fabricated result or citation repair. Schema compliance
 does not replace exact-character, relationship coverage or semantic/context checks.
 The `evidence-first-v5` adapter extracts a typed source-only fact/context inventory
-**before any guide prose is generated or shown**. A second model call checks every
+**before any view prose is generated or shown**. A second model call checks every
 item and source disposition against all complete frozen inputs. Measurements retain
 quantity/unit/comparison context; hypotheses and decisions retain observed/proposed/
 attempted/rejected/deferred/confirmed/unknown/blocked state. Authority, prerequisites,
@@ -316,12 +315,104 @@ evidence and cited recovery/escalation limits; it never invents a confirmed fix.
 
 `buildViews({ corpusId, expectedHead, targets, bounds?, publication?: boolean })`
 admits a durable manual job. Each target supplies `expectedVersion` and a
-`definition` with a stable view ID, `kind: "troubleshootingGuide"` and an explicit
+`definition` with a stable view ID, `kind: "troubleshootingGuide"` or `"projectBrief"` and an explicit
 revision-aware source selector. Admission freezes complete retained input text,
 source membership, current exact revisions, content hashes, target and definition
 revisions, authenticated OS actor, temporal bounds and configured pipeline/model
 identity. Their fingerprint is persisted with every per-target receipt.
 There is no browser-owned job store or duplicate canonical view store.
+
+### Project briefs
+
+`ProjectBriefContent` is discriminated by `kind: "projectBrief"`, not an executable
+guide or retagged procedure. Its fixed seven-section template has stable section
+IDs, headings, editable narrative, exact citations and typed `details`:
+
+- `goalsScope`: goal/scope inventory references.
+- `owners`: assignments with responsibility, inventory identity, `known`,
+  `unknown` or `unassigned` state, and a recorded owner name or explicit `null`.
+- `status`: separate project (`unknown`, `active`, `blocked`, `complete`),
+  incident (`unknown`, `open`, `closed`, `notApplicable`) and capacity
+  (`unknown`, `pendingOwnerReview`, `validated`, `notApplicable`) states.
+- `milestones`: inventory identity, source-grounded commitment state and date
+  (`null` when unknown). Proposed milestones are not accepted commitments.
+- `decisions`: inventory identity and observed/proposed/attempted/rejected/
+  deferred/confirmed/unknown/blocked/not-applicable fact state.
+- `risks`: inventory identity and open/blocked/resolved/unknown state, including
+  workload-memory warnings, headroom constraints, blockers and open questions.
+- `context`: source-grounded project knowledge `asOf`, evidence basis and
+  inventory references. Unknown is `{ asOf: null, basis: "unknown" }`.
+
+Structured fields refer to checked facts that must appear in the **actual section
+body**. Runtime validation rejects mismatched roles, missing context, invented
+names/dates, completion inferred from incident closure, and validated capacity
+while evidence says blocked pending owner review. Known project knowledge time
+requires a confirmed `projectAsOf` record assertion; source capture/modified times
+and generation timestamps alone never establish it. This is not record-level
+timeline/cutoff support.
+
+The source inventory and independent source check precede construction. The
+configured adapter requests a strict project-specific construction schema, then
+the independent final support audit sees narrative **and typed details**, including
+human-edited final content. Outcome is `projectSummary`; guide-only confirmed
+recovery requirements do not apply. Exact-artifact proof, policy precedence,
+edit attribution, bounded merge/conflicts, history, publication/index retry,
+privacy quarantine and published-only search use the same owning store.
+Positive model audits are not semantic-quality guarantees.
+
+In Memory Hub, choose a **named corpus**, select exact retained revisions, choose
+**Project brief** in **View kind**, set a stable view ID and choose **Build views**.
+All memory does not grant build scope. Open the brief for fixed-template fields,
+explicit edits, publication policy, history and original-evidence drillthrough.
+There are no brief Agent edition, skill activation or execution controls.
+The **Derived view kind** search filter limits derived artifacts while ordinary
+canonical evidence remains available. Older capabilities do not advertise/open
+unsupported kinds.
+
+The CLI, service facade/in-process client, RPC, MCP, parent IPC/HTTP gateway and
+extension use the same typed requests. For example, save this build request with
+real IDs/revisions from `sources` and a current head from `list`:
+
+```json
+{
+  "corpusId": "payments",
+  "expectedHead": null,
+  "publication": false,
+  "targets": [
+    {
+      "expectedVersion": 0,
+      "definition": {
+        "viewId": "payments-reliability-brief",
+        "kind": "projectBrief",
+        "selector": {
+          "kind": "sources",
+          "sources": [
+            { "sourceId": "charter", "revisionId": "current-revision" }
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+From the service package, run
+`node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts capabilities`,
+then `build <request.json>`, `read <corpusId> <viewId>`, `history <corpusId> <viewId>`,
+`save <request.json>`, `publish <request.json>` and `search <corpusId> <query>`.
+Only an eligible exact built/edited revision can publish; an unknown human draft
+does not bypass audits. API `searchViews` accepts optional
+`kinds: ["projectBrief"]` and returns exact published revisions with evidence.
+Do not open a store owned by another running server.
+
+Offline tests use configured-model stubs and synthetic retained sources; no
+expectation files are model input or canonical imports. No live quality
+qualification is claimed. `gpt-4o-2024-11-20` remains unqualified following the
+eight-source inventory coverage failure, and release enablement remains blocked.
+Ordinary installations remain off unless the existing capability is explicitly
+enabled. Disabling it preserves stored data/history and excludes derived retrieval.
+
+### Source-level build bounds
 
 Bounds are `learnedBefore`, `occurredFrom` and `occurredTo`, all ISO timestamps.
 Learned time uses source `capturedAt`; occurrence bounds use `sourceModifiedAt`.

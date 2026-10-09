@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { viewContentToText } from "./viewText.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
     access,
@@ -2404,7 +2405,8 @@ export class FileMemoryService
                           editMerging: true as const,
                           kinds: [
                               "troubleshootingGuide",
-                          ] as Array<"troubleshootingGuide">,
+                              "projectBrief",
+                          ] as Array<"troubleshootingGuide" | "projectBrief">,
                           drafts: true as const,
                           history: true as const,
                           publication: true as const,
@@ -2450,6 +2452,8 @@ export class FileMemoryService
             corpusId: request.corpusId,
             viewId: request.viewId,
         });
+        if (prior && prior.content.kind !== request.content.kind)
+            throw new Error("An existing view cannot change kind");
         let proof: ViewPublicationProof | undefined;
         if (prior?.generation?.input) {
             if (
@@ -2719,13 +2723,7 @@ export class FileMemoryService
         view: ViewVersion,
     ): Promise<ViewPublicationStatus> {
         const directory = this.viewIndexDirectory(view);
-        const content = [
-            view.content.title,
-            view.content.summary ?? "",
-            ...view.content.sections.map(
-                (section) => `## ${section.heading}\n\n${section.body}`,
-            ),
-        ].join("\n\n");
+        const content = viewContentToText(view.content);
         try {
             await mkdir(directory, { recursive: true });
             const index = this.procedureIndexFactory(view.corpusId, directory);
@@ -2805,10 +2803,25 @@ export class FileMemoryService
         if (
             Object.keys(request).some(
                 (key) =>
-                    !["corpusId", "query", "limit", "freshness"].includes(key),
+                    ![
+                        "corpusId",
+                        "query",
+                        "limit",
+                        "freshness",
+                        "kinds",
+                    ].includes(key),
             ) ||
             !request.query.trim() ||
             request.freshness !== "current" ||
+            (request.kinds !== undefined &&
+                (!Array.isArray(request.kinds) ||
+                    request.kinds.length > 2 ||
+                    request.kinds.some(
+                        (kind) =>
+                            !["troubleshootingGuide", "projectBrief"].includes(
+                                kind,
+                            ),
+                    ))) ||
             (request.limit !== undefined &&
                 (!Number.isSafeInteger(request.limit) ||
                     request.limit < 1 ||
@@ -2824,6 +2837,11 @@ export class FileMemoryService
             const results: ViewSearchMatch[] = [];
             for (const current of snapshot.views) {
                 if (current.compatibility || current.state === "archived")
+                    continue;
+                if (
+                    request.kinds &&
+                    !request.kinds.some((kind) => kind === current.content.kind)
+                )
                     continue;
                 const publication =
                     await this.personalHowToStore.getViewPublication({
@@ -2886,7 +2904,7 @@ export class FileMemoryService
                         review: "unreviewed",
                         freshness: "current",
                         evidence:
-                            view.content.kind === "troubleshootingGuide"
+                            view.content.kind !== "procedure"
                                 ? view.content.citations
                                 : [],
                         corroboration: "derived",
@@ -2981,7 +2999,10 @@ export class FileMemoryService
             expectedVersion: target.expectedVersion,
             bounds: bounds ?? {},
             inputs,
-            pipeline: "troubleshooting-v1" as const,
+            pipeline:
+                target.definition.kind === "projectBrief"
+                    ? ("project-brief-v1" as const)
+                    : ("troubleshooting-v1" as const),
             model: this.viewAdapter.identity,
             publicationPolicy: effectiveViewPublicationPolicy(
                 await this.personalHowToStore.getViewPublicationPolicy(

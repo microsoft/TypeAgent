@@ -14,6 +14,7 @@ import {
     assertViewIdentifier,
     viewSourceKey as sourceKey,
 } from "./viewContent.js";
+import { projectBriefRoles, validateProjectBrief } from "./projectBrief.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -46,7 +47,10 @@ function validateSelector(selector: ViewSourceSelector): Set<string> {
     return sources;
 }
 
-function validateSections(sections: ViewSection[]): Set<string> {
+function validateSections(
+    sections: ViewSection[],
+    project: boolean,
+): Set<string> {
     if (!Array.isArray(sections) || !sections.length)
         throw new Error("At least one guide section is required");
     const ids = new Set<string>();
@@ -54,20 +58,25 @@ function validateSections(sections: ViewSection[]): Set<string> {
         if (!section || typeof section !== "object")
             throw new Error("Invalid guide section");
         assertViewIdentifier("section ID", section.id);
-        onlyKeys(section, ["id", "role", "heading", "body"], "guide section");
+        onlyKeys(
+            section,
+            ["id", "role", "heading", "body", ...(project ? ["details"] : [])],
+            "view section",
+        );
         if (ids.has(section.id)) throw new Error("Duplicate section ID");
         ids.add(section.id);
-        if (
-            ![
-                "description",
-                "prerequisites",
-                "diagnostic",
-                "guard",
-                "verification",
-                "recovery",
-                "context",
-            ].includes(section.role)
-        )
+        const allowed: readonly string[] = project
+            ? projectBriefRoles
+            : [
+                  "description",
+                  "prerequisites",
+                  "diagnostic",
+                  "guard",
+                  "verification",
+                  "recovery",
+                  "context",
+              ];
+        if (!allowed.includes(section.role))
             throw new Error("Unsupported guide section role");
         text(section.heading, "Section heading");
         text(section.body, "Section content");
@@ -189,12 +198,12 @@ export function validateViewDraft(request: ViewSaveRequest): void {
     )
         throw new Error("Expected view history head is required");
     if (
-        request.definition?.kind !== "troubleshootingGuide" ||
-        request.content?.kind !== "troubleshootingGuide"
+        !["troubleshootingGuide", "projectBrief"].includes(
+            request.definition?.kind,
+        ) ||
+        request.content?.kind !== request.definition?.kind
     )
-        throw new Error(
-            "Unsupported view kind; only troubleshootingGuide drafts are supported",
-        );
+        throw new Error("Unsupported view kind or mismatched content kind");
     if (request.definition.viewId !== request.viewId)
         throw new Error("View definition identity does not match");
     onlyKeys(
@@ -204,7 +213,12 @@ export function validateViewDraft(request: ViewSaveRequest): void {
     );
     const sources = validateSelector(request.definition.selector);
     text(request.content.title, "Guide title");
-    const sections = validateSections(request.content.sections);
+    const sections = validateSections(
+        request.content.sections,
+        request.content.kind === "projectBrief",
+    );
+    if (request.content.kind === "projectBrief")
+        validateProjectBrief(request.content);
     if (request.content.agentEdition !== undefined)
         throw new Error(
             "Agent editions are edited through the runbook compatibility workflow",
