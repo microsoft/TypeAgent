@@ -95,7 +95,10 @@ async function waitForViewBuild(
 
 const viewCommands = new Map<
     string,
-    (rpc: MemoryViewService, values: string[]) => Promise<unknown>
+    (
+        rpc: ReturnType<typeof createMemoryServiceRpcFacade>,
+        values: string[],
+    ) => Promise<unknown>
 >([
     [
         "build",
@@ -107,6 +110,17 @@ const viewCommands = new Map<
         },
     ],
     ["builds", (rpc, values) => rpc.listViewBuilds(values[0])],
+    [
+        "events",
+        (rpc, values) =>
+            rpc.listEvents({
+                corpusId: values[0],
+                pageSize: 200,
+                ...(values[1] === undefined
+                    ? {}
+                    : { continuationToken: values[1] }),
+            }),
+    ],
     [
         "status",
         async (rpc, values) =>
@@ -228,14 +242,6 @@ export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
                 return await rpc.listViews(values[0]);
             case "sources":
                 return await rpc.listSources(values[0]);
-            case "events":
-                return await rpc.listEvents({
-                    corpusId: values[0],
-                    pageSize: 200,
-                    ...(values[1] === undefined
-                        ? {}
-                        : { continuationToken: values[1] }),
-                });
             case "event":
                 return await rpc.getEvent(values[0], values[1]);
             case "source":
