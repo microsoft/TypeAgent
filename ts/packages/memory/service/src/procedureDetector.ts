@@ -33,7 +33,10 @@ function markdownHeading(
     return { title, level: marker[1].length };
 }
 
-function scan(content: string): { lines: Line[]; headings: Heading[] } {
+export function scanMarkdownStructure(content: string): {
+    lines: Line[];
+    headings: Heading[];
+} {
     const lines: Line[] = [];
     const headings: Heading[] = [];
     let fence: { character: string; length: number } | undefined;
@@ -259,7 +262,7 @@ export function detectProcedureCandidates(
     revisionId: string,
     content: string,
 ): ProcedureCandidateCreateRequest[] {
-    const { lines, headings } = scan(content);
+    const { lines, headings } = scanMarkdownStructure(content);
     const source: SourceStructure = { content, lines, headings };
     const selected: Task[] = [];
     for (const heading of headings) {

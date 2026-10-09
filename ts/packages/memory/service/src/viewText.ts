@@ -1,7 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { ProjectBriefDetails, ViewVersion } from "./viewTypes.js";
+import type {
+    ProjectBriefDetails,
+    ViewVersion,
+    TimelineRecordDetails,
+} from "./viewTypes.js";
+
+export function timelineRecordText(details: TimelineRecordDetails): string {
+    return [
+        `Record: ${details.identity.kind === "canonicalEvent" ? details.identity.eventId : `${details.identity.sourceRecordId} (document-derived identity)`}`,
+        `Type: ${details.eventType}; state: ${details.state}; outcome: ${details.outcome ?? "unknown"}`,
+        `Occurred: ${details.occurredAt ?? "unknown"}`,
+        `Learned: ${details.learnedAt ?? "unknown"}`,
+        `Captured: ${details.capturedAt ?? "unknown"}`,
+    ].join("\n");
+}
 
 export function projectBriefDetailsText(details: ProjectBriefDetails): string {
     switch (details.kind) {
@@ -44,10 +58,17 @@ export function viewContentToText(content: ViewVersion["content"]): string {
     return [
         content.title,
         content.summary ?? "",
+        ...(content.kind === "timeline"
+            ? [`Generated: ${content.generatedAt}`]
+            : []),
         ...content.sections.map((section) =>
             [
                 `## ${section.heading}`,
-                section.details ? projectBriefDetailsText(section.details) : "",
+                section.details
+                    ? section.details.kind === "event"
+                        ? timelineRecordText(section.details)
+                        : projectBriefDetailsText(section.details)
+                    : "",
                 section.body,
             ]
                 .filter(Boolean)

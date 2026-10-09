@@ -68,6 +68,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryListCorpora: (params) => forward("memoryListCorpora", params),
         memoryGetCorpus: (params) => forward("memoryGetCorpus", params),
         memoryListSources: (params) => forward("memoryListSources", params),
+        memoryListEvents: (params) => forward("memoryListEvents", params),
         memoryViewCapabilities: (params) =>
             forward("memoryViewCapabilities", params),
         memoryListViews: (params) => forward("memoryListViews", params),

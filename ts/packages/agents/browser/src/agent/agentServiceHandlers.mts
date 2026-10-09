@@ -138,6 +138,7 @@ export function createAgentInvokeHandlers(
         memoryCreateCorpus: ({ name, description }) =>
             getMemoryService().createCorpus(name, description),
         memoryListCorpora: () => getMemoryService().listCorpora(),
+        memoryListEvents: (params) => getMemoryService().listEvents(params),
         ...createMemoryViewFunctions(getMemoryService),
         memoryGetCorpus: ({ corpusId }) =>
             getMemoryService().getCorpus(corpusId),

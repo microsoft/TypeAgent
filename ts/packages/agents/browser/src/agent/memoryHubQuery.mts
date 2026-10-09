@@ -5,6 +5,7 @@ import { viewContentToText } from "@typeagent/memory-service/view-text";
 import {
     conversationCorpusName,
     conversationProducerId,
+    canonicalizeProcedure,
     type MemoryService,
     type PersonalHowToService,
     type MemoryEvent,
@@ -22,7 +23,7 @@ import type {
 } from "@typeagent/browser-control-rpc/viewRpc";
 import type { MemoryCenterCorpus } from "@typeagent/browser-control-rpc/serviceTypes";
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import {
     currentSearchTraceId,
     isSearchTimingEnabled,
@@ -360,10 +361,7 @@ async function viewResults(
             rank: results.length + 1,
             revisionId: match.view.revisionId,
             viewVersion: match.view.version,
-            viewKind:
-                match.view.content.kind === "projectBrief"
-                    ? "projectBrief"
-                    : "troubleshootingGuide",
+            viewKind: match.view.content.kind,
             viewProvenance: match.view.provenance,
             review: match.review,
             freshness: match.freshness,
@@ -494,6 +492,73 @@ function validateConversation(event: MemoryEvent | undefined): MemoryEvent {
     return event;
 }
 
+async function canonicalEventEvidence(
+    service: MemoryHubReadService,
+    request: MemoryHubEvidenceRequest,
+): Promise<MemoryHubEvidenceContent> {
+    if (
+        !(await service.getCapabilities()).derivedViews?.kinds.includes(
+            "timeline",
+        )
+    )
+        throw new Error("Timeline event evidence is disabled");
+    const event = await timed(
+        service.getEvent(request.corpusId, request.objectId),
+    );
+    if (!event)
+        throw new Error("Canonical event evidence is no longer available");
+    if (
+        createHash("sha256")
+            .update(canonicalizeProcedure(event))
+            .digest("hex") !== request.revisionId
+    )
+        throw new Error("Canonical event evidence revision changed");
+    return pageText(event.eventType, JSON.stringify(event), request, request);
+}
+
+async function sourceRangeEvidence(
+    service: MemoryHubReadService,
+    request: MemoryHubEvidenceRequest,
+    title: string,
+): Promise<MemoryHubEvidenceContent> {
+    const match = /^chars:(\d+)-(\d+)$/.exec(request.locator ?? "");
+    const start = Number(match?.[1]);
+    const end = Number(match?.[2]);
+    const offset = request.offset ?? 0;
+    if (
+        !match ||
+        !request.revisionId ||
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(end) ||
+        start < 0 ||
+        end <= start ||
+        !Number.isSafeInteger(offset) ||
+        offset < 0 ||
+        offset >= end - start
+    )
+        throw new Error("Invalid exact retained source range");
+    const content = await timed(
+        service.getSourceContent({
+            corpusId: request.corpusId,
+            sourceId: request.objectId,
+            revisionId: request.revisionId,
+            offset: start + offset,
+            maxChars: Math.min(12_000, end - start - offset),
+        }),
+    );
+    if (end > content.totalChars)
+        throw new Error("Exact source range exceeds its retained revision");
+    const next = offset + content.content.length;
+    return {
+        title,
+        content: content.content,
+        offset,
+        totalChars: end - start,
+        ...(next < end - start ? { nextOffset: next } : {}),
+        provenance: request,
+    };
+}
+
 async function evidenceContent(
     service: MemoryHubReadService,
     request: MemoryHubEvidenceRequest,
@@ -504,6 +569,8 @@ async function evidenceContent(
             service.getSource(request.corpusId, request.objectId),
         );
         if (!source) throw new Error("Cited source is no longer available.");
+        if (request.locator)
+            return sourceRangeEvidence(service, request, source.title);
         const content = await timed(
             service.getSourceContent({
                 corpusId: request.corpusId,
@@ -547,6 +614,9 @@ async function evidenceContent(
     }
     if (request.kind === "view") {
         return publishedViewEvidence(service, request);
+    }
+    if (request.kind === "event") {
+        return canonicalEventEvidence(service, request);
     }
 
     async function publishedViewEvidence(
@@ -595,6 +665,15 @@ async function evidenceContent(
                 throw new Error(
                     "Published view evidence has changed; rebuild first",
                 );
+        }
+        for (const input of view.generation?.input?.inputs ?? []) {
+            if (input.evidence)
+                await canonicalEventEvidence(service, {
+                    corpusId: request.corpusId,
+                    kind: "event",
+                    objectId: input.evidence.eventId,
+                    revisionId: input.revisionId,
+                });
         }
         const text = viewContentToText(view.content);
         return pageText(view.content.title, text, request, request);

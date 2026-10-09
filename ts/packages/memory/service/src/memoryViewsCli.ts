@@ -24,6 +24,8 @@ node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <comman
   create-corpus <name>
   list <corpusId>
   sources <corpusId>
+  events <corpusId>
+  event <corpusId> <eventId>
   source <corpusId> <sourceId> [revisionId]
   read <corpusId> <viewId> [revisionId]
   history <corpusId> <viewId>
@@ -43,7 +45,7 @@ node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <comman
   retry-index <request.json>
   search <corpusId> <query>
 The store must not be owned by a running server. Actor comes from the local OS identity.
-Build accepts troubleshootingGuide or projectBrief definitions and uses configured synthesis. Project briefs have a fixed reading template, not execution/skill controls. Eligible artifacts can publish and index; live synthesis remains unqualified. No reset, source deletion, skill approval or execution is performed.`;
+Build accepts troubleshootingGuide, projectBrief or timeline definitions and uses configured synthesis. Timelines use timelineEvidence selectors with exact document revisions and canonical event IDs, with host-enforced knowledge/occurrence bounds. Fixed readers have no execution/skill controls. Eligible artifacts can publish and index; live synthesis remains unqualified. No reset, source deletion, skill approval or execution is performed.`;
 
 const argumentCounts = new Map<string, readonly [number, number]>([
     ["corpora", [0, 0]],
@@ -51,6 +53,8 @@ const argumentCounts = new Map<string, readonly [number, number]>([
     ["create-corpus", [1, 1]],
     ["list", [1, 1]],
     ["sources", [1, 1]],
+    ["events", [1, 1]],
+    ["event", [2, 2]],
     ["source", [2, 3]],
     ["read", [2, 3]],
     ["history", [2, 2]],
@@ -224,6 +228,13 @@ export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
                 return await rpc.listViews(values[0]);
             case "sources":
                 return await rpc.listSources(values[0]);
+            case "events":
+                return await rpc.listEvents({
+                    corpusId: values[0],
+                    pageSize: 1000,
+                });
+            case "event":
+                return await rpc.getEvent(values[0], values[1]);
             case "source":
                 return await rpc.getSourceContent({
                     corpusId: values[0],

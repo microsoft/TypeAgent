@@ -25,17 +25,25 @@ import {
     retainedPassages,
 } from "../../../memory/service/dist/viewSynthesisEvidence.js";
 import { hydrateInventoryConstruction } from "../../../memory/service/dist/viewInventoryCoverage.js";
+import { timelineTestAnswer } from "../../../memory/service/dist/test/timelineTestModel.js";
 
-for (const kind of ["troubleshootingGuide", "projectBrief"]) {
+for (const kind of ["troubleshootingGuide", "projectBrief", "timeline"]) {
     test(`real views HTTP/parent IPC routes ${kind} builds to the file-backed service owner`, async (t) => {
         const root = await mkdtemp(
             path.join(os.tmpdir(), "view-draft-gateway-"),
         );
-        const viewId = kind === "projectBrief" ? "payments-brief" : "guide";
+        const viewId =
+            kind === "timeline"
+                ? "incident-timeline"
+                : kind === "projectBrief"
+                  ? "payments-brief"
+                  : "guide";
         const sourceText =
-            kind === "projectBrief"
-                ? `${projectSources.charter}\n\n${projectSources.baseline}`
-                : "Read only. No confirmed recovery. Fresh approval required.";
+            kind === "timeline"
+                ? "## Record hypothesis\nClassification: hypothesis\nState: proposed\nOccurred at: 2026-10-05T08:45:00Z\nRecorded / known at: 2026-10-06T08:05:00Z\nOriginal unconfirmed query hypothesis."
+                : kind === "projectBrief"
+                  ? `${projectSources.charter}\n\n${projectSources.baseline}`
+                  : "Read only. No confirmed recovery. Fresh approval required.";
         const roles = [
             "description",
             "prerequisites",
@@ -51,12 +59,14 @@ for (const kind of ["troubleshootingGuide", "projectBrief"]) {
                 new FakeProcedureCorpusIndex(directory),
             viewSynthesisAdapter: {
                 identity: "offline-gateway-test",
-                ...(kind === "projectBrief"
+                ...(kind !== "troubleshootingGuide"
                     ? {
                           inventory: async (input) =>
                               hydrateInventory(
                                   input,
-                                  projectBriefTestAnswer(
+                                  (kind === "timeline"
+                                      ? timelineTestAnswer
+                                      : projectBriefTestAnswer)(
                                       "memory_source_fact_inventory",
                                       labelViewInput(
                                           input,
@@ -66,7 +76,9 @@ for (const kind of ["troubleshootingGuide", "projectBrief"]) {
                               ),
                           checkInventory: async (_input, inventory) =>
                               parseInventoryAudit(
-                                  projectBriefTestAnswer(
+                                  (kind === "timeline"
+                                      ? timelineTestAnswer
+                                      : projectBriefTestAnswer)(
                                       "memory_source_inventory_check",
                                       { inventory },
                                   ),
@@ -74,13 +86,17 @@ for (const kind of ["troubleshootingGuide", "projectBrief"]) {
                       }
                     : {}),
                 generate: async (input, _signal, inventory) => {
-                    if (kind === "projectBrief")
+                    if (kind !== "troubleshootingGuide")
                         return hydrateInventoryConstruction(
                             input,
                             inventory,
-                            projectBriefTestAnswer(
-                                "memory_project_brief_construction",
-                                { inventory },
+                            (kind === "timeline"
+                                ? timelineTestAnswer
+                                : projectBriefTestAnswer)(
+                                kind === "timeline"
+                                    ? "memory_timeline_construction"
+                                    : "memory_project_brief_construction",
+                                { input, inventory },
                             ),
                         );
                     const source = input.inputs[0];
@@ -157,6 +173,7 @@ for (const kind of ["troubleshootingGuide", "projectBrief"]) {
             ...createMemoryViewFunctions(() => service),
             memoryGetSourceContent: (request) =>
                 service.getSourceContent(request),
+            memoryListEvents: (request) => service.listEvents(request),
         });
         const ready = await new Promise((resolve, reject) => {
             child.on("message", (message) => {
@@ -203,7 +220,11 @@ for (const kind of ["troubleshootingGuide", "projectBrief"]) {
                         viewId,
                         kind,
                         selector: {
-                            kind: "sources",
+                            kind:
+                                kind === "timeline"
+                                    ? "timelineEvidence"
+                                    : "sources",
+                            ...(kind === "timeline" ? { events: [] } : {}),
                             sources: [
                                 {
                                     sourceId: source.sourceId,
@@ -235,6 +256,69 @@ for (const kind of ["troubleshootingGuide", "projectBrief"]) {
         }
         assert.equal(job.state, "complete");
         assert.equal(job.results[0].state, "draft");
+        if (kind === "timeline") {
+            const rejected = await invoke("memoryBuildViews", {
+                ...request,
+                bounds: { learnedBefore: "2026-10-05T12:00:00" },
+            });
+            assert.equal(rejected.status, 400);
+            const canonical = await service.appendEvent({
+                corpusId: corpus.corpusId,
+                idempotencyKey: "canonical-timeline-observation",
+                producer: { producerId: "observer", producerType: "test" },
+                sourceKind: "system",
+                eventType: "configuration",
+                eventTime: "2026-10-05T08:45:00Z",
+                observedAt: "2026-10-06T08:05:00Z",
+                content: "Canonical configuration correction.",
+            });
+            const selection = await invoke("memoryListEvents", {
+                corpusId: corpus.corpusId,
+            });
+            assert.equal(
+                selection.body.data.items[0].eventId,
+                canonical.event.eventId,
+            );
+            const canonicalBuild = await invoke("memoryBuildViews", {
+                corpusId: corpus.corpusId,
+                expectedHead: (await service.listViews(corpus.corpusId)).head,
+                publication: false,
+                targets: [
+                    {
+                        expectedVersion: 0,
+                        definition: {
+                            viewId: "canonical-timeline",
+                            kind: "timeline",
+                            selector: {
+                                kind: "timelineEvidence",
+                                sources: [],
+                                events: [{ eventId: canonical.event.eventId }],
+                            },
+                        },
+                    },
+                ],
+            });
+            let result = canonicalBuild.body.data;
+            while (result.state === "running") {
+                await new Promise((resolve) => setTimeout(resolve, 20));
+                result = (
+                    await invoke("memoryGetViewBuild", {
+                        corpusId: corpus.corpusId,
+                        jobId: result.jobId,
+                    })
+                ).body.data;
+            }
+            assert.equal(result.results[0].state, "draft");
+            assert.equal(
+                (
+                    await service.getView({
+                        corpusId: corpus.corpusId,
+                        viewId: "canonical-timeline",
+                    })
+                ).content.sections[0].id,
+                canonical.event.eventId,
+            );
+        }
         const views = await invoke("memoryListViews", {
             corpusId: corpus.corpusId,
         });

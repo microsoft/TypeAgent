@@ -4,16 +4,26 @@
 import type { ProcedureSourceCitation } from "./types.js";
 import type { AgentEdition } from "./agentEdition.js";
 
-export type ViewKind = "troubleshootingGuide" | "projectBrief";
+export type ViewKind = "troubleshootingGuide" | "projectBrief" | "timeline";
 export type ViewState = "draft" | "stale" | "archived";
 export interface ViewCitation extends ProcedureSourceCitation {
     locator: string;
     excerpt: string;
+    evidence?: { kind: "event"; eventId: string };
 }
-export interface ViewSourceSelector {
+export interface ViewDocumentSelector {
     kind: "sources";
     sources: Array<{ sourceId: string; revisionId: string }>;
+    events?: never;
 }
+export interface TimelineEvidenceSelector {
+    kind: "timelineEvidence";
+    sources: Array<{ sourceId: string; revisionId: string }>;
+    events: Array<{ eventId: string }>;
+}
+export type ViewSourceSelector =
+    | ViewDocumentSelector
+    | TimelineEvidenceSelector;
 export interface ViewSection {
     id: string;
     role:
@@ -29,10 +39,43 @@ export interface ViewSection {
         | "status"
         | "milestones"
         | "decisions"
-        | "risks";
+        | "risks"
+        | "event";
     heading: string;
     body: string;
-    details?: ProjectBriefDetails;
+    details?: ProjectBriefDetails | TimelineRecordDetails;
+}
+export interface TimelineRecordDetails {
+    kind: "event";
+    identity:
+        | { kind: "canonicalEvent"; eventId: string }
+        | { kind: "documentRecord"; sourceId: string; sourceRecordId: string };
+    eventType: string;
+    state: ViewFactStatus;
+    outcome: string | null;
+    occurredAt: string | null;
+    learnedAt: string | null;
+    capturedAt: string | null;
+    inventoryIds: string[];
+}
+export type TimelineRecord = Omit<ViewSection, "role" | "details"> & {
+    role: "event";
+    details: TimelineRecordDetails;
+};
+export interface TimelineContent {
+    kind: "timeline";
+    title: string;
+    summary?: string;
+    generatedAt: string;
+    sections: TimelineRecord[];
+    citations: ViewCitation[];
+    agentEdition?: never;
+    compatibilityFields?: never;
+}
+export interface TimelineEvidenceRecord {
+    id: string;
+    details: Omit<TimelineRecordDetails, "inventoryIds">;
+    citation: ViewCitation;
 }
 export type ProjectBriefDetails =
     | { kind: "goalsScope"; inventoryIds: string[] }
@@ -104,17 +147,33 @@ export interface ProjectBriefContent {
 }
 export type DerivedViewContent =
     | TroubleshootingGuideContent
-    | ProjectBriefContent;
+    | ProjectBriefContent
+    | TimelineContent;
 export type ViewEndpoint =
     | { kind: "section"; viewId: string; sectionId: string }
-    | { kind: "source"; sourceId: string; revisionId: string };
-export interface ViewRelationshipInput {
+    | {
+          kind: "source";
+          sourceId: string;
+          revisionId: string;
+          evidence?: { kind: "event"; eventId: string };
+      };
+export interface ViewEvidenceRelationshipInput {
     id: string;
     predicate: "supportedBy" | "dependsOn";
     from: Extract<ViewEndpoint, { kind: "section" }>;
     to: Extract<ViewEndpoint, { kind: "source" }>;
     citations: ViewCitation[];
 }
+export interface TimelineCorrectionRelationshipInput {
+    id: string;
+    predicate: "corrects" | "supersedes";
+    from: Extract<ViewEndpoint, { kind: "section" }>;
+    to: Extract<ViewEndpoint, { kind: "section" }>;
+    citations: ViewCitation[];
+}
+export type ViewRelationshipInput =
+    | ViewEvidenceRelationshipInput
+    | TimelineCorrectionRelationshipInput;
 export type ViewRelationship =
     | (ViewRelationshipInput & {
           schemaVersion: 1;
@@ -131,7 +190,7 @@ export type ViewRelationship =
           from: { kind: "view"; viewId: string; revisionId: string };
           to:
               | { kind: "definition"; viewId: string; revisionId: string }
-              | { kind: "source"; sourceId: string; revisionId: string };
+              | Extract<ViewEndpoint, { kind: "source" }>;
       };
 interface GuideFields {
     title: string;
@@ -275,6 +334,9 @@ export interface ViewRetainedInput {
     contentHash: string;
     learnedAt?: string;
     occurredAt?: string;
+    evidence?: { kind: "event"; eventId: string };
+    passages?: ViewCitation[];
+    records?: TimelineEvidenceRecord[];
 }
 export interface ViewBuildSnapshot {
     corpusId: string;
@@ -285,7 +347,8 @@ export interface ViewBuildSnapshot {
     expectedVersion: number;
     bounds: ViewBuildBounds;
     inputs: ViewRetainedInput[];
-    pipeline: "troubleshooting-v1" | "project-brief-v1";
+    selectionFingerprint?: string;
+    pipeline: "troubleshooting-v1" | "project-brief-v1" | "timeline-v1";
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
@@ -293,7 +356,11 @@ export interface ViewBuildSnapshot {
 export interface ViewSynthesisOutput {
     content: DerivedViewContent;
     relationships: ViewRelationshipInput[];
-    outcome: "diagnosticOnly" | "verifiedRecovery" | "projectSummary";
+    outcome:
+        | "diagnosticOnly"
+        | "verifiedRecovery"
+        | "projectSummary"
+        | "chronology";
     missingEvidence: string[];
     inventory?: ViewFactInventory;
     inventoryAudit?: ViewInventoryAudit;

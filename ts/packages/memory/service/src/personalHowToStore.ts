@@ -780,6 +780,27 @@ export class TypedViewStore {
 
     private sanitize(state: ViewStoreState, sourceId: string): ViewStoreState {
         const clearingDerived = sourceId === "@clear-derived-views";
+        const forgottenEvent = sourceId.startsWith("{")
+            ? (JSON.parse(sourceId) as { kind: "event"; eventId: string })
+                  .eventId
+            : undefined;
+        const matches = (value: {
+            sourceId: string;
+            evidence?: { kind: "event"; eventId: string };
+        }) =>
+            forgottenEvent
+                ? value.evidence?.eventId === forgottenEvent
+                : !value.evidence && value.sourceId === sourceId;
+        const selected = (
+            definition: Pick<ViewVersion["definition"], "selector">,
+        ) =>
+            forgottenEvent
+                ? definition.selector.events?.some(
+                      (event) => event.eventId === forgottenEvent,
+                  )
+                : definition.selector.sources.some(
+                      (source) => source.sourceId === sourceId,
+                  );
         const affected = new Set(
             Object.entries(state.views).flatMap(([id, versions]) =>
                 versions.some((version) => {
@@ -795,12 +816,7 @@ export class TypedViewStore {
                         return [...evidence.citations, ...evidence.assets];
                     });
                     return (
-                        version.definition.selector.sources.some(
-                            (source) => source.sourceId === sourceId,
-                        ) ||
-                        references.some(
-                            (citation) => citation.sourceId === sourceId,
-                        )
+                        selected(version.definition) || references.some(matches)
                     );
                 })
                     ? [id]
@@ -816,9 +832,9 @@ export class TypedViewStore {
                     !clearingDerived &&
                     !job.results.some(
                         (result) =>
-                            result.snapshot.inputs.some(
-                                (input) => input.sourceId === sourceId,
-                            ) || affected.has(result.viewId),
+                            result.snapshot.inputs.some(matches) ||
+                            selected(result.snapshot.definition) ||
+                            affected.has(result.viewId),
                     ),
             ),
         );
@@ -827,9 +843,8 @@ export class TypedViewStore {
                 ([, conflict]) =>
                     !clearingDerived &&
                     !affected.has(conflict.viewId) &&
-                    !conflict.input.inputs.some(
-                        (input) => input.sourceId === sourceId,
-                    ),
+                    !conflict.input.inputs.some(matches) &&
+                    !selected(conflict.input.definition),
             ),
         );
         state.publications = Object.fromEntries(
@@ -853,7 +868,7 @@ export class TypedViewStore {
         state.index.candidates = state.index.candidates.filter((candidate) => {
             const references = getProcedureEvidenceReferences(candidate);
             return ![...references.citations, ...references.assets].some(
-                (citation) => citation.sourceId === sourceId,
+                matches,
             );
         });
         delete state.index.indexGeneration;
@@ -866,6 +881,16 @@ export class TypedViewStore {
     ): Promise<void> {
         await this.history(corpusId).purge(
             sourceId,
+            (state, id) => this.sanitize(state, id),
+            (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
+        );
+        await this.rebuildIndex(corpusId);
+    }
+
+    public async forgetEvent(corpusId: string, eventId: string): Promise<void> {
+        await this.history(corpusId).purge(
+            JSON.stringify({ kind: "event", eventId }),
             (state, id) => this.sanitize(state, id),
             (state) => this.entries(state),
             () => this.removeSearchIndex(corpusId),

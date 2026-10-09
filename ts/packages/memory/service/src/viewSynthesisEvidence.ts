@@ -17,12 +17,15 @@ function paragraphs(content: string) {
 }
 export function retainedPassages(input: ViewBuildSnapshot): ViewPassage[] {
     return input.inputs.flatMap((source, sourceIndex) =>
-        paragraphs(source.content).map((passage, index) => ({
-            ...passage,
-            passageId: `p${sourceIndex}-${index}`,
-            sourceId: source.sourceId,
-            revisionId: source.revisionId,
-        })),
+        (source.passages ?? paragraphs(source.content)).map(
+            (passage, index) => ({
+                ...passage,
+                passageId: `p${sourceIndex}-${index}`,
+                sourceId: source.sourceId,
+                revisionId: source.revisionId,
+                ...(source.evidence ? { evidence: source.evidence } : {}),
+            }),
+        ),
     );
 }
 export function labelViewInput(
@@ -31,6 +34,27 @@ export function labelViewInput(
 ) {
     return {
         ...input,
+        ...(input.definition.kind === "timeline"
+            ? {
+                  definition: {
+                      ...input.definition,
+                      selector: {
+                          kind: "timelineEvidence",
+                          sources: input.inputs
+                              .filter((source) => !source.evidence)
+                              .map(({ sourceId, revisionId }) => ({
+                                  sourceId,
+                                  revisionId,
+                              })),
+                          events: input.inputs.flatMap((source) =>
+                              source.evidence
+                                  ? [{ eventId: source.evidence.eventId }]
+                                  : [],
+                          ),
+                      },
+                  },
+              }
+            : {}),
         inputs: input.inputs.map((source) => ({
             ...source,
             passages: passages.filter(

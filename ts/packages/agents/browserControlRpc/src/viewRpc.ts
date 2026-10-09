@@ -26,12 +26,12 @@ export type MemoryHubSearchRequest = {
     dateFrom?: string;
     dateTo?: string;
     conversationScope?: "none" | "current" | "all";
-    viewKinds?: Array<"troubleshootingGuide" | "projectBrief">;
+    viewKinds?: Array<"troubleshootingGuide" | "projectBrief" | "timeline">;
 };
 
 export type MemoryHubEvidence = {
     id: string;
-    kind: "source" | "procedure" | "conversation" | "view";
+    kind: "source" | "procedure" | "conversation" | "view" | "event";
     corpusId: string;
     corpusName: string;
     objectId: string;
@@ -46,7 +46,7 @@ export type MemoryHubEvidence = {
     canonicalUri?: string;
     procedureVersion?: number;
     procedureState?: "saved" | "stale" | "archived";
-    viewKind?: "troubleshootingGuide" | "projectBrief";
+    viewKind?: "troubleshootingGuide" | "projectBrief" | "timeline";
     viewVersion?: number;
     viewProvenance?: "human" | "procedure" | "generated" | "merged";
     review?: "unreviewed";
@@ -56,6 +56,7 @@ export type MemoryHubEvidence = {
         revisionId: string;
         locator: string;
         excerpt: string;
+        evidence?: { kind: "event"; eventId: string };
     }>;
     conversationId?: string;
     turnId?: string;
@@ -97,6 +98,7 @@ export type MemoryHubEvidenceRequest = {
     revisionId?: string;
     procedureVersion?: number;
     offset?: number;
+    locator?: string;
 };
 
 export type MemoryHubEvidenceContent = {
