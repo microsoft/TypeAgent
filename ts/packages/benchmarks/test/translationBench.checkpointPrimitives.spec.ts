@@ -1,9 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 import { afterAll, describe, expect, it } from "@jest/globals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import {
+    getTranslationBenchShardIndex,
+    readRecoverableJsonlLines,
+} from "../src/translationBench/runner/scale.js";
 import {
     appendTranslationBenchCheckpointRows,
     createTranslationBenchRunFingerprint,
@@ -33,6 +39,21 @@ const row = (caseId: string): TranslationBenchCheckpointRow<string> => ({
 });
 
 describe("translation bench checkpoints", () => {
+    it("uses canonical fingerprints and stable shards", () => {
+        expect(createTranslationBenchRunFingerprint({ b: 2, a: 1 })).toBe(
+            createTranslationBenchRunFingerprint({ a: 1, b: 2 }),
+        );
+        expect(getTranslationBenchShardIndex("case-1", 8)).toBe(
+            getTranslationBenchShardIndex("case-1", 8),
+        );
+    });
+
+    it("drops only an incomplete trailing JSONL row", () => {
+        expect(readRecoverableJsonlLines('{"header":1}\n{"row":')).toEqual([
+            '{"header":1}',
+        ]);
+    });
+
     it("recovers a torn final row before appending", () => {
         const checkpointPath = path.join(directory, "checkpoint.jsonl");
         appendTranslationBenchCheckpointRows(checkpointPath, header, [

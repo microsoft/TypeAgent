@@ -4,7 +4,14 @@ Action-translation eval for TypeAgent: pinned catalogs, model prices, and scorin
 
 ## Catalog + action-parameters grader
 
-Pinned `catalog.generated.json` and `action-parameters-grader.generated.json`. Code/script parameters use verify mode `llmAsAJudge` (not exact); synthesizer exclusions are derived from those fields. Regenerate with `pnpm run gen-catalog` (`--force` full rebuild). Tests: `pnpm run test:local`.
+Pinned `catalog.generated.json` and `action-parameters-grader.generated.json`.
+
+Human policy lives in `src/translationBench/policy/action-eligibility.json` (+ `.schema.json`):
+
+- **`removedActions`** — actions that must not be gold targets (`type: "action"` exact ids, or `type: "prefix"` `onboarding.*` only). They stay in the catalog for routing.
+- **`parameterOverrides`** — pin per-field **`verify`** only (`type: "field"`). `create` is never set in policy; type/regex derive minting. Override paths are skipped by the LLM classifier when regenerating the grader.
+
+Regenerate grader: `pnpm run gen-policy` (alias `gen-action-parameters-grader`). Full catalog+grader: `pnpm run gen-catalog`. Tests: `pnpm run test:local`.
 
 ## Dataset synthesizer (part 3)
 

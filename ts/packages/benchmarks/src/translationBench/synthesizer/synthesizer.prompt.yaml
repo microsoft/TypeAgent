@@ -57,22 +57,50 @@ template: |-
   - Immutable context may list confusableSiblings — nearby TypeAgent tools a
     careful reader could confuse with the target.
   - When confusableSiblings is non-empty, every seed/positive utterance MUST
-    uniquely mean the target action. Prefer the listed preferTargetCues and
-    never rely on phrasing that also fits a sibling (avoidCuesThatMeanSibling).
-  - Example collision to avoid: "Open the Apple stock quote in a new tab" can
-    mean either browser.openWebPage or browser.followLinkByText. Prefer
-    "Go to the Apple stock quote website" (openWebPage) or "Click the link
-    titled Apple stock quote" (followLinkByText).
-  - Double-meaning positives are rejected by the format checker as
-    AMBIGUOUS_INTENT before semantic review.
+    uniquely mean the target action (natural language only; no fixed phrase
+    lists). Do not write phrasing that also fits a sibling.
+  - After quality checks, the row is run on multiple translators; split or
+    non-gold agreement rejects the row as AMBIGUOUS_INTENT.
 
-  Diversify negatives across missing information, ambiguity, negation,
-  non-action questions, and contrastive adjacent intents that this target rule
-  must not capture. expectedActions remains [] because these cases score
-  target-rule abstention.
+  Negatives (hard fairness requirement — empty expectedActions):
+  - Scorer treats expectedActions: [] as "translator must emit ZERO actions"
+    across the FULL active schema set (chat, help, history, lookup, and every
+    other loaded tool — not merely "not the target"). Only write negatives
+    where that zero-action gold is fair.
+  - ALLOWED empty-gold kind (set dimensions.negativeKind exactly):
+      pure_refusal — utterance MUST OPEN with don't / do not / never /
+        leave … alone / hands off / do nothing / refrain from / avoid doing
+        the target, with NO alternate task, NO question, and NO request for
+        explanation. Allowed trailing abstain/reason only
+        ("; I haven't saved…", "; let it keep playing", "; leave it unchanged").
+        Templates: "Don't take a screenshot.", "Leave my tabs alone.",
+        "Do not open any websites right now.",
+        "Don't enable Game Mode; I need it off for this comparison."
+  - FORBIDDEN as empty-gold negatives (deterministic shape gate + semantic
+    checker reject BAD_NEGATIVE — prior 1k had ~99% unfair empties / ~97% FPR):
+      non_action_question / definition / meta / status ("What does goBack mean?",
+        "Is Bluetooth enabled?", "Has the flow been deleted?") — invite
+        chat/help/history/lookup under a full catalog
+      missing_info that still invites a tool ("Which list?" → listLists)
+      contrastive adjacent/sibling commands ("close only this tab" as neg for
+        closeAll, "search Bing for MSFT" as neg for changeSearchProvider,
+        "click the link…" as neg for openWebPage, "scroll up" as neg for
+        scrollDown) — these are OTHER actions, not zero-action gold
+      refuse-then-alternate ("Don't close all; just close this one",
+        "Don't open a site—just tell me whether…")
+      partial constraints ("Build the solution, but don't start debugging",
+        "open X but don't bookmark")
+      bare stop/cancel/sibling imperatives ("Stop reading the webpage",
+        "Cancel my appointment") — often map to stop*/cancel* tools
+      how-to / soft solicits ("How do I add X?", "Can you open Y?")
+      capability questions; trailing "what should I do instead?"
+      any imperative / toolable / answerable request a correct translator would
+        map to ANY loaded tool
+  - Every negative in this row MUST be pure_refusal and pass the shape gate.
+    Do not mint definition, status, or sibling-command empties.
 
   Use dimensions to label each case's scenario, linguistic form, and positive
-  variation or negative boundary reason.
+  variation or negativeKind / negative boundary reason.
 
   Each genCase must contain exactly id, role, utterance, expectedActions, order,
   dimensions, and optional history.
@@ -86,6 +114,9 @@ template: |-
   Gold parameters (hard requirement for seed + every positive):
   - Only include parameters the utterance (or allowed history) clearly supports.
   - Prefer omit over writing a value when the user did not ask for that field.
+  - Exception: if you include a nested object, every required property of that
+    object in the tool schema MUST be present (e.g. TermFilter.timeRange). Prefer
+    phrasing the utterance so those required fields are naturally supported.
   - NEVER mint: schema default polarity flags (e.g. unstar:false on "star"),
     empty strings, empty arrays, invented URLs/nonces/cursor/editor context,
     or dual fields that restate another parameter (public:true + private:false).
