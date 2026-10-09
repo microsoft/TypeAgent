@@ -12,6 +12,7 @@ import type {
     ViewPublicationStatus,
     DerivedViewContent,
     ViewKind,
+    ViewCitation,
 } from "@typeagent/memory-service";
 import { invokeMemory, invokeView } from "./viewClient";
 import { rbButton, rbError, rbNode } from "./memoryHubRunbookUi";
@@ -30,7 +31,13 @@ function jsonEditor(label: string, value: unknown): HTMLTextAreaElement {
 function editableEdges(view: ViewVersion): ViewRelationshipInput[] {
     return view.relationships.flatMap((edge) => {
         if (edge.origin === "system") return [];
-        const { schemaVersion, family, origin, reviewState, ...input } = edge;
+        const {
+            schemaVersion: _schemaVersion,
+            family: _family,
+            origin: _origin,
+            reviewState: _reviewState,
+            ...input
+        } = edge;
         return [input];
     });
 }
@@ -616,6 +623,41 @@ export function mountMemoryHubViews(
             );
     }
 
+    function showTimelineEvidence(
+        view: ViewVersion,
+        citation: ViewCitation,
+    ): void {
+        void action(async () => {
+            const capturedSequence = sequence;
+            const original = citation.evidence
+                ? await invokeView("memoryHubEvidence", {
+                      corpusId: view.corpusId,
+                      kind: "event",
+                      objectId: citation.evidence.eventId,
+                      revisionId: citation.revisionId,
+                  })
+                : await invokeView("memoryHubRunbookOriginal", {
+                      corpusId: view.corpusId,
+                      sourceId: citation.sourceId,
+                      revisionId: citation.revisionId,
+                      locator: citation.locator,
+                  });
+            if (
+                capturedSequence !== sequence ||
+                options.scope() !== view.corpusId
+            )
+                return;
+            if ("available" in original && !original.available)
+                throw new Error(
+                    original.error ?? "Original timeline evidence unavailable",
+                );
+            comparison.append(
+                rbNode("h5", original.title),
+                rbNode("pre", original.content),
+            );
+        });
+    }
+
     function showEditor(view: ViewVersion): void {
         if (!discardChanges()) return;
         if (view.content.kind === "procedure")
@@ -665,44 +707,7 @@ export function mountMemoryHubViews(
                       () => {
                           dirty = true;
                       },
-                      (citation) => {
-                          void action(async () => {
-                              const capturedSequence = sequence;
-                              const original = citation.evidence
-                                  ? await invokeView("memoryHubEvidence", {
-                                        corpusId: view.corpusId,
-                                        kind: "event",
-                                        objectId: citation.evidence.eventId,
-                                        revisionId: citation.revisionId,
-                                    })
-                                  : await invokeView(
-                                        "memoryHubRunbookOriginal",
-                                        {
-                                            corpusId: view.corpusId,
-                                            sourceId: citation.sourceId,
-                                            revisionId: citation.revisionId,
-                                            locator: citation.locator,
-                                        },
-                                    );
-                              if (
-                                  capturedSequence !== sequence ||
-                                  options.scope() !== view.corpusId
-                              )
-                                  return;
-                              if (
-                                  "available" in original &&
-                                  !original.available
-                              )
-                                  throw new Error(
-                                      original.error ??
-                                          "Original timeline evidence unavailable",
-                                  );
-                              comparison.append(
-                                  rbNode("h5", original.title),
-                                  rbNode("pre", original.content),
-                              );
-                          });
-                      },
+                      (citation) => showTimelineEvidence(view, citation),
                   )
                 : undefined;
         const content =

@@ -181,6 +181,36 @@ function endpointKey(
     throw new Error("Unsupported relationship endpoint");
 }
 
+function validateRelationshipDirection(
+    edge: ViewRelationshipInput,
+    kind: ViewSaveRequest["content"]["kind"],
+): void {
+    if (
+        !["supportedBy", "dependsOn", "corrects", "supersedes"].includes(
+            edge.predicate,
+        )
+    )
+        throw new Error("Unsupported relationship predicate");
+    const correction =
+        edge.predicate === "corrects" || edge.predicate === "supersedes";
+    if (
+        edge.from?.kind !== "section" ||
+        (correction ? edge.to?.kind !== "section" : edge.to?.kind !== "source")
+    )
+        throw new Error(
+            "Evidence relationships require section-to-source endpoints; corrections require section-to-section endpoints",
+        );
+    if (
+        correction &&
+        (kind !== "timeline" ||
+            edge.from.sectionId ===
+                (edge.to.kind === "section" ? edge.to.sectionId : undefined))
+    )
+        throw new Error(
+            "Corrections require distinct existing timeline records",
+        );
+}
+
 function validateRelationships(
     edges: ViewRelationshipInput[],
     request: ViewSaveRequest,
@@ -202,34 +232,7 @@ function validateRelationships(
         );
         if (ids.has(edge.id)) throw new Error("Duplicate relationship ID");
         ids.add(edge.id);
-        if (
-            !["supportedBy", "dependsOn", "corrects", "supersedes"].includes(
-                edge.predicate,
-            )
-        )
-            throw new Error("Unsupported relationship predicate");
-        const correction =
-            edge.predicate === "corrects" || edge.predicate === "supersedes";
-        if (
-            edge.from?.kind !== "section" ||
-            (correction
-                ? edge.to?.kind !== "section"
-                : edge.to?.kind !== "source")
-        )
-            throw new Error(
-                "Supported guide relationships are directed from a section to a source revision",
-            );
-        if (
-            correction &&
-            (request.content.kind !== "timeline" ||
-                edge.from.sectionId ===
-                    (edge.to.kind === "section"
-                        ? edge.to.sectionId
-                        : undefined))
-        )
-            throw new Error(
-                "Corrections require distinct existing timeline records",
-            );
+        validateRelationshipDirection(edge, request.content.kind);
         if (edge.id.startsWith("lineage:") || edge.id.startsWith("dependency:"))
             throw new Error("System relationship identities are reserved");
         const key = JSON.stringify([
@@ -244,14 +247,11 @@ function validateRelationships(
             throw new Error("Relationships require exact supporting citations");
         for (const citation of edge.citations)
             validateCitation(citation, sources);
+        const target = edge.to;
         if (
-            edge.to.kind === "source" &&
+            target.kind === "source" &&
             edge.citations.some(
-                (citation) =>
-                    sourceKey(citation) !==
-                    sourceKey(
-                        edge.to as Extract<ViewEndpoint, { kind: "source" }>,
-                    ),
+                (citation) => sourceKey(citation) !== sourceKey(target),
             )
         )
             throw new Error(
@@ -305,6 +305,14 @@ export function validateViewDraft(request: ViewSaveRequest): void {
         "view definition",
     );
     const sources = validateSelector(request.definition.selector);
+    const sections = validateDraftContent(request, sources);
+    validateRelationships(request.relationships, request, sources, sections);
+}
+
+function validateDraftContent(
+    request: ViewSaveRequest,
+    sources: Set<string>,
+): Set<string> {
     if (
         (request.content.kind === "timeline") !==
         (request.definition.selector.kind === "timelineEvidence")
@@ -356,8 +364,7 @@ export function validateViewDraft(request: ViewSaveRequest): void {
             sources,
         );
     }
-
-    validateRelationships(request.relationships, request, sources, sections);
+    return sections;
 }
 
 export function validateViewArchive(request: ViewArchiveRequest): void {
