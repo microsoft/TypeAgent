@@ -292,7 +292,7 @@ stages:
             condition: eq(variables['Agent.OS'], 'Linux')
 
           - script: |
-              node tools/scripts/validateBundledArtifact.mjs --dir "$(stagingDir)/agent-server"
+              node tools/scripts/validateBundledArtifact.mjs --dir "$(stagingDir)/agent-server" --max-files 8200
             displayName: "Validate bundled agent-server ($(platform)-$(arch))"
             workingDirectory: $(buildDirectory)
 
