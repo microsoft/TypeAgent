@@ -622,6 +622,71 @@ describe("project brief configured adapter, publication and lifecycle", () => {
         await expect(save(edited)).rejects.toThrow(
             "ownership is not supported",
         );
+        owner.assignments[0].state = "unknown";
+        owner.assignments[0].owner = null;
+        owner.assignments[0].responsibility = "Capacity";
+        await save(edited);
+        expect((await build()).results[0].state).toBe("merged");
+        const rebuilt = (await current()).content.sections.find(
+            (section) => section.role === "owners",
+        )!.details;
+        expect(rebuilt).toMatchObject({
+            assignments: [{ responsibility: "Capacity", owner: null }],
+        });
+    });
+    test("independent typed status fields merge directly while incompatible overlap conflicts and remains unpublishable", async () => {
+        await build();
+        const { view } = await current();
+        const { recordViewEdits } = await import("../src/viewMerge.js");
+        const human = structuredClone(view);
+        if (human.content.kind !== "projectBrief")
+            throw new Error("Missing project content");
+        const humanStatus = human.content.sections.find(
+            (section) => section.role === "status",
+        )!.details;
+        if (humanStatus.kind !== "status")
+            throw new Error("Missing typed status");
+        humanStatus.project = "blocked";
+        human.edits = recordViewEdits(
+            view,
+            human.content,
+            authoredRelationships(human),
+            "explicit-reader",
+        );
+        const candidate: ViewSynthesisOutput = {
+            content: structuredClone(view.content) as ProjectBriefContent,
+            relationships: authoredRelationships(view),
+            outcome: "projectSummary",
+            missingEvidence: view.generation!.missingEvidence!,
+            ...inventoryEvidence(view.generation!),
+        };
+        const generatedStatus = candidate.content.sections.find(
+            (section) => section.role === "status",
+        )!.details;
+        if (generatedStatus?.kind !== "status")
+            throw new Error("Missing generated status");
+        generatedStatus.incident = "open";
+        const merged = mergeView(human, candidate);
+        expect(merged.conflicts).toEqual([]);
+        expect(
+            merged.output.content.sections.find(
+                (section) => section.role === "status",
+            )?.details,
+        ).toMatchObject({
+            project: "blocked",
+            incident: "open",
+            capacity: "pendingOwnerReview",
+        });
+        const { validateConstructedGuide } = await import(
+            "../src/viewSynthesis.js"
+        );
+        expect(() =>
+            validateConstructedGuide(view.generation!.input!, merged.output),
+        ).toThrow("explicit project evidence");
+        generatedStatus.project = "complete";
+        expect(mergeView(human, candidate).conflicts).toContain(
+            "section:status",
+        );
     });
     test("section and edge tombstones are not resurrected by merge; missing fixed-template context remains unpublishable", async () => {
         await build();

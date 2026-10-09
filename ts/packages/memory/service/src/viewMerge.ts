@@ -8,6 +8,7 @@ import { viewSourceKey } from "./viewContent.js";
 import type {
     DerivedViewContent,
     ViewSection,
+    ProjectBriefDetails,
     ViewEditOperation,
     ViewRelationshipInput,
     ViewSourceSelector,
@@ -165,7 +166,11 @@ function mergeSection(
     const heading = mergeValue(base.heading, human.heading, generated.heading);
     const body = mergeValue(base.body, human.body, generated.body);
     const role = mergeValue(base.role, human.role, generated.role);
-    const details = mergeValue(base.details, human.details, generated.details);
+    const details = mergeProjectDetails(
+        base.details,
+        human.details,
+        generated.details,
+    );
     if (
         typeof heading !== "string" ||
         typeof body !== "string" ||
@@ -183,6 +188,122 @@ function mergeSection(
             ? { details: details as NonNullable<ViewSection["details"]> }
             : {}),
     };
+}
+
+function mergeTypedField<T>(base: T, human: T, generated: T): T | undefined {
+    if (viewHash(human) === viewHash(base)) return generated;
+    if (
+        viewHash(generated) === viewHash(base) ||
+        viewHash(human) === viewHash(generated)
+    )
+        return human;
+    return undefined;
+}
+
+function mergeBriefFields<T extends object>(
+    base: T,
+    human: T,
+    generated: T,
+    skip: Array<keyof T> = [],
+): T | undefined {
+    const result = structuredClone(generated);
+    for (const key of Object.keys(generated) as Array<keyof T>) {
+        if (skip.includes(key)) continue;
+        const value = mergeTypedField(base[key], human[key], generated[key]);
+        if (value === undefined) return undefined;
+        result[key] = value;
+    }
+    return result;
+}
+
+function mergeBriefEntries<T extends { inventoryId: string }>(
+    base: T[],
+    human: T[],
+    generated: T[],
+): T[] | undefined {
+    const result: T[] = [];
+    const ids = new Set(
+        [...generated, ...human, ...base].map((entry) => entry.inventoryId),
+    );
+    for (const id of ids) {
+        const old = base.find((entry) => entry.inventoryId === id);
+        const edited = human.find((entry) => entry.inventoryId === id);
+        const proposed = generated.find((entry) => entry.inventoryId === id);
+        if (!edited && (!proposed || viewHash(old) === viewHash(proposed)))
+            continue;
+        const merged =
+            old && edited && proposed
+                ? mergeBriefFields(old, edited, proposed)
+                : mergeTypedField(old, edited, proposed);
+        if (!merged) return undefined;
+        result.push(merged);
+    }
+    return result;
+}
+
+function mergeProjectDetails(
+    base: ProjectBriefDetails | undefined,
+    human: ProjectBriefDetails | undefined,
+    generated: ProjectBriefDetails | undefined,
+): ProjectBriefDetails | undefined {
+    const simple = mergeTypedField(base, human, generated);
+    if (simple) return simple;
+    if (
+        !base ||
+        !human ||
+        !generated ||
+        base.kind !== human.kind ||
+        base.kind !== generated.kind
+    )
+        return undefined;
+    switch (generated.kind) {
+        case "owners": {
+            if (base.kind !== "owners" || human.kind !== "owners")
+                return undefined;
+            return mergeOwnersDetails(base, human, generated);
+        }
+        case "milestones": {
+            if (base.kind !== "milestones" || human.kind !== "milestones")
+                return undefined;
+            return mergeBriefItemDetails(base, human, generated);
+        }
+        case "decisions": {
+            if (base.kind !== "decisions" || human.kind !== "decisions")
+                return undefined;
+            return mergeBriefItemDetails(base, human, generated);
+        }
+        case "risks": {
+            if (base.kind !== "risks" || human.kind !== "risks")
+                return undefined;
+            return mergeBriefItemDetails(base, human, generated);
+        }
+        default:
+            return mergeBriefFields(base, human, generated);
+    }
+}
+
+function mergeBriefItemDetails<
+    D extends { items: Array<{ inventoryId: string }> },
+>(base: D, human: D, generated: D): D | undefined {
+    const fields = mergeBriefFields(base, human, generated, ["items"]);
+    const items = mergeBriefEntries(base.items, human.items, generated.items);
+    if (!fields || !items) return undefined;
+    fields.items = items;
+    return fields;
+}
+
+function mergeOwnersDetails(
+    base: Extract<ProjectBriefDetails, { kind: "owners" }>,
+    human: Extract<ProjectBriefDetails, { kind: "owners" }>,
+    generated: Extract<ProjectBriefDetails, { kind: "owners" }>,
+): Extract<ProjectBriefDetails, { kind: "owners" }> | undefined {
+    const fields = mergeBriefFields(base, human, generated, ["assignments"]);
+    const assignments = mergeBriefEntries(
+        base.assignments,
+        human.assignments,
+        generated.assignments,
+    );
+    return fields && assignments ? { ...fields, assignments } : undefined;
 }
 
 export function mergeView(

@@ -358,6 +358,10 @@ human-edited final content. Outcome is `projectSummary`; guide-only confirmed
 recovery requirements do not apply. Exact-artifact proof, policy precedence,
 edit attribution, bounded merge/conflicts, history, publication/index retry,
 privacy quarantine and published-only search use the same owning store.
+Independent typed fields merge directly; assignment/milestone/decision/risk items
+are matched by stable inventory identity, retaining explicit removals. Incompatible
+field or removal-versus-change overlap remains a durable conflict, never an LLM
+choice. A clean merge still needs exact final-artifact validation.
 Positive model audits are not semantic-quality guarantees.
 Explicit corpus clear also purges derived revisions, proofs, jobs, conflicts,
 policy overrides and indexes from the recoverable private history; legacy procedure
