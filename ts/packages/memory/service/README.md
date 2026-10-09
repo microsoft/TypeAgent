@@ -381,10 +381,18 @@ From the service package:
 
 ```powershell
 node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts events <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts events <corpusId> <nextContinuationToken>
 node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts event <corpusId> <eventId>
 node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts build timeline-request.json
 node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts read <corpusId> incident-timeline
 ```
+
+The `events` command returns up to 200 records per page. Pass its
+`nextContinuationToken` as the optional last argument to discover subsequent
+records; repeat until the response has no continuation token.
+Forgetting multiple events aborts affected builds per event but performs one
+managed view-history purge and procedure-index rebuild for the batch. The
+persisted batch selection is also used for interrupted-purge recovery.
 
 The same `buildViews` request is supported by in-process/RPC clients,
 `memory_views_build` over MCP, host IPC and authenticated browser transports.

@@ -2228,11 +2228,10 @@ export class FileMemoryService
             const deletedIds = new Set(deleted.map((event) => event.eventId));
             for (const event of deleted) {
                 this.viewBuilds.forgetEvent(request.corpusId, event.eventId);
-                await this.personalHowToStore.forgetEvent(
-                    request.corpusId,
-                    event.eventId,
-                );
             }
+            await this.personalHowToStore.forgetEvents(request.corpusId, [
+                ...deletedIds,
+            ]);
             const remaining = runtime.events.filter(
                 (event) => !deletedIds.has(event.eventId),
             );

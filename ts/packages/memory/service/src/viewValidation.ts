@@ -116,6 +116,24 @@ function validateSections(sections: ViewSection[], kind: string): Set<string> {
     return ids;
 }
 
+function validateCanonicalEvidence(
+    value: Extract<ViewEndpoint, { kind: "source" }> | ViewCitation,
+    label: string,
+): void {
+    if (value.evidence === undefined) return;
+    if (
+        !value.evidence ||
+        typeof value.evidence !== "object" ||
+        value.evidence.kind !== "event" ||
+        value.evidence.eventId !== value.sourceId ||
+        typeof value.revisionId !== "string" ||
+        !/^[0-9a-f]{64}$/.test(value.revisionId)
+    )
+        throw new Error(`Invalid canonical event ${label} provenance`);
+    onlyKeys(value.evidence, ["kind", "eventId"], "event evidence");
+    assertViewIdentifier("event ID", value.evidence.eventId);
+}
+
 function validateCitation(value: ViewCitation, sources: Set<string>): void {
     if (
         !value ||
@@ -137,15 +155,7 @@ function validateCitation(value: ViewCitation, sources: Set<string>): void {
         ["sourceId", "revisionId", "locator", "excerpt", "evidence"],
         "view citation",
     );
-    if (value.evidence) {
-        onlyKeys(value.evidence, ["kind", "eventId"], "event evidence");
-        if (
-            value.evidence.kind !== "event" ||
-            value.evidence.eventId !== value.sourceId ||
-            !/^[0-9a-f]{64}$/.test(value.revisionId)
-        )
-            throw new Error("Invalid canonical event citation provenance");
-    }
+    validateCanonicalEvidence(value, "citation");
 }
 
 function endpointKey(
@@ -160,6 +170,9 @@ function endpointKey(
             ["kind", "sourceId", "revisionId", "evidence"],
             "source endpoint",
         );
+        assertViewIdentifier("source ID", value.sourceId);
+        assertViewIdentifier("revision ID", value.revisionId);
+        validateCanonicalEvidence(value, "endpoint");
         if (
             !sources.has(
                 value.evidence
