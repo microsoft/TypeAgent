@@ -87,6 +87,8 @@ const { createDocMemorySettings } = await import(
     "@typeagent/conversation-memory"
 );
 const { viewHash } = await import("../src/viewMerge.js");
+const { ViewHistory } = await import("../src/viewHistory.js");
+const { TypedViewStore } = await import("../src/personalHowToStore.js");
 
 describe("timeline configured service pipeline", () => {
     let root: string;
@@ -331,6 +333,253 @@ describe("timeline configured service pipeline", () => {
         ).toMatchObject({ state: "complete", results: [{ state: "draft" }] });
         service = open();
     });
+    test("CLI continuation discovers canonical events beyond the first 200", async () => {
+        const events = await Promise.all(
+            Array.from({ length: 201 }, (_, index) =>
+                event(`CLI pagination observation ${index}`),
+            ),
+        );
+        await service.close();
+        const args = [
+            "--store",
+            root,
+            "--enable-view-drafts",
+            "events",
+            corpusId,
+        ];
+        const first = await runMemoryViewsCli(args);
+        expect(first).toMatchObject({
+            items: expect.any(Array),
+            nextContinuationToken: expect.any(String),
+        });
+        if (
+            !first ||
+            typeof first !== "object" ||
+            !("items" in first) ||
+            !Array.isArray(first.items) ||
+            !("nextContinuationToken" in first) ||
+            typeof first.nextContinuationToken !== "string"
+        )
+            throw new Error(
+                "Expected the first CLI event page and continuation",
+            );
+        expect(first.items).toHaveLength(200);
+        const second = await runMemoryViewsCli([
+            ...args,
+            first.nextContinuationToken,
+        ]);
+        if (
+            !second ||
+            typeof second !== "object" ||
+            !("items" in second) ||
+            !Array.isArray(second.items)
+        )
+            throw new Error("Expected the second CLI event page");
+        expect(second.items).toHaveLength(1);
+        expect(second).not.toHaveProperty("nextContinuationToken");
+        expect(
+            [...first.items, ...second.items]
+                .map((item) => item.eventId)
+                .sort(),
+        ).toEqual(events.map((item) => item.eventId).sort());
+        service = open();
+    }, 60000);
+
+    test.each([
+        { evidence: { kind: "invalid" } },
+        { sourceId: "unrelated-event" },
+        { revisionId: "invalid-revision" },
+        { evidence: { extra: true } },
+        { evidence: null },
+        { evidence: "invalid" },
+    ])("rejects malformed canonical source endpoints: %j", async (change) => {
+        const canonical = await event("Canonical endpoint validation");
+        expect(
+            (await build(undefined, [canonical.eventId])).results[0].state,
+        ).toBe("draft");
+        const snapshot = await service.listViews(corpusId);
+        const view = snapshot.views[0];
+        const relationships = authoredRelationships(view);
+        if (view.content.kind !== "timeline")
+            throw new Error("Expected canonical timeline content");
+        const target = relationships[0].to;
+        if (target.kind !== "source" || !target.evidence)
+            throw new Error("Expected a canonical source endpoint");
+        const evidence = change.evidence;
+        Object.assign(target, {
+            ...change,
+            ...("evidence" in change
+                ? {
+                      evidence:
+                          evidence && typeof evidence === "object"
+                              ? { ...target.evidence, ...evidence }
+                              : evidence,
+                  }
+                : {}),
+        });
+        const callCount = calls.length;
+        await expect(
+            service.saveViewDraft({
+                corpusId,
+                viewId: view.viewId,
+                expectedHead: snapshot.head,
+                expectedVersion: view.version,
+                definition: {
+                    viewId: view.viewId,
+                    kind: "timeline",
+                    selector: view.definition.selector,
+                },
+                content: view.content,
+                relationships,
+            }),
+        ).rejects.toThrow(/canonical event endpoint|event evidence/);
+        expect(calls).toHaveLength(callCount);
+        expect((await service.listViews(corpusId)).head).toBe(snapshot.head);
+    });
+
+    test("bulk event forgetting purges managed history and rebuilds its index once", async () => {
+        const removed = [
+            await event("First forgotten observation"),
+            await event("Second forgotten observation"),
+        ];
+        const retained = await event(
+            "Unrelated retained observation",
+            "2026-10-06T10:00:00Z",
+            "2026-10-05T10:00:00Z",
+        );
+        expect(
+            (
+                await build(
+                    undefined,
+                    removed.map((item) => item.eventId),
+                    "removed-timeline",
+                    true,
+                )
+            ).results[0].state,
+        ).toBe("searchable");
+        expect(
+            (
+                await build(
+                    undefined,
+                    [retained.eventId],
+                    "retained-timeline",
+                    true,
+                )
+            ).results[0].state,
+        ).toBe("searchable");
+        const purge = jest.spyOn(ViewHistory.prototype, "purge");
+        const rebuild = jest.spyOn(TypedViewStore.prototype, "rebuildIndex");
+        try {
+            expect(
+                await service.forgetEvents({
+                    corpusId,
+                    eventTo: "2026-10-05T09:00:00Z",
+                    forgetLinkedSources: false,
+                }),
+            ).toMatchObject({ deletedEventCount: 2 });
+            expect(purge).toHaveBeenCalledTimes(1);
+            expect(rebuild).toHaveBeenCalledTimes(1);
+            expect(JSON.parse(purge.mock.calls[0][0])).toEqual({
+                kind: "events",
+                eventIds: expect.arrayContaining(
+                    removed.map((item) => item.eventId),
+                ),
+            });
+        } finally {
+            purge.mockRestore();
+            rebuild.mockRestore();
+        }
+        expect(await service.listViews(corpusId)).toMatchObject({
+            views: [{ viewId: "retained-timeline" }],
+        });
+        expect(
+            await service.getViewHistory({
+                corpusId,
+                viewId: "removed-timeline",
+            }),
+        ).toHaveLength(0);
+        await service.close();
+        service = open();
+        expect(
+            await service.searchViews({
+                corpusId,
+                query: "Retained",
+                freshness: "current",
+                kinds: ["timeline"],
+            }),
+        ).toMatchObject([{ view: { viewId: "retained-timeline" } }]);
+        expect(
+            await service.getEvent(corpusId, removed[0].eventId),
+        ).toBeUndefined();
+        expect(
+            await service.getEvent(corpusId, retained.eventId),
+        ).toBeDefined();
+    });
+
+    test("restart recovers the complete interrupted event-batch privacy selection", async () => {
+        const removed = [
+            await event("First interrupted batch observation"),
+            await event("Second interrupted batch observation"),
+        ];
+        expect(
+            (
+                await build(
+                    undefined,
+                    removed.map((item) => item.eventId),
+                )
+            ).results[0].state,
+        ).toBe("draft");
+        const retained = await event("Unrelated batch recovery evidence");
+        expect(
+            (await build(undefined, [retained.eventId], "retained-timeline"))
+                .results[0].state,
+        ).toBe("draft");
+        const purge = jest.spyOn(ViewHistory.prototype, "purge");
+        purge.mockImplementationOnce(
+            async (marker, sanitize, entries, cleanup) => {
+                purge.mockRestore();
+                const interrupted = new ViewHistory<unknown>(
+                    path.join(root, corpusId, "personal-how-to"),
+                    () => undefined,
+                    async (point) => {
+                        if (point === "purge-prepared")
+                            throw new Error("Batch purge interrupted");
+                    },
+                );
+                await interrupted.purge(marker, sanitize, entries, cleanup);
+            },
+        );
+        try {
+            await expect(
+                service.forgetEvents({
+                    corpusId,
+                    eventIds: removed.map((item) => item.eventId),
+                    forgetLinkedSources: false,
+                }),
+            ).rejects.toThrow("Batch purge interrupted");
+        } finally {
+            purge.mockRestore();
+        }
+        await service.close();
+        service = open();
+        expect(await service.listViews(corpusId)).toMatchObject({
+            views: [{ viewId: "retained-timeline" }],
+        });
+        expect(
+            await service.getViewHistory({
+                corpusId,
+                viewId: "incident-timeline",
+            }),
+        ).toHaveLength(0);
+        expect(
+            await service.forgetEvents({
+                corpusId,
+                eventIds: removed.map((item) => item.eventId),
+                forgetLinkedSources: false,
+            }),
+        ).toMatchObject({ deletedEventCount: 2 });
+    });
+
     test("canonical corrections preserve rejected history and idempotent replays; edge removals survive repeated rebuilds", async () => {
         const original = await event(
             "Query explanation remains an unconfirmed hypothesis.",

@@ -96,6 +96,34 @@ interface ViewStoreState {
     viewIndexCleanup?: string[];
 }
 
+function forgottenEventIds(marker: string): Set<string> | undefined {
+    if (!marker.startsWith("{")) return undefined;
+    const selection: unknown = JSON.parse(marker);
+    if (!selection || typeof selection !== "object" || !("kind" in selection))
+        throw new Error("Invalid event privacy purge selection");
+    if (selection.kind === "event" && "eventId" in selection) {
+        if (typeof selection.eventId !== "string")
+            throw new Error("Invalid event privacy purge selection");
+        assertViewIdentifier("event ID", selection.eventId);
+        return new Set([selection.eventId]);
+    }
+    if (
+        selection.kind !== "events" ||
+        !("eventIds" in selection) ||
+        !Array.isArray(selection.eventIds) ||
+        !selection.eventIds.length
+    )
+        throw new Error("Invalid event privacy purge selection");
+    return new Set(
+        selection.eventIds.map((id: unknown) => {
+            if (typeof id !== "string")
+                throw new Error("Invalid event privacy purge selection");
+            assertViewIdentifier("event ID", id);
+            return id;
+        }),
+    );
+}
+
 function viewVersions(state: ViewStoreState, viewId: string): ViewVersion[] {
     return Object.prototype.hasOwnProperty.call(state.views, viewId)
         ? state.views[viewId]
@@ -780,23 +808,21 @@ export class TypedViewStore {
 
     private sanitize(state: ViewStoreState, sourceId: string): ViewStoreState {
         const clearingDerived = sourceId === "@clear-derived-views";
-        const forgottenEvent = sourceId.startsWith("{")
-            ? (JSON.parse(sourceId) as { kind: "event"; eventId: string })
-                  .eventId
-            : undefined;
+        const forgottenEvents = forgottenEventIds(sourceId);
         const matches = (value: {
             sourceId: string;
             evidence?: { kind: "event"; eventId: string };
         }) =>
-            forgottenEvent
-                ? value.evidence?.eventId === forgottenEvent
+            forgottenEvents
+                ? value.evidence !== undefined &&
+                  forgottenEvents.has(value.evidence.eventId)
                 : !value.evidence && value.sourceId === sourceId;
         const selected = (
             definition: Pick<ViewVersion["definition"], "selector">,
         ) =>
-            forgottenEvent
-                ? definition.selector.events?.some(
-                      (event) => event.eventId === forgottenEvent,
+            forgottenEvents
+                ? definition.selector.events?.some((event) =>
+                      forgottenEvents.has(event.eventId),
                   )
                 : definition.selector.sources.some(
                       (source) => source.sourceId === sourceId,
@@ -889,8 +915,20 @@ export class TypedViewStore {
     }
 
     public async forgetEvent(corpusId: string, eventId: string): Promise<void> {
+        await this.forgetEvents(corpusId, [eventId]);
+    }
+
+    public async forgetEvents(
+        corpusId: string,
+        eventIds: string[],
+    ): Promise<void> {
+        if (!eventIds.length) return;
+        for (const id of eventIds) assertViewIdentifier("event ID", id);
         await this.history(corpusId).purge(
-            JSON.stringify({ kind: "event", eventId }),
+            JSON.stringify({
+                kind: "events",
+                eventIds: [...new Set(eventIds)],
+            }),
             (state, id) => this.sanitize(state, id),
             (state) => this.entries(state),
             () => this.removeSearchIndex(corpusId),

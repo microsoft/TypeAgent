@@ -24,7 +24,7 @@ node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <comman
   create-corpus <name>
   list <corpusId>
   sources <corpusId>
-  events <corpusId>
+  events <corpusId> [continuationToken]
   event <corpusId> <eventId>
   source <corpusId> <sourceId> [revisionId]
   read <corpusId> <viewId> [revisionId]
@@ -53,7 +53,7 @@ const argumentCounts = new Map<string, readonly [number, number]>([
     ["create-corpus", [1, 1]],
     ["list", [1, 1]],
     ["sources", [1, 1]],
-    ["events", [1, 1]],
+    ["events", [1, 2]],
     ["event", [2, 2]],
     ["source", [2, 3]],
     ["read", [2, 3]],
@@ -231,7 +231,10 @@ export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
             case "events":
                 return await rpc.listEvents({
                     corpusId: values[0],
-                    pageSize: 1000,
+                    pageSize: 200,
+                    ...(values[1] === undefined
+                        ? {}
+                        : { continuationToken: values[1] }),
                 });
             case "event":
                 return await rpc.getEvent(values[0], values[1]);
