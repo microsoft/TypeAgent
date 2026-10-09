@@ -42,6 +42,36 @@ function editableEdges(view: ViewVersion): ViewRelationshipInput[] {
     });
 }
 
+function retainedEvidenceEditor(
+    enabled: boolean,
+    retainedEdges: Map<string, ViewRelationshipInput>,
+    onChange: () => void,
+): HTMLFieldSetElement {
+    const fieldset = rbNode("fieldset");
+    fieldset.append(rbNode("legend", "Retained section evidence"));
+    if (!enabled) return fieldset;
+    for (const edge of retainedEdges.values()) {
+        const label = rbNode("label");
+        const retained = document.createElement("input");
+        retained.type = "checkbox";
+        retained.checked = true;
+        retained.onchange = () => {
+            if (retained.checked) retainedEdges.set(edge.id, edge);
+            else retainedEdges.delete(edge.id);
+            onChange();
+        };
+        label.append(
+            retained,
+            rbNode(
+                "span",
+                `${edge.from.sectionId}: ${edge.predicate} ${edge.to.kind === "source" ? `${edge.to.sourceId} @ ${edge.to.revisionId}` : edge.to.sectionId}`,
+            ),
+        );
+        fieldset.append(label);
+    }
+    return fieldset;
+}
+
 function publicationChoice(label: string, inherit: boolean): HTMLSelectElement {
     const select = document.createElement("select");
     select.setAttribute("aria-label", label);
@@ -721,28 +751,13 @@ export function mountMemoryHubViews(
         const retainedEdges = new Map(
             editableEdges(view).map((edge) => [edge.id, edge]),
         );
-        const projectEvidence = rbNode("fieldset");
-        projectEvidence.append(rbNode("legend", "Retained section evidence"));
-        if (projectEditor)
-            for (const edge of editableEdges(view)) {
-                const label = rbNode("label");
-                const retained = document.createElement("input");
-                retained.type = "checkbox";
-                retained.checked = true;
-                retained.onchange = () => {
-                    if (retained.checked) retainedEdges.set(edge.id, edge);
-                    else retainedEdges.delete(edge.id);
-                    dirty = true;
-                };
-                label.append(
-                    retained,
-                    rbNode(
-                        "span",
-                        `${edge.from.sectionId}: ${edge.predicate} ${edge.to.kind === "source" ? `${edge.to.sourceId} @ ${edge.to.revisionId}` : edge.to.sectionId}`,
-                    ),
-                );
-                projectEvidence.append(label);
-            }
+        const projectEvidence = retainedEvidenceEditor(
+            projectEditor !== undefined,
+            retainedEdges,
+            () => {
+                dirty = true;
+            },
+        );
         const viewPolicy = publicationChoice(
             "View auto-publish after build",
             true,
