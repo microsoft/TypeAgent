@@ -211,7 +211,10 @@ export function createProjectBriefEditor(
         text(
             "Project brief summary",
             content.summary ?? "",
-            (value) => (content.summary = value),
+            (value) => {
+                if (value.trim()) content.summary = value;
+                else delete content.summary;
+            },
             true,
         ),
     );

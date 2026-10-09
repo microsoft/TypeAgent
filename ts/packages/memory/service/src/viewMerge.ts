@@ -231,6 +231,7 @@ function mergeBriefEntries<T extends { inventoryId: string }>(
         const proposed = generated.find((entry) => entry.inventoryId === id);
         if (!edited && (!proposed || viewHash(old) === viewHash(proposed)))
             continue;
+        if (!proposed && viewHash(old) === viewHash(edited)) continue;
         const merged =
             old && edited && proposed
                 ? mergeBriefFields(old, edited, proposed)

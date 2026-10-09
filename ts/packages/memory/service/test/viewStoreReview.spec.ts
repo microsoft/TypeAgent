@@ -14,12 +14,16 @@ import os from "node:os";
 import path from "node:path";
 import { TypedViewStore } from "../src/personalHowToStore.js";
 import { ViewHistory } from "../src/viewHistory.js";
+import { mergeView, recordViewEdits } from "../src/viewMerge.js";
 import type { ProcedureSourceCitation } from "../src/types.js";
 import type {
+    ProjectBriefContent,
     ProcedureViewContent,
     TroubleshootingGuideContent,
     ViewEndpoint,
     ViewRelationshipInput,
+    ViewSynthesisOutput,
+    ViewVersion,
 } from "../src/viewTypes.js";
 
 describe("foundation review regressions", () => {
@@ -53,6 +57,61 @@ describe("foundation review regressions", () => {
             },
         });
     }
+
+    test.each(["policy", "publication", "cleanup", "all"])(
+        "derived purge clears orphan %s state while preserving corpus defaults and runbooks",
+        async (orphan) => {
+            await save([{ sourceId: "retained-source", revisionId: "first" }]);
+            const runbook = await store.get(corpusId, "guide");
+            const history = new ViewHistory<Record<string, unknown>>(
+                path.join(root, corpusId, "personal-how-to"),
+                () => ({}),
+            );
+            const { head, state } = await history.read();
+            state.publicationPolicy = {
+                revision: 3,
+                autoPublish: false,
+                views:
+                    orphan === "policy" || orphan === "all"
+                        ? { "future-brief": { revision: 1, autoPublish: true } }
+                        : {},
+            };
+            if (orphan === "publication" || orphan === "all")
+                state.publications = {
+                    "removed-brief": {
+                        corpusId,
+                        viewId: "removed-brief",
+                        indexState: "pending",
+                    },
+                };
+            if (orphan === "cleanup" || orphan === "all")
+                state.viewIndexCleanup = ["removed-brief"];
+            await history.commit(head, state, {}, "test", "Seed orphan state");
+
+            await store.clearDerivedViews(corpusId);
+
+            expect(await store.getViewPublicationPolicy(corpusId)).toEqual({
+                revision: 3,
+                autoPublish: false,
+                views: {},
+            });
+            expect(await store.getViewIndexCleanup(corpusId)).toEqual([]);
+            expect((await history.read()).state.publications).toEqual({});
+            expect(await store.get(corpusId, "guide")).toEqual(runbook);
+            for (const snapshot of await history.history()) {
+                expect(snapshot.state.publicationPolicy).toEqual({
+                    revision: 3,
+                    autoPublish: false,
+                    views: {},
+                });
+                expect(snapshot.state.publications).toEqual({});
+                expect(snapshot.state.viewIndexCleanup ?? []).toEqual([]);
+            }
+            const purgedHead = (await history.read()).head;
+            await store.clearDerivedViews(corpusId);
+            expect((await history.read()).head).toBe(purgedHead);
+        },
+    );
 
     test.each(["a:b", "a"])(
         "colon-bearing source/revision pairs retain both dependencies and invalidate %s",
@@ -189,4 +248,116 @@ describe("foundation review regressions", () => {
         await store.recover(corpusId);
         expect(await store.list({ corpusId })).toEqual([]);
     });
+});
+
+describe("project brief item deletion merge regressions", () => {
+    function fixture() {
+        const content: ProjectBriefContent = {
+            kind: "projectBrief",
+            title: "Project risks",
+            citations: [],
+            sections: [
+                {
+                    id: "risks",
+                    role: "risks",
+                    heading: "Risks",
+                    body: "Risk inventory",
+                    details: {
+                        kind: "risks",
+                        items: [
+                            { inventoryId: "retained", status: "open" },
+                            { inventoryId: "removed", status: "open" },
+                        ],
+                    },
+                },
+            ],
+        };
+        const current: ViewVersion = {
+            corpusId: "merge-corpus",
+            viewId: "brief",
+            revisionId: "human-revision",
+            version: 2,
+            state: "draft",
+            createdAt: "2026-10-09T00:00:00.000Z",
+            actor: "human",
+            provenance: "human",
+            definition: {
+                viewId: "brief",
+                revisionId: "definition",
+                kind: "projectBrief",
+                selector: { kind: "sources", sources: [] },
+            },
+            content: structuredClone(content),
+            relationships: [],
+            generation: {
+                candidateId: "generated-base",
+                fingerprint: "base-fingerprint",
+                content,
+                relationships: [],
+            },
+        };
+        const human = structuredClone(content);
+        const candidate: ViewSynthesisOutput = {
+            content: structuredClone(content),
+            relationships: [],
+            outcome: "diagnosticOnly",
+            missingEvidence: [],
+        };
+        return { current, human, candidate };
+    }
+
+    test.each(["generated", "human"])(
+        "%s deletion of an unchanged item merges with another item's edit",
+        (deletingSide) => {
+            const { current, human, candidate } = fixture();
+            const generated = candidate.content as ProjectBriefContent;
+            const deleted = deletingSide === "generated" ? generated : human;
+            const edited = deletingSide === "generated" ? human : generated;
+            deleted.sections[0].details = {
+                kind: "risks",
+                items: [{ inventoryId: "retained", status: "open" }],
+            };
+            edited.sections[0].details = {
+                kind: "risks",
+                items: [
+                    { inventoryId: "retained", status: "blocked" },
+                    { inventoryId: "removed", status: "open" },
+                ],
+            };
+            current.edits = recordViewEdits(current, human, [], "human");
+            current.content = human;
+            const merged = mergeView(current, candidate);
+            expect(merged.conflicts).toEqual([]);
+            expect(merged.output.content.sections[0].details).toEqual({
+                kind: "risks",
+                items: [{ inventoryId: "retained", status: "blocked" }],
+            });
+        },
+    );
+
+    test.each(["generated", "human"])(
+        "%s deletion conflicts with an edit to that same item",
+        (deletingSide) => {
+            const { current, human, candidate } = fixture();
+            const generated = candidate.content as ProjectBriefContent;
+            const deleted = deletingSide === "generated" ? generated : human;
+            const edited = deletingSide === "generated" ? human : generated;
+            deleted.sections[0].details = {
+                kind: "risks",
+                items: [{ inventoryId: "retained", status: "open" }],
+            };
+            edited.sections[0].details = {
+                kind: "risks",
+                items: [
+                    { inventoryId: "retained", status: "open" },
+                    { inventoryId: "removed", status: "blocked" },
+                ],
+            };
+            current.edits = recordViewEdits(current, human, [], "human");
+            current.content = human;
+            expect(mergeView(current, candidate).conflicts).toEqual([
+                "section:risks",
+            ]);
+        },
+    );
 });

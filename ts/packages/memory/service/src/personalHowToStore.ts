@@ -834,17 +834,17 @@ export class TypedViewStore {
         );
         state.publications = Object.fromEntries(
             Object.entries(state.publications ?? {}).filter(
-                ([id]) => !affected.has(id),
+                ([id]) => !clearingDerived && !affected.has(id),
             ),
         );
         if (state.viewIndexCleanup)
             state.viewIndexCleanup = state.viewIndexCleanup.filter(
-                (id) => !affected.has(id),
+                (id) => !clearingDerived && !affected.has(id),
             );
         if (state.publicationPolicy)
             state.publicationPolicy.views = Object.fromEntries(
                 Object.entries(state.publicationPolicy.views).filter(
-                    ([id]) => !affected.has(id),
+                    ([id]) => !clearingDerived && !affected.has(id),
                 ),
             );
         state.index.procedures = state.index.procedures.filter(
@@ -881,7 +881,10 @@ export class TypedViewStore {
                 versions.some((version) => !version.compatibility),
             ) &&
             !Object.keys(state.builds ?? {}).length &&
-            !Object.keys(state.conflicts ?? {}).length
+            !Object.keys(state.conflicts ?? {}).length &&
+            !Object.keys(state.publications ?? {}).length &&
+            !state.viewIndexCleanup?.length &&
+            !Object.keys(state.publicationPolicy?.views ?? {}).length
         )
             return;
         // This identity cannot collide with a validated source ID and is recoverable by the same purge journal.

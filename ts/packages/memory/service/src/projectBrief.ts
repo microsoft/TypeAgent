@@ -263,7 +263,7 @@ function validateSectionEvidence(
             validateRisks(details, items);
             break;
         case "context":
-            validateContext(details, items);
+            validateContext(details, items, inventory);
             break;
     }
 }
@@ -298,8 +298,17 @@ function validateOwnership(
                         citation.excerpt.includes(assignment.owner!),
                     ))) ||
             (assignment.state === "known" && item.status !== "confirmed") ||
-            (assignment.state !== "known" &&
-                !["unknown", "blocked"].includes(item.status))
+            (assignment.state === "unknown" &&
+                !["unknown", "blocked"].includes(item.status)) ||
+            (assignment.state === "unassigned" &&
+                !fieldEvidence(
+                    [item],
+                    "owner",
+                    new RegExp(
+                        `\\b(?:owner(?:ship)?(?:\\s+is|\\s*:)?\\s+unassigned|no owner(?:\\s+is)?\\s+assigned)\\b|^(?:Owner:\\s*)?${assignment.responsibility.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+has no owner\\.?$`,
+                        "i",
+                    ),
+                ))
         )
             throw new Error(
                 "Project ownership is not supported by the checked source fact",
@@ -434,6 +443,7 @@ function validateRisks(
 function validateContext(
     details: Extract<ProjectBriefDetails, { kind: "context" }>,
     items: ViewInventoryItem[],
+    inventory: ViewFactInventory,
 ): void {
     if (
         !items.some((item) =>
@@ -442,6 +452,16 @@ function validateContext(
     )
         throw new Error(
             "Project brief context requires checked context or unknown timing evidence",
+        );
+    if (
+        details.asOf === null &&
+        inventory.items.some(
+            (item) =>
+                item.kind === "projectAsOf" && item.status === "confirmed",
+        )
+    )
+        throw new Error(
+            "Project as-of cannot be unknown when checked record evidence confirms it",
         );
     if (
         details.asOf !== null &&

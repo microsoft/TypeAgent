@@ -178,6 +178,19 @@ test("fixed project template uses human-readable fields, honest unknowns and exa
     expect(original).toHaveBeenCalledWith("status", "current", "chars:0-12");
 });
 
+test("project summary input omits blank values and preserves nonblank text", () => {
+    const changed = jest.fn();
+    const editor = createProjectBriefEditor(content, changed, jest.fn());
+    change(editor.element, "Project brief summary", "");
+    expect(editor.read()).not.toHaveProperty("summary");
+    change(editor.element, "Project brief summary", " \t\n ");
+    expect(editor.read()).not.toHaveProperty("summary");
+    change(editor.element, "Project brief summary", "  Updated summary\n ");
+    expect(editor.read().summary).toBe("  Updated summary\n ");
+    expect(content.summary).toBe("Project active; incident closed");
+    expect(changed).toHaveBeenCalledTimes(3);
+});
+
 describe("Memory Hub project brief selector, editor and scope safety", () => {
     let host: HTMLElement;
     let panel: ReturnType<typeof mountMemoryHubViews>;
@@ -301,6 +314,31 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         );
         expect(errors).toEqual([]);
     });
+    test.each(["", " \t\n ", "  Updated summary\n "])(
+        "saving project summary %j omits blank values and preserves nonblank text",
+        async (summary) => {
+            await panel.refresh();
+            click(host, "Payments reliability (draft, v1)");
+            change(host, "Project brief summary", summary);
+            click(host, "Save explicit edits");
+            await settle();
+            const request = invoke.mock.calls.find(
+                ([method]) => method === "memorySaveViewDraft",
+            )?.[1];
+            expect(request).toEqual(
+                expect.objectContaining({
+                    definition: view.definition,
+                    content: expect.objectContaining({ kind: "projectBrief" }),
+                }),
+            );
+            if (summary.trim()) {
+                expect(request).toHaveProperty("content.summary", summary);
+            } else {
+                expect(request).not.toHaveProperty("content.summary");
+            }
+            expect(errors).toEqual([]);
+        },
+    );
     test("dirty project editor blocks builds without losing changes", async () => {
         await panel.refresh();
         click(host, "Payments reliability (draft, v1)");

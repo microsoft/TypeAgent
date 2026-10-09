@@ -109,28 +109,9 @@ Do not produce view prose, relationships, a proposed artifact or reviewer expect
         async checkInventory(input, inventory, signal) {
             const passages = retainedPassages(input);
             const raw = await complete(
-                input.definition.kind === "projectBrief"
-                    ? `${evidenceRules}
-Construct a fixed-template projectBrief with seven sections: goalsScope, owners, status, milestones, decisions, risks, context.
-Use stable meaningful section IDs, heading, connective prose and inventoryIds for each section.
-Include typed details matching each section role. All details reference checked inventory IDs whose immutable statements
-are rendered into that section by the host. Do not retag recovery/guide steps or create execution instructions.
-Status separates project unknown/active/blocked/complete from incident unknown/open/closed/notApplicable and capacity
-unknown/pendingOwnerReview/validated/notApplicable. Blocked capacity remains pendingOwnerReview.
-Owners have responsibility, known/unknown/unassigned state, owner (null unless a confirmed recorded name), inventoryId.
-Milestones have inventoryId, source status (proposed/confirmed/blocked/deferred/unknown), date (null unless explicitly recorded).
-Decisions have inventoryId and the checked fact status. Risks have inventoryId and open/blocked/resolved/unknown status.
-Resolved risks require explicit confirmed resolution; confirmed or observed open risks remain open.
-Context has asOf (null if unknown), basis unknown/recordEvidence, inventoryIds. Never use capture or modified metadata
-as project knowledge time. A known asOf requires a confirmed projectAsOf fact, not a generic timing fact.
-goalsScope details contain kind and inventoryIds.
-Every detail object has kind matching the role. Preserve provisional commitments, workload memory/headroom warnings,
-unknown owners, open questions and pending owner review. Inventory coverage cannot be hidden metadata.
-Exclusions are only checked background outsideScope or exact duplicate witnesses. Outcome is projectSummary.
-List missingEvidence honestly; never invent names, commitments, dates, completion or capacity validation.`
-                    : `${evidenceRules}
+                `${evidenceRules}
 Independently compare the source-only inventory against EVERY complete source and passage.
-No guide exists and none is shown. Inspect every item and source decision exactly once.
+No view exists and none is shown. Inspect every item and source decision exactly once.
 Reject omitted measurements/units/comparisons, wrong hypothesis or decision state, lost guards or context,
 false authority/recovery/project completion, lost blocked follow-up, and wrong occurrence-versus-learned time.
 Audit metadata/duplicate/outsideScope exclusions critically: never accept blanket irrelevance.
@@ -153,7 +134,26 @@ A positive overall verdict cannot override individual failures or missing facts.
                     "Configured construction requires a checked evidence-first inventory",
                 );
             const raw = await complete(
-                `${evidenceRules}
+                input.definition.kind === "projectBrief"
+                    ? `${evidenceRules}
+Construct a fixed-template projectBrief with seven sections: goalsScope, owners, status, milestones, decisions, risks, context.
+Use stable meaningful section IDs, heading, connective prose and inventoryIds for each section.
+Include typed details matching each section role. All details reference checked inventory IDs whose immutable statements
+are rendered into that section by the host. Do not retag recovery/guide steps or create execution instructions.
+Status separates project unknown/active/blocked/complete from incident unknown/open/closed/notApplicable and capacity
+unknown/pendingOwnerReview/validated/notApplicable. Blocked capacity remains pendingOwnerReview.
+Owners have responsibility, known/unknown/unassigned state, owner (null unless a confirmed recorded name), inventoryId.
+Milestones have inventoryId, source status (proposed/confirmed/blocked/deferred/unknown), date (null unless explicitly recorded).
+Decisions have inventoryId and the checked fact status. Risks have inventoryId and open/blocked/resolved/unknown status.
+Resolved risks require explicit confirmed resolution; confirmed or observed open risks remain open.
+Context has asOf (null if unknown), basis unknown/recordEvidence, inventoryIds. Never use capture or modified metadata
+as project knowledge time. A known asOf requires a confirmed projectAsOf fact, not a generic timing fact.
+goalsScope details contain kind and inventoryIds.
+Every detail object has kind matching the role. Preserve provisional commitments, workload memory/headroom warnings,
+unknown owners, open questions and pending owner review. Inventory coverage cannot be hidden metadata.
+Exclusions are only checked background outsideScope or exact duplicate witnesses. Outcome is projectSummary.
+List missingEvidence honestly; never invent names, commitments, dates, completion or capacity validation.`
+                    : `${evidenceRules}
 Construct a conditional troubleshootingGuide, not a raw session concatenation or executable procedure.
 Use all seven roles: description, prerequisites, diagnostic, guard, verification, recovery, context.
 For each section select inventoryIds and write concise connective/conditional prose.

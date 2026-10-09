@@ -8,6 +8,7 @@ import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
 import type {
     ProjectBriefContent,
     ViewBuildJob,
+    ViewFactInventory,
     ViewSynthesisOutput,
 } from "../src/viewTypes.js";
 import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
@@ -26,7 +27,11 @@ const jest = runtimeJest as typeof runtimeJest & {
     ): void;
 };
 const actual = await import("@typeagent/aiclient");
-const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
+const calls: Array<{
+    name: string;
+    input: Record<string, unknown>;
+    instructions: string;
+}> = [];
 const embeddings: string[] = [];
 let alter: (name: string, value: unknown) => unknown = (_name, value) => value;
 let prose = "Source-grounded project context.\n\n";
@@ -59,7 +64,13 @@ jest.unstable_mockModule("@typeagent/aiclient", () => ({
                 if (!message)
                     throw new Error("Configured project request lacks input");
                 const input = evidenceRecord(JSON.parse(message.content));
-                calls.push({ name: schema.name, input });
+                calls.push({
+                    name: schema.name,
+                    input,
+                    instructions:
+                        messages.find((message) => message.role === "system")
+                            ?.content ?? "",
+                });
                 return {
                     success: true,
                     data: JSON.stringify(
@@ -86,6 +97,8 @@ const { createDocMemorySettings } = await import(
 );
 const { viewHash, mergeView } = await import("../src/viewMerge.js");
 const { inventoryEvidence } = await import("../src/viewInventoryCoverage.js");
+const { renderInventoryItem } = await import("../src/viewInventory.js");
+const { validateProjectBriefEvidence } = await import("../src/projectBrief.js");
 
 describe("project brief configured adapter, publication and lifecycle", () => {
     let root: string;
@@ -221,6 +234,18 @@ describe("project brief configured adapter, publication and lifecycle", () => {
         ]);
         expect(calls[0].input).not.toHaveProperty("output");
         expect(calls[1].input).not.toHaveProperty("output");
+        expect(calls[1].instructions).toContain(
+            "Independently compare the source-only inventory",
+        );
+        expect(calls[1].instructions).not.toContain(
+            "Construct a fixed-template",
+        );
+        expect(calls[2].instructions).toContain(
+            "Construct a fixed-template projectBrief",
+        );
+        expect(calls[2].instructions).not.toContain(
+            "Construct a conditional troubleshootingGuide",
+        );
         const { view, content } = await current();
         expect(
             content.sections.find((section) => section.role === "status")
@@ -634,6 +659,186 @@ describe("project brief configured adapter, publication and lifecycle", () => {
             assignments: [{ responsibility: "Capacity", owner: null }],
         });
     });
+    test("human save cannot relabel unknown ownership as unassigned", async () => {
+        expect((await build()).results[0].state).toBe("draft");
+        const { view, content } = await current();
+        const edited = structuredClone(content);
+        const owners = edited.sections.find(
+            (section) => section.role === "owners",
+        )!.details;
+        if (owners.kind !== "owners") throw new Error("Missing owners");
+        owners.assignments[0].state = "unassigned";
+        await expect(save(edited)).rejects.toThrow(
+            "ownership is not supported",
+        );
+        expect((await current()).view.revisionId).toBe(view.revisionId);
+    });
+    test.each([
+        "Owner: Capacity validation has no owner assigned.",
+        "Owner: Capacity validation ownership is unassigned.",
+        "Owner: Capacity validation has no owner.",
+        "Capacity validation has no owner.",
+    ])(
+        "confirmed explicit unassigned ownership builds and saves: %s",
+        async (statement) => {
+            await ingest(
+                "charter",
+                projectSources.charter.replace(
+                    "Owner: Capacity validation owner unknown; service-owner review is required.",
+                    statement,
+                ),
+            );
+            alter = (name, value) => {
+                const raw = evidenceRecord(value);
+                if (name === "memory_source_fact_inventory") {
+                    const owner = evidenceArray(raw.items)
+                        .map(evidenceRecord)
+                        .find((item) => item.statement === statement)!;
+                    owner.kind = "owner";
+                    owner.status = "confirmed";
+                }
+                if (name === "memory_project_brief_construction") {
+                    const section = evidenceArray(
+                        evidenceRecord(raw.content).sections,
+                    )
+                        .map(evidenceRecord)
+                        .find((section) => section.role === "owners")!;
+                    evidenceRecord(
+                        evidenceArray(
+                            evidenceRecord(section.details).assignments,
+                        )[0],
+                    ).state = "unassigned";
+                }
+                return value;
+            };
+            expect((await build()).results[0].state).toBe("draft");
+            const edited = structuredClone((await current()).content);
+            expect(
+                edited.sections.find((section) => section.role === "owners")
+                    ?.details,
+            ).toMatchObject({
+                assignments: [{ state: "unassigned", owner: null }],
+            });
+            edited.sections[0].body += "\nHuman project note.";
+            await save(edited);
+            expect((await publish()).indexedRevisionId).toBe(
+                (await current()).view.revisionId,
+            );
+        },
+    );
+    test.each(["statement", "citation"] as const)(
+        "unassigned ownership rejects uncertainty in the %s despite confirmed inventory status",
+        async (uncertainField) => {
+            expect((await build()).results[0].state).toBe("draft");
+            const inventory = structuredClone(
+                calls.find(
+                    (call) => call.name === "memory_project_brief_construction",
+                )!.input.inventory,
+            ) as ViewFactInventory;
+            const owner = inventory.items.find(
+                (item) => item.kind === "owner",
+            )!;
+            owner.status = "confirmed";
+            owner.statement = "Owner: Capacity validation has no owner.";
+            for (const citation of owner.citations)
+                citation.excerpt = owner.statement;
+            const edited = structuredClone((await current()).content);
+            const owners = edited.sections.find(
+                (section) => section.role === "owners",
+            )!;
+            if (owners.details.kind !== "owners")
+                throw new Error("Missing owners");
+            owners.details.assignments[0].state = "unassigned";
+            owners.body = renderInventoryItem(owner);
+            expect(() =>
+                validateProjectBriefEvidence(edited, inventory),
+            ).not.toThrow();
+            const uncertainty =
+                "Owner: Capacity validation: whether it has no owner is unknown.";
+            if (uncertainField === "statement") owner.statement = uncertainty;
+            else
+                for (const citation of owner.citations)
+                    citation.excerpt = uncertainty;
+            owners.body = renderInventoryItem(owner);
+            expect(() =>
+                validateProjectBriefEvidence(edited, inventory),
+            ).toThrow("ownership is not supported");
+        },
+    );
+    test.each([false, true])(
+        "human save cannot erase confirmed project as-of while retaining known date in body (omit detail ID: %s)",
+        async (omitDetailId) => {
+            const asOf = "2026-10-06";
+            await ingest(
+                "charter",
+                projectSources.charter.replace(
+                    "Context: Project knowledge as-of is unknown; source capture time is not project status time.",
+                    `Context: Project knowledge as-of: ${asOf}.\n\nContext: Source capture time is not project status time.`,
+                ),
+            );
+            alter = (name, value) => {
+                const raw = evidenceRecord(value);
+                if (name === "memory_source_fact_inventory") {
+                    const context = evidenceArray(raw.items)
+                        .map(evidenceRecord)
+                        .find((item) => String(item.statement).includes(asOf))!;
+                    context.kind = "projectAsOf";
+                    context.status = "confirmed";
+                }
+                if (name === "memory_project_brief_construction") {
+                    const section = evidenceArray(
+                        evidenceRecord(raw.content).sections,
+                    )
+                        .map(evidenceRecord)
+                        .find((section) => section.role === "context")!;
+                    const inventory = evidenceArray(
+                        evidenceRecord(calls[calls.length - 1].input.inventory)
+                            .items,
+                    )
+                        .map(evidenceRecord)
+                        .find((item) => item.kind === "projectAsOf")!;
+                    section.inventoryIds = [
+                        ...evidenceArray(section.inventoryIds),
+                        inventory.id,
+                    ];
+                    Object.assign(evidenceRecord(section.details), {
+                        inventoryIds: [inventory.id],
+                        asOf,
+                        basis: "recordEvidence",
+                    });
+                }
+                return value;
+            };
+            expect((await build()).results[0].state).toBe("draft");
+            const { view, content } = await current();
+            const edited = structuredClone(content);
+            const context = edited.sections.find(
+                (section) => section.role === "context",
+            )!;
+            expect(context.body).toContain(asOf);
+            if (context.details.kind !== "context")
+                throw new Error("Missing context");
+            context.details.asOf = null;
+            context.details.basis = "unknown";
+            if (omitDetailId) {
+                const items = evidenceArray(
+                    evidenceRecord(
+                        calls.find(
+                            (call) =>
+                                call.name ===
+                                "memory_project_brief_construction",
+                        )!.input.inventory,
+                    ).items,
+                ).map(evidenceRecord);
+                const timing = items.find((item) => item.kind === "timing")!;
+                context.details.inventoryIds = [String(timing.id)];
+            }
+            await expect(save(edited)).rejects.toThrow(
+                "as-of cannot be unknown",
+            );
+            expect((await current()).view.revisionId).toBe(view.revisionId);
+        },
+    );
     test("independent typed status fields merge directly while incompatible overlap conflicts and remains unpublishable", async () => {
         await build();
         const { view } = await current();
