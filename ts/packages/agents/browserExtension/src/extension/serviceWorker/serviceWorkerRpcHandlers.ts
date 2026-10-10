@@ -87,6 +87,13 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             forward("memoryRetryViewIndex", params),
         memorySearchViews: (params) => forward("memorySearchViews", params),
         memoryBuildViews: (params) => forward("memoryBuildViews", params),
+        memoryPlanViewMaintenance: (params) =>
+            forward("memoryPlanViewMaintenance", params),
+        memoryMaintainViews: (params) => forward("memoryMaintainViews", params),
+        memoryUpdateViewMaintenance: (params) =>
+            forward("memoryUpdateViewMaintenance", params),
+        memoryGetViewMaintenance: (params) =>
+            forward("memoryGetViewMaintenance", params),
         memoryGetViewBuild: (params) => forward("memoryGetViewBuild", params),
         memoryListViewBuilds: (params) =>
             forward("memoryListViewBuilds", params),

@@ -720,6 +720,64 @@ describe("timeline configured service pipeline", () => {
         expect(job.results[0].state).toBe("failed");
         expect(await service.listViews(corpusId)).toMatchObject({ views: [] });
     });
+    test.each(["supportedBy", "dependsOn"] as const)(
+        "timeline %s citations cannot authorize another selected canonical source target",
+        async (predicate) => {
+            const first = await event("First canonical witness.");
+            const second = await event("Second canonical witness.");
+            expect(
+                (await build(undefined, [first.eventId, second.eventId]))
+                    .results[0].state,
+            ).toBe("draft");
+            const snapshot = await service.listViews(corpusId);
+            const view = snapshot.views[0];
+            const relationships = authoredRelationships(view);
+            const firstEdge = relationships.find(
+                (edge) => edge.predicate === "supportedBy",
+            );
+            const otherEdge = relationships.find(
+                (edge) =>
+                    edge.predicate === "supportedBy" &&
+                    edge.to.kind === "source" &&
+                    firstEdge?.to.kind === "source" &&
+                    edge.to.sourceId !== firstEdge.to.sourceId,
+            );
+            if (
+                !firstEdge ||
+                firstEdge.predicate !== "supportedBy" ||
+                !otherEdge ||
+                otherEdge.to.kind !== "source"
+            )
+                throw new Error(
+                    "Expected two distinct canonical source targets",
+                );
+            relationships.push({
+                ...firstEdge,
+                id: "invalid-canonical-target",
+                predicate,
+                to: otherEdge.to,
+            });
+            const callCount = calls.length;
+            await expect(
+                service.saveViewDraft({
+                    corpusId,
+                    viewId: view.viewId,
+                    expectedHead: snapshot.head,
+                    expectedVersion: view.version,
+                    definition: {
+                        viewId: view.viewId,
+                        kind: "timeline",
+                        selector: view.definition.selector,
+                    },
+                    content: view.content as TimelineContent,
+                    relationships,
+                }),
+            ).rejects.toThrow("citations must match its exact target");
+            expect(calls).toHaveLength(callCount);
+            expect(await service.listViews(corpusId)).toEqual(snapshot);
+        },
+    );
+
     test("replacement, archive, disabled reopen and document forget isolate canonical-only publications", async () => {
         const canonical = await event(
             "Unrelated canonical headroom observation.",

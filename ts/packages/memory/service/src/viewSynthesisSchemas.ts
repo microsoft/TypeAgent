@@ -12,6 +12,8 @@ import {
 } from "./viewInventory.js";
 import type { ViewKind } from "./viewTypes.js";
 import { projectBriefRoles } from "./projectBrief.js";
+import { wikiTaxonomy } from "./wiki.js";
+import type { WikiSubjectIdentity } from "./viewMaintenanceTypes.js";
 
 const text: JsonSchemaType = { type: "string" };
 const boolean: JsonSchemaType = { type: "boolean" };
@@ -101,7 +103,45 @@ export function createInventoryConstructionSchema(
     itemIds: string[],
     kind: ViewKind = "troubleshootingGuide",
     recordIds: string[] = [],
+    subjects?: WikiSubjectIdentity[],
 ): StructuredOutputJsonSchema {
+    if (kind === "wiki")
+        return schema("memory_wiki_construction", {
+            content: object({
+                title: text,
+                summary: text,
+                pages: array(
+                    subjects?.length
+                        ? {
+                              anyOf: subjects.map((subject) =>
+                                  object({
+                                      id: choice([subject.pageId]),
+                                      title: choice([subject.title]),
+                                      taxonomy: choice([subject.taxonomy]),
+                                      prose: text,
+                                      inventoryIds: array(choice(itemIds)),
+                                  }),
+                              ),
+                          }
+                        : object({
+                              id: text,
+                              title: text,
+                              taxonomy: choice(wikiTaxonomy),
+                              prose: text,
+                              inventoryIds: array(choice(itemIds)),
+                          }),
+                ),
+            }),
+            relationships: array(
+                object({
+                    from: text,
+                    to: text,
+                    predicate: choice(["relatedTo", "contradicts"]),
+                }),
+            ),
+            outcome: choice(["knowledgePages"]),
+            missingEvidence: array(text),
+        });
     if (kind === "timeline")
         return schema("memory_timeline_construction", {
             content: object({

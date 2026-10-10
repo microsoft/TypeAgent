@@ -183,6 +183,19 @@ export type RunbookUsage = {
     > & { document: { title: string } };
     skills: RunbookSkill[];
 };
+export type DerivedViewUsage = {
+    corpusId: string;
+    viewId: string;
+    kind: "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki";
+    title: string;
+    revisionId?: string;
+    version?: number;
+    jobId?: string;
+    conflictId?: string;
+    state: "current" | "historical" | "build" | "conflict";
+    sectionIds: string[];
+    reason: string;
+};
 export type MemoryHubRunbookFunctions = {
     memoryHubRunbooks(params: RunbookListRequest): Promise<
         MemoryCenterPage<RunbookSummary> & {
@@ -212,7 +225,13 @@ export type MemoryHubRunbookFunctions = {
         sourceId: string;
         pageSize?: number;
         continuationToken?: string;
-    }): Promise<MemoryCenterPage<RunbookUsage> & { warnings: string[] }>;
+        viewContinuationToken?: string;
+    }): Promise<
+        MemoryCenterPage<RunbookUsage> & {
+            warnings: string[];
+            views?: MemoryCenterPage<DerivedViewUsage>;
+        }
+    >;
     memoryHubSuggestBindings(params: {
         corpusId: string;
         procedureId: string;

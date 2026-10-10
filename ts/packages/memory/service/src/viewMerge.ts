@@ -17,6 +17,7 @@ import type {
     ViewVersion,
 } from "./viewTypes.js";
 import { authoredRelationships, edgeIdentity } from "./viewRelationships.js";
+import { wikiIndex } from "./viewContent.js";
 export { edgeIdentity } from "./viewRelationships.js";
 
 export function viewHash(value: unknown): string {
@@ -168,19 +169,23 @@ function mergeSection(
     const body = mergeValue(base.body, human.body, generated.body);
     const role = mergeValue(base.role, human.role, generated.role);
     const details =
-        base.details?.kind === "event" ||
-        human.details?.kind === "event" ||
-        generated.details?.kind === "event"
-            ? mergeTimelineDetails(
-                  base.details,
-                  human.details,
-                  generated.details,
-              )
-            : mergeProjectDetails(
-                  base.details,
-                  human.details,
-                  generated.details,
-              );
+        base.details?.kind === "page" ||
+        human.details?.kind === "page" ||
+        generated.details?.kind === "page"
+            ? mergeWikiDetails(base.details, human.details, generated.details)
+            : base.details?.kind === "event" ||
+                human.details?.kind === "event" ||
+                generated.details?.kind === "event"
+              ? mergeTimelineDetails(
+                    base.details,
+                    human.details,
+                    generated.details,
+                )
+              : mergeProjectDetails(
+                    base.details,
+                    human.details,
+                    generated.details,
+                );
     if (
         typeof heading !== "string" ||
         typeof body !== "string" ||
@@ -198,6 +203,50 @@ function mergeSection(
             ? { details: details as NonNullable<ViewSection["details"]> }
             : {}),
     };
+}
+
+function mergeWikiDetails(
+    base: ViewSection["details"],
+    human: ViewSection["details"],
+    generated: ViewSection["details"],
+) {
+    if (
+        base?.kind !== "page" ||
+        human?.kind !== "page" ||
+        generated?.kind !== "page"
+    )
+        return undefined;
+    const fields = mergeBriefFields(base, human, generated, [
+        "inventoryIds",
+        "mergedPageIds",
+    ]);
+    const inventoryIds = mergeIdentifierItems(
+        base.inventoryIds,
+        human.inventoryIds,
+        generated.inventoryIds,
+    );
+    const mergedPageIds = mergeIdentifierItems(
+        base.mergedPageIds,
+        human.mergedPageIds,
+        generated.mergedPageIds,
+    );
+    return fields && inventoryIds && mergedPageIds
+        ? { ...fields, inventoryIds, mergedPageIds }
+        : undefined;
+}
+
+function mergeIdentifierItems(
+    base: string[],
+    human: string[],
+    generated: string[],
+): string[] | undefined {
+    const entries = (values: string[]) =>
+        values.map((inventoryId) => ({ inventoryId }));
+    return mergeBriefEntries(
+        entries(base),
+        entries(human),
+        entries(generated),
+    )?.map((entry) => entry.inventoryId);
 }
 
 function mergeTimelineDetails(
@@ -386,6 +435,8 @@ export function mergeView(
             mergeContent(edit.target, base, human, next, output, conflicts);
         }
     }
+    if (output.content.kind === "wiki")
+        output.content.index = wikiIndex(output.content.sections);
     return { output, conflicts: [...new Set(conflicts)] };
 }
 
@@ -452,6 +503,7 @@ function mergeContentSection(
         if (
             !section.details ||
             section.details.kind === "event" ||
+            section.details.kind === "page" ||
             section.role !== section.details.kind
         ) {
             conflicts.push(target);
@@ -470,6 +522,16 @@ function mergeContentSection(
         upsertSection(content.sections, {
             ...section,
             role: "event",
+            details: section.details,
+        });
+    } else if (content.kind === "wiki") {
+        if (section.role !== "page" || section.details?.kind !== "page") {
+            conflicts.push(target);
+            return;
+        }
+        upsertSection(content.sections, {
+            ...section,
+            role: "page",
             details: section.details,
         });
     } else upsertSection(content.sections, section);

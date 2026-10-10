@@ -19,6 +19,10 @@ import {
     viewPublicationPolicyUpdateSchema,
     viewPublishRequestSchema,
     viewSearchRequestSchema,
+    viewMaintenancePlanRequestSchema,
+    viewMaintenanceRequestSchema,
+    viewMaintenanceUpdateSchema,
+    viewMaintenanceReadSchema,
 } from "@typeagent/memory-client";
 import type {
     ViewMethod,
@@ -101,6 +105,10 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryRetryViewIndex: protocolInput(viewPublishRequestSchema),
     memorySearchViews: protocolInput(viewSearchRequestSchema),
     memoryBuildViews: protocolInput(viewBuildRequestSchema),
+    memoryPlanViewMaintenance: protocolInput(viewMaintenancePlanRequestSchema),
+    memoryMaintainViews: protocolInput(viewMaintenanceRequestSchema),
+    memoryUpdateViewMaintenance: protocolInput(viewMaintenanceUpdateSchema),
+    memoryGetViewMaintenance: protocolInput(viewMaintenanceReadSchema),
     memoryGetViewBuild: protocolInput(viewBuildJobRequestSchema),
     memoryListViewBuilds: z.strictObject(corpus),
     memoryCancelViewBuild: protocolInput(viewBuildJobRequestSchema),
@@ -123,9 +131,9 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         dateTo: z.iso.datetime({ offset: true }).optional(),
         conversationScope: z.enum(["none", "current", "all"]).optional(),
         viewKinds: z
-            .enum(["troubleshootingGuide", "projectBrief", "timeline"])
+            .enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"])
             .array()
-            .max(3)
+            .max(4)
             .optional(),
     }),
     memoryHubEvidence: z.discriminatedUnion("kind", [

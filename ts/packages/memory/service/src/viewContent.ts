@@ -7,9 +7,19 @@ import type {
     ProcedureViewContent,
     ViewVersion,
     ViewSection,
+    WikiPage,
+    WikiIndexEntry,
 } from "./viewTypes.js";
 import { canonicalizeProcedure } from "./agentEdition.js";
 import { procedureToMarkdown } from "./procedureMarkdown.js";
+
+export function wikiIndex(pages: WikiPage[]): WikiIndexEntry[] {
+    return pages.map((page) => ({
+        pageId: page.id,
+        title: page.heading,
+        taxonomy: page.details.taxonomy,
+    }));
+}
 
 export function viewSourceKey(source: {
     sourceId: string;

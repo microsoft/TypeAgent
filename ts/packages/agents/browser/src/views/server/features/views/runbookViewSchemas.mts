@@ -138,6 +138,7 @@ export const runbookViewSchemas: Record<
         ...corpus,
         sourceId: text,
         ...page,
+        viewContinuationToken: text.optional(),
     }),
     memoryHubSuggestBindings: z.strictObject({
         ...procedure,

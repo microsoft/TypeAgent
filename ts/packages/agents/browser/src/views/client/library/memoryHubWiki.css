@@ -1,0 +1,50 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+.hub-wiki {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hub-wiki [hidden] {
+  display: none !important;
+}
+.hub-wiki nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.hub-wiki nav h4 {
+  flex-basis: 100%;
+}
+.hub-wiki [aria-current="page"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.hub-wiki button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  margin: 4px;
+  min-height: 36px;
+}
+.hub-wiki pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.hub-wiki label {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+}
+.hub-wiki input,
+.hub-wiki textarea,
+.hub-wiki select {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.hub-wiki :focus-visible {
+  outline: 2px solid var(--accent, #586ad1);
+  outline-offset: 2px;
+}

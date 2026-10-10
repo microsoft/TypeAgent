@@ -67,7 +67,9 @@ export function viewContentToText(content: ViewVersion["content"]): string {
                 section.details
                     ? section.details.kind === "event"
                         ? timelineRecordText(section.details)
-                        : projectBriefDetailsText(section.details)
+                        : section.details.kind === "page"
+                          ? `Page: ${section.id}; taxonomy: ${section.details.taxonomy}`
+                          : projectBriefDetailsText(section.details)
                     : "",
                 section.body,
             ]

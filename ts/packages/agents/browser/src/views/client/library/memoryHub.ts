@@ -18,6 +18,7 @@ import { mountMemoryHubImports } from "./memoryHubImports";
 import { mountMemoryHubCapture } from "./memoryHubCapture";
 import { mountMemoryHubRunbooks } from "./memoryHubRunbooks";
 import { mountMemoryHubViews } from "./memoryHubViews";
+import { renderDerivedViewUsage } from "./memoryHubViewUsage";
 import { mountMemoryHubPreferences } from "./memoryHubPreferences";
 import { mountMemoryHubRunbookImports } from "./memoryHubRunbookImports";
 import { mountMemoryHubWebMaintenance } from "./memoryHubWebMaintenance";
@@ -1132,7 +1133,10 @@ async function showTab(name: string): Promise<void> {
     }
 }
 
-async function showSourceUsage(continuationToken?: string): Promise<void> {
+async function showSourceUsage(
+    continuationToken?: string,
+    viewContinuationToken?: string,
+): Promise<void> {
     const route = parseRoute(location.hash);
     if (!route.corpusId || !route.objectId)
         throw new Error(
@@ -1140,7 +1144,7 @@ async function showSourceUsage(continuationToken?: string): Promise<void> {
         );
     const generation = routeVersion;
     const host = el("drawer-usedby");
-    if (!continuationToken)
+    if (!continuationToken && !viewContinuationToken)
         host.textContent =
             "Loading retained procedure versions and exact skill snapshots…";
     const page = await invokeView("memoryHubRunbookUsedBy", {
@@ -1148,14 +1152,17 @@ async function showSourceUsage(continuationToken?: string): Promise<void> {
         sourceId: route.objectId,
         pageSize: 25,
         ...(continuationToken === undefined ? {} : { continuationToken }),
+        ...(viewContinuationToken === undefined
+            ? {}
+            : { viewContinuationToken }),
     });
     if (generation !== routeVersion || location.hash !== routeHash(route))
         return;
-    if (!continuationToken) host.replaceChildren();
+    if (!continuationToken && !viewContinuationToken) host.replaceChildren();
     const status = document.createElement("p");
     status.textContent = `${page.total} retained procedure versions cite this source. ${page.warnings.join(" ")}`;
     host.append(status);
-    for (const usage of page.items) {
+    for (const usage of viewContinuationToken ? [] : page.items) {
         const card = document.createElement("article");
         card.className = "card";
         const procedure = usage.procedure;
@@ -1190,7 +1197,29 @@ async function showSourceUsage(continuationToken?: string): Promise<void> {
         }
         host.append(card);
     }
-    if (page.nextContinuationToken)
+    if (page.views && !continuationToken) {
+        host.append(
+            renderDerivedViewUsage(
+                page.views.items,
+                page.views.total,
+                (operation) => {
+                    void hubAction(operation);
+                },
+            ),
+        );
+        if (page.views.nextContinuationToken)
+            host.append(
+                button("More derived source dependencies", () => {
+                    void hubAction(() =>
+                        showSourceUsage(
+                            undefined,
+                            page.views!.nextContinuationToken,
+                        ),
+                    );
+                }),
+            );
+    }
+    if (page.nextContinuationToken && !viewContinuationToken)
         host.append(
             button("More source dependencies", () => {
                 void hubAction(() =>

@@ -16,6 +16,8 @@ import {
 } from "./viewContent.js";
 import { projectBriefRoles, validateProjectBrief } from "./projectBrief.js";
 import { validateTimeline } from "./timeline.js";
+import { validateWiki } from "./wiki.js";
+import { validateMaintenanceDefinition } from "./viewMaintenance.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -97,17 +99,19 @@ function validateSections(sections: ViewSection[], kind: string): Set<string> {
         const allowed: readonly string[] =
             kind === "timeline"
                 ? ["event"]
-                : kind === "projectBrief"
-                  ? projectBriefRoles
-                  : [
-                        "description",
-                        "prerequisites",
-                        "diagnostic",
-                        "guard",
-                        "verification",
-                        "recovery",
-                        "context",
-                    ];
+                : kind === "wiki"
+                  ? ["page"]
+                  : kind === "projectBrief"
+                    ? projectBriefRoles
+                    : [
+                          "description",
+                          "prerequisites",
+                          "diagnostic",
+                          "guard",
+                          "verification",
+                          "recovery",
+                          "context",
+                      ];
         if (!allowed.includes(section.role))
             throw new Error("Unsupported guide section role");
         text(section.heading, "Section heading");
@@ -199,16 +203,25 @@ function validateRelationshipDirection(
     kind: ViewSaveRequest["content"]["kind"],
 ): void {
     if (
-        !["supportedBy", "dependsOn", "corrects", "supersedes"].includes(
-            edge.predicate,
-        )
+        ![
+            "supportedBy",
+            "dependsOn",
+            "corrects",
+            "supersedes",
+            "relatedTo",
+            "contradicts",
+        ].includes(edge.predicate)
     )
         throw new Error("Unsupported relationship predicate");
     const correction =
         edge.predicate === "corrects" || edge.predicate === "supersedes";
+    const pageLink =
+        edge.predicate === "relatedTo" || edge.predicate === "contradicts";
     if (
         edge.from?.kind !== "section" ||
-        (correction ? edge.to?.kind !== "section" : edge.to?.kind !== "source")
+        (correction || pageLink
+            ? edge.to?.kind !== "section"
+            : edge.to?.kind !== "source")
     )
         throw new Error(
             "Evidence relationships require section-to-source endpoints; corrections require section-to-section endpoints",
@@ -222,6 +235,13 @@ function validateRelationshipDirection(
         throw new Error(
             "Corrections require distinct existing timeline records",
         );
+    if (
+        pageLink &&
+        (kind !== "wiki" ||
+            edge.to.kind !== "section" ||
+            edge.from.sectionId === edge.to.sectionId)
+    )
+        throw new Error("Wiki links require distinct current wiki pages");
 }
 
 function validateRelationships(
@@ -262,7 +282,8 @@ function validateRelationships(
             validateCitation(citation, sources);
         const target = edge.to;
         if (
-            request.content.kind === "timeline" &&
+            (request.content.kind === "timeline" ||
+                request.content.kind === "wiki") &&
             target.kind === "source" &&
             edge.citations.some(
                 (citation) => sourceKey(citation) !== sourceKey(target),
@@ -305,7 +326,7 @@ export function validateViewDraft(request: ViewSaveRequest): void {
     )
         throw new Error("Expected view history head is required");
     if (
-        !["troubleshootingGuide", "projectBrief", "timeline"].includes(
+        !["troubleshootingGuide", "projectBrief", "timeline", "wiki"].includes(
             request.definition?.kind,
         ) ||
         request.content?.kind !== request.definition?.kind
@@ -315,9 +336,10 @@ export function validateViewDraft(request: ViewSaveRequest): void {
         throw new Error("View definition identity does not match");
     onlyKeys(
         request.definition,
-        ["viewId", "kind", "selector"],
+        ["viewId", "kind", "selector", "maintenance"],
         "view definition",
     );
+    validateMaintenanceDefinition(request.definition);
     const sources = validateSelector(request.definition.selector);
     const sections = validateDraftContent(request, sources);
     validateRelationships(request.relationships, request, sources, sections);
@@ -342,6 +364,7 @@ function validateDraftContent(
     if (request.content.kind === "projectBrief")
         validateProjectBrief(request.content);
     if (request.content.kind === "timeline") validateTimeline(request.content);
+    if (request.content.kind === "wiki") validateWiki(request.content);
     if (request.content.agentEdition !== undefined)
         throw new Error(
             "Agent editions are edited through the runbook compatibility workflow",
@@ -359,6 +382,7 @@ function validateDraftContent(
             "sections",
             "citations",
             ...(request.content.kind === "timeline" ? ["generatedAt"] : []),
+            ...(request.content.kind === "wiki" ? ["index"] : []),
         ],
         "guide content",
     );

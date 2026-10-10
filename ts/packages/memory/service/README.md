@@ -246,10 +246,9 @@ atomic history-ref commit; failed preparations do not save a procedure version.
 
 `new FileMemoryService(privateStore, { viewDrafts: true })` enables the local
 developer/demo capability. It is **off by default**. `getCapabilities()` then
-advertises `derivedViews: { kinds: ["troubleshootingGuide", "projectBrief", "timeline"], drafts: true,
+advertises `derivedViews: { kinds: ["troubleshootingGuide", "projectBrief", "timeline", "wiki"], drafts: true,
 history: true, builds: true, editMerging: true, publication: true, search: true }`.
-Wiki and automatic scheduling remain unsupported; they
-are never silently substituted with procedures.
+Automatic scheduling remains unsupported.
 
 `listViews(corpusId)` returns `{ head, views }`, including pending drafts and
 explicit lifecycle state. `getView({ corpusId, viewId, revisionId? })` reads an
@@ -329,12 +328,82 @@ evidence and cited recovery/escalation limits; it never invents a confirmed fix.
 
 `buildViews({ corpusId, expectedHead, targets, bounds?, publication?: boolean })`
 admits a durable manual job. Each target supplies `expectedVersion` and a
-`definition` with a stable view ID, `kind: "troubleshootingGuide"`, `"projectBrief"` or `"timeline"` and an explicit
+`definition` with a stable view ID, `kind: "troubleshootingGuide"`, `"projectBrief"`, `"timeline"` or `"wiki"` and an explicit
 revision-aware source selector. Admission freezes complete retained input text,
 source membership, current exact revisions, content hashes, target and definition
 revisions, authenticated OS actor, temporal bounds and configured pipeline/model
 identity. Their fingerprint is persisted with every per-target receipt.
 There is no browser-owned job store or duplicate canonical view store.
+
+### Bounded knowledge wikis
+
+Choose a named corpus, exact retained revisions, **Knowledge wiki**, a stable
+view ID and **Build views** in Memory Hub. The CLI uses the same `build` request
+with `kind: "wiki"` and a `sources` selector. HTTP/parent IPC, browser extension,
+client/RPC and MCP carry the same discriminated content and relationships.
+Ordinary installations remain default-off; no provider or release switch is
+enabled by adding a kind.
+
+`WikiContent` contains 1 to 32 stable `WikiPage` sections and a typed `index`
+of exact page IDs, current titles and fixed `concept`, `system`, `project`
+taxonomy. Index entries are derived by the host, not model-authored links.
+Each page has checked inventory identities, source-grounded narrative and
+exact section-to-source `supportedBy` proof. Competing explanations, rejected
+hypotheses, unresolved contradictions, scope and unknowns stay in that narrative
+and the immutable rendered facts. Raw `[[wikilinks]]` have no relationship or
+publication authority.
+
+`relatedTo` and `contradicts` are explicit directed page-to-page assertions
+within one wiki revision. Both endpoints must exist and be distinct, and each
+assertion must cite exact retained evidence from both endpoint pages. This is
+structural proof, not semantic truth: the independent final-artifact audit
+must additionally support every assertion and page. Generated proof never
+turns a human-added assertion into independent corroboration.
+
+The fixed reader starts with a named index and readable page, typed navigation
+and exact original-evidence controls. **Edit selected wiki page** exposes named
+title/summary/narrative inputs, supported relationship addition/removal, omission
+and merge controls. Navigation moves focus to the selected page heading; editor
+opening focuses a named input. Controls wrap on narrow screens. DOM tests cover
+names, identities, focus, navigation, evidence and transport behavior; they are
+not screen-reader or visual accessibility qualification.
+
+A rename changes the display title, never the page ID or edge endpoints.
+A merge keeps the chosen target ID, records unique retired IDs in
+`mergedPageIds`, retains both narratives and checked facts, remaps supported
+edges and unions their exact citations, and removes self-links. Contradictory
+source context is retained, not resolved by merging pages. Omitted pages and
+removed relationships become explicit edit tombstones. The generated base,
+authenticated human attribution, stable-item/field merge, bounded prose merge,
+conflicts and exact-final-artifact validation use the existing owning store.
+An unchanged rebuild reapplies removals; changed deleted pages or incompatible
+evidence/edits conflict or fail validation rather than silently discarding edits.
+Unknown bases cannot be overwritten. Invalid omissions cannot hide required facts.
+
+The Library and runbook **Used by** surfaces include all four derived kinds:
+current/historical exact revisions, affected section/page IDs, selected membership,
+and pending/completed/conflicted build receipts. Derived dependencies page
+separately from existing procedure/skill dependencies. Historical inspection
+opens the requested revision only; it is not current publication.
+
+Publication precedence remains build > view > corpus, with explicit false
+distinct from inheritance. Publication is neither human review nor skill
+approval/activation. Default retrieval requires the eligible exact published and
+indexed revision; drafts, conflicts, stale, archived and forgotten artifacts
+are excluded. Index retries do not rebuild or republish. Source replace/forget,
+event forget, clear and restart reuse managed history/index/privacy cleanup.
+Canonical-event forget removes dependent timelines even when
+`forgetLinkedSources: false`; disabled reopen preserves stored data/history.
+Unrelated sources, views, procedures and skills retain their existing flows.
+External backups/exports and secure media erasure remain outside cleanup guarantees.
+
+Offline configured-model/transport fixtures establish lifecycle readiness only.
+The configured `gpt-4o-2024-11-20` evidence-first v5 run produced only five charter
+facts and left 185 selected passages unwitnessed; the strict source-first gate
+blocked before construction, final audit or save. No live provider calls, model
+swaps, weakened gates, corpus reset/migration or release enablement are authorized.
+Live per-kind quality/latency budgets and qualification remain unresolved blockers.
+Revalidation after integrating build/edit review fixes is also required.
 
 ### Evidence-linked timelines
 
@@ -458,7 +527,7 @@ until managed derived-data removal completes. External backups and secure media
 erasure remain outside the service's guarantees.
 
 This is an opt-in, offline-tested capability, not release qualification.
-No event execution, skill activation, scheduler, wiki store or migration is added.
+No event execution, skill activation, scheduler, separate wiki store or migration is added.
 Configured `gpt-4o-2024-11-20` synthesis remains live-unqualified; source inventories
 and independent semantic audits are model-based and may still omit or misinterpret
 evidence. Passing structured offline stubs does not establish live quality.
@@ -741,6 +810,35 @@ node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts re
 store. `cancel` and `retry` also take `<corpusId> <jobId>`. Do not point this
 exclusive CLI owner at a running server's store. Use MCP/Hub to control live
 jobs in the actual owning service.
+
+### Manual view maintenance
+
+Opt-in dynamic definitions can advance a fixed set of source IDs or enumerate
+bounded source-type/tag/project scope. `planViewMaintenance` previews affected,
+unchanged, pinned and blocked targets; `maintainViews` rebuilds only affected
+whole views through the existing exact-input pipeline. Accepted manifests and a
+stable explicit-subject wiki registry share the artifact's Git commit boundary.
+New subjects can create pages even when introduced by revisions of old sources.
+Titles and normalized names are not identities.
+
+`updateViewMaintenance` applies explicit head/version-guarded intent.
+`getViewMaintenance` reads durable receipts and current build outcomes. The CLI
+adds `set-maintenance`, `plan-maintenance`, `maintain` and `maintenance-status`;
+MCP exposes `memory_view_maintenance_update`, `memory_views_maintenance_plan`,
+`memory_views_maintain` and `memory_view_maintenance_get`. The Hub exposes
+configuration, preview, manual run and dependency inspection when the service
+advertises maintenance support.
+
+No-op detection uses logical evidence/rule/model fingerprints, not index time.
+Acceptance rechecks dynamic membership as well as exact revisions and human edits.
+Discovery identity gaps, empty scope, pending ingestion, unsupported retirement
+and bounds block visibly. Forgetting includes registry provenance, manifests,
+receipts and pending/conflict snapshots in the existing history purge. Scheduling,
+selective page synthesis and physical-index Git storage are not implemented.
+
+See [the maintenance contract and qualification recipe](../../../docs/architecture/memory/view-maintenance.md)
+for schemas, explicit subject metadata, compatibility and release limits.
+Configured-model quality remains separately gated.
 
 `TypedViewStore` generalizes the existing procedure persistence;
 `PersonalHowToStore` remains its compatibility export. Both workflows use one

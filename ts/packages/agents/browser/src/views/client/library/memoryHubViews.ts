@@ -18,7 +18,22 @@ import { invokeMemory, invokeView } from "./viewClient";
 import { rbButton, rbError, rbNode } from "./memoryHubRunbookUi";
 import { createProjectBriefEditor } from "./memoryHubProjectBrief";
 import { createTimelineEditor } from "./memoryHubTimeline";
+import { createWikiEditor } from "./memoryHubWiki";
+import { createMaintenancePanel } from "./memoryHubMaintenance";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
+
+const viewKindLabels: Record<ViewKind, string> = {
+    wiki: "Knowledge wiki",
+    timeline: "Evidence-linked timeline",
+    projectBrief: "Project brief",
+    troubleshootingGuide: "Troubleshooting guide",
+};
+
+function publicationDescription(
+    publication: ViewPublicationStatus | undefined,
+): string {
+    return `Publication: ${publication?.blockedReason ?? publication?.reason ?? "not published"}. Published ${publication?.publishedRevisionId ?? "none"}; indexed ${publication?.indexedRevisionId ?? "none"}.`;
+}
 
 function jsonEditor(label: string, value: unknown): HTMLTextAreaElement {
     const editor = document.createElement("textarea");
@@ -106,7 +121,7 @@ export function mountMemoryHubViews(
         rbNode("h3", "Views"),
         rbNode(
             "p",
-            "Distill retained document revisions or canonical events into an evidence-linked timeline, project brief or conditional troubleshooting guide. Publication and index readiness are separate; neither grants human review, skill approval or execution. Configured synthesis remains live-unqualified.",
+            "Distill retained document revisions or canonical events into a bounded knowledge wiki, evidence-linked timeline, project brief or conditional troubleshooting guide. Publication and index readiness are separate; neither grants human review, skill approval or execution. Configured synthesis remains live-unqualified.",
         ),
         status,
         controls,
@@ -129,6 +144,7 @@ export function mountMemoryHubViews(
     let refreshPending = false;
     let disposed = false;
     let supportedKinds: ViewKind[] = ["troubleshootingGuide"];
+    let maintenanceSupported = false;
 
     async function action(operation: () => Promise<void>): Promise<void> {
         if (busy || disposed) return;
@@ -152,13 +168,15 @@ export function mountMemoryHubViews(
         const capabilities = await invokeMemory("memoryViewCapabilities", {});
         if (current !== sequence) return;
         root.hidden = !capabilities.derivedViews?.builds;
+        maintenanceSupported = capabilities.derivedViews?.maintenance === true;
         supportedKinds = (
             capabilities.derivedViews?.kinds ?? ["troubleshootingGuide"]
         ).filter(
             (kind): kind is ViewKind =>
                 kind === "troubleshootingGuide" ||
                 kind === "projectBrief" ||
-                kind === "timeline",
+                kind === "timeline" ||
+                kind === "wiki",
         );
         if (root.hidden) return;
         const corpusId = options.scope();
@@ -310,12 +328,7 @@ export function mountMemoryHubViews(
         for (const kind of supportedKinds) {
             const option = document.createElement("option");
             option.value = kind;
-            option.textContent =
-                kind === "timeline"
-                    ? "Evidence-linked timeline"
-                    : kind === "projectBrief"
-                      ? "Project brief"
-                      : "Troubleshooting guide";
+            option.textContent = viewKindLabels[kind];
             kindPicker.append(option);
         }
         const cutoff = document.createElement("input");
@@ -498,6 +511,11 @@ export function mountMemoryHubViews(
         receipt.replaceChildren(
             rbNode("h4", `Build ${job.jobId}: ${job.state}`),
         );
+        if (job.maintenancePlan)
+            receipt.append(
+                rbNode("h5", "Manual maintenance plan"),
+                rbNode("pre", JSON.stringify(job.maintenancePlan, null, 2)),
+            );
         for (const result of job.results) {
             const effective = result.snapshot.publicationPolicy;
             if (effective)
@@ -650,6 +668,37 @@ export function mountMemoryHubViews(
                     `${view.content.title} (${view.state}, v${view.version})`,
                     () => showEditor(view),
                 ),
+                ...(maintenanceSupported && view.state !== "archived"
+                    ? [
+                          rbButton(`Maintain ${view.content.title}`, () => {
+                              if (!discardChanges()) return;
+                              const panel = createMaintenancePanel(
+                                  view,
+                                  snapshot.head,
+                                  {
+                                      action: (operation) => {
+                                          void action(operation);
+                                      },
+                                      onChange: () => {
+                                          dirty = true;
+                                      },
+                                      dirty: () => dirty,
+                                      saved: async () => {
+                                          dirty = false;
+                                          comparison.replaceChildren();
+                                          await refresh();
+                                      },
+                                      onBuild: renderReceipt,
+                                      isCurrent: () =>
+                                          !disposed &&
+                                          options.scope() === view.corpusId &&
+                                          comparison.contains(panel),
+                                  },
+                              );
+                              comparison.replaceChildren(panel);
+                          }),
+                      ]
+                    : []),
             );
     }
 
@@ -740,13 +789,22 @@ export function mountMemoryHubViews(
                       (citation) => showTimelineEvidence(view, citation),
                   )
                 : undefined;
-        const content =
-            projectEditor || timelineEditor
-                ? undefined
-                : jsonEditor(
-                      "Draft content with stable section IDs",
+        const wikiEditor =
+            view.content.kind === "wiki"
+                ? createWikiEditor(
                       view.content,
-                  );
+                      editableEdges(view),
+                      () => {
+                          dirty = true;
+                      },
+                      (citation) => showTimelineEvidence(view, citation),
+                  )
+                : undefined;
+        const structuredEditor = wikiEditor ?? timelineEditor ?? projectEditor;
+        const relationshipEditor = wikiEditor ?? timelineEditor;
+        const content = structuredEditor
+            ? undefined
+            : jsonEditor("Draft content with stable section IDs", view.content);
         const edges = jsonEditor("Typed relationships", editableEdges(view));
         const retainedEdges = new Map(
             editableEdges(view).map((edge) => [edge.id, edge]),
@@ -806,16 +864,13 @@ export function mountMemoryHubViews(
                 "p",
                 "Content and relationships are separate structured edits. Narrative remains editable; checked fact/context passages must remain somewhere in the final artifact. Rebuild with changed evidence to revise facts. Saving checks exact evidence and semantic/context support; unsupported edits are blocked.",
             ),
-            timelineEditor?.element ?? projectEditor?.element ?? content!,
-            ...(timelineEditor
+            structuredEditor?.element ?? content!,
+            ...(relationshipEditor
                 ? []
                 : projectEditor
                   ? [projectEvidence]
                   : [edges]),
-            rbNode(
-                "p",
-                `Publication: ${publication?.blockedReason ?? publication?.reason ?? "not published"}. Published ${publication?.publishedRevisionId ?? "none"}; indexed ${publication?.indexedRevisionId ?? "none"}.`,
-            ),
+            rbNode("p", publicationDescription(publication)),
             viewPolicy,
             rbButton("Save view publication override", () => {
                 void action(async () => {
@@ -846,16 +901,17 @@ export function mountMemoryHubViews(
                             viewId: view.viewId,
                             kind: view.content.kind as ViewKind,
                             selector: view.definition.selector,
+                            ...(view.definition.maintenance
+                                ? { maintenance: view.definition.maintenance }
+                                : {}),
                         },
-                        content: timelineEditor
-                            ? timelineEditor.read()
-                            : projectEditor
-                              ? projectEditor.read()
-                              : (JSON.parse(
-                                    content!.value,
-                                ) as DerivedViewContent),
-                        relationships: timelineEditor
-                            ? timelineEditor.relationships()
+                        content: structuredEditor
+                            ? structuredEditor.read()
+                            : (JSON.parse(
+                                  content!.value,
+                              ) as DerivedViewContent),
+                        relationships: relationshipEditor
+                            ? relationshipEditor.relationships()
                             : projectEditor
                               ? [...retainedEdges.values()]
                               : JSON.parse(edges.value),
@@ -925,7 +981,8 @@ export function mountMemoryHubViews(
                 rbNode(
                     "pre",
                     value?.content.kind === "projectBrief" ||
-                        value?.content.kind === "timeline"
+                        value?.content.kind === "timeline" ||
+                        value?.content.kind === "wiki"
                         ? viewContentToText(value.content)
                         : JSON.stringify(
                               value ?? "No known generated base",
@@ -987,13 +1044,23 @@ export function mountMemoryHubViews(
                       },
                   )
                 : undefined;
-        const combined =
-            combinedBrief || combinedTimeline
-                ? undefined
-                : jsonEditor(
-                      "Explicit combined resolution",
-                      conflict.candidate,
-                  );
+        const combinedWiki =
+            conflict.candidate.content.kind === "wiki"
+                ? createWikiEditor(
+                      conflict.candidate.content,
+                      conflict.candidate.relationships,
+                      () => {
+                          dirty = true;
+                      },
+                      (citation) => showTimelineEvidence(current, citation),
+                  )
+                : undefined;
+        const structuredEditor =
+            combinedWiki ?? combinedTimeline ?? combinedBrief;
+        const relationshipEditor = combinedWiki ?? combinedTimeline;
+        const combined = structuredEditor
+            ? undefined
+            : jsonEditor("Explicit combined resolution", conflict.candidate);
         if (combined)
             combined.oninput = () => {
                 dirty = true;
@@ -1012,7 +1079,7 @@ export function mountMemoryHubViews(
         }
         comparison.append(
             choice,
-            combinedTimeline?.element ?? combinedBrief?.element ?? combined!,
+            structuredEditor?.element ?? combined!,
             rbButton("Resolve explicitly and save draft", () => {
                 void action(async () => {
                     const selected = choice.value as
@@ -1021,19 +1088,18 @@ export function mountMemoryHubViews(
                         | "combined";
                     const output: ViewSynthesisOutput | undefined =
                         selected === "combined"
-                            ? combinedTimeline
+                            ? structuredEditor
                                 ? {
                                       ...conflict.candidate,
-                                      content: combinedTimeline.read(),
-                                      relationships:
-                                          combinedTimeline.relationships(),
+                                      content: structuredEditor.read(),
+                                      ...(relationshipEditor
+                                          ? {
+                                                relationships:
+                                                    relationshipEditor.relationships(),
+                                            }
+                                          : {}),
                                   }
-                                : combinedBrief
-                                  ? {
-                                        ...conflict.candidate,
-                                        content: combinedBrief.read(),
-                                    }
-                                  : JSON.parse(combined!.value)
+                                : JSON.parse(combined!.value)
                             : undefined;
                     const saved = await invokeMemory(
                         "memoryResolveViewConflict",

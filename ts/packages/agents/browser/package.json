@@ -40,7 +40,7 @@
     "test:local": "jest && npm run test:views:gateway && npm run test:views:client",
     "test:pdf": "node --test test/pdf*.spec.mjs test/pdfExtraction/*.spec.mjs test/memoryImportHandlers.spec.mjs test/agentConnectionBoundary.spec.mjs",
     "test:views:client": "jest --runInBand --testMatch \"**/views/client/**/*.test.ts\"",
-    "test:views:gateway": "node --test test/viewGateway.test.mjs test/viewDraftGateway.test.mjs test/viewLifecycle.test.mjs test/memoryHub.test.mjs test/memoryHubQuery.test.mjs test/memoryHubCapture.test.mjs test/browserCaptureRpc.test.mjs test/memoryHubRunbooks.test.mjs test/memoryHubRunbookImports.test.mjs test/memoryHubWebAnalytics.test.mjs",
+    "test:views:gateway": "node --test test/viewGateway.test.mjs test/viewDraftGateway.test.mjs test/viewLifecycle.test.mjs test/memoryHub.test.mjs test/memoryHubQuery.test.mjs test/memoryHubViewUsage.test.mjs test/memoryHubCapture.test.mjs test/browserCaptureRpc.test.mjs test/memoryHubRunbooks.test.mjs test/memoryHubRunbookImports.test.mjs test/memoryHubWebAnalytics.test.mjs",
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
     "tsc:views:client:typecheck": "tsc -p src/views/client/pdf/tsconfig.json && tsc -p src/views/client/library/tsconfig.json",

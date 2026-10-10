@@ -597,7 +597,12 @@ export const capabilitiesSchema = z.object({
     derivedViews: z
         .object({
             kinds: z
-                .enum(["troubleshootingGuide", "projectBrief", "timeline"])
+                .enum([
+                    "troubleshootingGuide",
+                    "projectBrief",
+                    "timeline",
+                    "wiki",
+                ])
                 .array(),
             drafts: z.literal(true),
             history: z.literal(true),
@@ -605,6 +610,7 @@ export const capabilitiesSchema = z.object({
             search: z.literal(true),
             builds: z.literal(true).optional(),
             editMerging: z.literal(true).optional(),
+            maintenance: z.literal(true).optional(),
         })
         .optional(),
     chatProvider: z.string().optional(),

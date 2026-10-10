@@ -26,8 +26,14 @@ import {
 } from "../../../memory/service/dist/viewSynthesisEvidence.js";
 import { hydrateInventoryConstruction } from "../../../memory/service/dist/viewInventoryCoverage.js";
 import { timelineTestAnswer } from "../../../memory/service/dist/test/timelineTestModel.js";
+import { wikiTestAnswer } from "../../../memory/service/dist/test/wikiTestModel.js";
 
-for (const kind of ["troubleshootingGuide", "projectBrief", "timeline"]) {
+for (const kind of [
+    "troubleshootingGuide",
+    "projectBrief",
+    "timeline",
+    "wiki",
+]) {
     test(`real views HTTP/parent IPC routes ${kind} builds to the file-backed service owner`, async (t) => {
         const root = await mkdtemp(
             path.join(os.tmpdir(), "view-draft-gateway-"),
@@ -64,9 +70,11 @@ for (const kind of ["troubleshootingGuide", "projectBrief", "timeline"]) {
                           inventory: async (input) =>
                               hydrateInventory(
                                   input,
-                                  (kind === "timeline"
-                                      ? timelineTestAnswer
-                                      : projectBriefTestAnswer)(
+                                  (kind === "wiki"
+                                      ? wikiTestAnswer
+                                      : kind === "timeline"
+                                        ? timelineTestAnswer
+                                        : projectBriefTestAnswer)(
                                       "memory_source_fact_inventory",
                                       labelViewInput(
                                           input,
@@ -76,9 +84,11 @@ for (const kind of ["troubleshootingGuide", "projectBrief", "timeline"]) {
                               ),
                           checkInventory: async (_input, inventory) =>
                               parseInventoryAudit(
-                                  (kind === "timeline"
-                                      ? timelineTestAnswer
-                                      : projectBriefTestAnswer)(
+                                  (kind === "wiki"
+                                      ? wikiTestAnswer
+                                      : kind === "timeline"
+                                        ? timelineTestAnswer
+                                        : projectBriefTestAnswer)(
                                       "memory_source_inventory_check",
                                       { inventory },
                                   ),
@@ -90,12 +100,16 @@ for (const kind of ["troubleshootingGuide", "projectBrief", "timeline"]) {
                         return hydrateInventoryConstruction(
                             input,
                             inventory,
-                            (kind === "timeline"
-                                ? timelineTestAnswer
-                                : projectBriefTestAnswer)(
-                                kind === "timeline"
-                                    ? "memory_timeline_construction"
-                                    : "memory_project_brief_construction",
+                            (kind === "wiki"
+                                ? wikiTestAnswer
+                                : kind === "timeline"
+                                  ? timelineTestAnswer
+                                  : projectBriefTestAnswer)(
+                                kind === "wiki"
+                                    ? "memory_wiki_construction"
+                                    : kind === "timeline"
+                                      ? "memory_timeline_construction"
+                                      : "memory_project_brief_construction",
                                 { input, inventory },
                             ),
                         );
@@ -430,5 +444,88 @@ for (const kind of ["troubleshootingGuide", "projectBrief", "timeline"]) {
             assert.equal(original.body.data.content, sourceText);
             assert.equal(latest.content.agentEdition, undefined);
         }
+        const maintenanceSnapshot = await service.listViews(corpus.corpusId);
+        const maintained = maintenanceSnapshot.views.find(
+            (view) => view.viewId === viewId,
+        );
+        const definitionUpdate = await invoke("memoryUpdateViewMaintenance", {
+            corpusId: corpus.corpusId,
+            viewId,
+            expectedHead: maintenanceSnapshot.head,
+            expectedVersion: maintained.version,
+            maintenance: {
+                schemaVersion: 1,
+                scope: { mode: "currentSources", sourceIds: ["s"] },
+                ...(kind === "wiki"
+                    ? {
+                          wikiDiscovery: {
+                              rules: "explicit-subjects-v1",
+                              createDraftPages: false,
+                              subjects: maintained.content.sections.map(
+                                  (page) => ({
+                                      key: page.id,
+                                      pageId: page.id,
+                                      title: page.heading,
+                                      taxonomy: page.details.taxonomy,
+                                  }),
+                              ),
+                          },
+                      }
+                    : {}),
+            },
+        });
+        assert.equal(definitionUpdate.status, 200);
+        const maintenancePlan = await invoke("memoryPlanViewMaintenance", {
+            corpusId: corpus.corpusId,
+            viewIds: [viewId],
+        });
+        assert.equal(maintenancePlan.status, 200);
+        assert.equal(maintenancePlan.body.data.targets[0].state, "rebuild");
+        const maintenanceRequest = {
+            corpusId: corpus.corpusId,
+            expectedHead: maintenancePlan.body.data.expectedHead,
+            targets: maintenancePlan.body.data.targets.map(
+                ({ viewId, expectedVersion }) => ({ viewId, expectedVersion }),
+            ),
+        };
+        assert.equal(
+            (
+                await invoke("memoryMaintainViews", {
+                    ...maintenanceRequest,
+                    actor: "spoof",
+                })
+            ).status,
+            400,
+        );
+        const maintenanceReceipt = await invoke(
+            "memoryMaintainViews",
+            maintenanceRequest,
+        );
+        assert.equal(maintenanceReceipt.status, 200);
+        let maintainedJob = maintenanceReceipt.body.data.job;
+        while (maintainedJob.state === "running") {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            maintainedJob = (
+                await invoke("memoryGetViewBuild", {
+                    corpusId: corpus.corpusId,
+                    jobId: maintainedJob.jobId,
+                })
+            ).body.data;
+        }
+        assert.ok(
+            ["draft", "merged"].includes(maintainedJob.results[0].state),
+            maintainedJob.results[0].reason,
+        );
+        const noOp = await invoke("memoryPlanViewMaintenance", {
+            corpusId: corpus.corpusId,
+            viewIds: [viewId],
+        });
+        assert.equal(noOp.body.data.targets[0].state, "unchanged");
+        const storedReceipt = await invoke("memoryGetViewMaintenance", {
+            corpusId: corpus.corpusId,
+            receiptId: maintenanceReceipt.body.data.receiptId,
+        });
+        assert.equal(storedReceipt.status, 200);
+        assert.equal(storedReceipt.body.data.job.state, "complete");
     });
 }

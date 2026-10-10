@@ -22,6 +22,7 @@ import {
 import { parseProjectBriefDetails, projectBriefRoles } from "./projectBrief.js";
 import type { ProjectBriefSection } from "./viewTypes.js";
 import { hydrateTimelineConstruction } from "./timelineConstruction.js";
+import { hydrateWikiConstruction } from "./wikiConstruction.js";
 
 const roles = [
     "description",
@@ -61,7 +62,7 @@ function selectedItems(
         return item;
     });
 }
-function evidenceEdges(
+export function evidenceEdges(
     input: ViewBuildSnapshot,
     sectionId: string,
     items: ViewInventoryItem[],
@@ -149,6 +150,16 @@ export function hydrateInventoryConstruction(
 ): ViewSynthesisOutput {
     if (input.definition.kind === "timeline") {
         const output = hydrateTimelineConstruction(input, inventory, value);
+        output.coverage = inventoryCoverage(output);
+        return output;
+    }
+    if (input.definition.kind === "wiki") {
+        const output = hydrateWikiConstruction(
+            input,
+            inventory,
+            value,
+            evidenceEdges,
+        );
         output.coverage = inventoryCoverage(output);
         return output;
     }

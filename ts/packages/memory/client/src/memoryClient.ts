@@ -82,9 +82,17 @@ import type {
     ViewPublicationPolicyUpdate,
     ViewSearchRequest,
     ViewSearchMatch,
+    ViewMaintenancePlanRequest,
+    ViewMaintenanceRequest,
+    ViewMaintenanceUpdate,
+    ViewMaintenanceRead,
+    ViewMaintenancePlan,
+    ViewMaintenanceResult,
 } from "@typeagent/memory-service";
 import {
     viewToolNames,
+    viewMaintenancePlanSchema,
+    viewMaintenanceResultSchema,
     viewBuildJobSchema,
     viewSnapshotSchema,
     viewVersionSchema,
@@ -234,6 +242,30 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return (
             this.service.buildViews?.(request) ??
             unsupportedCapability("view builds")
+        );
+    }
+    public planViewMaintenance(request: ViewMaintenancePlanRequest) {
+        return (
+            this.service.planViewMaintenance?.(request) ??
+            unsupportedCapability("view maintenance planning")
+        );
+    }
+    public maintainViews(request: ViewMaintenanceRequest) {
+        return (
+            this.service.maintainViews?.(request) ??
+            unsupportedCapability("view maintenance")
+        );
+    }
+    public updateViewMaintenance(request: ViewMaintenanceUpdate) {
+        return (
+            this.service.updateViewMaintenance?.(request) ??
+            unsupportedCapability("view maintenance definitions")
+        );
+    }
+    public getViewMaintenance(request: ViewMaintenanceRead) {
+        return (
+            this.service.getViewMaintenance?.(request) ??
+            unsupportedCapability("view maintenance receipts")
         );
     }
     public getViewBuild(request: ViewBuildJobRequest) {
@@ -666,6 +698,42 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             request,
             viewBuildJobSchema,
         );
+    }
+    public planViewMaintenance(
+        request: ViewMaintenancePlanRequest,
+    ): Promise<ViewMaintenancePlan> {
+        return this.invoke(
+            viewToolNames.planViewMaintenance,
+            request,
+            viewMaintenancePlanSchema,
+        );
+    }
+    public maintainViews(
+        request: ViewMaintenanceRequest,
+    ): Promise<ViewMaintenanceResult> {
+        return this.invoke(
+            viewToolNames.maintainViews,
+            request,
+            viewMaintenanceResultSchema,
+        );
+    }
+    public updateViewMaintenance(
+        request: ViewMaintenanceUpdate,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.updateViewMaintenance,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
+    public getViewMaintenance(
+        request: ViewMaintenanceRead,
+    ): Promise<ViewMaintenanceResult | undefined> {
+        return this.invoke<ViewMaintenanceResult | null>(
+            viewToolNames.getViewMaintenance,
+            request,
+            viewMaintenanceResultSchema.nullable(),
+        ).then((value) => value ?? undefined);
     }
     public getViewBuild(
         request: ViewBuildJobRequest,
