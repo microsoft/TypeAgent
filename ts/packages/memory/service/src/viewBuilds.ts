@@ -15,6 +15,7 @@ import { validateInventoryAudit } from "./viewInventory.js";
 import { mergeView } from "./viewMerge.js";
 import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
+import { validateMaintenanceConstruction } from "./viewMaintenance.js";
 
 export class ViewBuildStaleError extends Error {}
 
@@ -70,11 +71,12 @@ export class ViewBuildRunner {
         const scope: ViewBuildRuntimeScope = {
             corpusId: job.corpusId,
             sources: new Set(
-                job.results.flatMap((result) =>
-                    result.snapshot.definition.selector.sources.map(
+                job.results.flatMap((result) => [
+                    ...result.snapshot.definition.selector.sources.map(
                         (input) => input.sourceId,
                     ),
-                ),
+                    ...(result.snapshot.maintenance?.privacySources ?? []),
+                ]),
             ),
             events: new Set(
                 job.results.flatMap(
@@ -285,6 +287,10 @@ export class ViewBuildRunner {
             }
             validation = true;
             validateConstructedGuide(result.snapshot, candidate);
+            validateMaintenanceConstruction(
+                result.snapshot.maintenance,
+                candidate,
+            );
             await this.result(
                 job,
                 result.viewId,

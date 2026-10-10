@@ -12,7 +12,8 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./view-protocol": "./dist/viewProtocol.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

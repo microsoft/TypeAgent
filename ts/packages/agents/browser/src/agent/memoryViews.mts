@@ -23,6 +23,10 @@ type ViewMethods = Pick<
     | "memoryRetryViewIndex"
     | "memorySearchViews"
     | "memoryBuildViews"
+    | "memoryPlanViewMaintenance"
+    | "memoryMaintainViews"
+    | "memoryUpdateViewMaintenance"
+    | "memoryGetViewMaintenance"
     | "memoryGetViewBuild"
     | "memoryListViewBuilds"
     | "memoryCancelViewBuild"
@@ -52,6 +56,13 @@ export function createMemoryViewFunctions(
         memoryRetryViewIndex: (request) => views().retryViewIndex(request),
         memorySearchViews: (request) => views().searchViews(request),
         memoryBuildViews: (request) => views().buildViews(request),
+        memoryPlanViewMaintenance: (request) =>
+            views().planViewMaintenance(request),
+        memoryMaintainViews: (request) => views().maintainViews(request),
+        memoryUpdateViewMaintenance: (request) =>
+            views().updateViewMaintenance(request),
+        memoryGetViewMaintenance: (request) =>
+            views().getViewMaintenance(request),
         memoryGetViewBuild: (request) => views().getViewBuild(request),
         memoryListViewBuilds: ({ corpusId }) =>
             views().listViewBuilds(corpusId),

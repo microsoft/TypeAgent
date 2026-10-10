@@ -13,6 +13,10 @@ import type {
     ViewPublishRequest,
     ViewPublicationPolicyUpdate,
     ViewSearchRequest,
+    ViewMaintenancePlanRequest,
+    ViewMaintenanceRequest,
+    ViewMaintenanceUpdate,
+    ViewMaintenanceRead,
 } from "@typeagent/memory-service";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import {
@@ -35,6 +39,12 @@ import {
     viewPublishRequestSchema,
     viewSearchRequestSchema,
     viewSearchMatchSchema,
+    viewMaintenancePlanSchema,
+    viewMaintenancePlanRequestSchema,
+    viewMaintenanceRequestSchema,
+    viewMaintenanceResultSchema,
+    viewMaintenanceUpdateSchema,
+    viewMaintenanceReadSchema,
 } from "@typeagent/memory-client";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -46,6 +56,63 @@ export function registerViewTools(
 ): void {
     const views = createMemoryServiceRpcFacade(service);
     const corpus = z.strictObject({ corpusId: z.string().min(1).max(200) });
+    server.registerTool(
+        viewToolNames.planViewMaintenance,
+        {
+            description:
+                "Inspect dynamic membership, discovery identities, no-ops and blockers without synthesis or writes.",
+            inputSchema: viewMaintenancePlanRequestSchema,
+            outputSchema: z.object({ result: viewMaintenancePlanSchema }),
+        },
+        (request) =>
+            run(() =>
+                views.planViewMaintenance(
+                    request as ViewMaintenancePlanRequest,
+                ),
+            ),
+    );
+    server.registerTool(
+        viewToolNames.maintainViews,
+        {
+            description:
+                "Manually reconcile exact configured view versions. Rebuild affected full views; preserve explicit edits and record durable receipts. No scheduler or execution authority.",
+            inputSchema: viewMaintenanceRequestSchema,
+            outputSchema: z.object({ result: viewMaintenanceResultSchema }),
+        },
+        (request) =>
+            run(() => views.maintainViews(request as ViewMaintenanceRequest)),
+    );
+    server.registerTool(
+        viewToolNames.updateViewMaintenance,
+        {
+            description:
+                "Opt an existing derived view into bounded dynamic scope and explicit wiki subject discovery using exact head/version guards.",
+            inputSchema: viewMaintenanceUpdateSchema,
+            outputSchema: z.object({ result: viewHistoryEntrySchema }),
+        },
+        (request) =>
+            run(() =>
+                views.updateViewMaintenance(request as ViewMaintenanceUpdate),
+            ),
+    );
+    server.registerTool(
+        viewToolNames.getViewMaintenance,
+        {
+            description:
+                "Read a durable manual maintenance receipt and its current build outcome.",
+            inputSchema: viewMaintenanceReadSchema,
+            outputSchema: z.object({
+                result: viewMaintenanceResultSchema.nullable(),
+            }),
+        },
+        (request) =>
+            run(
+                async () =>
+                    (await views.getViewMaintenance(
+                        request as ViewMaintenanceRead,
+                    )) ?? null,
+            ),
+    );
     server.registerTool(
         viewToolNames.getViewPublicationPolicy,
         {

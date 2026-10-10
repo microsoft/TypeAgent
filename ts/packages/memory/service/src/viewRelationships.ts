@@ -8,14 +8,52 @@ import type {
     ViewRelationship,
     ViewRelationshipInput,
     ViewDefinition,
+    ViewDefinitionInput,
 } from "./viewTypes.js";
+
+export function preserveMaintenanceDefinition(
+    input: ViewDefinitionInput,
+    current?: ViewDefinition,
+): ViewDefinitionInput {
+    const maintenance = input.maintenance ?? current?.maintenance;
+    return { ...input, ...(maintenance ? { maintenance } : {}) };
+}
+
+export function editedViewState(current?: ViewVersion): "draft" | "stale" {
+    return current?.state === "stale" &&
+        current.definition.maintenance !== undefined &&
+        current.definition.maintenance.scope.mode !== "pinned"
+        ? "stale"
+        : "draft";
+}
+
+export function derivedDefinitionInput(
+    version: ViewVersion,
+): ViewDefinitionInput {
+    if (version.definition.kind === "procedure")
+        throw new Error(
+            "Procedure compatibility definitions are not maintained derived views",
+        );
+    return {
+        viewId: version.viewId,
+        kind: version.definition.kind,
+        selector: version.definition.selector,
+        ...(version.definition.maintenance
+            ? { maintenance: version.definition.maintenance }
+            : {}),
+    };
+}
 
 export function materializeDefinition(
     input: Omit<ViewDefinition, "revisionId">,
     previous?: ViewDefinition,
 ): ViewDefinition {
     const identity = (definition: Omit<ViewDefinition, "revisionId">) =>
-        JSON.stringify([definition.kind, definition.selector]);
+        JSON.stringify([
+            definition.kind,
+            definition.selector,
+            definition.maintenance,
+        ]);
     return {
         ...structuredClone(input),
         revisionId:

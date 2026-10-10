@@ -444,5 +444,88 @@ for (const kind of [
             assert.equal(original.body.data.content, sourceText);
             assert.equal(latest.content.agentEdition, undefined);
         }
+        const maintenanceSnapshot = await service.listViews(corpus.corpusId);
+        const maintained = maintenanceSnapshot.views.find(
+            (view) => view.viewId === viewId,
+        );
+        const definitionUpdate = await invoke("memoryUpdateViewMaintenance", {
+            corpusId: corpus.corpusId,
+            viewId,
+            expectedHead: maintenanceSnapshot.head,
+            expectedVersion: maintained.version,
+            maintenance: {
+                schemaVersion: 1,
+                scope: { mode: "currentSources", sourceIds: ["s"] },
+                ...(kind === "wiki"
+                    ? {
+                          wikiDiscovery: {
+                              rules: "explicit-subjects-v1",
+                              createDraftPages: false,
+                              subjects: maintained.content.sections.map(
+                                  (page) => ({
+                                      key: page.id,
+                                      pageId: page.id,
+                                      title: page.heading,
+                                      taxonomy: page.details.taxonomy,
+                                  }),
+                              ),
+                          },
+                      }
+                    : {}),
+            },
+        });
+        assert.equal(definitionUpdate.status, 200);
+        const maintenancePlan = await invoke("memoryPlanViewMaintenance", {
+            corpusId: corpus.corpusId,
+            viewIds: [viewId],
+        });
+        assert.equal(maintenancePlan.status, 200);
+        assert.equal(maintenancePlan.body.data.targets[0].state, "rebuild");
+        const maintenanceRequest = {
+            corpusId: corpus.corpusId,
+            expectedHead: maintenancePlan.body.data.expectedHead,
+            targets: maintenancePlan.body.data.targets.map(
+                ({ viewId, expectedVersion }) => ({ viewId, expectedVersion }),
+            ),
+        };
+        assert.equal(
+            (
+                await invoke("memoryMaintainViews", {
+                    ...maintenanceRequest,
+                    actor: "spoof",
+                })
+            ).status,
+            400,
+        );
+        const maintenanceReceipt = await invoke(
+            "memoryMaintainViews",
+            maintenanceRequest,
+        );
+        assert.equal(maintenanceReceipt.status, 200);
+        let maintainedJob = maintenanceReceipt.body.data.job;
+        while (maintainedJob.state === "running") {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            maintainedJob = (
+                await invoke("memoryGetViewBuild", {
+                    corpusId: corpus.corpusId,
+                    jobId: maintainedJob.jobId,
+                })
+            ).body.data;
+        }
+        assert.ok(
+            ["draft", "merged"].includes(maintainedJob.results[0].state),
+            maintainedJob.results[0].reason,
+        );
+        const noOp = await invoke("memoryPlanViewMaintenance", {
+            corpusId: corpus.corpusId,
+            viewIds: [viewId],
+        });
+        assert.equal(noOp.body.data.targets[0].state, "unchanged");
+        const storedReceipt = await invoke("memoryGetViewMaintenance", {
+            corpusId: corpus.corpusId,
+            receiptId: maintenanceReceipt.body.data.receiptId,
+        });
+        assert.equal(storedReceipt.status, 200);
+        assert.equal(storedReceipt.body.data.job.state, "complete");
     });
 }

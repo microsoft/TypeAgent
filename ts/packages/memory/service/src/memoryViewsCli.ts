@@ -15,6 +15,9 @@ import type {
     MemoryViewService,
     ViewPublishRequest,
     ViewPublicationPolicyUpdate,
+    ViewMaintenanceRequest,
+    ViewMaintenancePlanRequest,
+    ViewMaintenanceUpdate,
 } from "./viewTypes.js";
 
 const usage = `Opt-in derived views:
@@ -32,6 +35,10 @@ node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <comman
   save <request.json>
   archive <request.json>
   build <request.json>
+  plan-maintenance <request.json>
+  maintain <request.json>
+  set-maintenance <request.json>
+  maintenance-status <corpusId> <receiptId>
   builds <corpusId>
   status <corpusId> <jobId>
   cancel <corpusId> <jobId>
@@ -61,6 +68,10 @@ const argumentCounts = new Map<string, readonly [number, number]>([
     ["save", [1, 1]],
     ["archive", [1, 1]],
     ["build", [1, 1]],
+    ["plan-maintenance", [1, 1]],
+    ["maintain", [1, 1]],
+    ["set-maintenance", [1, 1]],
+    ["maintenance-status", [2, 2]],
     ["builds", [1, 1]],
     ["status", [2, 2]],
     ["cancel", [2, 2]],
@@ -100,6 +111,48 @@ const viewCommands = new Map<
         values: string[],
     ) => Promise<unknown>
 >([
+    [
+        "plan-maintenance",
+        async (rpc, values) =>
+            rpc.planViewMaintenance(
+                JSON.parse(
+                    await readFile(values[0], "utf8"),
+                ) as ViewMaintenancePlanRequest,
+            ),
+    ],
+    [
+        "set-maintenance",
+        async (rpc, values) =>
+            rpc.updateViewMaintenance(
+                JSON.parse(
+                    await readFile(values[0], "utf8"),
+                ) as ViewMaintenanceUpdate,
+            ),
+    ],
+    [
+        "maintain",
+        async (rpc, values) => {
+            const receipt = await rpc.maintainViews(
+                JSON.parse(
+                    await readFile(values[0], "utf8"),
+                ) as ViewMaintenanceRequest,
+            );
+            return {
+                ...receipt,
+                ...(receipt.job
+                    ? { job: await waitForViewBuild(rpc, receipt.job) }
+                    : {}),
+            };
+        },
+    ],
+    [
+        "maintenance-status",
+        async (rpc, values) =>
+            (await rpc.getViewMaintenance({
+                corpusId: values[0],
+                receiptId: values[1],
+            })) ?? null,
+    ],
     [
         "build",
         async (rpc, values) => {

@@ -2,6 +2,12 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
+import {
+    viewMaintenanceDefinitionSchema,
+    viewMaintenanceSnapshotSchema,
+    viewMaintenanceManifestSchema,
+} from "./viewMaintenanceProtocol.js";
+export * from "./viewMaintenanceProtocol.js";
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/);
 const text = z.string().min(1).max(120000);
@@ -24,6 +30,22 @@ export const viewDefinitionSchema = z.strictObject({
     viewId: id,
     kind: z.enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"]),
     selector: viewSelectorSchema,
+    maintenance: viewMaintenanceDefinitionSchema.optional(),
+});
+export const viewMaintenancePlanSchema = z.object({
+    corpusId: id,
+    expectedHead: head.nullable(),
+    targets: z
+        .object({
+            viewId: id,
+            expectedVersion: z.number().int().nonnegative(),
+            state: z.enum(["unchanged", "rebuild", "blocked", "pinned"]),
+            reason: text,
+            selector: viewSelectorSchema.optional(),
+            snapshot: viewMaintenanceSnapshotSchema.optional(),
+        })
+        .array()
+        .max(32),
 });
 const citation = source.extend({
     locator: z.string().regex(/^chars:\d+-\d+$/),
@@ -528,6 +550,7 @@ const snapshot = z.object({
     model: text,
     fingerprint: hash,
     publicationPolicy: viewEffectivePolicySchema.optional(),
+    maintenance: viewMaintenanceSnapshotSchema.optional(),
 });
 export const viewBuildJobSchema = z.object({
     jobId: z.string().uuid(),
@@ -546,6 +569,7 @@ export const viewBuildJobSchema = z.object({
         "interrupted",
     ]),
     publication: z.boolean(),
+    maintenancePlan: viewMaintenancePlanSchema.optional(),
     results: z
         .object({
             viewId: id,
@@ -615,6 +639,7 @@ export const viewVersionSchema = z.object({
     actor: text,
     baseRevisionId: id.optional(),
     provenance: z.enum(["human", "procedure", "generated", "merged"]),
+    maintenance: viewMaintenanceManifestSchema.optional(),
     validation: z
         .object({
             artifactFingerprint: hash,
@@ -662,6 +687,7 @@ export const viewVersionSchema = z.object({
             "procedure",
         ]),
         selector: viewSelectorSchema,
+        maintenance: viewMaintenanceDefinitionSchema.optional(),
     }),
     content: z.union([
         projectContent,
@@ -772,6 +798,10 @@ export const viewConflictSchema = z.object({
 });
 
 export const viewToolNames = {
+    planViewMaintenance: "memory_views_maintenance_plan",
+    maintainViews: "memory_views_maintain",
+    updateViewMaintenance: "memory_view_maintenance_update",
+    getViewMaintenance: "memory_view_maintenance_get",
     listViews: "memory_views_list",
     getView: "memory_view_get",
     saveViewDraft: "memory_view_save_draft",
@@ -791,3 +821,9 @@ export const viewToolNames = {
     getViewConflict: "memory_view_conflict_get",
     resolveViewConflict: "memory_view_conflict_resolve",
 } as const;
+
+export const viewMaintenanceResultSchema = z.object({
+    receiptId: id,
+    plan: viewMaintenancePlanSchema,
+    job: viewBuildJobSchema.optional(),
+});

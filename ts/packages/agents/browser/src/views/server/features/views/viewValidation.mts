@@ -19,6 +19,10 @@ import {
     viewPublicationPolicyUpdateSchema,
     viewPublishRequestSchema,
     viewSearchRequestSchema,
+    viewMaintenancePlanRequestSchema,
+    viewMaintenanceRequestSchema,
+    viewMaintenanceUpdateSchema,
+    viewMaintenanceReadSchema,
 } from "@typeagent/memory-client";
 import type {
     ViewMethod,
@@ -101,6 +105,10 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryRetryViewIndex: protocolInput(viewPublishRequestSchema),
     memorySearchViews: protocolInput(viewSearchRequestSchema),
     memoryBuildViews: protocolInput(viewBuildRequestSchema),
+    memoryPlanViewMaintenance: protocolInput(viewMaintenancePlanRequestSchema),
+    memoryMaintainViews: protocolInput(viewMaintenanceRequestSchema),
+    memoryUpdateViewMaintenance: protocolInput(viewMaintenanceUpdateSchema),
+    memoryGetViewMaintenance: protocolInput(viewMaintenanceReadSchema),
     memoryGetViewBuild: protocolInput(viewBuildJobRequestSchema),
     memoryListViewBuilds: z.strictObject(corpus),
     memoryCancelViewBuild: protocolInput(viewBuildJobRequestSchema),

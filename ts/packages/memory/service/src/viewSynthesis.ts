@@ -151,6 +151,9 @@ Return concise connective prose for each page, including scope and uncertainty. 
 Return only explicitly supported relatedTo or contradicts links between distinct existing page IDs.
 The host derives exact section/source proof and the typed index. Raw wikilinks are display text, never semantic authority.
 Do not create arbitrary taxonomy, page merge identities, evidence, citations or index entries.
+When input.maintenance.subjects is supplied, use every supplied pageId exactly once with its
+reviewed title and taxonomy. Never invent or match a subject identity by title. Subject metadata
+provides identity, not fact support; unsupported subjects must fail the independent evidence checks.
 Outcome is knowledgePages. Missing evidence is explicit; wiki publication gives no execution or skill authority.`
                     : input.definition.kind === "timeline"
                       ? `${evidenceRules}
@@ -206,6 +209,7 @@ Use stable section IDs. Do not fabricate a missing recovery or turn recorded val
                         (source) =>
                             source.records?.map((record) => record.id) ?? [],
                     ),
+                    input.maintenance?.subjects,
                 ),
             );
             return hydrateInventoryConstruction(input, inventory, raw);
