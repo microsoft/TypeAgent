@@ -501,7 +501,8 @@ export interface MemoryServiceCapabilities {
         kinds: Array<"troubleshootingGuide">;
         drafts: true;
         history: true;
-        publication: false;
+        publication: true;
+        search: true;
         builds?: true;
         editMerging?: true;
     };

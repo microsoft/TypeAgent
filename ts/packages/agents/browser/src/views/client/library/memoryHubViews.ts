@@ -8,6 +8,8 @@ import type {
     ViewVersion,
     ViewSynthesisOutput,
     ViewRelationshipInput,
+    ViewPublicationPolicy,
+    ViewPublicationStatus,
 } from "@typeagent/memory-service";
 import { invokeMemory } from "./viewClient";
 import { rbButton, rbError, rbNode } from "./memoryHubRunbookUi";
@@ -36,6 +38,19 @@ function editableEdges(view: ViewVersion): ViewRelationshipInput[] {
     );
 }
 
+function publicationChoice(label: string, inherit: boolean): HTMLSelectElement {
+    const select = document.createElement("select");
+    select.setAttribute("aria-label", label);
+    for (const value of [...(inherit ? ["inherit"] : []), "on", "off"]) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent =
+            value === "inherit" ? "Inherit" : value === "on" ? "On" : "Off";
+        select.append(option);
+    }
+    return select;
+}
+
 export function mountMemoryHubViews(
     host: HTMLElement,
     options: {
@@ -46,7 +61,7 @@ export function mountMemoryHubViews(
     const root = rbNode("section");
     root.className = "hub-draft-views";
     root.hidden = true;
-    root.setAttribute("aria-label", "Developer draft views");
+    root.setAttribute("aria-label", "Derived views");
     const status = rbNode("p");
     status.setAttribute("role", "status");
     const controls = rbNode("div");
@@ -54,10 +69,10 @@ export function mountMemoryHubViews(
     const drafts = rbNode("div");
     const comparison = rbNode("div");
     root.append(
-        rbNode("h3", "Views (draft only)"),
+        rbNode("h3", "Views"),
         rbNode(
             "p",
-            "Distill selected exact retained revisions into a conditional troubleshooting guide. No publication, search indexing, skill approval or execution.",
+            "Distill exact retained revisions into a conditional troubleshooting guide. Publication and index readiness are separate; neither grants human review, skill approval or execution. Configured synthesis remains live-unqualified.",
         ),
         status,
         controls,
@@ -67,6 +82,12 @@ export function mountMemoryHubViews(
     );
     host.append(root);
     let snapshot: ViewSnapshot = { head: null, views: [] };
+    let policy: ViewPublicationPolicy = {
+        revision: 0,
+        autoPublish: true,
+        views: {},
+    };
+    const publications = new Map<string, ViewPublicationStatus>();
     let sequence = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let dirty = false;
@@ -107,12 +128,26 @@ export function mountMemoryHubViews(
             comparison.replaceChildren();
             return;
         }
-        const [views, jobs] = await Promise.all([
+        const [views, jobs, savedPolicy] = await Promise.all([
             invokeMemory("memoryListViews", { corpusId }),
             invokeMemory("memoryListViewBuilds", { corpusId }),
+            invokeMemory("memoryGetViewPublicationPolicy", { corpusId }),
         ]);
         if (current !== sequence || corpusId !== options.scope()) return;
         snapshot = views;
+        policy = savedPolicy;
+        publications.clear();
+        await Promise.all(
+            views.views.map(async (view) => {
+                publications.set(
+                    view.viewId,
+                    await invokeMemory("memoryGetViewPublication", {
+                        corpusId,
+                        viewId: view.viewId,
+                    }),
+                );
+            }),
+        );
         await renderControls(corpusId, current);
         if (current !== sequence) return;
         renderDrafts();
@@ -120,7 +155,7 @@ export function mountMemoryHubViews(
         else
             receipt.replaceChildren(rbNode("p", "No durable view builds yet."));
         status.textContent =
-            "Draft-only capability enabled. Inputs and target revisions are rechecked before saving.";
+            "Opt-in views enabled. Inputs, policy and target revisions are rechecked before publication. Auto-publish does not stamp human review.";
     }
 
     async function renderControls(
@@ -191,11 +226,56 @@ export function mountMemoryHubViews(
         const cutoff = document.createElement("input");
         cutoff.setAttribute("aria-label", "Learned before ISO timestamp");
         cutoff.placeholder = "Optional learned-before ISO timestamp";
+        const corpusPolicy = publicationChoice(
+            "Corpus auto-publish after build",
+            false,
+        );
+        corpusPolicy.value = policy.autoPublish ? "on" : "off";
+        const settings = rbNode("fieldset");
+        settings.append(
+            rbNode("legend", "Corpus settings: Auto-publish after build"),
+            corpusPolicy,
+            rbButton("Save corpus publication setting", () => {
+                void action(async () => {
+                    await invokeMemory("memoryUpdateViewPublicationPolicy", {
+                        corpusId,
+                        expectedHead: snapshot.head,
+                        expectedRevision: policy.revision,
+                        autoPublish: corpusPolicy.value === "on",
+                    });
+                    await refresh();
+                });
+            }),
+        );
+        const buildPolicy = publicationChoice(
+            "Build auto-publish after build",
+            true,
+        );
+        const effective = rbNode("p");
+        const updateEffective = () => {
+            const override = policy.views[target.value.trim()]?.autoPublish;
+            const value =
+                buildPolicy.value !== "inherit"
+                    ? buildPolicy.value === "on"
+                    : (override ?? policy.autoPublish);
+            const origin =
+                buildPolicy.value !== "inherit"
+                    ? "build override"
+                    : override != null
+                      ? "view override"
+                      : "corpus setting";
+            effective.textContent = `Auto-publish after build: ${value ? "On" : "Off"} (${origin}). One-build overrides do not change saved settings.`;
+        };
+        target.oninput = buildPolicy.onchange = updateEffective;
+        updateEffective();
         controls.replaceChildren(
+            settings,
             sourceHost,
             target,
             cutoff,
-            rbButton("Build (draft only)", () => {
+            buildPolicy,
+            effective,
+            rbButton("Build views", () => {
                 void action(async () => {
                     if (dirty)
                         throw new Error(
@@ -234,7 +314,9 @@ export function mountMemoryHubViews(
                         ...(cutoff.value.trim()
                             ? { bounds: { learnedBefore: cutoff.value.trim() } }
                             : {}),
-                        publication: false,
+                        ...(buildPolicy.value === "inherit"
+                            ? {}
+                            : { publication: buildPolicy.value === "on" }),
                     });
                     if (current === sequence) renderReceipt(job);
                 });
@@ -252,6 +334,21 @@ export function mountMemoryHubViews(
             rbNode("h4", `Build ${job.jobId}: ${job.state}`),
         );
         for (const result of job.results) {
+            const effective = result.snapshot.publicationPolicy;
+            if (effective)
+                receipt.append(
+                    rbNode(
+                        "p",
+                        `Auto-publish: ${effective.autoPublish ? "On" : "Off"} (${effective.origin}); corpus policy revision ${effective.corpusRevision}, view policy revision ${effective.viewRevision}`,
+                    ),
+                );
+            if (result.publication)
+                receipt.append(
+                    rbNode(
+                        "p",
+                        `Published ${result.publication.publishedRevisionId}; indexed ${result.publication.indexedRevisionId ?? "not ready"}: ${result.publication.reason}`,
+                    ),
+                );
             receipt.append(
                 rbNode(
                     "p",
@@ -391,6 +488,41 @@ export function mountMemoryHubViews(
             view.content,
         );
         const edges = jsonEditor("Typed relationships", editableEdges(view));
+        const viewPolicy = publicationChoice(
+            "View auto-publish after build",
+            true,
+        );
+        const override = policy.views[view.viewId]?.autoPublish;
+        viewPolicy.value =
+            override == null ? "inherit" : override ? "on" : "off";
+        const publication = publications.get(view.viewId);
+        const publish = (retry: boolean) => {
+            void action(async () => {
+                if (dirty)
+                    throw new Error(
+                        "Save or discard edits before publishing or retrying indexing",
+                    );
+                if (!snapshot.head)
+                    throw new Error("Exact view history head is unavailable");
+                const revisionId = retry
+                    ? publication?.publishedRevisionId
+                    : view.revisionId;
+                if (!revisionId)
+                    throw new Error("No published revision to index");
+                const result = await invokeMemory(
+                    retry ? "memoryRetryViewIndex" : "memoryPublishView",
+                    {
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                        revisionId,
+                        expectedHead: snapshot.head,
+                        expectedVersion: view.version,
+                    },
+                );
+                await refresh();
+                status.textContent = result.reason;
+            });
+        };
         content.oninput = edges.oninput = () => {
             dirty = true;
         };
@@ -402,6 +534,29 @@ export function mountMemoryHubViews(
             ),
             content,
             edges,
+            rbNode(
+                "p",
+                `Publication: ${publication?.blockedReason ?? publication?.reason ?? "not published"}. Published ${publication?.publishedRevisionId ?? "none"}; indexed ${publication?.indexedRevisionId ?? "none"}.`,
+            ),
+            viewPolicy,
+            rbButton("Save view publication override", () => {
+                void action(async () => {
+                    await invokeMemory("memoryUpdateViewPublicationPolicy", {
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                        expectedHead: snapshot.head,
+                        expectedRevision:
+                            policy.views[view.viewId]?.revision ?? 0,
+                        autoPublish:
+                            viewPolicy.value === "inherit"
+                                ? null
+                                : viewPolicy.value === "on",
+                    });
+                    await refresh();
+                });
+            }),
+            rbButton("Publish exact revision", () => publish(false)),
+            rbButton("Retry index", () => publish(true)),
             rbButton("Save explicit edits", () => {
                 void action(async () => {
                     await invokeMemory("memorySaveViewDraft", {

@@ -187,6 +187,36 @@ test("configured adapter inventory and final coverage survive authenticated MCP,
             "memory_inventory_artifact_support",
         ]);
         const result = job.results[0];
+        expect(result.state).toBe("searchable");
+        const policy = await client.getViewPublicationPolicy(corpus.corpusId);
+        expect(policy.autoPublish).toBe(true);
+        const publication = await client.getViewPublication({
+            corpusId: corpus.corpusId,
+            viewId: "guide",
+        });
+        expect(publication.indexedRevisionId).toBe(result.revisionId);
+        const search = await client.searchViews({
+            corpusId: corpus.corpusId,
+            query: "Capacity",
+            freshness: "current",
+        });
+        expect(search[0].view.revisionId).toBe(result.revisionId);
+        expect(search[0].review).toBe("unreviewed");
+        const current = await client.listViews(corpus.corpusId);
+        await client.updateViewPublicationPolicy({
+            corpusId: corpus.corpusId,
+            expectedHead: current.head,
+            expectedRevision: policy.revision,
+            autoPublish: false,
+        });
+        expect(
+            (
+                await client.getViewPublication({
+                    corpusId: corpus.corpusId,
+                    viewId: "guide",
+                })
+            ).publishedRevisionId,
+        ).toBe(result.revisionId);
         expect(result.inventory!.items[0].citations[0].revisionId).toBe(
             source.revisionId,
         );
@@ -221,6 +251,16 @@ test("configured adapter inventory and final coverage survive authenticated MCP,
                 jobId: job.jobId,
             }))!.results[0].coverage,
         ).toEqual(result.coverage);
+        const latest = await client.listViews(corpus.corpusId);
+        const retry = await client.retryViewIndex({
+            corpusId: corpus.corpusId,
+            viewId: "guide",
+            revisionId: result.revisionId!,
+            expectedVersion: latest.views[0].version,
+            expectedHead: latest.head!,
+        });
+        expect(retry.intent).toEqual(publication.intent);
+        expect(stages).toHaveLength(5);
     } finally {
         await client?.close();
         await host?.close();

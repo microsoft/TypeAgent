@@ -4,7 +4,11 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export type IndexKind = "documents" | "conversation-events" | "procedures";
+export type IndexKind =
+    | "documents"
+    | "conversation-events"
+    | "procedures"
+    | "views";
 
 export interface IndexSchema {
     indexSchemaVersion: 1;

@@ -253,6 +253,63 @@ test("mixed evidence is answer-first, safely rendered, and exact citations never
     });
 });
 
+test("published derived results disclose their exact revision and drill through to original evidence", async () => {
+    const guide: MemoryHubEvidence = {
+        id: "view-citation",
+        kind: "view",
+        corpusId: "a",
+        corpusName: "Alpha",
+        objectId: "guide",
+        revisionId: "published-r2",
+        title: "Published troubleshooting guide",
+        snippet: "Inspect pressure carefully.",
+        score: 0.02,
+        rank: 1,
+        viewKind: "troubleshootingGuide",
+        viewVersion: 2,
+        viewProvenance: "merged",
+        review: "unreviewed",
+        freshness: "current",
+        evidenceSources: [
+            {
+                sourceId: "source",
+                revisionId: "source-r1",
+                locator: "chars:0-8",
+                excerpt: "Pressure",
+            },
+        ],
+    };
+    invoke.mockResolvedValueOnce(result([guide]));
+    await mounted.show("pressure");
+    expect(host.querySelector(".phase2-results")!.textContent).toContain(
+        "published-r2",
+    );
+    expect(host.querySelector(".phase2-results")!.textContent).toContain(
+        "merged",
+    );
+    expect(host.querySelector(".phase2-results")!.textContent).toContain(
+        "not independent corroboration",
+    );
+    button(guide.title).click();
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("memoryHubEvidence", {
+        corpusId: "a",
+        kind: "view",
+        objectId: "guide",
+        revisionId: "published-r2",
+        offset: 0,
+    });
+    button("Inspect original evidence source @ source-r1 (chars:0-8)").click();
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("memoryHubEvidence", {
+        corpusId: "a",
+        kind: "source",
+        objectId: "source",
+        revisionId: "source-r1",
+        offset: 0,
+    });
+});
+
 test("submitted filters include corpus, types, tags, inclusive dates and conversation scope", async () => {
     scope = "a";
     field<HTMLSelectElement>("sourceTypes").options[1].selected = true;

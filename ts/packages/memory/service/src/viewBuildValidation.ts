@@ -32,9 +32,12 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
         throw new Error(
             "Unsupported build request field; actor and model are service-owned",
         );
-    if (request.publication !== undefined && request.publication !== false)
+    if (
+        request.publication !== undefined &&
+        typeof request.publication !== "boolean"
+    )
         throw new Error(
-            "View builds are draft-only; publication is not supported",
+            "Build publication override must be a boolean or absent to inherit",
         );
     if (
         !Array.isArray(request.targets) ||

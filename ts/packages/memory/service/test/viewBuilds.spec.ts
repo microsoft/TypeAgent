@@ -177,6 +177,7 @@ describe("human-added edge merge regressions", () => {
         const request: ViewBuildRequest = {
             corpusId: corpus.corpusId,
             expectedHead: null,
+            publication: false,
             targets: [
                 {
                     expectedVersion: 0,
@@ -428,6 +429,7 @@ describe("durable draft builds and explicit edit merge", () => {
         await waitForMemoryJob(service, source.jobId);
         return {
             corpusId: corpus.corpusId,
+            publication: false,
             expectedHead: (await service.listViews(corpus.corpusId)).head,
             targets: Array.from({ length: count }, (_, index) => ({
                 expectedVersion: 0,
@@ -551,12 +553,6 @@ describe("durable draft builds and explicit edit merge", () => {
                 bounds: early.bounds,
             }),
         ).rejects.toThrow("temporal");
-        await expect(
-            service.buildViews({
-                ...request,
-                publication: true,
-            } as unknown as ViewBuildRequest),
-        ).rejects.toThrow("draft-only");
         await service.close();
         service = open();
         expect((await service.buildViews(early)).jobId).toBe(job.jobId);

@@ -54,7 +54,13 @@ import type {
     ViewSynthesisOutput,
     ViewMergeConflict,
     ViewConflictResolution,
+    ViewPublicationPolicy,
+    ViewPublicationPolicyUpdate,
+    ViewPublicationStatus,
+    ViewPublishRequest,
+    ViewPublicationProof,
 } from "./viewTypes.js";
+import { assertPublicationProof } from "./viewPublication.js";
 import {
     recordViewEdits,
     rebaseViewEdits,
@@ -85,6 +91,9 @@ interface ViewStoreState {
     views: Record<string, ViewVersion[]>;
     builds?: Record<string, ViewBuildJob>;
     conflicts?: Record<string, ViewMergeConflict>;
+    publicationPolicy?: ViewPublicationPolicy;
+    publications?: Record<string, ViewPublicationStatus>;
+    viewIndexCleanup?: string[];
 }
 
 function viewVersions(state: ViewStoreState, viewId: string): ViewVersion[] {
@@ -235,6 +244,7 @@ export class TypedViewStore {
 
     public async saveViewDraft(
         request: ViewSaveRequest,
+        validation?: ViewPublicationProof,
     ): Promise<ViewHistoryEntry> {
         const history = this.history(request.corpusId);
         const { head, state } = await history.read();
@@ -259,6 +269,7 @@ export class TypedViewStore {
             createdAt: timestamp(),
             actor: this.actor,
             provenance: "human",
+            ...(validation ? { validation } : {}),
             ...(current?.generation
                 ? { generation: structuredClone(current.generation) }
                 : {}),
@@ -354,7 +365,9 @@ export class TypedViewStore {
             createdAt: timestamp,
             updatedAt: timestamp,
             state: "running",
-            publication: false,
+            publication: snapshots.some(
+                (snapshot) => snapshot.publicationPolicy?.autoPublish,
+            ),
             results: snapshots.map((snapshot) => ({
                 viewId: snapshot.definition.viewId,
                 snapshot,
@@ -445,6 +458,7 @@ export class TypedViewStore {
         candidate: ViewSynthesisOutput,
         merged: ViewSynthesisOutput,
         conflicts: string[],
+        validation?: ViewPublicationProof,
     ): Promise<ViewBuildTargetResult> {
         const { head, state } = await this.history(corpusId).read();
         const job = state.builds?.[jobId];
@@ -476,11 +490,20 @@ export class TypedViewStore {
                 candidate,
                 merged,
             );
+            if (validation) version.validation = validation;
             state.views[viewId] = [...viewVersions(state, viewId), version];
             result.state = version.provenance === "merged" ? "merged" : "draft";
             result.reason =
                 "Validated draft saved; no publication, review or execution authority";
             result.revisionId = version.revisionId;
+            state.publications ??= {};
+            const publication = state.publications[viewId] ?? {
+                viewId,
+                indexState: "absent" as const,
+                reason: "No published revision",
+            };
+            publication.latestBuiltRevisionId = version.revisionId;
+            state.publications[viewId] = publication;
             result.missingEvidence = candidate.missingEvidence;
             if (merged.coverage) result.coverage = merged.coverage;
         }
@@ -588,6 +611,7 @@ export class TypedViewStore {
                 relationships: structuredClone(candidate.relationships),
                 input,
                 outcome: candidate.outcome,
+                missingEvidence: merged.missingEvidence,
                 ...inventoryEvidence(merged),
             },
             edits,
@@ -604,6 +628,7 @@ export class TypedViewStore {
     public async resolveViewConflict(
         request: ViewConflictResolution,
         output: ViewSynthesisOutput,
+        validation?: ViewPublicationProof,
     ): Promise<ViewHistoryEntry> {
         const { head, state } = await this.history(request.corpusId).read();
         const conflict = state.conflicts?.[request.conflictId];
@@ -628,6 +653,7 @@ export class TypedViewStore {
             output,
         );
         version.actor = this.actor;
+        if (validation) version.validation = validation;
         version.provenance = "human";
         if (request.choice === "generated")
             version.edits = (current.edits ?? []).map((edit) => ({
@@ -711,6 +737,12 @@ export class TypedViewStore {
             current.generation?.input !== undefined,
         );
         state.views[request.viewId] = [...versions, version];
+        if (state.publications?.[request.viewId]?.publishedRevisionId) {
+            delete state.publications[request.viewId];
+            state.viewIndexCleanup = [
+                ...new Set([...(state.viewIndexCleanup ?? []), request.viewId]),
+            ];
+        }
         const commitId = await history.commit(
             head,
             state,
@@ -796,6 +828,11 @@ export class TypedViewStore {
                     ),
             ),
         );
+        state.publications = Object.fromEntries(
+            Object.entries(state.publications ?? {}).filter(
+                ([id]) => !affected.has(id),
+            ),
+        );
         state.index.procedures = state.index.procedures.filter(
             (item) => !affected.has(item.procedureId),
         );
@@ -831,12 +868,237 @@ export class TypedViewStore {
     }
 
     private async removeSearchIndex(corpusId: string): Promise<void> {
+        const { state } = await this.history(corpusId).read(undefined, true);
+        const retained = new Set(
+            Object.keys(state.views).map((id) => viewHash(id)),
+        );
+        const root = path.join(
+            this.howToDirectory(corpusId),
+            "view-search-index",
+        );
+        let entries: string[];
+        try {
+            entries = await readdir(root);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            entries = [];
+        }
+        for (const entry of entries) {
+            if (!/^[0-9a-f]{64}$/.test(entry))
+                throw new Error(
+                    "Unexpected derived view index directory during privacy cleanup",
+                );
+            if (!retained.has(entry))
+                await retryProcedurePublication(() =>
+                    rm(path.join(root, entry), {
+                        recursive: true,
+                        force: true,
+                    }),
+                );
+        }
         await retryProcedurePublication(() =>
             rm(path.join(this.howToDirectory(corpusId), "search-index"), {
                 recursive: true,
                 force: true,
             }),
         );
+    }
+
+    public async getViewPublicationPolicy(
+        corpusId: string,
+    ): Promise<ViewPublicationPolicy> {
+        const { state } = await this.history(corpusId).read();
+        return (
+            state.publicationPolicy ?? {
+                revision: 0,
+                autoPublish: true,
+                views: {},
+            }
+        );
+    }
+
+    public async initializeViewPublicationPolicy(
+        corpusId: string,
+    ): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        if (state.publicationPolicy) return;
+        state.publicationPolicy = { revision: 0, autoPublish: true, views: {} };
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Initialize corpus auto-publish policy",
+        );
+    }
+
+    public async getViewIndexCleanup(corpusId: string): Promise<string[]> {
+        return (
+            (await this.history(corpusId).read()).state.viewIndexCleanup ?? []
+        );
+    }
+
+    public async completeViewIndexCleanup(
+        corpusId: string,
+        viewId: string,
+    ): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        state.viewIndexCleanup = (state.viewIndexCleanup ?? []).filter(
+            (id) => id !== viewId,
+        );
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Complete archived view index cleanup ${viewId}`,
+        );
+    }
+
+    public async updateViewPublicationPolicy(
+        request: ViewPublicationPolicyUpdate,
+    ): Promise<ViewPublicationPolicy> {
+        const { head, state } = await this.history(request.corpusId).read();
+        if (head !== request.expectedHead)
+            throw new Error("View policy history head conflict");
+        const policy = state.publicationPolicy ?? {
+            revision: 0,
+            autoPublish: true,
+            views: {},
+        };
+        if (request.viewId !== undefined) {
+            assertViewIdentifier("view ID", request.viewId);
+            const prior = policy.views[request.viewId];
+            if ((prior?.revision ?? 0) !== request.expectedRevision)
+                throw new Error("View policy revision conflict");
+            policy.views[request.viewId] = {
+                revision: request.expectedRevision + 1,
+                autoPublish: request.autoPublish,
+            };
+        } else {
+            if (policy.revision !== request.expectedRevision)
+                throw new Error("Corpus publication policy revision conflict");
+            if (request.autoPublish === null)
+                throw new Error("Corpus publication setting cannot inherit");
+            policy.revision++;
+            policy.autoPublish = request.autoPublish;
+        }
+        state.publicationPolicy = policy;
+        await this.commitBuildState(
+            request.corpusId,
+            head,
+            state,
+            "Update auto-publish policy",
+        );
+        return policy;
+    }
+
+    public async getViewPublication(
+        request: ViewReadRequest,
+    ): Promise<ViewPublicationStatus> {
+        const { state } = await this.history(request.corpusId).read();
+        const publication = state.publications?.[request.viewId] ?? {
+            viewId: request.viewId,
+            indexState: "absent" as const,
+            reason: "No published revision",
+        };
+        const pending = Object.values(state.conflicts ?? {}).some(
+            (conflict) =>
+                conflict.viewId === request.viewId &&
+                conflict.state === "pending",
+        );
+        return {
+            ...publication,
+            ...(pending
+                ? {
+                      blockedReason:
+                          "Resolve the pending merge conflict before publishing or searching",
+                  }
+                : {}),
+        };
+    }
+
+    public async publishView(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
+        const { head, state } = await this.history(request.corpusId).read();
+        const current = viewVersions(state, request.viewId).at(-1);
+        if (
+            head !== request.expectedHead ||
+            current?.revisionId !== request.revisionId ||
+            current.version !== request.expectedVersion
+        )
+            throw new Error("Publication head or target revision conflict");
+        if (current.state !== "draft")
+            throw new Error("Only a current eligible draft may publish");
+        if (
+            Object.values(state.conflicts ?? {}).some(
+                (conflict) =>
+                    conflict.viewId === request.viewId &&
+                    conflict.state === "pending",
+            )
+        )
+            throw new Error(
+                "Resolve the pending merge conflict before publishing",
+            );
+        assertPublicationProof(current);
+        state.publications ??= {};
+        const prior = state.publications[request.viewId];
+        if (prior?.publishedRevisionId === current.revisionId) return prior;
+        const publication: ViewPublicationStatus = {
+            viewId: request.viewId,
+            ...(prior?.latestBuiltRevisionId
+                ? { latestBuiltRevisionId: prior.latestBuiltRevisionId }
+                : {}),
+            publishedRevisionId: current.revisionId,
+            indexState: "pending",
+            reason: "Published, indexing pending",
+            intent: {
+                revisionId: current.revisionId,
+                actor: this.actor,
+                createdAt: timestamp(),
+            },
+        };
+        state.publications[request.viewId] = publication;
+        await this.commitBuildState(
+            request.corpusId,
+            head,
+            state,
+            `Publish ${request.viewId} revision ${current.revisionId}`,
+        );
+        return publication;
+    }
+
+    public async updateViewIndex(
+        corpusId: string,
+        viewId: string,
+        revisionId: string,
+        error?: string,
+    ): Promise<ViewPublicationStatus> {
+        if (
+            viewId === "__proto__" ||
+            viewId === "constructor" ||
+            viewId === "prototype"
+        )
+            throw new Error("Invalid view identifier");
+        const { head, state } = await this.history(corpusId).read();
+        const publication = state.publications?.[viewId];
+        if (!publication || publication.publishedRevisionId !== revisionId)
+            throw new Error(
+                "Published revision changed before index completion",
+            );
+        publication.indexState = error === undefined ? "ready" : "failed";
+        publication.reason =
+            error === undefined
+                ? "Exact published revision is searchable"
+                : error;
+        if (error === undefined) publication.indexedRevisionId = revisionId;
+        else delete publication.indexedRevisionId;
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Index ${viewId} revision ${revisionId}: ${publication.indexState}`,
+        );
+        return publication;
     }
 
     public async getIndexGeneration(

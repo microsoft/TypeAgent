@@ -191,7 +191,14 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         expect(
             await rpc.listProcedures({ corpusId: request.corpusId }),
         ).toEqual([]);
-        await expect(rpc.publishView(refRequest)).rejects.toThrow("draft-only");
+        await expect(
+            rpc.publishView({
+                ...refRequest,
+                revisionId: second.version.revisionId,
+                expectedVersion: second.version.version,
+                expectedHead: second.commitId,
+            }),
+        ).rejects.toThrow("known generated base");
         await service.close();
         service = open();
         expect(await service.getView(refRequest)).toEqual(second.version);
@@ -637,7 +644,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         await expect(history.read(initial)).rejects.toThrow();
     });
 
-    test("CLI is an actual opt-in consumer and rejects unsupported publication", async () => {
+    test("CLI is an actual opt-in consumer and requires explicit capability", async () => {
         await service.close();
         const corpus = await runMemoryViewsCli([
             "--store",
@@ -649,7 +656,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         expect(corpus).toMatchObject({ name: "CLI views" });
         await expect(
             runMemoryViewsCli(["--store", root, "list"]),
-        ).rejects.toThrow("Developer draft-only");
+        ).rejects.toThrow("Opt-in derived views");
         const corpora = await runMemoryViewsCli([
             "--store",
             root,
@@ -657,6 +664,79 @@ describe("typed draft views: service, history, privacy and CLI", () => {
             "corpora",
         ]);
         expect(corpora).toEqual([corpus]);
+    });
+
+    test("CLI publication settings persist, report absent indexes, and reject stale or missing publication targets", async () => {
+        const corpus = await service.createCorpus("Publication CLI");
+        const snapshot = await service.listViews(corpus.corpusId);
+        await service.close();
+        const args = ["--store", root, "--enable-view-drafts"];
+        expect(
+            await runMemoryViewsCli([...args, "policy", corpus.corpusId]),
+        ).toMatchObject({
+            revision: 0,
+            autoPublish: true,
+        });
+        const file = path.join(root, "publication-cli-request.json");
+        await writeFile(
+            file,
+            JSON.stringify({
+                corpusId: corpus.corpusId,
+                expectedHead: snapshot.head,
+                expectedRevision: 0,
+                autoPublish: false,
+            }),
+        );
+        expect(
+            await runMemoryViewsCli([...args, "set-policy", file]),
+        ).toMatchObject({
+            revision: 1,
+            autoPublish: false,
+        });
+        await expect(
+            runMemoryViewsCli([...args, "set-policy", file]),
+        ).rejects.toThrow("history head conflict");
+        expect(
+            await runMemoryViewsCli([
+                ...args,
+                "publication",
+                corpus.corpusId,
+                "missing-guide",
+            ]),
+        ).toMatchObject({ indexState: "absent" });
+        expect(
+            await runMemoryViewsCli([
+                ...args,
+                "search",
+                corpus.corpusId,
+                "pressure",
+            ]),
+        ).toEqual([]);
+        const current = await runMemoryViewsCli([
+            ...args,
+            "list",
+            corpus.corpusId,
+        ]);
+        if (!current || typeof current !== "object" || !("head" in current))
+            throw new Error("CLI list did not return the concurrency head");
+        await writeFile(
+            file,
+            JSON.stringify({
+                corpusId: corpus.corpusId,
+                viewId: "missing-guide",
+                revisionId: "missing-revision",
+                expectedHead: current.head,
+                expectedVersion: 1,
+            }),
+        );
+        await expect(
+            runMemoryViewsCli([...args, "publish", file]),
+        ).rejects.toThrow("Publication revision is missing");
+        await expect(
+            runMemoryViewsCli([...args, "retry-index", file]),
+        ).rejects.toThrow(
+            "Index retry head, target or published revision conflict",
+        );
     });
 
     test.each<[string, string[]]>([
@@ -677,7 +757,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         ["save", ["request.json", "extra"]],
         ["archive", []],
         ["archive", ["request.json", "extra"]],
-        ["publish", ["corpus"]],
+        ["publish", []],
         ["publish", ["corpus", "view", "extra"]],
         ["toString", []],
         ["unknown", []],
@@ -690,7 +770,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
                 command,
                 ...values,
             ]),
-        ).rejects.toThrow("Developer draft-only");
+        ).rejects.toThrow("Opt-in derived views");
     });
 
     test("compiled CLI entrypoint runs with no Git executable on PATH", async () => {
@@ -717,12 +797,13 @@ describe("typed draft views: service, history, privacy and CLI", () => {
 
     test("CLI save/read/history/archive are runnable across separate service lifetimes", async () => {
         const corpus = await service.createCorpus("CLI authoring");
+        const initialHead = (await service.listViews(corpus.corpusId)).head;
         await service.close();
         const request: ViewSaveRequest = {
             corpusId: corpus.corpusId,
             viewId: "manual-guide",
             expectedVersion: 0,
-            expectedHead: null,
+            expectedHead: initialHead,
             definition: {
                 viewId: "manual-guide",
                 kind: "troubleshootingGuide",
@@ -788,6 +869,6 @@ describe("typed draft views: service, history, privacy and CLI", () => {
                 corpus.corpusId,
                 request.viewId,
             ]),
-        ).rejects.toThrow("draft-only");
+        ).rejects.toThrow("Opt-in derived views");
     });
 });

@@ -97,6 +97,7 @@ export interface ViewVersion {
         relationships?: ViewRelationshipInput[];
         input?: ViewBuildSnapshot;
         outcome?: ViewSynthesisOutput["outcome"];
+        missingEvidence?: string[];
         inventory?: ViewFactInventory;
         inventoryAudit?: ViewInventoryAudit;
         coverage?: ViewInventoryCoverage;
@@ -106,6 +107,7 @@ export interface ViewVersion {
     content: TroubleshootingGuideContent | ProcedureViewContent;
     relationships: ViewRelationship[];
     provenance: "human" | "procedure" | "generated" | "merged";
+    validation?: ViewPublicationProof;
     compatibility?: {
         state: "saved" | "stale" | "archived";
         basedOnCandidateId?: string;
@@ -146,7 +148,16 @@ export interface MemoryViewService {
     saveViewDraft(request: ViewSaveRequest): Promise<ViewHistoryEntry>;
     archiveView(request: ViewArchiveRequest): Promise<ViewHistoryEntry>;
     getViewHistory(request: ViewReadRequest): Promise<ViewHistoryEntry[]>;
-    publishView(request: ViewReadRequest): Promise<never>;
+    getViewPublicationPolicy(corpusId: string): Promise<ViewPublicationPolicy>;
+    updateViewPublicationPolicy(
+        request: ViewPublicationPolicyUpdate,
+    ): Promise<ViewPublicationPolicy>;
+    getViewPublication(
+        request: ViewReadRequest,
+    ): Promise<ViewPublicationStatus>;
+    publishView(request: ViewPublishRequest): Promise<ViewPublicationStatus>;
+    retryViewIndex(request: ViewPublishRequest): Promise<ViewPublicationStatus>;
+    searchViews(request: ViewSearchRequest): Promise<ViewSearchMatch[]>;
     buildViews(request: ViewBuildRequest): Promise<ViewBuildJob>;
     getViewBuild(
         request: ViewBuildJobRequest,
@@ -176,7 +187,7 @@ export interface ViewBuildRequest {
     expectedHead: string | null;
     targets: ViewBuildTarget[];
     bounds?: ViewBuildBounds;
-    publication?: false;
+    publication?: boolean;
 }
 export interface ViewRetainedInput {
     sourceId: string;
@@ -199,6 +210,7 @@ export interface ViewBuildSnapshot {
     pipeline: "troubleshooting-v1";
     model: string;
     fingerprint: string;
+    publicationPolicy?: ViewEffectivePublicationPolicy;
 }
 export interface ViewSynthesisOutput {
     content: TroubleshootingGuideContent;
@@ -328,6 +340,8 @@ export type ViewBuildResultState =
     | "validating"
     | "draft"
     | "merged"
+    | "published"
+    | "searchable"
     | "conflicted"
     | "blocked"
     | "stale"
@@ -346,6 +360,7 @@ export interface ViewBuildTargetResult {
     inventory?: ViewFactInventory;
     inventoryAudit?: ViewInventoryAudit;
     coverage?: ViewInventoryCoverage;
+    publication?: ViewPublicationStatus;
 }
 export interface ViewBuildJob {
     jobId: string;
@@ -363,7 +378,64 @@ export interface ViewBuildJob {
         | "cancelled"
         | "interrupted";
     results: ViewBuildTargetResult[];
-    publication: false;
+    publication: boolean;
+}
+
+export interface ViewPublicationPolicy {
+    revision: number;
+    autoPublish: boolean;
+    views: Record<string, { revision: number; autoPublish: boolean | null }>;
+}
+export interface ViewPublicationPolicyUpdate {
+    corpusId: string;
+    expectedHead: string | null;
+    expectedRevision: number;
+    autoPublish: boolean | null;
+    viewId?: string;
+}
+export interface ViewEffectivePublicationPolicy {
+    autoPublish: boolean;
+    origin: "build" | "view" | "corpus";
+    corpusRevision: number;
+    viewRevision: number;
+    buildOverride?: boolean;
+}
+export interface ViewPublicationProof {
+    artifactFingerprint: string;
+    inputFingerprint: string;
+    support: ViewSupportReport;
+}
+export interface ViewPublicationStatus {
+    viewId: string;
+    latestBuiltRevisionId?: string;
+    publishedRevisionId?: string;
+    indexedRevisionId?: string;
+    intent?: { revisionId: string; actor: string; createdAt: string };
+    indexState: "absent" | "pending" | "failed" | "ready";
+    reason: string;
+    blockedReason?: string;
+}
+export interface ViewPublishRequest {
+    corpusId: string;
+    viewId: string;
+    revisionId: string;
+    expectedVersion: number;
+    expectedHead: string;
+}
+export interface ViewSearchRequest {
+    corpusId: string;
+    query: string;
+    limit?: number;
+    freshness: "current";
+}
+export interface ViewSearchMatch {
+    view: ViewVersion;
+    score: number;
+    snippet: string;
+    review: "unreviewed";
+    freshness: "current";
+    evidence: ViewCitation[];
+    corroboration: "derived";
 }
 export interface ViewBuildJobRequest {
     corpusId: string;
