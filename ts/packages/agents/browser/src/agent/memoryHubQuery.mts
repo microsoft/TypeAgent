@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { viewContentToText } from "@typeagent/memory-service/view-text";
 import {
     conversationCorpusName,
     conversationProducerId,
@@ -309,10 +310,16 @@ async function viewResults(
             query: request.query,
             limit: 100,
             freshness: "current",
+            ...(request.viewKinds ? { kinds: request.viewKinds } : {}),
         }),
     );
     const results: MemoryHubEvidence[] = [];
     for (const match of matches) {
+        if (
+            match.view.content.kind === "procedure" ||
+            !capabilities.derivedViews.kinds.includes(match.view.content.kind)
+        )
+            continue;
         if (!inDateRange(match.view.createdAt, request)) continue;
         if (request.tags?.length || request.sourceTypes?.length) {
             const sources = await Promise.all(
@@ -353,7 +360,10 @@ async function viewResults(
             rank: results.length + 1,
             revisionId: match.view.revisionId,
             viewVersion: match.view.version,
-            viewKind: "troubleshootingGuide",
+            viewKind:
+                match.view.content.kind === "projectBrief"
+                    ? "projectBrief"
+                    : "troubleshootingGuide",
             viewProvenance: match.view.provenance,
             review: match.review,
             freshness: match.freshness,
@@ -586,13 +596,7 @@ async function evidenceContent(
                     "Published view evidence has changed; rebuild first",
                 );
         }
-        const text = [
-            view.content.title,
-            view.content.summary ?? "",
-            ...view.content.sections.map(
-                (section) => `## ${section.heading}\n\n${section.body}`,
-            ),
-        ].join("\n\n");
+        const text = viewContentToText(view.content);
         return pageText(view.content.title, text, request, request);
     }
     const event = validateConversation(

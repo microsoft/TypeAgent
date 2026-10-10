@@ -37,7 +37,7 @@ export function effectiveViewPublicationPolicy(
 
 export function publicationArtifact(version: ViewVersion): ViewSynthesisOutput {
     if (
-        version.content.kind !== "troubleshootingGuide" ||
+        version.content.kind === "procedure" ||
         !version.generation?.input ||
         !version.generation.outcome ||
         !version.generation.missingEvidence

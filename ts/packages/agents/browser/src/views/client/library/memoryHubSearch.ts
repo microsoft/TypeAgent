@@ -170,6 +170,17 @@ export function mountMemoryHubSearch(
     to.name = "dateTo";
     const conversation = node("select");
     conversation.name = "conversationScope";
+    const viewKind = node("select");
+    viewKind.setAttribute("aria-label", "Derived view kind");
+    for (const [value, label] of [
+        ["", "All derived views"],
+        ["projectBrief", "Project briefs"],
+        ["troubleshootingGuide", "Troubleshooting guides"],
+    ]) {
+        const option = node("option", label);
+        option.value = value;
+        viewKind.append(option);
+    }
     for (const [value, label] of [
         ["none", "No conversations"],
         ["current", "Current conversation"],
@@ -205,6 +216,7 @@ export function mountMemoryHubSearch(
         field("From (UTC)", from),
         field("Through (UTC)", to),
         field("Conversations", conversation),
+        field("Derived view kind", viewKind),
     );
     filters.append(filtersSummary, filterFields, dateNote);
     form.append(queryLabel, submit, filters);
@@ -731,6 +743,10 @@ export function mountMemoryHubSearch(
             corpusId: options.scope(),
             limit: 50,
             generateAnswer: true,
+            ...(viewKind.value === "projectBrief" ||
+            viewKind.value === "troubleshootingGuide"
+                ? { viewKinds: [viewKind.value] }
+                : {}),
             sourceTypes: sourceTypes.length ? sourceTypes : undefined,
             tags: tags.value
                 .split(",")

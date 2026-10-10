@@ -20,6 +20,7 @@ import type {
 const usage = `Opt-in derived views:
 node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <command> [arguments]
   corpora
+  capabilities
   create-corpus <name>
   list <corpusId>
   sources <corpusId>
@@ -42,10 +43,11 @@ node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <comman
   retry-index <request.json>
   search <corpusId> <query>
 The store must not be owned by a running server. Actor comes from the local OS identity.
-Build uses configured synthesis. Eligible artifacts can publish and index. No reset, source deletion, skill approval or execution is performed.`;
+Build accepts troubleshootingGuide or projectBrief definitions and uses configured synthesis. Project briefs have a fixed reading template, not execution/skill controls. Eligible artifacts can publish and index; live synthesis remains unqualified. No reset, source deletion, skill approval or execution is performed.`;
 
 const argumentCounts = new Map<string, readonly [number, number]>([
     ["corpora", [0, 0]],
+    ["capabilities", [0, 0]],
     ["create-corpus", [1, 1]],
     ["list", [1, 1]],
     ["sources", [1, 1]],
@@ -212,6 +214,8 @@ export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
         const operation = viewCommands.get(command);
         if (operation) return await operation(rpc, values);
         switch (command) {
+            case "capabilities":
+                return await rpc.getCapabilities();
             case "corpora":
                 return await rpc.listCorpora();
             case "create-corpus":

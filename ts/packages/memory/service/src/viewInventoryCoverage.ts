@@ -19,6 +19,8 @@ import {
     evidenceText,
     exactEvidenceCoverage,
 } from "./viewSynthesisEvidence.js";
+import { parseProjectBriefDetails, projectBriefRoles } from "./projectBrief.js";
+import type { ProjectBriefSection } from "./viewTypes.js";
 
 const roles = [
     "description",
@@ -171,7 +173,12 @@ export function hydrateInventoryConstruction(
         relationships.push(...evidenceEdges(input, id, items));
         return {
             id,
-            role: evidenceChoice(section.role, roles),
+            role: evidenceChoice(
+                section.role,
+                input.definition.kind === "projectBrief"
+                    ? projectBriefRoles
+                    : roles,
+            ),
             heading: evidenceText(section.heading),
             body: evidenceText(
                 [
@@ -179,20 +186,51 @@ export function hydrateInventoryConstruction(
                     ...items.map(renderInventoryItem),
                 ].join("\n\n"),
             ),
+            ...(input.definition.kind === "projectBrief"
+                ? { details: parseProjectBriefDetails(section.details) }
+                : {}),
         };
     });
     const output: ViewSynthesisOutput = {
-        content: {
-            kind: "troubleshootingGuide",
-            title: evidenceText(content.title),
-            summary: evidenceText(content.summary),
-            sections,
-            citations: relationships.flatMap((edge) => edge.citations),
-        },
+        content:
+            input.definition.kind === "projectBrief"
+                ? {
+                      kind: "projectBrief",
+                      title: evidenceText(content.title),
+                      summary: evidenceText(content.summary),
+                      sections: sections.map((section): ProjectBriefSection => {
+                          if (!section.details)
+                              throw new Error(
+                                  "Project section lacks typed details",
+                              );
+                          if (section.role !== section.details.kind)
+                              throw new Error(
+                                  "Project section role and typed details differ",
+                              );
+                          return {
+                              ...section,
+                              role: section.details.kind,
+                              details: section.details,
+                          };
+                      }),
+                      citations: relationships.flatMap(
+                          (edge) => edge.citations,
+                      ),
+                  }
+                : {
+                      kind: "troubleshootingGuide",
+                      title: evidenceText(content.title),
+                      summary: evidenceText(content.summary),
+                      sections,
+                      citations: relationships.flatMap(
+                          (edge) => edge.citations,
+                      ),
+                  },
         relationships,
         outcome: evidenceChoice(raw.outcome, [
             "diagnosticOnly",
             "verifiedRecovery",
+            "projectSummary",
         ] as const),
         missingEvidence: evidenceArray(raw.missingEvidence, 100).map(
             evidenceText,

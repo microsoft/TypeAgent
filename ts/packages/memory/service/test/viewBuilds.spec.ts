@@ -31,6 +31,12 @@ import { fileURLToPath } from "node:url";
 import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
 import { validateBuildRequest } from "../src/viewBuildValidation.js";
 import { PersonalHowToStore } from "../src/personalHowToStore.js";
+import { runMemoryViewsCli } from "../src/memoryViewsCli.js";
+import {
+    getRuntimeConfig,
+    initRuntimeConfigFromProcessEnv,
+    setRuntimeConfig,
+} from "@typeagent/aiclient";
 
 function output(
     input: ViewBuildSnapshot,
@@ -1332,6 +1338,8 @@ describe("durable draft builds and explicit edit merge", () => {
         let modelBody = "Inspect pressure.\n\nPreserve approval boundaries.\n";
         const schemas = new Set<string>();
         const modelFailures: unknown[] = [];
+        const previousEnvironment = process.env;
+        const previousConfig = getRuntimeConfig();
         const model = createServer(async (incoming, response) => {
             try {
                 const chunks: Buffer[] = [];
@@ -1427,31 +1435,42 @@ describe("durable draft builds and explicit edit merge", () => {
                 OPENAI_RESPONSE_FORMAT_VIEW_BUILD_LOOPBACK: "1",
                 ENABLE_MODEL_REQUEST_LOGGING_VIEW_BUILD_LOOPBACK: "false",
             };
-            const run = (command: string[]) =>
+            const runProcess = (command: string[]) =>
                 promisify(execFile)(
                     process.execPath,
                     [cli, "--store", root, "--enable-view-drafts", ...command],
                     { env: environment, timeout: 30000 },
                 );
+            process.env = environment;
+            initRuntimeConfigFromProcessEnv();
+            const run = async (command: string[]) =>
+                JSON.stringify(
+                    await runMemoryViewsCli([
+                        "--store",
+                        root,
+                        "--enable-view-drafts",
+                        ...command,
+                    ]),
+                );
             const built: ViewBuildJob = JSON.parse(
-                (await run(["build", file])).stdout,
+                (await runProcess(["build", file])).stdout,
             );
             expect(built.state).toBe("complete");
             expect(built.results[0].state).toBe("draft");
             const status: ViewBuildJob = JSON.parse(
-                (await run(["status", request.corpusId, built.jobId])).stdout,
+                (await runProcess(["status", request.corpusId, built.jobId]))
+                    .stdout,
             );
             expect(status.results[0].revisionId).toBe(
                 built.results[0].revisionId,
             );
             expect(
                 JSON.parse(
-                    (await run(["history", request.corpusId, "guide-0"]))
-                        .stdout,
+                    await run(["history", request.corpusId, "guide-0"]),
                 )[0].version.generation.input.model,
             ).toContain("VIEW_BUILD_LOOPBACK");
             const listed: { head: string; views: ViewVersion[] } = JSON.parse(
-                (await run(["list", request.corpusId])).stdout,
+                await run(["list", request.corpusId]),
             );
             const human = structuredClone(
                 listed.views[0].content as ViewSaveRequest["content"],
@@ -1471,13 +1490,13 @@ describe("durable draft builds and explicit edit merge", () => {
                     relationships: authoredRelationships(listed.views[0]),
                 }),
             );
-            const saved = JSON.parse(
-                (await run(["save", humanFile])).stdout,
-            ) as { version: ViewVersion };
+            const saved = JSON.parse(await run(["save", humanFile])) as {
+                version: ViewVersion;
+            };
             modelBody =
                 "Inspect pressure conservatively.\n\nPreserve approval boundaries.\n";
             const before = JSON.parse(
-                (await run(["list", request.corpusId])).stdout,
+                await run(["list", request.corpusId]),
             ) as { head: string };
             await writeFile(
                 file,
@@ -1493,18 +1512,18 @@ describe("durable draft builds and explicit edit merge", () => {
                 }),
             );
             const conflicted = JSON.parse(
-                (await run(["build", file])).stdout,
+                await run(["build", file]),
             ) as ViewBuildJob;
             const conflictId = conflicted.results[0].conflictId!;
             expect(conflicted.results[0].state).toBe("conflicted");
             const comparison = JSON.parse(
-                (await run(["inspect", request.corpusId, conflictId])).stdout,
+                await run(["inspect", request.corpusId, conflictId]),
             ) as { input: ViewBuildSnapshot; human: ViewVersion };
             expect(comparison.human.content.sections[0].body).toContain(
                 "carefully",
             );
             const pending = JSON.parse(
-                (await run(["list", request.corpusId])).stdout,
+                await run(["list", request.corpusId]),
             ) as { head: string };
             const resolution = path.join(root, "resolution.json");
             await writeFile(
@@ -1519,9 +1538,9 @@ describe("durable draft builds and explicit edit merge", () => {
                     choice: "human",
                 }),
             );
-            const resolved = JSON.parse(
-                (await run(["resolve", resolution])).stdout,
-            ) as { version: ViewVersion };
+            const resolved = JSON.parse(await run(["resolve", resolution])) as {
+                version: ViewVersion;
+            };
             expect(resolved.version.actor).toBe(os.userInfo().username);
             expect(resolved.version.content.sections[0].body).toContain(
                 "carefully",
@@ -1533,13 +1552,16 @@ describe("durable draft builds and explicit edit merge", () => {
                 "memory_source_inventory_check",
             ]);
         } finally {
+            process.env = previousEnvironment;
+            setRuntimeConfig(previousConfig);
+            model.closeIdleConnections();
             await new Promise<void>((resolve, reject) =>
                 model.close((error) => (error ? reject(error) : resolve())),
             );
             service = open();
             expect(modelFailures).toEqual([]);
         }
-    }, 120000);
+    });
 });
 
 describe("bounded whitespace-preserving three-way prose", () => {

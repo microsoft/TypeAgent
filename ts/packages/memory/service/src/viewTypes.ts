@@ -4,7 +4,7 @@
 import type { ProcedureSourceCitation } from "./types.js";
 import type { AgentEdition } from "./agentEdition.js";
 
-export type ViewKind = "troubleshootingGuide";
+export type ViewKind = "troubleshootingGuide" | "projectBrief";
 export type ViewState = "draft" | "stale" | "archived";
 export interface ViewCitation extends ProcedureSourceCitation {
     locator: string;
@@ -23,10 +23,88 @@ export interface ViewSection {
         | "guard"
         | "verification"
         | "recovery"
-        | "context";
+        | "context"
+        | "goalsScope"
+        | "owners"
+        | "status"
+        | "milestones"
+        | "decisions"
+        | "risks";
     heading: string;
     body: string;
+    details?: ProjectBriefDetails;
 }
+export type ProjectBriefDetails =
+    | { kind: "goalsScope"; inventoryIds: string[] }
+    | {
+          kind: "owners";
+          assignments: Array<{
+              inventoryId: string;
+              responsibility: string;
+              state: "known" | "unknown" | "unassigned";
+              owner: string | null;
+          }>;
+      }
+    | {
+          kind: "status";
+          project: "unknown" | "active" | "blocked" | "complete";
+          incident: "unknown" | "open" | "closed" | "notApplicable";
+          capacity:
+              | "unknown"
+              | "pendingOwnerReview"
+              | "validated"
+              | "notApplicable";
+          inventoryIds: string[];
+      }
+    | {
+          kind: "milestones";
+          items: Array<{
+              inventoryId: string;
+              status:
+                  | "proposed"
+                  | "confirmed"
+                  | "blocked"
+                  | "deferred"
+                  | "unknown";
+              date: string | null;
+          }>;
+      }
+    | {
+          kind: "decisions";
+          items: Array<{
+              inventoryId: string;
+              status: ViewFactStatus;
+          }>;
+      }
+    | {
+          kind: "risks";
+          items: Array<{
+              inventoryId: string;
+              status: "open" | "blocked" | "resolved" | "unknown";
+          }>;
+      }
+    | {
+          kind: "context";
+          asOf: string | null;
+          basis: "recordEvidence" | "unknown";
+          inventoryIds: string[];
+      };
+export type ProjectBriefSection = Omit<ViewSection, "role" | "details"> & {
+    role: ProjectBriefDetails["kind"];
+    details: ProjectBriefDetails;
+};
+export interface ProjectBriefContent {
+    kind: "projectBrief";
+    title: string;
+    summary?: string;
+    sections: ProjectBriefSection[];
+    citations: ViewCitation[];
+    agentEdition?: never;
+    compatibilityFields?: never;
+}
+export type DerivedViewContent =
+    | TroubleshootingGuideContent
+    | ProjectBriefContent;
 export type ViewEndpoint =
     | { kind: "section"; viewId: string; sectionId: string }
     | { kind: "source"; sourceId: string; revisionId: string };
@@ -92,7 +170,7 @@ export interface ViewVersion {
     baseRevisionId?: string;
     generation?: {
         candidateId: string;
-        content: TroubleshootingGuideContent | ProcedureViewContent;
+        content: DerivedViewContent | ProcedureViewContent;
         fingerprint: string;
         relationships?: ViewRelationshipInput[];
         input?: ViewBuildSnapshot;
@@ -104,7 +182,7 @@ export interface ViewVersion {
     };
     edits?: ViewEditOperation[];
     definition: ViewDefinition;
-    content: TroubleshootingGuideContent | ProcedureViewContent;
+    content: DerivedViewContent | ProcedureViewContent;
     relationships: ViewRelationship[];
     provenance: "human" | "procedure" | "generated" | "merged";
     validation?: ViewPublicationProof;
@@ -124,7 +202,7 @@ export interface ViewSaveRequest {
     expectedVersion: number;
     expectedHead: string | null;
     definition: ViewDefinitionInput;
-    content: TroubleshootingGuideContent;
+    content: DerivedViewContent;
     relationships: ViewRelationshipInput[];
 }
 export interface ViewArchiveRequest {
@@ -207,15 +285,15 @@ export interface ViewBuildSnapshot {
     expectedVersion: number;
     bounds: ViewBuildBounds;
     inputs: ViewRetainedInput[];
-    pipeline: "troubleshooting-v1";
+    pipeline: "troubleshooting-v1" | "project-brief-v1";
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
 }
 export interface ViewSynthesisOutput {
-    content: TroubleshootingGuideContent;
+    content: DerivedViewContent;
     relationships: ViewRelationshipInput[];
-    outcome: "diagnosticOnly" | "verifiedRecovery";
+    outcome: "diagnosticOnly" | "verifiedRecovery" | "projectSummary";
     missingEvidence: string[];
     inventory?: ViewFactInventory;
     inventoryAudit?: ViewInventoryAudit;
@@ -232,6 +310,14 @@ export type ViewFactKind =
     | "unresolved"
     | "reuseWarning"
     | "timing"
+    | "projectStatus"
+    | "projectAsOf"
+    | "incidentStatus"
+    | "capacity"
+    | "owner"
+    | "milestone"
+    | "decision"
+    | "risk"
     | "background";
 export type ViewFactStatus =
     | "observed"
@@ -427,6 +513,7 @@ export interface ViewSearchRequest {
     query: string;
     limit?: number;
     freshness: "current";
+    kinds?: ViewKind[];
 }
 export interface ViewSearchMatch {
     view: ViewVersion;

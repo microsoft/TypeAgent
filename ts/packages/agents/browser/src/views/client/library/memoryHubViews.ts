@@ -10,9 +10,13 @@ import type {
     ViewRelationshipInput,
     ViewPublicationPolicy,
     ViewPublicationStatus,
+    DerivedViewContent,
+    ViewKind,
 } from "@typeagent/memory-service";
-import { invokeMemory } from "./viewClient";
+import { invokeMemory, invokeView } from "./viewClient";
 import { rbButton, rbError, rbNode } from "./memoryHubRunbookUi";
+import { createProjectBriefEditor } from "./memoryHubProjectBrief";
+import { viewContentToText } from "@typeagent/memory-service/view-text";
 
 function jsonEditor(label: string, value: unknown): HTMLTextAreaElement {
     const editor = document.createElement("textarea");
@@ -72,7 +76,7 @@ export function mountMemoryHubViews(
         rbNode("h3", "Views"),
         rbNode(
             "p",
-            "Distill exact retained revisions into a conditional troubleshooting guide. Publication and index readiness are separate; neither grants human review, skill approval or execution. Configured synthesis remains live-unqualified.",
+            "Distill exact retained revisions into a project brief or conditional troubleshooting guide. Publication and index readiness are separate; neither grants human review, skill approval or execution. Configured synthesis remains live-unqualified.",
         ),
         status,
         controls,
@@ -94,6 +98,7 @@ export function mountMemoryHubViews(
     let busy = false;
     let refreshPending = false;
     let disposed = false;
+    let supportedKinds: ViewKind[] = ["troubleshootingGuide"];
 
     async function action(operation: () => Promise<void>): Promise<void> {
         if (busy || disposed) return;
@@ -117,6 +122,12 @@ export function mountMemoryHubViews(
         const capabilities = await invokeMemory("memoryViewCapabilities", {});
         if (current !== sequence) return;
         root.hidden = !capabilities.derivedViews?.builds;
+        supportedKinds = (
+            capabilities.derivedViews?.kinds ?? ["troubleshootingGuide"]
+        ).filter(
+            (kind): kind is ViewKind =>
+                kind === "troubleshootingGuide" || kind === "projectBrief",
+        );
         if (root.hidden) return;
         const corpusId = options.scope();
         if (!corpusId) {
@@ -222,7 +233,18 @@ export function mountMemoryHubViews(
         }
         const target = document.createElement("input");
         target.setAttribute("aria-label", "Stable view ID");
-        target.placeholder = "guide-id (existing ID rebuilds that draft)";
+        target.placeholder = "view-id (existing ID rebuilds that draft)";
+        const kindPicker = document.createElement("select");
+        kindPicker.setAttribute("aria-label", "View kind");
+        for (const kind of supportedKinds) {
+            const option = document.createElement("option");
+            option.value = kind;
+            option.textContent =
+                kind === "projectBrief"
+                    ? "Project brief"
+                    : "Troubleshooting guide";
+            kindPicker.append(option);
+        }
         const cutoff = document.createElement("input");
         cutoff.setAttribute("aria-label", "Learned before ISO timestamp");
         cutoff.placeholder = "Optional learned-before ISO timestamp";
@@ -271,6 +293,7 @@ export function mountMemoryHubViews(
         controls.replaceChildren(
             settings,
             sourceHost,
+            kindPicker,
             target,
             cutoff,
             buildPolicy,
@@ -290,6 +313,17 @@ export function mountMemoryHubViews(
                     const prior = latest.views.find(
                         (view) => view.viewId === viewId,
                     );
+                    const kind = supportedKinds.find(
+                        (kind) => kind === kindPicker.value,
+                    );
+                    if (!kind)
+                        throw new Error(
+                            "This server does not support the selected view kind",
+                        );
+                    if (prior && prior.content.kind !== kind)
+                        throw new Error(
+                            "An existing view cannot change kind; choose a new stable view ID",
+                        );
                     const job = await invokeMemory("memoryBuildViews", {
                         corpusId,
                         expectedHead: latest.head,
@@ -298,7 +332,7 @@ export function mountMemoryHubViews(
                                 expectedVersion: prior?.version ?? 0,
                                 definition: {
                                     viewId,
-                                    kind: "troubleshootingGuide",
+                                    kind,
                                     selector: {
                                         kind: "sources",
                                         sources: [...selected].map(
@@ -470,8 +504,8 @@ export function mountMemoryHubViews(
     function renderDrafts(): void {
         if (dirty) return;
         drafts.replaceChildren(rbNode("h4", "Current draft views"));
-        for (const view of snapshot.views.filter(
-            (value) => value.content.kind === "troubleshootingGuide",
+        for (const view of snapshot.views.filter((value) =>
+            supportedKinds.some((kind) => value.content.kind === kind),
         ))
             drafts.append(
                 rbButton(
@@ -483,11 +517,74 @@ export function mountMemoryHubViews(
 
     function showEditor(view: ViewVersion): void {
         if (!discardChanges()) return;
-        const content = jsonEditor(
-            "Draft content with stable section IDs",
-            view.content,
-        );
+        if (view.content.kind === "procedure")
+            throw new Error("Legacy procedures use the runbook editor");
+        const projectEditor =
+            view.content.kind === "projectBrief"
+                ? createProjectBriefEditor(
+                      view.content,
+                      () => {
+                          dirty = true;
+                      },
+                      (sourceId, revisionId, locator) => {
+                          void action(async () => {
+                              const capturedSequence = sequence;
+                              const original = await invokeView(
+                                  "memoryHubRunbookOriginal",
+                                  {
+                                      corpusId: view.corpusId,
+                                      sourceId,
+                                      revisionId,
+                                      locator,
+                                  },
+                              );
+                              if (
+                                  capturedSequence !== sequence ||
+                                  options.scope() !== view.corpusId
+                              )
+                                  return;
+                              if (!original.available)
+                                  throw new Error(
+                                      original.error ??
+                                          "Original project evidence is unavailable",
+                                  );
+                              comparison.append(
+                                  rbNode("h5", original.title),
+                                  rbNode("pre", original.content),
+                              );
+                          });
+                      },
+                  )
+                : undefined;
+        const content = projectEditor
+            ? undefined
+            : jsonEditor("Draft content with stable section IDs", view.content);
         const edges = jsonEditor("Typed relationships", editableEdges(view));
+        const retainedEdges = new Map(
+            editableEdges(view).map((edge) => [edge.id, edge]),
+        );
+        const projectEvidence = rbNode("fieldset");
+        projectEvidence.append(rbNode("legend", "Retained section evidence"));
+        if (projectEditor)
+            for (const edge of editableEdges(view)) {
+                const label = rbNode("label");
+                const retained = document.createElement("input");
+                retained.type = "checkbox";
+                retained.checked = true;
+                retained.onchange = () => {
+                    if (retained.checked) retainedEdges.set(edge.id, edge);
+                    else retainedEdges.delete(edge.id);
+                    dirty = true;
+                };
+                label.append(
+                    retained,
+                    rbNode(
+                        "span",
+                        `${edge.from.sectionId}: ${edge.predicate} ${edge.to.sourceId} @ ${edge.to.revisionId}`,
+                    ),
+                );
+                projectEvidence.append(label);
+            }
         const viewPolicy = publicationChoice(
             "View auto-publish after build",
             true,
@@ -523,7 +620,11 @@ export function mountMemoryHubViews(
                 status.textContent = result.reason;
             });
         };
-        content.oninput = edges.oninput = () => {
+        if (content)
+            content.oninput = () => {
+                dirty = true;
+            };
+        edges.oninput = () => {
             dirty = true;
         };
         comparison.replaceChildren(
@@ -532,8 +633,8 @@ export function mountMemoryHubViews(
                 "p",
                 "Content and relationships are separate structured edits. Narrative remains editable; checked fact/context passages must remain somewhere in the final artifact. Rebuild with changed evidence to revise facts. Saving checks exact evidence and semantic/context support; unsupported edits are blocked.",
             ),
-            content,
-            edges,
+            projectEditor?.element ?? content!,
+            ...(projectEditor ? [projectEvidence] : [edges]),
             rbNode(
                 "p",
                 `Publication: ${publication?.blockedReason ?? publication?.reason ?? "not published"}. Published ${publication?.publishedRevisionId ?? "none"}; indexed ${publication?.indexedRevisionId ?? "none"}.`,
@@ -566,11 +667,17 @@ export function mountMemoryHubViews(
                         expectedVersion: view.version,
                         definition: {
                             viewId: view.viewId,
-                            kind: "troubleshootingGuide",
+                            kind: view.content.kind as ViewKind,
                             selector: view.definition.selector,
                         },
-                        content: JSON.parse(content.value),
-                        relationships: JSON.parse(edges.value),
+                        content: projectEditor
+                            ? projectEditor.read()
+                            : (JSON.parse(
+                                  content!.value,
+                              ) as DerivedViewContent),
+                        relationships: projectEditor
+                            ? [...retainedEdges.values()]
+                            : JSON.parse(edges.value),
                     });
                     dirty = false;
                     comparison.replaceChildren();
@@ -583,11 +690,17 @@ export function mountMemoryHubViews(
                         corpusId: view.corpusId,
                         viewId: view.viewId,
                     });
-                    const display = rbNode(
-                        "pre",
-                        JSON.stringify(history, null, 2),
-                    );
-                    comparison.append(display);
+                    for (const entry of history)
+                        comparison.append(
+                            rbNode(
+                                "h5",
+                                `Version ${entry.version.version} (${entry.version.state}) @ ${entry.version.revisionId}`,
+                            ),
+                            rbNode(
+                                "pre",
+                                viewContentToText(entry.version.content),
+                            ),
+                        );
                 });
             }),
             rbButton("Discard unsaved edits", () => {
@@ -630,7 +743,13 @@ export function mountMemoryHubViews(
                 rbNode("h5", label),
                 rbNode(
                     "pre",
-                    JSON.stringify(value ?? "No known generated base", null, 2),
+                    value?.content.kind === "projectBrief"
+                        ? viewContentToText(value.content)
+                        : JSON.stringify(
+                              value ?? "No known generated base",
+                              null,
+                              2,
+                          ),
                 ),
             );
         if (conflict.state === "resolved") {
@@ -659,13 +778,26 @@ export function mountMemoryHubViews(
             );
             return;
         }
-        const combined = jsonEditor(
-            "Explicit combined resolution",
-            conflict.candidate,
-        );
-        combined.oninput = () => {
-            dirty = true;
-        };
+        const combinedBrief =
+            conflict.candidate.content.kind === "projectBrief"
+                ? createProjectBriefEditor(
+                      conflict.candidate.content,
+                      () => {
+                          dirty = true;
+                      },
+                      () => {
+                          status.textContent =
+                              "Inspect original evidence from the current brief before resolving.";
+                      },
+                  )
+                : undefined;
+        const combined = combinedBrief
+            ? undefined
+            : jsonEditor("Explicit combined resolution", conflict.candidate);
+        if (combined)
+            combined.oninput = () => {
+                dirty = true;
+            };
         const choice = document.createElement("select");
         choice.setAttribute("aria-label", "Conflict resolution choice");
         for (const [value, label] of [
@@ -680,7 +812,7 @@ export function mountMemoryHubViews(
         }
         comparison.append(
             choice,
-            combined,
+            combinedBrief?.element ?? combined!,
             rbButton("Resolve explicitly and save draft", () => {
                 void action(async () => {
                     const selected = choice.value as
@@ -689,7 +821,12 @@ export function mountMemoryHubViews(
                         | "combined";
                     const output: ViewSynthesisOutput | undefined =
                         selected === "combined"
-                            ? JSON.parse(combined.value)
+                            ? combinedBrief
+                                ? {
+                                      ...conflict.candidate,
+                                      content: combinedBrief.read(),
+                                  }
+                                : JSON.parse(combined!.value)
                             : undefined;
                     const saved = await invokeMemory(
                         "memoryResolveViewConflict",

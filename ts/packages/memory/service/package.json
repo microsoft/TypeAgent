@@ -16,7 +16,8 @@
     "./rpc": "./dist/rpcFacade.js",
     "./agent-edition-validation": "./dist/agentEditionValidation.js",
     "./procedure-markdown": "./dist/procedureMarkdown.js",
-    "./procedureMarkdown": "./dist/procedureMarkdown.js"
+    "./procedureMarkdown": "./dist/procedureMarkdown.js",
+    "./view-text": "./dist/viewText.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

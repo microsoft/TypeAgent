@@ -779,9 +779,11 @@ export class TypedViewStore {
     }
 
     private sanitize(state: ViewStoreState, sourceId: string): ViewStoreState {
+        const clearingDerived = sourceId === "@clear-derived-views";
         const affected = new Set(
             Object.entries(state.views).flatMap(([id, versions]) =>
                 versions.some((version) => {
+                    if (clearingDerived) return !version.compatibility;
                     const content = [
                         version.content,
                         ...(version.generation
@@ -811,6 +813,7 @@ export class TypedViewStore {
         state.builds = Object.fromEntries(
             Object.entries(state.builds ?? {}).filter(
                 ([, job]) =>
+                    !clearingDerived &&
                     !job.results.some(
                         (result) =>
                             result.snapshot.inputs.some(
@@ -822,6 +825,7 @@ export class TypedViewStore {
         state.conflicts = Object.fromEntries(
             Object.entries(state.conflicts ?? {}).filter(
                 ([, conflict]) =>
+                    !clearingDerived &&
                     !affected.has(conflict.viewId) &&
                     !conflict.input.inputs.some(
                         (input) => input.sourceId === sourceId,
@@ -830,9 +834,19 @@ export class TypedViewStore {
         );
         state.publications = Object.fromEntries(
             Object.entries(state.publications ?? {}).filter(
-                ([id]) => !affected.has(id),
+                ([id]) => !clearingDerived && !affected.has(id),
             ),
         );
+        if (state.viewIndexCleanup)
+            state.viewIndexCleanup = state.viewIndexCleanup.filter(
+                (id) => !clearingDerived && !affected.has(id),
+            );
+        if (state.publicationPolicy)
+            state.publicationPolicy.views = Object.fromEntries(
+                Object.entries(state.publicationPolicy.views).filter(
+                    ([id]) => !clearingDerived && !affected.has(id),
+                ),
+            );
         state.index.procedures = state.index.procedures.filter(
             (item) => !affected.has(item.procedureId),
         );
@@ -852,6 +866,30 @@ export class TypedViewStore {
     ): Promise<void> {
         await this.history(corpusId).purge(
             sourceId,
+            (state, id) => this.sanitize(state, id),
+            (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
+        );
+        await this.rebuildIndex(corpusId);
+    }
+
+    public async clearDerivedViews(corpusId: string): Promise<void> {
+        const history = this.history(corpusId);
+        const { state } = await history.read();
+        if (
+            !Object.values(state.views).some((versions) =>
+                versions.some((version) => !version.compatibility),
+            ) &&
+            !Object.keys(state.builds ?? {}).length &&
+            !Object.keys(state.conflicts ?? {}).length &&
+            !Object.keys(state.publications ?? {}).length &&
+            !state.viewIndexCleanup?.length &&
+            !Object.keys(state.publicationPolicy?.views ?? {}).length
+        )
+            return;
+        // This identity cannot collide with a validated source ID and is recoverable by the same purge journal.
+        await history.purge(
+            "@clear-derived-views",
             (state, id) => this.sanitize(state, id),
             (state) => this.entries(state),
             () => this.removeSearchIndex(corpusId),

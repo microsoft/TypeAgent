@@ -6,7 +6,9 @@ import { diff3Merge, diffIndices } from "node-diff3";
 import { canonicalizeProcedure } from "./agentEdition.js";
 import { viewSourceKey } from "./viewContent.js";
 import type {
-    TroubleshootingGuideContent,
+    DerivedViewContent,
+    ViewSection,
+    ProjectBriefDetails,
     ViewEditOperation,
     ViewRelationshipInput,
     ViewSourceSelector,
@@ -63,7 +65,7 @@ function ambiguousInsertion(base: string[], changed: string[]): boolean {
     });
 }
 
-function fields(content: TroubleshootingGuideContent): Map<string, unknown> {
+function fields(content: DerivedViewContent): Map<string, unknown> {
     const values = new Map<string, unknown>([
         ["title", content.title],
         ["summary", content.summary],
@@ -76,7 +78,7 @@ function fields(content: TroubleshootingGuideContent): Map<string, unknown> {
 }
 
 function values(
-    content: TroubleshootingGuideContent,
+    content: DerivedViewContent,
     edges: ViewRelationshipInput[],
 ): Map<string, unknown> {
     const result = fields(content);
@@ -86,20 +88,20 @@ function values(
 
 export function recordViewEdits(
     current: ViewVersion | undefined,
-    content: TroubleshootingGuideContent,
+    content: DerivedViewContent,
     edges: ViewRelationshipInput[],
     actor: string,
 ): ViewEditOperation[] {
     const prior = current
         ? values(
-              current.content as TroubleshootingGuideContent,
+              current.content as DerivedViewContent,
               authoredRelationships(current),
           )
         : new Map<string, unknown>();
     const next = values(content, edges);
     const base = current?.generation
         ? values(
-              current.generation.content as TroubleshootingGuideContent,
+              current.generation.content as DerivedViewContent,
               current.generation.relationships ?? [],
           )
         : new Map<string, unknown>();
@@ -157,20 +159,152 @@ function mergeValue(
 }
 
 function mergeSection(
-    base: TroubleshootingGuideContent["sections"][number],
-    human: TroubleshootingGuideContent["sections"][number],
-    generated: TroubleshootingGuideContent["sections"][number],
-): TroubleshootingGuideContent["sections"][number] | undefined {
+    base: ViewSection,
+    human: ViewSection,
+    generated: ViewSection,
+): ViewSection | undefined {
     const heading = mergeValue(base.heading, human.heading, generated.heading);
     const body = mergeValue(base.body, human.body, generated.body);
     const role = mergeValue(base.role, human.role, generated.role);
+    const details = mergeProjectDetails(
+        base.details,
+        human.details,
+        generated.details,
+    );
     if (
         typeof heading !== "string" ||
         typeof body !== "string" ||
-        typeof role !== "string"
+        typeof role !== "string" ||
+        (details === undefined &&
+            (base.details || human.details || generated.details))
     )
         return undefined;
-    return { id: base.id, heading, body, role: role as typeof base.role };
+    return {
+        id: base.id,
+        heading,
+        body,
+        role: role as typeof base.role,
+        ...(details
+            ? { details: details as NonNullable<ViewSection["details"]> }
+            : {}),
+    };
+}
+
+function mergeTypedField<T>(base: T, human: T, generated: T): T | undefined {
+    if (viewHash(human) === viewHash(base)) return generated;
+    if (
+        viewHash(generated) === viewHash(base) ||
+        viewHash(human) === viewHash(generated)
+    )
+        return human;
+    return undefined;
+}
+
+function mergeBriefFields<T extends object>(
+    base: T,
+    human: T,
+    generated: T,
+    skip: Array<keyof T> = [],
+): T | undefined {
+    const result = structuredClone(generated);
+    for (const key of Object.keys(generated) as Array<keyof T>) {
+        if (skip.includes(key)) continue;
+        const value = mergeTypedField(base[key], human[key], generated[key]);
+        if (value === undefined) return undefined;
+        result[key] = value;
+    }
+    return result;
+}
+
+function mergeBriefEntries<T extends { inventoryId: string }>(
+    base: T[],
+    human: T[],
+    generated: T[],
+): T[] | undefined {
+    const result: T[] = [];
+    const ids = new Set(
+        [...generated, ...human, ...base].map((entry) => entry.inventoryId),
+    );
+    for (const id of ids) {
+        const old = base.find((entry) => entry.inventoryId === id);
+        const edited = human.find((entry) => entry.inventoryId === id);
+        const proposed = generated.find((entry) => entry.inventoryId === id);
+        if (!edited && (!proposed || viewHash(old) === viewHash(proposed)))
+            continue;
+        if (!proposed && viewHash(old) === viewHash(edited)) continue;
+        const merged =
+            old && edited && proposed
+                ? mergeBriefFields(old, edited, proposed)
+                : mergeTypedField(old, edited, proposed);
+        if (!merged) return undefined;
+        result.push(merged);
+    }
+    return result;
+}
+
+function mergeProjectDetails(
+    base: ProjectBriefDetails | undefined,
+    human: ProjectBriefDetails | undefined,
+    generated: ProjectBriefDetails | undefined,
+): ProjectBriefDetails | undefined {
+    const simple = mergeTypedField(base, human, generated);
+    if (simple) return simple;
+    if (
+        !base ||
+        !human ||
+        !generated ||
+        base.kind !== human.kind ||
+        base.kind !== generated.kind
+    )
+        return undefined;
+    switch (generated.kind) {
+        case "owners": {
+            if (base.kind !== "owners" || human.kind !== "owners")
+                return undefined;
+            return mergeOwnersDetails(base, human, generated);
+        }
+        case "milestones": {
+            if (base.kind !== "milestones" || human.kind !== "milestones")
+                return undefined;
+            return mergeBriefItemDetails(base, human, generated);
+        }
+        case "decisions": {
+            if (base.kind !== "decisions" || human.kind !== "decisions")
+                return undefined;
+            return mergeBriefItemDetails(base, human, generated);
+        }
+        case "risks": {
+            if (base.kind !== "risks" || human.kind !== "risks")
+                return undefined;
+            return mergeBriefItemDetails(base, human, generated);
+        }
+        default:
+            return mergeBriefFields(base, human, generated);
+    }
+}
+
+function mergeBriefItemDetails<
+    D extends { items: Array<{ inventoryId: string }> },
+>(base: D, human: D, generated: D): D | undefined {
+    const fields = mergeBriefFields(base, human, generated, ["items"]);
+    const items = mergeBriefEntries(base.items, human.items, generated.items);
+    if (!fields || !items) return undefined;
+    fields.items = items;
+    return fields;
+}
+
+function mergeOwnersDetails(
+    base: Extract<ProjectBriefDetails, { kind: "owners" }>,
+    human: Extract<ProjectBriefDetails, { kind: "owners" }>,
+    generated: Extract<ProjectBriefDetails, { kind: "owners" }>,
+): Extract<ProjectBriefDetails, { kind: "owners" }> | undefined {
+    const fields = mergeBriefFields(base, human, generated, ["assignments"]);
+    const assignments = mergeBriefEntries(
+        base.assignments,
+        human.assignments,
+        generated.assignments,
+    );
+    return fields && assignments ? { ...fields, assignments } : undefined;
 }
 
 export function mergeView(
@@ -183,6 +317,8 @@ export function mergeView(
     conflicts: string[];
 } {
     if (!current) return { output: structuredClone(candidate), conflicts: [] };
+    if (current.content.kind !== candidate.content.kind)
+        return { output: structuredClone(candidate), conflicts: ["view-kind"] };
     if (!current.generation)
         return {
             output: structuredClone(candidate),
@@ -193,11 +329,11 @@ export function mergeView(
     const output = structuredClone(candidate);
     const conflicts: string[] = [];
     const base = values(
-        current.generation.content as TroubleshootingGuideContent,
+        current.generation.content as DerivedViewContent,
         current.generation.relationships ?? [],
     );
     const human = values(
-        current.content as TroubleshootingGuideContent,
+        current.content as DerivedViewContent,
         authoredRelationships(current),
     );
     const next = values(candidate.content, candidate.relationships);
@@ -281,9 +417,9 @@ function mergeContent(
     let merged = mergeValue(old, edited, proposed);
     if (target.startsWith("section:") && old && edited && proposed)
         merged = mergeSection(
-            old as TroubleshootingGuideContent["sections"][number],
-            edited as TroubleshootingGuideContent["sections"][number],
-            proposed as TroubleshootingGuideContent["sections"][number],
+            old as ViewSection,
+            edited as ViewSection,
+            proposed as ViewSection,
         );
     const deletion =
         edited === undefined &&
@@ -305,20 +441,29 @@ function mergeContent(
             output.content.sections = output.content.sections.filter(
                 (section) => section.id !== id,
             );
-        else if (index < 0)
-            output.content.sections.push(
-                merged as TroubleshootingGuideContent["sections"][number],
-            );
-        else
-            output.content.sections[index] =
-                merged as TroubleshootingGuideContent["sections"][number];
+        else {
+            const section = merged as ViewSection;
+            if (output.content.kind === "projectBrief") {
+                if (!section.details || section.role !== section.details.kind) {
+                    conflicts.push(target);
+                    return;
+                }
+                const typed = {
+                    ...section,
+                    role: section.details.kind,
+                    details: section.details,
+                };
+                if (index < 0) output.content.sections.push(typed);
+                else output.content.sections[index] = typed;
+            } else if (index < 0) output.content.sections.push(section);
+            else output.content.sections[index] = section;
+        }
     } else if (target === "title") output.content.title = merged as string;
     else if (target === "summary") {
         if (merged === undefined) delete output.content.summary;
         else output.content.summary = merged as string;
     } else if (target === "citations")
-        output.content.citations =
-            merged as TroubleshootingGuideContent["citations"];
+        output.content.citations = merged as DerivedViewContent["citations"];
 }
 
 export function rebaseViewEdits(
@@ -352,7 +497,7 @@ export function reconcileResolutionEdits(
     output: ViewSynthesisOutput,
 ): ViewEditOperation[] {
     const human = values(
-        current.content as TroubleshootingGuideContent,
+        current.content as DerivedViewContent,
         authoredRelationships(current),
     );
     const resolved = values(output.content, output.relationships);
