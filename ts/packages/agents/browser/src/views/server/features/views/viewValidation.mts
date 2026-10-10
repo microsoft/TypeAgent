@@ -123,17 +123,35 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         dateTo: z.iso.datetime({ offset: true }).optional(),
         conversationScope: z.enum(["none", "current", "all"]).optional(),
         viewKinds: z
-            .enum(["troubleshootingGuide", "projectBrief"])
+            .enum(["troubleshootingGuide", "projectBrief", "timeline"])
             .array()
-            .max(2)
+            .max(3)
             .optional(),
     }),
     memoryHubEvidence: z.discriminatedUnion("kind", [
         z.strictObject({
             ...corpus,
+            kind: z.literal("event"),
+            objectId: text,
+            revisionId: text,
+            offset: z.number().int().nonnegative().optional(),
+        }),
+        z.strictObject({
+            ...corpus,
+            kind: z.literal("view"),
+            objectId: text,
+            revisionId: text,
+            offset: z.number().int().nonnegative().optional(),
+        }),
+        z.strictObject({
+            ...corpus,
             kind: z.literal("source"),
             objectId: text,
             revisionId: optionalText,
+            locator: z
+                .string()
+                .regex(/^chars:\d+-\d+$/)
+                .optional(),
             offset: z
                 .number()
                 .int()
@@ -207,6 +225,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         description: optionalText,
     }),
     memoryListCorpora: empty,
+    memoryListEvents: z.strictObject({ ...corpus, ...page }),
     memoryGetCorpus: z.strictObject(corpus),
     memoryListSources: z.strictObject({
         ...corpus,

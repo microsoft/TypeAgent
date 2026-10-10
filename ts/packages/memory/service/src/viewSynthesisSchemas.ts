@@ -100,7 +100,31 @@ export function createViewInventoryCheckSchema(
 export function createInventoryConstructionSchema(
     itemIds: string[],
     kind: ViewKind = "troubleshootingGuide",
+    recordIds: string[] = [],
 ): StructuredOutputJsonSchema {
+    if (kind === "timeline")
+        return schema("memory_timeline_construction", {
+            content: object({
+                title: text,
+                summary: text,
+                records: array(
+                    object({
+                        recordId: choice(recordIds),
+                        prose: text,
+                        inventoryIds: array(choice(itemIds)),
+                    }),
+                ),
+            }),
+            corrections: array(
+                object({
+                    from: choice(recordIds),
+                    to: choice(recordIds),
+                    predicate: choice(["corrects", "supersedes"]),
+                }),
+            ),
+            outcome: choice(["chronology"]),
+            missingEvidence: array(text),
+        });
     const ids = array(choice(itemIds));
     const reference = { inventoryId: choice(itemIds) };
     const nullableText: JsonSchemaType = { anyOf: [text, { type: "null" }] };

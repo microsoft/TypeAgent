@@ -14,7 +14,9 @@ import { citedAnswer } from "../dist/agent/memoryHubAnswer.mjs";
 import {
     conversationCorpusName,
     conversationProducerId,
+    canonicalizeProcedure,
 } from "@typeagent/memory-service";
+import { createHash } from "node:crypto";
 
 const time = "2026-10-02T00:00:00.000Z";
 const corpora = [
@@ -37,6 +39,94 @@ const event = {
     turnId: "turn-7",
     metadata: { authority: "explicit" },
 };
+
+test("timeline evidence opens exact canonical records and retained source ranges with owning-corpus and revision guards", async () => {
+    const { service, calls } = fixture();
+    const canonical = {
+        ...event,
+        corpusId: "a",
+        sourceKind: "system",
+        eventId: "configuration",
+        observedAt: "2026-10-06T08:05:00Z",
+        eventTime: "2026-10-05T08:45:00Z",
+        createdAt: "2026-10-08T11:00:00Z",
+    };
+    service.getCapabilities = async () => ({
+        derivedViews: { kinds: ["timeline"], search: true },
+    });
+    service.getEvent = async (corpusId, eventId) =>
+        corpusId === "a" && eventId === "configuration" ? canonical : undefined;
+    const functions = createMemoryHubQueryFunctions(() => service);
+    const revisionId = createHash("sha256")
+        .update(canonicalizeProcedure(canonical))
+        .digest("hex");
+    const exact = await functions.memoryHubEvidence({
+        corpusId: "a",
+        kind: "event",
+        objectId: "configuration",
+        revisionId,
+    });
+    assert.deepEqual(JSON.parse(exact.content), canonical);
+    await assert.rejects(
+        functions.memoryHubEvidence({
+            corpusId: "b",
+            kind: "event",
+            objectId: "configuration",
+            revisionId,
+        }),
+        /no longer available/,
+    );
+    await assert.rejects(
+        functions.memoryHubEvidence({
+            corpusId: "a",
+            kind: "event",
+            objectId: "configuration",
+            revisionId: "f".repeat(64),
+        }),
+        /revision changed/,
+    );
+    service.getSourceContent = async (request) => {
+        calls.push(["exact-range", request]);
+        const text = "beforeKNOWNafter";
+        return {
+            content: text.slice(
+                request.offset,
+                request.offset + request.maxChars,
+            ),
+            offset: request.offset,
+            totalChars: text.length,
+            revisionId: "r1",
+            truncated: false,
+        };
+    };
+    const range = await functions.memoryHubEvidence({
+        corpusId: "a",
+        kind: "source",
+        objectId: "log",
+        revisionId: "r1",
+        locator: "chars:6-11",
+    });
+    assert.equal(range.content, "KNOWN");
+    assert.equal(range.nextOffset, undefined);
+    assert.equal(range.provenance.locator, "chars:6-11");
+    assert.deepEqual(calls.at(-1)[1], {
+        corpusId: "a",
+        sourceId: "log",
+        revisionId: "r1",
+        offset: 6,
+        maxChars: 5,
+    });
+    service.getCapabilities = async () => ({});
+    await assert.rejects(
+        functions.memoryHubEvidence({
+            corpusId: "a",
+            kind: "event",
+            objectId: "configuration",
+            revisionId,
+        }),
+        /disabled/,
+    );
+});
 
 function fixture() {
     const calls = [];

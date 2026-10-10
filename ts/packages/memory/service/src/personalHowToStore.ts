@@ -96,6 +96,34 @@ interface ViewStoreState {
     viewIndexCleanup?: string[];
 }
 
+function forgottenEventIds(marker: string): Set<string> | undefined {
+    if (!marker.startsWith("{")) return undefined;
+    const selection: unknown = JSON.parse(marker);
+    if (!selection || typeof selection !== "object" || !("kind" in selection))
+        throw new Error("Invalid event privacy purge selection");
+    if (selection.kind === "event" && "eventId" in selection) {
+        if (typeof selection.eventId !== "string")
+            throw new Error("Invalid event privacy purge selection");
+        assertViewIdentifier("event ID", selection.eventId);
+        return new Set([selection.eventId]);
+    }
+    if (
+        selection.kind !== "events" ||
+        !("eventIds" in selection) ||
+        !Array.isArray(selection.eventIds) ||
+        !selection.eventIds.length
+    )
+        throw new Error("Invalid event privacy purge selection");
+    return new Set(
+        selection.eventIds.map((id: unknown) => {
+            if (typeof id !== "string")
+                throw new Error("Invalid event privacy purge selection");
+            assertViewIdentifier("event ID", id);
+            return id;
+        }),
+    );
+}
+
 function viewVersions(state: ViewStoreState, viewId: string): ViewVersion[] {
     return Object.prototype.hasOwnProperty.call(state.views, viewId)
         ? state.views[viewId]
@@ -780,6 +808,25 @@ export class TypedViewStore {
 
     private sanitize(state: ViewStoreState, sourceId: string): ViewStoreState {
         const clearingDerived = sourceId === "@clear-derived-views";
+        const forgottenEvents = forgottenEventIds(sourceId);
+        const matches = (value: {
+            sourceId: string;
+            evidence?: { kind: "event"; eventId: string };
+        }) =>
+            forgottenEvents
+                ? value.evidence !== undefined &&
+                  forgottenEvents.has(value.evidence.eventId)
+                : !value.evidence && value.sourceId === sourceId;
+        const selected = (
+            definition: Pick<ViewVersion["definition"], "selector">,
+        ) =>
+            forgottenEvents
+                ? definition.selector.events?.some((event) =>
+                      forgottenEvents.has(event.eventId),
+                  )
+                : definition.selector.sources.some(
+                      (source) => source.sourceId === sourceId,
+                  );
         const affected = new Set(
             Object.entries(state.views).flatMap(([id, versions]) =>
                 versions.some((version) => {
@@ -795,12 +842,7 @@ export class TypedViewStore {
                         return [...evidence.citations, ...evidence.assets];
                     });
                     return (
-                        version.definition.selector.sources.some(
-                            (source) => source.sourceId === sourceId,
-                        ) ||
-                        references.some(
-                            (citation) => citation.sourceId === sourceId,
-                        )
+                        selected(version.definition) || references.some(matches)
                     );
                 })
                     ? [id]
@@ -816,9 +858,9 @@ export class TypedViewStore {
                     !clearingDerived &&
                     !job.results.some(
                         (result) =>
-                            result.snapshot.inputs.some(
-                                (input) => input.sourceId === sourceId,
-                            ) || affected.has(result.viewId),
+                            result.snapshot.inputs.some(matches) ||
+                            selected(result.snapshot.definition) ||
+                            affected.has(result.viewId),
                     ),
             ),
         );
@@ -827,9 +869,8 @@ export class TypedViewStore {
                 ([, conflict]) =>
                     !clearingDerived &&
                     !affected.has(conflict.viewId) &&
-                    !conflict.input.inputs.some(
-                        (input) => input.sourceId === sourceId,
-                    ),
+                    !conflict.input.inputs.some(matches) &&
+                    !selected(conflict.input.definition),
             ),
         );
         state.publications = Object.fromEntries(
@@ -853,7 +894,7 @@ export class TypedViewStore {
         state.index.candidates = state.index.candidates.filter((candidate) => {
             const references = getProcedureEvidenceReferences(candidate);
             return ![...references.citations, ...references.assets].some(
-                (citation) => citation.sourceId === sourceId,
+                matches,
             );
         });
         delete state.index.indexGeneration;
@@ -866,6 +907,28 @@ export class TypedViewStore {
     ): Promise<void> {
         await this.history(corpusId).purge(
             sourceId,
+            (state, id) => this.sanitize(state, id),
+            (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
+        );
+        await this.rebuildIndex(corpusId);
+    }
+
+    public async forgetEvent(corpusId: string, eventId: string): Promise<void> {
+        await this.forgetEvents(corpusId, [eventId]);
+    }
+
+    public async forgetEvents(
+        corpusId: string,
+        eventIds: string[],
+    ): Promise<void> {
+        if (!eventIds.length) return;
+        for (const id of eventIds) assertViewIdentifier("event ID", id);
+        await this.history(corpusId).purge(
+            JSON.stringify({
+                kind: "events",
+                eventIds: [...new Set(eventIds)],
+            }),
             (state, id) => this.sanitize(state, id),
             (state) => this.entries(state),
             () => this.removeSearchIndex(corpusId),

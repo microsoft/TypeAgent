@@ -306,6 +306,7 @@ test("published derived results disclose their exact revision and drill through 
         kind: "source",
         objectId: "source",
         revisionId: "source-r1",
+        locator: "chars:0-8",
         offset: 0,
     });
 });

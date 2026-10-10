@@ -15,13 +15,7 @@ export function materializeDefinition(
     previous?: ViewDefinition,
 ): ViewDefinition {
     const identity = (definition: Omit<ViewDefinition, "revisionId">) =>
-        JSON.stringify([
-            definition.kind,
-            definition.selector.sources.map((source) => [
-                source.sourceId,
-                source.revisionId,
-            ]),
-        ]);
+        JSON.stringify([definition.kind, definition.selector]);
     return {
         ...structuredClone(input),
         revisionId:
@@ -86,6 +80,26 @@ export function versionRelationships(
                 to: { kind: "source", ...source },
             }),
         ),
+        ...(
+            version.generation?.input?.inputs.filter(
+                (input) => input.evidence,
+            ) ?? []
+        ).map(
+            (input): ViewRelationship => ({
+                id: `dependency:${createHash("sha256").update(viewSourceKey(input)).digest("hex").slice(0, 24)}`,
+                schemaVersion: 1,
+                predicate: "dependsOn",
+                family: "dependency",
+                origin: "system",
+                from,
+                to: {
+                    kind: "source",
+                    sourceId: input.sourceId,
+                    revisionId: input.revisionId,
+                    evidence: input.evidence!,
+                },
+            }),
+        ),
     ];
 }
 
@@ -93,24 +107,26 @@ export function edgeIdentity(edge: ViewRelationshipInput): string {
     return JSON.stringify([
         edge.predicate,
         ["section", edge.from.viewId, edge.from.sectionId],
-        ["source", edge.to.sourceId],
+        edge.to.kind === "source"
+            ? edge.to.evidence
+                ? ["event", edge.to.evidence.eventId]
+                : ["source", edge.to.sourceId]
+            : ["section", edge.to.viewId, edge.to.sectionId],
     ]);
 }
 
 export function authoredRelationships(
     version: ViewVersion,
 ): ViewRelationshipInput[] {
-    return version.relationships.flatMap((edge) =>
-        edge.origin !== "system"
-            ? [
-                  {
-                      id: edge.id,
-                      predicate: edge.predicate,
-                      from: edge.from,
-                      to: edge.to,
-                      citations: edge.citations,
-                  },
-              ]
-            : [],
-    );
+    return version.relationships.flatMap((edge) => {
+        if (edge.origin === "system") return [];
+        const {
+            schemaVersion: _schemaVersion,
+            family: _family,
+            origin: _origin,
+            reviewState: _reviewState,
+            ...input
+        } = edge;
+        return [input];
+    });
 }

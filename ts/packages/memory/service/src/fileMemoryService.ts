@@ -60,6 +60,12 @@ import {
     validateBuildRequest,
     validateConflictResolution,
 } from "./viewBuildValidation.js";
+import {
+    timelineDocumentInput,
+    timelineEventInput,
+    validateTimelineEvidence,
+    validateTimelineCorrections,
+} from "./timeline.js";
 import { authoredRelationships } from "./viewRelationships.js";
 import { validateViewDraft, validateViewArchive } from "./viewValidation.js";
 import lockfile from "proper-lockfile";
@@ -667,6 +673,26 @@ function suppressedTurnKey(
         sourceKind ?? null,
         authority ?? null,
     ]);
+}
+
+function isSuppressedEvent(
+    runtime: CorpusRuntime,
+    event: MemoryEvent,
+): boolean {
+    return (
+        runtime.suppressedEventKeys.has(eventIdempotencyKey(event)) ||
+        (event.conversationId !== undefined &&
+            (runtime.suppressedConversations.has(
+                suppressedConversationKey(
+                    event.conversationId,
+                    event.sourceKind,
+                ),
+            ) ||
+                runtime.suppressedConversations.has(
+                    suppressedConversationKey(event.conversationId),
+                ))) ||
+        isSuppressedTurn(runtime, event)
+    );
 }
 
 function isSuppressedTurn(
@@ -2068,8 +2094,14 @@ export class FileMemoryService
         validateIdentifier("corpus ID", corpusId);
         validateIdentifier("event ID", eventId);
         const runtime = await this.getCorpusRuntime(corpusId);
-        const event = runtime.events.find((item) => item.eventId === eventId);
-        return event === undefined ? undefined : structuredClone(event);
+        return runtime.access.read(async () => {
+            const event = runtime.events.find(
+                (item) => item.eventId === eventId,
+            );
+            if (event && isSuppressedEvent(runtime, event))
+                throw new Error("Canonical event evidence is suppressed");
+            return event === undefined ? undefined : structuredClone(event);
+        });
     }
 
     public async listEvents(
@@ -2079,7 +2111,11 @@ export class FileMemoryService
         this.validateEventFilterRequest(request);
         const runtime = await this.getCorpusRuntime(request.corpusId);
         const events = [...runtime.events]
-            .filter((event) => matchesEventFilter(event, request))
+            .filter(
+                (event) =>
+                    !isSuppressedEvent(runtime, event) &&
+                    matchesEventFilter(event, request),
+            )
             .sort(
                 (left, right) =>
                     Date.parse(right.observedAt) -
@@ -2112,8 +2148,10 @@ export class FileMemoryService
         const limit = Math.max(1, Math.min(request.limit ?? 20, 100));
         return this.enqueueWrite(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
-            const eligible = runtime.events.filter((event) =>
-                matchesEventFilter(event, request),
+            const eligible = runtime.events.filter(
+                (event) =>
+                    !isSuppressedEvent(runtime, event) &&
+                    matchesEventFilter(event, request),
             );
             if (eligible.length === 0) {
                 await this.purgeObsoleteEventIndex(request.corpusId, runtime);
@@ -2188,6 +2226,12 @@ export class FileMemoryService
                     matchesEventFilter(event, request),
             );
             const deletedIds = new Set(deleted.map((event) => event.eventId));
+            for (const event of deleted) {
+                this.viewBuilds.forgetEvent(request.corpusId, event.eventId);
+            }
+            await this.personalHowToStore.forgetEvents(request.corpusId, [
+                ...deletedIds,
+            ]);
             const remaining = runtime.events.filter(
                 (event) => !deletedIds.has(event.eventId),
             );
@@ -2407,7 +2451,12 @@ export class FileMemoryService
                           kinds: [
                               "troubleshootingGuide",
                               "projectBrief",
-                          ] as Array<"troubleshootingGuide" | "projectBrief">,
+                              "timeline",
+                          ] as Array<
+                              | "troubleshootingGuide"
+                              | "projectBrief"
+                              | "timeline"
+                          >,
                           drafts: true as const,
                           history: true as const,
                           publication: true as const,
@@ -2455,6 +2504,10 @@ export class FileMemoryService
         });
         if (prior && prior.content.kind !== request.content.kind)
             throw new Error("An existing view cannot change kind");
+        if (request.content.kind === "timeline" && !prior?.generation?.input)
+            throw new Error(
+                "Timeline drafts must begin with a grounded Build views result",
+            );
         let proof: ViewPublicationProof | undefined;
         if (prior?.generation?.input) {
             if (
@@ -2502,6 +2555,23 @@ export class FileMemoryService
                 ...request.relationships.flatMap((edge) => edge.citations),
             ];
             for (const citation of citations) {
+                if (citation.evidence) {
+                    const event = runtime.events.find(
+                        (entry) => entry.eventId === citation.evidence?.eventId,
+                    );
+                    if (
+                        !event ||
+                        isSuppressedEvent(runtime, event) ||
+                        viewHash(event) !== citation.revisionId ||
+                        citation.locator !==
+                            `chars:0-${JSON.stringify(event).length}` ||
+                        citation.excerpt !== JSON.stringify(event)
+                    )
+                        throw new Error(
+                            "Canonical event citation is missing, suppressed or changed",
+                        );
+                    continue;
+                }
                 const source = runtime.manifest.sources.find(
                     (item) => item.sourceId === citation.sourceId,
                 );
@@ -2643,6 +2713,20 @@ export class FileMemoryService
         assertPublicationProof(version);
         const runtime = await this.getCorpusRuntime(version.corpusId);
         for (const input of version.generation!.input!.inputs) {
+            if (input.evidence) {
+                const event = runtime.events.find(
+                    (entry) => entry.eventId === input.evidence?.eventId,
+                );
+                if (
+                    !event ||
+                    isSuppressedEvent(runtime, event) ||
+                    viewHash(event) !== input.contentHash
+                )
+                    throw new ViewBuildStaleError(
+                        "Canonical timeline event changed, was forgotten or suppressed",
+                    );
+                continue;
+            }
             const source = runtime.manifest.sources.find(
                 (entry) => entry.sourceId === input.sourceId,
             );
@@ -2657,6 +2741,31 @@ export class FileMemoryService
             )
                 throw new ViewBuildStaleError(
                     "Publication evidence was changed, forgotten or is no longer the exact accessible current revision; rebuild first",
+                );
+        }
+        if (version.content.kind === "timeline") {
+            const frozen = version.generation!.input!;
+            validateTimelineEvidence(frozen, version.content);
+            validateTimelineCorrections(
+                frozen,
+                version.content,
+                authoredRelationships(version),
+            );
+            const target = await this.snapshotViewTarget(
+                version.corpusId,
+                {
+                    definition: frozen.definition,
+                    expectedVersion: (await this.personalHowToStore.getView({
+                        corpusId: version.corpusId,
+                        viewId: version.viewId,
+                    }))!.version,
+                },
+                frozen.bounds,
+                frozen.publicationPolicy?.buildOverride,
+            );
+            if (target.selectionFingerprint !== frozen.selectionFingerprint)
+                throw new ViewBuildStaleError(
+                    "Timeline record membership or retained evidence changed; rebuild first",
                 );
         }
     }
@@ -2816,12 +2925,14 @@ export class FileMemoryService
             request.freshness !== "current" ||
             (request.kinds !== undefined &&
                 (!Array.isArray(request.kinds) ||
-                    request.kinds.length > 2 ||
+                    request.kinds.length > 3 ||
                     request.kinds.some(
                         (kind) =>
-                            !["troubleshootingGuide", "projectBrief"].includes(
-                                kind,
-                            ),
+                            ![
+                                "troubleshootingGuide",
+                                "projectBrief",
+                                "timeline",
+                            ].includes(kind),
                     ))) ||
             (request.limit !== undefined &&
                 (!Number.isSafeInteger(request.limit) ||
@@ -2953,6 +3064,16 @@ export class FileMemoryService
                 throw new ViewBuildStaleError(
                     "Selected source is unavailable or no longer the current exact retained revision",
                 );
+            if (target.definition.kind === "timeline")
+                return timelineDocumentInput(
+                    {
+                        ...selected,
+                        title: source.title,
+                        content: revision.content,
+                        capturedAt: revision.capturedAt,
+                    },
+                    bounds ?? {},
+                );
             const learnedAt = revision.capturedAt;
             const occurredAt = revision.sourceModifiedAt;
             if (
@@ -2980,6 +3101,16 @@ export class FileMemoryService
                 ...(occurredAt === undefined ? {} : { occurredAt }),
             };
         });
+        for (const selected of target.definition.selector.events ?? []) {
+            const event = runtime.events.find(
+                (entry) => entry.eventId === selected.eventId,
+            );
+            if (!event || isSuppressedEvent(runtime, event))
+                throw new ViewBuildStaleError(
+                    "Selected canonical event is missing or suppressed",
+                );
+            inputs.push(timelineEventInput(event, bounds ?? {}));
+        }
         if (
             inputs.reduce((count, input) => count + input.content.length, 0) >
             120_000
@@ -2999,11 +3130,29 @@ export class FileMemoryService
                 : {}),
             expectedVersion: target.expectedVersion,
             bounds: bounds ?? {},
-            inputs,
+            inputs:
+                target.definition.kind === "timeline"
+                    ? inputs.filter((input) => input.records?.length)
+                    : inputs,
+            ...(target.definition.kind === "timeline"
+                ? {
+                      selectionFingerprint: viewHash(
+                          inputs.map((input) => [
+                              input.sourceId,
+                              input.evidence,
+                              input.revisionId,
+                              input.contentHash,
+                              input.records,
+                          ]),
+                      ),
+                  }
+                : {}),
             pipeline:
-                target.definition.kind === "projectBrief"
-                    ? ("project-brief-v1" as const)
-                    : ("troubleshooting-v1" as const),
+                target.definition.kind === "timeline"
+                    ? ("timeline-v1" as const)
+                    : target.definition.kind === "projectBrief"
+                      ? ("project-brief-v1" as const)
+                      : ("troubleshooting-v1" as const),
             model: this.viewAdapter.identity,
             publicationPolicy: effectiveViewPublicationPolicy(
                 await this.personalHowToStore.getViewPublicationPolicy(

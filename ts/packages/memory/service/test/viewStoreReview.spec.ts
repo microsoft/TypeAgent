@@ -158,7 +158,10 @@ describe("foundation review regressions", () => {
         const sectionTargetAllowed: Extract<
             ViewEndpoint,
             { kind: "section" }
-        > extends ViewRelationshipInput["to"]
+        > extends Extract<
+            ViewRelationshipInput,
+            { predicate: "supportedBy" | "dependsOn" }
+        >["to"]
             ? true
             : false = false;
         const incompleteDraftCitationAllowed: ProcedureSourceCitation extends TroubleshootingGuideContent["citations"][number]

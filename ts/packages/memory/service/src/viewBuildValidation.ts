@@ -62,29 +62,64 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             expectedHead: request.expectedHead,
             definition: target.definition,
             content:
-                target.definition?.kind === "projectBrief"
-                    ? emptyProjectBrief()
-                    : {
-                          kind: "troubleshootingGuide",
-                          title: "Build validation",
+                target.definition?.kind === "timeline"
+                    ? {
+                          kind: "timeline",
+                          title: "Timeline selection validation",
+                          generatedAt: "2026-01-01T00:00:00.000Z",
+                          citations: [],
                           sections: [
                               {
-                                  id: "context",
-                                  role: "context",
-                                  heading: "Context",
+                                  id: "validation",
+                                  role: "event",
+                                  heading: "Record",
                                   body: "Selected evidence",
+                                  details: {
+                                      kind: "event",
+                                      identity: {
+                                          kind: "documentRecord",
+                                          sourceId: "validation",
+                                          sourceRecordId: "validation",
+                                      },
+                                      eventType: "unknown",
+                                      state: "unknown",
+                                      outcome: null,
+                                      occurredAt: null,
+                                      learnedAt: null,
+                                      capturedAt: null,
+                                      inventoryIds: [],
+                                  },
                               },
                           ],
-                          citations: [],
-                      },
+                      }
+                    : target.definition?.kind === "projectBrief"
+                      ? emptyProjectBrief()
+                      : {
+                            kind: "troubleshootingGuide",
+                            title: "Build validation",
+                            sections: [
+                                {
+                                    id: "context",
+                                    role: "context",
+                                    heading: "Context",
+                                    body: "Selected evidence",
+                                },
+                            ],
+                            citations: [],
+                        },
             relationships: [],
         });
         const id = target.definition.viewId;
         if (ids.has(id)) throw new Error("Duplicate build target");
         ids.add(id);
         if (
-            !target.definition.selector.sources.length ||
-            target.definition.selector.sources.length > 32
+            !(
+                target.definition.selector.sources.length +
+                (target.definition.selector.events?.length ?? 0)
+            ) ||
+            target.definition.selector.sources.length +
+                (target.definition.selector.events?.length ?? 0) >
+                32
         )
             throw new Error(
                 "Each target must select 1 to 32 exact retained source revisions",

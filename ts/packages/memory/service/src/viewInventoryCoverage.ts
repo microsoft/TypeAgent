@@ -21,6 +21,7 @@ import {
 } from "./viewSynthesisEvidence.js";
 import { parseProjectBriefDetails, projectBriefRoles } from "./projectBrief.js";
 import type { ProjectBriefSection } from "./viewTypes.js";
+import { hydrateTimelineConstruction } from "./timelineConstruction.js";
 
 const roles = [
     "description",
@@ -87,6 +88,9 @@ function evidenceEdges(
             kind: "source",
             sourceId: citations[0].sourceId,
             revisionId: citations[0].revisionId,
+            ...(citations[0].evidence
+                ? { evidence: citations[0].evidence }
+                : {}),
         },
         citations,
     }));
@@ -143,6 +147,11 @@ export function hydrateInventoryConstruction(
     inventory: ViewFactInventory,
     value: unknown,
 ): ViewSynthesisOutput {
+    if (input.definition.kind === "timeline") {
+        const output = hydrateTimelineConstruction(input, inventory, value);
+        output.coverage = inventoryCoverage(output);
+        return output;
+    }
     if (inventory.sourceFingerprint !== input.fingerprint)
         throw new Error("Construction inventory/input fingerprint mismatch");
     const raw = evidenceRecord(value);

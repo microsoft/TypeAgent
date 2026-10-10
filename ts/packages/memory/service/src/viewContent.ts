@@ -14,8 +14,9 @@ import { procedureToMarkdown } from "./procedureMarkdown.js";
 export function viewSourceKey(source: {
     sourceId: string;
     revisionId: string;
+    evidence?: { kind: "event"; eventId: string };
 }): string {
-    return `${source.sourceId}\n${source.revisionId}`;
+    return `${source.evidence ? `event:${source.evidence.eventId}\n` : ""}${source.sourceId}\n${source.revisionId}`;
 }
 
 function sectionRole(heading: string): ViewSection["role"] {

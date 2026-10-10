@@ -596,7 +596,9 @@ export const knowledgeGraphSchema = z.object({
 export const capabilitiesSchema = z.object({
     derivedViews: z
         .object({
-            kinds: z.enum(["troubleshootingGuide", "projectBrief"]).array(),
+            kinds: z
+                .enum(["troubleshootingGuide", "projectBrief", "timeline"])
+                .array(),
             drafts: z.literal(true),
             history: z.literal(true),
             publication: z.literal(true),

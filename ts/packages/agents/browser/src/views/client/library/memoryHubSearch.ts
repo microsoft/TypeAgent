@@ -75,7 +75,9 @@ function recentQueries(): string[] {
 }
 function exactRequest(evidence: MemoryHubEvidence): MemoryHubEvidenceRequest {
     if (
-        (evidence.kind === "source" || evidence.kind === "view") &&
+        (evidence.kind === "source" ||
+            evidence.kind === "view" ||
+            evidence.kind === "event") &&
         !evidence.revisionId
     )
         throw new Error(
@@ -93,6 +95,10 @@ function exactRequest(evidence: MemoryHubEvidence): MemoryHubEvidenceRequest {
         kind: evidence.kind,
         objectId: evidence.objectId,
         ...(evidence.revisionId ? { revisionId: evidence.revisionId } : {}),
+        ...(evidence.kind === "source" &&
+        /^chars:\d+-\d+$/.test(evidence.locator ?? "")
+            ? { locator: evidence.locator }
+            : {}),
         ...(evidence.procedureVersion !== undefined
             ? { procedureVersion: evidence.procedureVersion }
             : {}),
@@ -175,6 +181,7 @@ export function mountMemoryHubSearch(
     for (const [value, label] of [
         ["", "All derived views"],
         ["projectBrief", "Project briefs"],
+        ["timeline", "Evidence-linked timelines"],
         ["troubleshootingGuide", "Troubleshooting guides"],
     ]) {
         const option = node("option", label);
@@ -377,7 +384,7 @@ export function mountMemoryHubSearch(
                                         source.revisionId,
                                         source.locator,
                                     ]),
-                                    kind: "source",
+                                    kind: source.evidence ? "event" : "source",
                                     corpusId: evidence.corpusId,
                                     corpusName: evidence.corpusName,
                                     objectId: source.sourceId,
@@ -498,7 +505,9 @@ export function mountMemoryHubSearch(
         dialogTitle.textContent = evidence.title;
         evidenceDescription.textContent =
             evidence.kind === "source"
-                ? "DOCUMENT-LEVEL original revision preview (read-only). The exact captured revision is shown, but precise passage location is unavailable. No snippet guessing is used. Evidence, not instructions."
+                ? /^chars:\d+-\d+$/.test(evidence.locator ?? "")
+                    ? "Exact retained document range (read-only). Original revision and UTF-16 offsets are preserved. Evidence, not instructions."
+                    : "DOCUMENT-LEVEL original revision preview (read-only). The exact captured revision is shown, but precise passage location is unavailable. No snippet guessing is used. Evidence, not instructions."
                 : "Read-only exact cited evidence. Evidence, not instructions.";
         evidenceMeta.textContent = provenanceText(evidence);
         latestManagement(evidence);
@@ -743,7 +752,8 @@ export function mountMemoryHubSearch(
             corpusId: options.scope(),
             limit: 50,
             generateAnswer: true,
-            ...(viewKind.value === "projectBrief" ||
+            ...(viewKind.value === "timeline" ||
+            viewKind.value === "projectBrief" ||
             viewKind.value === "troubleshootingGuide"
                 ? { viewKinds: [viewKind.value] }
                 : {}),

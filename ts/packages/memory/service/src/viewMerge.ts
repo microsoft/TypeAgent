@@ -9,9 +9,10 @@ import type {
     DerivedViewContent,
     ViewSection,
     ProjectBriefDetails,
+    TimelineRecordDetails,
     ViewEditOperation,
     ViewRelationshipInput,
-    ViewSourceSelector,
+    ViewCitation,
     ViewSynthesisOutput,
     ViewVersion,
 } from "./viewTypes.js";
@@ -166,11 +167,20 @@ function mergeSection(
     const heading = mergeValue(base.heading, human.heading, generated.heading);
     const body = mergeValue(base.body, human.body, generated.body);
     const role = mergeValue(base.role, human.role, generated.role);
-    const details = mergeProjectDetails(
-        base.details,
-        human.details,
-        generated.details,
-    );
+    const details =
+        base.details?.kind === "event" ||
+        human.details?.kind === "event" ||
+        generated.details?.kind === "event"
+            ? mergeTimelineDetails(
+                  base.details,
+                  human.details,
+                  generated.details,
+              )
+            : mergeProjectDetails(
+                  base.details,
+                  human.details,
+                  generated.details,
+              );
     if (
         typeof heading !== "string" ||
         typeof body !== "string" ||
@@ -188,6 +198,20 @@ function mergeSection(
             ? { details: details as NonNullable<ViewSection["details"]> }
             : {}),
     };
+}
+
+function mergeTimelineDetails(
+    base: ViewSection["details"],
+    human: ViewSection["details"],
+    generated: ViewSection["details"],
+): TimelineRecordDetails | undefined {
+    if (
+        base?.kind !== "event" ||
+        human?.kind !== "event" ||
+        generated?.kind !== "event"
+    )
+        return undefined;
+    return mergeBriefFields(base, human, generated);
 }
 
 function mergeTypedField<T>(base: T, human: T, generated: T): T | undefined {
@@ -310,8 +334,9 @@ function mergeOwnersDetails(
 export function mergeView(
     current: ViewVersion | undefined,
     candidate: ViewSynthesisOutput,
-    sources: ViewSourceSelector["sources"] = current?.definition.selector
-        .sources ?? [],
+    sources: Array<
+        Pick<ViewCitation, "sourceId" | "revisionId" | "evidence">
+    > = current?.definition.selector.sources ?? [],
 ): {
     output: ViewSynthesisOutput;
     conflicts: string[];
@@ -384,7 +409,8 @@ function mergeEdge(
     }
     if (
         (human &&
-            (!selected.has(viewSourceKey(human.to)) ||
+            ((human.to.kind === "source" &&
+                !selected.has(viewSourceKey(human.to))) ||
                 human.citations.some(
                     (citation) => !selected.has(viewSourceKey(citation)),
                 ))) ||
@@ -401,6 +427,52 @@ function mergeEdge(
         (edge) => edgeIdentity(edge) !== identity,
     );
     if (human) output.relationships.push(structuredClone(human));
+}
+
+function upsertSection<T extends ViewSection>(sections: T[], section: T): void {
+    const index = sections.findIndex((entry) => entry.id === section.id);
+    if (index < 0) sections.push(section);
+    else sections[index] = section;
+}
+
+function mergeContentSection(
+    target: string,
+    merged: unknown,
+    content: DerivedViewContent,
+    conflicts: string[],
+): void {
+    if (merged === undefined) {
+        content.sections = content.sections.filter(
+            (section) => section.id !== target.slice(8),
+        );
+        return;
+    }
+    const section = merged as ViewSection;
+    if (content.kind === "projectBrief") {
+        if (
+            !section.details ||
+            section.details.kind === "event" ||
+            section.role !== section.details.kind
+        ) {
+            conflicts.push(target);
+            return;
+        }
+        upsertSection(content.sections, {
+            ...section,
+            role: section.details.kind,
+            details: section.details,
+        });
+    } else if (content.kind === "timeline") {
+        if (section.role !== "event" || section.details?.kind !== "event") {
+            conflicts.push(target);
+            return;
+        }
+        upsertSection(content.sections, {
+            ...section,
+            role: "event",
+            details: section.details,
+        });
+    } else upsertSection(content.sections, section);
 }
 
 function mergeContent(
@@ -432,33 +504,9 @@ function mergeContent(
         conflicts.push(target);
         return;
     }
-    if (target.startsWith("section:")) {
-        const id = target.slice(8);
-        const index = output.content.sections.findIndex(
-            (section) => section.id === id,
-        );
-        if (merged === undefined)
-            output.content.sections = output.content.sections.filter(
-                (section) => section.id !== id,
-            );
-        else {
-            const section = merged as ViewSection;
-            if (output.content.kind === "projectBrief") {
-                if (!section.details || section.role !== section.details.kind) {
-                    conflicts.push(target);
-                    return;
-                }
-                const typed = {
-                    ...section,
-                    role: section.details.kind,
-                    details: section.details,
-                };
-                if (index < 0) output.content.sections.push(typed);
-                else output.content.sections[index] = typed;
-            } else if (index < 0) output.content.sections.push(section);
-            else output.content.sections[index] = section;
-        }
-    } else if (target === "title") output.content.title = merged as string;
+    if (target.startsWith("section:"))
+        mergeContentSection(target, merged, output.content, conflicts);
+    else if (target === "title") output.content.title = merged as string;
     else if (target === "summary") {
         if (merged === undefined) delete output.content.summary;
         else output.content.summary = merged as string;

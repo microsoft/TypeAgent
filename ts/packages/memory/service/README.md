@@ -246,9 +246,9 @@ atomic history-ref commit; failed preparations do not save a procedure version.
 
 `new FileMemoryService(privateStore, { viewDrafts: true })` enables the local
 developer/demo capability. It is **off by default**. `getCapabilities()` then
-advertises `derivedViews: { kinds: ["troubleshootingGuide", "projectBrief"], drafts: true,
+advertises `derivedViews: { kinds: ["troubleshootingGuide", "projectBrief", "timeline"], drafts: true,
 history: true, builds: true, editMerging: true, publication: true, search: true }`.
-Wiki, timeline, record-level event selectors and automatic scheduling remain unsupported; they
+Wiki and automatic scheduling remain unsupported; they
 are never silently substituted with procedures.
 
 `listViews(corpusId)` returns `{ head, views }`, including pending drafts and
@@ -329,12 +329,139 @@ evidence and cited recovery/escalation limits; it never invents a confirmed fix.
 
 `buildViews({ corpusId, expectedHead, targets, bounds?, publication?: boolean })`
 admits a durable manual job. Each target supplies `expectedVersion` and a
-`definition` with a stable view ID, `kind: "troubleshootingGuide"` or `"projectBrief"` and an explicit
+`definition` with a stable view ID, `kind: "troubleshootingGuide"`, `"projectBrief"` or `"timeline"` and an explicit
 revision-aware source selector. Admission freezes complete retained input text,
 source membership, current exact revisions, content hashes, target and definition
 revisions, authenticated OS actor, temporal bounds and configured pipeline/model
 identity. Their fingerprint is persisted with every per-target receipt.
 There is no browser-owned job store or duplicate canonical view store.
+
+### Evidence-linked timelines
+
+Choose **Evidence-linked timeline** in Memory Hub, select canonical events and/or
+exact document revisions, set a stable view ID, and optionally enter explicit-timezone
+knowledge and occurrence bounds. The fixed reader shows record identity, type,
+state/outcome, occurrence, knowledge, capture, and separate generation time.
+Narrative is editable; source-owned identity/time/classification fields are read-only.
+Changes to those fields need new retained evidence and a rebuild, not a human-review
+override. Correction removals are explicit typed edge tombstones. Build progress,
+history, conflicts, publication settings, exact publication, index retry and
+published-only search use the existing view controls.
+
+```json
+{
+  "corpusId": "incident-history",
+  "expectedHead": null,
+  "publication": false,
+  "bounds": { "learnedBefore": "2026-10-05T12:00:00Z" },
+  "targets": [
+    {
+      "expectedVersion": 0,
+      "definition": {
+        "viewId": "incident-timeline",
+        "kind": "timeline",
+        "selector": {
+          "kind": "timelineEvidence",
+          "sources": [
+            {
+              "sourceId": "investigation-log",
+              "revisionId": "exact-current-revision"
+            }
+          ],
+          "events": [{ "eventId": "canonical-event-id" }]
+        }
+      }
+    }
+  ]
+}
+```
+
+Use the actual corpus/head/revision/event IDs, not the illustrative values above.
+From the service package:
+
+```powershell
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts events <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts events <corpusId> <nextContinuationToken>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts event <corpusId> <eventId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts build timeline-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts read <corpusId> incident-timeline
+```
+
+The `events` command returns up to 200 records per page. Pass its
+`nextContinuationToken` as the optional last argument to discover subsequent
+records; repeat until the response has no continuation token.
+Forgetting multiple events aborts affected builds per event but performs one
+managed view-history purge and procedure-index rebuild for the batch. The
+persisted batch selection is also used for interrupted-purge recovery.
+
+The same `buildViews` request is supported by in-process/RPC clients,
+`memory_views_build` over MCP, host IPC and authenticated browser transports.
+Existing document-only `sources` selectors and citations remain unchanged.
+Canonical citations carry `evidence: { kind: "event", eventId }`, with a frozen
+record hash as revision and exact UTF-16 offsets into `JSON.stringify(event)`.
+Evidence controls open that exact event, not a synthetic missing document.
+For document citations, offsets always refer to the original unchanged revision.
+
+`TimelineContent` has `kind: "timeline"`, `generatedAt`, and stable structured
+event sections (`role: "event"`). Each section's `details` contains
+`identity` (`canonicalEvent/eventId` or `documentRecord/sourceId/sourceRecordId`),
+`eventType`, source-grounded `state`, `outcome`, nullable `occurredAt`,
+`learnedAt`, `capturedAt`, and checked `inventoryIds`. Canonical record IDs and
+`eventTime`, `observedAt`, `createdAt` are copied from the canonical event and
+normalized to UTC; the existing append-event defaults are unchanged.
+Document-record section IDs are explicitly host-derived from source ID and
+record ID, never presented as canonical events.
+
+Supported document/log input uses explicit Markdown record boundaries:
+
+```markdown
+## Record configuration-change
+
+Classification: observation
+State: confirmed
+Occurred at: 2026-10-05T08:45:00Z
+Recorded / known at: 2026-10-06T08:05:00Z
+Outcome: configuration observed
+
+Retained evidence narrative and measurements.
+```
+
+Missing occurrence or knowledge fields stay `null`; capture/modified times never
+replace them. Unsupported/no-timezone/invalid dates and duplicate IDs fail
+explicitly. A bounded checkpoint excludes unknown required record times.
+Unstructured sources without grounded record boundaries fail with an unsupported
+projection explanation rather than unsafe full-file inclusion.
+`learnedBefore`, `occurredFrom`, and `occurredTo` are inclusive host-enforced record
+bounds. Only eligible passages reach inventory, independent source checking,
+construction and final audit; excluded future facts are not treated as background.
+The snapshot fingerprints exact source revisions, canonical records, membership
+and bounds, and rechecks them before materialization/publication. Empty eligible
+checkpoints report `skipped` and create no artifact or new publication.
+
+`corrects` and `supersedes` edges connect distinct existing event sections.
+Document evidence must explicitly declare `Corrects: <record-id>` or
+`Supersedes: <record-id>`; canonical evidence uses `metadata.corrects` or
+`metadata.supersedes` with its canonical target ID. Targets must belong to the
+same evidence identity kind, remain eligible, and have non-reversed knowledge
+ordering. Bare document record references resolve only within their own source;
+fenced examples are neither record boundaries nor metadata fields.
+The original hypothesis/action remains a separate record; correction
+never silently rewrites its history. Independent support audits and actual
+artifact coverage still apply, including human-edited final records. Positive
+audits cannot bypass incompatible provenance, structured timestamps or state.
+
+Canonical event forget purges dependent views, jobs, conflict bases, receipts,
+managed Git history and indexes even with `forgetLinkedSources: false`.
+Document replacement/forget, archive, clear and restart retain their existing
+guards; unrelated views/events/sources are preserved. Cleanup remains quarantined
+until managed derived-data removal completes. External backups and secure media
+erasure remain outside the service's guarantees.
+
+This is an opt-in, offline-tested capability, not release qualification.
+No event execution, skill activation, scheduler, wiki store or migration is added.
+Configured `gpt-4o-2024-11-20` synthesis remains live-unqualified; source inventories
+and independent semantic audits are model-based and may still omit or misinterpret
+evidence. Passing structured offline stubs does not establish live quality.
 
 ### Project briefs
 

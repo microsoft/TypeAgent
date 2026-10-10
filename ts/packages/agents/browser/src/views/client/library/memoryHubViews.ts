@@ -12,10 +12,12 @@ import type {
     ViewPublicationStatus,
     DerivedViewContent,
     ViewKind,
+    ViewCitation,
 } from "@typeagent/memory-service";
 import { invokeMemory, invokeView } from "./viewClient";
 import { rbButton, rbError, rbNode } from "./memoryHubRunbookUi";
 import { createProjectBriefEditor } from "./memoryHubProjectBrief";
+import { createTimelineEditor } from "./memoryHubTimeline";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
 
 function jsonEditor(label: string, value: unknown): HTMLTextAreaElement {
@@ -27,19 +29,47 @@ function jsonEditor(label: string, value: unknown): HTMLTextAreaElement {
 }
 
 function editableEdges(view: ViewVersion): ViewRelationshipInput[] {
-    return view.relationships.flatMap((edge) =>
-        edge.origin === "system"
-            ? []
-            : [
-                  {
-                      id: edge.id,
-                      predicate: edge.predicate,
-                      from: edge.from,
-                      to: edge.to,
-                      citations: edge.citations,
-                  },
-              ],
-    );
+    return view.relationships.flatMap((edge) => {
+        if (edge.origin === "system") return [];
+        const {
+            schemaVersion: _schemaVersion,
+            family: _family,
+            origin: _origin,
+            reviewState: _reviewState,
+            ...input
+        } = edge;
+        return [input];
+    });
+}
+
+function retainedEvidenceEditor(
+    enabled: boolean,
+    retainedEdges: Map<string, ViewRelationshipInput>,
+    onChange: () => void,
+): HTMLFieldSetElement {
+    const fieldset = rbNode("fieldset");
+    fieldset.append(rbNode("legend", "Retained section evidence"));
+    if (!enabled) return fieldset;
+    for (const edge of retainedEdges.values()) {
+        const label = rbNode("label");
+        const retained = document.createElement("input");
+        retained.type = "checkbox";
+        retained.checked = true;
+        retained.onchange = () => {
+            if (retained.checked) retainedEdges.set(edge.id, edge);
+            else retainedEdges.delete(edge.id);
+            onChange();
+        };
+        label.append(
+            retained,
+            rbNode(
+                "span",
+                `${edge.from.sectionId}: ${edge.predicate} ${edge.to.kind === "source" ? `${edge.to.sourceId} @ ${edge.to.revisionId}` : edge.to.sectionId}`,
+            ),
+        );
+        fieldset.append(label);
+    }
+    return fieldset;
 }
 
 function publicationChoice(label: string, inherit: boolean): HTMLSelectElement {
@@ -76,7 +106,7 @@ export function mountMemoryHubViews(
         rbNode("h3", "Views"),
         rbNode(
             "p",
-            "Distill exact retained revisions into a project brief or conditional troubleshooting guide. Publication and index readiness are separate; neither grants human review, skill approval or execution. Configured synthesis remains live-unqualified.",
+            "Distill retained document revisions or canonical events into an evidence-linked timeline, project brief or conditional troubleshooting guide. Publication and index readiness are separate; neither grants human review, skill approval or execution. Configured synthesis remains live-unqualified.",
         ),
         status,
         controls,
@@ -126,7 +156,9 @@ export function mountMemoryHubViews(
             capabilities.derivedViews?.kinds ?? ["troubleshootingGuide"]
         ).filter(
             (kind): kind is ViewKind =>
-                kind === "troubleshootingGuide" || kind === "projectBrief",
+                kind === "troubleshootingGuide" ||
+                kind === "projectBrief" ||
+                kind === "timeline",
         );
         if (root.hidden) return;
         const corpusId = options.scope();
@@ -206,6 +238,45 @@ export function mountMemoryHubViews(
             );
         if (current !== sequence) return;
         const selected = new Map<string, string>();
+        const selectedEvents = new Set<string>();
+        const eventHost = rbNode("fieldset");
+        eventHost.hidden = true;
+        eventHost.append(
+            rbNode("legend", "Canonical timeline events (not document IDs)"),
+        );
+        let eventContinuation: string | undefined;
+        if (supportedKinds.includes("timeline"))
+            do {
+                const page = await invokeMemory("memoryListEvents", {
+                    corpusId,
+                    pageSize: 200,
+                    ...(eventContinuation
+                        ? { continuationToken: eventContinuation }
+                        : {}),
+                });
+                for (const event of page.items) {
+                    const label = rbNode("label");
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.onchange = () => {
+                        if (checkbox.checked) selectedEvents.add(event.eventId);
+                        else selectedEvents.delete(event.eventId);
+                    };
+                    label.append(
+                        checkbox,
+                        rbNode(
+                            "span",
+                            `${event.eventType} [${event.eventId}] occurred ${event.eventTime}; learned ${event.observedAt}; captured ${event.createdAt}`,
+                        ),
+                    );
+                    eventHost.append(label);
+                }
+                eventContinuation = page.nextContinuationToken;
+            } while (eventContinuation && eventHost.childElementCount < 1001);
+        if (eventContinuation)
+            throw new Error(
+                "Event selection exceeds 1000 records; use a bounded corpus",
+            );
         const sourceHost = rbNode("fieldset");
         sourceHost.append(
             rbNode(
@@ -240,14 +311,29 @@ export function mountMemoryHubViews(
             const option = document.createElement("option");
             option.value = kind;
             option.textContent =
-                kind === "projectBrief"
-                    ? "Project brief"
-                    : "Troubleshooting guide";
+                kind === "timeline"
+                    ? "Evidence-linked timeline"
+                    : kind === "projectBrief"
+                      ? "Project brief"
+                      : "Troubleshooting guide";
             kindPicker.append(option);
         }
         const cutoff = document.createElement("input");
         cutoff.setAttribute("aria-label", "Learned before ISO timestamp");
         cutoff.placeholder = "Optional learned-before ISO timestamp";
+        const occurredFrom = document.createElement("input");
+        occurredFrom.setAttribute("aria-label", "Occurred from ISO timestamp");
+        occurredFrom.placeholder =
+            "Optional occurrence start (explicit timezone)";
+        const occurredTo = document.createElement("input");
+        occurredTo.setAttribute("aria-label", "Occurred to ISO timestamp");
+        occurredTo.placeholder = "Optional occurrence end (explicit timezone)";
+        kindPicker.onchange = () => {
+            eventHost.hidden = kindPicker.value !== "timeline";
+            occurredFrom.hidden = occurredTo.hidden =
+                kindPicker.value !== "timeline";
+        };
+        kindPicker.onchange(new Event("change"));
         const corpusPolicy = publicationChoice(
             "Corpus auto-publish after build",
             false,
@@ -294,8 +380,11 @@ export function mountMemoryHubViews(
             settings,
             sourceHost,
             kindPicker,
+            eventHost,
             target,
             cutoff,
+            occurredFrom,
+            occurredTo,
             buildPolicy,
             effective,
             rbButton("Build views", () => {
@@ -305,7 +394,14 @@ export function mountMemoryHubViews(
                             "Save or explicitly discard editor changes before building",
                         );
                     const viewId = target.value.trim();
-                    if (!viewId || !selected.size)
+                    if (
+                        !viewId ||
+                        (!selected.size &&
+                            !(
+                                kindPicker.value === "timeline" &&
+                                selectedEvents.size
+                            ))
+                    )
                         throw new Error("Choose evidence and a stable view ID");
                     const latest = await invokeMemory("memoryListViews", {
                         corpusId,
@@ -324,6 +420,12 @@ export function mountMemoryHubViews(
                         throw new Error(
                             "An existing view cannot change kind; choose a new stable view ID",
                         );
+                    const sources = [...selected].map(
+                        ([sourceId, revisionId]) => ({
+                            sourceId,
+                            revisionId,
+                        }),
+                    );
                     const job = await invokeMemory("memoryBuildViews", {
                         corpusId,
                         expectedHead: latest.head,
@@ -333,20 +435,49 @@ export function mountMemoryHubViews(
                                 definition: {
                                     viewId,
                                     kind,
-                                    selector: {
-                                        kind: "sources",
-                                        sources: [...selected].map(
-                                            ([sourceId, revisionId]) => ({
-                                                sourceId,
-                                                revisionId,
-                                            }),
-                                        ),
-                                    },
+                                    selector:
+                                        kind === "timeline"
+                                            ? {
+                                                  kind: "timelineEvidence",
+                                                  sources,
+                                                  events: [
+                                                      ...selectedEvents,
+                                                  ].map((eventId) => ({
+                                                      eventId,
+                                                  })),
+                                              }
+                                            : { kind: "sources", sources },
                                 },
                             },
                         ],
-                        ...(cutoff.value.trim()
-                            ? { bounds: { learnedBefore: cutoff.value.trim() } }
+                        ...(cutoff.value.trim() ||
+                        (kind === "timeline" &&
+                            (occurredFrom.value.trim() ||
+                                occurredTo.value.trim()))
+                            ? {
+                                  bounds: {
+                                      ...(cutoff.value.trim()
+                                          ? {
+                                                learnedBefore:
+                                                    cutoff.value.trim(),
+                                            }
+                                          : {}),
+                                      ...(kind === "timeline" &&
+                                      occurredFrom.value.trim()
+                                          ? {
+                                                occurredFrom:
+                                                    occurredFrom.value.trim(),
+                                            }
+                                          : {}),
+                                      ...(kind === "timeline" &&
+                                      occurredTo.value.trim()
+                                          ? {
+                                                occurredTo:
+                                                    occurredTo.value.trim(),
+                                            }
+                                          : {}),
+                                  },
+                              }
                             : {}),
                         ...(buildPolicy.value === "inherit"
                             ? {}
@@ -374,6 +505,13 @@ export function mountMemoryHubViews(
                     rbNode(
                         "p",
                         `Auto-publish: ${effective.autoPublish ? "On" : "Off"} (${effective.origin}); corpus policy revision ${effective.corpusRevision}, view policy revision ${effective.viewRevision}`,
+                    ),
+                );
+            if (result.snapshot.definition?.kind === "timeline")
+                receipt.append(
+                    rbNode(
+                        "p",
+                        `Timeline checkpoint: learned through ${result.snapshot.bounds.learnedBefore ?? "unbounded"}; occurrence ${result.snapshot.bounds.occurredFrom ?? "unbounded"} to ${result.snapshot.bounds.occurredTo ?? "unbounded"} (inclusive). Record knowledge, not file import time, determines eligibility. Unknown required times are excluded. Canonical event authority is evidence, not permission.`,
                     ),
                 );
             if (result.publication)
@@ -515,6 +653,41 @@ export function mountMemoryHubViews(
             );
     }
 
+    function showTimelineEvidence(
+        view: ViewVersion,
+        citation: ViewCitation,
+    ): void {
+        void action(async () => {
+            const capturedSequence = sequence;
+            const original = citation.evidence
+                ? await invokeView("memoryHubEvidence", {
+                      corpusId: view.corpusId,
+                      kind: "event",
+                      objectId: citation.evidence.eventId,
+                      revisionId: citation.revisionId,
+                  })
+                : await invokeView("memoryHubRunbookOriginal", {
+                      corpusId: view.corpusId,
+                      sourceId: citation.sourceId,
+                      revisionId: citation.revisionId,
+                      locator: citation.locator,
+                  });
+            if (
+                capturedSequence !== sequence ||
+                options.scope() !== view.corpusId
+            )
+                return;
+            if ("available" in original && !original.available)
+                throw new Error(
+                    original.error ?? "Original timeline evidence unavailable",
+                );
+            comparison.append(
+                rbNode("h5", original.title),
+                rbNode("pre", original.content),
+            );
+        });
+    }
+
     function showEditor(view: ViewVersion): void {
         if (!discardChanges()) return;
         if (view.content.kind === "procedure")
@@ -556,35 +729,35 @@ export function mountMemoryHubViews(
                       },
                   )
                 : undefined;
-        const content = projectEditor
-            ? undefined
-            : jsonEditor("Draft content with stable section IDs", view.content);
+        const timelineEditor =
+            view.content.kind === "timeline"
+                ? createTimelineEditor(
+                      view.content,
+                      editableEdges(view),
+                      () => {
+                          dirty = true;
+                      },
+                      (citation) => showTimelineEvidence(view, citation),
+                  )
+                : undefined;
+        const content =
+            projectEditor || timelineEditor
+                ? undefined
+                : jsonEditor(
+                      "Draft content with stable section IDs",
+                      view.content,
+                  );
         const edges = jsonEditor("Typed relationships", editableEdges(view));
         const retainedEdges = new Map(
             editableEdges(view).map((edge) => [edge.id, edge]),
         );
-        const projectEvidence = rbNode("fieldset");
-        projectEvidence.append(rbNode("legend", "Retained section evidence"));
-        if (projectEditor)
-            for (const edge of editableEdges(view)) {
-                const label = rbNode("label");
-                const retained = document.createElement("input");
-                retained.type = "checkbox";
-                retained.checked = true;
-                retained.onchange = () => {
-                    if (retained.checked) retainedEdges.set(edge.id, edge);
-                    else retainedEdges.delete(edge.id);
-                    dirty = true;
-                };
-                label.append(
-                    retained,
-                    rbNode(
-                        "span",
-                        `${edge.from.sectionId}: ${edge.predicate} ${edge.to.sourceId} @ ${edge.to.revisionId}`,
-                    ),
-                );
-                projectEvidence.append(label);
-            }
+        const projectEvidence = retainedEvidenceEditor(
+            projectEditor !== undefined,
+            retainedEdges,
+            () => {
+                dirty = true;
+            },
+        );
         const viewPolicy = publicationChoice(
             "View auto-publish after build",
             true,
@@ -633,8 +806,12 @@ export function mountMemoryHubViews(
                 "p",
                 "Content and relationships are separate structured edits. Narrative remains editable; checked fact/context passages must remain somewhere in the final artifact. Rebuild with changed evidence to revise facts. Saving checks exact evidence and semantic/context support; unsupported edits are blocked.",
             ),
-            projectEditor?.element ?? content!,
-            ...(projectEditor ? [projectEvidence] : [edges]),
+            timelineEditor?.element ?? projectEditor?.element ?? content!,
+            ...(timelineEditor
+                ? []
+                : projectEditor
+                  ? [projectEvidence]
+                  : [edges]),
             rbNode(
                 "p",
                 `Publication: ${publication?.blockedReason ?? publication?.reason ?? "not published"}. Published ${publication?.publishedRevisionId ?? "none"}; indexed ${publication?.indexedRevisionId ?? "none"}.`,
@@ -670,14 +847,18 @@ export function mountMemoryHubViews(
                             kind: view.content.kind as ViewKind,
                             selector: view.definition.selector,
                         },
-                        content: projectEditor
-                            ? projectEditor.read()
-                            : (JSON.parse(
-                                  content!.value,
-                              ) as DerivedViewContent),
-                        relationships: projectEditor
-                            ? [...retainedEdges.values()]
-                            : JSON.parse(edges.value),
+                        content: timelineEditor
+                            ? timelineEditor.read()
+                            : projectEditor
+                              ? projectEditor.read()
+                              : (JSON.parse(
+                                    content!.value,
+                                ) as DerivedViewContent),
+                        relationships: timelineEditor
+                            ? timelineEditor.relationships()
+                            : projectEditor
+                              ? [...retainedEdges.values()]
+                              : JSON.parse(edges.value),
                     });
                     dirty = false;
                     comparison.replaceChildren();
@@ -743,7 +924,8 @@ export function mountMemoryHubViews(
                 rbNode("h5", label),
                 rbNode(
                     "pre",
-                    value?.content.kind === "projectBrief"
+                    value?.content.kind === "projectBrief" ||
+                        value?.content.kind === "timeline"
                         ? viewContentToText(value.content)
                         : JSON.stringify(
                               value ?? "No known generated base",
@@ -791,9 +973,27 @@ export function mountMemoryHubViews(
                       },
                   )
                 : undefined;
-        const combined = combinedBrief
-            ? undefined
-            : jsonEditor("Explicit combined resolution", conflict.candidate);
+        const combinedTimeline =
+            conflict.candidate.content.kind === "timeline"
+                ? createTimelineEditor(
+                      conflict.candidate.content,
+                      conflict.candidate.relationships,
+                      () => {
+                          dirty = true;
+                      },
+                      () => {
+                          status.textContent =
+                              "Inspect exact original evidence from the current timeline before resolving.";
+                      },
+                  )
+                : undefined;
+        const combined =
+            combinedBrief || combinedTimeline
+                ? undefined
+                : jsonEditor(
+                      "Explicit combined resolution",
+                      conflict.candidate,
+                  );
         if (combined)
             combined.oninput = () => {
                 dirty = true;
@@ -812,7 +1012,7 @@ export function mountMemoryHubViews(
         }
         comparison.append(
             choice,
-            combinedBrief?.element ?? combined!,
+            combinedTimeline?.element ?? combinedBrief?.element ?? combined!,
             rbButton("Resolve explicitly and save draft", () => {
                 void action(async () => {
                     const selected = choice.value as
@@ -821,12 +1021,19 @@ export function mountMemoryHubViews(
                         | "combined";
                     const output: ViewSynthesisOutput | undefined =
                         selected === "combined"
-                            ? combinedBrief
+                            ? combinedTimeline
                                 ? {
                                       ...conflict.candidate,
-                                      content: combinedBrief.read(),
+                                      content: combinedTimeline.read(),
+                                      relationships:
+                                          combinedTimeline.relationships(),
                                   }
-                                : JSON.parse(combined!.value)
+                                : combinedBrief
+                                  ? {
+                                        ...conflict.candidate,
+                                        content: combinedBrief.read(),
+                                    }
+                                  : JSON.parse(combined!.value)
                             : undefined;
                     const saved = await invokeMemory(
                         "memoryResolveViewConflict",
