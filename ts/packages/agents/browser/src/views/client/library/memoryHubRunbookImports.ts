@@ -257,7 +257,7 @@ function issueText(response: RunbookImportResponse): string {
                   (member) => member.stage === "acquisition",
               )
                 ? `Batch ${response.batch.batchId}: ${response.batch.state}. Acquisition was rejected; no documents were submitted.`
-                : `Batch ${response.batch.batchId}: ${response.batch.state}. Acquired sources were submitted; this is not a promise of successful synthesis.`
+                : `Batch ${response.batch.batchId}: ${response.batch.state}.`
             : "No batch was started.",
         ...(response.batch?.members.some(
             (member) => member.stage !== "acquisition",

@@ -530,9 +530,7 @@ export function createMemoryHubRunbookImportFunctions(
         return {
             batch: acquiredMemberNames(batch, acquisition),
             acquisition: acquisition.issues,
-            warnings: [
-                "Classification and synthesis run as separate post-commit jobs. Imports never execute Runbooks, tools or automations.",
-            ],
+            warnings: [],
         };
     }
 

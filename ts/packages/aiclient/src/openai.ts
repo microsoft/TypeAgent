@@ -453,10 +453,22 @@ export function createChatModel(
             : getChatModelPool(endpoint);
     const settings = pool.members[0].settings;
 
-    // GPT-5 models only support temperature=1; 0 is rejected by the API.
-    if (typeof endpoint === "string" && /gpt.?5/i.test(endpoint)) {
+    // GPT-5+ models only support the default temperature; other values are
+    // rejected. Check resolved settings because callers often use an alias.
+    if (
+        (settings.provider === "azure" || settings.provider === "openai") &&
+        [
+            typeof endpoint === "string" ? endpoint : undefined,
+            "modelName" in settings ? settings.modelName : undefined,
+            settings.endpoint,
+        ].some(
+            (identifier) =>
+                identifier !== undefined &&
+                /gpt[-_.]?(?:5|6)(?:$|[-_.])/i.test(identifier),
+        )
+    ) {
         completionSettings ??= {};
-        completionSettings.temperature ??= 1;
+        completionSettings.temperature = 1;
     }
 
     let model: ChatModelWithStreaming;
