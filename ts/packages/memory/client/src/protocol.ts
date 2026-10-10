@@ -610,6 +610,7 @@ export const capabilitiesSchema = z.object({
             search: z.literal(true),
             builds: z.literal(true).optional(),
             editMerging: z.literal(true).optional(),
+            maintenance: z.literal(true).optional(),
         })
         .optional(),
     chatProvider: z.string().optional(),

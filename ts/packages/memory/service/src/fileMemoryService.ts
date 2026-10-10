@@ -41,7 +41,23 @@ import type {
     ViewSearchRequest,
     ViewSearchMatch,
     ViewPublicationProof,
+    ViewDefinitionInput,
+    ViewMaintenanceTargetPlan,
+    ViewMaintenancePlan,
+    ViewMaintenancePlanRequest,
+    ViewMaintenanceRequest,
+    ViewMaintenanceResult,
+    ViewMaintenanceRead,
+    ViewMaintenanceUpdate,
 } from "./viewTypes.js";
+import {
+    resolveViewMaintenance,
+    validateMaintenanceDefinition,
+} from "./viewMaintenance.js";
+import {
+    validateMaintenanceRequest,
+    assertMaintenanceMembership,
+} from "./viewMaintenanceValidation.js";
 import {
     assertPublicationProof,
     effectiveViewPublicationPolicy,
@@ -66,7 +82,10 @@ import {
     validateTimelineEvidence,
     validateTimelineCorrections,
 } from "./timeline.js";
-import { authoredRelationships } from "./viewRelationships.js";
+import {
+    authoredRelationships,
+    derivedDefinitionInput,
+} from "./viewRelationships.js";
 import { validateViewDraft, validateViewArchive } from "./viewValidation.js";
 import lockfile from "proper-lockfile";
 import {
@@ -2448,6 +2467,7 @@ export class FileMemoryService
                       derivedViews: {
                           builds: true as const,
                           editMerging: true as const,
+                          maintenance: true as const,
                           kinds: [
                               "troubleshootingGuide",
                               "projectBrief",
@@ -2506,6 +2526,14 @@ export class FileMemoryService
         });
         if (prior && prior.content.kind !== request.content.kind)
             throw new Error("An existing view cannot change kind");
+        if (
+            request.definition.maintenance !== undefined &&
+            viewHash(request.definition.maintenance) !==
+                viewHash(prior?.definition.maintenance)
+        )
+            throw new Error(
+                "Change maintenance intent through updateViewMaintenance, not a content edit",
+            );
         if (
             (request.content.kind === "timeline" ||
                 request.content.kind === "wiki") &&
@@ -2718,6 +2746,37 @@ export class FileMemoryService
             );
         assertPublicationProof(version);
         const runtime = await this.getCorpusRuntime(version.corpusId);
+        const latest = await this.personalHowToStore.getView({
+            corpusId: version.corpusId,
+            viewId: version.viewId,
+        });
+        if (
+            !latest ||
+            viewHash(latest.definition.maintenance) !==
+                viewHash(version.definition.maintenance)
+        )
+            throw new ViewBuildStaleError(
+                "Maintenance intent changed since publication; reconcile and publish the intended exact revision",
+            );
+        if (
+            version.definition.maintenance &&
+            version.definition.maintenance.scope.mode !== "pinned"
+        ) {
+            const plan = this.resolveMaintenanceTarget(
+                derivedDefinitionInput(version),
+                runtime,
+                version.generation!.input!.bounds,
+                version,
+            );
+            if (
+                plan.state === "blocked" ||
+                !plan.snapshot ||
+                plan.snapshot.fingerprint !== version.maintenance?.fingerprint
+            )
+                throw new ViewBuildStaleError(
+                    `Maintained view scope is outdated: ${plan.reason}`,
+                );
+        }
         for (const input of version.generation!.input!.inputs) {
             if (input.evidence) {
                 const event = runtime.events.find(
@@ -3055,6 +3114,13 @@ export class FileMemoryService
             throw new ViewBuildStaleError(
                 "View target version is stale, archived, or belongs to the procedure compatibility workflow",
             );
+        const maintenance = this.resolveMaintenanceTarget(
+            target.definition,
+            runtime,
+            bounds ?? {},
+            current,
+        );
+        assertMaintenanceMembership(target, current, maintenance);
         const inputs = target.definition.selector.sources.map((selected) => {
             const source = runtime.manifest.sources.find(
                 (entry) => entry.sourceId === selected.sourceId,
@@ -3170,6 +3236,9 @@ export class FileMemoryService
                 target.definition.viewId,
                 buildOverride,
             ),
+            ...(maintenance.snapshot
+                ? { maintenance: maintenance.snapshot }
+                : {}),
         };
         return { ...snapshot, fingerprint: viewHash(snapshot) };
     }
@@ -3226,6 +3295,281 @@ export class FileMemoryService
             }
         });
         return admitted.job;
+    }
+
+    private resolveMaintenanceTarget(
+        definition: ViewDefinitionInput,
+        runtime: CorpusRuntime,
+        bounds: ViewBuildRequest["bounds"],
+        current?: ViewVersion,
+    ): ViewMaintenanceTargetPlan {
+        const events = (definition.selector.events ?? []).map((selected) =>
+            runtime.events.find(
+                (event) =>
+                    event.eventId === selected.eventId &&
+                    !isSuppressedEvent(runtime, event),
+            ),
+        );
+        const plan = resolveViewMaintenance(
+            definition,
+            runtime.manifest.sources,
+            this.viewAdapter.identity,
+            bounds ?? {},
+            current,
+            viewHash(events),
+        );
+        if (plan.state === "pinned") return plan;
+        if (events.some((event) => !event))
+            return {
+                ...plan,
+                state: "blocked",
+                reason: "A configured canonical event is missing or suppressed",
+            };
+        if (
+            (runtime.manifest.knowledgeSuppressions ?? []).some((suppression) =>
+                plan.selector?.sources.some(
+                    (source) => source.sourceId === suppression.sourceId,
+                ),
+            )
+        )
+            return {
+                ...plan,
+                state: "blocked",
+                reason: "Eligible source has suppressed knowledge; reconcile scope before constructing from retained text",
+            };
+        return plan;
+    }
+
+    private async planMaintenanceLocked(
+        runtime: CorpusRuntime,
+        viewIds: string[],
+    ): Promise<ViewMaintenancePlan> {
+        const snapshot = await this.personalHowToStore.listViews(
+            runtime.manifest.corpus.corpusId,
+        );
+        return {
+            corpusId: runtime.manifest.corpus.corpusId,
+            expectedHead: snapshot.head,
+            targets: viewIds.map((viewId) => {
+                const view = snapshot.views.find(
+                    (entry) => entry.viewId === viewId,
+                );
+                if (
+                    !view ||
+                    view.compatibility ||
+                    view.state === "archived" ||
+                    view.content.kind === "procedure"
+                )
+                    return {
+                        viewId,
+                        expectedVersion: view?.version ?? 0,
+                        state: "blocked",
+                        reason: "View is missing, archived or belongs to procedure compatibility",
+                    };
+                if (view.definition.maintenance && !view.generation?.input)
+                    return {
+                        viewId,
+                        expectedVersion: view.version,
+                        state: "blocked",
+                        reason: "Unknown generated base; explicit grounded build is required",
+                    };
+                return this.resolveMaintenanceTarget(
+                    derivedDefinitionInput(view),
+                    runtime,
+                    view.generation?.input?.bounds,
+                    view,
+                );
+            }),
+        };
+    }
+
+    public async planViewMaintenance(
+        request: ViewMaintenancePlanRequest,
+    ): Promise<ViewMaintenancePlan> {
+        validateMaintenanceRequest(request, false);
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.planMaintenanceLocked(runtime, request.viewIds),
+        );
+    }
+
+    public async maintainViews(
+        request: ViewMaintenanceRequest,
+    ): Promise<ViewMaintenanceResult> {
+        validateMaintenanceRequest(request, true);
+        const runtime = await this.requireViews(request.corpusId);
+        return this.enqueueWrite(request.corpusId, async () => {
+            const plan = await this.planMaintenanceLocked(
+                runtime,
+                request.targets.map((target) => target.viewId),
+            );
+            if (
+                plan.expectedHead !== request.expectedHead ||
+                plan.targets.some(
+                    (target) =>
+                        target.expectedVersion !==
+                        request.targets.find(
+                            (selected) => selected.viewId === target.viewId,
+                        )!.expectedVersion,
+                )
+            )
+                throw new ViewBuildStaleError(
+                    "Maintenance head or target version changed; inspect a fresh plan",
+                );
+            const targets: ViewBuildTarget[] = [];
+            for (const target of plan.targets) {
+                if (target.state !== "rebuild" || !target.selector) continue;
+                const current = await this.personalHowToStore.getView({
+                    corpusId: request.corpusId,
+                    viewId: target.viewId,
+                });
+                if (!current || current.definition.kind === "procedure")
+                    throw new ViewBuildStaleError(
+                        "Maintenance target disappeared",
+                    );
+                targets.push({
+                    expectedVersion: current.version,
+                    definition: {
+                        viewId: current.viewId,
+                        kind: current.definition.kind,
+                        selector: target.selector,
+                        ...(current.definition.maintenance
+                            ? { maintenance: current.definition.maintenance }
+                            : {}),
+                    },
+                });
+            }
+            if (!targets.length)
+                return this.personalHowToStore.recordViewMaintenance(plan);
+            const buildRequest: ViewBuildRequest = {
+                corpusId: request.corpusId,
+                expectedHead: plan.expectedHead,
+                targets,
+            };
+            validateBuildRequest(buildRequest);
+            const reservation = this.viewBuilds.reserve();
+            try {
+                const snapshots: ViewBuildSnapshot[] = [];
+                for (const target of targets) {
+                    const view = await this.personalHowToStore.getView({
+                        corpusId: request.corpusId,
+                        viewId: target.definition.viewId,
+                    });
+                    snapshots.push(
+                        await this.snapshotViewTarget(
+                            request.corpusId,
+                            target,
+                            view?.generation?.input?.bounds,
+                        ),
+                    );
+                }
+                const admitted = await this.personalHowToStore.admitViewBuild(
+                    buildRequest,
+                    snapshots,
+                    plan,
+                );
+                const receipt =
+                    await this.personalHowToStore.recordViewMaintenance(
+                        plan,
+                        admitted.job,
+                    );
+                if (admitted.admitted) reservation.start(admitted.job);
+                return receipt;
+            } finally {
+                reservation.release();
+            }
+        });
+    }
+
+    private async invalidateMaintainedViews(corpusId: string): Promise<void> {
+        const runtime = await this.getCorpusRuntime(corpusId);
+        const { views } = await this.personalHowToStore.listViews(corpusId);
+        const invalid = views.filter((view) => {
+            if (
+                !view.definition.maintenance ||
+                view.state !== "draft" ||
+                view.definition.kind === "procedure"
+            )
+                return false;
+            const plan = this.resolveMaintenanceTarget(
+                derivedDefinitionInput(view),
+                runtime,
+                view.generation?.input?.bounds,
+                view,
+            );
+            return plan.state === "rebuild" || plan.state === "blocked";
+        });
+        await this.personalHowToStore.markMaintenanceStale(
+            corpusId,
+            invalid.map((view) => view.viewId),
+        );
+    }
+
+    public async updateViewMaintenance(
+        request: ViewMaintenanceUpdate,
+    ): Promise<ViewHistoryEntry> {
+        if (
+            !request ||
+            Object.keys(request).some(
+                (key) =>
+                    ![
+                        "corpusId",
+                        "viewId",
+                        "expectedHead",
+                        "expectedVersion",
+                        "maintenance",
+                    ].includes(key),
+            )
+        )
+            throw new Error("Unsupported maintenance update fields");
+        validateMaintenanceRequest(
+            {
+                corpusId: request.corpusId,
+                expectedHead: request.expectedHead,
+                targets: [
+                    {
+                        viewId: request.viewId,
+                        expectedVersion: request.expectedVersion,
+                    },
+                ],
+            },
+            true,
+        );
+        await this.requireViews(request.corpusId);
+        return this.enqueueWrite(request.corpusId, async () => {
+            const view = await this.personalHowToStore.getView(request);
+            if (!view || view.definition.kind === "procedure")
+                throw new Error("Unknown derived view maintenance target");
+            if (!request.maintenance)
+                throw new Error("Explicit maintenance definition is required");
+            validateMaintenanceDefinition({
+                viewId: view.viewId,
+                kind: view.definition.kind,
+                selector: view.definition.selector,
+                maintenance: request.maintenance,
+            });
+            return this.personalHowToStore.updateViewMaintenance(request);
+        });
+    }
+
+    public async getViewMaintenance(
+        request: ViewMaintenanceRead,
+    ): Promise<ViewMaintenanceResult | undefined> {
+        if (
+            !request ||
+            Object.keys(request).some(
+                (key) => !["corpusId", "receiptId"].includes(key),
+            )
+        )
+            throw new Error("Unsupported maintenance receipt request");
+        validateIdentifier("maintenance receipt ID", request.receiptId);
+        const runtime = await this.requireViews(request.corpusId);
+        return runtime.access.read(() =>
+            this.personalHowToStore.getViewMaintenance(
+                request.corpusId,
+                request.receiptId,
+            ),
+        );
     }
 
     public async listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
@@ -3547,6 +3891,7 @@ export class FileMemoryService
                 candidateManifest,
             );
             runtime.manifest = candidateManifest;
+            await this.invalidateMaintainedViews(request.corpusId);
         });
         return this.listSourceKnowledgeSuppressions(
             request.corpusId,
@@ -4411,6 +4756,7 @@ export class FileMemoryService
                 sourceId,
                 revisionId,
             );
+            await this.invalidateMaintainedViews(request.corpusId);
             await this.rejectObsoleteRunbookCandidates(
                 request.corpusId,
                 sourceId,

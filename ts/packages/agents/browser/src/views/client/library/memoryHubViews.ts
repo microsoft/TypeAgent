@@ -19,6 +19,7 @@ import { rbButton, rbError, rbNode } from "./memoryHubRunbookUi";
 import { createProjectBriefEditor } from "./memoryHubProjectBrief";
 import { createTimelineEditor } from "./memoryHubTimeline";
 import { createWikiEditor } from "./memoryHubWiki";
+import { createMaintenancePanel } from "./memoryHubMaintenance";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
 
 const viewKindLabels: Record<ViewKind, string> = {
@@ -143,6 +144,7 @@ export function mountMemoryHubViews(
     let refreshPending = false;
     let disposed = false;
     let supportedKinds: ViewKind[] = ["troubleshootingGuide"];
+    let maintenanceSupported = false;
 
     async function action(operation: () => Promise<void>): Promise<void> {
         if (busy || disposed) return;
@@ -166,6 +168,7 @@ export function mountMemoryHubViews(
         const capabilities = await invokeMemory("memoryViewCapabilities", {});
         if (current !== sequence) return;
         root.hidden = !capabilities.derivedViews?.builds;
+        maintenanceSupported = capabilities.derivedViews?.maintenance === true;
         supportedKinds = (
             capabilities.derivedViews?.kinds ?? ["troubleshootingGuide"]
         ).filter(
@@ -508,6 +511,11 @@ export function mountMemoryHubViews(
         receipt.replaceChildren(
             rbNode("h4", `Build ${job.jobId}: ${job.state}`),
         );
+        if (job.maintenancePlan)
+            receipt.append(
+                rbNode("h5", "Manual maintenance plan"),
+                rbNode("pre", JSON.stringify(job.maintenancePlan, null, 2)),
+            );
         for (const result of job.results) {
             const effective = result.snapshot.publicationPolicy;
             if (effective)
@@ -660,6 +668,37 @@ export function mountMemoryHubViews(
                     `${view.content.title} (${view.state}, v${view.version})`,
                     () => showEditor(view),
                 ),
+                ...(maintenanceSupported && view.state !== "archived"
+                    ? [
+                          rbButton(`Maintain ${view.content.title}`, () => {
+                              if (!discardChanges()) return;
+                              const panel = createMaintenancePanel(
+                                  view,
+                                  snapshot.head,
+                                  {
+                                      action: (operation) => {
+                                          void action(operation);
+                                      },
+                                      onChange: () => {
+                                          dirty = true;
+                                      },
+                                      dirty: () => dirty,
+                                      saved: async () => {
+                                          dirty = false;
+                                          comparison.replaceChildren();
+                                          await refresh();
+                                      },
+                                      onBuild: renderReceipt,
+                                      isCurrent: () =>
+                                          !disposed &&
+                                          options.scope() === view.corpusId &&
+                                          comparison.contains(panel),
+                                  },
+                              );
+                              comparison.replaceChildren(panel);
+                          }),
+                      ]
+                    : []),
             );
     }
 
@@ -862,6 +901,9 @@ export function mountMemoryHubViews(
                             viewId: view.viewId,
                             kind: view.content.kind as ViewKind,
                             selector: view.definition.selector,
+                            ...(view.definition.maintenance
+                                ? { maintenance: view.definition.maintenance }
+                                : {}),
                         },
                         content: structuredEditor
                             ? structuredEditor.read()

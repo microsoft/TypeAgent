@@ -507,6 +507,7 @@ export interface MemoryServiceCapabilities {
         search: true;
         builds?: true;
         editMerging?: true;
+        maintenance?: true;
     };
     chatProvider?: string;
     embeddingProvider?: string;

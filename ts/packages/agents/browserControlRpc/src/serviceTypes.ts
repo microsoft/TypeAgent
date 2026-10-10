@@ -12,6 +12,12 @@ import type {
     ViewBuildRequest,
     ViewBuildJobRequest,
     ViewBuildJob,
+    ViewMaintenancePlanRequest,
+    ViewMaintenancePlan,
+    ViewMaintenanceRequest,
+    ViewMaintenanceResult,
+    ViewMaintenanceUpdate,
+    ViewMaintenanceRead,
     ViewReadRequest,
     ViewSaveRequest,
     ViewArchiveRequest,
@@ -259,6 +265,18 @@ export type MemoryCenterInvokeFunctions = {
     memoryArchiveView(params: ViewArchiveRequest): Promise<ViewHistoryEntry>;
     memoryViewHistory(params: ViewReadRequest): Promise<ViewHistoryEntry[]>;
     memoryBuildViews(params: ViewBuildRequest): Promise<ViewBuildJob>;
+    memoryPlanViewMaintenance(
+        params: ViewMaintenancePlanRequest,
+    ): Promise<ViewMaintenancePlan>;
+    memoryMaintainViews(
+        params: ViewMaintenanceRequest,
+    ): Promise<ViewMaintenanceResult>;
+    memoryUpdateViewMaintenance(
+        params: ViewMaintenanceUpdate,
+    ): Promise<ViewHistoryEntry>;
+    memoryGetViewMaintenance(
+        params: ViewMaintenanceRead,
+    ): Promise<ViewMaintenanceResult | undefined>;
     memoryGetViewBuild(
         params: ViewBuildJobRequest,
     ): Promise<ViewBuildJob | undefined>;

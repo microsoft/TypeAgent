@@ -3,6 +3,18 @@
 
 import type { ProcedureSourceCitation } from "./types.js";
 import type { AgentEdition } from "./agentEdition.js";
+import type {
+    ViewMaintenanceDefinition,
+    ViewMaintenanceManifest,
+    ViewMaintenanceSnapshot,
+    ViewMaintenancePlan,
+    ViewMaintenancePlanRequest,
+    ViewMaintenanceRequest,
+    ViewMaintenanceResult,
+    ViewMaintenanceUpdate,
+    ViewMaintenanceRead,
+} from "./viewMaintenanceTypes.js";
+export type * from "./viewMaintenanceTypes.js";
 
 export type ViewKind =
     | "troubleshootingGuide"
@@ -250,12 +262,14 @@ export interface ViewDefinitionInput {
     viewId: string;
     kind: ViewKind;
     selector: ViewSourceSelector;
+    maintenance?: ViewMaintenanceDefinition;
 }
 export interface ViewDefinition {
     viewId: string;
     revisionId: string;
     kind: ViewKind | "procedure";
     selector: ViewSourceSelector;
+    maintenance?: ViewMaintenanceDefinition;
 }
 export interface ViewVersion {
     corpusId: string;
@@ -284,6 +298,7 @@ export interface ViewVersion {
     relationships: ViewRelationship[];
     provenance: "human" | "procedure" | "generated" | "merged";
     validation?: ViewPublicationProof;
+    maintenance?: ViewMaintenanceManifest;
     compatibility?: {
         state: "saved" | "stale" | "archived";
         basedOnCandidateId?: string;
@@ -319,6 +334,18 @@ export interface ViewHistoryEntry {
     version: ViewVersion;
 }
 export interface MemoryViewService {
+    updateViewMaintenance(
+        request: ViewMaintenanceUpdate,
+    ): Promise<ViewHistoryEntry>;
+    getViewMaintenance(
+        request: ViewMaintenanceRead,
+    ): Promise<ViewMaintenanceResult | undefined>;
+    planViewMaintenance(
+        request: ViewMaintenancePlanRequest,
+    ): Promise<ViewMaintenancePlan>;
+    maintainViews(
+        request: ViewMaintenanceRequest,
+    ): Promise<ViewMaintenanceResult>;
     listViews(corpusId: string): Promise<ViewSnapshot>;
     getView(request: ViewReadRequest): Promise<ViewVersion | undefined>;
     saveViewDraft(request: ViewSaveRequest): Promise<ViewHistoryEntry>;
@@ -395,6 +422,7 @@ export interface ViewBuildSnapshot {
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
+    maintenance?: ViewMaintenanceSnapshot;
 }
 export interface ViewSynthesisOutput {
     content: DerivedViewContent;
@@ -576,6 +604,7 @@ export interface ViewBuildJob {
         | "interrupted";
     results: ViewBuildTargetResult[];
     publication: boolean;
+    maintenancePlan?: ViewMaintenancePlan;
 }
 
 export interface ViewPublicationPolicy {

@@ -811,6 +811,35 @@ store. `cancel` and `retry` also take `<corpusId> <jobId>`. Do not point this
 exclusive CLI owner at a running server's store. Use MCP/Hub to control live
 jobs in the actual owning service.
 
+### Manual view maintenance
+
+Opt-in dynamic definitions can advance a fixed set of source IDs or enumerate
+bounded source-type/tag/project scope. `planViewMaintenance` previews affected,
+unchanged, pinned and blocked targets; `maintainViews` rebuilds only affected
+whole views through the existing exact-input pipeline. Accepted manifests and a
+stable explicit-subject wiki registry share the artifact's Git commit boundary.
+New subjects can create pages even when introduced by revisions of old sources.
+Titles and normalized names are not identities.
+
+`updateViewMaintenance` applies explicit head/version-guarded intent.
+`getViewMaintenance` reads durable receipts and current build outcomes. The CLI
+adds `set-maintenance`, `plan-maintenance`, `maintain` and `maintenance-status`;
+MCP exposes `memory_view_maintenance_update`, `memory_views_maintenance_plan`,
+`memory_views_maintain` and `memory_view_maintenance_get`. The Hub exposes
+configuration, preview, manual run and dependency inspection when the service
+advertises maintenance support.
+
+No-op detection uses logical evidence/rule/model fingerprints, not index time.
+Acceptance rechecks dynamic membership as well as exact revisions and human edits.
+Discovery identity gaps, empty scope, pending ingestion, unsupported retirement
+and bounds block visibly. Forgetting includes registry provenance, manifests,
+receipts and pending/conflict snapshots in the existing history purge. Scheduling,
+selective page synthesis and physical-index Git storage are not implemented.
+
+See [the maintenance contract and qualification recipe](../../../docs/architecture/memory/view-maintenance.md)
+for schemas, explicit subject metadata, compatibility and release limits.
+Configured-model quality remains separately gated.
+
 `TypedViewStore` generalizes the existing procedure persistence;
 `PersonalHowToStore` remains its compatibility export. Both workflows use one
 private **bare** `personal-how-to/view-history.git` repository per corpus. The

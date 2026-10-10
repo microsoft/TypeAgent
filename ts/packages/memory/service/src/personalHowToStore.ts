@@ -33,6 +33,8 @@ import {
     versionRelationships,
     authoredRelationships,
     materializeDefinition,
+    preserveMaintenanceDefinition,
+    editedViewState,
 } from "./viewRelationships.js";
 import {
     guideFromProcedure,
@@ -59,7 +61,11 @@ import type {
     ViewPublicationStatus,
     ViewPublishRequest,
     ViewPublicationProof,
+    ViewMaintenancePlan,
+    ViewMaintenanceResult,
+    ViewMaintenanceUpdate,
 } from "./viewTypes.js";
+import { maintenanceManifest } from "./viewMaintenance.js";
 import { assertPublicationProof } from "./viewPublication.js";
 import {
     recordViewEdits,
@@ -94,6 +100,10 @@ interface ViewStoreState {
     publicationPolicy?: ViewPublicationPolicy;
     publications?: Record<string, ViewPublicationStatus>;
     viewIndexCleanup?: string[];
+    maintenanceReceipts?: Record<
+        string,
+        Pick<ViewMaintenanceResult, "receiptId" | "plan"> & { jobId?: string }
+    >;
 }
 
 function forgottenEventIds(marker: string): Set<string> | undefined {
@@ -293,13 +303,16 @@ export class TypedViewStore {
             viewId: request.viewId,
             revisionId: randomUUID(),
             version: request.expectedVersion + 1,
-            state: "draft",
+            state: editedViewState(current),
             createdAt: timestamp(),
             actor: this.actor,
             provenance: "human",
             ...(validation ? { validation } : {}),
             ...(current?.generation
                 ? { generation: structuredClone(current.generation) }
+                : {}),
+            ...(current?.maintenance
+                ? { maintenance: structuredClone(current.maintenance) }
                 : {}),
             edits: recordViewEdits(
                 current,
@@ -309,7 +322,10 @@ export class TypedViewStore {
             ),
             ...(current ? { baseRevisionId: current.revisionId } : {}),
             definition: materializeDefinition(
-                request.definition,
+                preserveMaintenanceDefinition(
+                    request.definition,
+                    current?.definition,
+                ),
                 current?.definition,
             ),
             content: structuredClone(request.content),
@@ -320,6 +336,11 @@ export class TypedViewStore {
             request.relationships,
             current?.generation !== undefined,
         );
+        if (current?.maintenance)
+            version.maintenance = maintenanceManifest(
+                current.maintenance,
+                version,
+            );
         if (version.generation?.inventory) {
             version.generation.coverage = inventoryCoverage({
                 content: request.content,
@@ -374,6 +395,7 @@ export class TypedViewStore {
     public async admitViewBuild(
         request: ViewBuildRequest,
         snapshots: ViewBuildSnapshot[],
+        maintenancePlan?: ViewMaintenancePlan,
     ): Promise<{ job: ViewBuildJob; admitted: boolean }> {
         const { head, state } = await this.history(request.corpusId).read();
         const fingerprint = viewHash({ request, snapshots });
@@ -402,6 +424,7 @@ export class TypedViewStore {
                 state: "pending",
                 reason: "Queued for cross-source synthesis",
             })),
+            ...(maintenancePlan ? { maintenancePlan } : {}),
         };
         state.builds ??= {};
         state.builds[job.jobId] = job;
@@ -412,6 +435,98 @@ export class TypedViewStore {
             `Admit draft build ${job.jobId}`,
         );
         return { job, admitted: true };
+    }
+
+    public async recordViewMaintenance(
+        plan: ViewMaintenancePlan,
+        job?: ViewBuildJob,
+    ): Promise<ViewMaintenanceResult> {
+        const { head, state } = await this.history(plan.corpusId).read();
+        const receipt: ViewMaintenanceResult = {
+            receiptId: randomUUID(),
+            plan,
+            ...(job ? { job } : {}),
+        };
+        state.maintenanceReceipts ??= {};
+        state.maintenanceReceipts[receipt.receiptId] = {
+            receiptId: receipt.receiptId,
+            plan,
+            ...(job ? { jobId: job.jobId } : {}),
+        };
+        const entries = Object.entries(state.maintenanceReceipts);
+        state.maintenanceReceipts = Object.fromEntries(entries.slice(-100));
+        await this.commitBuildState(
+            plan.corpusId,
+            head,
+            state,
+            "Record manual view maintenance plan",
+        );
+        return receipt;
+    }
+
+    public async getViewMaintenance(
+        corpusId: string,
+        receiptId: string,
+    ): Promise<ViewMaintenanceResult | undefined> {
+        const { state } = await this.history(corpusId).read();
+        const receipt = state.maintenanceReceipts?.[receiptId];
+        if (!receipt) return undefined;
+        if (!receipt.jobId)
+            return { receiptId: receipt.receiptId, plan: receipt.plan };
+        const job = state.builds?.[receipt.jobId];
+        if (!job)
+            throw new Error(
+                "Maintenance receipt references a missing build job",
+            );
+        return { receiptId: receipt.receiptId, plan: receipt.plan, job };
+    }
+
+    public async updateViewMaintenance(
+        request: ViewMaintenanceUpdate,
+    ): Promise<ViewHistoryEntry> {
+        const { head, state } = await this.history(request.corpusId).read();
+        const current = viewVersions(state, request.viewId).at(-1);
+        if (
+            head !== request.expectedHead ||
+            current?.version !== request.expectedVersion
+        )
+            throw new Error(
+                "View maintenance definition head or version conflict",
+            );
+        if (!current || current.compatibility || current.state === "archived")
+            throw new Error(
+                "View is not eligible for maintenance configuration",
+            );
+        const definition = materializeDefinition(
+            { ...current.definition, maintenance: request.maintenance },
+            current.definition,
+        );
+        const version: ViewVersion = {
+            ...current,
+            definition,
+            revisionId: randomUUID(),
+            baseRevisionId: current.revisionId,
+            version: current.version + 1,
+            createdAt: timestamp(),
+            actor: this.actor,
+            state:
+                request.maintenance.scope.mode === "pinned"
+                    ? current.state
+                    : "stale",
+        };
+        version.relationships = versionRelationships(
+            version,
+            authoredRelationships(current),
+            !!current.generation,
+        );
+        state.views[request.viewId].push(version);
+        const commitId = await this.commitBuildState(
+            request.corpusId,
+            head,
+            state,
+            "Update explicit view maintenance definition",
+        );
+        return { commitId, version };
     }
 
     public async updateViewBuild(
@@ -650,6 +765,11 @@ export class TypedViewStore {
             merged.relationships,
             true,
         );
+        if (input.maintenance)
+            version.maintenance = maintenanceManifest(
+                input.maintenance,
+                version,
+            );
         return version;
     }
 
@@ -842,7 +962,12 @@ export class TypedViewStore {
                         return [...evidence.citations, ...evidence.assets];
                     });
                     return (
-                        selected(version.definition) || references.some(matches)
+                        selected(version.definition) ||
+                        references.some(matches) ||
+                        (!forgottenEvents &&
+                            version.maintenance?.privacySources.includes(
+                                sourceId,
+                            ))
                     );
                 })
                     ? [id]
@@ -859,6 +984,10 @@ export class TypedViewStore {
                     !job.results.some(
                         (result) =>
                             result.snapshot.inputs.some(matches) ||
+                            (!forgottenEvents &&
+                                result.snapshot.maintenance?.privacySources.includes(
+                                    sourceId,
+                                )) ||
                             selected(result.snapshot.definition) ||
                             affected.has(result.viewId),
                     ),
@@ -870,6 +999,10 @@ export class TypedViewStore {
                     !clearingDerived &&
                     !affected.has(conflict.viewId) &&
                     !conflict.input.inputs.some(matches) &&
+                    (forgottenEvents !== undefined ||
+                        !conflict.input.maintenance?.privacySources.includes(
+                            sourceId,
+                        )) &&
                     !selected(conflict.input.definition),
             ),
         );
@@ -878,6 +1011,9 @@ export class TypedViewStore {
                 ([id]) => !clearingDerived && !affected.has(id),
             ),
         );
+        state.maintenanceReceipts = {};
+        for (const job of Object.values(state.builds))
+            delete job.maintenancePlan;
         if (state.viewIndexCleanup)
             state.viewIndexCleanup = state.viewIndexCleanup.filter(
                 (id) => !clearingDerived && !affected.has(id),
@@ -945,6 +1081,7 @@ export class TypedViewStore {
             ) &&
             !Object.keys(state.builds ?? {}).length &&
             !Object.keys(state.conflicts ?? {}).length &&
+            !Object.keys(state.maintenanceReceipts ?? {}).length &&
             !Object.keys(state.publications ?? {}).length &&
             !state.viewIndexCleanup?.length &&
             !Object.keys(state.publicationPolicy?.views ?? {}).length
@@ -1591,25 +1728,19 @@ export class TypedViewStore {
         );
     }
 
-    public async markStale(
+    private async invalidateDrafts(
         corpusId: string,
-        sourceId: string,
-        activeRevisionId?: string,
+        invalidate: (version: ViewVersion) => boolean,
     ): Promise<void> {
-        const index = await this.readIndex(corpusId);
         const history = this.history(corpusId);
         const snapshot = await history.read();
-        let draftChanged = false;
+        let changed = false;
         for (const [id, versions] of Object.entries(snapshot.state.views)) {
             const current = versions.at(-1)!;
             if (
                 current.compatibility ||
                 current.state !== "draft" ||
-                !current.definition.selector.sources.some(
-                    (source) =>
-                        source.sourceId === sourceId &&
-                        source.revisionId !== activeRevisionId,
-                )
+                !invalidate(current)
             )
                 continue;
             const next: ViewVersion = {
@@ -1627,16 +1758,43 @@ export class TypedViewStore {
                 current.generation?.input !== undefined,
             );
             snapshot.state.views[id] = [...versions, next];
-            draftChanged = true;
+            changed = true;
         }
-        if (draftChanged)
+        if (changed)
             await history.commit(
                 snapshot.head,
                 snapshot.state,
                 this.entries(snapshot.state),
                 "memory-service",
-                "Invalidate changed source revisions",
+                "Invalidate changed view evidence or membership",
             );
+    }
+
+    public async markMaintenanceStale(
+        corpusId: string,
+        viewIds: string[],
+    ): Promise<void> {
+        const selected = new Set(viewIds);
+        await this.invalidateDrafts(corpusId, (view) =>
+            selected.has(view.viewId),
+        );
+    }
+
+    public async markStale(
+        corpusId: string,
+        sourceId: string,
+        activeRevisionId?: string,
+    ): Promise<void> {
+        const index = await this.readIndex(corpusId);
+        await this.invalidateDrafts(corpusId, (current) =>
+            current.definition.selector.sources.some(
+                (source) =>
+                    source.sourceId === sourceId &&
+                    source.revisionId !== activeRevisionId,
+            ),
+        );
+        const history = this.history(corpusId);
+        const snapshot = await history.read();
         let changed = false;
         for (const summary of index.procedures) {
             if (summary.state !== "saved") {

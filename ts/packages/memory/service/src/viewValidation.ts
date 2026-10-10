@@ -17,6 +17,7 @@ import {
 import { projectBriefRoles, validateProjectBrief } from "./projectBrief.js";
 import { validateTimeline } from "./timeline.js";
 import { validateWiki } from "./wiki.js";
+import { validateMaintenanceDefinition } from "./viewMaintenance.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -335,9 +336,10 @@ export function validateViewDraft(request: ViewSaveRequest): void {
         throw new Error("View definition identity does not match");
     onlyKeys(
         request.definition,
-        ["viewId", "kind", "selector"],
+        ["viewId", "kind", "selector", "maintenance"],
         "view definition",
     );
+    validateMaintenanceDefinition(request.definition);
     const sources = validateSelector(request.definition.selector);
     const sections = validateDraftContent(request, sources);
     validateRelationships(request.relationships, request, sources, sections);
