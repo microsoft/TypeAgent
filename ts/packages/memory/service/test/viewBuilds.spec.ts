@@ -1,42 +1,42 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import type {
-    ViewBuildRequest,
-    ViewBuildJob,
-    ViewSynthesisOutput,
-    ViewSupportReport,
-    ViewBuildSnapshot,
-    ViewSaveRequest,
-    ViewVersion,
-    ViewRelationshipInput,
-} from "../src/viewTypes.js";
-import { FileMemoryService } from "../src/fileMemoryService.js";
-import { waitForMemoryJob } from "../src/rpcFacade.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
-import { mergeProse, mergeView } from "../src/viewMerge.js";
-import {
-    authoredRelationships,
-    edgeIdentity,
-} from "../src/viewRelationships.js";
-import { ViewHistory } from "../src/viewHistory.js";
-import { ViewBuildRunner } from "../src/viewBuilds.js";
-import { createServer } from "node:http";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
-import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
-import { validateBuildRequest } from "../src/viewBuildValidation.js";
-import { PersonalHowToStore } from "../src/personalHowToStore.js";
-import { runMemoryViewsCli } from "../src/memoryViewsCli.js";
 import {
     getRuntimeConfig,
     initRuntimeConfigFromProcessEnv,
     setRuntimeConfig,
 } from "@typeagent/aiclient";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { FileMemoryService } from "../src/fileMemoryService.js";
+import { runMemoryViewsCli } from "../src/memoryViewsCli.js";
+import { waitForMemoryJob } from "../src/rpcFacade.js";
+import { validateBuildRequest } from "../src/viewBuildValidation.js";
+import { ViewBuildRunner } from "../src/viewBuilds.js";
+import { ViewHistory } from "../src/viewHistory.js";
+import { mergeProse, mergeView } from "../src/viewMerge.js";
+import {
+    authoredRelationships,
+    edgeIdentity,
+} from "../src/viewRelationships.js";
+import { TypedViewStore } from "../src/viewStore.js";
+import type {
+    ViewBuildJob,
+    ViewBuildRequest,
+    ViewBuildSnapshot,
+    ViewRelationshipInput,
+    ViewSaveRequest,
+    ViewSupportReport,
+    ViewSynthesisOutput,
+    ViewVersion,
+} from "../src/viewTypes.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
 
 function output(
     input: ViewBuildSnapshot,
@@ -120,9 +120,8 @@ describe("human-added edge merge regressions", () => {
         root = await mkdtemp(path.join(os.tmpdir(), "memory-added-edges-"));
         added = undefined;
         service = new FileMemoryService(root, {
-            viewDrafts: true,
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {
                 identity: "offline-edge-merge-model",
                 generate: async (input) => {
@@ -360,9 +359,8 @@ describe("durable draft builds and explicit edit merge", () => {
     >;
     const open = () =>
         new FileMemoryService(root, {
-            viewDrafts: true,
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {
                 identity: "offline-test-model",
                 generate: (input, signal) => generate(input, signal),
@@ -464,6 +462,19 @@ describe("durable draft builds and explicit edit merge", () => {
         }
         throw new Error("Build did not terminate");
     }
+    test("default-enabled builds surface unavailable provider errors without saving a View", async () => {
+        const request = await fixture();
+        generate.mockRejectedValue(
+            new Error("View model provider unavailable"),
+        );
+        const job = await wait(await service.buildViews(request));
+        expect(job).toMatchObject({ state: "failed" });
+        expect(JSON.stringify(job)).toContain(
+            "View model provider unavailable",
+        );
+        expect((await service.listViews(request.corpusId)).views).toEqual([]);
+        expect(validate).not.toHaveBeenCalled();
+    });
     async function rebuild(request: ViewBuildRequest): Promise<ViewBuildJob> {
         const snapshot = await service.listViews(request.corpusId);
         return wait(
@@ -673,11 +684,11 @@ describe("durable draft builds and explicit edit merge", () => {
             await generationGate;
             return output(input);
         });
-        const original = PersonalHowToStore.prototype.admitViewBuild;
+        const original = TypedViewStore.prototype.admitViewBuild;
         const admission = import.meta.jest
-            .spyOn(PersonalHowToStore.prototype, "admitViewBuild")
+            .spyOn(TypedViewStore.prototype, "admitViewBuild")
             .mockImplementationOnce(async function (
-                this: PersonalHowToStore,
+                this: TypedViewStore,
                 request,
                 snapshots,
             ) {
@@ -740,7 +751,7 @@ describe("durable draft builds and explicit edit merge", () => {
                 runner.reserve(),
             );
             const admission = import.meta.jest.spyOn(
-                PersonalHowToStore.prototype,
+                TypedViewStore.prototype,
                 "admitViewBuild",
             );
             try {
@@ -1025,7 +1036,7 @@ describe("durable draft builds and explicit edit merge", () => {
         ).toBeUndefined();
         expect((await service.listViews(request.corpusId)).views).toEqual([]);
         const history = new ViewHistory<Record<string, unknown>>(
-            path.join(root, request.corpusId, "personal-how-to"),
+            path.join(root, request.corpusId, "views"),
             () => ({}),
         );
         expect(JSON.stringify((await history.read()).state)).not.toContain(
@@ -1309,7 +1320,7 @@ describe("durable draft builds and explicit edit merge", () => {
                 builds: Record<string, ViewBuildJob>;
                 views: Record<string, ViewVersion[]>;
                 index: unknown;
-            }>(path.join(root, request.corpusId, "personal-how-to"), () => ({
+            }>(path.join(root, request.corpusId, "views"), () => ({
                 builds: {},
                 views: {},
                 index: {},
@@ -1432,7 +1443,8 @@ describe("durable draft builds and explicit edit merge", () => {
             await writeFile(file, JSON.stringify(request));
             const environment = {
                 ...process.env,
-                TYPEAGENT_RUNBOOK_MODEL_ENDPOINT: "openai:VIEW_BUILD_LOOPBACK",
+                TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT:
+                    "openai:VIEW_BUILD_LOOPBACK",
                 OPENAI_ENDPOINT_VIEW_BUILD_LOOPBACK: `http://127.0.0.1:${address.port}/chat/completions`,
                 OPENAI_API_KEY_VIEW_BUILD_LOOPBACK:
                     "synthetic-test-token-not-a-secret",
@@ -1444,19 +1456,14 @@ describe("durable draft builds and explicit edit merge", () => {
             const runProcess = (command: string[]) =>
                 promisify(execFile)(
                     process.execPath,
-                    [cli, "--store", root, "--enable-view-drafts", ...command],
+                    [cli, "--store", root, ...command],
                     { env: environment, timeout: 30000 },
                 );
             process.env = environment;
             initRuntimeConfigFromProcessEnv();
             const run = async (command: string[]) =>
                 JSON.stringify(
-                    await runMemoryViewsCli([
-                        "--store",
-                        root,
-                        "--enable-view-drafts",
-                        ...command,
-                    ]),
+                    await runMemoryViewsCli(["--store", root, ...command]),
                 );
             const built: ViewBuildJob = JSON.parse(
                 (await runProcess(["build", file])).stdout,

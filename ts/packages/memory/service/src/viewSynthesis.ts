@@ -95,6 +95,8 @@ Use stable meaningful keys. Each item cites supplied passageIds. Measurements re
 Retain every indispensable fact and constraint, even if inconvenient for recovery. Use unknown/unresolved items honestly.
 occurredAt and learnedAt refer to the record's evidence, not an invented observation; use empty strings when unknown.
 Account for EVERY supplied passage exactly once in sourceDecisions, grouping related passageIds to reduce repetition.
+Every sourceDecisions entry requires a nonempty reason, including represented and metadata decisions.
+For represented evidence explain what the referenced inventory items cover; for metadata identify why it is only source identity.
 represented/duplicate/outsideScope witnesses must cite every selected exact passage; each witness must cite a selected passage.
 metadata has no itemKeys and is limited to a passage containing only the exact source title/identity (optional Markdown heading).
 Other structural headings may be grounded background items, never a way to exclude substantive facts.
@@ -118,6 +120,7 @@ Do not produce view prose, relationships, a proposed artifact or reviewer expect
                 `${evidenceRules}
 Independently compare the source-only inventory against EVERY complete source and passage.
 No view exists and none is shown. Inspect every item and source decision exactly once.
+Every item and decision assessment requires a nonempty reason, including supported assessments.
 Reject omitted measurements/units/comparisons, wrong hypothesis or decision state, lost guards or context,
 false authority/recovery/project completion, lost blocked follow-up, and wrong occurrence-versus-learned time.
 Audit metadata/duplicate/outsideScope exclusions critically: never accept blanket irrelevance.

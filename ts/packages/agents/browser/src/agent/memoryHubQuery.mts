@@ -7,9 +7,7 @@ import {
     conversationProducerId,
     canonicalizeProcedure,
     type MemoryService,
-    type PersonalHowToService,
     type MemoryEvent,
-    type ProcedureSearchMatch,
     type MemoryViewService,
 } from "@typeagent/memory-service";
 import type {
@@ -35,8 +33,7 @@ import { timed } from "./memoryHubQuerySupport.mjs";
 import { memoryHubSearchInsights } from "./memoryHubSearchInsights.mjs";
 export { timed } from "./memoryHubQuerySupport.mjs";
 
-export type MemoryHubReadService = MemoryService &
-    Partial<PersonalHowToService & MemoryViewService>;
+export type MemoryHubReadService = MemoryService & Partial<MemoryViewService>;
 export type MemoryHubSynthesizer = (
     question: string,
     evidence: MemoryHubEvidence[],
@@ -98,37 +95,6 @@ function inDateRange(
     );
 }
 
-async function procedureMatchesFilters(
-    service: MemoryHubReadService,
-    corpusId: string,
-    match: ProcedureSearchMatch,
-    request: MemoryHubSearchRequest,
-    deadline: number,
-): Promise<boolean> {
-    if (!inDateRange(match.version.createdAt, request)) return false;
-    if (!request.sourceTypes?.length && !request.tags?.length) return true;
-    for (const citation of match.version.document.citations) {
-        const remaining = deadline - Date.now();
-        if (remaining <= 0)
-            throw new Error(
-                "Procedure filter deadline exceeded; the underlying read may still finish.",
-            );
-        const source = await timed(
-            service.getSource(corpusId, citation.sourceId),
-            remaining,
-        );
-        if (
-            source &&
-            (!request.sourceTypes?.length ||
-                request.sourceTypes.includes(source.sourceType)) &&
-            (!request.tags?.length ||
-                request.tags.every((tag) => source.tags?.includes(tag)))
-        )
-            return true;
-    }
-    return false;
-}
-
 async function documentResults(
     service: MemoryHubReadService,
     corpus: MemoryCenterCorpus,
@@ -185,58 +151,6 @@ async function documentResults(
             ? {}
             : { eventTime: evidence.capturedAt }),
     }));
-}
-
-async function procedureResults(
-    service: MemoryHubReadService,
-    corpus: MemoryCenterCorpus,
-    request: MemoryHubSearchRequest,
-): Promise<MemoryHubEvidence[]> {
-    if (!service.searchProcedures)
-        throw new Error("Procedure retrieval is unavailable in this host.");
-    const deadline = Date.now() + 30_000;
-    const traceId = currentSearchTraceId();
-    const matches = await timed(
-        service.searchProcedures({
-            ...(traceId === undefined ? {} : { traceId }),
-            corpusId: corpus.corpusId,
-            query: request.query,
-            states: ["saved", "stale"],
-            limit: 100,
-        }),
-    );
-    const result: MemoryHubEvidence[] = [];
-    for (const match of matches) {
-        if (
-            !(await procedureMatchesFilters(
-                service,
-                corpus.corpusId,
-                match,
-                request,
-                deadline,
-            ))
-        )
-            continue;
-        result.push({
-            id: JSON.stringify([
-                "procedure",
-                corpus.corpusId,
-                match.procedure.procedureId,
-                match.version.version,
-            ]),
-            kind: "procedure",
-            corpusId: corpus.corpusId,
-            corpusName: corpus.name,
-            objectId: match.procedure.procedureId,
-            title: match.procedure.title,
-            snippet: match.version.markdown.slice(0, 4_000),
-            score: match.score,
-            rank: result.length + 1,
-            procedureVersion: match.version.version,
-            procedureState: match.procedure.state,
-        });
-    }
-    return result;
 }
 
 async function conversationResults(
@@ -316,10 +230,7 @@ async function viewResults(
     );
     const results: MemoryHubEvidence[] = [];
     for (const match of matches) {
-        if (
-            match.view.content.kind === "procedure" ||
-            !capabilities.derivedViews.kinds.includes(match.view.content.kind)
-        )
+        if (!capabilities.derivedViews.kinds.includes(match.view.content.kind))
             continue;
         if (!inDateRange(match.view.createdAt, request)) continue;
         if (request.tags?.length || request.sourceTypes?.length) {
@@ -414,15 +325,15 @@ async function collectResults(
     const lists: MemoryHubEvidence[][] = [];
     const collect = async (
         corpus: MemoryCenterCorpus,
-        operation: "search" | "procedures" | "conversations" | "views",
+        operation: "search" | "conversations" | "views",
         work: () => Promise<MemoryHubEvidence[]>,
     ) => {
         try {
             const list = await timeSearchStage(
                 operation === "search"
                     ? "hub.documentRetrieval"
-                    : operation === "procedures"
-                      ? "hub.procedureRetrieval"
+                    : operation === "views"
+                      ? "hub.viewRetrieval"
                       : "hub.conversationRetrieval",
                 work,
             );
@@ -448,9 +359,6 @@ async function collectResults(
             await Promise.all([
                 collect(corpus, "search", () =>
                     documentResults(service, corpus, request, result),
-                ),
-                collect(corpus, "procedures", () =>
-                    procedureResults(service, corpus, request),
                 ),
                 collect(corpus, "views", () =>
                     viewResults(service, corpus, request),
@@ -595,23 +503,6 @@ async function evidenceContent(
             provenance: { ...request, revisionId: content.revisionId },
         };
     }
-    if (request.kind === "procedure") {
-        if (!service.getProcedure)
-            throw new Error("Procedure evidence is unavailable.");
-        const version = await timed(
-            service.getProcedure(
-                request.corpusId,
-                request.objectId,
-                request.procedureVersion,
-            ),
-        );
-        if (!version)
-            throw new Error("Cited procedure version is no longer available.");
-        return pageText(version.document.title, version.markdown, request, {
-            ...request,
-            procedureVersion: version.version,
-        });
-    }
     if (request.kind === "view") {
         return publishedViewEvidence(service, request);
     }
@@ -752,7 +643,7 @@ export function createMemoryHubQueryFunctions(
                         );
                         result.warnings = [...new Set(result.warnings)].sort();
                         result.warnings.push(
-                            "Results are a bounded evidence selection, not complete corpus totals. Procedure retrieval is limited to 100 candidates per corpus.",
+                            "Results are a bounded evidence selection, not complete corpus totals.",
                         );
                         if (
                             request.generateAnswer &&

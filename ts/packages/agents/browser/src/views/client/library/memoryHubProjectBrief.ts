@@ -5,7 +5,7 @@ import type {
     ProjectBriefContent,
     ProjectBriefDetails,
 } from "@typeagent/memory-service";
-import { rbNode, rbButton } from "./memoryHubRunbookUi";
+import { rbNode, rbButton } from "./memoryHubDocumentUi";
 
 const headings: Record<ProjectBriefDetails["kind"], string> = {
     goalsScope: "Goals and scope",

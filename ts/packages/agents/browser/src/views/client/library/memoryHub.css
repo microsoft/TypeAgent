@@ -48,6 +48,108 @@ body[data-memory-hub] {
 .hub-draft-views input:not([type="checkbox"]) {
   margin: 6px 8px 6px 0;
 }
+.hub-view-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.hub-view-list article,
+.hub-view-confirmation details {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.hub-view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.hub-view-actions > details {
+  position: relative;
+}
+.hub-view-document {
+  max-width: 900px;
+  margin: 20px auto;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.hub-view-section {
+  margin: 20px 0;
+}
+.hub-view-section > details {
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--surface-alt);
+  border-radius: 6px;
+}
+.hub-view-build-receipt {
+  margin: 16px 0;
+}
+@media (max-width: 600px) {
+  .hub-draft-views,
+  .hub-view-document {
+    padding: 12px;
+  }
+}
+.hub-view-sheet {
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  box-sizing: border-box;
+  overflow: auto;
+}
+.hub-view-sheet-body {
+  min-width: 0;
+}
+.hub-view-sheet fieldset {
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.hub-view-sheet select,
+.hub-view-sheet input:not([type="checkbox"]),
+.hub-view-sheet textarea {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.hub-view-kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 8px;
+}
+.hub-view-kinds legend {
+  grid-column: 1 / -1;
+}
+.hub-view-kind {
+  padding: 10px;
+  background: var(--surface-alt);
+  border-radius: 6px;
+}
+.hub-view-confirmation details {
+  margin: 12px 0;
+}
+.hub-view-confirmation p {
+  overflow-wrap: anywhere;
+}
+.hub-draft-views [aria-label="Troubleshooting guide editor"] label {
+  display: block;
+  margin: 12px 0;
+}
+.hub-draft-views [aria-label="Troubleshooting guide editor"] input,
+.hub-draft-views [aria-label="Troubleshooting guide editor"] textarea {
+  display: block;
+  width: 100%;
+  font-family: inherit;
+  box-sizing: border-box;
+}
 
 /* Top bar */
 .hub-top {
@@ -412,21 +514,19 @@ body[data-memory-hub] {
 #page-activity[data-activity-tab="jobs"] #hubChanges,
 #page-activity[data-activity-tab="web"] .jobs-panel,
 #page-activity[data-activity-tab="web"] #hubRunbookActivity,
+#page-activity[data-activity-tab="web"] #hubViewActivity,
 #page-activity[data-activity-tab="web"] #hubChanges,
 #page-activity[data-activity-tab="changes"] #hubActivity,
-#page-activity[data-activity-tab="changes"] #hubRunbookActivity {
+#page-activity[data-activity-tab="changes"] #hubRunbookActivity,
+#page-activity[data-activity-tab="changes"] #hubViewActivity {
   display: none;
 }
 .hub-filters {
   margin-bottom: 12px;
 }
-#page-settings[data-settings-tab="corpus"]
-  #hubSettings
-  > :not(.howto-settings):not(#reindexCorpusButton),
-#page-settings[data-settings-tab="runbooks"] #hubSettings > :not(form.card),
 #page-settings[data-settings-tab="graph"]
   #hubSettings
-  > :not(section.card:not(.howto-settings)),
+  > :not(.memory-web-maintenance):not(#reindexCorpusButton),
 #page-settings[data-settings-tab="view"]
   #hubSettings
   > :not(.memory-view-preferences) {
@@ -450,12 +550,6 @@ body[data-memory-hub] {
 }
 .section-heading .hub-menu-host {
   margin-left: auto;
-}
-#hubRunbooks {
-  min-width: 0;
-}
-#hubRunbooks .runbook-list-heading {
-  display: none;
 }
 #hubSettings {
   display: grid;
@@ -792,6 +886,51 @@ textarea:focus-visible {
   min-height: 0;
   margin-left: 4px;
   padding: 0 8px;
+}
+
+.hub-source-selection,
+.hub-selectable-source,
+.hub-view-result {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.hub-source-selection {
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.hub-selectable-source {
+  flex-wrap: nowrap;
+}
+.hub-selectable-source > button {
+  flex: 1;
+  min-width: 0;
+}
+.hub-selectable-source > input {
+  flex: 0 0 auto;
+}
+.hub-view-activity,
+.hub-legacy-guides {
+  margin-top: 16px;
+}
+.hub-view-result {
+  margin-top: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.hub-view-result p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.hub-view-job pre {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* Flyouts reuse the drawer panel */

@@ -3,13 +3,10 @@
 
 import {
     ingestRequestSchema,
-    revisionSchema,
-    searchRequestSchema,
-    procedureSaveRequestSchema,
     procedureDocumentSchema,
+    revisionSchema,
     runbookBindingArgumentsSchema,
-    runbookSynthesisRequestSchema,
-    runbookJobResultSchema,
+    searchRequestSchema,
 } from "@typeagent/memory-client";
 import type { ProcedureDocument } from "@typeagent/memory-service";
 
@@ -71,38 +68,6 @@ const agentDocument: ProcedureDocument = {
 };
 
 describe("canonical memory processing protocol", () => {
-    test("requires an exact synthesis revision and preserves durable job outcomes rather than inventing candidates", () => {
-        const request = {
-            corpusId: "ops",
-            sourceId: "guide",
-            revisionId: "rev-1",
-        };
-        expect(runbookSynthesisRequestSchema.parse(request)).toEqual(request);
-        expect(
-            runbookSynthesisRequestSchema.safeParse({
-                corpusId: "ops",
-                sourceId: "guide",
-            }).success,
-        ).toBe(false);
-        expect(
-            runbookSynthesisRequestSchema.safeParse({
-                ...request,
-                execute: true,
-            }).success,
-        ).toBe(false);
-        const job = {
-            ...request,
-            jobId: "job-1",
-            state: "failed",
-            createdAt: "2026-10-02",
-            updatedAt: "2026-10-02",
-            reason: "Model unavailable",
-            candidateIds: [],
-            warnings: [],
-        };
-        expect(runbookJobResultSchema.parse(job)).toEqual(job);
-    });
-
     test("preserves revision-owned asset metadata but rejects raw uploads without a wire contract", () => {
         const asset = {
             sourceId: "source-1",
@@ -133,21 +98,6 @@ describe("canonical memory processing protocol", () => {
                 },
             }).success,
         ).toBe(false);
-    });
-
-    test("round-trips edition fields and explicit review intent through public MCP schemas", () => {
-        const request = {
-            corpusId: "ops",
-            procedureId: "recovery",
-            expectedVersion: 1,
-            document: agentDocument,
-            reviewAgentEdition: true,
-            safetyConfirmed: true,
-        };
-        expect(procedureSaveRequestSchema.parse(request)).toEqual(request);
-        const old = { ...agentDocument };
-        delete old.agentEdition;
-        expect(procedureDocumentSchema.parse(old)).toEqual(old);
     });
 
     test("uses shared edition validation for unsafe references, duplicate steps and secret literals", () => {

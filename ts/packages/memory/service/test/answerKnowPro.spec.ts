@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { createDocMemorySettings } from "@typeagent/conversation-memory";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createDocMemorySettings } from "@typeagent/conversation-memory";
-import { createKnowProCorpusIndex, FileMemoryService } from "../src/index.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
+import { FileMemoryService, createKnowProCorpusIndex } from "../src/index.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
 const knowledgeForText = (text: string) => ({
     entities: text.includes("Zephyr")
@@ -67,10 +67,8 @@ describe("synthesized answers over the KnowPro corpus index", () => {
         previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
         process.env.TYPEAGENT_EMBEDDING_PROVIDER = "none";
         service = new FileMemoryService(root, {
-            procedureIndexFactory: (_corpusId, directory) =>
-                new FakeProcedureCorpusIndex(directory),
             eventIndexFactory: (_corpusId, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
             indexFactory: (corpusId, directory) =>
                 createKnowProCorpusIndex(corpusId, directory, () => {
                     const settings = createDocMemorySettings(

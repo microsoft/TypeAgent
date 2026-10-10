@@ -19,7 +19,7 @@ test("HTTP legacy redirects retain browser fragments and graph selection before 
 
 test("modern routes are unchanged and compatibility links cannot select unrelated applications", () => {
     const modern =
-        "http://localhost:123/library/memoryHub.html?query=Worker#/runbooks/a/p/procedure/3";
+        "http://localhost:123/library/memoryHub.html?query=Worker#/views/a/p/revision/r3";
     expect(migrateLegacyMemoryLocation(modern).href).toBe(modern);
     expect(() =>
         migrateLegacyMemoryLocation(

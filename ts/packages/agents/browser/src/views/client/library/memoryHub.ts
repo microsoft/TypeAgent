@@ -16,10 +16,11 @@ import { mountMemoryHubExplore } from "./memoryHubExplore";
 import { mountMemoryHubChanges } from "./memoryHubChanges";
 import { mountMemoryHubImports } from "./memoryHubImports";
 import { mountMemoryHubCapture } from "./memoryHubCapture";
-import { mountMemoryHubRunbooks } from "./memoryHubRunbooks";
+
 import { mountMemoryHubViews } from "./memoryHubViews";
+import { mountMemoryHubViewActivity } from "./memoryHubViewActivity";
 import { renderDerivedViewUsage } from "./memoryHubViewUsage";
-import { mountMemoryHubPreferences } from "./memoryHubPreferences";
+
 import { mountMemoryHubRunbookImports } from "./memoryHubRunbookImports";
 import { mountMemoryHubWebMaintenance } from "./memoryHubWebMaintenance";
 import { mountMemoryHubViewPreferences } from "./memoryHubViewPreferences";
@@ -51,7 +52,7 @@ const hidden = readHidden(localStorage.getItem(HIDE_KEY));
 let snapshot: MemoryHubSnapshot = {
     corpora: [],
     inbox: [],
-    procedures: [],
+
     errors: [],
 };
 let snapshotVersion = 0;
@@ -69,9 +70,11 @@ let explorePanel: ReturnType<typeof mountMemoryHubExplore>;
 let changesPanel: ReturnType<typeof mountMemoryHubChanges>;
 let importsPanel: ReturnType<typeof mountMemoryHubImports>;
 let capturePanel: ReturnType<typeof mountMemoryHubCapture>;
-let runbooksPanel: ReturnType<typeof mountMemoryHubRunbooks>;
+
 let draftViewsPanel: ReturnType<typeof mountMemoryHubViews>;
-let preferencesPanel: ReturnType<typeof mountMemoryHubPreferences>;
+let viewActivityPanel: ReturnType<typeof mountMemoryHubViewActivity>;
+let viewAttentionCount = 0;
+
 let runbookImportsPanel: ReturnType<typeof mountMemoryHubRunbookImports>;
 let webMaintenancePanel: ReturnType<typeof mountMemoryHubWebMaintenance>;
 let viewPreferencesPanel: ReturnType<typeof mountMemoryHubViewPreferences>;
@@ -89,7 +92,7 @@ const PDF_URI_PREFIX = "urn:pdf:";
 const railPages: HubRoute["page"][] = [
     "inbox",
     "library",
-    "runbooks",
+    "views",
     "explore",
     "activity",
     "settings",
@@ -124,9 +127,7 @@ function namedScopeAvailable(): boolean {
 function discardChanges(): boolean {
     return (
         manager.discardChanges() &&
-        (runbooksPanel?.discardChanges() ?? true) &&
         (draftViewsPanel?.discardChanges() ?? true) &&
-        (preferencesPanel?.discardChanges() ?? true) &&
         (viewPreferencesPanel?.discardChanges() ?? true) &&
         (runbookImportsPanel?.discardChanges() ?? true)
     );
@@ -147,92 +148,29 @@ function mountRunbookImports(): void {
                 invalidateDiscovery();
                 await refreshSnapshot();
             },
-            onOpenRunbook: (corpusId, objectId) => {
-                open({
-                    page: "runbooks",
-                    corpusId,
-                    objectId,
-                    runbookKind: "candidate",
-                });
-            },
         },
     );
     for (const [id, kind] of [
         ["addRunbookFolder", "folder"],
         ["addRunbookWiki", "wiki"],
         ["addRunbookUrls", "urls"],
+        ["addConversationFolder", "folder"],
     ] as const) {
         el(id).addEventListener("click", () => {
             if (!discardChanges()) return;
+            const target = el<HTMLSelectElement>("addTarget").value;
+            if (!target) {
+                void hubAction(async () => {
+                    throw new Error(
+                        "Choose a collection in Add to before importing sources.",
+                    );
+                });
+                return;
+            }
             el<HTMLDialogElement>("hubAddDialog").close();
-            runbookImportsPanel.open(kind);
+            runbookImportsPanel.open(kind, target);
         });
     }
-}
-
-function mountRunbooks(): void {
-    runbooksPanel = mountMemoryHubRunbooks(el("hubRunbooks"), {
-        scope: () => scope || undefined,
-        onError: (error) => {
-            void hubAction(async () => {
-                throw error;
-            });
-        },
-        onChanged: async () => {
-            invalidateDiscovery();
-            await refreshSnapshot();
-        },
-        onOpenSource: (corpusId, objectId) => {
-            open({ page: "library", corpusId, objectId });
-        },
-        onRouteChanged: (request) => {
-            const current = parseRoute(location.hash);
-            const inboxItem =
-                current.page === "inbox"
-                    ? snapshot.inbox.find(
-                          (item) => item.id === current.objectId,
-                      )
-                    : undefined;
-            if (
-                request?.kind === "candidate" &&
-                inboxItem?.kind === "candidate" &&
-                inboxItem.corpusId === request.corpusId &&
-                inboxItem.objectId === request.objectId
-            )
-                return;
-            if (current.page !== "runbooks" && !inboxItem) return;
-            const route: HubRoute = request
-                ? {
-                      page: "runbooks",
-                      corpusId: request.corpusId,
-                      objectId: request.objectId,
-                      runbookKind: request.kind,
-                      ...(request.version === undefined
-                          ? {}
-                          : { procedureVersion: request.version }),
-                      ...(request.skillRevisionId === undefined
-                          ? {}
-                          : { skillRevisionId: request.skillRevisionId }),
-                  }
-                : { page: "runbooks" };
-            const hash = routeHash(route);
-            if (hash !== location.hash) {
-                history.pushState(history.state, "", hash);
-                lastHash = hash;
-            }
-        },
-    });
-    preferencesPanel = mountMemoryHubPreferences(el("hubSettings"), {
-        scope: () => scope || undefined,
-        onError: (error) => {
-            void hubAction(async () => {
-                throw error;
-            });
-        },
-        onChanged: async () => {
-            await refreshSnapshot();
-        },
-    });
 }
 
 function synchronizeQuery(query: string): void {
@@ -257,9 +195,9 @@ function mountPhaseTwo(): void {
         scope: selectedScope,
         onOpenSource,
         onError,
-        onOpenProcedure: (corpusId, objectId) => {
-            open({ page: "runbooks", corpusId, objectId });
-        },
+
+        onOpenView: (corpusId, objectId, viewRevisionId) =>
+            open({ page: "views", corpusId, objectId, viewRevisionId }),
         onQueryChanged: synchronizeQuery,
         onNotify: (message) => notificationManager.showInfo(message),
     });
@@ -377,62 +315,22 @@ function open(route: HubRoute): boolean {
 }
 
 function inboxAction(item: MemoryHubInboxItem): void {
-    if (item.kind === "runbookWarning" && item.sourceId) {
-        open({
-            page: "library",
-            corpusId: item.corpusId,
-            objectId: item.sourceId,
-        });
-    } else if (item.kind === "job") {
-        open({
-            page: "activity",
-            corpusId: item.corpusId,
-            objectId: item.objectId,
-        });
-    } else {
-        open({ page: "inbox", objectId: item.id });
-    }
+    open({
+        page: "activity",
+        corpusId: item.corpusId,
+        objectId: item.objectId,
+    });
 }
 
 const inboxKinds: Record<
     MemoryHubInboxItem["kind"],
     { label: string; chip: string; glyph: string; tone: string }
 > = {
-    candidate: {
-        label: "Discovered how-to",
-        chip: "How-tos",
-        glyph: "fa-lightbulb",
-        tone: "",
-    },
-    staleProcedure: {
-        label: "Stale procedure",
-        chip: "Stale",
-        glyph: "fa-hourglass-half",
-        tone: "warn",
-    },
     job: {
         label: "Failed or partial job",
         chip: "Jobs",
         glyph: "fa-triangle-exclamation",
         tone: "bad",
-    },
-    skillDraft: {
-        label: "Skill draft",
-        chip: "Skill drafts",
-        glyph: "fa-rocket",
-        tone: "",
-    },
-    bindingDrift: {
-        label: "Changed tool binding",
-        chip: "Bindings",
-        glyph: "fa-link-slash",
-        tone: "warn",
-    },
-    runbookWarning: {
-        label: "Extraction warning",
-        chip: "Warnings",
-        glyph: "fa-circle-exclamation",
-        tone: "warn",
     },
 };
 
@@ -460,9 +358,7 @@ function inboxCard(item: MemoryHubInboxItem, dismissed: boolean): HTMLElement {
     body.append(heading, reason);
     const actions = document.createElement("div");
     actions.className = "hub-row-actions";
-    const primary = button(item.kind === "job" ? "Open job" : "Review", () =>
-        inboxAction(item),
-    );
+    const primary = button("Open job", () => inboxAction(item));
     primary.classList.add("primary");
     actions.append(primary);
     if (dismissed) {
@@ -474,33 +370,6 @@ function inboxCard(item: MemoryHubInboxItem, dismissed: boolean): HTMLElement {
         );
     } else {
         const more = [
-            ...(item.kind === "candidate"
-                ? [
-                      {
-                          label: "Reject",
-                          icon: "fa-thumbs-down",
-                          danger: true,
-                          action: () => {
-                              void hubAction(async () => {
-                                  if (
-                                      !confirm(
-                                          `Reject "${item.title}" in ${item.corpusName}?`,
-                                      )
-                                  )
-                                      return;
-                                  await invokeMemory(
-                                      "memoryRejectProcedureCandidate",
-                                      {
-                                          corpusId: item.corpusId,
-                                          candidateId: item.objectId,
-                                      },
-                                  );
-                                  await refreshSnapshot();
-                              });
-                          },
-                      },
-                  ]
-                : []),
             {
                 label: "Snooze 1 day",
                 icon: "fa-bell-slash",
@@ -575,17 +444,18 @@ function renderInboxChips(available: MemoryHubInboxItem[]): void {
 
 function renderInbox(): void {
     const counts = inboxCounts(snapshot.inbox, hidden, scope || undefined);
+    const attentionCount = counts.inbox + viewAttentionCount;
     el("inboxBadge").textContent = snapshotAvailable
-        ? String(counts.inbox)
+        ? String(attentionCount)
         : "—";
-    el("inboxBadge").dataset.count = String(counts.inbox);
+    el("inboxBadge").dataset.count = String(attentionCount);
     el("activityBadge").textContent =
         snapshotAvailable && jobsCountAvailable
             ? String(counts.failedJobs)
             : "?";
     el("activityBadge").dataset.count = String(counts.failedJobs);
     el("inboxSummary").textContent =
-        snapshotAvailable && counts.inbox ? `${counts.inbox} need you` : "";
+        snapshotAvailable && attentionCount ? `${attentionCount} need you` : "";
     const dismissedBox = el<HTMLInputElement>("inboxDismissed");
     const dismissed = dismissedBox.checked;
     const available = inboxItems(snapshot.inbox, hidden, {
@@ -615,7 +485,7 @@ function renderInbox(): void {
             .slice(inboxPage * 25, (inboxPage + 1) * 25)
             .map((item) => inboxCard(item, dismissed)),
     );
-    if (!items.length)
+    if (!items.length && !viewAttentionCount)
         list.append(
             inboxEmpty(
                 dismissed,
@@ -717,7 +587,7 @@ function renderAddTargets(): void {
     target.replaceChildren();
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "Choose a corpus";
+    placeholder.textContent = "Choose a collection";
     target.append(placeholder);
     for (const corpus of snapshot.corpora) {
         const option = document.createElement("option");
@@ -780,20 +650,6 @@ async function loadManagement(): Promise<void> {
     browserWide.title =
         "Web activity is browser-wide. The activity API supports these filters and linked-source filtering, not corpus scoping.";
     document.querySelector(".activity-panel h2")!.after(browserWide);
-    const settings = move(".howto-settings", "hubRunbooks");
-    const corpusSettings = document.createElement("section");
-    corpusSettings.className = "card howto-settings";
-    while (
-        settings.firstChild &&
-        !(
-            settings.firstChild instanceof HTMLElement &&
-            settings.firstChild.classList.contains("subsection-heading")
-        )
-    ) {
-        corpusSettings.append(settings.firstChild);
-    }
-    el("hubSettings").append(corpusSettings);
-    template.append(settings);
     el("hubSettings").append(el("reindexCorpusButton"));
     el("hubMain").prepend(el("errorBanner"));
     const typeSelect = document.createElement("select");
@@ -850,12 +706,7 @@ async function loadManagement(): Promise<void> {
             }
             return result;
         },
-        procedures: (query) =>
-            snapshot.procedures.filter(
-                (item) =>
-                    !query ||
-                    item.title.toLowerCase().includes(query.toLowerCase()),
-            ),
+
         changed: async () => {
             invalidateDiscovery();
             await refreshSnapshot();
@@ -880,8 +731,18 @@ async function loadManagement(): Promise<void> {
                 ?.name ?? corpusId,
         openSource: (corpusId, objectId) =>
             open({ page: "library", corpusId, objectId }),
-        openProcedure: (corpusId, objectId) =>
-            open({ page: "runbooks", corpusId, objectId }),
+
+        buildViews: async (corpusId, sources) => {
+            if (!discardChanges()) return;
+            history.pushState(
+                history.state,
+                "",
+                routeHash({ page: "views", corpusId }),
+            );
+            lastHash = location.hash;
+            await applyRoute();
+            await draftViewsPanel.buildFromSources(corpusId, sources);
+        },
         sourceForgotten: (corpusId, sourceId, title) => {
             notificationManager.showSuccess(`Forgot source "${title}".`);
             const route = parseRoute(location.hash);
@@ -964,13 +825,11 @@ function mountPageTabs(
 
 function mountPageTabSets(): void {
     mountPageTabs("page-activity", "activityTab", "Activity views", [
-        ["jobs", "Jobs"],
+        ["jobs", "Operations"],
         ["web", "Web history"],
         ["changes", "Changes"],
     ]);
     mountPageTabs("page-settings", "settingsTab", "Settings groups", [
-        ["corpus", "Corpus"],
-        ["runbooks", "Runbook import"],
         ["graph", "Browser graph"],
         ["view", "View"],
     ]);
@@ -1001,17 +860,6 @@ function mountSettingsBar(): void {
         reload?: HTMLButtonElement;
     } {
         switch (page.dataset.settingsTab) {
-            case "corpus":
-                return { save: el<HTMLButtonElement>("saveHowToSettings") };
-            case "runbooks": {
-                const form = group.querySelector("form.card");
-                return form
-                    ? {
-                          save: byText(form, "Save runbook preferences"),
-                          reload: byText(form, "Reload saved preferences"),
-                      }
-                    : {};
-            }
             case "view": {
                 const view = group.querySelector(".memory-view-preferences");
                 return view
@@ -1029,7 +877,6 @@ function mountSettingsBar(): void {
         const { save: saveButton, reload } = target();
         bar.hidden = !saveButton;
         for (const node of [
-            el("saveHowToSettings"),
             ...group.querySelectorAll<HTMLButtonElement>(
                 "form.card button, .memory-view-preferences button",
             ),
@@ -1133,10 +980,7 @@ async function showTab(name: string): Promise<void> {
     }
 }
 
-async function showSourceUsage(
-    continuationToken?: string,
-    viewContinuationToken?: string,
-): Promise<void> {
+async function showSourceUsage(continuationToken?: string): Promise<void> {
     const route = parseRoute(location.hash);
     if (!route.corpusId || !route.objectId)
         throw new Error(
@@ -1144,82 +988,29 @@ async function showSourceUsage(
         );
     const generation = routeVersion;
     const host = el("drawer-usedby");
-    if (!continuationToken && !viewContinuationToken)
-        host.textContent =
-            "Loading retained procedure versions and exact skill snapshots…";
-    const page = await invokeView("memoryHubRunbookUsedBy", {
+    if (!continuationToken)
+        host.textContent = "Loading exact derived-view dependencies…";
+    const page = await invokeView("memoryHubViewUsedBy", {
         corpusId: route.corpusId,
         sourceId: route.objectId,
         pageSize: 25,
         ...(continuationToken === undefined ? {} : { continuationToken }),
-        ...(viewContinuationToken === undefined
-            ? {}
-            : { viewContinuationToken }),
     });
     if (generation !== routeVersion || location.hash !== routeHash(route))
         return;
-    if (!continuationToken && !viewContinuationToken) host.replaceChildren();
-    const status = document.createElement("p");
-    status.textContent = `${page.total} retained procedure versions cite this source. ${page.warnings.join(" ")}`;
-    host.append(status);
-    for (const usage of viewContinuationToken ? [] : page.items) {
-        const card = document.createElement("article");
-        card.className = "card";
-        const procedure = usage.procedure;
-        card.append(
-            button(
-                `${procedure.document.title} · version ${procedure.version} · ${procedure.state}`,
-                () => {
-                    open({
-                        page: "runbooks",
-                        corpusId: procedure.corpusId,
-                        objectId: procedure.procedureId,
-                        runbookKind: "procedure",
-                        procedureVersion: procedure.version,
-                    });
-                },
-            ),
-        );
-        for (const skill of usage.skills) {
-            card.append(
-                button(
-                    `${skill.displayName} · ${skill.state}${skill.active ? " · active" : ""} · exact snapshot ${skill.revisionId.slice(0, 12)}`,
-                    () => {
-                        open({
-                            page: "runbooks",
-                            corpusId: procedure.corpusId,
-                            objectId: procedure.procedureId,
-                            skillRevisionId: skill.revisionId,
-                        });
-                    },
-                ),
-            );
-        }
-        host.append(card);
-    }
-    if (page.views && !continuationToken) {
-        host.append(
-            renderDerivedViewUsage(
-                page.views.items,
-                page.views.total,
-                (operation) => {
-                    void hubAction(operation);
-                },
-            ),
-        );
-        if (page.views.nextContinuationToken)
-            host.append(
-                button("More derived source dependencies", () => {
-                    void hubAction(() =>
-                        showSourceUsage(
-                            undefined,
-                            page.views!.nextContinuationToken,
-                        ),
-                    );
-                }),
-            );
-    }
-    if (page.nextContinuationToken && !viewContinuationToken)
+    if (!continuationToken) host.replaceChildren();
+    host.append(
+        renderDerivedViewUsage(
+            page.items,
+            page.total,
+            (operation) => {
+                void hubAction(operation);
+            },
+            (corpusId, objectId, viewRevisionId) =>
+                open({ page: "views", corpusId, objectId, viewRevisionId }),
+        ),
+    );
+    if (page.nextContinuationToken)
         host.append(
             button("More source dependencies", () => {
                 void hubAction(() =>
@@ -1256,6 +1047,8 @@ function updateExploreScope(
 }
 
 function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
+    if (visiblePage !== "views") draftViewsPanel.hide();
+    if (visiblePage !== "activity") viewActivityPanel.hide();
     if (visiblePage !== "settings") webMaintenancePanel.hide();
     if (visiblePage !== "explore" || !route.webView) webExplorePanel.hide();
     if (visiblePage !== "explore" || route.webView) explorePanel.hide();
@@ -1279,18 +1072,6 @@ function showPage(route: HubRoute, visiblePage: (typeof pages)[number]): void {
     );
     el<HTMLButtonElement>("reindexCorpusButton").disabled =
         !namedScopeAvailable();
-}
-
-async function showCandidate(
-    item: MemoryHubInboxItem,
-    version: number,
-): Promise<void> {
-    await runbooksPanel.show({
-        corpusId: item.corpusId,
-        kind: "candidate",
-        objectId: item.objectId,
-    });
-    if (version !== routeVersion) return;
 }
 
 async function findJob(
@@ -1349,38 +1130,21 @@ async function showJob(
     el("hubActivity").prepend(detail);
 }
 
-function isRunbookRoute(
-    route: HubRoute,
-    item: MemoryHubInboxItem | undefined,
-): boolean {
-    return (
-        route.page === "runbooks" ||
-        item?.kind === "staleProcedure" ||
-        item?.kind === "skillDraft" ||
-        item?.kind === "bindingDrift"
-    );
-}
-
-async function showRunbookRoute(
-    route: HubRoute,
-    item: MemoryHubInboxItem | undefined,
+async function showSourceRoute(
     corpusId: string,
+    sourceId: string,
+    version: number,
 ): Promise<void> {
-    const objectId = item?.objectId ?? route.objectId;
-    if (!objectId) {
-        await runbooksPanel.show();
-        return;
-    }
-    const skillRevisionId = item?.skillRevisionId ?? route.skillRevisionId;
-    await runbooksPanel.show({
-        corpusId,
-        kind: route.runbookKind ?? "procedure",
-        objectId,
-        ...(route.procedureVersion === undefined
-            ? {}
-            : { version: route.procedureVersion }),
-        ...(skillRevisionId === undefined ? {} : { skillRevisionId }),
-    });
+    await manager.selectSource(sourceId);
+    if (version !== routeVersion) return;
+    const corpusName =
+        snapshot.corpora.find((corpus) => corpus.corpusId === corpusId)?.name ??
+        "unavailable";
+    el("drawerCorpus").textContent =
+        `Source corpus: ${corpusName}${scope && corpusId !== scope ? " (outside selected scope)" : ""}`;
+    el("hubDrawer").classList.remove("hidden");
+    await showTab("content");
+    el("drawerClose").focus();
 }
 
 async function showManagedRoute(
@@ -1392,29 +1156,25 @@ async function showManagedRoute(
         throw new Error(
             "The selected corpus no longer exists. Choose another scope.",
         );
-    document.getElementById("hubCandidateReview")?.remove();
     const corpusId = item?.corpusId ?? route.corpusId ?? scope;
-    if (isRunbookRoute(route, item)) {
-        await showRunbookRoute(route, item, corpusId);
+    if (route.page === "views") {
+        await draftViewsPanel.show({
+            corpusId: corpusId || undefined,
+            viewId: route.objectId,
+            revisionId: route.viewRevisionId,
+        });
         return;
     }
     if (route.page === "inbox" || route.webView) return;
     await manager.selectCorpus(corpusId);
     if (version !== routeVersion) return;
     if (route.page === "library" && route.objectId) {
-        await manager.selectSource(route.objectId);
-        if (version !== routeVersion) return;
-        const corpusName =
-            snapshot.corpora.find((corpus) => corpus.corpusId === corpusId)
-                ?.name ?? "unavailable";
-        el("drawerCorpus").textContent =
-            `Source corpus: ${corpusName}${scope && corpusId !== scope ? " (outside selected scope)" : ""}`;
-        el("hubDrawer").classList.remove("hidden");
-        await showTab("content");
-        el("drawerClose").focus();
+        await showSourceRoute(corpusId, route.objectId, version);
     } else if (route.page === "activity" && route.objectId) {
         el("page-activity").dataset.activityTab = "jobs";
-        await showJob(corpusId, route.objectId, version);
+        if (route.activityKind !== "view-build")
+            await showJob(corpusId, route.objectId, version);
+        else document.getElementById("hubJobDetail")?.remove();
     } else {
         document.getElementById("hubJobDetail")?.remove();
     }
@@ -1454,10 +1214,9 @@ async function applyRoute(): Promise<void> {
         throw new Error(
             "Inbox item is no longer available. Refresh the Inbox.",
         );
-    const visiblePage = item && item.kind !== "job" ? "runbooks" : route.page;
+    const visiblePage = route.page;
     showPage(route, visiblePage);
-    if (item?.kind === "candidate") await showCandidate(item, version);
-    else await showManagedRoute(route, item, version);
+    await showManagedRoute(route, item, version);
     if (version !== routeVersion) return;
     if (route.page === "search") {
         const query = pendingSearchQuery;
@@ -1476,14 +1235,21 @@ async function applyRoute(): Promise<void> {
                     : { topic: route.webTopic }),
             });
     } else if (route.page === "activity") {
+        await viewActivityPanel.show(
+            route.activityKind === "view-build" &&
+                route.objectId &&
+                route.corpusId
+                ? { corpusId: route.corpusId, jobId: route.objectId }
+                : undefined,
+        );
         await changesPanel.refresh();
     } else if (route.page === "settings") {
-        await preferencesPanel.show();
         viewPreferencesPanel.show();
         await webMaintenancePanel.show();
     }
     if (version !== routeVersion) return;
     renderInbox();
+    if (route.page === "inbox") await viewActivityPanel.refresh();
     restoreFocus(visiblePage);
 }
 
@@ -1496,7 +1262,7 @@ export async function mountMemoryHub(): Promise<void> {
     el("hubRefresh").onclick = () => location.reload();
     await loadManagement();
     mountPhaseTwo();
-    mountRunbooks();
+
     draftViewsPanel = mountMemoryHubViews(el("hubDraftViews"), {
         scope: () => scope || undefined,
         onError: (error) => {
@@ -1504,8 +1270,46 @@ export async function mountMemoryHub(): Promise<void> {
                 throw error;
             });
         },
+        onOpenView: (corpusId, objectId, viewRevisionId) =>
+            open({ page: "views", corpusId, objectId, viewRevisionId }),
+        onBuildStarted: (corpusId, objectId) =>
+            open({
+                page: "activity",
+                corpusId,
+                objectId,
+                activityKind: "view-build",
+            }),
+        onChanged: async () => {
+            invalidateDiscovery();
+            await refreshSnapshot();
+            await viewActivityPanel.refresh();
+        },
     });
-    await draftViewsPanel.refresh();
+    viewActivityPanel = mountMemoryHubViewActivity(
+        el("hubViewActivity"),
+        el("hubViewAttention"),
+        {
+            scope: () => scope || undefined,
+            onError: (error) => {
+                void hubAction(async () => {
+                    throw error;
+                });
+            },
+            onOpenView: (corpusId, objectId, viewRevisionId) =>
+                open({ page: "views", corpusId, objectId, viewRevisionId }),
+            onOpenBuild: (corpusId, objectId) =>
+                open({
+                    page: "activity",
+                    corpusId,
+                    objectId,
+                    activityKind: "view-build",
+                }),
+            onAttentionCount: (count) => {
+                viewAttentionCount = count;
+                renderInbox();
+            },
+        },
+    );
     mountRunbookImports();
     const onError = (error: unknown) => {
         void hubAction(async () => {
@@ -1608,11 +1412,13 @@ export async function mountMemoryHub(): Promise<void> {
             return;
         }
         scope = el<HTMLSelectElement>("hubCorpus").value;
+        manager.clearBuildSelection();
         localStorage.setItem(SCOPE_KEY, scope);
         invalidateDiscovery();
-        runbooksPanel.scopeChanged();
+
         draftViewsPanel.scopeChanged();
-        preferencesPanel.scopeChanged();
+        viewActivityPanel.scopeChanged();
+
         runbookImportsPanel.scopeChanged();
         renderErrors();
         inboxPage = 0;
@@ -1728,8 +1534,10 @@ export async function mountMemoryHub(): Promise<void> {
         changesPanel.dispose();
         importsPanel.dispose();
         capturePanel.dispose();
-        runbooksPanel.dispose();
-        preferencesPanel.dispose();
+
+        draftViewsPanel.dispose();
+        viewActivityPanel.dispose();
+
         runbookImportsPanel.dispose();
         webMaintenancePanel.dispose();
         viewPreferencesPanel.dispose();

@@ -54,7 +54,7 @@ export function getRetiredBrowserViewHash(
     hash = "",
 ): string {
     if (
-        /^#\/(inbox|search|library|runbooks|explore|activity|settings)(\/|$)/.test(
+        /^#\/(inbox|search|library|views|explore|activity|settings)(\/|$)/.test(
             hash,
         )
     ) {
@@ -65,7 +65,6 @@ export function getRetiredBrowserViewHash(
         const section = hash.replace(/^#\/?/, "");
         const sections: Readonly<Record<string, string>> = {
             sources: "library",
-            howtos: "runbooks",
             jobs: "activity",
             activity: "activity",
             settings: "settings",

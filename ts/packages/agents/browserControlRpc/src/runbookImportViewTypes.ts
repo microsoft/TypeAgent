@@ -1,11 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-    MemoryBatchImport,
-    RunbookJobResult,
-    RunbookSynthesisRequest,
-} from "@typeagent/memory-service";
+import type { MemoryBatchImport } from "@typeagent/memory-service";
 
 export type RunbookImportKind = "folder" | "wiki" | "urls";
 export interface RunbookImportFile {
@@ -65,12 +61,6 @@ export interface MemoryHubRunbookImportFunctions {
     memoryHubCancelRunbookBatch(
         request: RunbookBatchRequest,
     ): Promise<RunbookImportBatch>;
-    memoryHubRunbookJobs(request: {
-        corpusId: string;
-    }): Promise<RunbookJobResult[]>;
-    memoryHubRetryRunbookSynthesis(
-        request: RunbookSynthesisRequest,
-    ): Promise<RunbookJobResult>;
 }
 
 export const runbookImportLimits = {

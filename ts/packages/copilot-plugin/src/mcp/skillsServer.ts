@@ -11,7 +11,6 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type {
     AgentServerConnection,
     CatalogEntry,
-    ProcedureArtifactRequest,
     GetSkillRequest,
     ListSkillsRequest,
     SearchSkillsRequest,
@@ -103,18 +102,6 @@ export class SkillsCatalogAdapter {
             }
             return connection.getSkill(request);
         });
-    }
-
-    public previewProcedureArtifact(
-        request: ProcedureArtifactRequest,
-    ): Promise<CallToolResult> {
-        return this.managementToolCall("previewProcedureArtifact", request);
-    }
-
-    public promoteProcedureArtifact(
-        request: ProcedureArtifactRequest,
-    ): Promise<CallToolResult> {
-        return this.managementToolCall("promoteProcedureArtifact", request);
     }
 
     public previewSkillAcquisition(
@@ -270,8 +257,6 @@ export class SkillsCatalogAdapter {
 
     private managementToolCall<
         TName extends
-            | "previewProcedureArtifact"
-            | "promoteProcedureArtifact"
             | "previewSkillAcquisition"
             | "checkSkillUpdate"
             | "acquireAndPublishSkill"
@@ -394,37 +379,9 @@ const skillAcquisitionRequestSchema = z.object({
     displayName: z.string().optional(),
     description: z.string().optional(),
 });
-const procedureSkillArtifactSchema = z.object({
-    path: z.string().optional(),
-    content: z.string(),
-    encoding: z.enum(["utf8", "base64"]).optional(),
-});
-const procedureArtifactRequestSchema = z.discriminatedUnion("kind", [
-    z.object({
-        corpusId: z.string(),
-        procedureId: z.string(),
-        version: z.number(),
-        kind: z.literal("skill"),
-        skill: z.object({
-            identity: skillIdentitySchema,
-            description: z.string().optional(),
-            schema: procedureSkillArtifactSchema.optional(),
-            grammar: procedureSkillArtifactSchema.optional(),
-        }),
-    }),
-    z.object({
-        corpusId: z.string(),
-        procedureId: z.string(),
-        version: z.number(),
-        kind: z.literal("macro"),
-    }),
-]);
 
 type SkillAcquisitionToolRequest = z.infer<
     typeof skillAcquisitionRequestSchema
->;
-type ProcedureArtifactToolRequest = z.infer<
-    typeof procedureArtifactRequestSchema
 >;
 
 function toSkillAcquisitionRequest(
@@ -459,44 +416,6 @@ function toSkillAcquisitionRequest(
         ...(request.description === undefined
             ? {}
             : { description: request.description }),
-    };
-}
-
-function toProcedureArtifactRequest(
-    request: ProcedureArtifactToolRequest,
-): ProcedureArtifactRequest {
-    if (request.kind === "macro") {
-        return request;
-    }
-    const optionalArtifact = (
-        artifact: z.infer<typeof procedureSkillArtifactSchema> | undefined,
-    ) =>
-        artifact === undefined
-            ? undefined
-            : {
-                  content: artifact.content,
-                  ...(artifact.path === undefined
-                      ? {}
-                      : { path: artifact.path }),
-                  ...(artifact.encoding === undefined
-                      ? {}
-                      : { encoding: artifact.encoding }),
-              };
-    const schema = optionalArtifact(request.skill.schema);
-    const grammar = optionalArtifact(request.skill.grammar);
-    return {
-        corpusId: request.corpusId,
-        procedureId: request.procedureId,
-        version: request.version,
-        kind: request.kind,
-        skill: {
-            identity: request.skill.identity,
-            ...(request.skill.description === undefined
-                ? {}
-                : { description: request.skill.description }),
-            ...(schema === undefined ? {} : { schema }),
-            ...(grammar === undefined ? {} : { grammar }),
-        },
     };
 }
 
@@ -628,34 +547,7 @@ export class TypeAgentSkillsMcpServer {
                         : { revision: request.revision }),
                 }),
         );
-        this.server.registerTool(
-            "typeagent-previewProcedureArtifact",
-            {
-                title: "Preview procedure artifact (read-only)",
-                description:
-                    "READ-ONLY: Preview the skill package or macro that would be generated from a saved procedure. Does not publish or modify anything.",
-                inputSchema: procedureArtifactRequestSchema,
-                annotations: readOnlyToolAnnotations,
-            },
-            (request) =>
-                adapter.previewProcedureArtifact(
-                    toProcedureArtifactRequest(request),
-                ),
-        );
-        this.server.registerTool(
-            "typeagent-promoteProcedureArtifact",
-            {
-                title: "Promote procedure artifact (mutating)",
-                description:
-                    "MUTATING: Generate and publish a skill draft or macro from a saved procedure.",
-                inputSchema: procedureArtifactRequestSchema,
-                annotations: mutatingToolAnnotations,
-            },
-            (request) =>
-                adapter.promoteProcedureArtifact(
-                    toProcedureArtifactRequest(request),
-                ),
-        );
+
         this.server.registerTool(
             "typeagent-previewSkillAcquisition",
             {

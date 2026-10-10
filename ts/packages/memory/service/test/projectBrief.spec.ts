@@ -1,23 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
+import { authoredRelationships } from "../src/viewRelationships.js";
+import { evidenceArray, evidenceRecord } from "../src/viewSynthesisEvidence.js";
 import type {
     ProjectBriefContent,
     ViewBuildJob,
     ViewFactInventory,
     ViewSynthesisOutput,
 } from "../src/viewTypes.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import {
-    projectSources,
     projectBriefTestAnswer,
+    projectSources,
 } from "./projectBriefTestModel.js";
-import { evidenceArray, evidenceRecord } from "../src/viewSynthesisEvidence.js";
-import { authoredRelationships } from "../src/viewRelationships.js";
 
 const runtimeJest = import.meta.jest;
 const jest = runtimeJest as typeof runtimeJest & {
@@ -108,7 +108,7 @@ describe("project brief configured adapter, publication and lifecycle", () => {
         new FileMemoryService(root, {
             viewDrafts: enabled,
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
         });
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "project-brief-offline-"));
@@ -450,20 +450,13 @@ describe("project brief configured adapter, publication and lifecycle", () => {
         const cli = await runMemoryViewsCli([
             "--store",
             root,
-            "--enable-view-drafts",
             "read",
             corpusId,
             "payments-brief",
         ]);
         expect(cli).toMatchObject({ content: { kind: "projectBrief" } });
         expect(
-            await runMemoryViewsCli([
-                "--store",
-                root,
-                "--enable-view-drafts",
-                "build",
-                requestPath,
-            ]),
+            await runMemoryViewsCli(["--store", root, "build", requestPath]),
         ).toMatchObject({
             state: "complete",
             results: [{ state: "draft" }],
@@ -970,9 +963,7 @@ describe("project brief configured adapter, publication and lifecycle", () => {
         const create = () =>
             new FileMemoryService(root, {
                 viewDrafts: true,
-                indexFactory: (_id, directory) =>
-                    new FakeProcedureCorpusIndex(directory),
-                procedureIndexFactory: (id, directory) =>
+                indexFactory: (id, directory) =>
                     createKnowProCorpusIndex(id, directory, () => {
                         const settings = createDocMemorySettings(
                             64,
@@ -1015,7 +1006,7 @@ describe("project brief configured adapter, publication and lifecycle", () => {
         const directory = path.join(
             root,
             corpusId,
-            "personal-how-to",
+            "views",
             "view-search-index",
             viewHash("payments-brief"),
             viewHash(revisionId),

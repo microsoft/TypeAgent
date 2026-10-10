@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import fs from "node:fs";
-import { mkdir, readFile, rename, rm, access, readdir } from "node:fs/promises";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
 import git from "isomorphic-git";
+import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import { access, mkdir, readFile, rename, rm } from "node:fs/promises";
+import path from "node:path";
 import lockfile from "proper-lockfile";
 import { writeRunbookJson } from "./durableRunbookJson.js";
-import { retryProcedurePublication } from "./procedurePublication.js";
+import { retryFilesystemPublication } from "./filesystemPublication.js";
 
 const ref = "refs/heads/typeagent-history";
 
@@ -104,21 +104,6 @@ export class ViewHistory<T> {
             );
         const head = oid ?? (await this.head());
         if (!head) {
-            const legacyEntries = (await exists(this.directory))
-                ? await readdir(this.directory)
-                : [];
-            if (
-                legacyEntries.some(
-                    (entry) =>
-                        entry === "procedures" ||
-                        entry === "index.json" ||
-                        (entry.startsWith("index.json.") &&
-                            entry.endsWith(".bak")),
-                )
-            )
-                throw new Error(
-                    "Pre-release procedure storage is incompatible with typed views. Use a new corpus/store; no automatic migration or reset is performed",
-                );
             return { head: null, state: this.empty() };
         }
         const blob = await git.readBlob({
@@ -300,24 +285,24 @@ export class ViewHistory<T> {
                 );
             await this.checkpoint?.("purge-prepared");
             if (await exists(this.gitdir))
-                await retryProcedurePublication(() =>
+                await retryFilesystemPublication(() =>
                     rename(this.gitdir, discarded),
                 );
             // Even an empty corpus has a repository after a privacy reset.
             else await mkdir(discarded, { recursive: true });
         }
         if (!(await exists(this.gitdir)))
-            await retryProcedurePublication(() =>
+            await retryFilesystemPublication(() =>
                 rename(path.join(replacement, "view-history.git"), this.gitdir),
             );
         await this.checkpoint?.("purge-swapped");
         await removeDerivedData?.();
         await this.checkpoint?.("purge-cleaned");
         // Removing the entire old object database, not GC, removes retained/unreachable blobs.
-        await retryProcedurePublication(() =>
+        await retryFilesystemPublication(() =>
             rm(discarded, { recursive: true, force: true }),
         );
-        await retryProcedurePublication(() =>
+        await retryFilesystemPublication(() =>
             rm(replacement, { recursive: true, force: true }),
         );
         await rm(this.gate);

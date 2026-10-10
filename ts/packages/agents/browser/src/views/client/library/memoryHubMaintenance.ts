@@ -4,7 +4,7 @@
 import type { ViewBuildJob, ViewVersion } from "@typeagent/memory-service";
 import { viewMaintenanceDefinitionSchema } from "@typeagent/memory-client/view-protocol";
 import { invokeMemory } from "./viewClient";
-import { rbButton, rbNode } from "./memoryHubRunbookUi";
+import { rbButton, rbNode } from "./memoryHubDocumentUi";
 
 export function createMaintenancePanel(
     view: ViewVersion,
@@ -47,6 +47,126 @@ export function createMaintenancePanel(
     );
     editor.oninput = options.onChange;
     const result = rbNode("pre");
+    const advanced = rbNode("details");
+    advanced.append(
+        rbNode("summary", "Advanced maintenance definition"),
+        editor,
+    );
+    const mode = document.createElement("select");
+    mode.setAttribute("aria-label", "Sources for future updates");
+    mode.append(
+        new Option("Keep the exact evidence (pinned)", "pinned"),
+        new Option(
+            "Follow latest revisions of selected sources",
+            "currentSources",
+        ),
+        new Option(
+            "Follow matching sources in this collection",
+            "scopedSources",
+        ),
+    );
+    const initial = viewMaintenanceDefinitionSchema.parse(
+        JSON.parse(editor.value),
+    );
+    mode.value = initial.scope.mode;
+    const fields = rbNode("div");
+    const field = (label: string, value: string) => {
+        const wrapper = rbNode("label", label);
+        const input = document.createElement("input");
+        input.value = value;
+        input.setAttribute("aria-label", label);
+        wrapper.append(input);
+        fields.append(wrapper);
+        return input;
+    };
+    const sourceIds = field(
+        "Source IDs (comma separated)",
+        initial.scope.mode === "currentSources"
+            ? initial.scope.sourceIds.join(", ")
+            : "",
+    );
+    const sourceTypes = field(
+        "Source types (comma separated)",
+        initial.scope.mode === "scopedSources"
+            ? (initial.scope.sourceTypes ?? []).join(", ")
+            : "",
+    );
+    const tags = field(
+        "All tags (comma separated)",
+        initial.scope.mode === "scopedSources"
+            ? (initial.scope.tags ?? []).join(", ")
+            : "",
+    );
+    const project = field(
+        "Exact project metadata",
+        initial.scope.mode === "scopedSources"
+            ? (initial.scope.project ?? "")
+            : "",
+    );
+    const split = (value: string) => [
+        ...new Set(
+            value
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean),
+        ),
+    ];
+    const sync = () => {
+        const definition = JSON.parse(editor.value);
+        definition.scope =
+            mode.value === "pinned"
+                ? { mode: "pinned" }
+                : mode.value === "currentSources"
+                  ? {
+                        mode: "currentSources",
+                        sourceIds: split(sourceIds.value),
+                    }
+                  : {
+                        mode: "scopedSources",
+                        ...(sourceTypes.value.trim()
+                            ? { sourceTypes: split(sourceTypes.value) }
+                            : {}),
+                        ...(tags.value.trim()
+                            ? { tags: split(tags.value) }
+                            : {}),
+                        ...(project.value.trim()
+                            ? { project: project.value.trim() }
+                            : {}),
+                    };
+        editor.value = JSON.stringify(definition, null, 2);
+        updateFields();
+        options.onChange();
+    };
+    const updateFields = () => {
+        sourceIds.parentElement!.hidden = mode.value !== "currentSources";
+        for (const input of [sourceTypes, tags, project])
+            input.parentElement!.hidden = mode.value !== "scopedSources";
+    };
+    mode.onchange = sync;
+    for (const input of [sourceIds, sourceTypes, tags, project])
+        input.oninput = sync;
+    updateFields();
+    const diagnostics = rbNode("details");
+    diagnostics.append(
+        rbNode("summary", "Exact update plan and receipt"),
+        result,
+    );
+    const manifest = rbNode("details");
+    manifest.append(
+        rbNode("summary", "Accepted dependency and discovery manifest"),
+        rbNode(
+            "pre",
+            JSON.stringify(
+                view.maintenance ?? {
+                    state: "No accepted maintenance checkpoint; full reconciliation required",
+                },
+                null,
+                2,
+            ),
+        ),
+    );
+    const summary = rbNode("p");
+    summary.setAttribute("role", "status");
     const requireSaved = () => {
         if (options.dirty())
             throw new Error(
@@ -57,9 +177,11 @@ export function createMaintenancePanel(
         rbNode("h4", `Maintain ${view.viewId}`),
         rbNode(
             "p",
-            "Manual maintenance rebuilds only affected whole views. Choose pinned, currentSources with sourceIds, or scopedSources with sourceTypes/tags/project. Project is exact source metadata.project; all tags must match. Wiki subject keys come from reviewed bindings or metadata.viewSubjects, not title matching. New pages require createDraftPages; unsupported identity, removals or overflow block visibly. Existing publication policy still applies. No periodic scheduler.",
+            "Preview changes before manually updating this view. Keep exact evidence, follow chosen sources, or follow explicit metadata matches. Existing publication policy applies; updates do not run on a schedule.",
         ),
-        editor,
+        mode,
+        fields,
+        advanced,
         rbButton("Save maintenance definition", () =>
             options.action(async () => {
                 if (!options.isCurrent()) return;
@@ -95,6 +217,7 @@ export function createMaintenancePanel(
                 });
                 if (!options.isCurrent()) return;
                 result.textContent = JSON.stringify(plan, null, 2);
+                summary.textContent = `Preview ready: ${plan.targets.length} explicit target(s). Inspect the exact plan before running.`;
             }),
         ),
         rbButton("Run manual maintenance", () =>
@@ -123,20 +246,14 @@ export function createMaintenancePanel(
                     2,
                 );
                 if (receipt.job) options.onBuild(receipt.job);
+                summary.textContent = receipt.job
+                    ? `Update started: ${receipt.job.state}. Results are recorded per target.`
+                    : "Maintenance receipt recorded. No build job was started; inspect the exact receipt.";
             }),
         ),
-        rbNode("h5", "Accepted dependency and discovery manifest"),
-        rbNode(
-            "pre",
-            JSON.stringify(
-                view.maintenance ?? {
-                    state: "No accepted maintenance checkpoint; full reconciliation required",
-                },
-                null,
-                2,
-            ),
-        ),
-        result,
+        manifest,
+        summary,
+        diagnostics,
     );
     return panel;
 }

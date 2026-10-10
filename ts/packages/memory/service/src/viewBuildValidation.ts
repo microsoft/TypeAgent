@@ -14,11 +14,9 @@ import { emptyProjectBrief } from "./projectBrief.js";
 import { emptyWiki } from "./wiki.js";
 
 export function parseViewDraftCapability(value: string | undefined): boolean {
-    if (value === undefined || value === "false") return false;
-    if (value === "true") return true;
-    throw new Error(
-        "TYPEAGENT_MEMORY_VIEW_DRAFTS must be true or false; draft views remain disabled by default",
-    );
+    if (value === undefined || value === "true") return true;
+    if (value === "false") return false;
+    throw new Error("TYPEAGENT_MEMORY_VIEW_DRAFTS must be true or false");
 }
 
 export function validateBuildRequest(request: ViewBuildRequest): void {

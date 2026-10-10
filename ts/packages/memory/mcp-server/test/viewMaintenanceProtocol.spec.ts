@@ -1,21 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { McpMemoryServiceClient } from "@typeagent/memory-client";
 import {
     FileMemoryService,
     type ViewBuildJob,
 } from "@typeagent/memory-service";
-import { McpMemoryServiceClient } from "@typeagent/memory-client";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { MemoryServiceHost } from "../src/memoryServiceHost.js";
 const {
-    FakeProcedureCorpusIndex,
-}: typeof import("../../service/dist/test/fakeProcedureCorpusIndex.js") =
+    FakeSemanticCorpusIndex,
+}: typeof import("../../service/dist/test/fakeSemanticCorpusIndex.js") =
     await import(
         new URL(
-            "../../../service/dist/test/fakeProcedureCorpusIndex.js",
+            "../../../service/dist/test/fakeSemanticCorpusIndex.js",
             import.meta.url,
         ).href
     );
@@ -51,7 +51,7 @@ test("authenticated MCP preserves dynamic definitions, manifests, no-op plans an
     const service = new FileMemoryService(root, {
         viewDrafts: true,
         indexFactory: (_id, directory) =>
-            new FakeProcedureCorpusIndex(directory),
+            new FakeSemanticCorpusIndex(directory),
         viewSynthesisAdapter: {
             identity: "controlled-maintenance-wire",
             inventory: async (input) =>

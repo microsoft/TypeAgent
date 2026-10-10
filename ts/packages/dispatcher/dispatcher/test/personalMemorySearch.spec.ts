@@ -2,29 +2,23 @@
 // Licensed under the MIT License.
 
 import { describe, expect, it, jest } from "@jest/globals";
-import { createHash, randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { createDocMemorySettings } from "@typeagent/conversation-memory";
-import {
-    createKnowProCorpusIndex,
-    createMemoryServiceRpcFacade,
-    FileMemoryService,
-} from "@typeagent/memory-service";
 import type {
+    CorpusIndexFactory,
     MemoryCorpus,
     MemorySearchResult,
     MemoryService,
-    PersonalHowToService,
-    ProcedureSearchMatch,
-    CorpusIndexFactory,
 } from "@typeagent/memory-service";
-import { ConversationDurableMemory } from "../src/context/conversationDurableMemory.js";
 import {
-    searchPersonalMemory,
-    searchReasoningConversationMemory,
-} from "../src/context/personalMemorySearch.js";
+    FileMemoryService,
+    createKnowProCorpusIndex,
+    createMemoryServiceRpcFacade,
+} from "@typeagent/memory-service";
+import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { searchPersonalMemory } from "../src/context/personalMemorySearch.js";
 
 const corpus = (corpusId: string, name: string): MemoryCorpus => ({
     corpusId,
@@ -55,10 +49,7 @@ const result = (corpusId: string, title: string): MemorySearchResult => ({
     capabilitiesUsed: [],
     indexVersion: "1",
 });
-
-const noProcedures = async (): Promise<ProcedureSearchMatch[]> => [];
-type SearchService = Pick<MemoryService, "listCorpora" | "search"> &
-    Pick<PersonalHowToService, "searchProcedures">;
+type SearchService = Pick<MemoryService, "listCorpora" | "search">;
 
 function createStructuredIndexFactory(
     queryEntity: string,
@@ -187,203 +178,6 @@ describe("searchPersonalMemory", () => {
         }
     });
 
-    it("recalls PDF, web, approved how-to and substring-matched incident evidence after restart", async () => {
-        const root = path.join(
-            os.tmpdir(),
-            `dispatcher-memory-${randomUUID()}`,
-        );
-        const previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
-        process.env.TYPEAGENT_EMBEDDING_PROVIDER = "none";
-        const factory = createStructuredIndexFactory(
-            "Service X",
-            () => "Service X",
-        );
-        const options = {
-            indexFactory: factory,
-        };
-        let service = new FileMemoryService(root, options);
-        try {
-            const { corpusId } = await service.createCorpus(
-                "TypeAgent Browser Memory",
-            );
-            const job = await service.ingestDocument({
-                corpusId,
-                source: {
-                    sourceType: "web",
-                    title: "Service X incident runbook",
-                    canonicalUri: "https://example.com/runbooks/service-x",
-                    markdown:
-                        "# Service X incident runbook\n\nInspect Service X traces before restarting.",
-                },
-            });
-            await waitForIngestion(service, job.jobId);
-            const procedure = await service.saveProcedure({
-                corpusId,
-                procedureId: "restore-service-x",
-                document: {
-                    title: "Restore availability to Service X",
-                    steps: ["Reduce concurrency before restarting Service X."],
-                    citations: [
-                        {
-                            sourceId: job.sourceId,
-                            revisionId: job.revisionId,
-                        },
-                    ],
-                },
-            });
-            const pdfCorpus = await service.createCorpus("Saved PDFs");
-            const pdfText = "Service X PDF checklist: inspect startup traces.";
-            const pdfJob = await service.ingestDocument({
-                corpusId: pdfCorpus.corpusId,
-                source: {
-                    sourceId: "pdf-runbook",
-                    sourceType: "markdown",
-                    title: "Service X PDF runbook",
-                    canonicalUri: "https://example.com/runbooks/service-x",
-                    markdown: pdfText,
-                    contentHash: createHash("sha256")
-                        .update(pdfText)
-                        .digest("hex"),
-                },
-            });
-            await waitForIngestion(service, pdfJob.jobId);
-            let memory = new ConversationDurableMemory({
-                service: createMemoryServiceRpcFacade(service),
-                conversationId: "incident-service-x",
-                runId: "diagnosis",
-            });
-            memory.recordActionResult(
-                "Service X diagnostic probe: connection pool exhausted.",
-                "turn-1",
-                "diagnose",
-                false,
-            );
-            memory.recordDecision(
-                "For Service X, roll back release 42.",
-                "turn-1",
-            );
-            const events = await memory.inspectTurn("turn-1");
-            expect(events).toHaveLength(2);
-            const recall = async () => {
-                const text = await searchPersonalMemory(
-                    "How do I restore Service X, and what did our diagnostic show?",
-                    () =>
-                        searchReasoningConversationMemory(
-                            { conversationDurableMemory: memory },
-                            "Service X",
-                        ),
-                    createMemoryServiceRpcFacade(service),
-                );
-                expect(text).toContain("Inspect Service X traces");
-                expect(text).toContain(
-                    "https://example.com/runbooks/service-x",
-                );
-                expect(text).toContain("Reduce concurrency");
-                expect(text).toContain("connection pool exhausted");
-                expect(text).toContain("roll back release 42");
-                expect(text).toContain("Service X PDF runbook");
-                expect(text).toContain("Service X PDF checklist");
-                expect(text).toContain(
-                    `source: pdf-runbook; revision: ${pdfJob.revisionId}`,
-                );
-                expect(text).not.toContain("Locations:");
-                expect(text).not.toContain("Canonical ranges:");
-                expect(text).not.toContain("search failed");
-            };
-            await recall();
-            await service.close();
-            service = new FileMemoryService(root, options);
-            memory = new ConversationDurableMemory({
-                service: createMemoryServiceRpcFacade(service),
-                conversationId: "incident-service-x",
-                runId: "follow-up",
-            });
-            await recall();
-            expect(await memory.inspectTurn("turn-1")).toEqual(events);
-            expect(
-                await service.getProcedure(corpusId, procedure.procedureId, 1),
-            ).toEqual(procedure);
-            expect(
-                await service.getSource(corpusId, job.sourceId),
-            ).toMatchObject({ activeRevisionId: job.revisionId });
-        } finally {
-            try {
-                await service.close();
-            } finally {
-                if (previousProvider === undefined) {
-                    delete process.env.TYPEAGENT_EMBEDDING_PROVIDER;
-                } else {
-                    process.env.TYPEAGENT_EMBEDDING_PROVIDER = previousProvider;
-                }
-                await rm(root, { recursive: true, force: true });
-            }
-        }
-    });
-
-    it("delivers semantic procedure matches to reasoning without corpus selection", async () => {
-        const root = path.join(
-            os.tmpdir(),
-            `dispatcher-memory-${randomUUID()}`,
-        );
-        const previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
-        process.env.TYPEAGENT_EMBEDDING_PROVIDER = "none";
-        const service = new FileMemoryService(root, {
-            indexFactory: createStructuredIndexFactory("Zephyr", (text) =>
-                text.includes("Restore availability")
-                    ? "Zephyr"
-                    : "Credentials",
-            ),
-        });
-        try {
-            const { corpusId } = await service.createCorpus(
-                "TypeAgent Browser Memory",
-            );
-            await service.saveProcedure({
-                corpusId,
-                procedureId: "recover-zephyr",
-                document: {
-                    title: "Restore availability to Zephyr cluster",
-                    steps: [
-                        "Inspect system logs and restart unhealthy workers.",
-                    ],
-                    citations: [],
-                },
-            });
-            await service.saveProcedure({
-                corpusId,
-                procedureId: "rotate-zephyr",
-                document: {
-                    title: "Rotate Zephyr credentials",
-                    steps: ["Issue a new access token."],
-                    citations: [],
-                },
-            });
-            const text = await searchPersonalMemory(
-                "How do I recover from a Zephyr outage?",
-                async () => undefined,
-                createMemoryServiceRpcFacade(service),
-            );
-            expect(text).toContain(
-                "Saved procedure: Restore availability to Zephyr cluster",
-            );
-            expect(text).toContain(
-                "Inspect system logs and restart unhealthy workers.",
-            );
-            expect(text).not.toContain("Rotate Zephyr credentials");
-        } finally {
-            try {
-                await service.close();
-            } finally {
-                if (previousProvider === undefined) {
-                    delete process.env.TYPEAGENT_EMBEDDING_PROVIDER;
-                } else {
-                    process.env.TYPEAGENT_EMBEDDING_PROVIDER = previousProvider;
-                }
-                await rm(root, { recursive: true, force: true });
-            }
-        }
-    });
-
     it("starts conversation and corpus searches concurrently and cites saved pages", async () => {
         let finishConversation!: (value: string) => void;
         const conversation = new Promise<string>((resolve) => {
@@ -399,7 +193,6 @@ describe("searchPersonalMemory", () => {
                 corpus("documents", "Imported Documents"),
             ],
             search,
-            searchProcedures: noProcedures,
         };
         const pending = searchPersonalMemory(
             "debug service",
@@ -437,7 +230,6 @@ describe("searchPersonalMemory", () => {
                 }
                 return result(corpusId, "Debug guide");
             },
-            searchProcedures: noProcedures,
         };
         const text = await searchPersonalMemory(
             "debug service",
@@ -460,7 +252,6 @@ describe("searchPersonalMemory", () => {
                     result("other", "Out of scope").matches[0],
                 ],
             }),
-            searchProcedures: noProcedures,
         };
         const text = await searchPersonalMemory(
             "debug",
@@ -510,7 +301,6 @@ describe("searchPersonalMemory", () => {
                         matches: [evidence],
                     };
                 },
-                searchProcedures: noProcedures,
             };
             const text = await searchPersonalMemory(
                 question,
@@ -577,7 +367,6 @@ describe("searchPersonalMemory", () => {
                               ],
                 };
             },
-            searchProcedures: noProcedures,
         };
         const text = await searchPersonalMemory(
             "debug service",
@@ -656,7 +445,6 @@ describe("searchPersonalMemory", () => {
                     },
                 ],
             }),
-            searchProcedures: noProcedures,
         };
         const text = await searchPersonalMemory(
             "debug",
@@ -698,7 +486,6 @@ describe("searchPersonalMemory", () => {
                     },
                 ],
             }),
-            searchProcedures: noProcedures,
         };
         const text = await searchPersonalMemory(
             "debug",
@@ -726,7 +513,6 @@ describe("searchPersonalMemory", () => {
                         score: corpusId === ids[0] ? 10_000 - rank : 0.001,
                     })),
                 }),
-                searchProcedures: noProcedures,
             };
             const text = await searchPersonalMemory(
                 "debug",
@@ -754,70 +540,6 @@ describe("searchPersonalMemory", () => {
         },
     );
 
-    it("interleaves saved procedures across corpora and reports omitted results and steps", async () => {
-        const ids = Array.from({ length: 6 }, (_, index) => `corpus-${index}`);
-        const service: SearchService = {
-            listCorpora: async () => ids.map((id) => corpus(id, id)),
-            search: async ({ corpusId }) => ({
-                ...result(corpusId, corpusId),
-                matches: [],
-            }),
-            searchProcedures: async ({
-                corpusId,
-            }): Promise<ProcedureSearchMatch[]> =>
-                Array.from({ length: 2 }, (_, rank) => {
-                    const title = `${corpusId} procedure ${rank}`;
-                    return {
-                        procedure: {
-                            corpusId,
-                            procedureId: title,
-                            title,
-                            state: "saved",
-                            latestVersion: 1,
-                            updatedAt: "2026-10-01T00:00:00Z",
-                        },
-                        version: {
-                            corpusId,
-                            procedureId: title,
-                            version: 1,
-                            state: "saved",
-                            document: {
-                                title,
-                                steps: Array.from(
-                                    { length: 7 },
-                                    (_, step) => `Step ${step}`,
-                                ),
-                                citations: [],
-                            },
-                            canonicalJson: "{}",
-                            markdown: title,
-                            createdAt: "2026-10-01T00:00:00Z",
-                            jsonHash: "json-hash",
-                            markdownHash: "markdown-hash",
-                        },
-                        score: corpusId === ids[0] ? 10_000 : 0.001,
-                    };
-                }),
-        };
-        const text = await searchPersonalMemory(
-            "debug",
-            async () => undefined,
-            service,
-        );
-        expect(
-            [...text.matchAll(/^- \*\*Saved procedure: (.*?)\*\*/gm)].map(
-                (match) => match[1],
-            ),
-        ).toEqual(ids.slice(0, 5).map((id) => `${id} procedure 0`));
-        expect(text).toContain(
-            "Procedure results truncated: 7 additional matches omitted",
-        );
-        expect(text).toContain(
-            "[Truncated: additional procedure steps omitted.]",
-        );
-        expect(text).not.toContain("Step 5");
-    });
-
     it("redistributes unused slots after deduplication and an empty corpus", async () => {
         const service: SearchService = {
             listCorpora: async () => [
@@ -840,7 +562,6 @@ describe("searchPersonalMemory", () => {
                                 locator: `passage ${rank}`,
                             })),
             }),
-            searchProcedures: noProcedures,
         };
         const text = await searchPersonalMemory(
             "debug",
@@ -853,7 +574,7 @@ describe("searchPersonalMemory", () => {
         expect(text).not.toContain("results truncated");
     });
 
-    it("keeps PDF and web results alongside conversation, document and procedure failures and service truncation warnings", async () => {
+    it("keeps PDF and web results alongside conversation and document failures and service truncation warnings", async () => {
         const service: SearchService = {
             listCorpora: async () => [
                 corpus("pdf", "PDFs"),
@@ -872,12 +593,6 @@ describe("searchPersonalMemory", () => {
                             : [],
                 };
             },
-            searchProcedures: async ({ corpusId }) => {
-                if (corpusId === "web") {
-                    throw new Error("Procedure index unavailable");
-                }
-                return [];
-            },
         };
         const text = await searchPersonalMemory(
             "debug",
@@ -893,9 +608,6 @@ describe("searchPersonalMemory", () => {
         );
         expect(text).toContain(
             "Document search failed in Unavailable: Error: Index unavailable",
-        );
-        expect(text).toContain(
-            "Procedure search failed in Web: Error: Procedure index unavailable",
         );
         expect(text).toContain(
             "Document search warning in PDFs: Response truncated at service character limit",
@@ -921,7 +633,6 @@ describe("searchPersonalMemory", () => {
                     })),
                 };
             },
-            searchProcedures: noProcedures,
         };
         const text = await searchPersonalMemory(
             "debug",
@@ -946,7 +657,6 @@ describe("searchPersonalMemory", () => {
         const service: SearchService = {
             listCorpora: async () => [corpus("browser", "Browser")],
             search: async () => result("browser", "Relevant page"),
-            searchProcedures: noProcedures,
         };
         const text = await searchPersonalMemory(
             "debug service",

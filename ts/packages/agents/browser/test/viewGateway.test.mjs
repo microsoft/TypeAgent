@@ -6,13 +6,81 @@ import { fork } from "node:child_process";
 import { once } from "node:events";
 import { test } from "node:test";
 import { request as httpRequest } from "node:http";
-import { createHash } from "node:crypto";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
     browserViews,
     getBrowserViewDestination,
 } from "@typeagent/browser-control-rpc/viewRoutes";
 import { validateViewRequest } from "../dist/views/server/features/views/viewValidation.mjs";
+import { viewMethods } from "@typeagent/browser-control-rpc/viewRpc";
+
+const removedMethods = [
+    "memoryGetHowToSettings",
+    "memoryUpdateHowToSettings",
+    "memoryCreateProcedureCandidate",
+    "memoryListProcedureCandidates",
+    "memoryRejectProcedureCandidate",
+    "memorySaveProcedure",
+    "memoryListProcedures",
+    "memoryGetProcedure",
+    "memorySearchProcedures",
+    "memoryArchiveProcedure",
+    "memoryHubRunbooks",
+    "memoryHubRunbook",
+    "memoryHubSaveRunbook",
+    "memoryHubRunbookHistory",
+    "memoryHubRunbookOriginal",
+    "memoryHubRunbookUsedBy",
+    "memoryHubSuggestBindings",
+    "memoryHubAcceptBinding",
+    "memoryHubPreviewSkill",
+    "memoryHubPublishSkill",
+    "memoryHubSkillAction",
+    "memoryHubSkillFile",
+    "memoryHubCompareRunbook",
+    "memoryHubSynthesizeRunbook",
+    "memoryHubReadRunbookAsset",
+    "memoryHubRunbookJobs",
+    "memoryHubRetryRunbookSynthesis",
+];
+
+test("legacy guide APIs and procedure evidence have no gateway contract", () => {
+    for (const method of removedMethods) {
+        assert.ok(!viewMethods.includes(method), method);
+        assert.throws(
+            () =>
+                validateViewRequest({
+                    method,
+                    params: { corpusId: "c" },
+                }),
+            undefined,
+            method,
+        );
+    }
+    assert.throws(() =>
+        validateViewRequest({
+            method: "memoryHubEvidence",
+            params: {
+                corpusId: "c",
+                kind: "procedure",
+                objectId: "p",
+                procedureVersion: 1,
+            },
+        }),
+    );
+    assert.throws(() =>
+        validateViewRequest({
+            method: "memoryHubStartRunbookImport",
+            params: {
+                corpusId: "c",
+                idempotencyKey: "sources",
+                kind: "urls",
+                urls: ["https://example.invalid"],
+                detectCandidates: true,
+            },
+        }),
+    );
+});
 
 test("view validation rejects generic operations and malformed domain payloads", () => {
     for (const body of [
@@ -129,12 +197,6 @@ test(
     "localhost HTTP gateway invokes parent RPC and forwards progress SSE",
     { timeout: 20_000 },
     async (t) => {
-        const png = Buffer.from(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1cAAAAASUVORK5CYII=",
-            "base64",
-        );
-        const hash = createHash("sha256").update(png).digest("hex");
-        const runbookCalls = [];
         const child = fork(
             new URL("../dist/views/server/server.mjs", import.meta.url),
             ["0"],
@@ -154,7 +216,6 @@ test(
             memoryHubSnapshot: async () => ({
                 corpora: [{ corpusId: "c", name: "Test corpus" }],
                 inbox: [],
-                procedures: [],
                 errors: [],
             }),
             memoryHubSearch: async (params) => ({
@@ -190,39 +251,6 @@ test(
                     },
                 ],
             }),
-            memoryHubRunbooks: async (params) => {
-                runbookCalls.push(["list", params]);
-                return {
-                    items: [],
-                    total: 0,
-                    errors: [],
-                    warnings: ["Catalog fixture"],
-                };
-            },
-            memoryHubSkillAction: async (params) => {
-                runbookCalls.push(["skill", params]);
-                return {
-                    identity: params.identity,
-                    revisionId: params.revisionId,
-                    state: "validated",
-                    active: false,
-                };
-            },
-            memoryHubReadRunbookAsset: async (params) => {
-                if (
-                    params.variant !== "original" ||
-                    params.acknowledgeUnreviewed !== true
-                )
-                    throw new Error(
-                        "Original pixels require explicit acknowledgement; safe preview unavailable",
-                    );
-                if (params.hash !== hash)
-                    throw new Error("Asset hash mismatch");
-                return {
-                    asset: { mimeType: "image/png", size: png.length, hash },
-                    data: png.toString("base64"),
-                };
-            },
             memoryCreateCorpus: async () => {
                 throw new Error("Domain failure");
             },
@@ -248,95 +276,17 @@ test(
                 body: JSON.stringify(body),
             });
         await t.test(
-            "Runbook listing and exact guarded lifecycle cross HTTP and parent IPC",
+            "removed APIs are rejected and the legacy asset route is absent",
             async () => {
-                const list = await invoke({
-                    method: "memoryHubRunbooks",
-                    params: { corpusId: "c", needsReview: true, pageSize: 25 },
-                });
-                assert.equal(list.status, 200);
-                assert.equal(
-                    (await list.json()).data.warnings[0],
-                    "Catalog fixture",
-                );
-                const mutation = {
-                    identity: {
-                        scope: "user",
-                        origin: "fixture",
-                        name: "worker",
-                    },
-                    revisionId: "exact-revision",
-                    expectedState: "draft",
-                    expectedActive: false,
-                    action: "validate",
-                };
-                const response = await invoke({
-                    method: "memoryHubSkillAction",
-                    params: mutation,
-                });
-                assert.equal(response.status, 200);
-                assert.deepEqual(runbookCalls[1], ["skill", mutation]);
-                const rejected = await invoke({
-                    method: "memoryHubSkillAction",
-                    params: { ...mutation, expectedActive: undefined },
-                });
-                assert.equal(rejected.status, 400);
-                assert.equal(runbookCalls.length, 2);
-            },
-        );
-        await t.test(
-            "Controlled revision assets are acknowledged, immutable and never safe-preview fallbacks",
-            async () => {
-                const query = new URLSearchParams({
-                    corpusId: "c",
-                    sourceId: "s",
-                    revisionId: "r",
-                    assetId: "a",
-                    hash,
-                    variant: "original",
-                });
-                let response = await fetch(
-                    `${base}/api/views/runbook-asset?${query}`,
-                );
-                assert.equal(response.status, 500);
-                assert.match((await response.json()).error, /acknowledgement/);
-                query.set("acknowledgeUnreviewed", "true");
-                response = await fetch(
-                    `${base}/api/views/runbook-asset?${query}`,
-                );
-                assert.equal(response.status, 200);
-                assert.equal(response.headers.get("content-type"), "image/png");
-                assert.equal(response.headers.get("cache-control"), "no-store");
-                assert.equal(
-                    response.headers.get("cross-origin-resource-policy"),
-                    "same-origin",
-                );
-                assert.equal(
-                    response.headers.get("x-content-type-options"),
-                    "nosniff",
-                );
-                assert.match(
-                    response.headers.get("content-security-policy"),
-                    /sandbox/,
-                );
-                assert.deepEqual(
-                    Buffer.from(await response.arrayBuffer()),
-                    png,
-                );
-                query.set("variant", "preview");
-                response = await fetch(
-                    `${base}/api/views/runbook-asset?${query}`,
-                );
-                assert.equal(response.status, 500);
-                assert.match(
-                    (await response.json()).error,
-                    /safe preview unavailable/,
-                );
-                query.set("hash", "bad");
-                response = await fetch(
-                    `${base}/api/views/runbook-asset?${query}`,
-                );
-                assert.equal(response.status, 400);
+                for (const method of removedMethods) {
+                    const response = await invoke({
+                        method,
+                        params: { corpusId: "c" },
+                    });
+                    assert.equal(response.status, 400, method);
+                }
+                const asset = await fetch(`${base}/api/views/runbook-asset`);
+                assert.equal(asset.status, 404);
             },
         );
         await t.test(
@@ -352,7 +302,6 @@ test(
                     data: {
                         corpora: [{ corpusId: "c", name: "Test corpus" }],
                         inbox: [],
-                        procedures: [],
                         errors: [],
                     },
                 });

@@ -1,26 +1,26 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import {
-    FileMemoryService,
-    type ViewSynthesisOutput,
-    type ViewBuildSnapshot,
-} from "@typeagent/memory-service";
 import {
     McpMemoryServiceClient,
     viewBuildRequestSchema,
     viewResolutionSchema,
 } from "@typeagent/memory-client";
+import {
+    FileMemoryService,
+    type ViewBuildSnapshot,
+    type ViewSynthesisOutput,
+} from "@typeagent/memory-service";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { MemoryServiceHost } from "../src/memoryServiceHost.js";
 const {
-    FakeProcedureCorpusIndex,
-}: typeof import("../../service/dist/test/fakeProcedureCorpusIndex.js") =
+    FakeSemanticCorpusIndex,
+}: typeof import("../../service/dist/test/fakeSemanticCorpusIndex.js") =
     await import(
         new URL(
-            "../../../service/dist/test/fakeProcedureCorpusIndex.js",
+            "../../../service/dist/test/fakeSemanticCorpusIndex.js",
             import.meta.url,
         ).href
     );
@@ -78,9 +78,8 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
     const root = await mkdtemp(path.join(os.tmpdir(), "memory-view-protocol-"));
     const open = () =>
         new FileMemoryService(root, {
-            viewDrafts: true,
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {
                 identity: "offline-protocol-test",
                 generate: async (input) => syntheticOutput(input),
@@ -149,6 +148,20 @@ test("real authenticated loopback MCP builds, inspects, edits, rejects publicati
             }))!;
         }
         expect(job.state).toBe("complete");
+        const usage = await client.getSourceViewUsage({
+            corpusId: corpus.corpusId,
+            sourceId: source.sourceId,
+        });
+        expect(usage).toMatchObject({
+            total: 1,
+            items: [
+                {
+                    viewId: "guide",
+                    kind: "troubleshootingGuide",
+                    provenance: "generated",
+                },
+            ],
+        });
         expect(job.results[0].state).toBe("draft");
         const snapshot = await client.listViews(corpus.corpusId);
         const view = snapshot.views[0];

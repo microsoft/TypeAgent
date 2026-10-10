@@ -9,9 +9,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
+import { viewMethods } from "@typeagent/browser-control-rpc/viewRpc";
 import { FileMemoryService, waitForMemoryJob } from "@typeagent/memory-service";
-import { FakeProcedureCorpusIndex } from "../../../memory/service/dist/test/fakeProcedureCorpusIndex.js";
+import { FakeSemanticCorpusIndex } from "../../../memory/service/dist/test/fakeSemanticCorpusIndex.js";
 import { createMemoryViewFunctions } from "../dist/agent/memoryViews.mjs";
+import { BrowserMemoryService } from "../dist/agent/browserMemoryService.mjs";
+import { createMemoryHubSourceOriginalFunctions } from "../dist/agent/memoryHubSourceOriginal.mjs";
+import { createMemoryHubViewUsageFunctions } from "../dist/agent/memoryHubViewUsage.mjs";
+import { createMemoryHubFunctions } from "../dist/agent/memoryHub.mjs";
+import { createMemoryHubExploreFunctions } from "../dist/agent/memoryHubExplore.mjs";
 import {
     projectBriefTestAnswer,
     projectSources,
@@ -34,7 +40,7 @@ for (const kind of [
     "timeline",
     "wiki",
 ]) {
-    test(`real views HTTP/parent IPC routes ${kind} builds to the file-backed service owner`, async (t) => {
+    test(`default Browser Views capability admits real ${kind} builds through HTTP/parent IPC without enablement`, async (t) => {
         const root = await mkdtemp(
             path.join(os.tmpdir(), "view-draft-gateway-"),
         );
@@ -60,9 +66,8 @@ for (const kind of [
             "context",
         ];
         const service = new FileMemoryService(root, {
-            viewDrafts: true,
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {
                 identity: "offline-gateway-test",
                 ...(kind !== "troubleshootingGuide"
@@ -183,12 +188,42 @@ for (const kind of [
             await service.close();
             await rm(root, { recursive: true, force: true });
         });
-        createRpc("draft-view-test-parent", child, {
+        const browserMemory = new BrowserMemoryService(service);
+        const capabilities = await browserMemory.getCapabilities();
+        assert.ok(
+            capabilities.derivedViews,
+            "Default Browser memory must expose working Views without opt-in",
+        );
+        assert.equal(capabilities.derivedViews.drafts, true);
+        assert.equal(capabilities.derivedViews.builds, true);
+        assert.ok(capabilities.derivedViews.kinds.includes(kind));
+        const handlers = {
             ...createMemoryViewFunctions(() => service),
+            ...createMemoryHubSourceOriginalFunctions(() => service),
+            ...createMemoryHubViewUsageFunctions(() => service),
+            ...createMemoryHubExploreFunctions(() => service),
             memoryGetSourceContent: (request) =>
                 service.getSourceContent(request),
             memoryListEvents: (request) => service.listEvents(request),
-        });
+            memoryListCorpora: () => service.listCorpora(),
+            memoryGetCorpus: ({ corpusId }) => service.getCorpus(corpusId),
+            memoryGetSource: ({ corpusId, sourceId }) =>
+                service.getSource(corpusId, sourceId),
+            memoryListSources: (request) => service.listSourcesPage(request),
+            memoryListJobs: (request) => service.listJobs(request),
+            memoryListActivity: (request) =>
+                browserMemory.listActivity(request),
+        };
+        Object.assign(handlers, createMemoryHubFunctions(handlers));
+        createRpc(
+            "draft-view-test-parent",
+            child,
+            Object.fromEntries(
+                viewMethods
+                    .filter((method) => method in handlers)
+                    .map((method) => [method, handlers[method]]),
+            ),
+        );
         const ready = await new Promise((resolve, reject) => {
             child.on("message", (message) => {
                 if (message.type === "Success") resolve(message);
@@ -223,6 +258,36 @@ for (const kind of [
             (await invoke("memoryViewCapabilities", {})).body.data.derivedViews
                 .builds,
             true,
+        );
+        const events = await invoke("memoryListEvents", {
+            corpusId: corpus.corpusId,
+            pageSize: 200,
+        });
+        assert.equal(events.status, 200);
+        assert.equal(events.body.success, true);
+        assert.deepEqual(events.body.data.items, []);
+        assert.equal(
+            (
+                await invoke("memoryGetSourceContent", {
+                    corpusId: corpus.corpusId,
+                    sourceId: source.sourceId,
+                    revisionId: source.revisionId,
+                    offset: 0,
+                    maxChars: 100000,
+                })
+            ).status,
+            200,
+        );
+        assert.equal(
+            (
+                await invoke("memoryGetSourceContent", {
+                    corpusId: corpus.corpusId,
+                    sourceId: source.sourceId,
+                    revisionId: source.revisionId,
+                    maxChars: 120000,
+                })
+            ).status,
+            400,
         );
         const request = {
             corpusId: corpus.corpusId,
@@ -270,6 +335,35 @@ for (const kind of [
         }
         assert.equal(job.state, "complete");
         assert.equal(job.results[0].state, "draft");
+        const original = await invoke("memoryHubSourceOriginal", {
+            corpusId: corpus.corpusId,
+            sourceId: source.sourceId,
+            revisionId: source.revisionId,
+            locator: "chars:0-10",
+        });
+        assert.equal(original.status, 200);
+        assert.equal(original.body.data.available, true);
+        assert.equal(original.body.data.content, sourceText);
+        assert.deepEqual(original.body.data.location, {
+            kind: "characters",
+            start: 0,
+            end: 10,
+        });
+        const usage = await invoke("memoryHubViewUsedBy", {
+            corpusId: corpus.corpusId,
+            sourceId: source.sourceId,
+        });
+        assert.equal(usage.status, 200);
+        assert.ok(
+            usage.body.data.items.some(
+                (item) => item.viewId === viewId && item.revisionId,
+            ),
+        );
+        assert.ok(
+            usage.body.data.items.some((item) => item.jobId === job.jobId),
+        );
+        assert.equal(usage.body.data.total, usage.body.data.items.length);
+        assert.ok(!Object.hasOwn(usage.body.data, "views"));
         if (kind === "timeline") {
             const rejected = await invoke("memoryBuildViews", {
                 ...request,
@@ -527,5 +621,16 @@ for (const kind of [
         });
         assert.equal(storedReceipt.status, 200);
         assert.equal(storedReceipt.body.data.job.state, "complete");
+        if (process.env.TYPEAGENT_TEST_BROWSER_WORKFLOW === "true") {
+            const { verifyViewBuildBrowserWorkflow } = await import(
+                "./viewBuildBrowserWorkflow.mjs"
+            );
+            await verifyViewBuildBrowserWorkflow(
+                base,
+                corpus.corpusId,
+                kind,
+                service,
+            );
+        }
     });
 }

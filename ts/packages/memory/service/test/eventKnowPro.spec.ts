@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { createDocMemorySettings } from "@typeagent/conversation-memory";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createDocMemorySettings } from "@typeagent/conversation-memory";
-import { createKnowProCorpusIndex, FileMemoryService } from "../src/index.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
+import { FileMemoryService, createKnowProCorpusIndex } from "../src/index.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
 test("event search uses structured knowledge with ledger filters before the limit", async () => {
     const fixture = await createFixture();
@@ -326,7 +326,7 @@ async function createFixture() {
     const makeService = () =>
         new FileMemoryService(root, {
             indexFactory: (_corpusId, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
             eventIndexFactory: (corpusId, directory) =>
                 createKnowProCorpusIndex(corpusId, directory, () => {
                     const settings = createDocMemorySettings(

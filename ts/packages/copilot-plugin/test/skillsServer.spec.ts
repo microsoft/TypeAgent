@@ -67,22 +67,20 @@ describe("skills MCP adapter", () => {
                 manifestDigest: "b".repeat(64),
                 manifest: [],
             }));
-            const promoteProcedureArtifact = jest.fn(async () => ({
-                kind: "skill" as const,
-                lineage: {
-                    corpusId: "operations",
-                    procedureId: "calendar",
-                    version: 1,
-                    jsonHash: "json",
-                    markdownHash: "markdown",
-                },
+            const updateSkill = jest.fn(async () => ({
                 entry,
+                revision: entry.revision.revision,
+                state: entry.state,
+                active: entry.active,
+                updated: true,
+                sourceFingerprint: "commit-one",
+                manifestDigest: "b".repeat(64),
             }));
             const adapter = new SkillsCatalogAdapter({
                 connect: jest.fn(async () =>
                     connection({
                         previewSkillAcquisition,
-                        promoteProcedureArtifact,
+                        updateSkill,
                     }),
                 ),
             });
@@ -107,8 +105,7 @@ describe("skills MCP adapter", () => {
                 ).toMatchObject({ readOnlyHint: true });
                 expect(
                     catalog.tools.find(
-                        ({ name }) =>
-                            name === "typeagent-promoteProcedureArtifact",
+                        ({ name }) => name === "typeagent-updateSkill",
                     )?.annotations,
                 ).toMatchObject({ readOnlyHint: false });
 
@@ -129,20 +126,11 @@ describe("skills MCP adapter", () => {
                     acquisitionRequest,
                 );
 
-                const procedureRequest = {
-                    corpusId: "operations",
-                    procedureId: "calendar",
-                    version: 1,
-                    kind: "skill",
-                    skill: { identity },
-                };
                 await client.callTool({
-                    name: "typeagent-promoteProcedureArtifact",
-                    arguments: procedureRequest,
+                    name: "typeagent-updateSkill",
+                    arguments: acquisitionRequest,
                 });
-                expect(promoteProcedureArtifact).toHaveBeenCalledWith(
-                    procedureRequest,
-                );
+                expect(updateSkill).toHaveBeenCalledWith(acquisitionRequest);
 
                 const invalid = await client.callTool({
                     name: "typeagent-previewSkillAcquisition",
@@ -320,19 +308,7 @@ describe("skills MCP adapter", () => {
         expect(client.close).toHaveBeenCalledTimes(1);
     });
 
-    it("forwards procedure and acquisition management requests exactly", async () => {
-        const procedureRequest = {
-            corpusId: "operations",
-            procedureId: "deploy-service",
-            version: 2,
-            kind: "skill" as const,
-            skill: {
-                identity,
-                schema: {
-                    content: "export type Action = {};",
-                },
-            },
-        };
+    it("forwards acquisition management requests exactly", async () => {
         const acquisitionRequest = {
             identity,
             schemaFingerprint: "schema-1",
@@ -342,15 +318,11 @@ describe("skills MCP adapter", () => {
                 ref: "main",
             },
         };
-        const previewProcedureArtifact = jest.fn(async () => ({}) as never);
-        const promoteProcedureArtifact = jest.fn(async () => ({}) as never);
         const previewSkillAcquisition = jest.fn(async () => ({}) as never);
         const checkSkillUpdate = jest.fn(async () => ({}) as never);
         const acquireAndPublishSkill = jest.fn(async () => ({}) as never);
         const updateSkill = jest.fn(async () => ({}) as never);
         const client = connection({
-            previewProcedureArtifact,
-            promoteProcedureArtifact,
             previewSkillAcquisition,
             checkSkillUpdate,
             acquireAndPublishSkill,
@@ -360,22 +332,18 @@ describe("skills MCP adapter", () => {
             connect: jest.fn(async () => client),
         });
 
-        await adapter.previewProcedureArtifact(procedureRequest);
-        await adapter.promoteProcedureArtifact(procedureRequest);
         await adapter.previewSkillAcquisition(acquisitionRequest);
         await adapter.checkSkillUpdate(acquisitionRequest);
         await adapter.acquireAndPublishSkill(acquisitionRequest);
         await adapter.updateSkill(acquisitionRequest);
 
-        expect(previewProcedureArtifact).toHaveBeenCalledWith(procedureRequest);
-        expect(promoteProcedureArtifact).toHaveBeenCalledWith(procedureRequest);
         expect(previewSkillAcquisition).toHaveBeenCalledWith(
             acquisitionRequest,
         );
         expect(checkSkillUpdate).toHaveBeenCalledWith(acquisitionRequest);
         expect(acquireAndPublishSkill).toHaveBeenCalledWith(acquisitionRequest);
         expect(updateSkill).toHaveBeenCalledWith(acquisitionRequest);
-        expect(client.close).toHaveBeenCalledTimes(6);
+        expect(client.close).toHaveBeenCalledTimes(4);
         expect(acquisitionRequest.source).not.toHaveProperty("subdirectory");
         expect(acquisitionRequest).not.toHaveProperty("displayName");
     });

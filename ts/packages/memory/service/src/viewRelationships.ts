@@ -4,11 +4,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { viewSourceKey } from "./viewContent.js";
 import type {
-    ViewVersion,
-    ViewRelationship,
-    ViewRelationshipInput,
     ViewDefinition,
     ViewDefinitionInput,
+    ViewRelationship,
+    ViewRelationshipInput,
+    ViewVersion,
 } from "./viewTypes.js";
 
 export function preserveMaintenanceDefinition(
@@ -30,10 +30,6 @@ export function editedViewState(current?: ViewVersion): "draft" | "stale" {
 export function derivedDefinitionInput(
     version: ViewVersion,
 ): ViewDefinitionInput {
-    if (version.definition.kind === "procedure")
-        throw new Error(
-            "Procedure compatibility definitions are not maintained derived views",
-        );
     return {
         viewId: version.viewId,
         kind: version.definition.kind,

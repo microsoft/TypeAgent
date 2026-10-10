@@ -2,12 +2,6 @@
 // Licensed under the MIT License.
 
 import type {
-    ProcedureCandidate,
-    ProcedureDocument,
-    ProcedureSaveRequest,
-    ProcedureSourceCitation,
-    ProcedureSummary,
-    ProcedureVersion,
     MemoryServiceCapabilities,
     ViewBuildRequest,
     ViewBuildJobRequest,
@@ -178,26 +172,6 @@ export type MemoryCenterIngestResult = {
     revisionId: string;
     state: MemoryCenterJobState;
     statusUri: string;
-};
-
-export type MemoryCenterHowToSettings = {
-    revision: number;
-    updatedAt: string;
-    enabled: boolean;
-    detectCandidates: boolean;
-    preferences?: Record<string, unknown>;
-};
-
-export type MemoryCenterProcedureCitation = ProcedureSourceCitation;
-export type MemoryCenterProcedureDocument = ProcedureDocument;
-export type MemoryCenterProcedureCandidate = ProcedureCandidate;
-export type MemoryCenterProcedureSummary = ProcedureSummary;
-export type MemoryCenterProcedureVersion = ProcedureVersion;
-
-export type MemoryCenterProcedureSearchMatch = {
-    procedure: MemoryCenterProcedureSummary;
-    version: MemoryCenterProcedureVersion;
-    score: number;
 };
 
 export type MemoryCenterReindexResult = {
@@ -382,55 +356,6 @@ export type MemoryCenterInvokeFunctions = {
     memoryCancelJob(params: {
         jobId: string;
     }): Promise<MemoryCenterJob | undefined>;
-    memoryGetHowToSettings(params: {
-        corpusId: string;
-    }): Promise<MemoryCenterHowToSettings>;
-    memoryUpdateHowToSettings(params: {
-        corpusId: string;
-        expectedRevision: number;
-        enabled?: boolean;
-        detectCandidates?: boolean;
-        preferences?: Record<string, unknown>;
-    }): Promise<MemoryCenterHowToSettings>;
-    memoryCreateProcedureCandidate(
-        params: MemoryCenterProcedureDocument & {
-            corpusId: string;
-            candidateId?: string;
-            state?: "detected" | "draft";
-        },
-    ): Promise<MemoryCenterProcedureCandidate>;
-    memoryListProcedureCandidates(params: {
-        corpusId: string;
-        states?: MemoryCenterProcedureCandidate["state"][];
-    }): Promise<MemoryCenterProcedureCandidate[]>;
-    memoryRejectProcedureCandidate(params: {
-        corpusId: string;
-        candidateId: string;
-    }): Promise<MemoryCenterProcedureCandidate>;
-    memorySaveProcedure(
-        params: ProcedureSaveRequest,
-    ): Promise<MemoryCenterProcedureVersion>;
-    memoryListProcedures(params: {
-        corpusId: string;
-        states?: MemoryCenterProcedureSummary["state"][];
-    }): Promise<MemoryCenterProcedureSummary[]>;
-    memoryGetProcedure(params: {
-        corpusId: string;
-        procedureId: string;
-        version?: number;
-    }): Promise<MemoryCenterProcedureVersion | undefined>;
-    memorySearchProcedures(params: {
-        corpusId: string;
-        query: string;
-        states?: MemoryCenterProcedureSummary["state"][];
-        limit?: number;
-    }): Promise<MemoryCenterProcedureSearchMatch[]>;
-    memoryArchiveProcedure(params: {
-        corpusId: string;
-        procedureId: string;
-        expectedVersion?: number;
-    }): Promise<MemoryCenterProcedureVersion>;
-
     memoryListActivity(
         params: MemoryCenterActivityFilter,
     ): Promise<MemoryCenterPage<MemoryCenterActivity>>;
@@ -584,13 +509,11 @@ export type BrowserAgentInvokeFunctions = {
         mode?: string;
         extractedKnowledge?: any;
         activityType?: "visited" | "captured";
-        reportHowToStatus?: boolean;
     }): Promise<{
         indexed: boolean;
         knowledgeExtracted: boolean;
         entityCount: number;
         warnings?: string[];
-        howTo?: { enabled: boolean; candidateCount: number };
         error?: string;
     }>;
 
