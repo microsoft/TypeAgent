@@ -17,12 +17,14 @@ import type {
     IngestionJobStatus,
     JobListRequest,
     JobProgress,
-    MemoryCorpus,
-    MemoryCorpusStatus,
+    MemoryAnswerRequest,
+    MemoryAnswerResult,
+    MemoryBatchImportLookup,
+    MemoryBatchImportRequest,
     MemoryChangeListRequest,
     MemoryChangeReceipt,
-    MemoryBatchImportRequest,
-    MemoryBatchImportLookup,
+    MemoryCorpus,
+    MemoryCorpusStatus,
     MemoryEvent,
     MemoryEventAppendRequest,
     MemoryEventAppendResult,
@@ -31,8 +33,6 @@ import type {
     MemoryEventListRequest,
     MemoryEventSearchRequest,
     MemoryEventSearchResult,
-    MemoryAnswerRequest,
-    MemoryAnswerResult,
     MemoryKnowledgeGraph,
     MemoryPage,
     MemorySearchRequest,
@@ -40,18 +40,10 @@ import type {
     MemoryService,
     MemoryServiceCapabilities,
     MemorySource,
-    PersonalHowToService,
-    PersonalHowToSettings,
-    PersonalHowToSettingsUpdate,
-    ProcedureCandidate,
-    ProcedureCandidateCreateRequest,
-    ProcedureListRequest,
-    ProcedureSaveRequest,
-    ProcedureSearchMatch,
-    ProcedureSearchRequest,
-    ProcedureSummary,
-    ProcedureVersion,
+    MemoryViewService,
     ReindexResult,
+    RevisionAssetReadRequest,
+    RevisionAssetRequest,
     SourceContent,
     SourceContentRequest,
     SourceForgetPreview,
@@ -59,56 +51,39 @@ import type {
     SourceForgetResult,
     SourceListRequest,
     SourceReplaceRequest,
-    RevisionAssetRequest,
-    RevisionAssetReadRequest,
-    RunbookJobResult,
-    RunbookSynthesisRequest,
-    MemoryViewService,
-    ViewBuildRequest,
-    ViewBuildJobRequest,
-    ViewBuildJob,
-    ViewReadRequest,
-    ViewSaveRequest,
     ViewArchiveRequest,
+    ViewBuildJob,
+    ViewBuildJobRequest,
+    ViewBuildRequest,
     ViewConflictReadRequest,
     ViewConflictResolution,
-    ViewSnapshot,
-    ViewVersion,
     ViewHistoryEntry,
+    ViewMaintenancePlan,
+    ViewMaintenancePlanRequest,
+    ViewMaintenanceRead,
+    ViewMaintenanceRequest,
+    ViewMaintenanceResult,
+    ViewMaintenanceUpdate,
     ViewMergeConflict,
-    ViewPublishRequest,
-    ViewPublicationStatus,
     ViewPublicationPolicy,
     ViewPublicationPolicyUpdate,
-    ViewSearchRequest,
+    ViewPublicationStatus,
+    ViewPublishRequest,
+    ViewReadRequest,
+    ViewSaveRequest,
     ViewSearchMatch,
-    ViewMaintenancePlanRequest,
-    ViewMaintenanceRequest,
-    ViewMaintenanceUpdate,
-    ViewMaintenanceRead,
-    ViewMaintenancePlan,
-    ViewMaintenanceResult,
+    ViewSearchRequest,
+    ViewSnapshot,
+    ViewSourceUsageRequest,
+    ViewSourceUsagePage,
+    ViewVersion,
 } from "@typeagent/memory-service";
-import {
-    viewToolNames,
-    viewMaintenancePlanSchema,
-    viewMaintenanceResultSchema,
-    viewBuildJobSchema,
-    viewSnapshotSchema,
-    viewVersionSchema,
-    viewHistoryEntrySchema,
-    viewConflictSchema,
-    viewPublicationPolicySchema,
-    viewPublicationStatusSchema,
-    viewSearchMatchSchema,
-} from "./viewProtocol.js";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
-import { validateProcedureSaveRequest } from "@typeagent/memory-service/agent-edition-validation";
 import type { z } from "zod";
 import {
+    answerResultSchema,
     capabilitiesSchema,
     changePageSchema,
-    answerResultSchema,
     clearedCountSchema,
     corpusSchema,
     eventAppendResultSchema,
@@ -116,30 +91,36 @@ import {
     eventPageSchema,
     eventSearchResultSchema,
     ingestResultSchema,
-    jobStatusSchema,
     jobPageSchema,
+    jobStatusSchema,
     knowledgeGraphSchema,
     memoryToolNames,
-    optionalJobStatusSchema,
     optionalCorpusStatusSchema,
     optionalEventSchema,
+    optionalJobStatusSchema,
     optionalSourceSchema,
-    optionalProcedureCandidateSchema,
-    optionalProcedureVersionSchema,
-    personalHowToSettingsSchema,
-    procedureCandidateSchema,
-    procedureSearchMatchSchema,
-    procedureSummarySchema,
-    procedureVersionSchema,
+    reindexResultSchema,
     searchResultSchema,
-    sourceSchema,
     sourceContentSchema,
     sourceForgetPreviewSchema,
     sourceForgetResultSchema,
     sourcePageSchema,
-    reindexResultSchema,
-    runbookJobResultSchema,
+    sourceSchema,
 } from "./protocol.js";
+import {
+    viewBuildJobSchema,
+    viewConflictSchema,
+    viewHistoryEntrySchema,
+    viewMaintenancePlanSchema,
+    viewMaintenanceResultSchema,
+    viewPublicationPolicySchema,
+    viewPublicationStatusSchema,
+    viewSearchMatchSchema,
+    viewSnapshotSchema,
+    viewSourceUsagePageSchema,
+    viewToolNames,
+    viewVersionSchema,
+} from "./viewProtocol.js";
 
 function unsupportedCapability(operation: string): Promise<never> {
     return Promise.reject(new Error(`Memory ${operation} are not supported`));
@@ -150,10 +131,7 @@ export interface MemoryClientCallOptions {
     onProgress?: (progress: JobProgress) => void;
 }
 
-export interface MemoryServiceClient
-    extends MemoryService,
-        PersonalHowToService,
-        MemoryViewService {
+export interface MemoryServiceClient extends MemoryService, MemoryViewService {
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
@@ -166,10 +144,16 @@ export interface MemoryServiceClient
 }
 
 export class InProcessMemoryServiceClient implements MemoryServiceClient {
+    public getSourceViewUsage(
+        request: ViewSourceUsageRequest,
+    ): Promise<ViewSourceUsagePage> {
+        return (
+            this.service.getSourceViewUsage?.(request) ??
+            unsupportedCapability("source View usage")
+        );
+    }
     public constructor(
-        private readonly service: MemoryService &
-            PersonalHowToService &
-            Partial<MemoryViewService>,
+        private readonly service: MemoryService & Partial<MemoryViewService>,
     ) {}
 
     public listViews(corpusId: string) {
@@ -386,27 +370,6 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
-    public listRunbookJobs(corpusId: string) {
-        return (
-            this.service.listRunbookJobs?.(corpusId) ??
-            unsupportedCapability("runbook jobs")
-        );
-    }
-
-    public getRunbookJob(jobId: string) {
-        return (
-            this.service.getRunbookJob?.(jobId) ??
-            unsupportedCapability("runbook jobs")
-        );
-    }
-
-    public requestRunbookSynthesis(request: RunbookSynthesisRequest) {
-        return (
-            this.service.requestRunbookSynthesis?.(request) ??
-            unsupportedCapability("runbook synthesis")
-        );
-    }
-
     public listSources(corpusId: string) {
         return this.service.listSources(corpusId);
     }
@@ -512,69 +475,6 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.getCapabilities();
     }
 
-    public getPersonalHowToSettings(corpusId: string) {
-        return this.service.getPersonalHowToSettings(corpusId);
-    }
-
-    public updatePersonalHowToSettings(
-        corpusId: string,
-        update: PersonalHowToSettingsUpdate,
-    ) {
-        return this.service.updatePersonalHowToSettings(corpusId, update);
-    }
-
-    public createProcedureCandidate(request: ProcedureCandidateCreateRequest) {
-        return this.service.createProcedureCandidate(request);
-    }
-
-    public getProcedureCandidate(corpusId: string, candidateId: string) {
-        return this.service.getProcedureCandidate(corpusId, candidateId);
-    }
-
-    public listProcedureCandidates(
-        corpusId: string,
-        states?: ProcedureCandidate["state"][],
-    ) {
-        return this.service.listProcedureCandidates(corpusId, states);
-    }
-
-    public rejectProcedureCandidate(corpusId: string, candidateId: string) {
-        return this.service.rejectProcedureCandidate(corpusId, candidateId);
-    }
-
-    public saveProcedure(request: ProcedureSaveRequest) {
-        validateProcedureSaveRequest(request);
-        return this.service.saveProcedure(request);
-    }
-
-    public listProcedures(request: ProcedureListRequest) {
-        return this.service.listProcedures(request);
-    }
-
-    public getProcedure(
-        corpusId: string,
-        procedureId: string,
-        version?: number,
-    ) {
-        return this.service.getProcedure(corpusId, procedureId, version);
-    }
-
-    public searchProcedures(request: ProcedureSearchRequest) {
-        return this.service.searchProcedures(request);
-    }
-
-    public archiveProcedure(
-        corpusId: string,
-        procedureId: string,
-        expectedVersion?: number,
-    ) {
-        return this.service.archiveProcedure(
-            corpusId,
-            procedureId,
-            expectedVersion,
-        );
-    }
-
     public waitForJob(
         jobId: string,
         options: MemoryClientCallOptions & { pollIntervalMs?: number } = {},
@@ -603,6 +503,15 @@ export type MemoryMcpTransportConfig =
 type MemoryMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
 
 export class McpMemoryServiceClient implements MemoryServiceClient {
+    public getSourceViewUsage(
+        request: ViewSourceUsageRequest,
+    ): Promise<ViewSourceUsagePage> {
+        return this.invoke(
+            viewToolNames.getSourceViewUsage,
+            request,
+            viewSourceUsagePageSchema,
+        );
+    }
     public listViews(corpusId: string): Promise<ViewSnapshot> {
         return this.invoke(
             viewToolNames.listViews,
@@ -1079,160 +988,6 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             memoryToolNames.capabilities,
             {},
             capabilitiesSchema,
-        );
-    }
-
-    public requestRunbookSynthesis(
-        request: RunbookSynthesisRequest,
-    ): Promise<RunbookJobResult> {
-        return this.invoke(
-            memoryToolNames.runbookSynthesisRequest,
-            request,
-            runbookJobResultSchema,
-        );
-    }
-
-    public getRunbookJob(jobId: string): Promise<RunbookJobResult | undefined> {
-        return this.invoke<RunbookJobResult | null>(
-            memoryToolNames.runbookJobGet,
-            { jobId },
-            runbookJobResultSchema.nullable(),
-        ).then((job) => job ?? undefined);
-    }
-
-    public listRunbookJobs(corpusId: string): Promise<RunbookJobResult[]> {
-        return this.invoke(
-            memoryToolNames.runbookJobsList,
-            { corpusId },
-            runbookJobResultSchema.array().max(100),
-        );
-    }
-
-    public getPersonalHowToSettings(
-        corpusId: string,
-    ): Promise<PersonalHowToSettings> {
-        return this.invoke(
-            memoryToolNames.howToSettingsGet,
-            { corpusId },
-            personalHowToSettingsSchema,
-        );
-    }
-
-    public updatePersonalHowToSettings(
-        corpusId: string,
-        update: PersonalHowToSettingsUpdate,
-    ): Promise<PersonalHowToSettings> {
-        return this.invoke(
-            memoryToolNames.howToSettingsUpdate,
-            { corpusId, ...update },
-            personalHowToSettingsSchema,
-        );
-    }
-
-    public createProcedureCandidate(
-        request: ProcedureCandidateCreateRequest,
-    ): Promise<ProcedureCandidate> {
-        return this.invoke(
-            memoryToolNames.procedureCandidateCreate,
-            request,
-            procedureCandidateSchema,
-        );
-    }
-
-    public getProcedureCandidate(
-        corpusId: string,
-        candidateId: string,
-    ): Promise<ProcedureCandidate | undefined> {
-        return this.invoke<ProcedureCandidate | null>(
-            memoryToolNames.procedureCandidateGet,
-            { corpusId, candidateId },
-            optionalProcedureCandidateSchema,
-        ).then((candidate) => candidate ?? undefined);
-    }
-
-    public listProcedureCandidates(
-        corpusId: string,
-        states?: ProcedureCandidate["state"][],
-    ): Promise<ProcedureCandidate[]> {
-        return this.invoke(
-            memoryToolNames.procedureCandidateList,
-            { corpusId, ...(states === undefined ? {} : { states }) },
-            procedureCandidateSchema.array(),
-        );
-    }
-
-    public rejectProcedureCandidate(
-        corpusId: string,
-        candidateId: string,
-    ): Promise<ProcedureCandidate> {
-        return this.invoke(
-            memoryToolNames.procedureCandidateReject,
-            { corpusId, candidateId },
-            procedureCandidateSchema,
-        );
-    }
-
-    public saveProcedure(
-        request: ProcedureSaveRequest,
-    ): Promise<ProcedureVersion> {
-        validateProcedureSaveRequest(request);
-        return this.invoke(
-            memoryToolNames.procedureSave,
-            request,
-            procedureVersionSchema,
-        );
-    }
-
-    public listProcedures(
-        request: ProcedureListRequest,
-    ): Promise<ProcedureSummary[]> {
-        return this.invoke(
-            memoryToolNames.procedureList,
-            request,
-            procedureSummarySchema.array(),
-        );
-    }
-
-    public getProcedure(
-        corpusId: string,
-        procedureId: string,
-        version?: number,
-    ): Promise<ProcedureVersion | undefined> {
-        return this.invoke<ProcedureVersion | null>(
-            memoryToolNames.procedureGet,
-            {
-                corpusId,
-                procedureId,
-                ...(version === undefined ? {} : { version }),
-            },
-            optionalProcedureVersionSchema,
-        ).then((procedure) => procedure ?? undefined);
-    }
-
-    public searchProcedures(
-        request: ProcedureSearchRequest,
-    ): Promise<ProcedureSearchMatch[]> {
-        const { traceId: _traceId, ...mcpRequest } = request;
-        return this.invoke(
-            memoryToolNames.procedureSearch,
-            mcpRequest,
-            procedureSearchMatchSchema.array(),
-        );
-    }
-
-    public archiveProcedure(
-        corpusId: string,
-        procedureId: string,
-        expectedVersion?: number,
-    ): Promise<ProcedureVersion> {
-        return this.invoke(
-            memoryToolNames.procedureArchive,
-            {
-                corpusId,
-                procedureId,
-                ...(expectedVersion === undefined ? {} : { expectedVersion }),
-            },
-            procedureVersionSchema,
         );
     }
 

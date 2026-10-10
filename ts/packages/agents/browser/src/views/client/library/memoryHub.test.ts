@@ -18,7 +18,6 @@ jest.mock("./viewClient", () => ({
 jest.mock("./memoryHubPhase2.css", () => ({}));
 jest.mock("./memoryKnowledgeCollection.css", () => ({}));
 jest.mock("./memoryHubImports.css", () => ({}));
-jest.mock("./memoryHubRunbooks.css", () => ({}));
 jest.mock("./memoryHubRunbookImports.css", () => ({}));
 jest.mock("./memoryHubViewPreferences.css", () => ({}));
 jest.mock("./memoryHubWebExplore.css", () => ({}));
@@ -78,29 +77,7 @@ const source = {
     activeRevisionId: "r1",
     revisions: [],
 };
-const version = {
-    corpusId: "a",
-    procedureId: "procedure",
-    state: "saved",
-    version: 3,
-    markdown: "# Guide\n\n## Steps\n\n1. Check\n\n## Sources\n\n_None_\n",
-    document: { title: "Guide", steps: ["Check"], citations: [] },
-};
-const candidate = {
-    corpusId: "a",
-    candidateId: "candidate",
-    state: "detected",
-    title: "Found guide",
-    steps: ["Check"],
-    citations: [
-        {
-            sourceId: "source",
-            revisionId: "r1",
-            locator: "lines 2-3",
-            excerpt: "Check",
-        },
-    ],
-};
+
 let host: MemoryManagementHost;
 
 function value<T extends HTMLElement>(id: string): T {
@@ -131,31 +108,6 @@ beforeEach(() => {
                 case "memoryListJobs":
                 case "memoryListActivity":
                     return { items: [], total: 0 };
-                case "memoryGetHowToSettings":
-                    return {
-                        revision: 7,
-                        enabled: true,
-                        detectCandidates: true,
-                        preferences: {
-                            instructions: "Keep commands",
-                            custom: "preserve",
-                        },
-                    };
-                case "memoryListProcedureCandidates":
-                    return [candidate];
-                case "memoryListProcedures":
-                    return [
-                        {
-                            corpusId: "a",
-                            procedureId: "procedure",
-                            title: "Guide",
-                            state: "saved",
-                            latestVersion: 3,
-                        },
-                    ];
-                case "memoryGetProcedure":
-                case "memorySaveProcedure":
-                    return version;
                 case "memoryGetSource":
                     return source;
                 case "memoryGetSourceContent":
@@ -190,10 +142,8 @@ beforeEach(() => {
     host = {
         scope: () => "a",
         sources: jest.fn(async () => ({ items: [source], total: 1 })),
-        procedures: () => [],
         changed: jest.fn(async () => {}),
         openSource: jest.fn(),
-        openProcedure: jest.fn(),
     };
     window.confirm = jest.fn(() => true);
     HTMLDialogElement.prototype.showModal = function () {
@@ -208,6 +158,64 @@ beforeEach(() => {
 afterEach(() => {
     document.body.innerHTML = "";
     delete document.body.dataset.memoryHub;
+});
+
+test("ready source selection passes exact revisions to a scoped multi-view build", async () => {
+    const ready = {
+        ...source,
+        revisions: [
+            {
+                revisionId: "r1",
+                sourceId: "source",
+                state: "ready" as const,
+                contentHash: "hash",
+                mimeType: "text/markdown",
+                pipelineVersion: "test",
+            },
+        ],
+    };
+    host.sources = jest.fn(async () => ({ items: [ready], total: 1 }));
+    host.buildViews = jest.fn();
+    const manager = mountMemoryManagement(host);
+    await manager.selectCorpus("a");
+    const select = document.querySelector<HTMLInputElement>(
+        'input[aria-label="Select Source for a view build"]',
+    )!;
+    expect(select.disabled).toBe(false);
+    select.click();
+    const build = Array.from(document.querySelectorAll("button")).find(
+        (button) => button.textContent === "Build views from selection",
+    )!;
+    build.click();
+    await settle();
+    expect(host.buildViews).toHaveBeenCalledWith("a", [
+        { sourceId: "source", revisionId: "r1" },
+    ]);
+    host.sources = jest.fn(async () => ({
+        items: [
+            {
+                ...ready,
+                activeRevisionId: "r2",
+                revisions: [{ ...ready.revisions[0], revisionId: "r2" }],
+            },
+        ],
+        total: 1,
+    }));
+    await manager.refresh();
+    expect(value("errorBanner").textContent).toContain(
+        "selected source changed",
+    );
+    expect(
+        document.querySelector<HTMLInputElement>(
+            'input[aria-label="Select Source for a view build"]',
+        )!.checked,
+    ).toBe(false);
+    manager.clearBuildSelection();
+    expect(
+        document.querySelector<HTMLInputElement>(
+            'input[aria-label="Select Source for a view build"]',
+        )!.checked,
+    ).toBe(false);
 });
 
 test("source links are corpus-qualified and Knowledge is loaded only on demand", async () => {
@@ -274,7 +282,7 @@ test("replacement retains revision/history checks and forget retains server toke
     value("forgetSourceButton").click();
     await settle();
     expect(value("forgetPreview").textContent).toContain(
-        "dependency lookup is unavailable",
+        "Source revisions and derived knowledge will be removed",
     );
     value("confirmForgetButton").click();
     await settle();
@@ -413,50 +421,6 @@ test("a refresh failure after forgetting is not reported as a failed deletion", 
     expect(value<HTMLDialogElement>("forgetDialog").open).toBe(false);
 });
 
-test("candidate review/save retains citations and candidate identity", async () => {
-    const manager = mountMemoryManagement(host);
-    await manager.reviewCandidate("a", "candidate");
-    expect(value<HTMLTextAreaElement>("procedureEditor").value).toContain(
-        JSON.stringify(candidate.citations[0]),
-    );
-    value("saveProcedureButton").click();
-    await settle();
-    expect(invoke).toHaveBeenCalledWith(
-        "memorySaveProcedure",
-        expect.objectContaining({
-            corpusId: "a",
-            candidateId: "candidate",
-            markdown: expect.stringContaining('"revisionId":"r1"'),
-        }),
-    );
-    expect(host.changed).toHaveBeenCalled();
-});
-
-test("saved how-tos and settings retain optimistic checks and preferences", async () => {
-    const manager = mountMemoryManagement(host);
-    await manager.selectCorpus("a");
-    await manager.selectProcedure("procedure");
-    value("saveProcedureButton").click();
-    await settle();
-    expect(invoke).toHaveBeenCalledWith(
-        "memorySaveProcedure",
-        expect.objectContaining({
-            expectedVersion: 3,
-            procedureId: "procedure",
-        }),
-    );
-    value<HTMLTextAreaElement>("howToInstructions").value = "New guidance";
-    value("saveHowToSettings").click();
-    await settle();
-    expect(invoke).toHaveBeenCalledWith(
-        "memoryUpdateHowToSettings",
-        expect.objectContaining({
-            expectedRevision: 7,
-            preferences: { instructions: "New guidance", custom: "preserve" },
-        }),
-    );
-});
-
 test("All memory cannot send a corpus-wide mutation to last inspected corpus", async () => {
     const manager = mountMemoryManagement({ ...host, scope: () => undefined });
     await manager.selectCorpus("a");
@@ -471,21 +435,23 @@ test("All memory cannot send a corpus-wide mutation to last inspected corpus", a
 test("unsaved edits block navigation and failures preserve editable drafts", async () => {
     const manager = mountMemoryManagement(host);
     await manager.selectCorpus("a");
-    await manager.selectProcedure("procedure");
-    value<HTMLTextAreaElement>("procedureEditor").value += "draft";
+    await manager.selectSource("source");
+    value<HTMLTextAreaElement>("contentEditor").value += "draft";
     window.confirm = jest.fn(() => false);
     expect(manager.discardChanges()).toBe(false);
     await manager.selectCorpus("b");
     expect(invoke).not.toHaveBeenCalledWith("memoryGetCorpus", {
         corpusId: "b",
     });
-    invoke.mockImplementationOnce(async () => {
-        throw new Error("Version conflict");
-    });
-    value("saveProcedureButton").click();
+    value("replaceSourceButton").click();
     await settle();
-    expect(value("errorBanner").textContent).toContain("Version conflict");
-    expect(value<HTMLTextAreaElement>("procedureEditor").value).toContain(
+    invoke.mockImplementationOnce(async () => {
+        throw new Error("Revision conflict");
+    });
+    value("confirmReplaceButton").click();
+    await settle();
+    expect(value("errorBanner").textContent).toContain("Revision conflict");
+    expect(value<HTMLTextAreaElement>("contentEditor").value).toContain(
         "draft",
     );
     expect(value("connectionState").textContent).toContain("operation failed");
@@ -534,29 +500,6 @@ test.each(["\r\n", "\r", "\n"])(
     },
 );
 
-test("saving a procedure with normalized line endings stays clean when reloading fails", async () => {
-    const manager = mountMemoryManagement(host);
-    await manager.selectCorpus("a");
-    await manager.selectProcedure("procedure");
-    value<HTMLTextAreaElement>("procedureEditor").value += "Edited";
-    invoke.mockImplementationOnce(async () => ({
-        ...version,
-        version: 4,
-        markdown: "# Saved\r\n\r\nEdited\r\n",
-    }));
-    invoke.mockImplementationOnce(async () => {
-        throw new Error("Reload unavailable");
-    });
-    value("saveProcedureButton").click();
-    await settle();
-    expect(value("errorBanner").textContent).toContain("Reload unavailable");
-    expect(value<HTMLTextAreaElement>("procedureEditor").value).toBe(
-        "# Saved\n\nEdited\n",
-    );
-    expect(manager.discardChanges()).toBe(true);
-    expect(window.confirm).not.toHaveBeenCalled();
-});
-
 test("hub errors distinguish offline transport from operation failure", async () => {
     document.body.innerHTML =
         '<div id="hubError"></div><div id="hubStatus"></div>';
@@ -585,7 +528,7 @@ test("late corpus responses cannot replace a newer corpus or enable its old sett
     );
     const manager = mountMemoryManagement(host);
     const old = manager.selectCorpus("old");
-    expect(value<HTMLButtonElement>("saveHowToSettings").disabled).toBe(true);
+    expect(document.getElementById("saveHowToSettings")).toBeNull();
     await manager.selectCorpus("a");
     resolveOld({ ...corpus, corpusId: "old" });
     await expect(old).rejects.toThrow("Superseded request");
@@ -632,16 +575,17 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
         text: async () => centerHtml,
     })) as unknown as typeof fetch;
     const inboxItem = {
-        id: "candidate:a:c",
-        fingerprint: "candidate:v1",
-        kind: "candidate",
+        id: "job:a:c",
+        fingerprint: "job:v1",
+        kind: "job",
         corpusId: "a",
         corpusName: "Alpha",
-        objectId: "candidate",
-        title: "Found guide",
-        reason: "Review",
+        objectId: "failed-build",
+        title: "Failed view build",
+        reason: "Build failed",
         updatedAt: "2026-10-01",
-        severity: "info",
+        severity: "attention",
+        jobState: "failed",
         sourceId: "source",
     };
     const searchEvidence = {
@@ -663,7 +607,6 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
                 return {
                     corpora: [corpus],
                     inbox: [inboxItem],
-                    procedures: [],
                     errors: [],
                 };
             if (method === "memoryHubSearch")
@@ -706,9 +649,7 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     expect(value("drawer-knowledge").textContent).toContain(
         "Derived knowledge",
     );
-    expect(
-        value("hubSettings").querySelector("#saveHowToSettings"),
-    ).not.toBeNull();
+    expect(value("hubSettings").querySelector("#saveHowToSettings")).toBeNull();
     expect(value("createCorpusDialog").parentElement).toBe(document.body);
     value("hubInbox")
         .querySelector<HTMLButtonElement>('[aria-label="Dismiss"]')!
@@ -732,13 +673,9 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     expect(value("contentEditor").classList.contains("hidden")).toBe(true);
     expect(document.getElementById("hubInspector")).toBeNull();
     expect(value("page-activity").dataset.activityTab).toBe("jobs");
-    expect(value("page-settings").dataset.settingsTab).toBe("corpus");
-    const settingsBar =
-        value("page-settings").querySelector<HTMLElement>(".hub-savebar")!;
-    expect(settingsBar.hidden).toBe(false);
-    expect(settingsBar.querySelector("button")!.textContent).toBe(
-        "Save changes",
-    );
+    expect(value("page-settings").dataset.settingsTab).toBe("graph");
+    expect(document.getElementById("hubRunbooks")).toBeNull();
+    expect(document.getElementById("hubLegacyGuides")).toBeNull();
     value("page-activity")
         .querySelector<HTMLButtonElement>('[data-page-tab="web"]')!
         .click();
@@ -842,12 +779,11 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
                   inbox: [
                       {
                           ...inboxItem,
-                          id: "candidate:a:imported",
+                          id: "job:a:imported",
                           objectId: "imported",
-                          title: "Newly completed imported guide",
+                          title: "Newly failed view build",
                       },
                   ],
-                  procedures: [],
                   errors: [],
               })
             : beforeInboxRefresh(method, params),
@@ -857,10 +793,8 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
     history.replaceState({}, "", "#/inbox");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     await settle();
-    expect(value("hubInbox").textContent).toContain(
-        "Newly completed imported guide",
-    );
-    expect(value("hubInbox").textContent).not.toContain("Found guide");
+    expect(value("hubInbox").textContent).toContain("Newly failed view build");
+    expect(value("hubInbox").textContent).not.toContain("Failed view build");
     viewInvoke.mockImplementation(beforeInboxRefresh);
     const selector = value<HTMLSelectElement>("hubCorpus");
     selector.value = "a";
@@ -872,7 +806,6 @@ test("the complete shell mounts reused panels, global Add and reversible triage"
             ? Promise.resolve({
                   corpora: [],
                   inbox: [],
-                  procedures: [],
                   errors: [],
               })
             : currentView(method, params),

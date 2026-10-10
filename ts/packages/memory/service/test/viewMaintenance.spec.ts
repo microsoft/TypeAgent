@@ -1,23 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
-import type {
-    ViewBuildJob,
-    ViewMaintenanceDefinition,
-    WikiSubject,
-} from "../src/viewTypes.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
-import { wikiTestAnswer } from "./wikiTestModel.js";
-import { authoredRelationships } from "../src/viewRelationships.js";
 import { wikiIndex } from "../src/viewContent.js";
 import {
     resolveViewMaintenance,
     validateMaintenanceDefinition,
 } from "../src/viewMaintenance.js";
+import { authoredRelationships } from "../src/viewRelationships.js";
+import type {
+    ViewBuildJob,
+    ViewMaintenanceDefinition,
+    WikiSubject,
+} from "../src/viewTypes.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { wikiTestAnswer } from "./wikiTestModel.js";
 
 const jestRuntime = import.meta.jest;
 const jest = jestRuntime as typeof jestRuntime & {
@@ -100,9 +100,7 @@ describe("manual maintained wiki lifecycle through configured construction", () 
         new FileMemoryService(root, {
             viewDrafts: true,
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
-            procedureIndexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
         });
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "memory-maintenance-"));
@@ -645,7 +643,7 @@ describe("manual maintained wiki lifecycle through configured construction", () 
         const retried = await maintain();
         expect((await wait(retried.job!)).results[0].state).toBe("draft");
     });
-    test("CLI maintenance still requires explicit developer opt-in", async () => {
+    test("CLI maintenance reaches request loading without a developer opt-in", async () => {
         await service.close();
         await expect(
             runMemoryViewsCli([
@@ -654,7 +652,7 @@ describe("manual maintained wiki lifecycle through configured construction", () 
                 "plan-maintenance",
                 "unused.json",
             ]),
-        ).rejects.toThrow("--enable-view-drafts");
+        ).rejects.toThrow("ENOENT");
         service = open();
     });
 });

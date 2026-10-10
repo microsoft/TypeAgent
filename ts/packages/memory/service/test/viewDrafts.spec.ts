@@ -1,34 +1,30 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm, readdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import fs from "node:fs";
 import git from "isomorphic-git";
 import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import fs from "node:fs";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { FileMemoryService } from "../src/fileMemoryService.js";
-import {
-    createMemoryServiceRpcFacade,
-    waitForMemoryJob,
-} from "../src/rpcFacade.js";
 import { runMemoryViewsCli } from "../src/memoryViewsCli.js";
-import type { ViewSaveRequest } from "../src/viewTypes.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
+import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { ViewHistory, type ViewHistoryFaultPoint } from "../src/viewHistory.js";
+import type { ViewSaveRequest } from "../src/viewTypes.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { parseViewDraftCapability } from "../src/viewBuildValidation.js";
 
 describe("typed draft views: service, history, privacy and CLI", () => {
     let root: string;
     let service: FileMemoryService;
-    const open = (enabled = true) =>
+    const open = (enabled?: boolean) =>
         new FileMemoryService(root, {
-            viewDrafts: enabled,
+            ...(enabled === undefined ? {} : { viewDrafts: enabled }),
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
-            procedureIndexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
         });
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "memory-view-drafts-"));
@@ -37,6 +33,19 @@ describe("typed draft views: service, history, privacy and CLI", () => {
     afterEach(async () => {
         await service.close();
         await rm(root, { recursive: true, force: true });
+    });
+    test("Views and all four builders are enabled without configuration", async () => {
+        expect(parseViewDraftCapability(undefined)).toBe(true);
+        expect(parseViewDraftCapability("true")).toBe(true);
+        expect(parseViewDraftCapability("false")).toBe(false);
+        expect(() => parseViewDraftCapability("invalid")).toThrow(
+            "must be true or false",
+        );
+        expect((await service.getCapabilities()).derivedViews).toMatchObject({
+            drafts: true,
+            builds: true,
+            kinds: ["troubleshootingGuide", "projectBrief", "timeline", "wiki"],
+        });
     });
     async function fixture(): Promise<ViewSaveRequest> {
         const corpus = await service.createCorpus("Draft views");
@@ -110,124 +119,53 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         };
     }
 
-    test("create/edit/archive, exact revisions, authenticated actor and restart through RPC", async () => {
+    test("source Used by is current-only metadata, paginated and validates requests", async () => {
         const request = await fixture();
-        const rpc = createMemoryServiceRpcFacade(service);
-        const first = await rpc.saveViewDraft(request);
-        expect(first.version.actor).toBe(os.userInfo().username);
-        expect(first.version.state).toBe("draft");
-        expect(first.version.revisionId).not.toBe(first.commitId);
-        expect(first.version.definition.revisionId).not.toBe(
-            first.version.revisionId,
-        );
-        expect(first.version.relationships).toEqual([
-            expect.objectContaining({
-                id: "evidence-support",
-                predicate: "supportedBy",
-                family: "evidence",
-                origin: "human",
-                reviewState: "unreviewed",
-                schemaVersion: 1,
-            }),
-            expect.objectContaining({
-                predicate: "generatedFrom",
-                family: "lineage",
-                origin: "system",
-                from: {
-                    kind: "view",
+        await service.saveViewDraft(request);
+        const sourceId = request.definition.selector.sources[0].sourceId;
+        const secondId = "second-guide";
+        await service.saveViewDraft({
+            ...request,
+            viewId: secondId,
+            expectedHead: (await service.listViews(request.corpusId)).head,
+            definition: { ...request.definition, viewId: secondId },
+            relationships: [],
+        });
+        const usage = { corpusId: request.corpusId, sourceId, pageSize: 1 };
+        const first = await service.getSourceViewUsage(usage);
+        expect(first).toMatchObject({
+            total: 2,
+            nextContinuationToken: "1",
+            items: [
+                {
                     viewId: request.viewId,
-                    revisionId: first.version.revisionId,
+                    title: request.content.title,
+                    kind: "troubleshootingGuide",
                 },
-                to: {
-                    kind: "definition",
-                    viewId: request.viewId,
-                    revisionId: first.version.definition.revisionId,
-                },
-            }),
-            expect.objectContaining({
-                predicate: "dependsOn",
-                family: "dependency",
-                origin: "system",
-                to: {
-                    kind: "source",
-                    ...request.definition.selector.sources[0],
-                },
-            }),
-        ]);
-        const edit = structuredClone(request);
-        edit.expectedHead = first.commitId;
-        edit.expectedVersion = 1;
-        edit.content.sections[0].body +=
-            "\nKeep this explicit human constraint.";
-        edit.relationships[0].predicate = "dependsOn";
-        const second = await rpc.saveViewDraft(edit);
-        expect(second.version.baseRevisionId).toBe(first.version.revisionId);
-        expect(second.version.content.sections[0].id).toBe("inspect");
-        expect(second.version.definition.revisionId).toBe(
-            first.version.definition.revisionId,
-        );
-        expect(second.version.relationships[1].from).toEqual({
-            kind: "view",
-            viewId: request.viewId,
-            revisionId: second.version.revisionId,
+            ],
         });
-        const refRequest = {
-            corpusId: request.corpusId,
-            viewId: request.viewId,
-        };
-        expect(
-            await rpc.getView({
-                ...refRequest,
-                revisionId: first.version.revisionId,
-            }),
-        ).toEqual(first.version);
-        const history = await rpc.getViewHistory(refRequest);
-        expect(
-            history.map((entry) => [entry.commitId, entry.version.revisionId]),
-        ).toEqual([
-            [second.commitId, second.version.revisionId],
-            [first.commitId, first.version.revisionId],
-        ]);
-        expect(
-            await rpc.listProcedures({ corpusId: request.corpusId }),
-        ).toEqual([]);
+        expect(first.items[0]).not.toHaveProperty("content");
+        const last = await service.getSourceViewUsage({
+            ...usage,
+            continuationToken: first.nextContinuationToken!,
+        });
+        expect(last.items.map((item) => item.viewId)).toEqual([secondId]);
+        expect(last.nextContinuationToken).toBeUndefined();
         await expect(
-            rpc.publishView({
-                ...refRequest,
-                revisionId: second.version.revisionId,
-                expectedVersion: second.version.version,
-                expectedHead: second.commitId,
-            }),
-        ).rejects.toThrow("known generated base");
-        await service.close();
-        service = open();
-        expect(await service.getView(refRequest)).toEqual(second.version);
-        const archived = await service.archiveView({
-            ...refRequest,
-            expectedHead: second.commitId,
-            expectedVersion: 2,
-        });
-        expect(archived.version.state).toBe("archived");
-        expect(archived.version.definition.revisionId).toBe(
-            first.version.definition.revisionId,
-        );
-        expect(archived.version.relationships[0]).toMatchObject({
-            id: "evidence-support",
-            predicate: "dependsOn",
-            origin: "human",
-        });
-        expect(archived.version.relationships[1].from).toEqual({
-            kind: "view",
-            viewId: request.viewId,
-            revisionId: archived.version.revisionId,
-        });
+            service.getSourceViewUsage({ ...usage, pageSize: 0 }),
+        ).rejects.toThrow("pageSize");
         await expect(
-            service.saveViewDraft({
-                ...edit,
-                expectedVersion: 3,
-                expectedHead: archived.commitId,
+            service.getSourceViewUsage({
+                ...usage,
+                continuationToken: "99999999999999999999999",
             }),
-        ).rejects.toThrow("archived");
+        ).rejects.toThrow("continuation token");
+        await expect(
+            service.getSourceViewUsage({ ...usage, continuationToken: "3" }),
+        ).rejects.toThrow("out of range");
+        await expect(
+            service.getSourceViewUsage({ ...usage, sourceId: "missing" }),
+        ).rejects.toThrow("does not exist");
     });
 
     test("expected head/version and concurrent writers never silently overwrite", async () => {
@@ -290,96 +228,6 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         ).toEqual(first.version);
     });
 
-    test("runbook compatibility uses the same typed store and retains the exact generated base without editing sources", async () => {
-        const request = await fixture();
-        const selected = request.definition.selector.sources[0];
-        const sourceRequest = { corpusId: request.corpusId, ...selected };
-        const source = await service.getSourceContent(sourceRequest);
-        const candidate = await service.createProcedureCandidate({
-            corpusId: request.corpusId,
-            candidateId: "generated-guide",
-            title: "Generated guide",
-            steps: ["Inspect pressure.", "Correlate before scaling."],
-            citations: request.content.citations,
-        });
-        const saved = await service.saveProcedure({
-            corpusId: request.corpusId,
-            candidateId: candidate.candidateId,
-            document: {
-                title: "Human guide",
-                steps: [
-                    "Inspect with the human-added guard.",
-                    "Correlate before scaling.",
-                ],
-                citations: [],
-            },
-        });
-        const view = await service.getView({
-            corpusId: request.corpusId,
-            viewId: saved.procedureId,
-        });
-        expect(view?.content.sections[0].body).toBe(
-            "Inspect with the human-added guard.",
-        );
-        expect(view?.generation?.content.sections[0].body).toBe(
-            "Inspect pressure.",
-        );
-        expect(view?.generation?.candidateId).toBe(candidate.candidateId);
-        expect(view?.content.kind).toBe("procedure");
-        expect(view?.definition.kind).toBe("procedure");
-        expect(view?.definition.selector.sources).toEqual(
-            request.definition.selector.sources,
-        );
-        expect(await service.getSourceContent(sourceRequest)).toEqual(source);
-        expect(
-            await service.getProcedure(request.corpusId, saved.procedureId),
-        ).toEqual(saved);
-        const files = await readdir(
-            path.join(root, request.corpusId, "personal-how-to"),
-        );
-        expect(files).toContain("view-history.git");
-        expect(files).not.toContain("procedures");
-        const replacement = await service.replaceSource({
-            corpusId: request.corpusId,
-            sourceId: selected.sourceId,
-            expectedActiveRevisionId: selected.revisionId,
-            source: {
-                sourceType: "markdown",
-                title: "Changed evidence",
-                markdown: "New observation.",
-            },
-        });
-        expect((await waitForMemoryJob(service, replacement.jobId)).state).toBe(
-            "complete",
-        );
-        expect(
-            (
-                await service.getView({
-                    corpusId: request.corpusId,
-                    viewId: saved.procedureId,
-                })
-            )?.state,
-        ).toBe("stale");
-        const confirmation = await service.previewForgetSource(
-            request.corpusId,
-            selected.sourceId,
-        );
-        await service.forgetSource({
-            corpusId: request.corpusId,
-            sourceId: selected.sourceId,
-            confirmationToken: confirmation.confirmationToken,
-        });
-        expect(
-            await service.getProcedure(request.corpusId, saved.procedureId),
-        ).toBeUndefined();
-        expect(
-            await service.getViewHistory({
-                corpusId: request.corpusId,
-                viewId: saved.procedureId,
-            }),
-        ).toEqual([]);
-    });
-
     test("unsupported kinds, spoofed actor, invalid citations and endpoints fail before storage", async () => {
         const request = await fixture();
         const spoofed = { ...request, actor: "spoof" };
@@ -424,7 +272,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         service = open(false);
         expect((await service.getCapabilities()).derivedViews).toBeUndefined();
         await expect(service.listViews(request.corpusId)).rejects.toThrow(
-            "developer/demo",
+            "explicitly disabled",
         );
     });
 
@@ -460,7 +308,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         const directory = path.join(
             root,
             request.corpusId,
-            "personal-how-to",
+            "views",
             "view-history.git",
         );
         const oldObject = path.join(
@@ -517,7 +365,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         const directory = path.join(
             root,
             request.corpusId,
-            "personal-how-to",
+            "views",
             "view-history.git",
         );
         const before = await git.readTree({
@@ -644,25 +492,19 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         await expect(history.read(initial)).rejects.toThrow();
     });
 
-    test("CLI is an actual opt-in consumer and requires explicit capability", async () => {
+    test("CLI enables Views without an opt-in flag", async () => {
         await service.close();
         const corpus = await runMemoryViewsCli([
             "--store",
             root,
-            "--enable-view-drafts",
             "create-corpus",
             "CLI views",
         ]);
         expect(corpus).toMatchObject({ name: "CLI views" });
         await expect(
             runMemoryViewsCli(["--store", root, "list"]),
-        ).rejects.toThrow("Opt-in derived views");
-        const corpora = await runMemoryViewsCli([
-            "--store",
-            root,
-            "--enable-view-drafts",
-            "corpora",
-        ]);
+        ).rejects.toThrow("Derived Views");
+        const corpora = await runMemoryViewsCli(["--store", root, "corpora"]);
         expect(corpora).toEqual([corpus]);
     });
 
@@ -670,7 +512,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         const corpus = await service.createCorpus("Publication CLI");
         const snapshot = await service.listViews(corpus.corpusId);
         await service.close();
-        const args = ["--store", root, "--enable-view-drafts"];
+        const args = ["--store", root];
         expect(
             await runMemoryViewsCli([...args, "policy", corpus.corpusId]),
         ).toMatchObject({
@@ -763,14 +605,8 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         ["unknown", []],
     ])("CLI rejects invalid %s arguments", async (command, values) => {
         await expect(
-            runMemoryViewsCli([
-                "--store",
-                root,
-                "--enable-view-drafts",
-                command,
-                ...values,
-            ]),
-        ).rejects.toThrow("Opt-in derived views");
+            runMemoryViewsCli(["--store", root, command, ...values]),
+        ).rejects.toThrow("Derived Views");
     });
 
     test("compiled CLI entrypoint runs with no Git executable on PATH", async () => {
@@ -780,14 +616,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         );
         const { stdout } = await promisify(execFile)(
             process.execPath,
-            [
-                script,
-                "--store",
-                root,
-                "--enable-view-drafts",
-                "create-corpus",
-                "Executable CLI views",
-            ],
+            [script, "--store", root, "create-corpus", "Executable CLI views"],
             { env: { ...process.env, PATH: "" } },
         );
         expect(JSON.parse(stdout)).toMatchObject({
@@ -825,7 +654,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
             relationships: [],
         };
         const file = path.join(root, "cli-request.json");
-        const args = ["--store", root, "--enable-view-drafts"];
+        const args = ["--store", root];
         await writeFile(file, JSON.stringify(request));
         const saved = await runMemoryViewsCli([...args, "save", file]);
         expect(saved).toMatchObject({
@@ -869,6 +698,6 @@ describe("typed draft views: service, history, privacy and CLI", () => {
                 corpus.corpusId,
                 request.viewId,
             ]),
-        ).rejects.toThrow("Opt-in derived views");
+        ).rejects.toThrow("Derived Views");
     });
 });

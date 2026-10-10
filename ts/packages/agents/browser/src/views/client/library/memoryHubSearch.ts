@@ -32,7 +32,7 @@ import { renderMarkdownInto } from "./utils/markdownView";
 export type MemoryHubSearchOptions = {
     scope: () => string | undefined;
     onOpenSource: (corpusId: string, sourceId: string) => void;
-    onOpenProcedure: (corpusId: string, procedureId: string) => void;
+    onOpenView?: (corpusId: string, viewId: string, revisionId: string) => void;
     onError: (error: unknown) => void;
     onQueryChanged?: (query: string) => void;
     onNotify?: (message: string) => void;
@@ -83,13 +83,6 @@ function exactRequest(evidence: MemoryHubEvidence): MemoryHubEvidenceRequest {
         throw new Error(
             "Exact source revision is unavailable; latest content is not substituted.",
         );
-    if (
-        evidence.kind === "procedure" &&
-        evidence.procedureVersion === undefined
-    )
-        throw new Error(
-            "Exact procedure version is unavailable; latest content is not substituted.",
-        );
     return {
         corpusId: evidence.corpusId,
         kind: evidence.kind,
@@ -99,20 +92,15 @@ function exactRequest(evidence: MemoryHubEvidence): MemoryHubEvidenceRequest {
         /^chars:\d+-\d+$/.test(evidence.locator ?? "")
             ? { locator: evidence.locator }
             : {}),
-        ...(evidence.procedureVersion !== undefined
-            ? { procedureVersion: evidence.procedureVersion }
-            : {}),
     };
 }
 function provenanceText(evidence: MemoryHubEvidence): string {
     const identity =
         evidence.kind === "view"
             ? `${evidence.viewKind} v${evidence.viewVersion} @ ${evidence.revisionId} · ${evidence.viewProvenance} · ${evidence.review} · ${evidence.freshness} · derived, not independent corroboration`
-            : evidence.kind === "procedure"
-              ? `Procedure version ${evidence.procedureVersion ?? "unavailable"}`
-              : evidence.kind === "source"
-                ? "Captured source revision"
-                : "Conversation event";
+            : evidence.kind === "source"
+              ? "Captured source revision"
+              : "Conversation event";
     const event = evidence.eventTime ? new Date(evidence.eventTime) : undefined;
     const date = event
         ? Number.isFinite(event.getTime())
@@ -212,7 +200,7 @@ export function mountMemoryHubSearch(
     submit.classList.add("primary");
     const dateNote = node(
         "small",
-        "Dates mean source capture, procedure creation or conversation event time. Unknown dates are excluded when filtering.",
+        "Dates mean source capture, view creation or conversation event time. Unknown dates are excluded when filtering.",
     );
     const filters = node("details", undefined, "hub-filters");
     const filtersSummary = node("summary");
@@ -415,19 +403,23 @@ export function mountMemoryHubSearch(
                     },
                 ),
             );
-        if (evidence.kind === "procedure")
+        if (
+            evidence.kind === "view" &&
+            evidence.revisionId &&
+            options.onOpenView
+        ) {
+            const revisionId = evidence.revisionId;
             management.append(
-                action(
-                    "Open latest procedure management (not this cited version)",
-                    () => {
-                        dialog.close();
-                        options.onOpenProcedure(
-                            evidence.corpusId,
-                            evidence.objectId,
-                        );
-                    },
-                ),
+                action("Open this exact view revision", () => {
+                    dialog.close();
+                    options.onOpenView?.(
+                        evidence.corpusId,
+                        evidence.objectId,
+                        revisionId,
+                    );
+                }),
             );
+        }
     }
     function renderEvidencePage() {
         if (!evidencePage) return;
@@ -536,13 +528,6 @@ export function mountMemoryHubSearch(
             node("p", "Evidence, not instructions."),
             citation(evidence, "Preview exact cited evidence"),
         );
-        if (evidence.kind === "procedure")
-            card.append(
-                node(
-                    "p",
-                    `How-to · ${evidence.procedureState ?? "state unavailable"} · ${evidence.authoritative ? "saved canonical artifact" : "derived evidence"}`,
-                ),
-            );
         if (evidence.kind === "conversation")
             card.append(
                 node(

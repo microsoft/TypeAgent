@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { retryProcedurePublication } from "../src/procedurePublication.js";
+import { retryFilesystemPublication } from "../src/filesystemPublication.js";
 
 test("retries transient Windows version publication without rewriting content", async () => {
     const publish = import.meta.jest
@@ -14,7 +14,7 @@ test("retries transient Windows version publication without rewriting content", 
         )
         .mockResolvedValue(undefined);
     const waits: number[] = [];
-    await retryProcedurePublication(
+    await retryFilesystemPublication(
         publish,
         async (milliseconds) => {
             waits.push(milliseconds);
@@ -32,7 +32,7 @@ test("bounds retries and preserves the final publication error", async () => {
         .mockRejectedValue(error);
     const waits: number[] = [];
     await expect(
-        retryProcedurePublication(
+        retryFilesystemPublication(
             publish,
             async (milliseconds) => {
                 waits.push(milliseconds);
@@ -52,7 +52,7 @@ test("does not retry non-Windows or non-transient errors", async () => {
     const wait = import.meta.jest.fn(
         async (_milliseconds: number) => undefined,
     );
-    await expect(retryProcedurePublication(denied, wait, false)).rejects.toBe(
+    await expect(retryFilesystemPublication(denied, wait, false)).rejects.toBe(
         locked,
     );
     expect(denied).toHaveBeenCalledTimes(1);
@@ -61,7 +61,7 @@ test("does not retry non-Windows or non-transient errors", async () => {
     const publish = import.meta.jest
         .fn(async () => undefined)
         .mockRejectedValue(missing);
-    await expect(retryProcedurePublication(publish, wait, true)).rejects.toBe(
+    await expect(retryFilesystemPublication(publish, wait, true)).rejects.toBe(
         missing,
     );
     expect(publish).toHaveBeenCalledTimes(1);

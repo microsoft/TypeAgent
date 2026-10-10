@@ -16,30 +16,6 @@ function corpus(corpusId) {
     };
 }
 
-function candidate(corpusId, id, state = "detected") {
-    return {
-        corpusId,
-        candidateId: id,
-        state,
-        title: `How-to ${id}`,
-        steps: ["First", "Second"],
-        citations: [{ sourceId: "source", revisionId: "revision" }],
-        createdAt: "2026-10-01T00:00:00Z",
-        updatedAt: "2026-10-01T00:00:00Z",
-    };
-}
-
-function procedure(corpusId, state = "stale") {
-    return {
-        corpusId,
-        procedureId: "procedure",
-        title: "Restart worker",
-        state,
-        latestVersion: 2,
-        updatedAt: "2026-10-02T00:00:00Z",
-    };
-}
-
 function job(corpusId, jobId, state) {
     return {
         corpusId,
@@ -68,66 +44,74 @@ function source(corpusId, id) {
 function fixture(overrides = {}) {
     return {
         memoryListCorpora: async () => [corpus("b"), corpus("a")],
-        memoryListProcedureCandidates: async () => [],
-        memoryListProcedures: async () => [],
         memoryListJobs: async () => ({ items: [], total: 0 }),
         memoryListSources: async () => ({ items: [], total: 0 }),
         ...overrides,
     };
 }
 
-test("snapshot derives all attention kinds and deterministic corpus-qualified identities", async () => {
-    const calls = [];
+test("snapshot contains only corpora and ingestion attention with corpus-qualified identities", async () => {
     const hub = createMemoryHubFunctions(
         fixture({
-            memoryListProcedureCandidates: async (request) => {
-                calls.push(request);
-                return [candidate(request.corpusId, "same-id")];
-            },
-            memoryListProcedures: async ({ corpusId }) => [
-                procedure(corpusId),
-                { ...procedure(corpusId, "saved"), procedureId: "saved" },
-            ],
             memoryListJobs: async () => ({
                 items: [
-                    job("b", "failed", "failed"),
-                    job("a", "partial", "partial"),
+                    job("a", "same", "failed"),
+                    job("b", "same", "partial"),
                     job("a", "complete", "complete"),
                 ],
                 total: 3,
             }),
         }),
     );
-    const result = await hub.memoryHubSnapshot({});
+    const snapshot = await hub.memoryHubSnapshot({});
+    assert.deepEqual(Object.keys(snapshot).sort(), [
+        "corpora",
+        "errors",
+        "inbox",
+    ]);
     assert.deepEqual(
-        result.corpora.map((c) => c.corpusId),
+        snapshot.corpora.map((item) => item.corpusId),
         ["a", "b"],
     );
-    assert.equal(result.inbox.length, 6);
-    assert.equal(result.procedures.length, 4);
-    assert.equal(new Set(result.inbox.map((item) => item.id)).size, 6);
-    assert.deepEqual(result.errors, []);
-    assert.deepEqual(
-        result.inbox.map((item) => item.kind),
-        [
-            "job",
-            "job",
-            "staleProcedure",
-            "staleProcedure",
-            "candidate",
-            "candidate",
-        ],
+    assert.equal(snapshot.inbox.length, 2);
+    assert.equal(new Set(snapshot.inbox.map((item) => item.id)).size, 2);
+    assert.ok(snapshot.inbox.every((item) => item.kind === "job"));
+    assert.deepEqual(snapshot.errors, []);
+});
+
+test("ingestion changes invalidate dismissal while preserving attention identity", async () => {
+    let updatedAt = "2026-10-01T00:00:00Z";
+    const hub = createMemoryHubFunctions(
+        fixture({
+            memoryListJobs: async () => ({
+                items: [{ ...job("a", "retry", "failed"), updatedAt }],
+                total: 1,
+            }),
+        }),
     );
-    assert.equal(
-        result.inbox.filter((item) => item.jobState === "failed").length,
-        1,
+    const before = await hub.memoryHubSnapshot({ corpusId: "a" });
+    updatedAt = "2026-10-02T00:00:00Z";
+    const after = await hub.memoryHubSnapshot({ corpusId: "a" });
+    assert.equal(before.inbox[0].id, after.inbox[0].id);
+    assert.notEqual(before.inbox[0].fingerprint, after.inbox[0].fingerprint);
+});
+
+test("snapshot rejects a missing corpus and propagates unavailable corpus listings", async () => {
+    await assert.rejects(
+        createMemoryHubFunctions(fixture()).memoryHubSnapshot({
+            corpusId: "missing",
+        }),
+        /was not found/,
     );
-    assert.deepEqual(
-        calls.map((c) => c.states),
-        [
-            ["detected", "draft"],
-            ["detected", "draft"],
-        ],
+    await assert.rejects(
+        createMemoryHubFunctions(
+            fixture({
+                memoryListCorpora: async () => {
+                    throw new Error("Service disconnected");
+                },
+            }),
+        ).memoryHubSnapshot({}),
+        /Service disconnected/,
     );
 });
 
@@ -186,58 +170,6 @@ test("a later jobs page failure preserves known failures and marks the result in
     assert.equal(result.inbox[0].objectId, "known-failure");
     assert.equal(result.errors[0].operation, "jobs");
     assert.equal(result.errors[0].message, "Job page unavailable");
-});
-
-test("a changed candidate keeps its identity but invalidates local dismissal", async () => {
-    let state = "detected";
-    const hub = createMemoryHubFunctions(
-        fixture({
-            memoryListProcedureCandidates: async ({ corpusId }) => [
-                candidate(corpusId, "candidate", state),
-            ],
-        }),
-    );
-    const before = await hub.memoryHubSnapshot({ corpusId: "a" });
-    state = "draft";
-    const after = await hub.memoryHubSnapshot({ corpusId: "a" });
-    assert.equal(before.inbox[0].id, after.inbox[0].id);
-    assert.notEqual(before.inbox[0].fingerprint, after.inbox[0].fingerprint);
-    assert.equal(after.corpora.length, 1);
-});
-
-test("partial failures remain explicit while successful corpora retain their items", async () => {
-    const hub = createMemoryHubFunctions(
-        fixture({
-            memoryListProcedureCandidates: async ({ corpusId }) => {
-                if (corpusId === "b") throw new Error("Corpus index offline");
-                return [candidate(corpusId, "candidate")];
-            },
-            memoryListProcedures: async ({ corpusId }) => [procedure(corpusId)],
-        }),
-    );
-    const result = await hub.memoryHubSnapshot({});
-    assert.equal(result.inbox.length, 3);
-    assert.deepEqual(result.errors, [
-        {
-            corpusId: "b",
-            operation: "candidates",
-            message: "Corpus index offline",
-        },
-    ]);
-    await assert.rejects(
-        hub.memoryHubSnapshot({ corpusId: "missing" }),
-        /was not found/,
-    );
-    await assert.rejects(
-        createMemoryHubFunctions(
-            fixture({
-                memoryListCorpora: async () => {
-                    throw new Error("Service disconnected");
-                },
-            }),
-        ).memoryHubSnapshot({}),
-        /Service disconnected/,
-    );
 });
 
 function sourceFixture() {
@@ -339,7 +271,6 @@ test("source listing exposes corpus failures and empty corpora correctly", async
     assert.deepEqual(await empty.memoryHubSnapshot({}), {
         corpora: [],
         inbox: [],
-        procedures: [],
         errors: [],
     });
 });

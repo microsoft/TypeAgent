@@ -4,10 +4,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { FileMemoryService } from "../src/fileMemoryService.js";
 import type { FileMemoryServiceOptions } from "../src/fileMemoryService.js";
+import { FileMemoryService } from "../src/fileMemoryService.js";
 import type { IndexedDocument } from "../src/types.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
 function deferred() {
     let resolve!: () => void;
@@ -91,7 +91,7 @@ describe("snapshot-safe indexed reads", () => {
         initializationBlock = undefined;
         const factory = (kind: Kind) => (_id: string, directory: string) => {
             counts[kind].created++;
-            return new (class extends FakeProcedureCorpusIndex {
+            return new (class extends FakeSemanticCorpusIndex {
                 public override async initialize() {
                     counts[kind].initialized++;
                     const gate = initializationBlock;
@@ -129,7 +129,6 @@ describe("snapshot-safe indexed reads", () => {
         };
         options = {
             indexFactory: factory("documents"),
-            procedureIndexFactory: factory("procedures"),
         };
         service = new FileMemoryService(root, options);
         corpusId = (await service.createCorpus("Snapshot fixture")).corpusId;
@@ -143,15 +142,6 @@ describe("snapshot-safe indexed reads", () => {
             },
         });
         await waitForJob(service, accepted.jobId);
-        await service.saveProcedure({
-            corpusId,
-            procedureId: "guide",
-            document: {
-                title: "Zephyr deployment",
-                steps: ["Inspect the deployment logs"],
-                citations: [],
-            },
-        });
     });
 
     afterEach(async () => {
@@ -169,68 +159,6 @@ describe("snapshot-safe indexed reads", () => {
     function documentSearch() {
         return service.search({ corpusId, query: "Zephyr" });
     }
-    function procedureSearch() {
-        return service.searchProcedures({
-            corpusId,
-            query: "Zephyr",
-            states: ["saved"],
-        });
-    }
-
-    test("unchanged published document generations and loaded procedure generations are reused", async () => {
-        await procedureSearch();
-        const initialized = {
-            documents: counts.documents.initialized,
-            procedures: counts.procedures.initialized,
-        };
-        await Promise.all([
-            documentSearch(),
-            documentSearch(),
-            procedureSearch(),
-            procedureSearch(),
-            service.getKnowledgeGraph(corpusId),
-            service.getSourceKnowledge(corpusId, "source"),
-        ]);
-        expect(counts.documents.initialized).toBe(initialized.documents);
-        expect(counts.procedures.initialized).toBe(initialized.procedures);
-    });
-
-    test("cold concurrent callers share one runtime and initialize each generation once", async () => {
-        await service.close();
-        counts.documents.created = 0;
-        counts.documents.initialized = 0;
-        counts.procedures.initialized = 0;
-        service = new FileMemoryService(root, options);
-        const results = await Promise.all([
-            documentSearch(),
-            documentSearch(),
-            procedureSearch(),
-            procedureSearch(),
-            service.getSourceKnowledge(corpusId, "source"),
-        ]);
-        expect(results[0]).toMatchObject({ matches: [{ sourceId: "source" }] });
-        expect(counts.documents.created).toBe(1);
-        expect(counts.documents.initialized).toBe(1);
-        expect(counts.procedures.initialized).toBe(1);
-    });
-
-    test("document and procedure searches overlap after preparation", async () => {
-        await procedureSearch();
-        const documents = block("documents");
-        const procedures = block("procedures");
-        const first = documentSearch();
-        const second = procedureSearch();
-        await within(
-            Promise.all([
-                documents.entered.promise,
-                procedures.entered.promise,
-            ]),
-        );
-        documents.resume.resolve();
-        procedures.resume.resolve();
-        expect((await first).matches).toHaveLength(1);
-        expect(await second).toHaveLength(1);
-    });
 
     test("reindex publication waits for readers and later readers wait behind the writer", async () => {
         const reader = block("documents");
@@ -274,33 +202,6 @@ describe("snapshot-safe indexed reads", () => {
         ).rejects.toThrow("Unknown source");
     });
 
-    test("saving and archiving procedures invalidate the generation cache", async () => {
-        expect(await procedureSearch()).toHaveLength(1);
-        await service.saveProcedure({
-            corpusId,
-            procedureId: "guide",
-            expectedVersion: 1,
-            document: {
-                title: "Zephyr revised deployment",
-                steps: ["Inspect revised logs"],
-                citations: [],
-            },
-        });
-        expect((await procedureSearch())[0].version.version).toBe(2);
-        const loaded = counts.procedures.initialized;
-        await procedureSearch();
-        expect(counts.procedures.initialized).toBe(loaded);
-        await service.archiveProcedure(corpusId, "guide", 2);
-        expect(await procedureSearch()).toEqual([]);
-        expect(
-            await service.searchProcedures({
-                corpusId,
-                query: "Zephyr",
-                states: ["archived"],
-            }),
-        ).toHaveLength(1);
-    });
-
     test("failed initialization is not cached and can be retried", async () => {
         await service.close();
         service = new FileMemoryService(root, options);
@@ -330,28 +231,6 @@ describe("snapshot-safe indexed reads", () => {
             await Promise.allSettled([search, closing]);
         }
         await search;
-        await closing;
-        expect(closed).toBe(true);
-    });
-
-    test("close waits through cold index preparation and its subsequent read", async () => {
-        const gate = { entered: deferred(), resume: deferred() };
-        initializationBlock = gate;
-        releases.push(gate.resume.resolve);
-        const reading = procedureSearch();
-        await within(gate.entered.promise);
-        let closed = false;
-        const closing = service.close().then(() => {
-            closed = true;
-        });
-        try {
-            await new Promise<void>((resolve) => setImmediate(resolve));
-            expect(closed).toBe(false);
-        } finally {
-            gate.resume.resolve();
-            await Promise.allSettled([reading, closing]);
-        }
-        await expect(reading).resolves.toHaveLength(1);
         await closing;
         expect(closed).toBe(true);
     });

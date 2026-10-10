@@ -1,20 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm, readdir, readFile } from "node:fs/promises";
+import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
+import { wikiIndex } from "../src/viewContent.js";
+import { authoredRelationships } from "../src/viewRelationships.js";
+import { evidenceRecord } from "../src/viewSynthesisEvidence.js";
 import type {
-    WikiContent,
     ViewBuildJob,
     ViewRelationshipInput,
+    WikiContent,
 } from "../src/viewTypes.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { wikiTestAnswer } from "./wikiTestModel.js";
-import { evidenceRecord } from "../src/viewSynthesisEvidence.js";
-import { authoredRelationships } from "../src/viewRelationships.js";
-import { wikiIndex } from "../src/viewContent.js";
 
 const runtimeJest = import.meta.jest;
 const jest = runtimeJest as typeof runtimeJest & {
@@ -73,9 +73,7 @@ describe("bounded wiki evidence, edits, publication and managed lifecycle", () =
         new FileMemoryService(root, {
             viewDrafts,
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
-            procedureIndexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
         });
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "wiki-offline-"));
@@ -424,7 +422,7 @@ describe("bounded wiki evidence, edits, publication and managed lifecycle", () =
         const oldHistoryObject = path.join(
             root,
             corpusId,
-            "personal-how-to",
+            "views",
             "view-history.git",
             "objects",
             original.snapshot.head!.slice(0, 2),
@@ -499,12 +497,7 @@ describe("bounded wiki evidence, edits, publication and managed lifecycle", () =
     test("CLI advertises wiki without provider calls or execution authority", async () => {
         await service.close();
         expect(
-            await runMemoryViewsCli([
-                "--store",
-                root,
-                "--enable-view-drafts",
-                "capabilities",
-            ]),
+            await runMemoryViewsCli(["--store", root, "capabilities"]),
         ).toMatchObject({
             derivedViews: { kinds: expect.arrayContaining(["wiki"]) },
         });

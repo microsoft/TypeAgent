@@ -1,31 +1,12 @@
 # @typeagent/memory-mcp-server
 
-`memory_procedure_save` accepts optional schema-v1 `document.agentEdition`,
-`reviewAgentEdition`, and `safetyConfirmed`. Schemas preserve both human and
-agent sections and use shared pure edition validation. Review requires
-explicit intent for the resulting exact procedure version; incoming model
-review stamps are not trusted. Real catalog validation remains the injected
-memory service/host's responsibility. Missing catalog resolvers fail review
-explicitly, and no MCP operation executes runbook commands or bindings.
+Typed derived View tools expose explicit builds, drafts, exact revision history, guarded edits/conflict resolution, publication, maintenance and search. Source acquisition and revision assets remain independent evidence capabilities. Ingestion does not detect candidates or start synthesis jobs, and no tool grants review or execution permission.
 
-Catalog argument maps preserve nested `{"$input":"declared-input-id"}`
-references and `{"$literal": JSON}` escapes. Shared validation enforces bounded
-finite JSON and declared references before recursive wire parsing. The injected
-host must validate actual target schemas, including required parameters for
-omitted arguments, and explicitly attest argument fit; an identity-only catalog
-check cannot bless a reviewed runbook. Secret values are not resolved or retained
-as input defaults/examples.
+Views are enabled by default. `TYPEAGENT_MEMORY_VIEW_DRAFTS=false` explicitly disables them; unset or `true` requires no user opt-in, and invalid values fail. Missing or unavailable model providers surface build errors without creating successful artifacts or bypassing validation.
 
-The explicit `memory_runbook_synthesis_request` tool takes only
-`{corpusId,sourceId,revisionId}` and invokes the optional existing durable draft
-pipeline. It can reuse pending/completed results without claiming fresh output
-or overwriting human edits. Poll with `memory_runbook_job_get` or
-`memory_runbook_jobs_list`; failed model jobs retain explicit state/reason.
-Unsupported implementations return tool errors. These tools require no model
-keys for offline fixture verification and confer no execution/approval permission.
-The golden-set numerical quality gate remains separate and open.
-Source revisions preserve asset metadata. Raw asset upload is host-only and
-rejected by ingestion schemas until an explicit bounded wire contract exists.
+`memory_view_source_usage` returns paginated metadata for current derived Views
+that depend on a document source. It never enumerates legacy procedures,
+canonical event-ID matches, or historical-only View dependencies.
 
 `memory_changes_list` exposes canonical `MemoryService.listChanges` with
 `corpusId`, optional `pageSize` (1-200), and `continuationToken`. Results are
@@ -45,9 +26,6 @@ typed ingestion, search, synthesized or extractive grounded answers
 bounded content, derived knowledge, revision replacement, preview/confirm
 deletion, reindex, and filtered job management surface. Destructive tools are
 annotated accordingly.
-
-Personal how-to tools cover optimistic settings updates, procedure candidate
-create/get/list/reject, and immutable procedure save/get/list/search/archive.
 
 ## Trademarks
 

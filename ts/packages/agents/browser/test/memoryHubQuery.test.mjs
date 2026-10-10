@@ -157,24 +157,6 @@ function fixture() {
             };
         },
         getCapabilities: async () => ({}),
-        searchProcedures: async (_request) => [
-            {
-                procedure: {
-                    procedureId: "guide",
-                    title: "Guide",
-                    state: "saved",
-                },
-                version: {
-                    version: 3,
-                    createdAt: time,
-                    markdown: "Check first.",
-                    document: {
-                        citations: [{ sourceId: "shared", revisionId: "r1" }],
-                    },
-                },
-                score: 20,
-            },
-        ],
         searchEvents: async (request) => {
             calls.push(["events", request]);
             return { matches: [{ event, snippet: event.content, score: 2 }] };
@@ -196,14 +178,6 @@ function fixture() {
                 totalChars: 17,
                 revisionId: request.revisionId ?? "r2",
                 truncated: false,
-            };
-        },
-        getProcedure: async (corpusId, procedureId, version) => {
-            calls.push(["procedure", corpusId, procedureId, version]);
-            return {
-                version: version ?? 3,
-                document: { title: "Guide" },
-                markdown: "Exact saved version",
             };
         },
         getKnowledgeGraph: async () => ({
@@ -228,7 +202,6 @@ function fixture() {
                 },
             ],
         }),
-        listProcedures: async () => [{ procedureId: "guide" }],
         listChanges: async (request) => {
             const records =
                 request.corpusId === "c"
@@ -313,12 +286,6 @@ test("tracing preserves disabled call shapes and correlates concurrent Hub reque
         const { service, query, calls } = fixture();
         service.getSource = async () => ({ activeRevisionId: "r1" });
         const reads = [];
-        const procedures = [];
-        const searchProcedures = service.searchProcedures;
-        service.searchProcedures = async (request) => {
-            procedures.push(request);
-            return searchProcedures(request);
-        };
         service.getSourceKnowledge = async (...args) => {
             reads.push(args);
             return service.getKnowledgeGraph(args[0]);
@@ -329,12 +296,8 @@ test("tracing preserves disabled call shapes and correlates concurrent Hub reque
         assert.ok(
             calls.every(([, request]) => !Object.hasOwn(request, "traceId")),
         );
-        assert.ok(
-            procedures.every((request) => !Object.hasOwn(request, "traceId")),
-        );
         assert.ok(reads.every((args) => args.length === 2));
         calls.length = 0;
-        procedures.length = 0;
         reads.length = 0;
         process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
         await Promise.all([
@@ -353,7 +316,6 @@ test("tracing preserves disabled call shapes and correlates concurrent Hub reque
         const ids = new Set(entries.map((entry) => entry.traceId));
         assert.equal(ids.size, 2);
         assert.ok(calls.every(([, request]) => ids.has(request.traceId)));
-        assert.ok(procedures.every((request) => ids.has(request.traceId)));
         assert.ok(reads.every((args) => args.length === 3 && ids.has(args[2])));
         for (const id of ids) {
             assert.match(id, /^[a-f0-9-]{36}$/);
@@ -368,7 +330,6 @@ test("tracing preserves disabled call shapes and correlates concurrent Hub reque
                 "hub.retrieval",
                 "hub.fusion",
                 "hub.documentRetrieval",
-                "hub.procedureRetrieval",
                 "hub.insights",
                 "hub.synthesis",
             ])
@@ -488,7 +449,7 @@ test("mixed search preserves corpus/version/turn identity and synthesizes once o
         generateAnswer: true,
     });
 
-    assert.equal(result.matches.length, 5);
+    assert.equal(result.matches.length, 3);
     assert.equal(result.matches.filter((m) => m.kind === "source").length, 2);
     assert.equal(result.ranking, "reciprocal-rank-fusion");
     assert.equal(result.errors.length, 0);
@@ -498,11 +459,6 @@ test("mixed search preserves corpus/version/turn identity and synthesizes once o
                 m.kind === "conversation" &&
                 m.turnId === "turn-7" &&
                 m.authoritative,
-        ),
-    );
-    assert.ok(
-        result.matches.some(
-            (m) => m.kind === "procedure" && m.procedureVersion === 3,
         ),
     );
     assert.ok(result.matches.some((m) => m.revisionId === "r1"));
@@ -631,49 +587,7 @@ test("a corrupt corpus score reports partial failure without hiding other eviden
     );
 });
 
-test("procedure filtering stops starting reads when its whole-operation deadline expires", async (t) => {
-    let now = 0;
-    t.mock.method(Date, "now", () => now);
-    const { query, service } = fixture();
-    service.searchProcedures = async () => [
-        {
-            procedure: { procedureId: "guide", title: "Guide", state: "saved" },
-            version: {
-                version: 3,
-                createdAt: time,
-                markdown: "Check first.",
-                document: {
-                    citations: [
-                        { sourceId: "first", revisionId: "r1" },
-                        { sourceId: "second", revisionId: "r1" },
-                    ],
-                },
-            },
-            score: 1,
-        },
-    ];
-    let reads = 0;
-    service.getSource = async () => {
-        reads++;
-        now = 31_000;
-        return { sourceType: "markdown", tags: [] };
-    };
-    const result = await query.memoryHubSearch({
-        query: "worker",
-        corpusId: "a",
-        tags: ["ops"],
-    });
-    assert.equal(reads, 1);
-    assert.ok(
-        result.errors.some(
-            (error) =>
-                error.operation === "procedures" &&
-                /deadline/.test(error.message),
-        ),
-    );
-});
-
-test("document predicates are forwarded and conversation/procedure predicates precede final ranking", async () => {
+test("document predicates are forwarded and conversation predicates precede final ranking", async () => {
     const { query, calls } = fixture();
     const request = {
         query: "worker",
@@ -690,10 +604,10 @@ test("document predicates are forwarded and conversation/procedure predicates pr
     const passed = calls.find(([kind]) => kind === "search")[1];
     assert.deepEqual(passed.tags, ["ops"]);
     assert.equal(passed.dateFrom, time);
-    assert.ok(result.matches.some((m) => m.kind === "procedure"));
+    assert.ok(result.matches.every((m) => m.kind === "source"));
 });
 
-test("evidence opens exact retained source revision and exact saved procedure version", async () => {
+test("evidence opens the exact retained source revision", async () => {
     const { query, calls } = fixture();
     const source = await query.memoryHubEvidence({
         kind: "source",
@@ -706,18 +620,6 @@ test("evidence opens exact retained source revision and exact saved procedure ve
         calls.find(([kind]) => kind === "content")[1].revisionId,
         "r1",
     );
-    const procedure = await query.memoryHubEvidence({
-        kind: "procedure",
-        corpusId: "a",
-        objectId: "guide",
-        procedureVersion: 2,
-    });
-    assert.equal(procedure.provenance.procedureVersion, 2);
-    assert.deepEqual(calls.find(([kind]) => kind === "procedure").slice(1), [
-        "a",
-        "guide",
-        2,
-    ]);
 });
 
 test("conversation citations resolve actual event/turn structure and reject foreign producers", async () => {

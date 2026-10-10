@@ -4,8 +4,8 @@
 import { z } from "zod";
 import {
     viewMaintenanceDefinitionSchema,
-    viewMaintenanceSnapshotSchema,
     viewMaintenanceManifestSchema,
+    viewMaintenanceSnapshotSchema,
 } from "./viewMaintenanceProtocol.js";
 export * from "./viewMaintenanceProtocol.js";
 
@@ -14,6 +14,39 @@ const text = z.string().min(1).max(120000);
 const head = z.string().regex(/^[0-9a-f]{40}$/);
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
 const source = z.strictObject({ sourceId: id, revisionId: id });
+export const viewSourceUsageRequestSchema = z.strictObject({
+    corpusId: id,
+    sourceId: id,
+    pageSize: z.number().int().min(1).max(200).optional(),
+    continuationToken: z
+        .string()
+        .regex(/^(0|[1-9][0-9]*)$/)
+        .optional(),
+});
+export const viewSourceUsagePageSchema = z.strictObject({
+    items: z
+        .strictObject({
+            viewId: id,
+            revisionId: id,
+            version: z.number().int().positive(),
+            kind: z.enum([
+                "troubleshootingGuide",
+                "projectBrief",
+                "timeline",
+                "wiki",
+            ]),
+            title: text,
+            state: z.enum(["draft", "stale", "archived"]),
+            provenance: z.enum(["human", "generated", "merged"]),
+        })
+        .array()
+        .max(200),
+    total: z.number().int().nonnegative(),
+    nextContinuationToken: z
+        .string()
+        .regex(/^(0|[1-9][0-9]*)$/)
+        .optional(),
+});
 const eventEvidence = z.strictObject({ kind: z.literal("event"), eventId: id });
 export const viewSelectorSchema = z.discriminatedUnion("kind", [
     z.strictObject({
@@ -638,7 +671,7 @@ export const viewVersionSchema = z.object({
     createdAt: z.string(),
     actor: text,
     baseRevisionId: id.optional(),
-    provenance: z.enum(["human", "procedure", "generated", "merged"]),
+    provenance: z.enum(["human", "generated", "merged"]),
     maintenance: viewMaintenanceManifestSchema.optional(),
     validation: z
         .object({
@@ -684,7 +717,6 @@ export const viewVersionSchema = z.object({
             "projectBrief",
             "timeline",
             "wiki",
-            "procedure",
         ]),
         selector: viewSelectorSchema,
         maintenance: viewMaintenanceDefinitionSchema.optional(),
@@ -694,7 +726,7 @@ export const viewVersionSchema = z.object({
         timelineContent,
         wikiContent,
         z.object({
-            kind: z.enum(["troubleshootingGuide", "procedure"]),
+            kind: z.literal("troubleshootingGuide"),
             title: text,
             summary: text.optional(),
             sections: section
@@ -706,7 +738,6 @@ export const viewVersionSchema = z.object({
                     excerpt: z.string().optional(),
                 })
                 .array(),
-            compatibilityFields: z.record(z.string(), z.unknown()).optional(),
             agentEdition: z.unknown().optional(),
         }),
     ]),
@@ -754,7 +785,6 @@ export const viewVersionSchema = z.object({
             systemEdge,
         ])
         .array(),
-    compatibility: z.unknown().optional(),
 });
 export const viewSnapshotSchema = z.object({
     head: head.nullable(),
@@ -803,6 +833,7 @@ export const viewToolNames = {
     updateViewMaintenance: "memory_view_maintenance_update",
     getViewMaintenance: "memory_view_maintenance_get",
     listViews: "memory_views_list",
+    getSourceViewUsage: "memory_view_source_usage",
     getView: "memory_view_get",
     saveViewDraft: "memory_view_save_draft",
     archiveView: "memory_view_archive",

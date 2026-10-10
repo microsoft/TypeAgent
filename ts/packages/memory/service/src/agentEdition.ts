@@ -2,20 +2,17 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
-import type {
-    ProcedureDocument,
-    ProcedureSaveRequest,
-    ProcedureVersion,
-} from "./types.js";
 import {
     canonicalizeProcedure,
     getRunbookCatalogBindings,
     normalizeAgentEditionDocument,
-    validateAgentEditionReviewIntent,
     validateAgentEditionReadiness,
+    validateAgentEditionReviewIntent,
     validateRunbookCatalogBindings,
+    type AgentEditionReviewIntent,
     type RunbookBindingValidator,
 } from "./agentEditionValidation.js";
+import type { ProcedureDocument, ProcedureVersion } from "./types.js";
 
 export * from "./agentEditionValidation.js";
 
@@ -68,10 +65,7 @@ export function validateReviewedAgentEdition(
 
 export async function prepareAgentEditionSave(
     document: ProcedureDocument,
-    request: Pick<
-        ProcedureSaveRequest,
-        "reviewAgentEdition" | "safetyConfirmed"
-    >,
+    request: AgentEditionReviewIntent,
     resultingVersion: number,
     previous?: ProcedureVersion,
     validator?: RunbookBindingValidator,

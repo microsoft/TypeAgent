@@ -10,6 +10,11 @@ The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multip
 
 ---
 
+Derived memory Views are enabled by default in the durable memory host.
+`TYPEAGENT_MEMORY_VIEW_DRAFTS=false` explicitly disables them; unset or `true`
+requires no user opt-in. Builds remain explicit, provider failures remain errors,
+and enablement does not grant publication, review or execution authority.
+
 ## Runbook host capabilities
 
 Both WebSocket and embedded hosts inject the named, plain-object
@@ -20,10 +25,6 @@ credentials or schema-validator functions are exposed.
 
 - `listSkills` is metadata-only, paginated (`limit` 1–200, default 100;
   nonnegative `offset`). `getSkill` and `readSkillFile` read the existing catalog.
-- `previewProcedureArtifact`/`promoteProcedureArtifact` support only `kind:
-"skill"` and an explicit saved procedure version. The existing coordinator
-  verifies lineage/artifact hashes and publishes a **draft**, never an approval.
-  Accepted catalog bindings are revalidated before preview/publication.
 - `getSkillLifecycle({identity, revision})` returns the exact entry and the
   catalog's real `allowedTransitions`/`allowedActions`. `changeSkillLifecycle`
   requires that immutable revision plus `expectedState` and `expectedActive`.
@@ -99,49 +100,15 @@ callers injecting their own memory service must configure its validator
 themselves. Persisted drift belongs in readiness/Inbox, not automatic execution
 or approval.
 
-### Configured image evidence
+### Configured derived View model
 
-Both owned hosts use the same durable-memory factory and lazy configured
-runbook synthesizer. Unknown or unsupported image capability remains
-**disabled/manual**, even when `describeImages` is selected.
-
-The current AI client has no reliable offline vision-capability metadata on
-configured deployments or model pools. Its legacy
-`modelResource.isMultiModalContentSupported` recognizes only model-name
-heuristics (including an assumed empty default); it is not a reliable
-capability check. Copilot model discovery contacts the CLI and can select a
-fallback model. Hosts do not run discovery, create a model, retrieve keys or
-make model calls to guess capability at startup.
-
-For an operator-verified image-capable route, configure these host environment
-variables **before starting either host**:
-
-```powershell
-$env:TYPEAGENT_RUNBOOK_MODEL_ENDPOINT = "azure:YOUR_VERIFIED_VISION_DEPLOYMENT"
-$env:TYPEAGENT_RUNBOOK_MULTIMODAL = "true"
-```
-
-This is an explicit host capability **declaration**, not automatic discovery.
-The selected route must already be configured through normal AI-client
-configuration; the existing endpoint getter checks configuration presence,
-not vision support or actual model availability. Copilot/Ollama routes are
-registered by provider rather than validated through model discovery; OpenAI
-checks endpoint presence rather than a named model's capabilities.
-The operator must verify image-input support for the
-actual selected model and every pool/fallback route. Missing scoped endpoints,
-unconfigured declared routes and malformed declarations fail explicitly.
-An enabled declaration requires an explicit `provider:named-model` selector;
-implicit provider routing and default aliases are not accepted.
-Omitting the declaration, or setting it to `"false"`, keeps images manual.
-The endpoint can also select a text-only model while leaving images disabled.
-
-The factory forwards the same endpoint to `runbookModelEndpoint` and the
-declaration to `runbookMultimodal`; there is no hardcoded image-capable default.
-The ingestion service still requires the user's `describeImages` preference,
-retained revision/asset evidence and explicit review. A vision-capable model
-does not make original pixels a safe preview, accept bindings, approve a skill
-or qualify model-quality/golden-set results. Callers injecting their own
-memory service configure those `FileMemoryServiceOptions` themselves.
+Owned hosts use the shared durable-memory factory. Set
+`TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT` to an already configured model route
+to select the model for explicit View builds. The factory forwards
+`viewModelEndpoint`; an unconfigured explicit route fails at startup.
+Model construction remains lazy and source imports do not start View builds.
+Saved-procedure synthesis and its image-capability settings are removed.
+Source assets remain retained evidence, not safe previews or execution grants.
 
 ---
 

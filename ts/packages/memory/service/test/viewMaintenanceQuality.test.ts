@@ -1,23 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
+import { loadConfigSync } from "@typeagent/config";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { loadConfigSync } from "@typeagent/config";
-import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import { FileMemoryService } from "../src/fileMemoryService.js";
-import { createConfiguredViewSynthesisAdapter } from "../src/viewSynthesis.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
+import { createConfiguredViewSynthesisAdapter } from "../src/viewSynthesis.js";
 import { viewContentToText } from "../src/viewText.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
 import type { ViewBuildJob, ViewSynthesisAdapter } from "../src/viewTypes.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
 test("configured model maintains explicit subjects, source facts and stable identity on a synthetic two-checkpoint corpus", async () => {
     loadConfigSync();
     initRuntimeConfigFromProcessEnv();
     const configured = createConfiguredViewSynthesisAdapter(
-        process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT,
+        process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT,
     );
     let stages = 0;
     const adapter: ViewSynthesisAdapter = {
@@ -52,7 +52,7 @@ test("configured model maintains explicit subjects, source facts and stable iden
         viewDrafts: true,
         viewSynthesisAdapter: adapter,
         indexFactory: (_id, directory) =>
-            new FakeProcedureCorpusIndex(directory),
+            new FakeSemanticCorpusIndex(directory),
     });
     async function wait(admitted: ViewBuildJob): Promise<ViewBuildJob> {
         for (;;) {

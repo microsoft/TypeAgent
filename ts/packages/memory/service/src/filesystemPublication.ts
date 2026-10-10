@@ -3,7 +3,7 @@
 
 import { setTimeout as delay } from "node:timers/promises";
 
-export async function retryProcedurePublication(
+export async function retryFilesystemPublication(
     publish: () => Promise<void>,
     wait: (milliseconds: number) => Promise<void> = delay,
     windows = process.platform === "win32",

@@ -1,27 +1,27 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
+import { loadConfigSync } from "@typeagent/config";
 import { readFile } from "node:fs/promises";
 import { FileMemoryService } from "./fileMemoryService.js";
 import { createMemoryServiceRpcFacade } from "./rpcFacade.js";
-import { loadConfigSync } from "@typeagent/config";
-import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import type {
-    ViewSaveRequest,
+    MemoryViewService,
     ViewArchiveRequest,
+    ViewBuildJob,
     ViewBuildRequest,
     ViewConflictResolution,
-    ViewBuildJob,
-    MemoryViewService,
-    ViewPublishRequest,
-    ViewPublicationPolicyUpdate,
-    ViewMaintenanceRequest,
     ViewMaintenancePlanRequest,
+    ViewMaintenanceRequest,
     ViewMaintenanceUpdate,
+    ViewPublicationPolicyUpdate,
+    ViewPublishRequest,
+    ViewSaveRequest,
 } from "./viewTypes.js";
 
-const usage = `Opt-in derived views:
-node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <command> [arguments]
+const usage = `Derived Views:
+node dist/memoryViewsCli.js --store <private-store> <command> [arguments]
   corpora
   capabilities
   create-corpus <name>
@@ -260,23 +260,16 @@ const viewCommands = new Map<
 ]);
 
 export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
-    const [storeFlag, store, capability, command, ...values] = args;
-    if (
-        storeFlag !== "--store" ||
-        !store ||
-        capability !== "--enable-view-drafts" ||
-        !command
-    )
-        throw new Error(usage);
+    const [storeFlag, store, command, ...values] = args;
+    if (storeFlag !== "--store" || !store || !command) throw new Error(usage);
     const counts = argumentCounts.get(command);
     if (!counts || values.length < counts[0] || values.length > counts[1])
         throw new Error(usage);
     const service = new FileMemoryService(store, {
-        viewDrafts: true,
-        ...(process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT
+        ...(process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT
             ? {
-                  runbookModelEndpoint:
-                      process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT,
+                  viewModelEndpoint:
+                      process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT,
               }
             : {}),
     });

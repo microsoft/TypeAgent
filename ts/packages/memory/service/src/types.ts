@@ -3,20 +3,16 @@
 
 import type { AgentEdition } from "./agentEdition.js";
 import type {
-    RevisionAssetDescriptor,
-    RevisionAssetInput,
-    RevisionAssetReadRequest,
-    RevisionAssetRequest,
-} from "./revisionAssetStore.js";
-import type {
     MemoryBatchImport,
     MemoryBatchImportLookup,
     MemoryBatchImportRequest,
 } from "./batchImport.js";
 import type {
-    RunbookJobResult,
-    RunbookSynthesisRequest,
-} from "./runbookPipeline.js";
+    RevisionAssetDescriptor,
+    RevisionAssetInput,
+    RevisionAssetReadRequest,
+    RevisionAssetRequest,
+} from "./revisionAssetStore.js";
 
 export const conversationCorpusName = "typeagent-profile-conversations";
 export const conversationProducerId = "typeagent.dispatcher.conversation";
@@ -336,7 +332,6 @@ export type MemoryEventSourceKind =
     | "conversation"
     | "document"
     | "web-activity"
-    | "procedure"
     | "system"
     | "other";
 
@@ -523,29 +518,6 @@ export interface MemoryServiceCapabilities {
     warnings: string[];
 }
 
-export interface PersonalHowToSettings {
-    revision: number;
-    updatedAt: string;
-    enabled: boolean;
-    detectCandidates: boolean;
-    preferences?: Record<string, unknown>;
-}
-
-export interface PersonalHowToSettingsUpdate {
-    expectedRevision: number;
-    enabled?: boolean;
-    detectCandidates?: boolean;
-    preferences?: Record<string, unknown>;
-}
-
-export type ProcedureState =
-    | "detected"
-    | "draft"
-    | "saved"
-    | "stale"
-    | "archived"
-    | "rejected";
-
 export interface ProcedureSourceCitation {
     sourceId: string;
     revisionId: string;
@@ -567,20 +539,6 @@ export interface ProcedureDocument {
     agentEdition?: AgentEdition;
 }
 
-export interface ProcedureCandidate extends ProcedureDocument {
-    candidateId: string;
-    corpusId: string;
-    state: "detected" | "draft" | "rejected" | "saved";
-    createdAt: string;
-    updatedAt: string;
-}
-
-export interface ProcedureCandidateCreateRequest extends ProcedureDocument {
-    corpusId: string;
-    candidateId?: string;
-    state?: "detected" | "draft";
-}
-
 export interface ProcedureVersion {
     corpusId: string;
     procedureId: string;
@@ -594,43 +552,6 @@ export interface ProcedureVersion {
     markdownHash: string;
     basedOnCandidateId?: string;
     previousVersion?: number;
-}
-
-export interface ProcedureSummary {
-    corpusId: string;
-    procedureId: string;
-    title: string;
-    state: "saved" | "stale" | "archived";
-    latestVersion: number;
-    updatedAt: string;
-}
-
-export interface ProcedureSaveRequest {
-    corpusId: string;
-    procedureId?: string;
-    candidateId?: string;
-    expectedVersion?: number;
-    document?: ProcedureDocument;
-    markdown?: string;
-    reviewAgentEdition?: boolean;
-    safetyConfirmed?: boolean;
-}
-
-export interface ProcedureListRequest {
-    corpusId: string;
-    states?: Array<"saved" | "stale" | "archived">;
-}
-
-export interface ProcedureSearchRequest extends ProcedureListRequest {
-    traceId?: string;
-    query: string;
-    limit?: number;
-}
-
-export interface ProcedureSearchMatch {
-    procedure: ProcedureSummary;
-    version: ProcedureVersion;
-    score: number;
 }
 
 export interface MemoryService {
@@ -659,11 +580,6 @@ export interface MemoryService {
     listBatchImports?(corpusId: string): Promise<MemoryBatchImport[]>;
     retryBatchImport?(batchId: string): Promise<MemoryBatchImport>;
     cancelBatchImport?(batchId: string): Promise<MemoryBatchImport>;
-    listRunbookJobs?(corpusId: string): Promise<RunbookJobResult[]>;
-    getRunbookJob?(jobId: string): Promise<RunbookJobResult | undefined>;
-    requestRunbookSynthesis?(
-        request: RunbookSynthesisRequest,
-    ): Promise<RunbookJobResult>;
     listSources(corpusId: string): Promise<MemorySource[]>;
     listSourcesPage(
         request: SourceListRequest,
@@ -733,44 +649,6 @@ export interface MemoryService {
     answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult>;
     getKnowledgeGraph(corpusId: string): Promise<MemoryKnowledgeGraph>;
     getCapabilities(): Promise<MemoryServiceCapabilities>;
-}
-
-export interface PersonalHowToService {
-    getPersonalHowToSettings(corpusId: string): Promise<PersonalHowToSettings>;
-    updatePersonalHowToSettings(
-        corpusId: string,
-        update: PersonalHowToSettingsUpdate,
-    ): Promise<PersonalHowToSettings>;
-    createProcedureCandidate(
-        request: ProcedureCandidateCreateRequest,
-    ): Promise<ProcedureCandidate>;
-    getProcedureCandidate(
-        corpusId: string,
-        candidateId: string,
-    ): Promise<ProcedureCandidate | undefined>;
-    listProcedureCandidates(
-        corpusId: string,
-        states?: ProcedureCandidate["state"][],
-    ): Promise<ProcedureCandidate[]>;
-    rejectProcedureCandidate(
-        corpusId: string,
-        candidateId: string,
-    ): Promise<ProcedureCandidate>;
-    saveProcedure(request: ProcedureSaveRequest): Promise<ProcedureVersion>;
-    listProcedures(request: ProcedureListRequest): Promise<ProcedureSummary[]>;
-    getProcedure(
-        corpusId: string,
-        procedureId: string,
-        version?: number,
-    ): Promise<ProcedureVersion | undefined>;
-    searchProcedures(
-        request: ProcedureSearchRequest,
-    ): Promise<ProcedureSearchMatch[]>;
-    archiveProcedure(
-        corpusId: string,
-        procedureId: string,
-        expectedVersion?: number,
-    ): Promise<ProcedureVersion>;
 }
 
 export interface IndexedDocument {

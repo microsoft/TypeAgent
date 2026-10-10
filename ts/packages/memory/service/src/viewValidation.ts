@@ -1,23 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-    ViewSaveRequest,
-    ViewCitation,
-    ViewEndpoint,
-    ViewSourceSelector,
-    ViewSection,
-    ViewRelationshipInput,
-    ViewArchiveRequest,
-} from "./viewTypes.js";
+import { projectBriefRoles, validateProjectBrief } from "./projectBrief.js";
+import { validateTimeline } from "./timeline.js";
 import {
     assertViewIdentifier,
     viewSourceKey as sourceKey,
 } from "./viewContent.js";
-import { projectBriefRoles, validateProjectBrief } from "./projectBrief.js";
-import { validateTimeline } from "./timeline.js";
-import { validateWiki } from "./wiki.js";
 import { validateMaintenanceDefinition } from "./viewMaintenance.js";
+import type {
+    ViewArchiveRequest,
+    ViewCitation,
+    ViewEndpoint,
+    ViewRelationshipInput,
+    ViewSaveRequest,
+    ViewSection,
+    ViewSourceSelector,
+} from "./viewTypes.js";
+import { validateWiki } from "./wiki.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -367,11 +367,7 @@ function validateDraftContent(
     if (request.content.kind === "wiki") validateWiki(request.content);
     if (request.content.agentEdition !== undefined)
         throw new Error(
-            "Agent editions are edited through the runbook compatibility workflow",
-        );
-    if (request.content.compatibilityFields !== undefined)
-        throw new Error(
-            "Compatibility fields are reserved for existing runbooks",
+            "Agent editions are not supported in derived view drafts",
         );
     onlyKeys(
         request.content,

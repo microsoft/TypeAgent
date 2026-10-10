@@ -1,18 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-    MemoryEvidence,
-    MemoryService,
-    PersonalHowToService,
-    ProcedureSearchMatch,
-} from "@typeagent/memory-service";
-import registerDebug from "debug";
 import {
     ConversationMessage,
     ConversationMessageMeta,
     type ConversationMemory,
 } from "@typeagent/conversation-memory";
+import type { MemoryEvidence, MemoryService } from "@typeagent/memory-service";
+import registerDebug from "debug";
 import type { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
     conversationCorpusName,
@@ -20,8 +15,7 @@ import {
 } from "./conversationDurableMemory.js";
 
 const debug = registerDebug("typeagent:dispatcher:memory");
-type SearchService = Pick<MemoryService, "listCorpora" | "search"> &
-    Partial<Pick<PersonalHowToService, "searchProcedures">>;
+type SearchService = Pick<MemoryService, "listCorpora" | "search">;
 function distinctEvidence(
     matches: { name: string; evidence: MemoryEvidence }[],
 ): { name: string; evidence: MemoryEvidence }[] {
@@ -167,9 +161,7 @@ export async function searchPersonalMemory(
         );
     }
     if (documents.status === "fulfilled" && documents.value) {
-        sections.push(
-            `## Saved pages, documents and procedures\n${documents.value}`,
-        );
+        sections.push(`## Saved pages and documents\n${documents.value}`);
     } else if (documents.status === "rejected") {
         debug(`Saved document search failed: ${String(documents.reason)}`);
         sections.push(
@@ -195,8 +187,7 @@ async function searchDocuments(
     const corpora = (await service.listCorpora()).filter(
         (corpus) => corpus.name !== conversationCorpusName,
     );
-    const searchProcedures = service.searchProcedures?.bind(service);
-    const requests = corpora.flatMap((corpus) => [
+    const requests = corpora.map((corpus) =>
         service
             .search({
                 corpusId: corpus.corpusId,
@@ -212,32 +203,16 @@ async function searchDocuments(
                 ),
                 warnings: result.warnings,
             })),
-        ...(searchProcedures === undefined
-            ? []
-            : [
-                  searchProcedures({
-                      corpusId: corpus.corpusId,
-                      query: question,
-                      states: ["saved"],
-                      limit: 5,
-                  }).then((matches) => ({
-                      kind: "procedure" as const,
-                      name: corpus.name,
-                      matches,
-                  })),
-              ]),
-    ]);
+    );
     const results = await Promise.allSettled(requests);
     const matches: { name: string; evidence: MemoryEvidence }[][] = [];
-    const procedures: { name: string; match: ProcedureSearchMatch }[][] = [];
     const errors: string[] = [];
     results.forEach((result, index) => {
         if (result.status === "rejected") {
-            const perCorpus = searchProcedures === undefined ? 1 : 2;
-            const message = `${index % perCorpus === 0 ? "Document" : "Procedure"} search failed in ${corpora[Math.floor(index / perCorpus)].name}: ${String(result.reason)}`;
+            const message = `Document search failed in ${corpora[index].name}: ${String(result.reason)}`;
             debug(message);
             errors.push(message);
-        } else if (result.value.kind === "document") {
+        } else {
             matches.push(
                 distinctEvidence(
                     result.value.matches.map((evidence) => ({
@@ -252,31 +227,15 @@ async function searchDocuments(
                         `Document search warning in ${result.value.name}: ${warning}`,
                 ),
             );
-        } else {
-            procedures.push(
-                result.value.matches.map((match) => ({
-                    name: result.value.name,
-                    match,
-                })),
-            );
         }
     });
     const selectedMatches = interleave(matches, 8);
-    const selectedProcedures = interleave(procedures, 5);
     const omittedMatches =
         matches.reduce((total, group) => total + group.length, 0) -
         selectedMatches.length;
-    const omittedProcedures =
-        procedures.reduce((total, group) => total + group.length, 0) -
-        selectedProcedures.length;
     if (omittedMatches > 0) {
         errors.unshift(
             `Document results truncated: ${omittedMatches} additional evidence matches omitted (limit: 8; corpus order breaks ties).`,
-        );
-    }
-    if (omittedProcedures > 0) {
-        errors.unshift(
-            `Procedure results truncated: ${omittedProcedures} additional matches omitted (limit: 5; corpus order breaks ties).`,
         );
     }
     const lines = selectedMatches.map(({ name, evidence }) =>
@@ -291,29 +250,8 @@ async function searchDocuments(
             1_000,
         ),
     );
-    const procedureLines = selectedProcedures.map(({ name, match }) =>
-        boundedText(
-            [
-                `- **Saved procedure: ${match.version.document.title}** (corpus: ${name}; procedure: ${match.procedure.procedureId}; version: ${match.procedure.latestVersion})`,
-                ...(match.version.document.summary === undefined
-                    ? []
-                    : [`  Summary: ${match.version.document.summary}`]),
-                ...match.version.document.steps
-                    .slice(0, 5)
-                    .map((step, index) => `  ${index + 1}. ${step}`),
-                ...(match.version.document.steps.length > 5
-                    ? ["  [Truncated: additional procedure steps omitted.]"]
-                    : []),
-                `  Sources: ${match.version.document.citations.map((citation) => `${citation.sourceId}@${citation.revisionId}`).join(", ") || "manually created"}`,
-            ].join("\n"),
-            800,
-        ),
-    );
-    if (searchProcedures === undefined) {
-        errors.push("Saved procedure search is unavailable in this host.");
-    }
     return (
-        [...lines, ...procedureLines, boundedText(errors.join("\n"), 2_000)]
+        [...lines, boundedText(errors.join("\n"), 2_000)]
             .filter(Boolean)
             .join("\n") || undefined
     );

@@ -7,7 +7,7 @@ import type {
     ViewCitation,
     ViewRelationshipInput,
 } from "@typeagent/memory-service";
-import { rbNode, rbButton } from "./memoryHubRunbookUi";
+import { rbNode, rbButton } from "./memoryHubDocumentUi";
 
 function index(content: WikiContent) {
     content.index = content.sections.map((page) => ({

@@ -1,21 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdtemp, rm, readFile, writeFile, stat } from "node:fs/promises";
+import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
+import { timelineTimestamp } from "../src/timeline.js";
+import { hydrateInventoryConstruction } from "../src/viewInventoryCoverage.js";
+import { authoredRelationships } from "../src/viewRelationships.js";
 import type {
     TimelineContent,
     ViewBuildBounds,
     ViewBuildJob,
 } from "../src/viewTypes.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
-import { timelineTestAnswer } from "./timelineTestModel.js";
-import { authoredRelationships } from "../src/viewRelationships.js";
-import { timelineTimestamp } from "../src/timeline.js";
-import { hydrateInventoryConstruction } from "../src/viewInventoryCoverage.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { projectSources } from "./projectBriefTestModel.js";
+import { timelineTestAnswer } from "./timelineTestModel.js";
 
 const runtimeJest = import.meta.jest;
 const jest = runtimeJest as typeof runtimeJest & {
@@ -88,7 +88,6 @@ const { createDocMemorySettings } = await import(
 );
 const { viewHash } = await import("../src/viewMerge.js");
 const { ViewHistory } = await import("../src/viewHistory.js");
-const { TypedViewStore } = await import("../src/personalHowToStore.js");
 
 describe("timeline configured service pipeline", () => {
     let root: string;
@@ -98,7 +97,7 @@ describe("timeline configured service pipeline", () => {
         new FileMemoryService(root, {
             viewDrafts: true,
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
         });
     beforeEach(async () => {
         root = await mkdtemp(path.join(os.tmpdir(), "timeline-offline-"));
@@ -316,20 +315,13 @@ describe("timeline configured service pipeline", () => {
             await runMemoryViewsCli([
                 "--store",
                 root,
-                "--enable-view-drafts",
                 "read",
                 corpusId,
                 "canonical-timeline",
             ]),
         ).toMatchObject({ content: { kind: "timeline" } });
         expect(
-            await runMemoryViewsCli([
-                "--store",
-                root,
-                "--enable-view-drafts",
-                "build",
-                requestFile,
-            ]),
+            await runMemoryViewsCli(["--store", root, "build", requestFile]),
         ).toMatchObject({ state: "complete", results: [{ state: "draft" }] });
         service = open();
     });
@@ -340,13 +332,7 @@ describe("timeline configured service pipeline", () => {
             ),
         );
         await service.close();
-        const args = [
-            "--store",
-            root,
-            "--enable-view-drafts",
-            "events",
-            corpusId,
-        ];
+        const args = ["--store", root, "events", corpusId];
         const first = await runMemoryViewsCli(args);
         expect(first).toMatchObject({
             items: expect.any(Array),
@@ -437,7 +423,7 @@ describe("timeline configured service pipeline", () => {
         expect((await service.listViews(corpusId)).head).toBe(snapshot.head);
     });
 
-    test("bulk event forgetting purges managed history and rebuilds its index once", async () => {
+    test("bulk event forgetting purges managed history once", async () => {
         const removed = [
             await event("First forgotten observation"),
             await event("Second forgotten observation"),
@@ -468,7 +454,6 @@ describe("timeline configured service pipeline", () => {
             ).results[0].state,
         ).toBe("searchable");
         const purge = jest.spyOn(ViewHistory.prototype, "purge");
-        const rebuild = jest.spyOn(TypedViewStore.prototype, "rebuildIndex");
         try {
             expect(
                 await service.forgetEvents({
@@ -478,7 +463,6 @@ describe("timeline configured service pipeline", () => {
                 }),
             ).toMatchObject({ deletedEventCount: 2 });
             expect(purge).toHaveBeenCalledTimes(1);
-            expect(rebuild).toHaveBeenCalledTimes(1);
             expect(JSON.parse(purge.mock.calls[0][0])).toEqual({
                 kind: "events",
                 eventIds: expect.arrayContaining(
@@ -487,7 +471,6 @@ describe("timeline configured service pipeline", () => {
             });
         } finally {
             purge.mockRestore();
-            rebuild.mockRestore();
         }
         expect(await service.listViews(corpusId)).toMatchObject({
             views: [{ viewId: "retained-timeline" }],
@@ -539,7 +522,7 @@ describe("timeline configured service pipeline", () => {
             async (marker, sanitize, entries, cleanup) => {
                 purge.mockRestore();
                 const interrupted = new ViewHistory<unknown>(
-                    path.join(root, corpusId, "personal-how-to"),
+                    path.join(root, corpusId, "views"),
                     () => undefined,
                     async (point) => {
                         if (point === "purge-prepared")
@@ -846,8 +829,9 @@ describe("timeline configured service pipeline", () => {
         ]);
         await service.close();
         service = new FileMemoryService(root, {
+            viewDrafts: false,
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
         });
         await expect(search()).rejects.toThrow("not supported");
         await service.close();
@@ -1284,13 +1268,7 @@ describe("timeline configured service pipeline", () => {
             "unrelated-guide",
         ]);
         const files = await readFile(
-            path.join(
-                root,
-                corpusId,
-                "personal-how-to",
-                "view-history.git",
-                "HEAD",
-            ),
+            path.join(root, corpusId, "views", "view-history.git", "HEAD"),
             "utf8",
         );
         expect(files).toContain("refs/heads");
@@ -1395,9 +1373,7 @@ describe("timeline configured service pipeline", () => {
         const create = () =>
             new FileMemoryService(root, {
                 viewDrafts: true,
-                indexFactory: (_id, directory) =>
-                    new FakeProcedureCorpusIndex(directory),
-                procedureIndexFactory: (id, directory) =>
+                indexFactory: (id, directory) =>
                     createKnowProCorpusIndex(id, directory, () => {
                         const settings = createDocMemorySettings(
                             64,
@@ -1448,7 +1424,7 @@ describe("timeline configured service pipeline", () => {
         const directory = path.join(
             root,
             corpusId,
-            "personal-how-to",
+            "views",
             "view-search-index",
             viewHash("indexed-timeline"),
             viewHash(revisionId),

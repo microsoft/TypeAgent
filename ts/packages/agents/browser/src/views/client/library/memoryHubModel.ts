@@ -7,7 +7,7 @@ export const pages = [
     "inbox",
     "search",
     "library",
-    "runbooks",
+    "views",
     "explore",
     "activity",
     "settings",
@@ -17,9 +17,8 @@ export type HubRoute = {
     page: HubPage;
     corpusId?: string;
     objectId?: string;
-    runbookKind?: "candidate" | "procedure";
-    procedureVersion?: number;
-    skillRevisionId?: string;
+    viewRevisionId?: string;
+    activityKind?: "view-build";
     webView?: "analytics" | "entities" | "topics";
     webEntity?: string;
     webTopic?: string;
@@ -64,18 +63,11 @@ export function parseRoute(hash: string): HubRoute {
         page,
         corpusId: parts[1] || undefined,
         objectId: parts[2] || undefined,
-        ...(page === "runbooks" &&
-        (parts[3] === "candidate" || parts[3] === "procedure")
-            ? { runbookKind: parts[3] }
+        ...(page === "views" && parts[3] === "revision" && parts[4]
+            ? { viewRevisionId: parts[4] }
             : {}),
-        ...(page === "runbooks" &&
-        parts[3] === "procedure" &&
-        /^[1-9]\d*$/.test(parts[4] ?? "") &&
-        Number.isSafeInteger(Number(parts[4]))
-            ? { procedureVersion: Number(parts[4]) }
-            : {}),
-        ...(page === "runbooks" && parts[3] === "skill" && parts[4]
-            ? { runbookKind: "procedure", skillRevisionId: parts[4] }
+        ...(page === "activity" && parts[3] === "view-build"
+            ? { activityKind: "view-build" as const }
             : {}),
     };
 }
@@ -105,18 +97,11 @@ export function routeHash(route: HubRoute): string {
                 : [
                       route.corpusId,
                       route.objectId,
-                      ...(route.page === "runbooks" && route.objectId
-                          ? route.skillRevisionId
-                              ? ["skill", route.skillRevisionId]
-                              : [
-                                    route.runbookKind ??
-                                        (route.procedureVersion === undefined
-                                            ? undefined
-                                            : "procedure"),
-                                    route.procedureVersion === undefined
-                                        ? undefined
-                                        : String(route.procedureVersion),
-                                ]
+                      ...(route.page === "views" && route.viewRevisionId
+                          ? ["revision", route.viewRevisionId]
+                          : []),
+                      ...(route.page === "activity" && route.activityKind
+                          ? [route.activityKind]
                           : []),
                   ]),
         ]

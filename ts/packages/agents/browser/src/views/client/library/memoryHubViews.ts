@@ -15,11 +15,20 @@ import type {
     ViewCitation,
 } from "@typeagent/memory-service";
 import { invokeMemory, invokeView } from "./viewClient";
-import { rbButton, rbError, rbNode } from "./memoryHubRunbookUi";
+import { rbButton, rbError, rbNode, rbMarkdown } from "./memoryHubDocumentUi";
+import { viewSheet } from "./memoryHubViewUi";
+import {
+    listReadyViewSources,
+    listViewTimelineEvents,
+    viewBuildBounds,
+    createViewBuildTargets,
+    readViewSourceText,
+} from "./memoryHubViewBuild";
 import { createProjectBriefEditor } from "./memoryHubProjectBrief";
 import { createTimelineEditor } from "./memoryHubTimeline";
 import { createWikiEditor } from "./memoryHubWiki";
 import { createMaintenancePanel } from "./memoryHubMaintenance";
+import { createGuideEditor } from "./memoryHubGuide";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
 
 const viewKindLabels: Record<ViewKind, string> = {
@@ -105,23 +114,33 @@ export function mountMemoryHubViews(
     options: {
         scope: () => string | undefined;
         onError: (error: unknown) => void;
+        onNavigate?: (route: string) => void;
+        onChange?: () => void;
+        onOpenView?: (
+            corpusId: string,
+            viewId: string,
+            revisionId?: string,
+        ) => void;
+        onBuildStarted?: (corpusId: string, jobId: string) => void;
+        onChanged?: () => Promise<void> | void;
     },
 ) {
     const root = rbNode("section");
     root.className = "hub-draft-views";
-    root.hidden = true;
+    root.hidden = false;
     root.setAttribute("aria-label", "Derived views");
     const status = rbNode("p");
     status.setAttribute("role", "status");
     const controls = rbNode("div");
-    const receipt = rbNode("div");
+    const receipt = rbNode("details", undefined, "hub-view-build-receipt");
+    receipt.hidden = true;
     const drafts = rbNode("div");
     const comparison = rbNode("div");
     root.append(
         rbNode("h3", "Views"),
         rbNode(
             "p",
-            "Distill retained document revisions or canonical events into a bounded knowledge wiki, evidence-linked timeline, project brief or conditional troubleshooting guide. Publication and index readiness are separate; neither grants human review, skill approval or execution. Configured synthesis remains live-unqualified.",
+            "Read reusable documents built from your memory. Choose a view to preview it, or build new views from ready evidence.",
         ),
         status,
         controls,
@@ -137,6 +156,7 @@ export function mountMemoryHubViews(
         views: {},
     };
     const publications = new Map<string, ViewPublicationStatus>();
+    const pendingConflicts = new Map<string, ViewMergeConflict>();
     let sequence = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let dirty = false;
@@ -145,17 +165,59 @@ export function mountMemoryHubViews(
     let disposed = false;
     let supportedKinds: ViewKind[] = ["troubleshootingGuide"];
     let maintenanceSupported = false;
+    let buildsSupported = false;
+    let route:
+        | { corpusId: string; viewId: string; revisionId?: string }
+        | undefined;
+    let activeCorpus: string | undefined;
+    let builder: ReturnType<typeof viewSheet> | undefined;
+    let initialSources: string[] = [];
+    let exactInitialSources = new Map<string, string>();
+    let builderDirty = false;
+    let visible = true;
+    const heads = new Map<string, string | null>();
+    const policies = new Map<string, ViewPublicationPolicy>();
+    let corpusNames = new Map<string, string>();
+    const publicationKey = (corpusId: string, viewId: string) =>
+        JSON.stringify([corpusId, viewId]);
+    const markDirty = () => {
+        dirty = true;
+        options.onChange?.();
+    };
+    const changed = async () => {
+        options.onChange?.();
+        await options.onChanged?.();
+    };
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+        if (!dirty && !builderDirty) return;
+        event.preventDefault();
+        event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
 
     async function action(operation: () => Promise<void>): Promise<void> {
         if (busy || disposed) return;
         busy = true;
+        root.setAttribute("aria-busy", "true");
         try {
             await operation();
         } catch (error) {
             status.textContent = `View operation failed: ${rbError(error)}. No success or overwrite is assumed.`;
+            const dialog =
+                root.querySelector<HTMLDialogElement>("dialog[open]");
+            if (dialog) {
+                let alert = dialog.querySelector<HTMLElement>('[role="alert"]');
+                if (!alert) {
+                    alert = rbNode("p");
+                    alert.setAttribute("role", "alert");
+                    dialog.append(alert);
+                }
+                alert.textContent = status.textContent;
+            }
             options.onError(error);
         } finally {
             busy = false;
+            root.setAttribute("aria-busy", "false");
             if (refreshPending) {
                 refreshPending = false;
                 void action(refresh);
@@ -167,8 +229,9 @@ export function mountMemoryHubViews(
         const current = ++sequence;
         const capabilities = await invokeMemory("memoryViewCapabilities", {});
         if (current !== sequence) return;
-        root.hidden = !capabilities.derivedViews?.builds;
+        root.hidden = !visible;
         maintenanceSupported = capabilities.derivedViews?.maintenance === true;
+        buildsSupported = capabilities.derivedViews?.builds === true;
         supportedKinds = (
             capabilities.derivedViews?.kinds ?? ["troubleshootingGuide"]
         ).filter(
@@ -178,83 +241,268 @@ export function mountMemoryHubViews(
                 kind === "timeline" ||
                 kind === "wiki",
         );
-        if (root.hidden) return;
-        const corpusId = options.scope();
-        if (!corpusId) {
+        if (!buildsSupported) {
+            pendingConflicts.clear();
             status.textContent =
-                "Choose a named corpus to build views. All memory is not an access grant.";
+                "The connected memory service does not provide view building. Views may be explicitly disabled by the host or unavailable in this service version. No setting in Memory needs to be enabled.";
             controls.replaceChildren();
             drafts.replaceChildren();
             receipt.replaceChildren();
             comparison.replaceChildren();
             return;
         }
-        const [views, jobs, savedPolicy] = await Promise.all([
-            invokeMemory("memoryListViews", { corpusId }),
-            invokeMemory("memoryListViewBuilds", { corpusId }),
-            invokeMemory("memoryGetViewPublicationPolicy", { corpusId }),
-        ]);
-        if (current !== sequence || corpusId !== options.scope()) return;
-        snapshot = views;
-        policy = savedPolicy;
+        const selectedScope = options.scope();
+        const corpusId = route?.corpusId ?? selectedScope;
+        const catalog = await invokeMemory("memoryListCorpora", {});
+        if (current !== sequence || selectedScope !== options.scope()) return;
+        corpusNames = new Map(
+            catalog.map((corpus) => [corpus.corpusId, corpus.name]),
+        );
+        const corpora = corpusId ? [{ corpusId }] : catalog;
+        const collections = await Promise.all(
+            corpora.map(async ({ corpusId }) => {
+                const [views, jobs, savedPolicy] = await Promise.all([
+                    invokeMemory("memoryListViews", { corpusId }),
+                    invokeMemory("memoryListViewBuilds", { corpusId }),
+                    invokeMemory("memoryGetViewPublicationPolicy", {
+                        corpusId,
+                    }),
+                ]);
+                return { corpusId, views, jobs, savedPolicy };
+            }),
+        );
+        if (current !== sequence || selectedScope !== options.scope()) return;
+        heads.clear();
+        policies.clear();
+        for (const collection of collections) {
+            heads.set(collection.corpusId, collection.views.head);
+            policies.set(collection.corpusId, collection.savedPolicy);
+        }
+        snapshot = {
+            head: collections.length === 1 ? collections[0].views.head : null,
+            views: collections.flatMap((collection) => collection.views.views),
+        };
+        policy = collections[0]?.savedPolicy ?? policy;
         publications.clear();
         await Promise.all(
-            views.views.map(async (view) => {
+            snapshot.views.map(async (view) => {
                 publications.set(
-                    view.viewId,
+                    publicationKey(view.corpusId, view.viewId),
                     await invokeMemory("memoryGetViewPublication", {
-                        corpusId,
+                        corpusId: view.corpusId,
                         viewId: view.viewId,
                     }),
                 );
             }),
         );
-        await renderControls(corpusId, current);
+        if (current !== sequence) return;
+        controls.replaceChildren(
+            rbButton("Build views", () => {
+                exactInitialSources.clear();
+                void action(() => openBuilder());
+            }),
+            rbButton("Refresh views", () => {
+                void action(refresh);
+            }),
+        );
+        const jobs = collections.flatMap((collection) => collection.jobs);
+        await loadPendingConflicts(jobs, current);
         if (current !== sequence) return;
         renderDrafts();
         if (jobs[0]) renderReceipt(jobs[0]);
-        else
-            receipt.replaceChildren(rbNode("p", "No durable view builds yet."));
-        status.textContent =
-            "Opt-in views enabled. Inputs, policy and target revisions are rechecked before publication. Auto-publish does not stamp human review.";
+        else {
+            receipt.replaceChildren();
+            receipt.hidden = true;
+        }
+        status.textContent = snapshot.views.length
+            ? `${snapshot.views.length} saved views${corpusId ? "" : " across your collections"}.`
+            : "No views yet. Build a reusable document from ready sources.";
+        if (route && !dirty) await renderRoute(route, current);
+    }
+
+    async function loadPendingConflicts(
+        jobs: ViewBuildJob[],
+        current: number,
+    ): Promise<void> {
+        const references = new Map<
+            string,
+            { corpusId: string; conflictId: string }
+        >();
+        const ordered = [...jobs].sort((left, right) =>
+            (right.createdAt ?? "").localeCompare(left.createdAt ?? ""),
+        );
+        for (const job of ordered)
+            for (const result of job.results) {
+                const key = publicationKey(job.corpusId, result.viewId);
+                if (result.conflictId && !references.has(key))
+                    references.set(key, {
+                        corpusId: job.corpusId,
+                        conflictId: result.conflictId,
+                    });
+            }
+        const conflicts = await Promise.all(
+            [...references].map(async ([key, input]) => {
+                const conflict = await invokeMemory(
+                    "memoryGetViewConflict",
+                    input,
+                );
+                if (!conflict)
+                    throw new Error(
+                        "A conflict referenced by a build receipt is unavailable; refresh Activity or inspect view history",
+                    );
+                return { key, conflict };
+            }),
+        );
+        if (disposed || current !== sequence) return;
+        pendingConflicts.clear();
+        for (const { key, conflict } of conflicts)
+            if (conflict.state === "pending")
+                pendingConflicts.set(key, conflict);
+    }
+
+    async function renderRoute(
+        target: { corpusId: string; viewId: string; revisionId?: string },
+        current: number,
+    ): Promise<void> {
+        const latest = snapshot.views.find(
+            (view) =>
+                view.corpusId === target.corpusId &&
+                view.viewId === target.viewId,
+        );
+        const view = target.revisionId
+            ? await invokeMemory("memoryGetView", target)
+            : latest;
+        if (disposed || current !== sequence) return;
+        if (!view) {
+            comparison.replaceChildren(
+                rbNode(
+                    "p",
+                    "This view revision is unavailable in the selected collection.",
+                ),
+            );
+            if (target.revisionId)
+                throw new Error("Exact view revision is unavailable");
+            return;
+        }
+        if (
+            target.revisionId &&
+            (view.revisionId !== target.revisionId ||
+                view.corpusId !== target.corpusId ||
+                view.viewId !== target.viewId)
+        )
+            throw new Error(
+                "The service did not return the requested exact view revision",
+            );
+        showPreview(view);
+        if (target.revisionId) {
+            comparison.querySelector(".hub-view-actions")?.replaceChildren(
+                rbNode(
+                    "p",
+                    latest?.revisionId === view.revisionId
+                        ? "Exact revision (read-only)"
+                        : "Historical revision (read-only)",
+                ),
+                rbNode("p", `Revision: ${view.revisionId}`),
+                rbButton("Back to views", backToViews),
+                rbButton("Open current view", () => {
+                    void showView(view.corpusId, view.viewId);
+                }),
+            );
+        }
+    }
+
+    function backToViews(): void {
+        if (!discardChanges()) return;
+        route = undefined;
+        comparison.replaceChildren();
+        drafts.hidden = controls.hidden = false;
+        if (busy) refreshPending = true;
+        else void action(refresh);
+        if (options.onNavigate) options.onNavigate("#/views");
+        else window.location.hash = "#/views";
+    }
+
+    async function openBuilder(
+        corpusId = options.scope(),
+        sourceIds: string[] = [],
+        rebuilding?: ViewVersion,
+    ): Promise<void> {
+        if (!discardChanges()) return;
+        sequence++;
+        builder?.close();
+        builder = viewSheet(
+            root,
+            "Build views",
+            () => !busy && discardChanges(),
+        );
+        builder.element.addEventListener("change", () => {
+            builderDirty = true;
+        });
+        initialSources = sourceIds;
+        const picker = document.createElement("select");
+        picker.setAttribute("aria-label", "Build collection");
+        const corpora = await invokeMemory("memoryListCorpora", {});
+        if (disposed || !builder.element.isConnected) return;
+        picker.append(new Option("Choose a collection", ""));
+        for (const corpus of corpora)
+            picker.append(new Option(corpus.name, corpus.corpusId));
+        picker.value = corpusId ?? "";
+        picker.disabled = rebuilding !== undefined;
+        const content = rbNode("div");
+        builder.body.append(
+            rbNode(
+                "p",
+                "Choose view types, ready evidence, then confirm exact inputs before generation.",
+            ),
+            picker,
+            content,
+        );
+        const load = async () => {
+            activeCorpus = picker.value || undefined;
+            content.replaceChildren();
+            if (!activeCorpus) {
+                content.append(
+                    rbNode(
+                        "p",
+                        "All memory can be browsed together. Builds use one explicit collection.",
+                    ),
+                );
+                return;
+            }
+            const current = sequence;
+            const corpusId = activeCorpus;
+            policy = await invokeMemory("memoryGetViewPublicationPolicy", {
+                corpusId,
+            });
+            await renderControls(corpusId, current, content, rebuilding);
+        };
+        picker.onchange = () => {
+            void action(load);
+        };
+        await load();
     }
 
     async function renderControls(
         corpusId: string,
         current: number,
+        container: HTMLElement,
+        rebuilding?: ViewVersion,
     ): Promise<void> {
-        const sources: Array<{
-            sourceId: string;
-            revisionId: string;
-            title: string;
-        }> = [];
-        let continuationToken: string | undefined;
-        do {
-            const page = await invokeMemory("memoryListSources", {
-                corpusId,
-                pageSize: 200,
-                ...(continuationToken === undefined
-                    ? {}
-                    : { continuationToken }),
-            });
-            for (const source of page.items) {
-                const revision = source.revisions.find(
-                    (entry) => entry.revisionId === source.activeRevisionId,
+        const [sources, events] = await Promise.all([
+            listReadyViewSources(corpusId),
+            supportedKinds.includes("timeline")
+                ? listViewTimelineEvents(corpusId)
+                : Promise.resolve([]),
+        ]);
+        if (current !== sequence || activeCorpus !== corpusId) return;
+        for (const [sourceId, revisionId] of exactInitialSources)
+            if (
+                sources.find((source) => source.sourceId === sourceId)
+                    ?.revisionId !== revisionId
+            )
+                throw new Error(
+                    "A selected source revision is no longer ready and current. Review source selection again.",
                 );
-                if (revision?.state === "ready")
-                    sources.push({
-                        sourceId: source.sourceId,
-                        revisionId: source.activeRevisionId,
-                        title: source.title,
-                    });
-            }
-            continuationToken = page.nextContinuationToken;
-        } while (continuationToken && sources.length < 1000);
-        if (continuationToken)
-            throw new Error(
-                "Source selection exceeds 1000 ready sources; use a bounded corpus",
-            );
-        if (current !== sequence) return;
         const selected = new Map<string, string>();
         const selectedEvents = new Set<string>();
         const eventHost = rbNode("fieldset");
@@ -262,39 +510,33 @@ export function mountMemoryHubViews(
         eventHost.append(
             rbNode("legend", "Canonical timeline events (not document IDs)"),
         );
-        let eventContinuation: string | undefined;
-        if (supportedKinds.includes("timeline"))
-            do {
-                const page = await invokeMemory("memoryListEvents", {
-                    corpusId,
-                    pageSize: 200,
-                    ...(eventContinuation
-                        ? { continuationToken: eventContinuation }
-                        : {}),
-                });
-                for (const event of page.items) {
-                    const label = rbNode("label");
-                    const checkbox = document.createElement("input");
-                    checkbox.type = "checkbox";
-                    checkbox.onchange = () => {
-                        if (checkbox.checked) selectedEvents.add(event.eventId);
-                        else selectedEvents.delete(event.eventId);
-                    };
-                    label.append(
-                        checkbox,
-                        rbNode(
-                            "span",
-                            `${event.eventType} [${event.eventId}] occurred ${event.eventTime}; learned ${event.observedAt}; captured ${event.createdAt}`,
-                        ),
-                    );
-                    eventHost.append(label);
-                }
-                eventContinuation = page.nextContinuationToken;
-            } while (eventContinuation && eventHost.childElementCount < 1001);
-        if (eventContinuation)
-            throw new Error(
-                "Event selection exceeds 1000 records; use a bounded corpus",
+        for (const event of events) {
+            const label = rbNode("label");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.setAttribute("aria-label", `Use event ${event.eventId}`);
+            if (
+                rebuilding?.definition.selector.kind === "timelineEvidence" &&
+                rebuilding.definition.selector.events.some(
+                    (input) => input.eventId === event.eventId,
+                )
+            ) {
+                checkbox.checked = true;
+                selectedEvents.add(event.eventId);
+            }
+            checkbox.onchange = () => {
+                if (checkbox.checked) selectedEvents.add(event.eventId);
+                else selectedEvents.delete(event.eventId);
+            };
+            label.append(
+                checkbox,
+                rbNode(
+                    "span",
+                    `${event.eventType} [${event.eventId}] occurred ${event.eventTime}; learned ${event.observedAt}; captured ${event.createdAt}`,
+                ),
             );
+            eventHost.append(label);
+        }
         const sourceHost = rbNode("fieldset");
         sourceHost.append(
             rbNode(
@@ -302,15 +544,54 @@ export function mountMemoryHubViews(
                 "Select exact current evidence (maximum 32 sources)",
             ),
         );
+        const selectAll = document.createElement("input");
+        selectAll.type = "checkbox";
+        selectAll.setAttribute("aria-label", "Select all sources");
+        const selectAllLabel = rbNode("label");
+        selectAllLabel.append(selectAll, rbNode("span", "Select all sources"));
+        const selectionCount = rbNode("p");
+        selectionCount.setAttribute("role", "status");
+        const sourceControls = new Map<string, HTMLInputElement>();
+        const updateSelection = () => {
+            selectAll.checked =
+                sources.length > 0 && selected.size === sources.length;
+            selectAll.indeterminate =
+                selected.size > 0 && selected.size < sources.length;
+            selectAll.disabled = sources.length === 0;
+            selectionCount.textContent = `${selected.size} of ${sources.length} sources selected. Maximum 32 sources per view.${selected.size > 32 ? " Deselect sources before continuing." : ""}`;
+        };
+        selectAll.onchange = () => {
+            for (const source of sources) {
+                sourceControls.get(source.sourceId)!.checked =
+                    selectAll.checked;
+                if (selectAll.checked)
+                    selected.set(source.sourceId, source.revisionId);
+                else selected.delete(source.sourceId);
+            }
+            updateSelection();
+        };
+        sourceHost.append(selectAllLabel, selectionCount);
+        sourceHost.append(
+            rbNode(
+                "p",
+                "Choose sources relevant to the views you want. Missing facts stay unknown; selecting a source does not guarantee a useful view.",
+            ),
+        );
         for (const source of sources) {
             const label = rbNode("label");
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
+            checkbox.setAttribute("aria-label", `Use ${source.title}`);
+            checkbox.checked = initialSources.includes(source.sourceId);
+            if (checkbox.checked)
+                selected.set(source.sourceId, source.revisionId);
             checkbox.onchange = () => {
                 if (checkbox.checked)
                     selected.set(source.sourceId, source.revisionId);
                 else selected.delete(source.sourceId);
+                updateSelection();
             };
+            sourceControls.set(source.sourceId, checkbox);
             label.append(
                 checkbox,
                 rbNode(
@@ -320,16 +601,35 @@ export function mountMemoryHubViews(
             );
             sourceHost.append(label);
         }
-        const target = document.createElement("input");
-        target.setAttribute("aria-label", "Stable view ID");
-        target.placeholder = "view-id (existing ID rebuilds that draft)";
-        const kindPicker = document.createElement("select");
-        kindPicker.setAttribute("aria-label", "View kind");
+        updateSelection();
+        const selectedKinds = new Set<ViewKind>();
+        if (rebuilding) selectedKinds.add(rebuilding.content.kind);
+        const targets = new Map(
+            supportedKinds.map((kind) => [
+                kind,
+                `${kind}-${[...crypto.getRandomValues(new Uint8Array(16))].map((value) => value.toString(16).padStart(2, "0")).join("")}`,
+            ]),
+        );
+        const kindPicker = rbNode("fieldset", undefined, "hub-view-kinds");
+        kindPicker.append(rbNode("legend", "What would you like to build?"));
         for (const kind of supportedKinds) {
-            const option = document.createElement("option");
-            option.value = kind;
-            option.textContent = viewKindLabels[kind];
-            kindPicker.append(option);
+            if (rebuilding && kind !== rebuilding.content.kind) continue;
+            const label = rbNode("label", undefined, "hub-view-kind");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = selectedKinds.has(kind);
+            checkbox.disabled = rebuilding !== undefined;
+            checkbox.setAttribute("aria-label", viewKindLabels[kind]);
+            checkbox.onchange = () => {
+                if (checkbox.checked) selectedKinds.add(kind);
+                else selectedKinds.delete(kind);
+                eventHost.hidden =
+                    occurredFrom.hidden =
+                    occurredTo.hidden =
+                        !selectedKinds.has("timeline");
+            };
+            label.append(checkbox, rbNode("strong", viewKindLabels[kind]));
+            kindPicker.append(label);
         }
         const cutoff = document.createElement("input");
         cutoff.setAttribute("aria-label", "Learned before ISO timestamp");
@@ -341,12 +641,10 @@ export function mountMemoryHubViews(
         const occurredTo = document.createElement("input");
         occurredTo.setAttribute("aria-label", "Occurred to ISO timestamp");
         occurredTo.placeholder = "Optional occurrence end (explicit timezone)";
-        kindPicker.onchange = () => {
-            eventHost.hidden = kindPicker.value !== "timeline";
-            occurredFrom.hidden = occurredTo.hidden =
-                kindPicker.value !== "timeline";
-        };
-        kindPicker.onchange(new Event("change"));
+        eventHost.hidden =
+            occurredFrom.hidden =
+            occurredTo.hidden =
+                !selectedKinds.has("timeline");
         const corpusPolicy = publicationChoice(
             "Corpus auto-publish after build",
             false,
@@ -360,11 +658,12 @@ export function mountMemoryHubViews(
                 void action(async () => {
                     await invokeMemory("memoryUpdateViewPublicationPolicy", {
                         corpusId,
-                        expectedHead: snapshot.head,
+                        expectedHead: heads.get(corpusId) ?? null,
                         expectedRevision: policy.revision,
                         autoPublish: corpusPolicy.value === "on",
                     });
                     await refresh();
+                    await changed();
                 });
             }),
         );
@@ -374,7 +673,9 @@ export function mountMemoryHubViews(
         );
         const effective = rbNode("p");
         const updateEffective = () => {
-            const override = policy.views[target.value.trim()]?.autoPublish;
+            const override = rebuilding
+                ? policy.views[rebuilding.viewId]?.autoPublish
+                : undefined;
             const value =
                 buildPolicy.value !== "inherit"
                     ? buildPolicy.value === "on"
@@ -382,140 +683,244 @@ export function mountMemoryHubViews(
             const origin =
                 buildPolicy.value !== "inherit"
                     ? "build override"
-                    : override != null
-                      ? "view override"
-                      : "corpus setting";
+                    : override == null
+                      ? "corpus setting"
+                      : "view override";
             effective.textContent = `Auto-publish after build: ${value ? "On" : "Off"} (${origin}). One-build overrides do not change saved settings.`;
         };
-        target.oninput = buildPolicy.onchange = updateEffective;
+        buildPolicy.onchange = updateEffective;
         updateEffective();
-        controls.replaceChildren(
-            settings,
-            sourceHost,
+        container.replaceChildren(
             kindPicker,
+            sourceHost,
             eventHost,
-            target,
             cutoff,
             occurredFrom,
             occurredTo,
             buildPolicy,
             effective,
-            rbButton("Build views", () => {
+            rbButton("Continue to confirmation", () => {
                 void action(async () => {
                     if (dirty)
                         throw new Error(
                             "Save or explicitly discard editor changes before building",
                         );
-                    const viewId = target.value.trim();
-                    if (
-                        !viewId ||
-                        (!selected.size &&
-                            !(
-                                kindPicker.value === "timeline" &&
-                                selectedEvents.size
-                            ))
-                    )
-                        throw new Error("Choose evidence and a stable view ID");
+                    if (!selectedKinds.size)
+                        throw new Error("Choose at least one view type");
                     const latest = await invokeMemory("memoryListViews", {
                         corpusId,
                     });
-                    const prior = latest.views.find(
-                        (view) => view.viewId === viewId,
-                    );
-                    const kind = supportedKinds.find(
-                        (kind) => kind === kindPicker.value,
-                    );
-                    if (!kind)
-                        throw new Error(
-                            "This server does not support the selected view kind",
+                    if (rebuilding) {
+                        if (corpusId !== rebuilding.corpusId)
+                            throw new Error(
+                                "A rebuild cannot move a view to another collection",
+                            );
+                        const current = latest.views.find(
+                            (view) => view.viewId === rebuilding.viewId,
                         );
-                    if (prior && prior.content.kind !== kind)
-                        throw new Error(
-                            "An existing view cannot change kind; choose a new stable view ID",
-                        );
+                        if (
+                            !current ||
+                            current.version !== rebuilding.version ||
+                            current.revisionId !== rebuilding.revisionId
+                        )
+                            throw new Error(
+                                "The view changed; refresh it before rebuilding",
+                            );
+                    }
                     const sources = [...selected].map(
                         ([sourceId, revisionId]) => ({
                             sourceId,
                             revisionId,
                         }),
                     );
-                    const job = await invokeMemory("memoryBuildViews", {
-                        corpusId,
-                        expectedHead: latest.head,
-                        targets: [
-                            {
-                                expectedVersion: prior?.version ?? 0,
-                                definition: {
-                                    viewId,
-                                    kind,
-                                    selector:
-                                        kind === "timeline"
-                                            ? {
-                                                  kind: "timelineEvidence",
-                                                  sources,
-                                                  events: [
-                                                      ...selectedEvents,
-                                                  ].map((eventId) => ({
-                                                      eventId,
-                                                  })),
-                                              }
-                                            : { kind: "sources", sources },
-                                },
-                            },
-                        ],
-                        ...(cutoff.value.trim() ||
-                        (kind === "timeline" &&
-                            (occurredFrom.value.trim() ||
-                                occurredTo.value.trim()))
-                            ? {
-                                  bounds: {
-                                      ...(cutoff.value.trim()
-                                          ? {
-                                                learnedBefore:
-                                                    cutoff.value.trim(),
-                                            }
-                                          : {}),
-                                      ...(kind === "timeline" &&
-                                      occurredFrom.value.trim()
-                                          ? {
-                                                occurredFrom:
-                                                    occurredFrom.value.trim(),
-                                            }
-                                          : {}),
-                                      ...(kind === "timeline" &&
-                                      occurredTo.value.trim()
-                                          ? {
-                                                occurredTo:
-                                                    occurredTo.value.trim(),
-                                            }
-                                          : {}),
-                                  },
-                              }
-                            : {}),
-                        ...(buildPolicy.value === "inherit"
-                            ? {}
-                            : { publication: buildPolicy.value === "on" }),
+                    const timelineSources = selectedKinds.has("timeline")
+                        ? await recordSources(corpusId, sources)
+                        : [];
+                    const bounds = viewBuildBounds(
+                        cutoff.value,
+                        occurredFrom.value,
+                        occurredTo.value,
+                        selectedKinds.has("timeline"),
+                    );
+                    const buildTargets = createViewBuildTargets(
+                        selectedKinds,
+                        targets,
+                        sources,
+                        timelineSources,
+                        selectedEvents,
+                        rebuilding,
+                    );
+                    if (
+                        current !== sequence ||
+                        corpusId !== activeCorpus ||
+                        !builder?.element.isConnected
+                    )
+                        return;
+                    const confirmation = rbNode(
+                        "section",
+                        undefined,
+                        "hub-view-confirmation",
+                    );
+                    const publication = buildPolicy.value;
+                    confirmation.append(
+                        rbNode("h3", "Confirm exact inputs"),
+                        rbNode("p", effective.textContent ?? ""),
+                    );
+                    for (const target of buildTargets) {
+                        const detail = rbNode("details");
+                        detail.open = true;
+                        detail.append(
+                            rbNode(
+                                "summary",
+                                viewKindLabels[target.definition.kind],
+                            ),
+                            rbNode(
+                                "p",
+                                `${rebuilding ? "Rebuild view" : "New view"}: ${target.definition.viewId}`,
+                            ),
+                            rbNode(
+                                "p",
+                                target.definition.selector.sources
+                                    .map(
+                                        (source) =>
+                                            `${source.sourceId} @ ${source.revisionId}`,
+                                    )
+                                    .join(", ") || "No document sources",
+                            ),
+                        );
+                        if (
+                            target.definition.selector.kind ===
+                            "timelineEvidence"
+                        )
+                            detail.append(
+                                rbNode(
+                                    "p",
+                                    `Canonical events: ${target.definition.selector.events.map((event) => event.eventId).join(", ") || "none"}`,
+                                ),
+                                rbNode(
+                                    "p",
+                                    `${sources.length - timelineSources.length} non-record documents excluded. Learned through ${bounds.learnedBefore ?? "unbounded"}; occurred ${bounds.occurredFrom ?? "unbounded"} to ${bounds.occurredTo ?? "unbounded"} (inclusive, UTC). Capture time is not knowledge time.`,
+                                ),
+                            );
+                        confirmation.append(detail);
+                    }
+                    const submit = rbButton("Start build", () => {
+                        void action(async () => {
+                            if (
+                                current !== sequence ||
+                                corpusId !== activeCorpus
+                            )
+                                throw new Error(
+                                    "Collection changed; review inputs again",
+                                );
+                            const job = await invokeMemory("memoryBuildViews", {
+                                corpusId,
+                                expectedHead: latest.head,
+                                targets: buildTargets,
+                                ...(Object.values(bounds).some(Boolean)
+                                    ? { bounds }
+                                    : {}),
+                                ...(publication === "inherit"
+                                    ? {}
+                                    : { publication: publication === "on" }),
+                            });
+                            if (current === sequence) {
+                                renderReceipt(job);
+                                receipt.open = true;
+                                builder?.element.remove();
+                                builder = undefined;
+                                builderDirty = false;
+                                options.onChange?.();
+                                await options.onChanged?.();
+                                options.onBuildStarted?.(
+                                    job.corpusId,
+                                    job.jobId,
+                                );
+                            }
+                        });
                     });
-                    if (current === sequence) renderReceipt(job);
+                    confirmation.append(
+                        submit,
+                        rbButton("Back to selection", () => {
+                            confirmation.remove();
+                            for (const child of [...container.children])
+                                (child as HTMLElement).hidden = false;
+                            eventHost.hidden =
+                                occurredFrom.hidden =
+                                occurredTo.hidden =
+                                    !selectedKinds.has("timeline");
+                        }),
+                    );
+                    for (const child of [...container.children])
+                        (child as HTMLElement).hidden = true;
+                    container.append(confirmation);
+                    submit.focus();
                 });
             }),
-            rbButton("Refresh views and receipts", () => {
-                void action(refresh);
-            }),
         );
+        const settingsDetails = rbNode("details");
+        settingsDetails.append(
+            rbNode("summary", "Collection publication settings"),
+            settings,
+        );
+        container.append(settingsDetails);
+        const search = document.createElement("input");
+        search.type = "search";
+        search.setAttribute("aria-label", "Find ready sources");
+        search.placeholder = "Find ready sources";
+        search.oninput = () => {
+            for (const checkbox of sourceControls.values()) {
+                const label = checkbox.parentElement!;
+                label.hidden = !(label.textContent ?? "")
+                    .toLowerCase()
+                    .includes(search.value.toLowerCase());
+            }
+        };
+        sourceHost.insertBefore(search, sourceHost.children[1] ?? null);
+    }
+
+    async function recordSources(
+        corpusId: string,
+        sources: Array<{ sourceId: string; revisionId: string }>,
+    ) {
+        const records = [];
+        for (const source of sources) {
+            const content = await readViewSourceText(corpusId, source);
+            let fenced = false;
+            const lines = content.split(/\r?\n/).filter((line) => {
+                if (/^\s*(`{3,}|~{3,})/.test(line)) {
+                    fenced = !fenced;
+                    return false;
+                }
+                return !fenced;
+            });
+            if (
+                lines.some((line) =>
+                    /^## Record [A-Za-z0-9][A-Za-z0-9._:-]{0,199}\s*$/.test(
+                        line,
+                    ),
+                )
+            )
+                records.push(source);
+        }
+        return records;
     }
 
     function renderReceipt(job: ViewBuildJob): void {
-        if (job.corpusId !== options.scope()) return;
+        if (options.scope() && job.corpusId !== options.scope()) return;
         if (timer) clearTimeout(timer);
+        receipt.hidden = false;
         receipt.replaceChildren(
-            rbNode("h4", `Build ${job.jobId}: ${job.state}`),
+            rbNode("summary", `Build ${job.jobId}: ${job.state}`),
         );
-        if (job.maintenancePlan)
-            receipt.append(
-                rbNode("h5", "Manual maintenance plan"),
+        if (job.maintenancePlan) {
+            const plan = rbNode("details");
+            plan.append(
+                rbNode("summary", "Manual maintenance plan"),
                 rbNode("pre", JSON.stringify(job.maintenancePlan, null, 2)),
             );
+            receipt.append(plan);
+        }
         for (const result of job.results) {
             const effective = result.snapshot.publicationPolicy;
             if (effective)
@@ -544,11 +949,31 @@ export function mountMemoryHubViews(
                     "p",
                     `${result.viewId}: ${result.state}. ${result.reason}`,
                 ),
+            );
+            const exact = rbNode("details");
+            exact.append(
+                rbNode("summary", `Exact inputs for ${result.viewId}`),
                 rbNode(
                     "p",
-                    `Input fingerprint: ${result.snapshot.fingerprint}; exact sources: ${result.snapshot.inputs.map((source) => `${source.sourceId}@${source.revisionId}`).join(", ")}`,
+                    result.snapshot.inputs
+                        .map(
+                            (source) =>
+                                `${source.sourceId} @ ${source.revisionId}`,
+                        )
+                        .join(", "),
                 ),
             );
+            receipt.append(exact);
+            if (
+                ["draft", "merged", "published", "searchable"].includes(
+                    result.state,
+                )
+            )
+                receipt.append(
+                    rbButton("Open view", () => {
+                        void showView(job.corpusId, result.viewId);
+                    }),
+                );
             if (result.inventory) {
                 const details = rbNode("details");
                 details.append(
@@ -614,6 +1039,8 @@ export function mountMemoryHubViews(
                             }),
                         ),
                     );
+                    status.textContent =
+                        "Cancellation requested. Only the durable receipt confirms which targets were cancelled; completed targets are retained.";
                 }),
             );
             const current = sequence;
@@ -650,56 +1077,338 @@ export function mountMemoryHubViews(
         renderReceipt(value);
         // Polling never replaces an active editor.
         if (value.state !== "running" && !dirty) {
-            snapshot = await invokeMemory("memoryListViews", {
+            const latest = await invokeMemory("memoryListViews", {
                 corpusId: job.corpusId,
             });
-            if (current === sequence) renderDrafts();
+            if (current === sequence) {
+                heads.set(job.corpusId, latest.head);
+                snapshot = {
+                    head: options.scope() ? latest.head : null,
+                    views: [
+                        ...snapshot.views.filter(
+                            (view) => view.corpusId !== job.corpusId,
+                        ),
+                        ...latest.views,
+                    ],
+                };
+                renderDrafts();
+                options.onChange?.();
+            }
         }
     }
 
     function renderDrafts(): void {
         if (dirty) return;
-        drafts.replaceChildren(rbNode("h4", "Current draft views"));
-        for (const view of snapshot.views.filter((value) =>
-            supportedKinds.some((kind) => value.content.kind === kind),
-        ))
-            drafts.append(
-                rbButton(
-                    `${view.content.title} (${view.state}, v${view.version})`,
-                    () => showEditor(view),
-                ),
-                ...(maintenanceSupported && view.state !== "archived"
-                    ? [
-                          rbButton(`Maintain ${view.content.title}`, () => {
-                              if (!discardChanges()) return;
-                              const panel = createMaintenancePanel(
-                                  view,
-                                  snapshot.head,
-                                  {
-                                      action: (operation) => {
-                                          void action(operation);
-                                      },
-                                      onChange: () => {
-                                          dirty = true;
-                                      },
-                                      dirty: () => dirty,
-                                      saved: async () => {
-                                          dirty = false;
-                                          comparison.replaceChildren();
-                                          await refresh();
-                                      },
-                                      onBuild: renderReceipt,
-                                      isCurrent: () =>
-                                          !disposed &&
-                                          options.scope() === view.corpusId &&
-                                          comparison.contains(panel),
-                                  },
-                              );
-                              comparison.replaceChildren(panel);
-                          }),
-                      ]
-                    : []),
+        const search = document.createElement("input");
+        search.type = "search";
+        search.setAttribute("aria-label", "Find views");
+        search.placeholder = "Find views";
+        const kind = document.createElement("select");
+        kind.setAttribute("aria-label", "Filter view type");
+        kind.append(new Option("All view types", ""));
+        for (const value of supportedKinds)
+            kind.append(new Option(viewKindLabels[value], value));
+        const list = rbNode("div", undefined, "hub-view-list");
+        const render = () => {
+            list.replaceChildren();
+            const matches = snapshot.views.filter(
+                (view) =>
+                    supportedKinds.some((kind) => view.content.kind === kind) &&
+                    (!kind.value || view.content.kind === kind.value) &&
+                    view.content.title
+                        .toLowerCase()
+                        .includes(search.value.toLowerCase()),
             );
+            if (!matches.length)
+                list.append(
+                    rbNode(
+                        "p",
+                        "No views match. Try another type or build a new view.",
+                    ),
+                );
+            for (const view of matches) {
+                const card = rbNode("article", undefined, "hub-view-card");
+                const publication = publications.get(
+                    publicationKey(view.corpusId, view.viewId),
+                );
+                card.append(
+                    rbButton(view.content.title, () => {
+                        void showView(view.corpusId, view.viewId);
+                    }),
+                    rbNode(
+                        "p",
+                        `${viewKindLabels[view.content.kind as ViewKind]} - ${view.state}, version ${view.version}`,
+                    ),
+                    rbNode(
+                        "p",
+                        publication?.indexedRevisionId === view.revisionId
+                            ? "Current version searchable"
+                            : publication?.publishedRevisionId ===
+                                view.revisionId
+                              ? "Published; search index not current"
+                              : "Draft changes not published",
+                    ),
+                );
+                if (!options.scope()) {
+                    const diagnostics = rbNode("details");
+                    diagnostics.append(
+                        rbNode("summary", "Collection details"),
+                        rbNode("p", `Corpus ID: ${view.corpusId}`),
+                    );
+                    card.append(
+                        rbNode(
+                            "p",
+                            `Collection: ${corpusNames.get(view.corpusId) ?? "Collection name unavailable"}`,
+                        ),
+                        diagnostics,
+                    );
+                }
+                list.append(card);
+            }
+        };
+        search.oninput = kind.onchange = render;
+        drafts.replaceChildren(search, kind, list);
+        render();
+    }
+
+    async function showView(
+        corpusId: string,
+        viewId: string,
+        revisionId?: string,
+    ): Promise<void> {
+        if (!discardChanges()) return;
+        sequence++;
+        route = { corpusId, viewId, revisionId };
+        const view = snapshot.views.find(
+            (view) => view.corpusId === corpusId && view.viewId === viewId,
+        );
+        if (busy) refreshPending = true;
+        else if (revisionId)
+            await action(() =>
+                renderRoute({ corpusId, viewId, revisionId }, sequence),
+            );
+        else if (view) showPreview(view);
+        else await action(refresh);
+        options.onNavigate?.(
+            `#/views/${encodeURIComponent(corpusId)}/${encodeURIComponent(viewId)}${revisionId ? `/revision/${encodeURIComponent(revisionId)}` : ""}`,
+        );
+        options.onOpenView?.(corpusId, viewId, revisionId);
+    }
+
+    function showPreview(view: ViewVersion): void {
+        if (!supportedKinds.includes(view.content.kind)) {
+            comparison.replaceChildren(
+                rbNode(
+                    "p",
+                    "This view type is not supported by the current memory service.",
+                ),
+            );
+            return;
+        }
+        drafts.hidden = true;
+        controls.hidden = true;
+        const title = rbNode("h2", view.content.title);
+        title.tabIndex = -1;
+        const article = rbNode("article", undefined, "hub-view-document");
+        article.append(
+            title,
+            rbNode(
+                "p",
+                `${viewKindLabels[view.content.kind]} - version ${view.version}`,
+            ),
+        );
+        if (view.content.summary)
+            article.append(rbMarkdown(view.content.summary));
+        if (view.content.kind === "wiki") {
+            const contents = rbNode("nav");
+            contents.setAttribute("aria-label", "Wiki pages");
+            for (const section of view.content.sections)
+                contents.append(
+                    rbButton(section.heading, () => {
+                        const page = [
+                            ...article.querySelectorAll<HTMLElement>(
+                                "[data-page]",
+                            ),
+                        ].find((page) => page.dataset.page === section.id);
+                        page?.focus();
+                        page?.scrollIntoView?.({ block: "start" });
+                    }),
+                );
+            article.append(contents);
+        }
+        for (const section of view.content.sections) {
+            const page = rbNode("section", undefined, "hub-view-section");
+            page.tabIndex = -1;
+            page.dataset.page = section.id;
+            page.append(
+                rbNode("h3", section.heading),
+                rbMarkdown(section.body),
+            );
+            if (view.content.kind === "timeline") {
+                const record = view.content.sections.find(
+                    (record) => record.id === section.id,
+                )!;
+                page.append(
+                    rbNode(
+                        "p",
+                        `Occurred: ${record.details.occurredAt ?? "unknown"}; learned: ${record.details.learnedAt ?? "unknown"}; captured: ${record.details.capturedAt ?? "unknown"}`,
+                    ),
+                    rbNode(
+                        "p",
+                        `${record.details.eventType} - ${record.details.state}; outcome: ${record.details.outcome ?? "unknown"}`,
+                    ),
+                );
+            }
+            const evidence = rbNode("details");
+            evidence.append(rbNode("summary", "Evidence and relationships"));
+            for (const edge of view.relationships) {
+                if (
+                    edge.origin === "system" ||
+                    edge.from.sectionId !== section.id
+                )
+                    continue;
+                evidence.append(rbNode("p", edge.predicate));
+                for (const citation of edge.citations)
+                    evidence.append(
+                        rbButton(
+                            `Open exact evidence ${citation.sourceId}`,
+                            () => showTimelineEvidence(view, citation),
+                        ),
+                    );
+            }
+            page.append(evidence);
+            article.append(page);
+        }
+        if (view.content.citations.length) {
+            const citations = rbNode("details");
+            citations.append(rbNode("summary", "Exact source evidence"));
+            for (const citation of view.content.citations)
+                citations.append(
+                    rbButton(
+                        `${citation.sourceId} @ ${citation.revisionId}`,
+                        () => showTimelineEvidence(view, citation),
+                    ),
+                );
+            article.append(citations);
+        }
+        const actions = rbNode("div", undefined, "hub-view-actions");
+        const more = rbNode("details", undefined, "hub-view-more-actions");
+        const moreSummary = rbNode("summary", "More actions");
+        more.append(moreSummary);
+        more.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape" || !more.open) return;
+            event.preventDefault();
+            more.open = false;
+            moreSummary.focus();
+        });
+        const pendingConflict = pendingConflicts.get(
+            publicationKey(view.corpusId, view.viewId),
+        );
+        if (pendingConflict)
+            more.append(
+                rbButton("Review pending conflict", () => {
+                    void action(() =>
+                        showConflict(view.corpusId, pendingConflict.conflictId),
+                    );
+                }),
+            );
+        actions.append(
+            rbButton("Back to views", backToViews),
+            rbButton("Edit", () => showEditor(view)),
+        );
+        more.append(
+            rbButton("Rebuild from evidence", () => {
+                exactInitialSources.clear();
+                void action(() =>
+                    openBuilder(
+                        view.corpusId,
+                        view.definition.selector.sources.map(
+                            (source) => source.sourceId,
+                        ),
+                        view,
+                    ),
+                );
+            }),
+            rbButton("Publication and search", () => {
+                const sheet = viewSheet(
+                    root,
+                    "Publication and search",
+                    () => !busy && discardChanges(),
+                );
+                sheet.body.append(publicationPanel(view));
+            }),
+            rbButton("History", () => {
+                void action(async () => {
+                    const history = await invokeMemory("memoryViewHistory", {
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                    });
+                    if (disposed) return;
+                    const sheet = viewSheet(root, "View history");
+                    for (const entry of history)
+                        sheet.body.append(
+                            rbNode(
+                                "h3",
+                                `Version ${entry.version.version} (${entry.version.state}) @ ${entry.version.revisionId}`,
+                            ),
+                            rbMarkdown(
+                                viewContentToText(entry.version.content),
+                            ),
+                            rbButton("Open exact revision", () => {
+                                sheet.close();
+                                void showView(
+                                    view.corpusId,
+                                    view.viewId,
+                                    entry.version.revisionId,
+                                );
+                            }),
+                        );
+                });
+            }),
+        );
+        if (maintenanceSupported && view.state !== "archived")
+            more.append(
+                rbButton("Update view", () => {
+                    if (!discardChanges()) return;
+                    const sheet = viewSheet(
+                        root,
+                        "Update view",
+                        () => !busy && discardChanges(),
+                    );
+                    const panel = createMaintenancePanel(
+                        view,
+                        heads.get(view.corpusId) ?? null,
+                        {
+                            action: (operation) => {
+                                void action(async () => {
+                                    await operation();
+                                    await changed();
+                                });
+                            },
+                            onChange: markDirty,
+                            dirty: () => dirty,
+                            saved: async () => {
+                                dirty = false;
+                                sheet.close();
+                                await refresh();
+                            },
+                            onBuild: (job) => {
+                                renderReceipt(job);
+                                options.onBuildStarted?.(
+                                    job.corpusId,
+                                    job.jobId,
+                                );
+                            },
+                            isCurrent: () =>
+                                !disposed && sheet.element.isConnected,
+                        },
+                    );
+                    sheet.body.append(panel);
+                }),
+            );
+        actions.append(more);
+        comparison.replaceChildren(actions, article);
+        title.focus();
     }
 
     function showTimelineEvidence(
@@ -715,17 +1424,13 @@ export function mountMemoryHubViews(
                       objectId: citation.evidence.eventId,
                       revisionId: citation.revisionId,
                   })
-                : await invokeView("memoryHubRunbookOriginal", {
+                : await invokeView("memoryHubSourceOriginal", {
                       corpusId: view.corpusId,
                       sourceId: citation.sourceId,
                       revisionId: citation.revisionId,
                       locator: citation.locator,
                   });
-            if (
-                capturedSequence !== sequence ||
-                options.scope() !== view.corpusId
-            )
-                return;
+            if (capturedSequence !== sequence) return;
             if ("available" in original && !original.available)
                 throw new Error(
                     original.error ?? "Original timeline evidence unavailable",
@@ -739,20 +1444,19 @@ export function mountMemoryHubViews(
 
     function showEditor(view: ViewVersion): void {
         if (!discardChanges()) return;
-        if (view.content.kind === "procedure")
-            throw new Error("Legacy procedures use the runbook editor");
+        const editorHead = heads.get(view.corpusId) ?? null;
         const projectEditor =
             view.content.kind === "projectBrief"
                 ? createProjectBriefEditor(
                       view.content,
                       () => {
-                          dirty = true;
+                          markDirty();
                       },
                       (sourceId, revisionId, locator) => {
                           void action(async () => {
                               const capturedSequence = sequence;
                               const original = await invokeView(
-                                  "memoryHubRunbookOriginal",
+                                  "memoryHubSourceOriginal",
                                   {
                                       corpusId: view.corpusId,
                                       sourceId,
@@ -760,11 +1464,7 @@ export function mountMemoryHubViews(
                                       locator,
                                   },
                               );
-                              if (
-                                  capturedSequence !== sequence ||
-                                  options.scope() !== view.corpusId
-                              )
-                                  return;
+                              if (capturedSequence !== sequence) return;
                               if (!original.available)
                                   throw new Error(
                                       original.error ??
@@ -784,7 +1484,7 @@ export function mountMemoryHubViews(
                       view.content,
                       editableEdges(view),
                       () => {
-                          dirty = true;
+                          markDirty();
                       },
                       (citation) => showTimelineEvidence(view, citation),
                   )
@@ -795,12 +1495,17 @@ export function mountMemoryHubViews(
                       view.content,
                       editableEdges(view),
                       () => {
-                          dirty = true;
+                          markDirty();
                       },
                       (citation) => showTimelineEvidence(view, citation),
                   )
                 : undefined;
-        const structuredEditor = wikiEditor ?? timelineEditor ?? projectEditor;
+        const guideEditor =
+            view.content.kind === "troubleshootingGuide"
+                ? createGuideEditor(view.content, markDirty)
+                : undefined;
+        const structuredEditor =
+            wikiEditor ?? timelineEditor ?? projectEditor ?? guideEditor;
         const relationshipEditor = wikiEditor ?? timelineEditor;
         const content = structuredEditor
             ? undefined
@@ -813,51 +1518,21 @@ export function mountMemoryHubViews(
             projectEditor !== undefined,
             retainedEdges,
             () => {
-                dirty = true;
+                markDirty();
             },
         );
-        const viewPolicy = publicationChoice(
-            "View auto-publish after build",
-            true,
-        );
-        const override = policy.views[view.viewId]?.autoPublish;
-        viewPolicy.value =
-            override == null ? "inherit" : override ? "on" : "off";
-        const publication = publications.get(view.viewId);
-        const publish = (retry: boolean) => {
-            void action(async () => {
-                if (dirty)
-                    throw new Error(
-                        "Save or discard edits before publishing or retrying indexing",
-                    );
-                if (!snapshot.head)
-                    throw new Error("Exact view history head is unavailable");
-                const revisionId = retry
-                    ? publication?.publishedRevisionId
-                    : view.revisionId;
-                if (!revisionId)
-                    throw new Error("No published revision to index");
-                const result = await invokeMemory(
-                    retry ? "memoryRetryViewIndex" : "memoryPublishView",
-                    {
-                        corpusId: view.corpusId,
-                        viewId: view.viewId,
-                        revisionId,
-                        expectedHead: snapshot.head,
-                        expectedVersion: view.version,
-                    },
-                );
-                await refresh();
-                status.textContent = result.reason;
-            });
-        };
         if (content)
             content.oninput = () => {
-                dirty = true;
+                markDirty();
             };
         edges.oninput = () => {
-            dirty = true;
+            markDirty();
         };
+        const advancedRelationships = rbNode("details");
+        advancedRelationships.append(
+            rbNode("summary", "Typed relationships (advanced)"),
+            edges,
+        );
         comparison.replaceChildren(
             rbNode("h4", `Edit ${view.viewId} version ${view.version}`),
             rbNode(
@@ -869,33 +1544,13 @@ export function mountMemoryHubViews(
                 ? []
                 : projectEditor
                   ? [projectEvidence]
-                  : [edges]),
-            rbNode("p", publicationDescription(publication)),
-            viewPolicy,
-            rbButton("Save view publication override", () => {
-                void action(async () => {
-                    await invokeMemory("memoryUpdateViewPublicationPolicy", {
-                        corpusId: view.corpusId,
-                        viewId: view.viewId,
-                        expectedHead: snapshot.head,
-                        expectedRevision:
-                            policy.views[view.viewId]?.revision ?? 0,
-                        autoPublish:
-                            viewPolicy.value === "inherit"
-                                ? null
-                                : viewPolicy.value === "on",
-                    });
-                    await refresh();
-                });
-            }),
-            rbButton("Publish exact revision", () => publish(false)),
-            rbButton("Retry index", () => publish(true)),
+                  : [advancedRelationships]),
             rbButton("Save explicit edits", () => {
                 void action(async () => {
                     await invokeMemory("memorySaveViewDraft", {
                         corpusId: view.corpusId,
                         viewId: view.viewId,
-                        expectedHead: snapshot.head,
+                        expectedHead: editorHead,
                         expectedVersion: view.version,
                         definition: {
                             viewId: view.viewId,
@@ -919,31 +1574,98 @@ export function mountMemoryHubViews(
                     dirty = false;
                     comparison.replaceChildren();
                     await refresh();
-                });
-            }),
-            rbButton("Inspect history", () => {
-                void action(async () => {
-                    const history = await invokeMemory("memoryViewHistory", {
-                        corpusId: view.corpusId,
-                        viewId: view.viewId,
-                    });
-                    for (const entry of history)
-                        comparison.append(
-                            rbNode(
-                                "h5",
-                                `Version ${entry.version.version} (${entry.version.state}) @ ${entry.version.revisionId}`,
-                            ),
-                            rbNode(
-                                "pre",
-                                viewContentToText(entry.version.content),
-                            ),
-                        );
+                    await changed();
                 });
             }),
             rbButton("Discard unsaved edits", () => {
-                if (discardChanges()) comparison.replaceChildren();
+                if (discardChanges()) showPreview(view);
             }),
         );
+        const heading = comparison.querySelector<HTMLElement>("h4");
+        if (heading) {
+            heading.tabIndex = -1;
+            heading.focus();
+        }
+    }
+
+    function publicationPanel(view: ViewVersion): HTMLElement {
+        const panel = rbNode("section");
+        const publication = publications.get(
+            publicationKey(view.corpusId, view.viewId),
+        );
+        const savedPolicy = policies.get(view.corpusId);
+        if (!savedPolicy)
+            throw new Error(
+                "Exact publication policy is unavailable; refresh views",
+            );
+        const viewPolicy = publicationChoice(
+            "View auto-publish after build",
+            true,
+        );
+        const override = savedPolicy.views[view.viewId]?.autoPublish;
+        viewPolicy.value =
+            override == null ? "inherit" : override ? "on" : "off";
+        const publish = (retry: boolean) => {
+            void action(async () => {
+                if (dirty)
+                    throw new Error("Save or discard edits before publication");
+                const head = heads.get(view.corpusId);
+                if (!head)
+                    throw new Error("Exact view history head is unavailable");
+                const revisionId = retry
+                    ? publication?.publishedRevisionId
+                    : view.revisionId;
+                if (!revisionId)
+                    throw new Error("No published revision to index");
+                const result = await invokeMemory(
+                    retry ? "memoryRetryViewIndex" : "memoryPublishView",
+                    {
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                        revisionId,
+                        expectedHead: head,
+                        expectedVersion: view.version,
+                    },
+                );
+                await refresh();
+                status.textContent = result.reason;
+                await changed();
+            });
+        };
+        const retry = rbButton("Retry index", () => publish(true));
+        retry.disabled = !publication?.publishedRevisionId;
+        panel.append(
+            rbNode("p", publicationDescription(publication)),
+            rbNode(
+                "p",
+                `Effective auto-publish: ${(override ?? savedPolicy.autoPublish) ? "On" : "Off"} (${override == null ? "collection setting" : "view override"}). Collection policy revision ${savedPolicy.revision}; view policy revision ${savedPolicy.views[view.viewId]?.revision ?? 0}. Publication does not grant human review or execution.`,
+            ),
+            viewPolicy,
+            rbButton("Save view publication override", () => {
+                void action(async () => {
+                    if (dirty)
+                        throw new Error(
+                            "Save or discard edits before changing publication policy",
+                        );
+                    await invokeMemory("memoryUpdateViewPublicationPolicy", {
+                        corpusId: view.corpusId,
+                        viewId: view.viewId,
+                        expectedHead: heads.get(view.corpusId) ?? null,
+                        expectedRevision:
+                            savedPolicy.views[view.viewId]?.revision ?? 0,
+                        autoPublish:
+                            viewPolicy.value === "inherit"
+                                ? null
+                                : viewPolicy.value === "on",
+                    });
+                    await refresh();
+                    await changed();
+                });
+            }),
+            rbButton("Publish exact revision", () => publish(false)),
+            retry,
+        );
+        return panel;
     }
 
     async function showConflict(
@@ -1022,7 +1744,7 @@ export function mountMemoryHubViews(
                 ? createProjectBriefEditor(
                       conflict.candidate.content,
                       () => {
-                          dirty = true;
+                          markDirty();
                       },
                       () => {
                           status.textContent =
@@ -1036,7 +1758,7 @@ export function mountMemoryHubViews(
                       conflict.candidate.content,
                       conflict.candidate.relationships,
                       () => {
-                          dirty = true;
+                          markDirty();
                       },
                       () => {
                           status.textContent =
@@ -1050,13 +1772,21 @@ export function mountMemoryHubViews(
                       conflict.candidate.content,
                       conflict.candidate.relationships,
                       () => {
-                          dirty = true;
+                          markDirty();
                       },
                       (citation) => showTimelineEvidence(current, citation),
                   )
                 : undefined;
-        const structuredEditor =
-            combinedWiki ?? combinedTimeline ?? combinedBrief;
+        const combinedGuide =
+            conflict.candidate.content.kind === "troubleshootingGuide"
+                ? createGuideEditor(conflict.candidate.content, markDirty)
+                : undefined;
+        const structuredEditor = [
+            combinedWiki,
+            combinedTimeline,
+            combinedBrief,
+            combinedGuide,
+        ].find((editor) => editor !== undefined);
         const relationshipEditor = combinedWiki ?? combinedTimeline;
         const combined = structuredEditor
             ? undefined
@@ -1119,7 +1849,12 @@ export function mountMemoryHubViews(
                     dirty = false;
                     comparison.replaceChildren();
                     await refresh();
-                    if (!disposed && options.scope() === conflict.corpusId)
+                    await changed();
+                    if (
+                        !disposed &&
+                        (!options.scope() ||
+                            options.scope() === conflict.corpusId)
+                    )
                         status.textContent = `Conflict resolved explicitly; saved draft version ${saved.version.version}. No publication or human review is granted.`;
                 });
             }),
@@ -1127,23 +1862,106 @@ export function mountMemoryHubViews(
     }
 
     function discardChanges(): boolean {
-        if (dirty && !confirm("Discard unsaved draft view edits?"))
+        if (
+            (dirty || builderDirty) &&
+            !confirm("Discard unsaved view changes?")
+        )
             return false;
         dirty = false;
+        builderDirty = false;
+        options.onChange?.();
         return true;
     }
     return {
         refresh: () => action(refresh),
         discardChanges,
+        showView,
+        hide: () => {
+            visible = false;
+            sequence++;
+            if (timer) clearTimeout(timer);
+            root.hidden = true;
+            for (const dialog of root.querySelectorAll("dialog"))
+                dialog.remove();
+            builder = undefined;
+            builderDirty = false;
+        },
+        show: async (
+            value: {
+                corpusId?: string;
+                viewId?: string;
+                revisionId?: string;
+            } = {},
+        ) => {
+            if (!discardChanges()) return;
+            sequence++;
+            visible = true;
+            root.hidden = !visible;
+            route =
+                value.corpusId && value.viewId
+                    ? {
+                          corpusId: value.corpusId,
+                          viewId: value.viewId,
+                          revisionId: value.revisionId,
+                      }
+                    : undefined;
+            if (busy) refreshPending = true;
+            else await action(refresh);
+            if (!buildsSupported) return;
+            if (!route) {
+                comparison.replaceChildren();
+                drafts.hidden = controls.hidden = false;
+            }
+        },
+        setRoute: async (value?: {
+            corpusId: string;
+            viewId: string;
+            revisionId?: string;
+        }) => {
+            if (!discardChanges()) return;
+            sequence++;
+            route = value;
+            if (value) {
+                if (busy) refreshPending = true;
+                else await action(refresh);
+            } else {
+                comparison.replaceChildren();
+                drafts.hidden = controls.hidden = false;
+            }
+        },
+        buildFromSources: (
+            corpusId?: string,
+            sources?: Array<string | { sourceId: string; revisionId: string }>,
+        ) =>
+            action(async () => {
+                exactInitialSources = new Map(
+                    (sources ?? []).flatMap((source) =>
+                        typeof source === "string"
+                            ? []
+                            : [[source.sourceId, source.revisionId]],
+                    ),
+                );
+                await openBuilder(
+                    corpusId,
+                    sources?.map((source) =>
+                        typeof source === "string" ? source : source.sourceId,
+                    ),
+                );
+            }),
         scopeChanged() {
             if (disposed) return;
             sequence++;
+            builder?.element.remove();
+            builder = undefined;
+            activeCorpus = undefined;
+            route = undefined;
+            drafts.hidden = controls.hidden = false;
             if (timer) clearTimeout(timer);
             controls.replaceChildren();
             drafts.replaceChildren();
             receipt.replaceChildren();
             comparison.replaceChildren();
-            root.hidden = true;
+            root.hidden = !visible;
             if (busy) refreshPending = true;
             else void action(refresh);
         },
@@ -1152,6 +1970,7 @@ export function mountMemoryHubViews(
             refreshPending = false;
             sequence++;
             if (timer) clearTimeout(timer);
+            window.removeEventListener("beforeunload", beforeUnload);
             root.remove();
         },
     };

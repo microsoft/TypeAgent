@@ -155,6 +155,8 @@ describe("Memory Hub timeline controls", () => {
                     return {
                         derivedViews: { builds: true, kinds: ["timeline"] },
                     };
+                case "memoryListCorpora":
+                    return [{ corpusId: "c", name: "Timeline collection" }];
                 case "memoryListViews":
                     return { head, views: [view] };
                 case "memoryListViewBuilds":
@@ -219,25 +221,31 @@ describe("Memory Hub timeline controls", () => {
     afterEach(() => panel.dispose());
     test("event-only build sends discriminated selector and explicit knowledge/occurrence bounds", async () => {
         await panel.refresh();
+        click(host, "Build views");
+        await settle();
+        host.querySelector<HTMLInputElement>(
+            'input[aria-label="Evidence-linked timeline"]',
+        )!.click();
         const checkbox = host.querySelector<HTMLInputElement>(
-            'input[type="checkbox"]',
+            'input[aria-label^="Use event "]',
         )!;
         checkbox.checked = true;
         checkbox.dispatchEvent(new Event("change"));
-        input(host, "Stable view ID", "timeline");
         input(host, "Learned before ISO timestamp", "2026-10-05T12:00:00Z");
         input(host, "Occurred from ISO timestamp", "2026-10-05T00:00:00Z");
         input(host, "Occurred to ISO timestamp", "2026-10-06T00:00:00Z");
-        click(host, "Build views");
+        click(host, "Continue to confirmation");
+        await settle();
+        click(host, "Start build");
         await settle();
         expect(invoke).toHaveBeenCalledWith(
             "memoryBuildViews",
             expect.objectContaining({
                 targets: [
                     {
-                        expectedVersion: 1,
+                        expectedVersion: 0,
                         definition: {
-                            viewId: "timeline",
+                            viewId: expect.stringMatching(/^timeline-/),
                             kind: "timeline",
                             selector: {
                                 kind: "timelineEvidence",
@@ -248,9 +256,9 @@ describe("Memory Hub timeline controls", () => {
                     },
                 ],
                 bounds: {
-                    learnedBefore: "2026-10-05T12:00:00Z",
-                    occurredFrom: "2026-10-05T00:00:00Z",
-                    occurredTo: "2026-10-06T00:00:00Z",
+                    learnedBefore: "2026-10-05T12:00:00.000Z",
+                    occurredFrom: "2026-10-05T00:00:00.000Z",
+                    occurredTo: "2026-10-06T00:00:00.000Z",
                 },
             }),
         );
@@ -259,7 +267,8 @@ describe("Memory Hub timeline controls", () => {
     });
     test("fixed timeline editor saves attributed shape and reads event evidence without nonexistent source lookup", async () => {
         await panel.refresh();
-        click(host, "Incident timeline (draft, v1)");
+        click(host, "Incident timeline");
+        click(host, "Edit");
         expect(
             host.querySelector(
                 '[aria-label="Draft content with stable section IDs"]',
@@ -307,7 +316,8 @@ describe("Memory Hub timeline controls", () => {
                 }),
         );
         await panel.refresh();
-        click(host, "Incident timeline (draft, v1)");
+        click(host, "Incident timeline");
+        click(host, "Edit");
         click(host, "Open exact event evidence event-1");
         await settle();
         scope = undefined;

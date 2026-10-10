@@ -11,7 +11,7 @@ import type {
     MemoryKnowledgeGraph,
 } from "../src/types.js";
 
-export class FakeProcedureCorpusIndex implements CorpusIndex {
+export class FakeSemanticCorpusIndex implements CorpusIndex {
     protected documents: IndexedDocument[] = [];
 
     public constructor(private readonly directory: string) {}

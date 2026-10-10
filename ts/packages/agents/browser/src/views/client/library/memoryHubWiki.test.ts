@@ -149,6 +149,8 @@ test("merge retains facts, citation union, target identity and retired IDs; no d
 
 test("Memory Hub creates and saves wiki through real typed client methods, not raw JSON or execution controls", async () => {
     invoke.mockImplementation(async (method) => {
+        if (method === "memoryListCorpora")
+            return [{ corpusId: "c", name: "Wiki collection" }];
         if (method === "memoryViewCapabilities")
             return { derivedViews: { builds: true, kinds: ["wiki"] } };
         if (method === "memoryListViews")
@@ -200,7 +202,9 @@ test("Memory Hub creates and saves wiki through real typed client methods, not r
         host.querySelector<HTMLOptionElement>('option[value="wiki"]')!
             .textContent,
     ).toBe("Knowledge wiki");
-    click(host, "Payments wiki (draft, v1)");
+    click(host, "Payments wiki");
+    expect(host.querySelector("textarea")).toBeNull();
+    click(host, "Edit");
     expect(host.querySelector('[aria-label="Typed relationships"]')).toBeNull();
     click(host, "Edit selected wiki page");
     const title = host.querySelector<HTMLInputElement>(

@@ -7,22 +7,17 @@ import {
     FileMemoryService,
     createKnowProCorpusIndex,
     parseViewDraftCapability,
-    type RunbookBindingValidator,
 } from "@typeagent/memory-service";
-import { getConfiguredRunbookModelOptions } from "./runbookModelOptions.js";
+import { getConfiguredViewModelOptions } from "./viewModelOptions.js";
 
 export function createDurableMemoryService(
     rootDirectory: string,
-    runbookBindingValidator?: RunbookBindingValidator,
 ): FileMemoryService {
     return new FileMemoryService(rootDirectory, {
         viewDrafts: parseViewDraftCapability(
             process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS,
         ),
-        ...getConfiguredRunbookModelOptions(),
-        ...(runbookBindingValidator === undefined
-            ? {}
-            : { runbookBindingValidator }),
+        ...getConfiguredViewModelOptions(),
         indexFactory: (corpusId, indexDirectory) =>
             createKnowProCorpusIndex(corpusId, indexDirectory, () => {
                 const settings = createDocMemorySettings(

@@ -20,10 +20,7 @@ import {
     createMemoryHubRunbookImportFunctions,
     runbookImportBatchId,
 } from "../dist/agent/memoryHubRunbookImports.mjs";
-import {
-    runbookImportRequestSchema,
-    runbookImportViewSchemas,
-} from "../dist/views/server/features/views/runbookImportSchemas.mjs";
+import { runbookImportRequestSchema } from "../dist/views/server/features/views/runbookImportSchemas.mjs";
 
 const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]);
 function selected(relativePath, content, extra = {}) {
@@ -115,7 +112,6 @@ function service(overrides = {}) {
             actions.push(["cancel", batchId]);
             return batch("alpha", "cancelled");
         },
-        listRunbookJobs: async () => [],
         ...overrides,
     };
 }
@@ -803,97 +799,7 @@ test("canonical batch storage persists opaque member keys, names, warnings and r
     }
 });
 
-test("post-commit synthesis retry forwards exact retained identity without acquisition or batch ingestion", async () => {
-    const identity = {
-        corpusId: "alpha",
-        sourceId: "source",
-        revisionId: "revision",
-    };
-    const result = {
-        ...identity,
-        jobId: "new-attempt",
-        state: "running",
-        createdAt: "",
-        updatedAt: "",
-        candidateIds: [],
-        warnings: [],
-    };
-    const calls = [];
-    const fixture = service({
-        requestRunbookSynthesis: async (value) => {
-            calls.push(value);
-            return result;
-        },
-    });
-    const functions = createMemoryHubRunbookImportFunctions(
-        () => fixture,
-        async () => {
-            assert.fail("Synthesis retry must not reacquire URLs");
-        },
-    );
-    assert.deepEqual(
-        await functions.memoryHubRetryRunbookSynthesis(identity),
-        result,
-    );
-    assert.deepEqual(calls, [identity]);
-    assert.deepEqual(fixture.started, []);
-    assert.deepEqual(fixture.actions, []);
-    const schema = runbookImportViewSchemas.memoryHubRetryRunbookSynthesis;
-    assert.deepEqual(schema.parse(identity), identity);
-    assert.equal(
-        schema.safeParse({ ...identity, sourceId: "" }).success,
-        false,
-    );
-    assert.equal(
-        schema.safeParse({ ...identity, content: "replacement" }).success,
-        false,
-    );
-});
-
-test("synthesis retry exposes unsupported/stale errors and rejects returned identity mismatch", async () => {
-    const identity = {
-        corpusId: "alpha",
-        sourceId: "source",
-        revisionId: "revision",
-    };
-    await assert.rejects(
-        createMemoryHubRunbookImportFunctions(() =>
-            service(),
-        ).memoryHubRetryRunbookSynthesis(identity),
-        /unavailable/,
-    );
-    const stale = service({
-        requestRunbookSynthesis: async () => {
-            throw new Error("Revision is no longer ready and active");
-        },
-    });
-    await assert.rejects(
-        createMemoryHubRunbookImportFunctions(
-            () => stale,
-        ).memoryHubRetryRunbookSynthesis(identity),
-        /no longer ready and active/,
-    );
-    const mismatch = service({
-        requestRunbookSynthesis: async () => ({
-            ...identity,
-            revisionId: "other",
-        }),
-    });
-    await assert.rejects(
-        createMemoryHubRunbookImportFunctions(
-            () => mismatch,
-        ).memoryHubRetryRunbookSynthesis(identity),
-        /another target or source revision/,
-    );
-    await assert.rejects(
-        createMemoryHubRunbookImportFunctions(
-            () => stale,
-        ).memoryHubRetryRunbookSynthesis({ ...identity, revisionId: "" }),
-        /exact retained source revision/,
-    );
-});
-
-test("unavailable service or missing named corpus is explicit; durable interrupted batches/jobs survive a new facade", async () => {
+test("unavailable service or missing named corpus is explicit; durable interrupted batches survive a new facade", async () => {
     await assert.rejects(
         createMemoryHubRunbookImportFunctions(() => ({
             getCorpus: async () => undefined,
@@ -902,26 +808,11 @@ test("unavailable service or missing named corpus is explicit; durable interrupt
     );
     const fixture = service({
         listBatchImports: async () => [batch("alpha", "interrupted")],
-        listRunbookJobs: async () => [
-            {
-                jobId: "job",
-                corpusId: "alpha",
-                sourceId: "source",
-                revisionId: "revision",
-                state: "interrupted",
-                candidateIds: [],
-                warnings: ["Restart interrupted synthesis"],
-            },
-        ],
     });
     const restarted = createMemoryHubRunbookImportFunctions(() => fixture);
     assert.equal(
         (await restarted.memoryHubRunbookBatches({ corpusId: "alpha" }))[0]
             .state,
-        "interrupted",
-    );
-    assert.equal(
-        (await restarted.memoryHubRunbookJobs({ corpusId: "alpha" }))[0].state,
         "interrupted",
     );
     await assert.rejects(

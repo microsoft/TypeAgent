@@ -94,10 +94,4 @@ export const runbookImportViewSchemas: Record<
     memoryHubRunbookBatch: batch,
     memoryHubRetryRunbookBatch: batch,
     memoryHubCancelRunbookBatch: batch,
-    memoryHubRunbookJobs: z.strictObject(corpus),
-    memoryHubRetryRunbookSynthesis: z.strictObject({
-        ...corpus,
-        sourceId: text,
-        revisionId: text,
-    }),
 };

@@ -7,57 +7,11 @@ import path from "node:path";
 import { FileMemoryService } from "../src/index.js";
 import { classifyIndexSchema, type IndexKind } from "../src/indexSchema.js";
 import { createMemoryServiceRpcFacade } from "../src/rpcFacade.js";
-import { canonicalizeProcedure as canonicalize } from "../src/agentEdition.js";
-import { ViewHistory } from "../src/viewHistory.js";
-import type { ViewVersion } from "../src/viewTypes.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
 import type { IndexedDocument } from "../src/types.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
 const schemaFileName = "index-schema.json";
 const semanticFileName = "corpus_data.json";
-
-interface ProcedureHistoryState {
-    index: Record<string, unknown>;
-    views: Record<string, ViewVersion[]>;
-}
-
-function procedureHistory(root: string, corpusId: string) {
-    return new ViewHistory<ProcedureHistoryState>(
-        path.join(root, corpusId, "personal-how-to"),
-        () => ({ index: {}, views: {} }),
-    );
-}
-
-async function procedureGeneration(root: string, corpusId: string) {
-    const { state } = await procedureHistory(root, corpusId).read();
-    const generation = state.index.indexGeneration;
-    if (typeof generation !== "string") {
-        throw new Error("Saved procedure index has no generation");
-    }
-    return generation;
-}
-
-async function writeProcedureIndex(
-    root: string,
-    corpusId: string,
-    index: Record<string, unknown>,
-) {
-    const history = procedureHistory(root, corpusId);
-    const { head, state } = await history.read();
-    state.index = index;
-    await history.commit(
-        head,
-        state,
-        Object.fromEntries(
-            Object.entries(state.views).map(([id, versions]) => [
-                `view-${encodeURIComponent(id)}.json`,
-                canonicalize(versions),
-            ]),
-        ),
-        "schema-test",
-        "Set procedure index state for schema validation",
-    );
-}
 
 function descriptor(indexKind: IndexKind, indexSchemaVersion = 1): string {
     return JSON.stringify({
@@ -78,7 +32,7 @@ async function waitForJob(service: FileMemoryService, jobId: string) {
     throw new Error(`Job '${jobId}' timed out`);
 }
 
-test.each(["documents", "conversation-events", "procedures"] as const)(
+test.each(["documents", "conversation-events", "views"] as const)(
     "%s descriptors distinguish reset, current, and unsupported data",
     async (kind) => {
         const directory = await mkdtemp(
@@ -132,7 +86,7 @@ test.each(["documents", "conversation-events", "procedures"] as const)(
     },
 );
 
-test.each(["documents", "conversation-events", "procedures"] as const)(
+test.each(["documents", "conversation-events", "views"] as const)(
     "%s handles retired projection markers without changing schema safety checks",
     async (kind) => {
         const directory = await mkdtemp(
@@ -183,7 +137,7 @@ test("document reset replays canonical content and never copies an unmarked gene
     const counts = { rebuild: 0, append: 0 };
     const replayed: IndexedDocument[][] = [];
     const factory = (_corpusId: string, directory: string) =>
-        new (class extends FakeProcedureCorpusIndex {
+        new (class extends FakeSemanticCorpusIndex {
             public override async rebuild(documents: IndexedDocument[]) {
                 counts.rebuild++;
                 replayed.push(structuredClone(documents));
@@ -341,7 +295,7 @@ test("event reset and failed extraction retain ledger and suppression markers", 
     const root = await mkdtemp(path.join(os.tmpdir(), "memory-schema-event-"));
     let failNext = false;
     const factory = (_corpusId: string, directory: string) =>
-        new (class extends FakeProcedureCorpusIndex {
+        new (class extends FakeSemanticCorpusIndex {
             public override async rebuild(documents: IndexedDocument[]) {
                 if (failNext) {
                     failNext = false;
@@ -426,211 +380,3 @@ test("event reset and failed extraction retain ledger and suppression markers", 
         await rm(root, { recursive: true, force: true });
     }
 });
-
-test("procedure reset preserves saved versions and rejects future generations", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "memory-schema-proc-"));
-    const factory = (_corpusId: string, directory: string) =>
-        new FakeProcedureCorpusIndex(directory);
-    const service = new FileMemoryService(root, {
-        procedureIndexFactory: factory,
-    });
-    try {
-        const { corpusId } = await service.createCorpus("Procedures");
-        await service.saveProcedure({
-            corpusId,
-            procedureId: "runbook",
-            document: {
-                title: "Restore Zephyr",
-                steps: ["Inspect recovery logs"],
-                citations: [],
-            },
-        });
-        const firstGeneration = await procedureGeneration(root, corpusId);
-        const rootIndex = path.join(
-            root,
-            corpusId,
-            "personal-how-to",
-            "search-index",
-        );
-        const firstDirectory = path.join(rootIndex, firstGeneration);
-        await writeFile(
-            path.join(firstDirectory, schemaFileName),
-            descriptor("procedures", 0),
-        );
-        expect(
-            await service.searchProcedures({ corpusId, query: "Zephyr" }),
-        ).toHaveLength(1);
-        const secondGeneration = await procedureGeneration(root, corpusId);
-        expect(secondGeneration).not.toBe(firstGeneration);
-        expect(await readdir(rootIndex)).toHaveLength(1);
-        const secondDirectory = path.join(rootIndex, secondGeneration);
-        await rm(path.join(secondDirectory, semanticFileName));
-        expect(
-            await service.searchProcedures({ corpusId, query: "Zephyr" }),
-        ).toHaveLength(1);
-        const thirdGeneration = await procedureGeneration(root, corpusId);
-        const thirdDirectory = path.join(rootIndex, thirdGeneration);
-        expect(thirdGeneration).not.toBe(secondGeneration);
-        await writeFile(
-            path.join(thirdDirectory, schemaFileName),
-            descriptor("procedures", 2),
-        );
-        await expect(
-            service.searchProcedures({ corpusId, query: "Zephyr" }),
-        ).rejects.toThrow("Unsupported future index schema version");
-        expect(
-            await readFile(path.join(thirdDirectory, schemaFileName), "utf8"),
-        ).toBe(descriptor("procedures", 2));
-        expect(
-            (await service.getProcedure(corpusId, "runbook", 1))?.document
-                .title,
-        ).toBe("Restore Zephyr");
-    } finally {
-        await service.close();
-        await rm(root, { recursive: true, force: true });
-    }
-});
-
-test.each(["documents", "conversation-events", "procedures"] as const)(
-    "%s rejects malformed generation pointers before resetting derived indexes",
-    async (kind) => {
-        const root = await mkdtemp(
-            path.join(os.tmpdir(), "memory-schema-pointer-"),
-        );
-        const factory = (_corpusId: string, directory: string) =>
-            new FakeProcedureCorpusIndex(directory);
-        let service = new FileMemoryService(root, {
-            indexFactory: factory,
-            eventIndexFactory: factory,
-            procedureIndexFactory: factory,
-        });
-        try {
-            const { corpusId } =
-                await service.createCorpus("Pointer validation");
-            if (kind === "documents") {
-                const job = await service.ingestDocument({
-                    corpusId,
-                    source: {
-                        sourceId: "retained",
-                        sourceType: "text",
-                        title: "Retained page",
-                        text: "Zephyr retained page",
-                    },
-                });
-                expect((await waitForJob(service, job.jobId)).state).toBe(
-                    "complete",
-                );
-            } else if (kind === "conversation-events") {
-                await service.appendEvent({
-                    corpusId,
-                    producer: { producerId: "agent", producerType: "test" },
-                    idempotencyKey: "retained",
-                    sourceKind: "conversation",
-                    eventType: "user-turn",
-                    content: "Zephyr retained event",
-                });
-                await service.searchEvents({ corpusId, query: "Zephyr" });
-            } else {
-                await service.saveProcedure({
-                    corpusId,
-                    procedureId: "retained",
-                    document: {
-                        title: "Restore Zephyr",
-                        steps: ["Inspect recovery logs"],
-                        citations: [],
-                    },
-                });
-            }
-            const corpusRoot = path.join(root, corpusId);
-            const fileStatePath =
-                kind === "documents"
-                    ? path.join(corpusRoot, "manifest.json")
-                    : path.join(corpusRoot, "event-search-index", "state.json");
-            const derivedRoot =
-                kind === "documents"
-                    ? path.join(corpusRoot, "index")
-                    : kind === "conversation-events"
-                      ? path.join(corpusRoot, "event-search-index")
-                      : path.join(
-                            corpusRoot,
-                            "personal-how-to",
-                            "search-index",
-                        );
-            const original =
-                kind === "procedures"
-                    ? (await procedureHistory(root, corpusId).read()).state
-                          .index
-                    : JSON.parse(await readFile(fileStatePath, "utf8"));
-            const writeState = async (state: Record<string, unknown>) => {
-                if (kind === "procedures") {
-                    await writeProcedureIndex(root, corpusId, state);
-                } else {
-                    await writeFile(fileStatePath, JSON.stringify(state));
-                }
-            };
-            const entries = await readdir(derivedRoot);
-            const marker = path.join(corpusRoot, "canonical-marker");
-            await writeFile(marker, "must survive");
-            await service.close();
-
-            for (const invalid of [
-                "..\\..",
-                path.resolve(root, "outside-index"),
-            ]) {
-                const state = {
-                    ...original,
-                    [kind === "conversation-events"
-                        ? "generation"
-                        : "indexGeneration"]: invalid,
-                };
-                await writeState(state);
-                service = new FileMemoryService(root, {
-                    indexFactory: factory,
-                    eventIndexFactory: factory,
-                    procedureIndexFactory: factory,
-                });
-                const search =
-                    kind === "documents"
-                        ? service.search({ corpusId, query: "Zephyr" })
-                        : kind === "conversation-events"
-                          ? service.searchEvents({ corpusId, query: "Zephyr" })
-                          : service.searchProcedures({
-                                corpusId,
-                                query: "Zephyr",
-                            });
-                await expect(search).rejects.toThrow(
-                    "Invalid index generation",
-                );
-                expect(await readdir(derivedRoot)).toEqual(entries);
-                expect(await readFile(marker, "utf8")).toBe("must survive");
-                await service.close();
-            }
-            await writeState(original);
-            service = new FileMemoryService(root, {
-                indexFactory: factory,
-                eventIndexFactory: factory,
-                procedureIndexFactory: factory,
-            });
-            if (kind === "documents") {
-                expect(
-                    (
-                        await service.getSourceContent({
-                            corpusId,
-                            sourceId: "retained",
-                        })
-                    ).content,
-                ).toBe("Zephyr retained page");
-            } else if (kind === "conversation-events") {
-                expect((await service.listEvents({ corpusId })).total).toBe(1);
-            } else {
-                expect(
-                    (await service.getProcedure(corpusId, "retained", 1))
-                        ?.document.title,
-                ).toBe("Restore Zephyr");
-            }
-        } finally {
-            await service.close();
-            await rm(root, { recursive: true, force: true });
-        }
-    },
-);

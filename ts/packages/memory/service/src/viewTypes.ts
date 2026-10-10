@@ -1,18 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { ProcedureSourceCitation } from "./types.js";
 import type { AgentEdition } from "./agentEdition.js";
+import type { ProcedureSourceCitation } from "./types.js";
 import type {
     ViewMaintenanceDefinition,
     ViewMaintenanceManifest,
-    ViewMaintenanceSnapshot,
     ViewMaintenancePlan,
     ViewMaintenancePlanRequest,
+    ViewMaintenanceRead,
     ViewMaintenanceRequest,
     ViewMaintenanceResult,
+    ViewMaintenanceSnapshot,
     ViewMaintenanceUpdate,
-    ViewMaintenanceRead,
 } from "./viewMaintenanceTypes.js";
 export type * from "./viewMaintenanceTypes.js";
 
@@ -85,7 +85,6 @@ export interface WikiContent {
     sections: WikiPage[];
     citations: ViewCitation[];
     agentEdition?: never;
-    compatibilityFields?: never;
 }
 export interface TimelineRecordDetails {
     kind: "event";
@@ -112,7 +111,6 @@ export interface TimelineContent {
     sections: TimelineRecord[];
     citations: ViewCitation[];
     agentEdition?: never;
-    compatibilityFields?: never;
 }
 export interface TimelineEvidenceRecord {
     id: string;
@@ -185,7 +183,6 @@ export interface ProjectBriefContent {
     sections: ProjectBriefSection[];
     citations: ViewCitation[];
     agentEdition?: never;
-    compatibilityFields?: never;
 }
 export type DerivedViewContent =
     | TroubleshootingGuideContent
@@ -248,15 +245,10 @@ interface GuideFields {
     summary?: string;
     sections: ViewSection[];
     agentEdition?: AgentEdition;
-    compatibilityFields?: Record<string, unknown>;
 }
 export interface TroubleshootingGuideContent extends GuideFields {
     kind: "troubleshootingGuide";
     citations: ViewCitation[];
-}
-export interface ProcedureViewContent extends GuideFields {
-    kind: "procedure";
-    citations: ProcedureSourceCitation[];
 }
 export interface ViewDefinitionInput {
     viewId: string;
@@ -267,7 +259,7 @@ export interface ViewDefinitionInput {
 export interface ViewDefinition {
     viewId: string;
     revisionId: string;
-    kind: ViewKind | "procedure";
+    kind: ViewKind;
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
 }
@@ -282,7 +274,7 @@ export interface ViewVersion {
     baseRevisionId?: string;
     generation?: {
         candidateId: string;
-        content: DerivedViewContent | ProcedureViewContent;
+        content: DerivedViewContent;
         fingerprint: string;
         relationships?: ViewRelationshipInput[];
         input?: ViewBuildSnapshot;
@@ -294,20 +286,35 @@ export interface ViewVersion {
     };
     edits?: ViewEditOperation[];
     definition: ViewDefinition;
-    content: DerivedViewContent | ProcedureViewContent;
+    content: DerivedViewContent;
     relationships: ViewRelationship[];
-    provenance: "human" | "procedure" | "generated" | "merged";
+    provenance: "human" | "generated" | "merged";
     validation?: ViewPublicationProof;
     maintenance?: ViewMaintenanceManifest;
-    compatibility?: {
-        state: "saved" | "stale" | "archived";
-        basedOnCandidateId?: string;
-        previousVersion?: number;
-    };
 }
 export interface ViewSnapshot {
     head: string | null;
     views: ViewVersion[];
+}
+export interface ViewSourceUsageRequest {
+    corpusId: string;
+    sourceId: string;
+    pageSize?: number;
+    continuationToken?: string;
+}
+export interface ViewSourceUsage {
+    viewId: string;
+    revisionId: string;
+    version: number;
+    kind: ViewKind;
+    title: string;
+    state: ViewState;
+    provenance: ViewVersion["provenance"];
+}
+export interface ViewSourceUsagePage {
+    items: ViewSourceUsage[];
+    total: number;
+    nextContinuationToken?: string;
 }
 export interface ViewSaveRequest {
     corpusId: string;
@@ -347,6 +354,9 @@ export interface MemoryViewService {
         request: ViewMaintenanceRequest,
     ): Promise<ViewMaintenanceResult>;
     listViews(corpusId: string): Promise<ViewSnapshot>;
+    getSourceViewUsage(
+        request: ViewSourceUsageRequest,
+    ): Promise<ViewSourceUsagePage>;
     getView(request: ViewReadRequest): Promise<ViewVersion | undefined>;
     saveViewDraft(request: ViewSaveRequest): Promise<ViewHistoryEntry>;
     archiveView(request: ViewArchiveRequest): Promise<ViewHistoryEntry>;

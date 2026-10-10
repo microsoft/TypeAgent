@@ -21,8 +21,11 @@ const service = new FileMemoryService(rootDirectory, {
     viewDrafts: parseViewDraftCapability(
         process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS,
     ),
-    ...(process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT
-        ? { runbookModelEndpoint: process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT }
+    ...(process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT
+        ? {
+              viewModelEndpoint:
+                  process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT,
+          }
         : {}),
 });
 const server = new MemoryMcpServer(service);

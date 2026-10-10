@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { scanMarkdownStructure } from "./markdownStructure.js";
 import type { MemoryEvent } from "./types.js";
+import { viewSourceKey } from "./viewContent.js";
+import { factStatuses } from "./viewInventory.js";
+import { viewHash } from "./viewMerge.js";
 import type {
     TimelineContent,
     TimelineEvidenceRecord,
@@ -9,14 +13,10 @@ import type {
     ViewBuildBounds,
     ViewBuildSnapshot,
     ViewCitation,
-    ViewRetainedInput,
-    ViewRelationshipInput,
     ViewFactInventory,
+    ViewRelationshipInput,
+    ViewRetainedInput,
 } from "./viewTypes.js";
-import { viewHash } from "./viewMerge.js";
-import { factStatuses } from "./viewInventory.js";
-import { viewSourceKey } from "./viewContent.js";
-import { scanMarkdownStructure } from "./procedureDetector.js";
 
 export function timelineTimestamp(value: unknown): string {
     if (
