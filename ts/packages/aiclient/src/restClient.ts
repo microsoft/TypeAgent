@@ -6,9 +6,12 @@ import registerDebug from "debug";
 import { filterSecretsFromJsonString } from "@typeagent/common-utils";
 import { otel } from "@typeagent/telemetry";
 import type { EndpointPool, EndpointPoolMember } from "./endpointPool.js";
+import type { ModelRequestConstraints } from "@typeagent/config";
+import { checkSerializedRequestConstraints } from "./requestConstraints.js";
 import {
     RequestAdmissionError,
     reserveSerializedRequest,
+    bindRequestBudgetScope,
 } from "./requestBudget.js";
 import {
     markSuccess,
@@ -285,13 +288,24 @@ async function callFetch(
     options?: RequestInit,
     timeout?: number,
     throttler?: FetchThrottler,
+    requestConstraints?: ModelRequestConstraints,
 ) {
     const safeOptions = redactRequestBody(options);
-    const send = () => {
+    const send = bindRequestBudgetScope(() => {
         safeOptions?.signal?.throwIfAborted();
+        if (requestConstraints) {
+            if (typeof safeOptions?.body !== "string")
+                throw new RequestAdmissionError(
+                    "Configured request constraints require a serialized body",
+                );
+            checkSerializedRequestConstraints(
+                safeOptions.body,
+                requestConstraints,
+            );
+        }
         reserveSerializedRequest(safeOptions);
         return fetchWithTimeout(url, safeOptions, timeout);
-    };
+    });
     return throttler ? throttler(send) : send();
 }
 
@@ -380,6 +394,7 @@ export async function fetchWithRetry(
     retryPauseMs?: number,
     timeout?: number,
     throttler?: FetchThrottler,
+    requestConstraints?: ModelRequestConstraints,
 ) {
     retryMaxAttempts ??= 3;
     retryPauseMs ??= 1000;
@@ -395,7 +410,13 @@ export async function fetchWithRetry(
     const host = hostOf(url);
     try {
         while (true) {
-            const result = await callFetch(url, options, timeout, throttler);
+            const result = await callFetch(
+                url,
+                options,
+                timeout,
+                throttler,
+                requestConstraints,
+            );
             if (result === undefined) {
                 throw noResponseError();
             }
@@ -700,6 +721,7 @@ async function fetchWithPool(
             settings.retryPauseMs,
             settings.timeout,
             settings.throttler,
+            settings.requestConstraints,
         );
     }
 
@@ -785,6 +807,7 @@ async function fetchWithPool(
                 init,
                 perAttemptTimeout,
                 member.settings.throttler,
+                member.settings.requestConstraints,
             );
         } catch (e: any) {
             // If the caller's abort signal fired, propagate immediately

@@ -4,6 +4,7 @@
 import type {
     ProjectBriefContent,
     ProjectBriefDetails,
+    ViewDefinitionInput,
 } from "@typeagent/memory-service";
 import { rbNode, rbButton } from "./memoryHubDocumentUi";
 
@@ -25,8 +26,14 @@ export function createProjectBriefEditor(
         revisionId: string,
         locator: string,
     ) => void,
+    originalRetrieval?: ViewDefinitionInput["projectSummary"],
 ) {
     const content: ProjectBriefContent = JSON.parse(JSON.stringify(original));
+    const retrieval = originalRetrieval
+        ? (JSON.parse(JSON.stringify(originalRetrieval)) as NonNullable<
+              ViewDefinitionInput["projectSummary"]
+          >)
+        : undefined;
     const root = rbNode("section");
     root.setAttribute("aria-label", "Project brief fixed template");
     function text(
@@ -252,5 +259,33 @@ export function createProjectBriefEditor(
             ),
         );
     root.append(evidence);
-    return { element: root, read: () => content };
+    if (retrieval)
+        root.append(
+            text(
+                "Project retrieval query",
+                retrieval.query,
+                (value) => (retrieval.query = value),
+            ),
+            text(
+                "Project retrieval aliases (one per line)",
+                retrieval.aliases.join("\n"),
+                (value) =>
+                    (retrieval.aliases = value
+                        .split("\n")
+                        .map((alias) => alias.trim())
+                        .filter(Boolean)),
+                true,
+            ),
+            text(
+                "Excluded project source IDs (one per line)",
+                retrieval.excludedSourceIds.join("\n"),
+                (value) =>
+                    (retrieval.excludedSourceIds = value
+                        .split("\n")
+                        .map((id) => id.trim())
+                        .filter(Boolean)),
+                true,
+            ),
+        );
+    return { element: root, read: () => content, retrieval: () => retrieval };
 }

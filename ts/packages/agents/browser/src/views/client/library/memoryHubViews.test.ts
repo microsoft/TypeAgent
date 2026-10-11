@@ -467,7 +467,10 @@ describe("Memory Center preview-first views", () => {
         },
     );
     test("multiple friendly kinds produce exact explicit targets only after confirmation, generated IDs and real policy", async () => {
-        await startBuild(["Knowledge wiki", "Project brief"]);
+        await startBuild(["Troubleshooting guide", "Project brief"]);
+        expect(
+            host.querySelector('input[aria-label="Knowledge wiki"]'),
+        ).toBeNull();
         expect(host.textContent).not.toContain("Not ready");
         expect(host.querySelector('[aria-label="Stable view ID"]')).toBeNull();
         click(host, "Continue to confirmation");
@@ -487,9 +490,11 @@ describe("Memory Center preview-first views", () => {
             }>;
         };
         expect(request.targets.map((target) => target.definition.kind)).toEqual(
-            ["wiki", "projectBrief"],
+            ["troubleshootingGuide", "projectBrief"],
         );
-        expect(request.targets[0].definition.viewId).toMatch(/^wiki-/);
+        expect(request.targets[0].definition.viewId).toMatch(
+            /^troubleshootingGuide-/,
+        );
         expect(
             new Set(request.targets.map((target) => target.definition.viewId))
                 .size,
@@ -651,7 +656,7 @@ describe("Memory Center preview-first views", () => {
                   })
                 : original(method, params),
         );
-        await startBuild(["Evidence-linked timeline", "Knowledge wiki"]);
+        await startBuild(["Evidence-linked timeline", "Troubleshooting guide"]);
         const event = host.querySelector<HTMLInputElement>(
             "fieldset[hidden] input",
         );

@@ -11,13 +11,15 @@ import { validateViewDraft } from "./viewValidation.js";
 import { assertViewIdentifier } from "./viewContent.js";
 import { validateIsoTimestamp } from "./timestampValidation.js";
 import { emptyProjectBrief } from "./projectBrief.js";
-import { emptyWiki } from "./wiki.js";
 import { validateProjectSelector } from "./informationalProject.js";
 
-export function parseViewDraftCapability(value: string | undefined): boolean {
-    if (value === undefined || value === "true") return true;
-    if (value === "false") return false;
-    throw new Error("TYPEAGENT_MEMORY_VIEW_DRAFTS must be true or false");
+export function parseViewDraftCapability(
+    value: string | undefined,
+    setting = "TYPEAGENT_MEMORY_VIEW_DRAFTS",
+): boolean {
+    if (value === undefined || value === "true" || value === "1") return true;
+    if (value === "false" || value === "0") return false;
+    throw new Error(`${setting} must be true or false`);
 }
 
 export function validateBuildRequest(request: ViewBuildRequest): void {
@@ -106,22 +108,24 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
         const id = target.definition.viewId;
         if (ids.has(id)) throw new Error("Duplicate build target");
         ids.add(id);
-        if (
-            !(
-                target.definition.selector.sources.length +
-                (target.definition.selector.events?.length ?? 0)
-            ) ||
-            target.definition.selector.sources.length +
-                (target.definition.selector.events?.length ?? 0) >
-                32
-        )
+        if (!validEvidenceCount(target))
             throw new Error(
                 "Each target must select 1 to 32 exact retained source revisions",
             );
     }
 
+    function validEvidenceCount(
+        target: ViewBuildRequest["targets"][number],
+    ): boolean {
+        const count =
+            target.definition.selector.sources.length +
+            (target.definition.selector.events?.length ?? 0);
+        return count <= 32 && (count > 0 || !!target.definition.projectSummary);
+    }
+
     function selectionValidationContent(kind: ViewKind): DerivedViewContent {
-        if (kind === "wiki") return emptyWiki();
+        if (kind === "wiki")
+            throw new Error("Wiki construction requires informational-wiki-v1");
         if (kind === "timeline")
             return {
                 kind: "timeline",

@@ -6,7 +6,7 @@ import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import { loadConfigSync } from "@typeagent/config";
 import {
     FileMemoryService,
-    parseViewDraftCapability,
+    getConfiguredMemoryViewOptions,
 } from "@typeagent/memory-service";
 import { fileURLToPath } from "node:url";
 import { MemoryMcpServer } from "./memoryMcpServer.js";
@@ -18,9 +18,7 @@ const rootDirectory =
     process.env.TYPEAGENT_MEMORY_DIR ??
     fileURLToPath(new URL("../../data", import.meta.url));
 const service = new FileMemoryService(rootDirectory, {
-    viewDrafts: parseViewDraftCapability(
-        process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS,
-    ),
+    ...getConfiguredMemoryViewOptions(),
     ...(process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT
         ? {
               viewModelEndpoint:

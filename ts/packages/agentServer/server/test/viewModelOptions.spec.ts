@@ -15,6 +15,7 @@ test("the host enables derived Views without an environment opt-in", async () =>
     try {
         expect((await service.getCapabilities()).derivedViews).toMatchObject({
             builds: true,
+            informationalWiki: true,
             kinds: ["troubleshootingGuide", "projectBrief", "timeline", "wiki"],
         });
     } finally {

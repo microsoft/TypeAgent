@@ -12,12 +12,12 @@ import { viewHash } from "./viewMerge.js";
 import { ViewBuildStaleError } from "./viewBuilds.js";
 
 function validateWikiFamilyRequest(
-    request: Extract<ViewMaintenanceRequest, { family: "wiki" }>,
+    request: Extract<ViewMaintenanceRequest, { family: "wiki" | "projects" }>,
     writing: boolean,
 ): void {
     if (
         !writing ||
-        request.family !== "wiki" ||
+        !["wiki", "projects"].includes(request.family) ||
         !["update", "rebuild", "pause", "resume"].includes(request.operation) ||
         Object.keys(request).some(
             (key) =>
@@ -28,7 +28,7 @@ function validateWikiFamilyRequest(
         (request.expectedHead !== null &&
             !/^[0-9a-f]{40}$/.test(request.expectedHead))
     )
-        throw new Error("Invalid wiki-family maintenance request");
+        throw new Error("Invalid informational-family maintenance request");
     assertViewIdentifier("corpus ID", request.corpusId);
 }
 

@@ -11,6 +11,8 @@ import { callApi } from "../src/restClient.js";
 import { callJsonApiWithPool } from "../src/restClient.js";
 import { discoverEndpointPool } from "../src/endpointPool.js";
 import { ModelType } from "../src/openai.js";
+import { discoverEndpointPoolFromConfig } from "../src/endpointPoolFromConfig.js";
+import { buildConfig } from "@typeagent/config";
 
 function budget(chatAttempts = 2) {
     return new RequestBudget({
@@ -28,6 +30,49 @@ function budget(chatAttempts = 2) {
 }
 
 describe("serialized inference budget (mock transport)", () => {
+    test("queued callers retain separate opt-in envelopes and do not leak a completed envelope into product requests", async () => {
+        const original = globalThis.fetch;
+        let sent = 0;
+        globalThis.fetch = async () => {
+            sent++;
+            return new Response("{}", { status: 200 });
+        };
+        const pool = discoverEndpointPoolFromConfig(
+            buildConfig({
+                AZURE_OPENAI_ENDPOINT: "https://synthetic.invalid/queue",
+                AZURE_OPENAI_API_KEY: "synthetic-key",
+                AZURE_OPENAI_MAX_CONCURRENCY: "1",
+            }),
+            "azure",
+            ModelType.Chat,
+        );
+        const first = budget(1);
+        const second = budget(1);
+        const call = () =>
+            callJsonApiWithPool(pool, async () => ({
+                success: true,
+                data: {
+                    headers: {},
+                    body: { messages: [], max_completion_tokens: 4000 },
+                },
+            }));
+        try {
+            const results = await Promise.all([
+                runWithRequestBudget(first, call),
+                runWithRequestBudget(second, call),
+            ]);
+            expect(results.every((result) => result.success)).toBe(true);
+            expect(first.receipts).toHaveLength(1);
+            expect(second.receipts).toHaveLength(1);
+            await expect(
+                runWithRequestBudget(second, call),
+            ).rejects.toBeInstanceOf(RequestAdmissionError);
+            expect((await call()).success).toBe(true);
+            expect(sent).toBe(3);
+        } finally {
+            globalThis.fetch = original;
+        }
+    });
     test("pooled queue propagates typed local admission errors with zero fetches or retries", async () => {
         const original = globalThis.fetch;
         let sent = 0;

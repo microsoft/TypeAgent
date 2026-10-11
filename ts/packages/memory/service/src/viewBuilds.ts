@@ -16,7 +16,6 @@ import { mergeView } from "./viewMerge.js";
 import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
 import { informationalPipeline } from "./informationalView.js";
-import { validateMaintenanceConstruction } from "./viewMaintenance.js";
 import {
     RequestBudget,
     runWithRequestBudget,
@@ -104,7 +103,7 @@ export class ViewBuildRunner {
             )
                 return this.run(job, controller.signal);
             if (!this.informationalLimits)
-                return this.blockInformationalJob(job);
+                return this.run(job, controller.signal);
             return runWithRequestBudget(
                 new RequestBudget(this.informationalLimits),
                 () => this.run(job, controller.signal),
@@ -121,17 +120,6 @@ export class ViewBuildRunner {
                 });
             })
             .finally(() => this.controllers.delete(job.jobId));
-    }
-
-    private async blockInformationalJob(job: ViewBuildJob): Promise<void> {
-        await this.owner.update(job.corpusId, job.jobId, (current) => {
-            current.state = "failed";
-            for (const result of current.results) {
-                result.state = "blocked";
-                result.reason =
-                    "An explicit bounded request budget is required before informational inference";
-            }
-        });
     }
 
     public assertCapacity(): void {
@@ -339,10 +327,6 @@ export class ViewBuildRunner {
             }
             validation = true;
             validateConstructedGuide(result.snapshot, candidate);
-            validateMaintenanceConstruction(
-                result.snapshot.maintenance,
-                candidate,
-            );
             await this.result(
                 job,
                 result.viewId,
@@ -445,9 +429,13 @@ export class ViewBuildRunner {
         });
     }
 
-    public async close(): Promise<void> {
+    public cancelAll(): void {
         for (const item of this.controllers.values())
             item.controller.abort(new Error("Service closing"));
+    }
+
+    public async close(): Promise<void> {
+        this.cancelAll();
         await this.tail;
         for (const failure of this.failures.values()) throw failure.error;
     }

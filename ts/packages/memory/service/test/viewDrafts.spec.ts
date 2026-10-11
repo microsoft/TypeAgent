@@ -44,6 +44,7 @@ describe("typed draft views: service, history, privacy and CLI", () => {
         expect((await service.getCapabilities()).derivedViews).toMatchObject({
             drafts: true,
             builds: true,
+            informationalWiki: true,
             kinds: ["troubleshootingGuide", "projectBrief", "timeline", "wiki"],
         });
     });

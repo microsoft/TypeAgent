@@ -83,10 +83,7 @@ export function versionRelationships(
                 family:
                     edge.predicate === "supportedBy"
                         ? "evidence"
-                        : edge.predicate === "relatedTo" ||
-                            edge.predicate === "contradicts"
-                          ? "knowledge"
-                          : "dependency",
+                        : "dependency",
                 origin:
                     generated &&
                     !version.edits?.some(

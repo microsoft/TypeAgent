@@ -14,27 +14,9 @@ export type ViewMaintenanceScope =
           project?: string;
       };
 
-export interface WikiSubject {
-    key: string;
-    title: string;
-    taxonomy: "concept" | "system" | "project";
-    pageId?: string;
-}
-
 export interface ViewMaintenanceDefinition {
     schemaVersion: 1;
     scope: ViewMaintenanceScope;
-    wikiDiscovery?: {
-        rules: "explicit-subjects-v1";
-        createDraftPages: boolean;
-        subjects: WikiSubject[];
-    };
-}
-
-export interface WikiSubjectIdentity extends WikiSubject {
-    pageId: string;
-    state: "active" | "omitted" | "merged";
-    mergedInto?: string;
 }
 
 export interface ViewMaintenanceDependency {
@@ -50,21 +32,12 @@ export interface ViewMaintenanceSnapshot {
     schemaVersion: 1;
     fingerprint: string;
     dependencies: ViewMaintenanceDependency[];
-    subjects: WikiSubjectIdentity[];
-    registry: WikiSubjectIdentity[];
     privacySources: string[];
 }
 
 export interface ViewMaintenanceManifest extends ViewMaintenanceSnapshot {
     acceptedRevisionId: string;
     acceptedAt: string;
-    pages: Array<{
-        pageId: string;
-        subjectKeys: string[];
-        contributing: ViewMaintenanceDependency[];
-        context: ViewMaintenanceDependency[];
-        inventoryIds: string[];
-    }>;
 }
 
 export interface ViewMaintenanceTargetPlan {
@@ -95,7 +68,7 @@ export interface ExplicitViewMaintenanceRequest {
 export interface WikiFamilyMaintenanceRequest {
     corpusId: string;
     expectedHead: string | null;
-    family: "wiki";
+    family: "wiki" | "projects";
     operation: "update" | "rebuild" | "pause" | "resume";
 }
 export type ViewMaintenanceRequest =

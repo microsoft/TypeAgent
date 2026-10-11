@@ -23,7 +23,11 @@ export function informationalWiki(content: {
 
 export function validateWikiSelector(definition: ViewDefinitionInput): void {
     const wiki = definition.wiki;
-    if (!wiki) return;
+    if (!wiki) {
+        if (definition.kind === "wiki")
+            throw new Error("Wiki construction requires informational-wiki-v1");
+        return;
+    }
     if (
         definition.kind !== "wiki" ||
         definition.maintenance !== undefined ||
@@ -213,7 +217,7 @@ export function hydrateInformational(
                 id: viewId,
                 role: "page",
                 heading: value.title,
-                body: value.prose,
+                body: `${value.prose}\n\nCoverage limits: ${value.limits}`,
                 details: {
                     kind: "page",
                     construction: "informational-wiki-v1",

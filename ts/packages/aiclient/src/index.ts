@@ -25,6 +25,7 @@ export * from "./restClient.js";
 export * from "./auth.js";
 export * from "./tokenCounter.js";
 export * from "./requestBudget.js";
+export * from "./requestConstraints.js";
 export {
     getCopilotClient,
     getCopilotCliPath,

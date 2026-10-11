@@ -19,7 +19,10 @@ export function createWikiModels(outputTokens: number, endpoint?: string) {
         openai.GPT_6_LUNA,
         {
             response_format: { type: "json_object" },
-            max_completion_tokens: outputTokens,
+            max_completion_tokens: openai.getChatModelOutputLimit(
+                outputTokens,
+                openai.GPT_6_LUNA,
+            ),
         },
         undefined,
         ["durable-index"],
@@ -27,7 +30,10 @@ export function createWikiModels(outputTokens: number, endpoint?: string) {
     return {
         extractionModel,
         languageModel: openai.createChatModel(endpoint, {
-            max_completion_tokens: outputTokens,
+            max_completion_tokens: openai.getChatModelOutputLimit(
+                outputTokens,
+                endpoint,
+            ),
         }),
         provider: viewProvider,
     };

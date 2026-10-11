@@ -27,20 +27,6 @@ export function createMaintenancePanel(
         view.definition.maintenance ?? {
             schemaVersion: 1,
             scope: { mode: "pinned" },
-            ...(view.content.kind === "wiki"
-                ? {
-                      wikiDiscovery: {
-                          rules: "explicit-subjects-v1",
-                          createDraftPages: false,
-                          subjects: view.content.sections.map((page) => ({
-                              key: page.id,
-                              pageId: page.id,
-                              title: page.heading,
-                              taxonomy: page.details.taxonomy,
-                          })),
-                      },
-                  }
-                : {}),
         },
         null,
         2,

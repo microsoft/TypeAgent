@@ -10,6 +10,7 @@ export * from "./revisionAssetStore.js";
 export * from "./rpcFacade.js";
 export * from "./types.js";
 export * from "./wikiBudget.js";
+export * from "./viewHostOptions.js";
 export { parseViewDraftCapability } from "./viewBuildValidation.js";
 export * from "./viewStore.js";
 export * from "./viewSynthesis.js";

@@ -180,6 +180,7 @@ test("indexed answer passes entire supplied subranges and rejects invented citat
             citationIds: ["invented"],
         }),
     });
+
     await expect(
         answerIndexedEvidence("question", evidence, 4000, undefined, model),
     ).rejects.toThrow("unsupported citation");
@@ -222,4 +223,13 @@ test("indexed answer passes entire supplied subranges and rejects invented citat
             model,
         ),
     ).toEqual({ answer: "Evidence is insufficient", citations: [] });
+});
+
+test("empty indexed evidence returns an explicit no-answer without resolving a model", async () => {
+    expect(
+        await answerIndexedEvidence("question", [], 4000, "azure:unconfigured"),
+    ).toEqual({
+        answer: "No supporting indexed fragments were found.",
+        citations: [],
+    });
 });

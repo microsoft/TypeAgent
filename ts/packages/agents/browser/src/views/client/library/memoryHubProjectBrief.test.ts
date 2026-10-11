@@ -289,7 +289,7 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
                         definition: {
                             viewId: expect.stringMatching(/^projectBrief-/),
                             kind: "projectBrief",
-                            selector: view.definition.selector,
+                            selector: { kind: "sources", sources: [] },
                             projectSummary: view.definition.projectSummary,
                         },
                     },
