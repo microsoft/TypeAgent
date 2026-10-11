@@ -4,6 +4,7 @@
 import type { RequestBudgetLimits } from "@typeagent/aiclient";
 import { countDocTokens } from "@typeagent/conversation-memory";
 
+/** Explicit rehearsal configuration; product initialization never reads this. */
 export function resolveConfiguredWikiBudget(
     environment: Readonly<Record<string, string | undefined>> = process.env,
 ): RequestBudgetLimits | undefined {

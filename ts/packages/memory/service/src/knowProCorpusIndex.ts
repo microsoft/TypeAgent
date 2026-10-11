@@ -11,6 +11,8 @@ import {
     docPartsFromVtt,
 } from "@typeagent/conversation-memory";
 import * as kp from "@typeagent/knowpro";
+import { isInitiativeSubject } from "./initiativeDiscovery.js";
+import { symbolicIdentity, usefulWikiSubject } from "./wikiGrouping.js";
 import { access } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -25,6 +27,7 @@ import type {
     CorpusIndexMatch,
     IndexedDocument,
     IndexedSubject,
+    IndexedSubjectIdentity,
     IndexedFragmentRequest,
     IndexedFragmentSelection,
     MemoryPage,
@@ -44,10 +47,41 @@ const durableDocPartOptions = {
 interface EntityKnowledge {
     name: string;
     type: string[];
+    facets?: Array<{ name: string; value: unknown }>;
+}
+
+function initiativeKnowledgeTypes(ref: {
+    knowledgeType: string;
+    knowledge: unknown;
+}): string[] {
+    return ref.knowledgeType === "entity"
+        ? (ref.knowledge as EntityKnowledge).type
+        : [];
 }
 
 interface TopicKnowledge {
     text: string;
+}
+
+function indexedSubjectIdentity(ref: {
+    knowledgeType: string;
+    knowledge: unknown;
+}): IndexedSubjectIdentity {
+    if (ref.knowledgeType !== "entity") return { types: [], scopes: [] };
+    const entity = ref.knowledge as EntityKnowledge;
+    return {
+        types: entity.type,
+        scopes: (entity.facets ?? []).flatMap((facet) =>
+            /^(project|initiative|episode|scope)$/i.test(facet.name) &&
+            typeof facet.value === "string" &&
+            facet.value.trim()
+                ? [`${facet.name.toLocaleLowerCase()}:${facet.value.trim()}`]
+                : [],
+        ),
+        ...(symbolicIdentity({ types: entity.type, scopes: [] })
+            ? { symbols: [entity.name] }
+            : {}),
+    };
 }
 
 interface ActionKnowledge {
@@ -161,34 +195,12 @@ export class KnowProCorpusIndex implements CorpusIndex {
         )
             throw new Error("Invalid indexed-subject page bounds");
         const memory = this.memory;
-        const items: IndexedSubject[] = [];
-        for (const term of memory?.semanticRefIndex.getTerms() ?? []) {
-            const sources = new Set<string>();
-            let postingCount = 0;
-            for (const posting of memory!.semanticRefIndex.lookupTerm(term)) {
-                const ref = memory!.semanticRefs.get(
-                    posting.semanticRefOrdinal,
-                );
-                const subject =
-                    ref.knowledgeType === "entity"
-                        ? (ref.knowledge as EntityKnowledge).name
-                        : ref.knowledgeType === "topic"
-                          ? (ref.knowledge as TopicKnowledge).text
-                          : undefined;
-                if (subject?.toLocaleLowerCase() !== term.toLocaleLowerCase())
-                    continue;
-                const source = parseSourceUri(
-                    memory!.messages.get(ref.range.start.messageOrdinal)
-                        .metadata.sourceUrl,
-                );
-                if (source && sourceIds.has(source.sourceId)) {
-                    sources.add(source.sourceId);
-                    postingCount++;
-                }
-            }
-            if (postingCount && /\p{L}/u.test(term))
-                items.push({ term, postingCount, sourceIds: [...sources] });
-        }
+        const items = memory
+            ? [...memory.semanticRefIndex.getTerms()].flatMap((term) => {
+                  const subject = this.indexedSubject(memory, term, sourceIds);
+                  return subject ? [subject] : [];
+              })
+            : [];
         items.sort((a, b) => a.term.localeCompare(b.term));
         const remaining = new Set(items);
         const fair: IndexedSubject[] = [];
@@ -211,6 +223,62 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 ? { nextContinuationToken: String(next) }
                 : {}),
         };
+    }
+
+    private indexedSubject(
+        memory: DocMemory,
+        term: string,
+        sourceIds: ReadonlySet<string>,
+    ): IndexedSubject | undefined {
+        const sources = new Set<string>();
+        let postingCount = 0;
+        let initiative = false;
+        const types = new Set<string>();
+        const scopes = new Set<string>();
+        const symbols = new Set<string>();
+        for (const posting of memory.semanticRefIndex.lookupTerm(term)) {
+            const ref = memory.semanticRefs.get(posting.semanticRefOrdinal);
+            const subject =
+                ref.knowledgeType === "entity"
+                    ? (ref.knowledge as EntityKnowledge).name
+                    : ref.knowledgeType === "topic"
+                      ? (ref.knowledge as TopicKnowledge).text
+                      : undefined;
+            if (
+                !subject ||
+                subject.toLocaleLowerCase() !== term.toLocaleLowerCase()
+            )
+                continue;
+            const message = memory.messages.get(ref.range.start.messageOrdinal);
+            const source = parseSourceUri(message.metadata.sourceUrl);
+            if (!source || !sourceIds.has(source.sourceId)) continue;
+            const text = message.textChunks.join("\n");
+            if (!usefulWikiSubject(subject, text)) continue;
+            sources.add(source.sourceId);
+            postingCount++;
+            const identity = indexedSubjectIdentity(ref);
+            identity.types.forEach((type) => types.add(type));
+            identity.scopes.forEach((scope) => scopes.add(scope));
+            identity.symbols?.forEach((symbol) => symbols.add(symbol));
+            initiative ||= isInitiativeSubject(
+                subject,
+                initiativeKnowledgeTypes(ref),
+                text,
+            );
+        }
+        return postingCount
+            ? {
+                  term: symbols.size === 1 ? [...symbols][0] : term,
+                  postingCount,
+                  sourceIds: [...sources],
+                  initiative,
+                  identity: {
+                      types: [...types].sort(),
+                      scopes: [...scopes].sort(),
+                      ...(symbols.size ? { symbols: [...symbols].sort() } : {}),
+                  },
+              }
+            : undefined;
     }
 
     private *indexedBlocks(

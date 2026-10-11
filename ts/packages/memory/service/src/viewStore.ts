@@ -65,6 +65,7 @@ interface ViewStoreState {
     publications?: Record<string, ViewPublicationStatus>;
     viewIndexCleanup?: string[];
     wikiFamily?: WikiFamilyState;
+    projectFamily?: WikiFamilyState;
     maintenanceReceipts?: Record<
         string,
         Pick<ViewMaintenanceResult, "receiptId" | "plan"> & { jobId?: string }
@@ -77,7 +78,12 @@ export interface WikiFamilyState {
     cursor: number;
     indexVersion?: string;
     error?: string;
-    descriptors: Array<{ viewId: string; query: string; sourceIds: string[] }>;
+    descriptors: Array<{
+        viewId: string;
+        query: string;
+        sourceIds: string[];
+        identity?: import("./types.js").IndexedSubjectIdentity;
+    }>;
 }
 
 function forgottenEventIds(marker: string): Set<string> | undefined {
@@ -137,9 +143,14 @@ export class TypedViewStore {
         }));
     }
 
-    public async getWikiFamily(corpusId: string): Promise<WikiFamilyState> {
+    public async getWikiFamily(
+        corpusId: string,
+        family: "wiki" | "projects" = "wiki",
+    ): Promise<WikiFamilyState> {
         return (
-            (await this.history(corpusId).read()).state.wikiFamily ?? {
+            (await this.history(corpusId).read()).state[
+                family === "wiki" ? "wikiFamily" : "projectFamily"
+            ] ?? {
                 enabled: true,
                 dirty: true,
                 cursor: 0,
@@ -151,14 +162,16 @@ export class TypedViewStore {
     public async saveWikiFamily(
         corpusId: string,
         family: WikiFamilyState,
+        kind: "wiki" | "projects" = "wiki",
     ): Promise<void> {
         const { head, state } = await this.history(corpusId).read();
-        state.wikiFamily = structuredClone(family);
+        state[kind === "wiki" ? "wikiFamily" : "projectFamily"] =
+            structuredClone(family);
         await this.commitBuildState(
             corpusId,
             head,
             state,
-            "Checkpoint informational wiki maintenance",
+            `Checkpoint informational ${kind} maintenance`,
         );
     }
 
@@ -395,6 +408,7 @@ export class TypedViewStore {
         snapshots: ViewBuildSnapshot[],
         maintenancePlan?: ViewMaintenancePlan,
         wikiFamily?: WikiFamilyState,
+        familyKind: "wiki" | "projects" = "wiki",
     ): Promise<{ job: ViewBuildJob; admitted: boolean }> {
         const { head, state } = await this.history(request.corpusId).read();
         const fingerprint = viewHash({ request, snapshots });
@@ -427,7 +441,9 @@ export class TypedViewStore {
         };
         state.builds ??= {};
         state.builds[job.jobId] = job;
-        if (wikiFamily) state.wikiFamily = structuredClone(wikiFamily);
+        if (wikiFamily)
+            state[familyKind === "wiki" ? "wikiFamily" : "projectFamily"] =
+                structuredClone(wikiFamily);
         await this.commitBuildState(
             request.corpusId,
             head,
@@ -557,19 +573,25 @@ export class TypedViewStore {
             (job) => job.state === "running",
         );
         if (!running.length) return;
-        if (
-            state.wikiFamily &&
-            running.some((job) =>
-                job.results.some(
-                    (result) =>
-                        result.snapshot.pipeline === "informational-wiki-v1",
-                ),
-            )
-        ) {
-            state.wikiFamily.dirty = true;
-            state.wikiFamily.cursor = 0;
-            state.wikiFamily.error =
-                "Interrupted wiki admission; retry pending indexed work";
+        for (const kind of ["wiki", "projects"] as const) {
+            const family =
+                state[kind === "wiki" ? "wikiFamily" : "projectFamily"];
+            if (
+                family &&
+                running.some((job) =>
+                    job.results.some(
+                        (result) =>
+                            result.snapshot.pipeline ===
+                            (kind === "wiki"
+                                ? "informational-wiki-v1"
+                                : "informational-project-summary-v1"),
+                    ),
+                )
+            ) {
+                family.dirty = true;
+                family.cursor = 0;
+                family.error = `Interrupted ${kind} admission; retry pending indexed work`;
+            }
         }
         for (const job of running) {
             job.state = "interrupted";
@@ -1036,16 +1058,17 @@ export class TypedViewStore {
             ),
         );
         state.maintenanceReceipts = {};
-        if (state.wikiFamily) {
-            state.wikiFamily.descriptors = state.wikiFamily.descriptors.filter(
+        for (const family of [state.wikiFamily, state.projectFamily]) {
+            if (!family) continue;
+            family.descriptors = family.descriptors.filter(
                 (descriptor) =>
                     !clearingDerived &&
                     !affected.has(descriptor.viewId) &&
                     !descriptor.sourceIds.includes(sourceId),
             );
-            state.wikiFamily.dirty = true;
-            state.wikiFamily.cursor = 0;
-            delete state.wikiFamily.indexVersion;
+            family.dirty = true;
+            family.cursor = 0;
+            delete family.indexVersion;
         }
         for (const job of Object.values(state.builds))
             delete job.maintenancePlan;

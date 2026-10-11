@@ -44,7 +44,7 @@ function job(state: ViewBuildJob["state"] = "partial"): ViewBuildJob {
                     expectedVersion: 0,
                     bounds: {},
                     inputs: [],
-                    pipeline: "wiki-v1",
+                    pipeline: "informational-wiki-v1",
                     model: "fixture",
                     fingerprint: "f",
                 },

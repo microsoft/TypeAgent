@@ -64,22 +64,12 @@ const {
         .href
 );
 const {
-    wikiTestAnswer,
-}: typeof import("../../service/dist/test/wikiTestModel.js") = await import(
-    new URL("../../../service/dist/test/wikiTestModel.js", import.meta.url).href
-);
-const {
     createConfiguredViewSynthesisAdapter,
 }: typeof import("../../service/dist/viewSynthesis.js") = await import(
     new URL("../../../service/dist/viewSynthesis.js", import.meta.url).href
 );
 
-test.each([
-    "troubleshootingGuide",
-    "projectBrief",
-    "timeline",
-    "wiki",
-] as const)(
+test.each(["troubleshootingGuide", "projectBrief", "timeline"] as const)(
     "configured %s inventory and final coverage survive authenticated MCP, history and reopen",
     async (kind) => {
         const root = await mkdtemp(
@@ -114,11 +104,9 @@ test.each([
                         ? projectSummaryTestResponse(
                               JSON.parse(user.content).fragments,
                           )
-                        : (kind === "wiki"
-                              ? wikiTestAnswer
-                              : kind === "timeline"
-                                ? timelineTestAnswer
-                                : inventoryTestAnswer)(
+                        : (kind === "timeline"
+                              ? timelineTestAnswer
+                              : inventoryTestAnswer)(
                               schema.name,
                               JSON.parse(user.content),
                           );
@@ -154,13 +142,11 @@ test.each([
         if (!address || typeof address === "string")
             throw new Error("Offline model listener unavailable");
         const endpoint =
-            kind === "wiki"
-                ? "WIKI_OFFLINE"
-                : kind === "timeline"
-                  ? "TIMELINE_OFFLINE"
-                  : kind === "projectBrief"
-                    ? "PROJECT_BRIEF_OFFLINE"
-                    : "V5_OFFLINE";
+            kind === "timeline"
+                ? "TIMELINE_OFFLINE"
+                : kind === "projectBrief"
+                  ? "PROJECT_BRIEF_OFFLINE"
+                  : "V5_OFFLINE";
         const environment = {
             [`OPENAI_ENDPOINT_${endpoint}`]: `http://127.0.0.1:${address.port}/chat/completions`,
             [`OPENAI_API_KEY_${endpoint}`]:
@@ -176,23 +162,7 @@ test.each([
         const open = () =>
             new FileMemoryService(root, {
                 viewDrafts: true,
-                ...(kind === "projectBrief"
-                    ? {
-                          informationalBudget: {
-                              contextTokens: 21000,
-                              inputTokens: 16000,
-                              outputTokens: 4000,
-                              safetyTokens: 1000,
-                              chatAttempts: 4,
-                              reservedTokens: 64000,
-                              embeddingAttempts: 8,
-                              elapsedMs: 60000,
-                              tokenizer: "synthetic-loopback",
-                              countTokens: (text: string) =>
-                                  Math.ceil(text.length / 3),
-                          },
-                      }
-                    : {}),
+                informationalViews: kind === "projectBrief",
                 viewModelEndpoint: `openai:${endpoint}`,
                 viewSynthesisAdapter: createConfiguredViewSynthesisAdapter(
                     `openai:${endpoint}`,
@@ -305,11 +275,9 @@ test.each([
                     : [
                           "memory_source_fact_inventory",
                           "memory_source_inventory_check",
-                          kind === "wiki"
-                              ? "memory_wiki_construction"
-                              : kind === "timeline"
-                                ? "memory_timeline_construction"
-                                : "memory_inventory_guide_construction",
+                          kind === "timeline"
+                              ? "memory_timeline_construction"
+                              : "memory_inventory_guide_construction",
                           "memory_inventory_artifact_support",
                           "memory_inventory_artifact_support",
                       ],

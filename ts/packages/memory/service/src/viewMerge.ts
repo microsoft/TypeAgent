@@ -18,6 +18,7 @@ import type {
     ViewBuildSnapshot,
 } from "./viewTypes.js";
 import { authoredRelationships, edgeIdentity } from "./viewRelationships.js";
+import { informationalView } from "./informationalView.js";
 import { wikiIndex } from "./viewContent.js";
 export { edgeIdentity } from "./viewRelationships.js";
 
@@ -234,42 +235,7 @@ function mergeWikiDetails(
         generated?.kind !== "page"
     )
         return undefined;
-    if ("construction" in generated) {
-        if (!("construction" in base) || !("construction" in human))
-            return undefined;
-        return { ...generated, taxonomy: human.taxonomy, note: human.note };
-    }
-    if ("construction" in base || "construction" in human) return undefined;
-    const fields = mergeBriefFields(base, human, generated, [
-        "inventoryIds",
-        "mergedPageIds",
-    ]);
-    const inventoryIds = mergeIdentifierItems(
-        base.inventoryIds,
-        human.inventoryIds,
-        generated.inventoryIds,
-    );
-    const mergedPageIds = mergeIdentifierItems(
-        base.mergedPageIds,
-        human.mergedPageIds,
-        generated.mergedPageIds,
-    );
-    return fields && inventoryIds && mergedPageIds
-        ? { ...fields, inventoryIds, mergedPageIds }
-        : undefined;
-}
-
-function mergeIdentifierItems(
-    base: string[],
-    human: string[],
-    generated: string[],
-): string[] | undefined {
-    const entries = (values: string[]) => values.map((id) => ({ id }));
-    return mergeBriefEntries(
-        entries(base),
-        entries(human),
-        entries(generated),
-    )?.map((entry) => entry.id);
+    return { ...generated, taxonomy: human.taxonomy, note: human.note };
 }
 
 function mergeTimelineDetails(
@@ -582,8 +548,7 @@ function mergeContent(
     const proposed = next.get(target);
     if (
         target === "title" &&
-        output.content.kind === "wiki" &&
-        output.content.construction === "informational-wiki-v1" &&
+        informationalView(output.content) &&
         typeof edited === "string"
     ) {
         output.content.title = edited;

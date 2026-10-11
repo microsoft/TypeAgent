@@ -571,6 +571,7 @@ export const capabilitiesSchema = z.object({
             editMerging: z.literal(true).optional(),
             maintenance: z.literal(true).optional(),
             informationalWiki: z.literal(true).optional(),
+            informationalProjects: z.literal(true).optional(),
         })
         .optional(),
     chatProvider: z.string().optional(),

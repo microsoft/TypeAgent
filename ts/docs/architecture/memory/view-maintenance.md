@@ -1,189 +1,157 @@
-# Manual derived-view maintenance
+# Derived-view maintenance
 
-Maintenance is an opt-in developer extension of the four-view build pipeline:
-wiki, project brief, timeline and troubleshooting guide. It selects affected
-views incrementally and rebuilds each selected view from its complete retained
-evidence. It does not patch prose from fact deltas or schedule background synthesis.
-The existing `TYPEAGENT_MEMORY_VIEW_DRAFTS` gate and live-quality qualification
-boundary still apply.
+Views are enabled by default. The host can disable all Views with
+`TYPEAGENT_MEMORY_VIEW_DRAFTS=false`, or only informational Wiki/Projects with
+`TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS=false`. Explicit test rehearsal budgets
+do not enable product behavior or impose lifetime product quotas. Configured
+provider request admission, 429/retry handling and application scheduling remain
+separate concerns.
 
-## Definition, snapshot and checkpoint
+## Indexed Wiki and Projects
 
-The persisted definition records continuing intent separately from the exact
-selector used by one build:
+`informational-wiki-v1` is the sole operational wiki construction contract.
+Each record contains one independently identified, editable page with bounded
+indexed citations. The informational family discovers wiki targets from the
+existing index after ingestion. Family `update`, `rebuild`, `pause` and `resume`
+use the existing maintenance service; durable pause survives reopening.
 
-| Scope                                 | Membership                                                                                     |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `pinned` or no maintenance definition | Existing exact-source/event builds; no advancement or expansion                                |
-| `currentSources`                      | Listed source IDs at their current ready revisions                                             |
-| `scopedSources`                       | Current sources matching optional source types, all supplied tags and exact `metadata.project` |
+Old source-only wiki definitions, `wiki-v1` requests, inventory-backed bundles
+and `wikiDiscovery.rules = "explicit-subjects-v1"` are rejected explicitly.
+There is no compatibility alias or serialized migration. Existing historical
+qualification receipts are not rewritten.
 
-Resolution enumerates membership, not top-K retrieval results. It blocks on missing
-configured sources, matching pending/failed ingestion, empty scope, suppressed
-source knowledge and overflow. Timeline document revisions can advance while its
-explicit canonical-event selection and temporal bounds remain fixed. Dynamic
-event-only/future-event scopes are not part of this release.
+Page titles, fixed concept/system/project categories, personal notes, source
+exclusions, exact citations and stable identities remain editable. Prose
+regeneration retains editorial overrides or exposes conflicts rather than
+silently overwriting them. The browser creates wiki pages through the indexed
+family and rebuilds saved informational definitions, not full-source bundles.
+Bundle merges, omissions and explicit-subject registries are not operational
+editor controls.
 
-Each accepted generated version retains a logical fingerprint, source revision/
-content/metadata/pipeline identities, wiki registry and page manifests. The logical
-fingerprint includes scope/discovery rules, temporal bounds, canonical-event
-identity/content, source capture/modified metadata, pipeline configuration and
-model identity. It excludes actors, job IDs, build/acceptance timestamps,
-output heads and output versions. Corpus/index timestamps are not freshness proofs.
-Missing manifests force reconciliation; an unknown generated base blocks automatic
-edit replacement.
+Projects retain `informational-project-summary-v1`, sharing bounded indexed
+retrieval without an inventory pipeline. Family `projects` discovers typed
+initiative subjects with local goals/scope evidence after successful indexing.
+A service mention alone is not a project. New candidates and existing saved
+selectors are reconciled through the same family/job/view store as Wiki, with
+durable independent pause/resume, failures and restart recovery.
 
-Page manifests record contributing evidence and conservative context dependencies
-on **all selected sources**. This deliberately favors completeness over precise
-page-level invalidation while construction still rebuilds whole views.
+Selector/alias case, whitespace and underscore variants nominate compatible
+descriptors, never titles. Reuse requires shared indexed subject evidence and
+compatible extracted types and explicit project/initiative/episode/scope facets.
+Missing identity metadata is not proof of equivalence; disjoint evidence records
+an ambiguity rather than creating another lexical duplicate. Explicit symbol
+types do not receive implicit underscore/space equivalence. Only duplicate
+unmaterialized nominations can be retired. Historical saved pages remain
+independent, including edits, references, exclusions and stable IDs; multiple
+compatible saved pages report an ambiguity and are never merged automatically.
+This is conservative lexical nomination, not semantic grouping or hierarchy.
+Exact indexed symbol names retain their original spelling. Multiple exact
+symbols collapsed into one folded KnowPro term expose an ambiguity instead of
+nomination as one newly generated page; no automatic cross-record consolidation
+or new disambiguation workflow is provided.
+A mixed meeting can supply
+evidence for multiple initiatives; synthesis must keep goals, owners and each
+status dimension bound to the selected initiative and retain unknowns.
+Status prose separately preserves incident closure and blocked/unvalidated
+capacity qualifications and reasons; the bounded capacity enum may represent
+unvalidated capacity as `pendingOwnerReview`. Review ownership does not establish
+accountable service ownership, and rehearsal acceptance does not complete a
+rollout. Project prompt revisions invalidate evidence no-ops without changing IDs.
 
-## Explicit wiki subjects
+Indexed subject discovery requires local substantive content, not multiple
+sources or a page quota. Dates, bare quantities, metadata-only subject lists and
+unsupported headings do not independently nominate pages. Generic properties
+require explanatory content rather than an incidental state/value. Useful
+one-source definitions, observations and charters remain eligible. These
+deterministic content checks do not semantically qualify generated prose.
+Legacy unmaterialized metadata/shell nominations are filtered with explicit
+maintenance-plan reasons; saved pages are not removed or reclassified by this
+usefulness gate. Unknown extracted type/scope is not a global type or scope:
+shared indexed evidence is still required, and known metadata is retained when
+an unknown descriptor is enriched.
 
-Dynamic wikis require `wikiDiscovery.rules = "explicit-subjects-v1"`. Subject keys
-come from source `metadata.viewSubjects` or reviewed definition bindings, not model
-invented keys, page titles or normalized names.
+Bounded retrieval selects by indexed relevance, new correction/counterexample/
+qualification/observation signals and source diversity rather than newest-three
+selection. Interleaved windows retain exact indexed locators and the existing
+12-fragment, 2000-character/window and 32000-character read ceilings. Unselected
+candidate blocks set the limited flag. Selection and prompts preserve older
+bounded successes, measurements and initiative-specific conditions without
+claiming exhaustiveness. Shared vocabulary and infrastructure are navigation
+hints, never authority to unify project owners, states, milestones or episodes.
+Wiki coverage limits appear in both body and summary so body-only exports retain
+the caveat. Categories, notes and readable titles remain editorial metadata,
+not retrieval scope. Grouping prompt changes invalidate Wiki evidence no-ops;
+the timeline/troubleshooting pipeline and project goals/scope remain unchanged.
+Versioned synthesis identity is shared by snapshot fingerprints and repeated
+build-receipt lookup, preserving request idempotence across prompt revisions.
 
-Example ingestion metadata:
+Project retrieval searches current eligible indexed postings across the
+collection before selecting bounded fragments. Neither the first/last 32
+documents nor a user's source selection defines automatic coverage. The saved
+selector retains only exact evidence revisions for the bounded build. A manual
+project build may pass an empty source selector to search all eligible sources.
+Queries, aliases, exclusions and editorial titles/prose remain editable.
+Unchanged evidence makes no synthesis calls; new uncited evidence, replacements
+and removal dirty the family. Missing/excluded evidence blocks visibly rather
+than substituting invented content. Privacy eligibility still gates every read.
 
-```json
-{
-  "project": "checkout",
-  "viewSubjects": [
-    { "key": "payments-service", "title": "Payments", "taxonomy": "system" },
-    {
-      "key": "connection-pool",
-      "title": "Pool pressure",
-      "taxonomy": "concept"
-    }
-  ]
-}
-```
+Publication and derivative indexing are independent per-record operations.
+Creating or updating a page does not imply that its derivative index is ready.
+Citation eligibility, source suppression/forgetting and privacy guards still
+apply independently of publication state.
 
-Example maintenance definition:
+## Explicit timeline and troubleshooting maintenance
 
-```json
-{
-  "schemaVersion": 1,
-  "scope": { "mode": "scopedSources", "project": "checkout" },
-  "wikiDiscovery": {
-    "rules": "explicit-subjects-v1",
-    "createDraftPages": true,
-    "subjects": [
-      {
-        "key": "payments-service",
-        "title": "Payments",
-        "taxonomy": "system",
-        "pageId": "existing-payments-page"
-      }
-    ]
-  }
-}
-```
+Timeline and troubleshooting guides retain their shared full-evidence inventory,
+support, temporal and publication helpers. Their manual maintenance definitions
+select continuing membership independently of the selector used by one build:
 
-Use `pageId` only in a reviewed binding to an existing matching-taxonomy page.
-Legacy pages need those explicit bindings before dynamic reconciliation.
-Source metadata cannot assign/rebind page IDs. Reviewed bindings resolve conflicting
-display labels for an established key; taxonomy changes and identity rebinding block.
+| Scope                                 | Membership                                                   |
+| ------------------------------------- | ------------------------------------------------------------ |
+| `pinned` or no maintenance definition | Exact sources/events; no automatic advancement               |
+| `currentSources`                      | Listed source IDs at current ready revisions                 |
+| `scopedSources`                       | Matching source types, all tags and exact `metadata.project` |
 
-New subjects receive deterministic UUIDv8 page identities scoped to corpus, view
-and subject key. Allocations become persisted registry entries only with accepted
-output. Repeated discovery does not duplicate pages; a new subject in a revised
-old document is discovered just like one in a new document. Known keys extend their
-existing pages, and renames preserve IDs. The model must use supplied page IDs, reviewed titles and
-taxonomies and represent every discovered subject. The construction schema binds
-those fields together for each subject. Metadata supplies identity,
-not evidence support: inventory/source checks and final semantic audits still apply.
+Resolution enumerates membership rather than truncating top-K relevance. Missing,
+pending, inaccessible, empty or oversized scopes block explicitly. Timeline
+source revisions can advance while canonical-event selection and temporal bounds
+remain fixed. Dynamic event-only/future-event scopes are not implemented.
 
-Existing explicit omission/merge edits remain authoritative. Accepted manifests
-retain omitted keys and survivor mappings rather than forgetting those intentions.
-When removing evidence would retire an active unmapped page, this release blocks
-for explicit resolution instead of deleting it automatically. Registry and privacy
-provenance have separate 128-entry bounds; exceeding them blocks for review.
+Accepted versions retain dependency fingerprints and conservative privacy source
+identities. Fingerprints include source content/metadata/pipeline, model, scope,
+temporal bounds and canonical-event evidence, not actor/job/time/output versions.
+No-op plans make no synthesis calls. Failed, cancelled, stale or conflicted work
+does not advance accepted dependency checkpoints.
 
-## Admission and acceptance
+The removed wiki-only registry/page manifests are not required by these consumers.
+Privacy provenance still conservatively retains previous source IDs so removing
+a citation cannot evade forgetting. Forget/clear purges local views, dependencies,
+receipts, conflicts, caches and private history; external backups/exports are
+outside local guarantees.
 
-1. Preview a bounded plan for explicit view IDs: `pinned`, `unchanged`, `blocked`
-   or `rebuild`, with reasons and dependencies.
-2. Submit the exact plan head and target versions. Re-resolve under the corpus
-   write boundary, so preview is not an authorization or concurrency bypass.
-3. Admit only affected full-view targets through existing inventory, construction,
-   support, human-edit merge and whole-artifact validation.
-4. Re-resolve membership and recheck source/event/rule/model identity and target/edit
-   guards before materialization. Newly eligible evidence arriving during generation
-   invalidates an obsolete plan even if its former sources are unchanged.
-5. Commit each accepted artifact, registry and manifests together in the existing
-   private Git history. Failed, stale, cancelled or conflicted attempts do not
-   advance their evidence checkpoints. Partial batches checkpoint successes separately.
-6. Apply existing publication/index policy separately. Maintenance does not imply
-   publication, review, skill approval or execution. Index retries reuse accepted output.
+## Service and UI controls
 
-No-op maintenance makes zero synthesis calls. It records an inspectable receipt
-without creating a new artifact version. Receipts reference existing build jobs
-rather than copying retained source text. Up to 100 latest receipts are directly
-readable; accepted manifests and existing Git history retain provenance.
+In-process, RPC, MCP, gateway and browser transports share strict contracts:
 
-Ingestion/suppression changes issue lightweight invalidation, not synthesis.
-Potentially outdated maintained drafts remain stale after ordinary content edits.
-Publication/search independently re-resolve maintenance freshness, including new
-membership, even when publication refers to an older revision.
-
-Forget/clear includes manifests, registry/tombstones, discovery privacy provenance,
-receipts, pending build/conflict snapshots, caches and the existing Git object purge.
-Registry provenance conservatively retains prior source IDs so losing a current
-citation cannot evade forgetting. Privacy purge drops diagnostic maintenance plans/
-receipts conservatively; backups and external exports are outside local guarantees.
-
-## Controls
-
-All operations use the same service contracts across in-process/RPC clients, MCP,
-parent/browser transports, extension forwarding and the Memory Hub:
-
-- `updateViewMaintenance`: opt in/change a definition with exact head/version guards.
+- `updateViewMaintenance`: change an explicit definition under head/version guards.
 - `planViewMaintenance`: preview without writes or synthesis.
-- `maintainViews`: persist a receipt and optionally admit an affected-view build.
-- `getViewMaintenance`: inspect a persisted receipt and its current build outcome.
+- `maintainViews`: record a receipt and optionally admit work; also controls the
+  informational `wiki` and `projects` families.
+- `getViewMaintenance`: inspect the receipt and current build outcome.
 
-The Hub exposes **Maintain**, a bounded JSON definition editor, preview, run,
-accepted manifests and build plans. Unsaved edits and service failures are explicit.
-Publication controls and execution restrictions remain unchanged.
+The Hub exposes manual maintenance for timeline/troubleshooting, informational
+family controls, explicit editorial changes, publication state and build errors.
+Unsaved edits and failures remain visible. No approval or execution authority is
+granted by a generated view.
 
-The exclusive-owner CLI adds:
-
-```powershell
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts set-maintenance definition-update.json
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts plan-maintenance plan-request.json
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts maintain maintenance-request.json
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts maintenance-status <corpusId> <receiptId>
-```
-
-`plan-request.json` contains `corpusId` and `viewIds`.
-`maintenance-request.json` contains `corpusId`, the preview's `expectedHead` and
-`targets` with `viewId`/`expectedVersion`. `definition-update.json` additionally
-identifies one `viewId` and its expected version, with the definition in `maintenance`.
-Do not use this CLI against a store owned by a running server.
-
-## Qualification and later work
-
-Offline tests cover no-op call counts, new/revised-source discovery, reviewed
-renames, omissions, concurrency, partial batches, cancellation/restart, forgetting,
-all four HTTP/parent view paths, real authenticated MCP and UI failure preservation.
-These are lifecycle tests, not model-quality guarantees.
-
-`viewMaintenanceQuality.test.ts` runs the real configured adapter on a synthetic
-two-checkpoint corpus. It requires accepted exact-page coverage, stable identities,
-retained numerical/status facts, no missing inventory facts and zero model stages
-on no-op. Run explicitly from the service package after building:
+The exclusive-owner CLI uses the same operations:
 
 ```powershell
-npm run jest-esm -- --runInBand --testPathPattern="viewMaintenanceQuality[.]test[.]js$"
+node dist\memoryViewsCli.js --store <isolated-store> set-maintenance definition-update.json
+node dist\memoryViewsCli.js --store <isolated-store> plan-maintenance plan-request.json
+node dist\memoryViewsCli.js --store <isolated-store> maintain maintenance-request.json
+node dist\memoryViewsCli.js --store <isolated-store> maintenance-status <corpusId> <receiptId>
 ```
 
-The configured-model two-checkpoint test passed locally with exact identity-bound
-schemas. The initial run exposed an identity/title mismatch, which was corrected
-by constraining each page's ID, reviewed title and taxonomy together rather than
-weakening acceptance checks.
-
-It uses existing configured credentials and never fetches keys. A passing synthetic
-run does not qualify broader distillation corpora. Periodic triggers, selective page
-synthesis, automatic retirement/identity migration and durable change cursors remain
-separate work; physical KnowPro index storage in Git is unnecessary.
+Do not use this CLI against a store owned by a running server. Offline lifecycle
+tests are not model-quality or live provider-capacity qualification.

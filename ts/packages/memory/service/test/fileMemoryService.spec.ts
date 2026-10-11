@@ -184,13 +184,9 @@ describe("FileMemoryService", () => {
     let rootDirectory: string;
     let index: FakeCorpusIndex;
     let service: FileMemoryService;
-
-    beforeEach(async () => {
-        rootDirectory = await mkdtemp(
-            path.join(os.tmpdir(), "typeagent-memory-service-"),
-        );
-        index = new FakeCorpusIndex();
-        service = new FileMemoryService(rootDirectory, {
+    const open = (informationalViews = true) =>
+        new FileMemoryService(rootDirectory, {
+            informationalViews,
             eventIndexFactory: (_corpusId, directory) =>
                 new FakeSemanticCorpusIndex(directory),
             indexFactory: (_corpusId, indexDirectory) => {
@@ -198,6 +194,13 @@ describe("FileMemoryService", () => {
                 return index;
             },
         });
+
+    beforeEach(async () => {
+        rootDirectory = await mkdtemp(
+            path.join(os.tmpdir(), "typeagent-memory-service-"),
+        );
+        index = new FakeCorpusIndex();
+        service = open();
     });
 
     afterEach(async () => {
@@ -346,6 +349,7 @@ describe("FileMemoryService", () => {
 
         const result = await service.answer({
             corpusId: corpus.corpusId,
+            answerMode: "extractive",
             question: "indexing",
         });
 
@@ -358,6 +362,8 @@ describe("FileMemoryService", () => {
     });
 
     test("synthesizes answers through the index when supported", async () => {
+        await service.close();
+        service = open(false);
         const corpus = await service.createCorpus("Synthesized");
         for (const [sourceId, text] of [
             ["book-a", "Guest one recommended Dune."],
@@ -414,6 +420,8 @@ describe("FileMemoryService", () => {
     });
 
     test("reports no answer and rejects unsupported synthesis", async () => {
+        await service.close();
+        service = open(false);
         const corpus = await service.createCorpus("NoAnswer");
         const accepted = await service.ingestDocument({
             corpusId: corpus.corpusId,

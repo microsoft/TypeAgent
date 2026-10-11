@@ -127,17 +127,17 @@ import {
     validateMaintenanceRequest,
 } from "./viewMaintenanceValidation.js";
 import { sameViewBuildEvidence, viewHash } from "./viewMerge.js";
-import { informationalView as informationalWiki } from "./informationalView.js";
+import {
+    informationalView as informationalWiki,
+    viewSynthesisIdentity,
+} from "./informationalView.js";
 import {
     RequestBudget,
     runWithRequestBudget,
     type ChatModel,
     type RequestBudgetLimits,
 } from "@typeagent/aiclient";
-import { resolveConfiguredWikiBudget } from "./wikiBudget.js";
-import { createWikiModels } from "./wikiModels.js";
 import { answerIndexedEvidence } from "./indexedAnswer.js";
-import { createDocMemorySettings } from "@typeagent/conversation-memory";
 import {
     assertPublicationProof,
     effectiveViewPublicationPolicy,
@@ -148,6 +148,12 @@ import {
     derivedDefinitionInput,
 } from "./viewRelationships.js";
 import { TypedViewStore, type WikiFamilyState } from "./viewStore.js";
+import {
+    discoverInformationalDescriptors,
+    retireWikiCandidate,
+    usefulWikiSubject,
+    usefulWikiSubjectLabel,
+} from "./wikiGrouping.js";
 import {
     createConfiguredViewSynthesisAdapter,
     validateConstructedGuide,
@@ -301,12 +307,15 @@ export interface FileMemoryServiceOptions {
     indexedAnswerModel?: ChatModel;
     /** Derived Views are enabled unless explicitly disabled by the host. */
     viewDrafts?: boolean;
+    /** Informational views follow Views enablement unless explicitly disabled. */
+    informationalViews?: boolean;
     viewPublicationCheckpoint?: (point: "intent" | "index") => Promise<void>;
     viewSynthesisAdapter?: ViewSynthesisAdapter;
     viewModelEndpoint?: string;
     indexFactory?: CorpusIndexFactory;
     eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
+    /** Opt-in rehearsal envelope only; never enables product behavior. */
     informationalBudget?: RequestBudgetLimits;
 }
 
@@ -915,7 +924,6 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
     private readonly wikiBudget: RequestBudgetLimits | undefined;
     private readonly wikiModelEndpoint: string | undefined;
     private readonly indexedAnswerModel: ChatModel | undefined;
-    private readonly informationalIndexFactory: CorpusIndexFactory;
 
     public constructor(
         private readonly rootDirectory: string,
@@ -925,14 +933,14 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         this.viewDrafts = options.viewDrafts !== false;
         this.wikiModelEndpoint = options.viewModelEndpoint;
         this.indexedAnswerModel = options.indexedAnswerModel;
-        this.wikiBudget =
-            options.informationalBudget ?? resolveConfiguredWikiBudget();
-        this.informationalWikiEnabled = this.wikiBudget !== undefined;
+        this.wikiBudget = options.informationalBudget;
+        this.informationalWikiEnabled =
+            this.viewDrafts && options.informationalViews !== false;
         this.viewAdapter =
             options.viewSynthesisAdapter ??
             createConfiguredViewSynthesisAdapter(
                 options.viewModelEndpoint,
-                this.wikiBudget?.outputTokens,
+                Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
             );
         this.viewBuilds = new ViewBuildRunner(
             this.viewAdapter,
@@ -956,33 +964,7 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                     const job = await this.enqueueWrite(corpusId, () =>
                         this.viewStore.updateViewBuild(corpusId, jobId, update),
                     );
-                    if (
-                        job.state !== "running" &&
-                        job.state !== "complete" &&
-                        job.results.some(
-                            (result) =>
-                                result.snapshot.pipeline ===
-                                "informational-wiki-v1",
-                        )
-                    ) {
-                        await this.enqueueWrite(corpusId, async () => {
-                            const family =
-                                await this.viewStore.getWikiFamily(corpusId);
-                            family.dirty = true;
-                            family.error =
-                                "A wiki build did not complete; inspect its receipt and retry explicitly";
-                            await this.viewStore.saveWikiFamily(
-                                corpusId,
-                                family,
-                            );
-                        });
-                    }
-                    if (job.state === "complete") {
-                        const family =
-                            await this.viewStore.getWikiFamily(corpusId);
-                        if (family.enabled && family.dirty)
-                            this.scheduleWikiMaintenance(corpusId);
-                    }
+                    await this.checkpointInformationalFamilies(job);
                     return job;
                 },
                 current: (input) =>
@@ -1077,20 +1059,6 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             this.wikiBudget,
         );
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
-        this.informationalIndexFactory =
-            this.wikiBudget && !options.viewSynthesisAdapter
-                ? (corpusId, directory) =>
-                      createKnowProCorpusIndex(corpusId, directory, () =>
-                          createDocMemorySettings(
-                              64,
-                              undefined,
-                              createWikiModels(
-                                  this.wikiBudget!.outputTokens,
-                                  this.wikiModelEndpoint,
-                              ).extractionModel,
-                          ),
-                      )
-                : this.indexFactory;
         this.eventIndexFactory = options.eventIndexFactory ?? this.indexFactory;
         this.capabilities = options.capabilities ?? defaultCapabilities();
         this.assetStore = new RevisionAssetStore(rootDirectory);
@@ -1119,11 +1087,17 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                             this.manifestPath(directory.name),
                         )
                     ) {
-                        const family = await this.viewStore.getWikiFamily(
-                            directory.name,
-                        );
-                        if (family.enabled && family.dirty)
-                            this.scheduleWikiMaintenance(directory.name);
+                        for (const kind of ["projects", "wiki"] as const) {
+                            const family = await this.viewStore.getWikiFamily(
+                                directory.name,
+                                kind,
+                            );
+                            if (family.enabled && family.dirty && !family.error)
+                                this.scheduleWikiMaintenance(
+                                    directory.name,
+                                    kind,
+                                );
+                        }
                     }
                 }
             }
@@ -1147,12 +1121,14 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         }
         await this.batchStore.close();
 
-        const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
+        this.viewBuilds.cancelAll();
         await Promise.allSettled([
             this.rootWriteTail,
             ...this.corpusLoads.values(),
             ...this.indexedReads,
         ]);
+        // Family maintenance may admit a new build while tracked reads drain.
+        const viewClosure = await Promise.allSettled([this.viewBuilds.close()]);
         await Promise.allSettled(
             [...this.corpora.values()].map((runtime) => runtime.access.idle()),
         );
@@ -2604,8 +2580,10 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
 
     public async getCapabilities(): Promise<MemoryServiceCapabilities> {
         await this.initialize();
+        const capabilities = structuredClone(this.capabilities);
+        delete capabilities.derivedViews;
         return {
-            ...structuredClone(this.capabilities),
+            ...capabilities,
             ...(this.viewDrafts
                 ? {
                       derivedViews: {
@@ -2613,7 +2591,10 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                           editMerging: true as const,
                           maintenance: true as const,
                           ...(this.informationalWikiEnabled
-                              ? { informationalWiki: true as const }
+                              ? {
+                                    informationalWiki: true as const,
+                                    informationalProjects: true as const,
+                                }
                               : {}),
                           kinds: [
                               "troubleshootingGuide",
@@ -2661,6 +2642,10 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                 ...(this.informationalWikiEnabled
                     ? {
                           wikiFamily: await this.wikiFamilyStatus(corpusId),
+                          projectFamily: await this.wikiFamilyStatus(
+                              corpusId,
+                              "projects",
+                          ),
                       }
                     : {}),
             };
@@ -2669,11 +2654,23 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
 
     private async wikiFamilyStatus(
         corpusId: string,
+        kind: "wiki" | "projects" = "wiki",
     ): Promise<NonNullable<ViewSnapshot["wikiFamily"]>> {
-        const family = await this.viewStore.getWikiFamily(corpusId);
+        const family = await this.viewStore.getWikiFamily(corpusId, kind);
+        const active = (await this.viewStore.listViewBuilds(corpusId)).some(
+            (job) =>
+                job.state === "running" &&
+                job.results.some(
+                    (result) =>
+                        result.snapshot.pipeline ===
+                        (kind === "wiki"
+                            ? "informational-wiki-v1"
+                            : "informational-project-summary-v1"),
+                ),
+        );
         return {
             enabled: family.enabled,
-            pending: family.dirty,
+            pending: family.dirty || active,
             ...(family.error ? { error: family.error } : {}),
         };
     }
@@ -2900,16 +2897,25 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         request: ViewSaveRequest,
         prior: ViewVersion | undefined,
     ): Promise<void> {
+        const selector =
+            request.definition.wiki ?? request.definition.projectSummary;
         if (
-            !request.definition.wiki ||
-            viewHash(request.definition.wiki) ===
-                viewHash(prior?.definition.wiki)
+            !selector ||
+            viewHash(selector) ===
+                viewHash(
+                    prior?.definition.wiki ?? prior?.definition.projectSummary,
+                )
         )
             return;
-        const family = await this.viewStore.getWikiFamily(request.corpusId);
+        const kind = request.definition.projectSummary ? "projects" : "wiki";
+        const family = await this.viewStore.getWikiFamily(
+            request.corpusId,
+            kind,
+        );
         family.dirty = true;
-        await this.viewStore.saveWikiFamily(request.corpusId, family);
-        this.scheduleWikiMaintenance(request.corpusId);
+        family.cursor = 0;
+        await this.viewStore.saveWikiFamily(request.corpusId, family, kind);
+        this.scheduleWikiMaintenance(request.corpusId, kind);
     }
 
     private async validateIndexedDraftCitation(
@@ -3219,11 +3225,7 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         const content = viewContentToText(view.content);
         try {
             await mkdir(directory, { recursive: true });
-            const index = (
-                informationalWiki(view.content)
-                    ? this.informationalIndexFactory
-                    : this.indexFactory
-            )(view.corpusId, directory);
+            const index = this.indexFactory(view.corpusId, directory);
             await index.rebuild(
                 [
                     {
@@ -3368,11 +3370,7 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                     throw new Error(
                         "Published view index is missing or does not match the exact revision; retry indexing",
                     );
-                const index = (
-                    informationalWiki(view.content)
-                        ? this.informationalIndexFactory
-                        : this.indexFactory
-                )(request.corpusId, directory);
+                const index = this.indexFactory(request.corpusId, directory);
                 await index.initialize();
                 const matches =
                     informationalWiki(view.content) && index.readFragments
@@ -3423,6 +3421,10 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         target: ViewBuildTarget,
         current?: ViewVersion,
     ): Promise<ViewBuildSnapshot> {
+        if (!this.informationalWikiEnabled)
+            throw new Error(
+                "Informational views are explicitly disabled by this host",
+            );
         const runtime = await this.getCorpusRuntime(corpusId);
         await this.ensureDocumentIndex(corpusId, runtime);
         const wiki = target.definition.wiki ?? target.definition.projectSummary;
@@ -3430,7 +3432,20 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             throw new Error(
                 "Host does not support bounded informational wiki retrieval",
             );
-        const selected = target.definition.selector.sources;
+        const selected = target.definition.selector.sources.length
+            ? target.definition.selector.sources
+            : runtime.manifest.sources
+                  .filter((source) =>
+                      source.revisions.some(
+                          (revision) =>
+                              revision.revisionId === source.activeRevisionId &&
+                              revision.state === "ready",
+                      ),
+                  )
+                  .map((source) => ({
+                      sourceId: source.sourceId,
+                      revisionId: source.activeRevisionId,
+                  }));
         const selection = await runtime.index.readFragments({
             terms: [wiki.query, ...wiki.aliases],
             sourceIds: selected
@@ -3485,7 +3500,16 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         const snapshot = {
             corpusId,
             actor: userInfo().username,
-            definition: structuredClone(target.definition),
+            definition: {
+                ...structuredClone(target.definition),
+                selector: {
+                    kind: "sources" as const,
+                    sources: inputs.map(({ sourceId, revisionId }) => ({
+                        sourceId,
+                        revisionId,
+                    })),
+                },
+            },
             expectedVersion: target.expectedVersion,
             ...(current
                 ? {
@@ -3496,7 +3520,6 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             bounds: {},
             inputs,
             selectionFingerprint: viewHash({
-                generation: runtime.manifest.indexGeneration,
                 readChars: selection.readChars,
                 limited: selection.limited,
                 fragments: selection.fragments,
@@ -3504,20 +3527,71 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             pipeline: target.definition.projectSummary
                 ? ("informational-project-summary-v1" as const)
                 : ("informational-wiki-v1" as const),
-            model: this.viewAdapter.identity,
+            model: viewSynthesisIdentity(
+                this.viewAdapter.identity,
+                target.definition,
+            ),
         };
         return { ...snapshot, fingerprint: viewHash(snapshot) };
     }
 
-    private scheduleWikiMaintenance(corpusId: string): void {
+    private async checkpointInformationalFamilies(
+        job: ViewBuildJob,
+    ): Promise<void> {
+        if (job.state === "running" || !this.informationalWikiEnabled) return;
+        const runtime = await this.getCorpusRuntime(job.corpusId);
+        if (!runtime.index.listSubjects || !runtime.index.readFragments) return;
+        await this.enqueueWrite(job.corpusId, async () => {
+            for (const kind of ["projects", "wiki"] as const) {
+                const results = job.results.filter(
+                    (result) =>
+                        result.snapshot.pipeline ===
+                        (kind === "wiki"
+                            ? "informational-wiki-v1"
+                            : "informational-project-summary-v1"),
+                );
+                if (!results.length || job.state === "complete") continue;
+                const family = await this.viewStore.getWikiFamily(
+                    job.corpusId,
+                    kind,
+                );
+                family.dirty = true;
+                const retryableChange =
+                    results.some((result) => result.state === "stale") &&
+                    !results.some((result) =>
+                        ["failed", "cancelled", "conflicted"].includes(
+                            result.state,
+                        ),
+                    );
+                if (retryableChange) delete family.error;
+                else
+                    family.error = `A ${kind} build did not complete; inspect its receipt and retry explicitly`;
+                await this.viewStore.saveWikiFamily(job.corpusId, family, kind);
+            }
+        });
+        for (const kind of ["projects", "wiki"] as const) {
+            const family = await this.viewStore.getWikiFamily(
+                job.corpusId,
+                kind,
+            );
+            if (family.enabled && family.dirty && !family.error)
+                this.scheduleWikiMaintenance(job.corpusId, kind);
+        }
+    }
+
+    private scheduleWikiMaintenance(
+        corpusId: string,
+        kind: "wiki" | "projects" = "wiki",
+    ): void {
+        const key = `${corpusId}:${kind}`;
         if (
             !this.informationalWikiEnabled ||
             this.closed ||
-            this.wikiTimers.has(corpusId)
+            this.wikiTimers.has(key)
         )
             return;
         const timer = setTimeout(() => {
-            this.wikiTimers.delete(corpusId);
+            this.wikiTimers.delete(key);
             const work = this.enqueueWrite(corpusId, async () => {
                 const runtime = await this.getCorpusRuntime(corpusId);
                 const snapshot = await this.viewStore.listViews(corpusId);
@@ -3525,14 +3599,17 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                     await this.maintainWikiFamily(runtime, {
                         corpusId,
                         expectedHead: snapshot.head,
-                        family: "wiki",
+                        family: kind,
                         operation: "update",
                     });
                 } catch (error) {
-                    const family = await this.viewStore.getWikiFamily(corpusId);
+                    const family = await this.viewStore.getWikiFamily(
+                        corpusId,
+                        kind,
+                    );
                     family.dirty = true;
                     family.error = safeError(error);
-                    await this.viewStore.saveWikiFamily(corpusId, family);
+                    await this.viewStore.saveWikiFamily(corpusId, family, kind);
                 }
             });
             this.indexedReads.add(work);
@@ -3541,52 +3618,42 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                 (error: unknown) => {
                     this.indexedReads.delete(work);
                     this.wikiMaintenanceFailures.set(
-                        corpusId,
+                        key,
                         new Error(safeError(error)),
                     );
                 },
             );
         }, 250);
-        this.wikiTimers.set(corpusId, timer);
+        this.wikiTimers.set(key, timer);
     }
 
     private async maintainWikiFamily(
         runtime: CorpusRuntime,
-        request: Extract<ViewMaintenanceRequest, { family: "wiki" }>,
+        request: Extract<
+            ViewMaintenanceRequest,
+            { family: "wiki" | "projects" }
+        >,
     ): Promise<ViewMaintenanceResult> {
         const corpusId = request.corpusId;
+        const kind = request.family;
         if (!this.informationalWikiEnabled)
             throw new Error(
-                "Informational wiki requires reviewed configured request capabilities",
+                "Informational views are explicitly disabled by this host",
             );
         const snapshot = await this.viewStore.listViews(corpusId);
         if (snapshot.head !== request.expectedHead)
             throw new ViewBuildStaleError("Wiki-family history head changed");
-        const family = await this.viewStore.getWikiFamily(corpusId);
-        if (family.error && request.operation === "update") {
-            delete family.error;
-            family.dirty = true;
-        }
+        const family = await this.viewStore.getWikiFamily(corpusId, kind);
         const plan: ViewMaintenancePlan = {
             corpusId,
             expectedHead: snapshot.head,
             targets: [],
         };
-        if (request.operation === "pause" || request.operation === "resume") {
-            family.enabled = request.operation === "resume";
-            family.dirty = family.dirty || family.enabled;
-            await this.viewStore.saveWikiFamily(corpusId, family);
-            if (!family.enabled)
-                return this.viewStore.recordViewMaintenance(plan);
-        }
+        await this.applyInformationalFamilyOperation(request, family);
         if (!family.enabled) return this.viewStore.recordViewMaintenance(plan);
         const active = await this.viewStore.listViewBuilds(corpusId);
         if (active.some((job) => job.state === "running"))
             return this.viewStore.recordViewMaintenance(plan);
-        if (request.operation === "rebuild") {
-            family.dirty = true;
-            family.cursor = 0;
-        }
         if (
             !family.dirty &&
             family.indexVersion === runtime.manifest.indexGeneration
@@ -3603,7 +3670,13 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                     revision.state === "ready",
             ),
         );
-        if (!eligible.length) return this.viewStore.recordViewMaintenance(plan);
+        if (!eligible.length) {
+            family.dirty = false;
+            family.cursor = 0;
+            family.descriptors = [];
+            await this.viewStore.saveWikiFamily(corpusId, family, kind);
+            return this.viewStore.recordViewMaintenance(plan);
+        }
         await this.ensureDocumentIndex(corpusId, runtime);
         const page = await runtime.index.listSubjects(
             family.cursor,
@@ -3620,14 +3693,25 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                 ...page.items.map((subject) => subject.term),
             ].map((name) => name.trim().toLocaleLowerCase()),
         );
-        const descriptors = family.descriptors.filter((descriptor) =>
-            subjectNames.has(descriptor.query),
+        const descriptors = family.descriptors.filter(
+            (descriptor) =>
+                snapshot.views.some(
+                    (view) => view.viewId === descriptor.viewId,
+                ) ||
+                subjectNames.has(descriptor.query.trim().toLocaleLowerCase()),
         );
         if (descriptors.length !== family.descriptors.length) {
             family.descriptors = descriptors;
             family.cursor = 0;
         }
-        this.discoverWikiDescriptors(family, page.items);
+        discoverInformationalDescriptors(
+            family,
+            kind === "projects"
+                ? page.items.filter((subject) => subject.initiative)
+                : page.items,
+            snapshot.views,
+            kind,
+        );
         const { targets, snapshots } = await this.prepareWikiTargets(
             corpusId,
             family,
@@ -3635,9 +3719,10 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             eligible,
             request.operation === "rebuild",
             plan,
+            kind,
         );
         // Save discovered identities while leaving unadmitted work retryable.
-        await this.viewStore.saveWikiFamily(corpusId, family);
+        await this.viewStore.saveWikiFamily(corpusId, family, kind);
         const nextFamily = structuredClone(family);
         const admittedIds = new Set(
             targets.map((target) => target.definition.viewId),
@@ -3655,50 +3740,61 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             nextFamily.indexVersion = runtime.manifest.indexGeneration;
         else delete nextFamily.indexVersion;
         nextFamily.dirty =
-            !!page.nextContinuationToken || targets.length === 12;
+            !!page.nextContinuationToken ||
+            targets.length === 12 ||
+            !!family.error;
         if (!targets.length) {
-            await this.viewStore.saveWikiFamily(corpusId, nextFamily);
+            await this.viewStore.saveWikiFamily(corpusId, nextFamily, kind);
+            if (nextFamily.dirty && !nextFamily.error)
+                this.scheduleWikiMaintenance(corpusId, kind);
             return this.viewStore.recordViewMaintenance(plan);
         }
         const head = (await this.viewStore.listViews(corpusId)).head;
         const buildRequest = { corpusId, expectedHead: head, targets };
         validateBuildRequest(buildRequest);
-        const admitted = await this.viewStore.admitViewBuild(
-            buildRequest,
-            snapshots,
-            plan,
-            nextFamily,
-        );
-        if (admitted.admitted) this.viewBuilds.start(admitted.job);
-        const receipt = await this.viewStore.recordViewMaintenance(
-            plan,
-            admitted.job,
-        );
-        return receipt;
+        const reservation = this.viewBuilds.reserve();
+        try {
+            const admitted = await this.viewStore.admitViewBuild(
+                buildRequest,
+                snapshots,
+                plan,
+                nextFamily,
+                kind,
+            );
+            if (admitted.admitted) reservation.start(admitted.job);
+            return await this.viewStore.recordViewMaintenance(
+                plan,
+                admitted.job,
+            );
+        } finally {
+            reservation.release();
+        }
     }
 
-    private discoverWikiDescriptors(
+    private async applyInformationalFamilyOperation(
+        request: Extract<
+            ViewMaintenanceRequest,
+            { family: "wiki" | "projects" }
+        >,
         family: WikiFamilyState,
-        subjects: Array<{ term: string; sourceIds: string[] }>,
-    ): void {
-        for (const subject of subjects) {
-            const query = subject.term.trim().toLocaleLowerCase();
-            const prior = family.descriptors.find(
-                (descriptor) => descriptor.query === query,
-            );
-            if (prior) {
-                prior.sourceIds = [
-                    ...new Set([...prior.sourceIds, ...subject.sourceIds]),
-                ];
-                continue;
-            }
-            if (!query || query.length > 200) continue;
-            family.descriptors.push({
-                viewId: randomUUID(),
-                query,
-                sourceIds: subject.sourceIds,
-            });
+    ): Promise<void> {
+        if (request.operation !== "pause") {
+            delete family.error;
+            if (request.operation === "update") family.dirty = true;
         }
+        if (request.operation === "pause" || request.operation === "resume") {
+            family.enabled = request.operation === "resume";
+            family.dirty ||= family.enabled;
+        }
+        if (request.operation === "rebuild") {
+            family.dirty = true;
+            family.cursor = 0;
+        }
+        await this.viewStore.saveWikiFamily(
+            request.corpusId,
+            family,
+            request.family,
+        );
     }
 
     private async prepareWikiTargets(
@@ -3708,6 +3804,7 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         eligible: StoredSource[],
         rebuild: boolean,
         plan: ViewMaintenancePlan,
+        kind: "wiki" | "projects",
     ): Promise<{ targets: ViewBuildTarget[]; snapshots: ViewBuildSnapshot[] }> {
         const targets: ViewBuildTarget[] = [];
         const snapshots: ViewBuildSnapshot[] = [];
@@ -3716,54 +3813,43 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             const current = views.find(
                 (view) => view.viewId === descriptor.viewId,
             );
-            if (current?.state === "archived") continue;
-            const sources = eligible
-                .filter(
-                    (source) =>
-                        descriptor.sourceIds.includes(source.sourceId) &&
-                        !current?.definition.wiki?.excludedSourceIds.includes(
-                            source.sourceId,
-                        ),
-                )
-                .slice(-3)
-                .map((source) => ({
-                    sourceId: source.sourceId,
-                    revisionId: source.activeRevisionId,
-                }));
-            if (!sources.length) {
-                if (current?.definition.wiki?.excludedSourceIds.length) {
-                    family.error =
-                        "Wiki refresh blocked: all matching sources are excluded. Change exclusions or archive the page.";
-                    plan.targets.push({
-                        viewId: descriptor.viewId,
-                        expectedVersion: current.version,
-                        state: "blocked",
-                        reason: family.error,
-                        selector: current.definition.selector,
-                    });
-                }
+            if (
+                !current &&
+                kind === "wiki" &&
+                !usefulWikiSubjectLabel(descriptor.query)
+            ) {
+                retireWikiCandidate(family, descriptor.viewId, plan);
                 continue;
             }
-            const target: ViewBuildTarget = {
-                expectedVersion: current?.version ?? 0,
-                definition: {
-                    viewId: descriptor.viewId,
-                    kind: "wiki",
-                    selector: { kind: "sources", sources },
-                    wiki: current?.definition.wiki ?? {
-                        construction: "informational-wiki-v1",
-                        query: descriptor.query,
-                        aliases: [],
-                        excludedSourceIds: [],
-                    },
-                },
-            };
+            const target = this.informationalFamilyTarget(
+                descriptor,
+                current,
+                eligible,
+                kind,
+                family,
+                plan,
+            );
+            if (!target) continue;
             try {
                 const input = await this.snapshotInformationalTarget(
                     corpusId,
                     target,
                     current,
                 );
+                if (
+                    !current &&
+                    kind === "wiki" &&
+                    !usefulWikiSubject(
+                        descriptor.query,
+                        input.inputs
+                            .map((source) => source.content)
+                            .join("\n\n"),
+                    )
+                ) {
+                    retireWikiCandidate(family, descriptor.viewId, plan);
+                    continue;
+                }
+                target.definition = input.definition;
                 if (
                     sameViewBuildEvidence(current?.generation?.input, input) &&
                     !rebuild
@@ -3795,6 +3881,7 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                     )
                 )
                     throw error;
+                family.error = error.message;
                 plan.targets.push({
                     viewId: descriptor.viewId,
                     expectedVersion: target.expectedVersion,
@@ -3804,6 +3891,64 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             }
         }
         return { targets, snapshots };
+    }
+
+    private informationalFamilyTarget(
+        descriptor: WikiFamilyState["descriptors"][number],
+        current: ViewVersion | undefined,
+        eligible: StoredSource[],
+        kind: "wiki" | "projects",
+        family: WikiFamilyState,
+        plan: ViewMaintenancePlan,
+    ): ViewBuildTarget | undefined {
+        if (current?.state === "archived") return undefined;
+        const retrieval =
+            current?.definition.wiki ?? current?.definition.projectSummary;
+        const sources = eligible
+            .filter(
+                (source) =>
+                    !retrieval?.excludedSourceIds.includes(source.sourceId),
+            )
+            .map((source) => ({
+                sourceId: source.sourceId,
+                revisionId: source.activeRevisionId,
+            }));
+        if (!sources.length) {
+            family.error = `${kind} refresh blocked: all matching sources are excluded. Change exclusions or archive the view.`;
+            plan.targets.push({
+                viewId: descriptor.viewId,
+                expectedVersion: current?.version ?? 0,
+                state: "blocked",
+                reason: family.error,
+            });
+            return undefined;
+        }
+        return {
+            expectedVersion: current?.version ?? 0,
+            definition: {
+                viewId: descriptor.viewId,
+                kind: kind === "wiki" ? "wiki" : "projectBrief",
+                selector: { kind: "sources", sources },
+                ...(kind === "wiki"
+                    ? {
+                          wiki: current?.definition.wiki ?? {
+                              construction: "informational-wiki-v1",
+                              query: descriptor.query,
+                              aliases: [],
+                              excludedSourceIds: [],
+                          },
+                      }
+                    : {
+                          projectSummary: current?.definition
+                              .projectSummary ?? {
+                              construction: "informational-project-summary-v1",
+                              query: descriptor.query,
+                              aliases: [],
+                              excludedSourceIds: [],
+                          },
+                      }),
+            },
+        };
     }
 
     private async snapshotViewTarget(
@@ -3826,6 +3971,8 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             );
         if (target.definition.wiki || target.definition.projectSummary)
             return this.snapshotInformationalTarget(corpusId, target, current);
+        if (target.definition.kind === "wiki")
+            throw new Error("Wiki construction requires informational-wiki-v1");
         const maintenance = this.resolveMaintenanceTarget(
             target.definition,
             runtime,
@@ -3935,9 +4082,7 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             pipeline:
                 target.definition.kind === "timeline"
                     ? ("timeline-v1" as const)
-                    : target.definition.kind === "wiki"
-                      ? ("wiki-v1" as const)
-                      : ("troubleshooting-v1" as const),
+                    : ("troubleshooting-v1" as const),
             model: this.viewAdapter.identity,
             publicationPolicy: effectiveViewPublicationPolicy(
                 await this.viewStore.getViewPublicationPolicy(corpusId),
@@ -3970,12 +4115,26 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
     public async buildViews(request: ViewBuildRequest): Promise<ViewBuildJob> {
         validateBuildRequest(request);
         await this.requireViews(request.corpusId);
+        if (
+            !this.informationalWikiEnabled &&
+            request.targets.some(
+                (target) =>
+                    target.definition.wiki || target.definition.projectSummary,
+            )
+        )
+            throw new Error(
+                "Informational views are explicitly disabled by this host",
+            );
         const existing = (await this.listViewBuilds(request.corpusId)).find(
             (job) =>
                 viewHash(job.request) === viewHash(request) &&
                 job.results.every(
                     (result) =>
-                        result.snapshot.model === this.viewAdapter.identity,
+                        result.snapshot.model ===
+                        viewSynthesisIdentity(
+                            this.viewAdapter.identity,
+                            result.snapshot.definition,
+                        ),
                 ),
         );
         if (existing) return existing;
@@ -4102,9 +4261,10 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         validateMaintenanceRequest(request, true);
         const runtime = await this.requireViews(request.corpusId);
         if ("family" in request) {
-            const timer = this.wikiTimers.get(request.corpusId);
+            const key = `${request.corpusId}:${request.family}`;
+            const timer = this.wikiTimers.get(key);
             if (timer) clearTimeout(timer);
-            this.wikiTimers.delete(request.corpusId);
+            this.wikiTimers.delete(key);
             return this.enqueueWrite(request.corpusId, () =>
                 this.maintainWikiFamily(runtime, request),
             );
@@ -4210,16 +4370,18 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             invalid.map((view) => view.viewId),
         );
         if (
-            !this.viewDrafts ||
+            !this.informationalWikiEnabled ||
             !runtime.index.listSubjects ||
             !runtime.index.readFragments
         )
             return;
-        const family = await this.viewStore.getWikiFamily(corpusId);
-        family.dirty = true;
-        family.cursor = 0;
-        await this.viewStore.saveWikiFamily(corpusId, family);
-        this.scheduleWikiMaintenance(corpusId);
+        for (const kind of ["projects", "wiki"] as const) {
+            const family = await this.viewStore.getWikiFamily(corpusId, kind);
+            family.dirty = true;
+            family.cursor = 0;
+            await this.viewStore.saveWikiFamily(corpusId, family, kind);
+            if (!family.error) this.scheduleWikiMaintenance(corpusId, kind);
+        }
     }
 
     public async updateViewMaintenance(
@@ -4433,64 +4595,70 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         if (question.length === 0) {
             throw new Error("Memory question cannot be empty");
         }
-        if (request.answerMode !== "extractive" && this.wikiBudget) {
-            return runWithRequestBudget(
-                new RequestBudget(this.wikiBudget),
-                async () => {
-                    const result = await this.search({
-                        corpusId: request.corpusId,
-                        query: question,
-                        ...(request.sourceIds
-                            ? { sourceIds: request.sourceIds }
-                            : {}),
-                        indexedFragments: true,
-                        limit: Math.min(request.limit ?? 12, 12),
-                        maxResponseChars: Math.min(
-                            request.maxResponseChars ?? 24000,
-                            24000,
-                        ),
-                    });
-                    const generated = await answerIndexedEvidence(
-                        question,
-                        result.matches,
-                        this.wikiBudget!.outputTokens,
-                        this.wikiModelEndpoint,
-                        this.indexedAnswerModel,
-                    );
-                    for (const citation of generated.citations) {
-                        if (!citation.locator?.startsWith("indexed:"))
-                            throw new Error(
-                                "Indexed answer requires an exact indexed locator",
-                            );
-                        const source = await this.getSource(
-                            request.corpusId,
-                            citation.sourceId,
+        if (
+            request.answerMode !== "extractive" &&
+            this.informationalWikiEnabled
+        ) {
+            const answer = async (): Promise<MemoryAnswerResult> => {
+                const result = await this.search({
+                    corpusId: request.corpusId,
+                    query: question,
+                    ...(request.sourceIds
+                        ? { sourceIds: request.sourceIds }
+                        : {}),
+                    indexedFragments: true,
+                    limit: Math.min(request.limit ?? 12, 12),
+                    maxResponseChars: Math.min(
+                        request.maxResponseChars ?? 24000,
+                        24000,
+                    ),
+                });
+                const generated = await answerIndexedEvidence(
+                    question,
+                    result.matches,
+                    Math.min(this.wikiBudget?.outputTokens ?? 4000, 4000),
+                    this.wikiModelEndpoint,
+                    this.indexedAnswerModel,
+                );
+                for (const citation of generated.citations) {
+                    if (!citation.locator?.startsWith("indexed:"))
+                        throw new Error(
+                            "Indexed answer requires an exact indexed locator",
                         );
-                        if (source?.activeRevisionId !== citation.revisionId)
-                            throw new Error(
-                                "Indexed answer evidence changed before delivery",
-                            );
-                        const current = await this.getSourceContent({
-                            corpusId: request.corpusId,
-                            sourceId: citation.sourceId,
-                            revisionId: citation.revisionId,
-                            indexedLocator: citation.locator,
-                        });
-                        if (current.content !== citation.snippet)
-                            throw new Error(
-                                "Indexed answer evidence is unavailable or changed",
-                            );
-                    }
-                    return {
-                        question,
-                        ...generated,
-                        mode: "synthesized",
-                        grounded: true,
-                        indexVersion: result.indexVersion,
-                        warnings: result.warnings,
-                    };
-                },
-            );
+                    const source = await this.getSource(
+                        request.corpusId,
+                        citation.sourceId,
+                    );
+                    if (source?.activeRevisionId !== citation.revisionId)
+                        throw new Error(
+                            "Indexed answer evidence changed before delivery",
+                        );
+                    const current = await this.getSourceContent({
+                        corpusId: request.corpusId,
+                        sourceId: citation.sourceId,
+                        revisionId: citation.revisionId,
+                        indexedLocator: citation.locator,
+                    });
+                    if (current.content !== citation.snippet)
+                        throw new Error(
+                            "Indexed answer evidence is unavailable or changed",
+                        );
+                }
+                return {
+                    question,
+                    ...generated,
+                    mode: "synthesized",
+                    grounded: true,
+                    indexVersion: result.indexVersion,
+                    warnings: result.warnings,
+                };
+            };
+            return this.wikiBudget
+                ? runWithRequestBudget(
+                      new RequestBudget(this.wikiBudget),
+                      answer,
+                  )
+                : answer();
         }
         if (request.answerMode !== "extractive") {
             const synthesized = await this.synthesizeAnswer(request, question);

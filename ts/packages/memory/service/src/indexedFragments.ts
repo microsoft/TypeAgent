@@ -65,6 +65,57 @@ function balancedOffsets(length: number, window: number): number[] {
     return offsets;
 }
 
+function diverseBlocks(blocks: IndexedBlock[], limit: number): IndexedBlock[] {
+    const signals = (text: string) => [
+        /\b(correct(?:ion|ed|s)?|supersed(?:es|ed)|retract(?:ed|ion)?)\b/i.test(
+            text,
+        ),
+        /\b(counterexample|contradict(?:s|ion)?|failed|not reproduced)\b/i.test(
+            text,
+        ),
+        /\b(qualif\w*|caveat|limited|only|cohort|workload|as.of)\b/i.test(text),
+        /\b(success|passed|recovered|observed|median|p95)\b/i.test(text),
+    ];
+    const remaining = blocks.map((block, order) => ({
+        block,
+        order,
+        signals: signals(block.text),
+    }));
+    const selected: IndexedBlock[] = [];
+    const covered = new Set<number>();
+    while (remaining.length && selected.length < limit) {
+        const novelty = (entry: (typeof remaining)[number]) =>
+            entry.signals.filter(
+                (present, index) => present && !covered.has(index),
+            ).length;
+        remaining.sort(
+            (a, b) =>
+                (selected.length ? novelty(b) - novelty(a) : 0) ||
+                Number(
+                    selected.some(
+                        (block) => block.sourceId === a.block.sourceId,
+                    ),
+                ) -
+                    Number(
+                        selected.some(
+                            (block) => block.sourceId === b.block.sourceId,
+                        ),
+                    ) ||
+                b.block.score - a.block.score ||
+                a.order - b.order,
+        );
+        const entry = remaining.shift()!;
+        selected.push(entry.block);
+        entry.signals.forEach((present, index) => {
+            if (present) covered.add(index);
+        });
+    }
+    return selected;
+}
+
+const contextualHeading =
+    /^#{1,6} [^\n]*(qualif|contrast|warn|correct|limit|caveat|counterexample|scope|observation|measurement)/im;
+
 export function selectIndexedFragments(
     blocks: Iterable<IndexedBlock>,
     request: IndexedFragmentRequest,
@@ -76,8 +127,7 @@ export function selectIndexedFragments(
         !request.terms.length ||
         (request.query !== undefined && !request.query.trim()) ||
         request.terms.length > 8 ||
-        request.terms.some((term) => !term.trim() || term.length > 200) ||
-        request.sourceIds.length > 32
+        request.terms.some((term) => !term.trim() || term.length > 200)
     )
         throw new Error("Invalid bounded indexed-fragment selector");
     const terms = [
@@ -98,13 +148,18 @@ export function selectIndexedFragments(
         string,
         Array<{ start: number; end: number }>
     >();
-    const selected = [...blocks]
-        .filter((block) => eligible.has(block.sourceId))
-        .slice(0, Math.max(2, Math.floor(maxFragments / 3)));
+    const candidates = [...blocks].filter((block) =>
+        eligible.has(block.sourceId),
+    );
+    const selected = diverseBlocks(
+        candidates,
+        Math.max(2, Math.floor(maxFragments / 3)),
+    );
+    limited = candidates.length > selected.length;
     const windows = selected.map((block) => {
         const headings = [...block.text.matchAll(/^#{1,6} .+$/gm)];
         const important = headings.filter((heading) =>
-            /qualif|contrast|warn|correct|limit|caveat/i.test(heading[0]),
+            contextualHeading.test(heading[0]),
         );
         const matchedPassages = terms
             .flatMap((term) => {
@@ -201,9 +256,7 @@ export function selectIndexedFragments(
             if (
                 !terms.some((term) => lower.includes(term)) &&
                 !request.query &&
-                !/^#{1,6} [^\n]*(qualif|contrast|warn|correct|limit|caveat)/im.test(
-                    snippet,
-                )
+                !contextualHeading.test(snippet)
             )
                 continue;
             const locator = indexedLocator(block, offset, end);

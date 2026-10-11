@@ -18,7 +18,10 @@ export function createIndexedAnswerModel(
         );
     return openai.createChatModel(endpoint, {
         response_format: { type: "json_object" },
-        max_completion_tokens: outputTokens,
+        max_completion_tokens: openai.getChatModelOutputLimit(
+            outputTokens,
+            endpoint,
+        ),
     });
 }
 
@@ -27,13 +30,14 @@ export async function answerIndexedEvidence(
     evidence: MemoryEvidence[],
     outputTokens: number,
     endpoint?: string,
-    model: ChatModel = createIndexedAnswerModel(outputTokens, endpoint),
+    model?: ChatModel,
 ): Promise<{ answer: string; citations: MemoryEvidence[] }> {
     if (!evidence.length)
         return {
             answer: "No supporting indexed fragments were found.",
             citations: [],
         };
+    model ??= createIndexedAnswerModel(outputTokens, endpoint);
     const result = await model.complete(
         [
             {

@@ -23,6 +23,7 @@ import { inventoryTestAnswer } from "../../../memory/service/dist/test/viewInven
 import { projectSummaryTestResponse } from "../../../memory/service/dist/test/informationalProjectTestModel.js";
 import { FakeIndexedCorpusIndex } from "../../../memory/service/dist/test/fakeIndexedCorpusIndex.js";
 import { hydrateProjectSummary } from "../../../memory/service/dist/informationalProject.js";
+import { hydrateInformational } from "../../../memory/service/dist/informationalWiki.js";
 import {
     hydrateInventory,
     parseInventoryAudit,
@@ -33,7 +34,6 @@ import {
 } from "../../../memory/service/dist/viewSynthesisEvidence.js";
 import { hydrateInventoryConstruction } from "../../../memory/service/dist/viewInventoryCoverage.js";
 import { timelineTestAnswer } from "../../../memory/service/dist/test/timelineTestModel.js";
-import { wikiTestAnswer } from "../../../memory/service/dist/test/wikiTestModel.js";
 
 for (const kind of [
     "troubleshootingGuide",
@@ -67,6 +67,7 @@ for (const kind of [
             "context",
         ];
         const service = new FileMemoryService(root, {
+            informationalViews: kind === "projectBrief" || kind === "wiki",
             ...(kind === "projectBrief"
                 ? {
                       informationalBudget: {
@@ -84,21 +85,19 @@ for (const kind of [
                   }
                 : {}),
             indexFactory: (_id, directory) =>
-                kind === "projectBrief"
+                kind === "projectBrief" || kind === "wiki"
                     ? new FakeIndexedCorpusIndex(directory)
                     : new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {
                 identity: "offline-gateway-test",
-                ...(kind !== "troubleshootingGuide" && kind !== "projectBrief"
+                ...(kind === "timeline"
                     ? {
                           inventory: async (input) =>
                               hydrateInventory(
                                   input,
-                                  (kind === "wiki"
-                                      ? wikiTestAnswer
-                                      : kind === "timeline"
-                                        ? timelineTestAnswer
-                                        : inventoryTestAnswer)(
+                                  (kind === "timeline"
+                                      ? timelineTestAnswer
+                                      : inventoryTestAnswer)(
                                       "memory_source_fact_inventory",
                                       labelViewInput(
                                           input,
@@ -108,11 +107,9 @@ for (const kind of [
                               ),
                           checkInventory: async (_input, inventory) =>
                               parseInventoryAudit(
-                                  (kind === "wiki"
-                                      ? wikiTestAnswer
-                                      : kind === "timeline"
-                                        ? timelineTestAnswer
-                                        : inventoryTestAnswer)(
+                                  (kind === "timeline"
+                                      ? timelineTestAnswer
+                                      : inventoryTestAnswer)(
                                       "memory_source_inventory_check",
                                       { inventory },
                                   ),
@@ -120,6 +117,20 @@ for (const kind of [
                       }
                     : {}),
                 generate: async (input, _signal, inventory) => {
+                    if (kind === "wiki") {
+                        assert.equal(input.pipeline, "informational-wiki-v1");
+                        assert.equal(inventory, undefined);
+                        return hydrateInformational(input, {
+                            title: "Read only wiki",
+                            prose: input.inputs
+                                .map((source) => source.content)
+                                .join("\n\n"),
+                            limits: "Only selected indexed evidence",
+                            citationIds: input.inputs
+                                .flatMap((source) => source.passages ?? [])
+                                .map((_, index) => `f${index}`),
+                        });
+                    }
                     if (kind === "projectBrief") {
                         assert.equal(
                             input.pipeline,
@@ -141,16 +152,12 @@ for (const kind of [
                         return hydrateInventoryConstruction(
                             input,
                             inventory,
-                            (kind === "wiki"
-                                ? wikiTestAnswer
-                                : kind === "timeline"
-                                  ? timelineTestAnswer
-                                  : inventoryTestAnswer)(
-                                kind === "wiki"
-                                    ? "memory_wiki_construction"
-                                    : kind === "timeline"
-                                      ? "memory_timeline_construction"
-                                      : "memory_inventory_guide_construction",
+                            (kind === "timeline"
+                                ? timelineTestAnswer
+                                : inventoryTestAnswer)(
+                                kind === "timeline"
+                                    ? "memory_timeline_construction"
+                                    : "memory_inventory_guide_construction",
                                 { input, inventory },
                             ),
                         );
@@ -279,6 +286,13 @@ for (const kind of [
             return { status: response.status, body: await response.json() };
         }
         const corpus = await service.createCorpus("Gateway synthetic fixture");
+        if (kind === "wiki")
+            await service.maintainViews({
+                corpusId: corpus.corpusId,
+                expectedHead: (await service.listViews(corpus.corpusId)).head,
+                family: "wiki",
+                operation: "pause",
+            });
         const source = await service.ingestDocument({
             corpusId: corpus.corpusId,
             source: {
@@ -334,6 +348,16 @@ for (const kind of [
                     definition: {
                         viewId,
                         kind,
+                        ...(kind === "wiki"
+                            ? {
+                                  wiki: {
+                                      construction: "informational-wiki-v1",
+                                      query: "Read only",
+                                      aliases: [],
+                                      excludedSourceIds: [],
+                                  },
+                              }
+                            : {}),
                         ...(kind === "projectBrief"
                             ? {
                                   projectSummary: {
@@ -368,6 +392,20 @@ for (const kind of [
                 .status,
             400,
         );
+        if (kind === "wiki") {
+            const obsolete = structuredClone(request);
+            delete obsolete.targets[0].definition.wiki;
+            assert.equal(
+                (await invoke("memoryBuildViews", obsolete)).status,
+                400,
+            );
+            const unsupported = structuredClone(request);
+            unsupported.targets[0].definition.wiki.construction = "wiki-v1";
+            assert.equal(
+                (await invoke("memoryBuildViews", unsupported)).status,
+                400,
+            );
+        }
         if (kind === "projectBrief") {
             const obsolete = structuredClone(request);
             delete obsolete.targets[0].definition.projectSummary;
@@ -539,6 +577,39 @@ for (const kind of [
                 freshness: "current",
             })
         ).body.data;
+        if (kind === "wiki") {
+            assert.equal(visible.length, 1);
+            assert.equal(
+                visible[0].view.content.construction,
+                "informational-wiki-v1",
+            );
+            const citation = visible[0].evidence[0];
+            const resolved = await invoke("memoryGetSourceContent", {
+                corpusId: corpus.corpusId,
+                sourceId: citation.sourceId,
+                revisionId: citation.revisionId,
+                indexedLocator: citation.locator,
+            });
+            assert.equal(resolved.status, 200);
+            assert.equal(resolved.body.data.content, citation.excerpt);
+            const oldMaintenance = await invoke("memoryUpdateViewMaintenance", {
+                corpusId: corpus.corpusId,
+                viewId,
+                expectedHead: views.body.data.head,
+                expectedVersion: visible[0].view.version,
+                maintenance: {
+                    schemaVersion: 1,
+                    scope: { mode: "pinned" },
+                    wikiDiscovery: {
+                        rules: "explicit-subjects-v1",
+                        subjects: [],
+                        createDraftPages: false,
+                    },
+                },
+            });
+            assert.equal(oldMaintenance.status, 400);
+            return;
+        }
         if (kind === "projectBrief") {
             assert.equal(visible.length, 1);
             assert.equal(
@@ -618,22 +689,6 @@ for (const kind of [
             maintenance: {
                 schemaVersion: 1,
                 scope: { mode: "currentSources", sourceIds: ["s"] },
-                ...(kind === "wiki"
-                    ? {
-                          wikiDiscovery: {
-                              rules: "explicit-subjects-v1",
-                              createDraftPages: false,
-                              subjects: maintained.content.sections.map(
-                                  (page) => ({
-                                      key: page.id,
-                                      pageId: page.id,
-                                      title: page.heading,
-                                      taxonomy: page.details.taxonomy,
-                                  }),
-                              ),
-                          },
-                      }
-                    : {}),
             },
         });
         assert.equal(definitionUpdate.status, 200);
@@ -663,7 +718,11 @@ for (const kind of [
             "memoryMaintainViews",
             maintenanceRequest,
         );
-        assert.equal(maintenanceReceipt.status, 200);
+        assert.equal(
+            maintenanceReceipt.status,
+            200,
+            JSON.stringify(maintenanceReceipt.body),
+        );
         let maintainedJob = maintenanceReceipt.body.data.job;
         while (maintainedJob.state === "running") {
             await new Promise((resolve) => setTimeout(resolve, 20));

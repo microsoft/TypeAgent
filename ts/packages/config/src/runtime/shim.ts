@@ -17,6 +17,10 @@
  */
 
 import { regionToEnvSuffix } from "./regions.js";
+import {
+    MODEL_REQUEST_CONSTRAINTS_KEY,
+    modelRequestConstraintsToTree,
+} from "./requestConstraints.js";
 import { SIMPLE_CONFIG_MAPPING_LIST } from "../mappings.js";
 import {
     AuthMode,
@@ -136,6 +140,10 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
  */
 export function configToEnv(config: Config): EnvOutput {
     const out: EnvOutput = {};
+    if (config.modelRequestConstraints)
+        out[MODEL_REQUEST_CONSTRAINTS_KEY] = JSON.stringify(
+            modelRequestConstraintsToTree(config.modelRequestConstraints),
+        );
 
     // Azure OpenAI section.
     const ao = config.azureOpenAI;

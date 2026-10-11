@@ -307,12 +307,17 @@ export function mountMemoryHubViews(
             }),
         );
         const jobs = collections.flatMap((collection) => collection.jobs);
-        const familyStatus = collections.flatMap((collection) =>
-            wikiStatusDescription(
+        const familyStatus = collections.flatMap((collection) => [
+            ...wikiStatusDescription(
                 collection.corpusId,
                 collection.views.wikiFamily,
             ),
-        );
+            ...wikiStatusDescription(
+                collection.corpusId,
+                collection.views.projectFamily,
+                "Projects",
+            ),
+        ]);
         await loadPendingConflicts(jobs, current);
         if (current !== sequence) return;
         renderDrafts();
@@ -326,10 +331,11 @@ export function mountMemoryHubViews(
         function wikiStatusDescription(
             corpusId: string,
             family: ViewSnapshot["wikiFamily"],
+            label = "Wiki",
         ): string[] {
             if (!family) return [];
             return [
-                `${corpusNames.get(corpusId) ?? corpusId}: Wiki ${family.enabled ? "automatic" : "paused"}; ${family.pending ? "bounded work pending" : "up to date"}${family.error ? `; retry needed: ${family.error}` : ""}.`,
+                `${corpusNames.get(corpusId) ?? corpusId}: ${label} ${family.enabled ? "automatic" : "paused"}; ${family.pending ? "bounded work pending" : "up to date"}${family.error ? `; retry needed: ${family.error}` : ""}.`,
             ];
         }
 
@@ -337,40 +343,42 @@ export function mountMemoryHubViews(
             derivedViews?: { informationalWiki?: true };
         }): HTMLButtonElement[] {
             if (!capabilities.derivedViews?.informationalWiki) return [];
-            return (["update", "rebuild", "pause", "resume"] as const).map(
-                (operation) =>
-                    rbButton(
-                        `${operation[0].toUpperCase()}${operation.slice(1)} collection Wiki`,
-                        () => {
-                            void action(async () => {
-                                const corpusId = options.scope();
-                                if (!corpusId)
-                                    throw new Error(
-                                        "Choose one collection to update its Wiki.",
+            return (["wiki", "projects"] as const).flatMap((family) =>
+                (["update", "rebuild", "pause", "resume"] as const).map(
+                    (operation) =>
+                        rbButton(
+                            `${operation[0].toUpperCase()}${operation.slice(1)} collection ${family === "wiki" ? "Wiki" : "Projects"}`,
+                            () => {
+                                void action(async () => {
+                                    const corpusId = options.scope();
+                                    if (!corpusId)
+                                        throw new Error(
+                                            "Choose one collection to update its Wiki.",
+                                        );
+                                    const current = await invokeMemory(
+                                        "memoryListViews",
+                                        { corpusId },
                                     );
-                                const current = await invokeMemory(
-                                    "memoryListViews",
-                                    { corpusId },
-                                );
-                                const result = await invokeMemory(
-                                    "memoryMaintainViews",
-                                    {
-                                        corpusId,
-                                        expectedHead: current.head,
-                                        family: "wiki",
-                                        operation,
-                                    },
-                                );
-                                if (result.job) renderReceipt(result.job);
-                                await refresh();
-                            });
-                        },
-                    ),
+                                    const result = await invokeMemory(
+                                        "memoryMaintainViews",
+                                        {
+                                            corpusId,
+                                            expectedHead: current.head,
+                                            family,
+                                            operation,
+                                        },
+                                    );
+                                    if (result.job) renderReceipt(result.job);
+                                    await refresh();
+                                });
+                            },
+                        ),
+                ),
             );
         }
         status.textContent = snapshot.views.length
             ? `${snapshot.views.length} saved views${corpusId ? "" : " across your collections"}.`
-            : "No views yet. Wiki pages are discovered from indexed evidence; update this collection Wiki or build a legacy view.";
+            : "No views yet. Wiki pages and Projects are discovered automatically from indexed evidence. Update a collection family or build a timeline or guide.";
         if (route && !dirty) await renderRoute(route, current);
     }
 
@@ -667,6 +675,7 @@ export function mountMemoryHubViews(
         const kindPicker = rbNode("fieldset", undefined, "hub-view-kinds");
         kindPicker.append(rbNode("legend", "What would you like to build?"));
         for (const kind of supportedKinds) {
+            if (kind === "wiki" && !rebuilding) continue;
             if (rebuilding && kind !== rebuilding.content.kind) continue;
             const label = rbNode("label", undefined, "hub-view-kind");
             const checkbox = document.createElement("input");
@@ -813,12 +822,7 @@ export function mountMemoryHubViews(
                         selectedEvents,
                         rebuilding,
                         projectQuery.value,
-                        selectedSources.length
-                            ? selectedSources
-                            : sources.map(({ sourceId, revisionId }) => ({
-                                  sourceId,
-                                  revisionId,
-                              })),
+                        selectedSources,
                     );
                     if (
                         current !== sequence ||
@@ -855,7 +859,10 @@ export function mountMemoryHubViews(
                                         (source) =>
                                             `${source.sourceId} @ ${source.revisionId}`,
                                     )
-                                    .join(", ") || "No document sources",
+                                    .join(", ") ||
+                                    (target.definition.projectSummary
+                                        ? "Search current eligible indexed sources automatically"
+                                        : "No document sources"),
                             ),
                         );
                         if (
@@ -1436,7 +1443,11 @@ export function mountMemoryHubViews(
                 });
             }),
         );
-        if (maintenanceSupported && view.state !== "archived")
+        if (
+            maintenanceSupported &&
+            view.state !== "archived" &&
+            !view.definition.wiki
+        )
             more.append(
                 rbButton("Update view", () => {
                     if (!discardChanges()) return;
@@ -1567,6 +1578,7 @@ export function mountMemoryHubViews(
                               );
                           });
                       },
+                      view.definition.projectSummary,
                   )
                 : undefined;
         const timelineEditor =
@@ -1657,6 +1669,7 @@ export function mountMemoryHubViews(
                             ...(view.definition.projectSummary
                                 ? {
                                       projectSummary:
+                                          projectEditor?.retrieval() ??
                                           view.definition.projectSummary,
                                   }
                                 : {}),

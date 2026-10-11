@@ -41,6 +41,46 @@ test("indexed Search/Ask citations preserve their exact locator through the HTTP
 });
 
 test("informational indexed evidence and family operations pass the strict browser gateway", () => {
+    const build = {
+        corpusId: "corpus",
+        expectedHead: null,
+        targets: [
+            {
+                expectedVersion: 0,
+                definition: {
+                    viewId: "page",
+                    kind: "wiki",
+                    selector: {
+                        kind: "sources",
+                        sources: [
+                            { sourceId: "source", revisionId: "revision" },
+                        ],
+                    },
+                    wiki: {
+                        construction: "informational-wiki-v1",
+                        query: "concept",
+                        aliases: [],
+                        excludedSourceIds: [],
+                    },
+                },
+            },
+        ],
+    };
+    assert.deepEqual(
+        validateViewRequest({ method: "memoryBuildViews", params: build })
+            .params,
+        build,
+    );
+    const old = structuredClone(build);
+    delete old.targets[0].definition.wiki;
+    assert.throws(() =>
+        validateViewRequest({ method: "memoryBuildViews", params: old }),
+    );
+    const oldVersion = structuredClone(build);
+    oldVersion.targets[0].definition.wiki.construction = "wiki-v1";
+    assert.throws(() =>
+        validateViewRequest({ method: "memoryBuildViews", params: oldVersion }),
+    );
     const params = {
         corpusId: "corpus",
         sourceId: "source",
@@ -58,27 +98,28 @@ test("informational indexed evidence and family operations pass the strict brows
             params: { ...params, indexedLocator: "made-up" },
         }),
     );
-    for (const operation of ["update", "pause", "resume", "rebuild"]) {
-        const family = {
-            corpusId: "corpus",
-            expectedHead: null,
-            family: "wiki",
-            operation,
-        };
-        assert.deepEqual(
-            validateViewRequest({
-                method: "memoryMaintainViews",
-                params: family,
-            }).params,
-            family,
-        );
-        assert.throws(() =>
-            validateViewRequest({
-                method: "memoryMaintainViews",
-                params: { ...family, approval: true },
-            }),
-        );
-    }
+    for (const kind of ["wiki", "projects"])
+        for (const operation of ["update", "pause", "resume", "rebuild"]) {
+            const family = {
+                corpusId: "corpus",
+                expectedHead: null,
+                family: kind,
+                operation,
+            };
+            assert.deepEqual(
+                validateViewRequest({
+                    method: "memoryMaintainViews",
+                    params: family,
+                }).params,
+                family,
+            );
+            assert.throws(() =>
+                validateViewRequest({
+                    method: "memoryMaintainViews",
+                    params: { ...family, approval: true },
+                }),
+            );
+        }
 });
 import { viewMethods } from "@typeagent/browser-control-rpc/viewRpc";
 

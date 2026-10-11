@@ -127,7 +127,7 @@ export class RequestBudget {
     }
 }
 
-function outputReservation(body: object): number {
+export function outputReservation(body: object): number {
     const value =
         "max_completion_tokens" in body
             ? body.max_completion_tokens
@@ -143,7 +143,12 @@ function outputReservation(body: object): number {
     return value;
 }
 
-const budgets = new AsyncLocalStorage<readonly RequestBudget[]>();
+const budgets = new AsyncLocalStorage<readonly RequestBudget[] | undefined>();
+
+export function bindRequestBudgetScope<T>(work: () => T): () => T {
+    const active = budgets.getStore();
+    return () => budgets.run(active, work);
+}
 
 export function runWithRequestBudget<T>(
     budget: RequestBudget,

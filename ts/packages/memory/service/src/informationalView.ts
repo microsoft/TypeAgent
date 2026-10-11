@@ -1,6 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { ViewDefinitionInput } from "./viewTypes.js";
+
+export function viewSynthesisIdentity(
+    model: string,
+    definition: ViewDefinitionInput,
+): string {
+    if (definition.projectSummary) return `${model}:project-attribution-v3`;
+    if (definition.wiki) return `${model}:wiki-grouping-v1`;
+    return model;
+}
+
 export function informationalView(content: {
     kind: string;
     construction?: string;

@@ -506,6 +506,7 @@ export interface MemoryServiceCapabilities {
         editMerging?: true;
         maintenance?: true;
         informationalWiki?: true;
+        informationalProjects?: true;
     };
     chatProvider?: string;
     embeddingProvider?: string;
@@ -683,6 +684,14 @@ export interface IndexedSubject {
     term: string;
     postingCount: number;
     sourceIds: string[];
+    initiative?: boolean;
+    identity?: IndexedSubjectIdentity;
+}
+
+export interface IndexedSubjectIdentity {
+    types: string[];
+    scopes: string[];
+    symbols?: string[];
 }
 
 export interface IndexedFragment extends CorpusIndexMatch {

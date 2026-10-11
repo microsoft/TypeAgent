@@ -75,7 +75,7 @@ export function registerViewTools(
         viewToolNames.planViewMaintenance,
         {
             description:
-                "Inspect dynamic membership, discovery identities, no-ops and blockers without synthesis or writes.",
+                "Inspect explicit timeline/troubleshooting membership, no-ops and blockers without synthesis or writes.",
             inputSchema: viewMaintenancePlanRequestSchema,
             outputSchema: z.object({ result: viewMaintenancePlanSchema }),
         },
@@ -90,7 +90,7 @@ export function registerViewTools(
         viewToolNames.maintainViews,
         {
             description:
-                "Manually reconcile exact configured view versions. Rebuild affected full views; preserve explicit edits and record durable receipts. No scheduler or execution authority.",
+                "Control automatic indexed Wiki or Projects family updates, rebuilds, pause and resume without choosing sources, or reconcile explicit timeline/troubleshooting versions. Preserve edits and durable receipts; no execution authority.",
             inputSchema: viewMaintenanceRequestSchema,
             outputSchema: z.object({ result: viewMaintenanceResultSchema }),
         },
@@ -101,7 +101,7 @@ export function registerViewTools(
         viewToolNames.updateViewMaintenance,
         {
             description:
-                "Opt an existing derived view into bounded dynamic scope and explicit wiki subject discovery using exact head/version guards.",
+                "Opt an existing timeline or troubleshooting view into bounded dynamic scope using exact head/version guards. Indexed Wiki uses family maintenance, not subject registries.",
             inputSchema: viewMaintenanceUpdateSchema,
             outputSchema: z.object({ result: viewHistoryEntrySchema }),
         },

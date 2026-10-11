@@ -62,23 +62,14 @@ export interface ViewSection {
     body: string;
     details?: ProjectBriefDetails | TimelineRecordDetails | WikiPageDetails;
 }
-export interface LegacyWikiPageDetails {
-    kind: "page";
-    taxonomy: "concept" | "system" | "project";
-    inventoryIds: string[];
-    mergedPageIds: string[];
-}
 export interface InformationalWikiPageDetails {
     kind: "page";
     construction: "informational-wiki-v1";
     taxonomy: "concept" | "system" | "project";
     note: string;
-    inventoryIds?: never;
     mergedPageIds: string[];
 }
-export type WikiPageDetails =
-    | LegacyWikiPageDetails
-    | InformationalWikiPageDetails;
+export type WikiPageDetails = InformationalWikiPageDetails;
 export type WikiPage = Omit<ViewSection, "role" | "details"> & {
     role: "page";
     details: WikiPageDetails;
@@ -90,7 +81,7 @@ export interface WikiIndexEntry {
 }
 export interface WikiContent {
     kind: "wiki";
-    construction?: "informational-wiki-v1";
+    construction: "informational-wiki-v1";
     title: string;
     summary?: string;
     index: WikiIndexEntry[];
@@ -222,21 +213,13 @@ export interface TimelineCorrectionRelationshipInput {
     to: Extract<ViewEndpoint, { kind: "section" }>;
     citations: ViewCitation[];
 }
-export interface WikiPageRelationshipInput {
-    id: string;
-    predicate: "relatedTo" | "contradicts";
-    from: Extract<ViewEndpoint, { kind: "section" }>;
-    to: Extract<ViewEndpoint, { kind: "section" }>;
-    citations: ViewCitation[];
-}
 export type ViewRelationshipInput =
     | ViewEvidenceRelationshipInput
-    | TimelineCorrectionRelationshipInput
-    | WikiPageRelationshipInput;
+    | TimelineCorrectionRelationshipInput;
 export type ViewRelationship =
     | (ViewRelationshipInput & {
           schemaVersion: 1;
-          family: "evidence" | "dependency" | "knowledge";
+          family: "evidence" | "dependency";
           origin: "human" | "generator";
           reviewState: "unreviewed";
       })
@@ -321,6 +304,11 @@ export interface ViewSnapshot {
     head: string | null;
     views: ViewVersion[];
     wikiFamily?: {
+        enabled: boolean;
+        pending: boolean;
+        error?: string;
+    };
+    projectFamily?: {
         enabled: boolean;
         pending: boolean;
         error?: string;
@@ -457,7 +445,6 @@ export interface ViewBuildSnapshot {
     pipeline:
         | "troubleshooting-v1"
         | "timeline-v1"
-        | "wiki-v1"
         | "informational-wiki-v1"
         | "informational-project-summary-v1";
     model: string;

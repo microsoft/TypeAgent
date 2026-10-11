@@ -139,8 +139,13 @@ export function createViewBuildTargets(
     projectQuery?: string,
     projectSources: SourceInput[] = sources,
 ): ViewBuildRequest["targets"] {
+    const selectedKinds = [...kinds];
+    if (selectedKinds.includes("wiki") && !rebuilding?.definition.wiki)
+        throw new Error(
+            "Wiki pages are created by the indexed informational family",
+        );
     const eventInputs = [...events].map((eventId) => ({ eventId }));
-    return [...kinds].map((kind) => {
+    return selectedKinds.map((kind) => {
         if (
             kind === "projectBrief" &&
             !rebuilding?.definition.projectSummary &&
@@ -155,7 +160,8 @@ export function createViewBuildTargets(
                   : sources;
         const count =
             inputs.length + (kind === "timeline" ? eventInputs.length : 0);
-        if (!count) throw new Error(`${kind} has no compatible evidence`);
+        if (!count && kind !== "projectBrief")
+            throw new Error(`${kind} has no compatible evidence`);
         if (count > 32)
             throw new Error(
                 `${kind} accepts at most 32 combined sources and events`,

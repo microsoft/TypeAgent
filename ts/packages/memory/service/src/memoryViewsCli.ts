@@ -5,6 +5,7 @@ import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import { loadConfigSync } from "@typeagent/config";
 import { readFile } from "node:fs/promises";
 import { FileMemoryService } from "./fileMemoryService.js";
+import { getConfiguredMemoryViewOptions } from "./viewHostOptions.js";
 import { createMemoryServiceRpcFacade } from "./rpcFacade.js";
 import type {
     MemoryViewService,
@@ -52,7 +53,7 @@ node dist/memoryViewsCli.js --store <private-store> <command> [arguments]
   retry-index <request.json>
   search <corpusId> <query>
 The store must not be owned by a running server. Actor comes from the local OS identity.
-Build accepts troubleshootingGuide, projectBrief, timeline or wiki definitions and uses configured synthesis. Project briefs require a projectSummary selector with construction informational-project-summary-v1, query, aliases and excludedSourceIds; they retrieve bounded indexed fragments, not full-source inventories. Wikis use bounded concept/system/project pages with stable identities and exact citations; renames preserve identity and merges retain facts and citations. Timelines use timelineEvidence selectors with exact document revisions and canonical event IDs, with host-enforced knowledge/occurrence bounds. Fixed readers have no execution/skill controls. Eligible artifacts can publish and index. No reset, source deletion, skill approval or execution is performed.`;
+Build accepts troubleshootingGuide, projectBrief, timeline or wiki definitions and uses configured synthesis. Project summaries require a projectSummary selector with construction informational-project-summary-v1, query, aliases and excludedSourceIds; an empty source selector searches all eligible indexed sources. Automatic wiki/projects family update, rebuild, pause and resume requests use maintain with corpusId and expectedHead, without source selection. Wikis use bounded concept/system/project pages with stable identities and exact citations; editorial renames preserve identity. Timelines use timelineEvidence selectors with exact document revisions and canonical event IDs, with host-enforced knowledge/occurrence bounds. Fixed readers have no execution/skill controls. Eligible artifacts can publish and index. No reset, source deletion, skill approval or execution is performed.`;
 
 const argumentCounts = new Map<string, readonly [number, number]>([
     ["corpora", [0, 0]],
@@ -266,6 +267,7 @@ export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
     if (!counts || values.length < counts[0] || values.length > counts[1])
         throw new Error(usage);
     const service = new FileMemoryService(store, {
+        ...getConfiguredMemoryViewOptions(),
         ...(process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT
             ? {
                   viewModelEndpoint:

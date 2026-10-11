@@ -221,25 +221,16 @@ function validateRelationshipDirection(
     kind: ViewSaveRequest["content"]["kind"],
 ): void {
     if (
-        ![
-            "supportedBy",
-            "dependsOn",
-            "corrects",
-            "supersedes",
-            "relatedTo",
-            "contradicts",
-        ].includes(edge.predicate)
+        !["supportedBy", "dependsOn", "corrects", "supersedes"].includes(
+            edge.predicate,
+        )
     )
         throw new Error("Unsupported relationship predicate");
     const correction =
         edge.predicate === "corrects" || edge.predicate === "supersedes";
-    const pageLink =
-        edge.predicate === "relatedTo" || edge.predicate === "contradicts";
     if (
         edge.from?.kind !== "section" ||
-        (correction || pageLink
-            ? edge.to?.kind !== "section"
-            : edge.to?.kind !== "source")
+        (correction ? edge.to?.kind !== "section" : edge.to?.kind !== "source")
     )
         throw new Error(
             "Evidence relationships require section-to-source endpoints; corrections require section-to-section endpoints",
@@ -253,13 +244,6 @@ function validateRelationshipDirection(
         throw new Error(
             "Corrections require distinct existing timeline records",
         );
-    if (
-        pageLink &&
-        (kind !== "wiki" ||
-            edge.to.kind !== "section" ||
-            edge.from.sectionId === edge.to.sectionId)
-    )
-        throw new Error("Wiki links require distinct current wiki pages");
 }
 
 function validateRelationships(

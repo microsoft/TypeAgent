@@ -89,6 +89,16 @@ export const viewDefinitionSchema = z
     })
     .superRefine((definition, context) => {
         if (
+            (definition.kind === "wiki") !== !!definition.wiki ||
+            (definition.wiki &&
+                (definition.maintenance || definition.projectSummary))
+        )
+            context.addIssue({
+                code: "custom",
+                path: ["wiki"],
+                message: "Wiki construction requires informational-wiki-v1",
+            });
+        if (
             (definition.kind === "projectBrief") !==
                 !!definition.projectSummary ||
             (definition.projectSummary &&
@@ -289,14 +299,10 @@ const correctionEdge = evidenceEdge.extend({
     predicate: z.enum(["corrects", "supersedes"]),
     to: sectionEndpoint,
 });
-const pageEdge = correctionEdge.extend({
-    predicate: z.enum(["relatedTo", "contradicts"]),
-});
-const edge = z.union([evidenceEdge, correctionEdge, pageEdge]);
+const edge = z.union([evidenceEdge, correctionEdge]);
 const requestEdge = z.union([
     evidenceEdge.extend({ citations: citation.array().min(1).max(1000) }),
     correctionEdge.extend({ citations: citation.array().min(1).max(1000) }),
-    pageEdge.extend({ citations: citation.array().min(1).max(1000) }),
 ]);
 const guideContent = z.strictObject({
     kind: z.literal("troubleshootingGuide"),
@@ -412,7 +418,7 @@ const timelineContent = guideContent.extend({
 });
 const wikiContent = guideContent.extend({
     kind: z.literal("wiki"),
-    construction: z.literal("informational-wiki-v1").optional(),
+    construction: z.literal("informational-wiki-v1"),
     index: z
         .strictObject({
             pageId: id,
@@ -421,32 +427,24 @@ const wikiContent = guideContent.extend({
         })
         .array()
         .min(1)
-        .max(32),
+        .max(1),
     sections: z
         .strictObject({
             id,
             role: z.literal("page"),
             heading: text,
             body: text,
-            details: z.union([
-                z.strictObject({
-                    kind: z.literal("page"),
-                    taxonomy: z.enum(["concept", "system", "project"]),
-                    inventoryIds,
-                    mergedPageIds: id.array().max(128),
-                }),
-                z.strictObject({
-                    kind: z.literal("page"),
-                    construction: z.literal("informational-wiki-v1"),
-                    taxonomy: z.enum(["concept", "system", "project"]),
-                    note: z.string().max(4000),
-                    mergedPageIds: id.array().length(0),
-                }),
-            ]),
+            details: z.strictObject({
+                kind: z.literal("page"),
+                construction: z.literal("informational-wiki-v1"),
+                taxonomy: z.enum(["concept", "system", "project"]),
+                note: z.string().max(4000),
+                mergedPageIds: id.array().length(0),
+            }),
         })
         .array()
         .min(1)
-        .max(32),
+        .max(1),
 });
 const content = z.union([
     guideContent,
@@ -623,7 +621,6 @@ const snapshot = z.object({
     pipeline: z.enum([
         "troubleshooting-v1",
         "timeline-v1",
-        "wiki-v1",
         "informational-wiki-v1",
         "informational-project-summary-v1",
     ]),
@@ -826,12 +823,6 @@ export const viewVersionSchema = z.object({
                 origin: z.enum(["human", "generator"]),
                 reviewState: z.literal("unreviewed"),
             }),
-            pageEdge.extend({
-                schemaVersion: z.literal(1),
-                family: z.literal("knowledge"),
-                origin: z.enum(["human", "generator"]),
-                reviewState: z.literal("unreviewed"),
-            }),
             systemEdge,
         ])
         .array(),
@@ -840,6 +831,13 @@ export const viewSnapshotSchema = z.object({
     head: head.nullable(),
     views: viewVersionSchema.array(),
     wikiFamily: z
+        .strictObject({
+            enabled: z.boolean(),
+            pending: z.boolean(),
+            error: z.string().optional(),
+        })
+        .optional(),
+    projectFamily: z
         .strictObject({
             enabled: z.boolean(),
             pending: z.boolean(),

@@ -67,6 +67,7 @@ describe("synthesized answers over the KnowPro corpus index", () => {
         previousProvider = process.env.TYPEAGENT_EMBEDDING_PROVIDER;
         process.env.TYPEAGENT_EMBEDDING_PROVIDER = "none";
         service = new FileMemoryService(root, {
+            informationalViews: false,
             eventIndexFactory: (_corpusId, directory) =>
                 new FakeSemanticCorpusIndex(directory),
             indexFactory: (corpusId, directory) =>

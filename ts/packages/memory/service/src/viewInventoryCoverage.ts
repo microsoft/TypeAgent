@@ -20,7 +20,6 @@ import {
     exactEvidenceCoverage,
 } from "./viewSynthesisEvidence.js";
 import { hydrateTimelineConstruction } from "./timelineConstruction.js";
-import { hydrateWikiConstruction } from "./wikiConstruction.js";
 
 const roles = [
     "description",
@@ -151,16 +150,8 @@ export function hydrateInventoryConstruction(
         output.coverage = inventoryCoverage(output);
         return output;
     }
-    if (input.definition.kind === "wiki") {
-        const output = hydrateWikiConstruction(
-            input,
-            inventory,
-            value,
-            evidenceEdges,
-        );
-        output.coverage = inventoryCoverage(output);
-        return output;
-    }
+    if (input.definition.kind === "wiki")
+        throw new Error("Wiki construction requires informational-wiki-v1");
     if (inventory.sourceFingerprint !== input.fingerprint)
         throw new Error("Construction inventory/input fingerprint mismatch");
     const raw = evidenceRecord(value);

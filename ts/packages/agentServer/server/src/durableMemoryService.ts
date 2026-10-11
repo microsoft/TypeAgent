@@ -6,7 +6,7 @@ import { createDocMemorySettings } from "@typeagent/conversation-memory";
 import {
     FileMemoryService,
     createKnowProCorpusIndex,
-    parseViewDraftCapability,
+    getConfiguredMemoryViewOptions,
 } from "@typeagent/memory-service";
 import { getConfiguredViewModelOptions } from "./viewModelOptions.js";
 
@@ -14,9 +14,7 @@ export function createDurableMemoryService(
     rootDirectory: string,
 ): FileMemoryService {
     return new FileMemoryService(rootDirectory, {
-        viewDrafts: parseViewDraftCapability(
-            process.env.TYPEAGENT_MEMORY_VIEW_DRAFTS,
-        ),
+        ...getConfiguredMemoryViewOptions(),
         ...getConfiguredViewModelOptions(),
         indexFactory: (corpusId, indexDirectory) =>
             createKnowProCorpusIndex(corpusId, indexDirectory, () => {
