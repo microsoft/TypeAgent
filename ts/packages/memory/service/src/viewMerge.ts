@@ -15,6 +15,7 @@ import type {
     ViewCitation,
     ViewSynthesisOutput,
     ViewVersion,
+    ViewBuildSnapshot,
 } from "./viewTypes.js";
 import { authoredRelationships, edgeIdentity } from "./viewRelationships.js";
 import { wikiIndex } from "./viewContent.js";
@@ -24,6 +25,19 @@ export function viewHash(value: unknown): string {
     return createHash("sha256")
         .update(canonicalizeProcedure(value ?? null))
         .digest("hex");
+}
+
+export function sameViewBuildEvidence(
+    prior: ViewBuildSnapshot | undefined,
+    next: ViewBuildSnapshot,
+): boolean {
+    return (
+        prior !== undefined &&
+        viewHash(prior.inputs) === viewHash(next.inputs) &&
+        viewHash(prior.definition) === viewHash(next.definition) &&
+        prior.pipeline === next.pipeline &&
+        prior.model === next.model
+    );
 }
 
 export function mergeProse(
@@ -165,7 +179,11 @@ function mergeSection(
     human: ViewSection,
     generated: ViewSection,
 ): ViewSection | undefined {
-    const heading = mergeValue(base.heading, human.heading, generated.heading);
+    const heading =
+        generated.details?.kind === "page" &&
+        "construction" in generated.details
+            ? human.heading
+            : mergeValue(base.heading, human.heading, generated.heading);
     const body = mergeValue(base.body, human.body, generated.body);
     const role = mergeValue(base.role, human.role, generated.role);
     const details =
@@ -216,6 +234,12 @@ function mergeWikiDetails(
         generated?.kind !== "page"
     )
         return undefined;
+    if ("construction" in generated) {
+        if (!("construction" in base) || !("construction" in human))
+            return undefined;
+        return { ...generated, taxonomy: human.taxonomy, note: human.note };
+    }
+    if ("construction" in base || "construction" in human) return undefined;
     const fields = mergeBriefFields(base, human, generated, [
         "inventoryIds",
         "mergedPageIds",
@@ -401,6 +425,13 @@ export function mergeView(
     const edits =
         current.edits?.filter((edit) => edit.status !== "cleared") ?? [];
     const output = structuredClone(candidate);
+    if (
+        current.content.kind === "wiki" &&
+        candidate.content.kind === "wiki" &&
+        current.content.construction === "informational-wiki-v1"
+    ) {
+        output.content.title = current.content.title;
+    }
     const conflicts: string[] = [];
     const base = values(
         current.generation.content as DerivedViewContent,
@@ -548,6 +579,15 @@ function mergeContent(
     const old = base.get(target);
     const edited = human.get(target);
     const proposed = next.get(target);
+    if (
+        target === "title" &&
+        output.content.kind === "wiki" &&
+        output.content.construction === "informational-wiki-v1" &&
+        typeof edited === "string"
+    ) {
+        output.content.title = edited;
+        return;
+    }
     let merged = mergeValue(old, edited, proposed);
     if (target.startsWith("section:") && old && edited && proposed)
         merged = mergeSection(

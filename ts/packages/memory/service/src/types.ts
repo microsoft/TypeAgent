@@ -203,6 +203,7 @@ export interface SourceContentRequest {
     revisionId?: string;
     offset?: number;
     maxChars?: number;
+    indexedLocator?: string;
 }
 
 export interface SourceContent {
@@ -276,6 +277,7 @@ export interface MemorySearchRequest {
     sourceIds?: string[];
     dateFrom?: string;
     dateTo?: string;
+    indexedFragments?: boolean;
 }
 
 export interface MemoryEvidence {
@@ -503,6 +505,7 @@ export interface MemoryServiceCapabilities {
         builds?: true;
         editMerging?: true;
         maintenance?: true;
+        informationalWiki?: true;
     };
     chatProvider?: string;
     embeddingProvider?: string;
@@ -676,8 +679,46 @@ export interface CorpusIndexAnswer {
     matches: CorpusIndexMatch[];
 }
 
+export interface IndexedSubject {
+    term: string;
+    postingCount: number;
+    sourceIds: string[];
+}
+
+export interface IndexedFragment extends CorpusIndexMatch {
+    locator: string;
+}
+
+export interface IndexedFragmentRequest {
+    terms: string[];
+    query?: string;
+    sourceIds: string[];
+    maxFragments?: number;
+    maxCharsPerFragment?: number;
+    maxReadChars?: number;
+}
+
+export interface IndexedFragmentSelection {
+    fragments: IndexedFragment[];
+    readChars: number;
+    limited: boolean;
+}
+
 export interface CorpusIndex {
     initialize(): Promise<void>;
+    listSubjects?(
+        offset: number,
+        limit: number,
+        sourceIds: ReadonlySet<string>,
+    ): Promise<MemoryPage<IndexedSubject>>;
+    readFragments?(
+        request: IndexedFragmentRequest,
+    ): Promise<IndexedFragmentSelection>;
+    resolveIndexedLocator?(
+        sourceId: string,
+        revisionId: string,
+        locator: string,
+    ): Promise<string>;
     rebuild(
         documents: IndexedDocument[],
         signal: AbortSignal,

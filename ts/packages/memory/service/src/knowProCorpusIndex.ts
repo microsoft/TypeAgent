@@ -13,11 +13,21 @@ import {
 import * as kp from "@typeagent/knowpro";
 import { access } from "node:fs/promises";
 import path from "node:path";
+import {
+    indexedTextHash,
+    parseIndexedLocator,
+    selectIndexedFragments,
+    type IndexedBlock,
+} from "./indexedFragments.js";
 import type {
     CorpusIndex,
     CorpusIndexAnswer,
     CorpusIndexMatch,
     IndexedDocument,
+    IndexedSubject,
+    IndexedFragmentRequest,
+    IndexedFragmentSelection,
+    MemoryPage,
     JobProgress,
     MemoryKnowledgeGraph,
 } from "./types.js";
@@ -135,6 +145,286 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 );
             }
         }
+    }
+
+    public async listSubjects(
+        offset: number,
+        limit: number,
+        sourceIds: ReadonlySet<string>,
+    ): Promise<MemoryPage<IndexedSubject>> {
+        if (
+            !Number.isSafeInteger(offset) ||
+            offset < 0 ||
+            !Number.isSafeInteger(limit) ||
+            limit < 1 ||
+            limit > 48
+        )
+            throw new Error("Invalid indexed-subject page bounds");
+        const memory = this.memory;
+        const items: IndexedSubject[] = [];
+        for (const term of memory?.semanticRefIndex.getTerms() ?? []) {
+            const sources = new Set<string>();
+            let postingCount = 0;
+            for (const posting of memory!.semanticRefIndex.lookupTerm(term)) {
+                const ref = memory!.semanticRefs.get(
+                    posting.semanticRefOrdinal,
+                );
+                const subject =
+                    ref.knowledgeType === "entity"
+                        ? (ref.knowledge as EntityKnowledge).name
+                        : ref.knowledgeType === "topic"
+                          ? (ref.knowledge as TopicKnowledge).text
+                          : undefined;
+                if (subject?.toLocaleLowerCase() !== term.toLocaleLowerCase())
+                    continue;
+                const source = parseSourceUri(
+                    memory!.messages.get(ref.range.start.messageOrdinal)
+                        .metadata.sourceUrl,
+                );
+                if (source && sourceIds.has(source.sourceId)) {
+                    sources.add(source.sourceId);
+                    postingCount++;
+                }
+            }
+            if (postingCount && /\p{L}/u.test(term))
+                items.push({ term, postingCount, sourceIds: [...sources] });
+        }
+        items.sort((a, b) => a.term.localeCompare(b.term));
+        const remaining = new Set(items);
+        const fair: IndexedSubject[] = [];
+        while (remaining.size) {
+            for (const sourceId of [...sourceIds].reverse()) {
+                const candidate = [...remaining].find((item) =>
+                    item.sourceIds.includes(sourceId),
+                );
+                if (candidate) {
+                    remaining.delete(candidate);
+                    fair.push(candidate);
+                }
+            }
+        }
+        const next = offset + limit;
+        return {
+            items: fair.slice(offset, next),
+            total: items.length,
+            ...(next < items.length
+                ? { nextContinuationToken: String(next) }
+                : {}),
+        };
+    }
+
+    private *indexedBlocks(
+        memory: DocMemory,
+        scores?: ReadonlyMap<number, number>,
+    ): Iterable<IndexedBlock> {
+        const ordinals = new Map<string, number>();
+        for (
+            let messageOrdinal = 0;
+            messageOrdinal < memory.messages.length;
+            messageOrdinal++
+        ) {
+            const message = memory.messages.get(messageOrdinal);
+            const source = parseSourceUri(message.metadata.sourceUrl);
+            if (!source) continue;
+            const key = `${source.sourceId}:${source.revisionId}`;
+            const blockOrdinal = ordinals.get(key) ?? 0;
+            ordinals.set(key, blockOrdinal + 1);
+            if (scores && !scores.has(messageOrdinal)) continue;
+            yield {
+                ...source,
+                blockOrdinal,
+                text: message.textChunks.join("\n"),
+                score: scores?.get(messageOrdinal) ?? 1,
+            };
+        }
+    }
+
+    public async readFragments(
+        request: IndexedFragmentRequest,
+    ): Promise<IndexedFragmentSelection> {
+        const memory = this.memory;
+        if (!memory) return { fragments: [], readChars: 0, limited: false };
+        const scores = new Map<number, number>();
+        const requested = new Set(
+            request.terms.flatMap(
+                (term) =>
+                    term.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? [],
+            ),
+        );
+        const vocabulary = [...memory.semanticRefIndex.getTerms()];
+        const words = [
+            ...new Set(
+                vocabulary.flatMap(
+                    (term) =>
+                        term.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ??
+                        [],
+                ),
+            ),
+        ];
+        for (const word of [...requested]) {
+            if (word.length < 5) continue;
+            for (const match of kp.nearestNeighborEditDistance(
+                words,
+                word,
+                4,
+                word.length >= 8 ? 2 : 1,
+            ))
+                if (match.item.startsWith(word.slice(0, 3)))
+                    requested.add(match.item);
+        }
+        const terms = vocabulary.filter(
+            (term) =>
+                request.terms.some(
+                    (query) =>
+                        term.toLocaleLowerCase() === query.toLocaleLowerCase(),
+                ) ||
+                (term.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? []).some(
+                    (word) => requested.has(word) && word.length > 2,
+                ),
+        );
+        const matches = new Map<number, Set<string>>();
+        const typedSubjects = new Map<string, Set<number>>();
+        for (const term of terms) {
+            const matchedWords = (
+                term.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? []
+            ).filter((word) => requested.has(word));
+            for (const posting of memory.semanticRefIndex.lookupTerm(term)) {
+                const ref = memory.semanticRefs.get(posting.semanticRefOrdinal);
+                const start = ref.range.start.messageOrdinal;
+                const end = ref.range.end?.messageOrdinal ?? start;
+                if (request.query && ref.knowledgeType === "entity") {
+                    const entity = ref.knowledge as EntityKnowledge;
+                    if (
+                        entity.type.some((type) =>
+                            requested.has(type.toLocaleLowerCase()),
+                        )
+                    ) {
+                        const ordinals =
+                            typedSubjects.get(entity.name) ?? new Set<number>();
+                        ordinals.add(start);
+                        typedSubjects.set(entity.name, ordinals);
+                    }
+                }
+                for (
+                    let ordinal = start;
+                    ordinal <= Math.min(end, start + 4);
+                    ordinal++
+                ) {
+                    const words = matches.get(ordinal) ?? new Set<string>();
+                    matchedWords.forEach((word) => words.add(word));
+                    matches.set(ordinal, words);
+                }
+            }
+        }
+        for (const [ordinal, words] of matches)
+            scores.set(
+                ordinal,
+                [...words].reduce(
+                    (score, word) =>
+                        score +
+                        Math.log(
+                            1 +
+                                memory.messages.length /
+                                    [...matches.values()].filter((set) =>
+                                        set.has(word),
+                                    ).length,
+                        ),
+                    0,
+                ),
+            );
+        if (request.query) {
+            const options = kp.createLanguageSearchOptionsTypical();
+            options.maxMessageMatches = 8;
+            options.maxKnowledgeMatches = 12;
+            const result = await memory.searchWithLanguage(
+                request.query ?? request.terms.join(" "),
+                options,
+            );
+            if (!result.success) throw new Error(result.message);
+            for (const match of result.data.flatMap(
+                (item) => item.messageMatches,
+            ))
+                scores.set(
+                    match.messageOrdinal,
+                    (scores.get(match.messageOrdinal) ?? 0) +
+                        Math.max(1, match.score),
+                );
+        }
+        const preferred = new Set(
+            [...typedSubjects.values()].map(
+                (ordinals) =>
+                    [...ordinals].sort(
+                        (a, b) => (scores.get(b) ?? 0) - (scores.get(a) ?? 0),
+                    )[0],
+            ),
+        );
+        if (request.query) {
+            const graph = await this.getKnowledgeGraph();
+            const matchedSources = new Set(
+                graph.entities
+                    .filter((item) =>
+                        (
+                            item.name
+                                .toLocaleLowerCase()
+                                .match(/[\p{L}\p{N}-]+/gu) ?? []
+                        ).some((word) => requested.has(word)),
+                    )
+                    .flatMap((item) => item.sourceIds),
+            );
+            for (const entity of graph.entities.filter(
+                (item) =>
+                    item.types.some((type) =>
+                        /correction|follow.?up|qualification/i.test(type),
+                    ) &&
+                    item.sourceIds.some((sourceId) =>
+                        matchedSources.has(sourceId),
+                    ),
+            )) {
+                for (
+                    let ordinal = memory.messages.length - 1;
+                    ordinal >= 0;
+                    ordinal--
+                ) {
+                    const source = parseSourceUri(
+                        memory.messages.get(ordinal).metadata.sourceUrl,
+                    );
+                    if (source && entity.sourceIds.includes(source.sourceId))
+                        preferred.add(ordinal);
+                }
+            }
+        }
+        const highest = Math.max(0, ...scores.values());
+        for (const ordinal of preferred)
+            scores.set(ordinal, highest + (scores.get(ordinal) ?? 0));
+        return selectIndexedFragments(
+            [...this.indexedBlocks(memory, scores)].sort(
+                (a, b) => b.score - a.score,
+            ),
+            request,
+        );
+    }
+
+    public async resolveIndexedLocator(
+        sourceId: string,
+        revisionId: string,
+        locator: string,
+    ): Promise<string> {
+        const anchor = parseIndexedLocator(locator);
+        const memory = this.memory;
+        if (memory)
+            for (const block of this.indexedBlocks(memory)) {
+                if (
+                    block.sourceId === sourceId &&
+                    block.revisionId === revisionId &&
+                    block.blockOrdinal === anchor.blockOrdinal &&
+                    indexedTextHash(block.text) === anchor.hash &&
+                    anchor.end <= block.text.length
+                )
+                    return block.text.slice(anchor.start, anchor.end);
+            }
+        throw new Error(
+            "Indexed-text anchor is unavailable in the current index",
+        );
     }
 
     public async rebuild(

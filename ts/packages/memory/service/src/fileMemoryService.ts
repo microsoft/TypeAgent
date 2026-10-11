@@ -112,7 +112,11 @@ import {
     validateBuildRequest,
     validateConflictResolution,
 } from "./viewBuildValidation.js";
-import { ViewBuildRunner, ViewBuildStaleError } from "./viewBuilds.js";
+import {
+    ViewBuildRunner,
+    ViewBuildStaleError,
+    safeError,
+} from "./viewBuilds.js";
 import { inventoryEvidence } from "./viewInventoryCoverage.js";
 import {
     resolveViewMaintenance,
@@ -122,7 +126,18 @@ import {
     assertMaintenanceMembership,
     validateMaintenanceRequest,
 } from "./viewMaintenanceValidation.js";
-import { viewHash } from "./viewMerge.js";
+import { sameViewBuildEvidence, viewHash } from "./viewMerge.js";
+import { informationalView as informationalWiki } from "./informationalView.js";
+import {
+    RequestBudget,
+    runWithRequestBudget,
+    type ChatModel,
+    type RequestBudgetLimits,
+} from "@typeagent/aiclient";
+import { resolveConfiguredWikiBudget } from "./wikiBudget.js";
+import { createWikiModels } from "./wikiModels.js";
+import { answerIndexedEvidence } from "./indexedAnswer.js";
+import { createDocMemorySettings } from "@typeagent/conversation-memory";
 import {
     assertPublicationProof,
     effectiveViewPublicationPolicy,
@@ -132,7 +147,7 @@ import {
     authoredRelationships,
     derivedDefinitionInput,
 } from "./viewRelationships.js";
-import { TypedViewStore } from "./viewStore.js";
+import { TypedViewStore, type WikiFamilyState } from "./viewStore.js";
 import {
     createConfiguredViewSynthesisAdapter,
     validateConstructedGuide,
@@ -283,6 +298,7 @@ interface PreparedCorpusIndex {
 }
 
 export interface FileMemoryServiceOptions {
+    indexedAnswerModel?: ChatModel;
     /** Derived Views are enabled unless explicitly disabled by the host. */
     viewDrafts?: boolean;
     viewPublicationCheckpoint?: (point: "intent" | "index") => Promise<void>;
@@ -291,6 +307,7 @@ export interface FileMemoryServiceOptions {
     indexFactory?: CorpusIndexFactory;
     eventIndexFactory?: CorpusIndexFactory;
     capabilities?: MemoryServiceCapabilities;
+    informationalBudget?: RequestBudgetLimits;
 }
 
 function now(): string {
@@ -889,6 +906,16 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
     private releaseLock: (() => Promise<void>) | undefined;
     private rootWriteTail: Promise<void> = Promise.resolve();
     private closed = false;
+    private readonly wikiTimers = new Map<
+        string,
+        ReturnType<typeof setTimeout>
+    >();
+    private readonly wikiMaintenanceFailures = new Map<string, Error>();
+    private readonly informationalWikiEnabled: boolean;
+    private readonly wikiBudget: RequestBudgetLimits | undefined;
+    private readonly wikiModelEndpoint: string | undefined;
+    private readonly indexedAnswerModel: ChatModel | undefined;
+    private readonly informationalIndexFactory: CorpusIndexFactory;
 
     public constructor(
         private readonly rootDirectory: string,
@@ -896,85 +923,174 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
     ) {
         this.viewPublicationCheckpoint = options.viewPublicationCheckpoint;
         this.viewDrafts = options.viewDrafts !== false;
+        this.wikiModelEndpoint = options.viewModelEndpoint;
+        this.indexedAnswerModel = options.indexedAnswerModel;
+        this.wikiBudget =
+            options.informationalBudget ?? resolveConfiguredWikiBudget();
+        this.informationalWikiEnabled = this.wikiBudget !== undefined;
         this.viewAdapter =
             options.viewSynthesisAdapter ??
-            createConfiguredViewSynthesisAdapter(options.viewModelEndpoint);
-        this.viewBuilds = new ViewBuildRunner(this.viewAdapter, {
-            update: (corpusId, jobId, update) =>
-                this.enqueueWrite(corpusId, () =>
-                    this.viewStore.updateViewBuild(corpusId, jobId, update),
-                ),
-            current: (input) =>
-                this.getView({
-                    corpusId: input.corpusId,
-                    viewId: input.definition.viewId,
-                }),
-            materialize: (
-                job,
-                result,
-                candidate,
-                merged,
-                conflicts,
-                signal,
-                proof,
-            ) =>
-                this.enqueueWrite(job.corpusId, async () => {
-                    signal.throwIfAborted();
-                    await this.recheckViewInput(result.snapshot);
-                    const saved = await this.viewStore.materializeViewBuild(
-                        job.corpusId,
-                        job.jobId,
-                        result.viewId,
-                        candidate,
-                        merged,
-                        conflicts,
-                        proof,
+            createConfiguredViewSynthesisAdapter(
+                options.viewModelEndpoint,
+                this.wikiBudget?.outputTokens,
+            );
+        this.viewBuilds = new ViewBuildRunner(
+            this.viewAdapter,
+            {
+                unchanged: async (input) => {
+                    const current = await this.viewStore.getView({
+                        corpusId: input.corpusId,
+                        viewId: input.definition.viewId,
+                    });
+                    const prior = current?.generation?.input;
+                    return (
+                        sameViewBuildEvidence(prior, input) ||
+                        this.viewStore.hasPendingInformationalInput(
+                            input.corpusId,
+                            input.definition.viewId,
+                            input,
+                        )
+                    );
+                },
+                update: async (corpusId, jobId, update) => {
+                    const job = await this.enqueueWrite(corpusId, () =>
+                        this.viewStore.updateViewBuild(corpusId, jobId, update),
                     );
                     if (
-                        !conflicts.length &&
-                        saved.revisionId &&
-                        result.snapshot.publicationPolicy?.autoPublish
+                        job.state !== "running" &&
+                        job.state !== "complete" &&
+                        job.results.some(
+                            (result) =>
+                                result.snapshot.pipeline ===
+                                "informational-wiki-v1",
+                        )
                     ) {
-                        const snapshot = await this.viewStore.listViews(
-                            job.corpusId,
-                        );
-                        const view = snapshot.views.find(
-                            (entry) => entry.viewId === result.viewId,
-                        );
-                        if (!view || !snapshot.head)
-                            throw new Error(
-                                "Materialized build target is missing",
+                        await this.enqueueWrite(corpusId, async () => {
+                            const family =
+                                await this.viewStore.getWikiFamily(corpusId);
+                            family.dirty = true;
+                            family.error =
+                                "A wiki build did not complete; inspect its receipt and retry explicitly";
+                            await this.viewStore.saveWikiFamily(
+                                corpusId,
+                                family,
                             );
-                        const publication = await this.publishViewLocked({
-                            corpusId: job.corpusId,
-                            viewId: view.viewId,
-                            revisionId: view.revisionId,
-                            expectedVersion: view.version,
-                            expectedHead: snapshot.head,
                         });
-                        await this.viewStore.updateViewBuild(
+                    }
+                    if (job.state === "complete") {
+                        const family =
+                            await this.viewStore.getWikiFamily(corpusId);
+                        if (family.enabled && family.dirty)
+                            this.scheduleWikiMaintenance(corpusId);
+                    }
+                    return job;
+                },
+                current: (input) =>
+                    this.getCorpusRuntime(input.corpusId).then((runtime) =>
+                        runtime.access.read(() =>
+                            this.viewStore.getView({
+                                corpusId: input.corpusId,
+                                viewId: input.definition.viewId,
+                            }),
+                        ),
+                    ),
+                materialize: (
+                    job,
+                    result,
+                    candidate,
+                    merged,
+                    conflicts,
+                    signal,
+                    proof,
+                ) =>
+                    this.enqueueWrite(job.corpusId, async () => {
+                        signal.throwIfAborted();
+                        await this.recheckViewInput(result.snapshot);
+                        const saved = await this.viewStore.materializeViewBuild(
                             job.corpusId,
                             job.jobId,
-                            (current) => {
-                                const receipt = current.results.find(
-                                    (entry) => entry.viewId === view.viewId,
-                                );
-                                if (!receipt)
-                                    throw new Error(
-                                        "Publication receipt target is missing",
-                                    );
-                                receipt.publication = publication;
-                                receipt.state =
-                                    publication.indexState === "ready"
-                                        ? "searchable"
-                                        : "published";
-                                receipt.reason = publication.reason;
-                            },
+                            result.viewId,
+                            candidate,
+                            merged,
+                            conflicts,
+                            proof,
                         );
-                    }
-                }),
-        });
+                        if (
+                            !conflicts.length &&
+                            saved.revisionId &&
+                            informationalWiki(merged.content)
+                        ) {
+                            const view = await this.viewStore.getView({
+                                corpusId: job.corpusId,
+                                viewId: result.viewId,
+                            });
+                            if (!view)
+                                throw new Error(
+                                    "Accepted informational page is missing",
+                                );
+                            await this.viewStore.makeInformationalVisible(view);
+                            await this.indexViewLocked(view);
+                        } else if (
+                            !conflicts.length &&
+                            saved.revisionId &&
+                            result.snapshot.publicationPolicy?.autoPublish
+                        ) {
+                            const snapshot = await this.viewStore.listViews(
+                                job.corpusId,
+                            );
+                            const view = snapshot.views.find(
+                                (entry) => entry.viewId === result.viewId,
+                            );
+                            if (!view || !snapshot.head)
+                                throw new Error(
+                                    "Materialized build target is missing",
+                                );
+                            const publication = await this.publishViewLocked({
+                                corpusId: job.corpusId,
+                                viewId: view.viewId,
+                                revisionId: view.revisionId,
+                                expectedVersion: view.version,
+                                expectedHead: snapshot.head,
+                            });
+                            await this.viewStore.updateViewBuild(
+                                job.corpusId,
+                                job.jobId,
+                                (current) => {
+                                    const receipt = current.results.find(
+                                        (entry) => entry.viewId === view.viewId,
+                                    );
+                                    if (!receipt)
+                                        throw new Error(
+                                            "Publication receipt target is missing",
+                                        );
+                                    receipt.publication = publication;
+                                    receipt.state =
+                                        publication.indexState === "ready"
+                                            ? "searchable"
+                                            : "published";
+                                    receipt.reason = publication.reason;
+                                },
+                            );
+                        }
+                    }),
+            },
+            this.wikiBudget,
+        );
         this.indexFactory = options.indexFactory ?? createKnowProCorpusIndex;
+        this.informationalIndexFactory =
+            this.wikiBudget && !options.viewSynthesisAdapter
+                ? (corpusId, directory) =>
+                      createKnowProCorpusIndex(corpusId, directory, () =>
+                          createDocMemorySettings(
+                              64,
+                              undefined,
+                              createWikiModels(
+                                  this.wikiBudget!.outputTokens,
+                                  this.wikiModelEndpoint,
+                              ).extractionModel,
+                          ),
+                      )
+                : this.indexFactory;
         this.eventIndexFactory = options.eventIndexFactory ?? this.indexFactory;
         this.capabilities = options.capabilities ?? defaultCapabilities();
         this.assetStore = new RevisionAssetStore(rootDirectory);
@@ -998,6 +1114,17 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                     await this.viewStore.recover(directory.name);
                     await this.cleanArchivedViewIndexes(directory.name);
                     await this.viewStore.recoverViewBuilds(directory.name);
+                    if (
+                        await readJson<CorpusManifest>(
+                            this.manifestPath(directory.name),
+                        )
+                    ) {
+                        const family = await this.viewStore.getWikiFamily(
+                            directory.name,
+                        );
+                        if (family.enabled && family.dirty)
+                            this.scheduleWikiMaintenance(directory.name);
+                    }
                 }
             }
             await this.pruneStoredChanges();
@@ -1012,6 +1139,8 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             return;
         }
         this.closed = true;
+        for (const timer of this.wikiTimers.values()) clearTimeout(timer);
+        this.wikiTimers.clear();
         await this.initializePromise?.catch(() => undefined);
         for (const controller of this.controllers.values()) {
             controller.abort(new Error("Memory service is closing"));
@@ -1031,6 +1160,8 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         this.releaseLock = undefined;
         const viewFailure = viewClosure[0];
         if (viewFailure.status === "rejected") throw viewFailure.reason;
+        for (const failure of this.wikiMaintenanceFailures.values())
+            throw failure;
     }
 
     public async createCorpus(
@@ -1406,6 +1537,49 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         validateIdentifier("corpus ID", request.corpusId);
         validateIdentifier("source ID", request.sourceId);
         const runtime = await this.getCorpusRuntime(request.corpusId);
+        if (request.indexedLocator !== undefined)
+            return this.enqueueDocumentRead(
+                request.corpusId,
+                async (runtime) => {
+                    const source = runtime.manifest.sources.find(
+                        (item) => item.sourceId === request.sourceId,
+                    );
+                    const revisionId =
+                        request.revisionId ?? source?.activeRevisionId;
+                    if (
+                        !source ||
+                        !revisionId ||
+                        source.activeRevisionId !== revisionId ||
+                        !source.revisions.some(
+                            (revision) =>
+                                revision.revisionId === revisionId &&
+                                revision.state === "ready",
+                        )
+                    )
+                        throw new Error(
+                            "Indexed source revision is unavailable or stale",
+                        );
+                    if (!runtime.index.resolveIndexedLocator)
+                        throw new Error(
+                            "Host does not support indexed-text citation resolution",
+                        );
+                    const content = await runtime.index.resolveIndexedLocator(
+                        request.sourceId,
+                        revisionId,
+                        request.indexedLocator!,
+                    );
+                    return {
+                        corpusId: request.corpusId,
+                        sourceId: request.sourceId,
+                        revisionId,
+                        mimeType: "text/plain; anchor=indexed-text",
+                        offset: 0,
+                        content,
+                        totalChars: content.length,
+                        truncated: false,
+                    };
+                },
+            );
         const source = runtime.manifest.sources.find(
             (item) => item.sourceId === request.sourceId,
         );
@@ -1578,15 +1752,22 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         );
         if (signal?.aborted) controller.abort(signal.reason);
         void this.enqueueWrite(request.corpusId, async () => {
-            await this.processIngestion(
-                request,
-                content,
-                contentHash,
-                sourceId,
-                revisionId,
-                job,
-                controller.signal,
-            );
+            const ingest = () =>
+                this.processIngestion(
+                    request,
+                    content,
+                    contentHash,
+                    sourceId,
+                    revisionId,
+                    job,
+                    controller.signal,
+                );
+            await (this.wikiBudget
+                ? runWithRequestBudget(
+                      new RequestBudget(this.wikiBudget),
+                      ingest,
+                  )
+                : ingest());
         });
         return {
             jobId,
@@ -2227,7 +2408,92 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         }
         return this.enqueueDocumentRead(request.corpusId, async (runtime) => {
             const limit = Math.max(1, Math.min(request.limit ?? 10, 100));
-            const candidates = await runtime.index.search(query, limit * 4);
+            let candidates: CorpusIndexMatch[] = request.indexedFragments
+                ? []
+                : await runtime.index.search(query, limit * 4);
+            let fragmentLimited = false;
+            if (request.indexedFragments) {
+                if (!runtime.index.readFragments)
+                    throw new Error(
+                        "This index does not support bounded indexed fragments",
+                    );
+                const nominated = runtime.manifest.sources
+                    .filter(
+                        (source) =>
+                            (!request.sourceIds ||
+                                request.sourceIds.includes(source.sourceId)) &&
+                            (!request.sourceTypes ||
+                                request.sourceTypes.includes(
+                                    source.sourceType,
+                                )) &&
+                            (request.tags ?? []).every((tag) =>
+                                source.tags?.includes(tag),
+                            ) &&
+                            source.revisions.some(
+                                (revision) =>
+                                    revision.revisionId ===
+                                        source.activeRevisionId &&
+                                    revision.state === "ready" &&
+                                    matchesSearchDate(revision, request),
+                            ),
+                    )
+                    .slice(-32);
+                const selection = await runtime.index.readFragments({
+                    query,
+                    terms: [
+                        ...new Set(
+                            query
+                                .toLowerCase()
+                                .match(/[\p{L}\p{N}][\p{L}\p{N}-]*/gu) ?? [
+                                query.slice(0, 200),
+                            ],
+                        ),
+                    ]
+                        .filter(
+                            (term) =>
+                                term.length <= 200 &&
+                                !new Set([
+                                    "what",
+                                    "which",
+                                    "does",
+                                    "about",
+                                    "with",
+                                    "from",
+                                    "have",
+                                    "that",
+                                    "this",
+                                    "their",
+                                    "were",
+                                    "when",
+                                    "where",
+                                    "should",
+                                    "would",
+                                    "could",
+                                    "how",
+                                    "why",
+                                    "the",
+                                    "and",
+                                    "for",
+                                    "are",
+                                    "can",
+                                    "was",
+                                    "not",
+                                    "did",
+                                    "its",
+                                    "is",
+                                    "to",
+                                    "of",
+                                    "in",
+                                    "a",
+                                    "an",
+                                ]).has(term),
+                        )
+                        .slice(0, 8),
+                    sourceIds: nominated.map((item) => item.sourceId),
+                });
+                candidates = selection.fragments;
+                fragmentLimited = fragmentLimited || selection.limited;
+            }
             const matches = this.toEvidence(
                 request.corpusId,
                 runtime,
@@ -2240,6 +2506,11 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                 matches,
                 warnings: [
                     ...this.capabilities.warnings,
+                    ...(fragmentLimited
+                        ? [
+                              "Limited indexed selection: bounded subranges may omit context; open sources for more detail.",
+                          ]
+                        : []),
                     ...(request.dateFrom === undefined &&
                     request.dateTo === undefined
                         ? []
@@ -2341,6 +2612,9 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                           builds: true as const,
                           editMerging: true as const,
                           maintenance: true as const,
+                          ...(this.informationalWikiEnabled
+                              ? { informationalWiki: true as const }
+                              : {}),
                           kinds: [
                               "troubleshootingGuide",
                               "projectBrief",
@@ -2374,7 +2648,49 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
 
     public async listViews(corpusId: string): Promise<ViewSnapshot> {
         const runtime = await this.requireViews(corpusId);
-        return runtime.access.read(() => this.viewStore.listViews(corpusId));
+        return runtime.access.read(async () => {
+            const snapshot = await this.viewStore.listViews(corpusId);
+            const eligible = await Promise.all(
+                snapshot.views.map((view) =>
+                    this.informationalVersionEligible(view, view),
+                ),
+            );
+            return {
+                ...snapshot,
+                views: snapshot.views.filter((_, index) => eligible[index]),
+                ...(this.informationalWikiEnabled
+                    ? {
+                          wikiFamily: await this.wikiFamilyStatus(corpusId),
+                      }
+                    : {}),
+            };
+        });
+    }
+
+    private async wikiFamilyStatus(
+        corpusId: string,
+    ): Promise<NonNullable<ViewSnapshot["wikiFamily"]>> {
+        const family = await this.viewStore.getWikiFamily(corpusId);
+        return {
+            enabled: family.enabled,
+            pending: family.dirty,
+            ...(family.error ? { error: family.error } : {}),
+        };
+    }
+
+    private async informationalVersionEligible(
+        view: ViewVersion,
+        current?: ViewVersion,
+    ): Promise<boolean> {
+        if (!informationalWiki(view.content)) return true;
+        if (view.state !== "draft") return false;
+        try {
+            await this.assertViewPublicationFresh(view, current);
+            return true;
+        } catch (error) {
+            if (error instanceof ViewBuildStaleError) return false;
+            throw error;
+        }
     }
 
     public async getSourceViewUsage(
@@ -2435,7 +2751,12 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         request: ViewReadRequest,
     ): Promise<ViewVersion | undefined> {
         const runtime = await this.requireViews(request.corpusId);
-        return runtime.access.read(() => this.viewStore.getView(request));
+        return runtime.access.read(async () => {
+            const view = await this.viewStore.getView(request);
+            if (view && !(await this.informationalVersionEligible(view)))
+                return undefined;
+            return view;
+        });
     }
 
     public async saveViewDraft(
@@ -2484,17 +2805,21 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                 ...inventoryEvidence(prior.generation),
             };
             validateConstructedGuide(prior.generation.input, output);
-            const support = await this.viewAdapter.validate(
-                prior.generation.input,
-                output,
-                new AbortController().signal,
-            );
-            validateSupport(output, support);
-            proof = publicationProof(
-                prior.generation.input.fingerprint,
-                output,
-                support,
-            );
+            const support = informationalWiki(output.content)
+                ? undefined
+                : await this.viewAdapter.validate(
+                      prior.generation.input,
+                      output,
+                      new AbortController().signal,
+                  );
+            if (support) {
+                validateSupport(output, support);
+                proof = publicationProof(
+                    prior.generation.input.fingerprint,
+                    output,
+                    support,
+                );
+            }
         }
         return this.enqueueWrite(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
@@ -2512,6 +2837,14 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                 ...request.relationships.flatMap((edge) => edge.citations),
             ];
             for (const citation of citations) {
+                if (
+                    await this.validateIndexedDraftCitation(
+                        runtime,
+                        citation,
+                        informationalWiki(request.content),
+                    )
+                )
+                    continue;
                 if (citation.evidence) {
                     const event = runtime.events.find(
                         (entry) => entry.eventId === citation.evidence?.eventId,
@@ -2554,8 +2887,53 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                         "View citation does not match the exact retained source revision",
                     );
             }
-            return this.viewStore.saveViewDraft(request, proof);
+            const saved = await this.viewStore.saveViewDraft(request, proof);
+            await this.acceptInformationalVersion(saved.version);
+            await this.markWikiRetrievalChanged(request, prior);
+            return saved;
         });
+    }
+
+    private async markWikiRetrievalChanged(
+        request: ViewSaveRequest,
+        prior: ViewVersion | undefined,
+    ): Promise<void> {
+        if (
+            !request.definition.wiki ||
+            viewHash(request.definition.wiki) ===
+                viewHash(prior?.definition.wiki)
+        )
+            return;
+        const family = await this.viewStore.getWikiFamily(request.corpusId);
+        family.dirty = true;
+        await this.viewStore.saveWikiFamily(request.corpusId, family);
+        this.scheduleWikiMaintenance(request.corpusId);
+    }
+
+    private async validateIndexedDraftCitation(
+        runtime: CorpusRuntime,
+        citation: ViewSynthesisOutput["content"]["citations"][number],
+        informational: boolean,
+    ): Promise<boolean> {
+        if (!informational || !citation.locator.startsWith("indexed:"))
+            return false;
+        if (
+            !runtime.index.resolveIndexedLocator ||
+            (await runtime.index.resolveIndexedLocator(
+                citation.sourceId,
+                citation.revisionId,
+                citation.locator,
+            )) !== citation.excerpt
+        )
+            throw new Error("Indexed citation is unavailable or changed");
+        return true;
+    }
+
+    private async acceptInformationalVersion(view: ViewVersion): Promise<void> {
+        if (!informationalWiki(view.content)) return;
+        await this.assertViewPublicationFresh(view);
+        await this.viewStore.makeInformationalVisible(view);
+        await this.indexViewLocked(view);
     }
 
     public async archiveView(
@@ -2575,9 +2953,15 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         request: ViewReadRequest,
     ): Promise<ViewHistoryEntry[]> {
         const runtime = await this.requireViews(request.corpusId);
-        return runtime.access.read(() =>
-            this.viewStore.getViewHistory(request),
-        );
+        return runtime.access.read(async () => {
+            const history = await this.viewStore.getViewHistory(request);
+            const eligible = await Promise.all(
+                history.map((entry) =>
+                    this.informationalVersionEligible(entry.version),
+                ),
+            );
+            return history.filter((_, index) => eligible[index]);
+        });
     }
 
     public async getViewPublicationPolicy(
@@ -2662,17 +3046,21 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
 
     private async assertViewPublicationFresh(
         version: ViewVersion,
+        current?: ViewVersion,
     ): Promise<void> {
         if (version.state !== "draft")
             throw new Error(
                 "Archived or stale view cannot be published or searched",
             );
-        assertPublicationProof(version);
+        if (!informationalWiki(version.content))
+            assertPublicationProof(version);
         const runtime = await this.getCorpusRuntime(version.corpusId);
-        const latest = await this.viewStore.getView({
-            corpusId: version.corpusId,
-            viewId: version.viewId,
-        });
+        const latest =
+            current ??
+            (await this.viewStore.getView({
+                corpusId: version.corpusId,
+                viewId: version.viewId,
+            }));
         if (
             !latest ||
             viewHash(latest.definition.maintenance) !==
@@ -2681,25 +3069,7 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             throw new ViewBuildStaleError(
                 "Maintenance intent changed since publication; reconcile and publish the intended exact revision",
             );
-        if (
-            version.definition.maintenance &&
-            version.definition.maintenance.scope.mode !== "pinned"
-        ) {
-            const plan = this.resolveMaintenanceTarget(
-                derivedDefinitionInput(version),
-                runtime,
-                version.generation!.input!.bounds,
-                version,
-            );
-            if (
-                plan.state === "blocked" ||
-                !plan.snapshot ||
-                plan.snapshot.fingerprint !== version.maintenance?.fingerprint
-            )
-                throw new ViewBuildStaleError(
-                    `Maintained view scope is outdated: ${plan.reason}`,
-                );
-        }
+        this.assertPublicationMaintenance(version, runtime);
         for (const input of version.generation!.input!.inputs) {
             if (input.evidence) {
                 const event = runtime.events.find(
@@ -2756,6 +3126,31 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                     "Timeline record membership or retained evidence changed; rebuild first",
                 );
         }
+    }
+
+    private assertPublicationMaintenance(
+        version: ViewVersion,
+        runtime: CorpusRuntime,
+    ): void {
+        if (
+            !version.definition.maintenance ||
+            version.definition.maintenance.scope.mode === "pinned"
+        )
+            return;
+        const plan = this.resolveMaintenanceTarget(
+            derivedDefinitionInput(version),
+            runtime,
+            version.generation!.input!.bounds,
+            version,
+        );
+        if (
+            plan.state === "blocked" ||
+            !plan.snapshot ||
+            plan.snapshot.fingerprint !== version.maintenance?.fingerprint
+        )
+            throw new ViewBuildStaleError(
+                `Maintained view scope is outdated: ${plan.reason}`,
+            );
     }
 
     private async publishViewLocked(
@@ -2822,7 +3217,11 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         const content = viewContentToText(view.content);
         try {
             await mkdir(directory, { recursive: true });
-            const index = this.indexFactory(view.corpusId, directory);
+            const index = (
+                informationalWiki(view.content)
+                    ? this.informationalIndexFactory
+                    : this.indexFactory
+            )(view.corpusId, directory);
             await index.rebuild(
                 [
                     {
@@ -2927,19 +3326,18 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                 "Derived search requires a nonempty query and explicit current freshness",
             );
         return runtime.access.read(async () => {
-            const snapshot = await this.viewStore.listViews(request.corpusId);
             const results: ViewSearchMatch[] = [];
-            for (const current of snapshot.views) {
+            for (const {
+                current,
+                view,
+                publication,
+            } of await this.viewStore.listPublishedViews(request.corpusId)) {
                 if (current.state === "archived") continue;
                 if (
                     request.kinds &&
                     !request.kinds.some((kind) => kind === current.content.kind)
                 )
                     continue;
-                const publication = await this.viewStore.getViewPublication({
-                    corpusId: request.corpusId,
-                    viewId: current.viewId,
-                });
                 if (
                     publication.blockedReason ||
                     !publication.publishedRevisionId ||
@@ -2948,17 +3346,12 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                         publication.publishedRevisionId
                 )
                     continue;
-                const view = await this.viewStore.getView({
-                    corpusId: request.corpusId,
-                    viewId: current.viewId,
-                    revisionId: publication.publishedRevisionId,
-                });
                 if (!view)
                     throw new Error(
                         "Published view pointer references a missing revision",
                     );
                 try {
-                    await this.assertViewPublicationFresh(view);
+                    await this.assertViewPublicationFresh(view, current);
                 } catch (error) {
                     if (error instanceof ViewBuildStaleError) continue;
                     throw error;
@@ -2973,12 +3366,32 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                     throw new Error(
                         "Published view index is missing or does not match the exact revision; retry indexing",
                     );
-                const index = this.indexFactory(request.corpusId, directory);
+                const index = (
+                    informationalWiki(view.content)
+                        ? this.informationalIndexFactory
+                        : this.indexFactory
+                )(request.corpusId, directory);
                 await index.initialize();
-                for (const match of await index.search(
-                    request.query.trim(),
-                    request.limit ?? 20,
-                )) {
+                const matches =
+                    informationalWiki(view.content) && index.readFragments
+                        ? (
+                              await index.readFragments({
+                                  terms: [
+                                      ...new Set(
+                                          request.query
+                                              .toLocaleLowerCase()
+                                              .match(/[\p{L}\p{N}-]+/gu) ?? [],
+                                      ),
+                                  ].slice(0, 8),
+                                  sourceIds: [view.viewId],
+                                  maxFragments: 1,
+                              })
+                          ).fragments
+                        : await index.search(
+                              request.query.trim(),
+                              request.limit ?? 20,
+                          );
+                for (const match of matches) {
                     if (
                         match.sourceId !== view.viewId ||
                         match.revisionId !== view.revisionId
@@ -3003,6 +3416,394 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         });
     }
 
+    private async snapshotInformationalTarget(
+        corpusId: string,
+        target: ViewBuildTarget,
+        current?: ViewVersion,
+    ): Promise<ViewBuildSnapshot> {
+        const runtime = await this.getCorpusRuntime(corpusId);
+        await this.ensureDocumentIndex(corpusId, runtime);
+        const wiki = target.definition.wiki ?? target.definition.projectSummary;
+        if (!wiki || !runtime.index.readFragments)
+            throw new Error(
+                "Host does not support bounded informational wiki retrieval",
+            );
+        const selected = target.definition.selector.sources;
+        const selection = await runtime.index.readFragments({
+            terms: [wiki.query, ...wiki.aliases],
+            sourceIds: selected
+                .map((source) => source.sourceId)
+                .filter(
+                    (sourceId) => !wiki.excludedSourceIds.includes(sourceId),
+                ),
+        });
+        if (!selection.fragments.length)
+            throw new Error(
+                "No substantive indexed fragments matched this wiki selector",
+            );
+        const inputs = selected.flatMap((item) => {
+            const source = runtime.manifest.sources.find(
+                (entry) => entry.sourceId === item.sourceId,
+            );
+            const revision = source?.revisions.find(
+                (entry) => entry.revisionId === item.revisionId,
+            );
+            if (
+                !source ||
+                !revision ||
+                source.activeRevisionId !== item.revisionId ||
+                revision.state !== "ready"
+            )
+                throw new ViewBuildStaleError(
+                    "Informational source revision is unavailable or changed",
+                );
+            const fragments = selection.fragments.filter(
+                (fragment) =>
+                    fragment.sourceId === item.sourceId &&
+                    fragment.revisionId === item.revisionId,
+            );
+            if (!fragments.length) return [];
+            return [
+                {
+                    ...item,
+                    title: source.title,
+                    content: fragments
+                        .map((fragment) => fragment.snippet)
+                        .join("\n\n"),
+                    contentHash: viewHash(revision.content),
+                    passages: fragments.map((fragment) => ({
+                        sourceId: fragment.sourceId,
+                        revisionId: fragment.revisionId,
+                        locator: fragment.locator,
+                        excerpt: fragment.snippet,
+                    })),
+                },
+            ];
+        });
+        const snapshot = {
+            corpusId,
+            actor: userInfo().username,
+            definition: structuredClone(target.definition),
+            expectedVersion: target.expectedVersion,
+            ...(current
+                ? {
+                      definitionRevisionId: current.definition.revisionId,
+                      targetRevisionId: current.revisionId,
+                  }
+                : {}),
+            bounds: {},
+            inputs,
+            selectionFingerprint: viewHash({
+                generation: runtime.manifest.indexGeneration,
+                readChars: selection.readChars,
+                limited: selection.limited,
+                fragments: selection.fragments,
+            }),
+            pipeline: target.definition.projectSummary
+                ? ("informational-project-summary-v1" as const)
+                : ("informational-wiki-v1" as const),
+            model: this.viewAdapter.identity,
+        };
+        return { ...snapshot, fingerprint: viewHash(snapshot) };
+    }
+
+    private scheduleWikiMaintenance(corpusId: string): void {
+        if (
+            !this.informationalWikiEnabled ||
+            this.closed ||
+            this.wikiTimers.has(corpusId)
+        )
+            return;
+        const timer = setTimeout(() => {
+            this.wikiTimers.delete(corpusId);
+            const work = this.enqueueWrite(corpusId, async () => {
+                const runtime = await this.getCorpusRuntime(corpusId);
+                const snapshot = await this.viewStore.listViews(corpusId);
+                try {
+                    await this.maintainWikiFamily(runtime, {
+                        corpusId,
+                        expectedHead: snapshot.head,
+                        family: "wiki",
+                        operation: "update",
+                    });
+                } catch (error) {
+                    const family = await this.viewStore.getWikiFamily(corpusId);
+                    family.dirty = true;
+                    family.error = safeError(error);
+                    await this.viewStore.saveWikiFamily(corpusId, family);
+                }
+            });
+            this.indexedReads.add(work);
+            void work.then(
+                () => this.indexedReads.delete(work),
+                (error: unknown) => {
+                    this.indexedReads.delete(work);
+                    this.wikiMaintenanceFailures.set(
+                        corpusId,
+                        new Error(safeError(error)),
+                    );
+                },
+            );
+        }, 250);
+        this.wikiTimers.set(corpusId, timer);
+    }
+
+    private async maintainWikiFamily(
+        runtime: CorpusRuntime,
+        request: Extract<ViewMaintenanceRequest, { family: "wiki" }>,
+    ): Promise<ViewMaintenanceResult> {
+        const corpusId = request.corpusId;
+        if (!this.informationalWikiEnabled)
+            throw new Error(
+                "Informational wiki requires reviewed configured request capabilities",
+            );
+        const snapshot = await this.viewStore.listViews(corpusId);
+        if (snapshot.head !== request.expectedHead)
+            throw new ViewBuildStaleError("Wiki-family history head changed");
+        const family = await this.viewStore.getWikiFamily(corpusId);
+        if (family.error && request.operation === "update") {
+            delete family.error;
+            family.dirty = true;
+        }
+        const plan: ViewMaintenancePlan = {
+            corpusId,
+            expectedHead: snapshot.head,
+            targets: [],
+        };
+        if (request.operation === "pause" || request.operation === "resume") {
+            family.enabled = request.operation === "resume";
+            family.dirty = family.dirty || family.enabled;
+            await this.viewStore.saveWikiFamily(corpusId, family);
+            if (!family.enabled)
+                return this.viewStore.recordViewMaintenance(plan);
+        }
+        if (!family.enabled) return this.viewStore.recordViewMaintenance(plan);
+        const active = await this.viewStore.listViewBuilds(corpusId);
+        if (active.some((job) => job.state === "running"))
+            return this.viewStore.recordViewMaintenance(plan);
+        if (request.operation === "rebuild") {
+            family.dirty = true;
+            family.cursor = 0;
+        }
+        if (
+            !family.dirty &&
+            family.indexVersion === runtime.manifest.indexGeneration
+        )
+            return this.viewStore.recordViewMaintenance(plan);
+        if (!runtime.index.listSubjects || !runtime.index.readFragments)
+            throw new Error(
+                "Host does not support indexed wiki candidate discovery",
+            );
+        const eligible = runtime.manifest.sources.filter((source) =>
+            source.revisions.some(
+                (revision) =>
+                    revision.revisionId === source.activeRevisionId &&
+                    revision.state === "ready",
+            ),
+        );
+        if (!eligible.length) return this.viewStore.recordViewMaintenance(plan);
+        await this.ensureDocumentIndex(corpusId, runtime);
+        const page = await runtime.index.listSubjects(
+            family.cursor,
+            48,
+            new Set(eligible.map((source) => source.sourceId)),
+        );
+        const subjects = await runtime.index.getKnowledgeGraph(
+            new Set(eligible.map((source) => source.sourceId)),
+        );
+        const subjectNames = new Set(
+            [
+                ...subjects.entities.map((subject) => subject.name),
+                ...subjects.topics.map((subject) => subject.name),
+                ...page.items.map((subject) => subject.term),
+            ].map((name) => name.trim().toLocaleLowerCase()),
+        );
+        const descriptors = family.descriptors.filter((descriptor) =>
+            subjectNames.has(descriptor.query),
+        );
+        if (descriptors.length !== family.descriptors.length) {
+            family.descriptors = descriptors;
+            family.cursor = 0;
+        }
+        this.discoverWikiDescriptors(family, page.items);
+        const { targets, snapshots } = await this.prepareWikiTargets(
+            corpusId,
+            family,
+            snapshot.views,
+            eligible,
+            request.operation === "rebuild",
+            plan,
+        );
+        // Save discovered identities while leaving unadmitted work retryable.
+        await this.viewStore.saveWikiFamily(corpusId, family);
+        const nextFamily = structuredClone(family);
+        const admittedIds = new Set(
+            targets.map((target) => target.definition.viewId),
+        );
+        nextFamily.descriptors = [
+            ...nextFamily.descriptors.filter(
+                (descriptor) => !admittedIds.has(descriptor.viewId),
+            ),
+            ...nextFamily.descriptors.filter((descriptor) =>
+                admittedIds.has(descriptor.viewId),
+            ),
+        ];
+        nextFamily.cursor = Number(page.nextContinuationToken ?? 0);
+        if (runtime.manifest.indexGeneration)
+            nextFamily.indexVersion = runtime.manifest.indexGeneration;
+        else delete nextFamily.indexVersion;
+        nextFamily.dirty =
+            !!page.nextContinuationToken || targets.length === 12;
+        if (!targets.length) {
+            await this.viewStore.saveWikiFamily(corpusId, nextFamily);
+            return this.viewStore.recordViewMaintenance(plan);
+        }
+        const head = (await this.viewStore.listViews(corpusId)).head;
+        const buildRequest = { corpusId, expectedHead: head, targets };
+        validateBuildRequest(buildRequest);
+        const admitted = await this.viewStore.admitViewBuild(
+            buildRequest,
+            snapshots,
+            plan,
+            nextFamily,
+        );
+        if (admitted.admitted) this.viewBuilds.start(admitted.job);
+        const receipt = await this.viewStore.recordViewMaintenance(
+            plan,
+            admitted.job,
+        );
+        return receipt;
+    }
+
+    private discoverWikiDescriptors(
+        family: WikiFamilyState,
+        subjects: Array<{ term: string; sourceIds: string[] }>,
+    ): void {
+        for (const subject of subjects) {
+            const query = subject.term.trim().toLocaleLowerCase();
+            const prior = family.descriptors.find(
+                (descriptor) => descriptor.query === query,
+            );
+            if (prior) {
+                prior.sourceIds = [
+                    ...new Set([...prior.sourceIds, ...subject.sourceIds]),
+                ];
+                continue;
+            }
+            if (!query || query.length > 200) continue;
+            family.descriptors.push({
+                viewId: randomUUID(),
+                query,
+                sourceIds: subject.sourceIds,
+            });
+        }
+    }
+
+    private async prepareWikiTargets(
+        corpusId: string,
+        family: WikiFamilyState,
+        views: ViewVersion[],
+        eligible: StoredSource[],
+        rebuild: boolean,
+        plan: ViewMaintenancePlan,
+    ): Promise<{ targets: ViewBuildTarget[]; snapshots: ViewBuildSnapshot[] }> {
+        const targets: ViewBuildTarget[] = [];
+        const snapshots: ViewBuildSnapshot[] = [];
+        for (const descriptor of family.descriptors) {
+            if (targets.length === 12) break;
+            const current = views.find(
+                (view) => view.viewId === descriptor.viewId,
+            );
+            if (current?.state === "archived") continue;
+            const sources = eligible
+                .filter(
+                    (source) =>
+                        descriptor.sourceIds.includes(source.sourceId) &&
+                        !current?.definition.wiki?.excludedSourceIds.includes(
+                            source.sourceId,
+                        ),
+                )
+                .slice(-3)
+                .map((source) => ({
+                    sourceId: source.sourceId,
+                    revisionId: source.activeRevisionId,
+                }));
+            if (!sources.length) {
+                if (current?.definition.wiki?.excludedSourceIds.length) {
+                    family.error =
+                        "Wiki refresh blocked: all matching sources are excluded. Change exclusions or archive the page.";
+                    plan.targets.push({
+                        viewId: descriptor.viewId,
+                        expectedVersion: current.version,
+                        state: "blocked",
+                        reason: family.error,
+                        selector: current.definition.selector,
+                    });
+                }
+                continue;
+            }
+            const target: ViewBuildTarget = {
+                expectedVersion: current?.version ?? 0,
+                definition: {
+                    viewId: descriptor.viewId,
+                    kind: "wiki",
+                    selector: { kind: "sources", sources },
+                    wiki: current?.definition.wiki ?? {
+                        construction: "informational-wiki-v1",
+                        query: descriptor.query,
+                        aliases: [],
+                        excludedSourceIds: [],
+                    },
+                },
+            };
+            try {
+                const input = await this.snapshotInformationalTarget(
+                    corpusId,
+                    target,
+                    current,
+                );
+                if (
+                    sameViewBuildEvidence(current?.generation?.input, input) &&
+                    !rebuild
+                )
+                    continue;
+                if (
+                    !rebuild &&
+                    (await this.viewStore.hasPendingInformationalInput(
+                        corpusId,
+                        descriptor.viewId,
+                        input,
+                    ))
+                )
+                    continue;
+                targets.push(target);
+                snapshots.push(input);
+                plan.targets.push({
+                    viewId: descriptor.viewId,
+                    expectedVersion: target.expectedVersion,
+                    state: "rebuild",
+                    reason: "Indexed wiki selector has new evidence",
+                    selector: target.definition.selector,
+                });
+            } catch (error) {
+                if (
+                    !(error instanceof Error) ||
+                    !error.message.startsWith(
+                        "No substantive indexed fragments",
+                    )
+                )
+                    throw error;
+                plan.targets.push({
+                    viewId: descriptor.viewId,
+                    expectedVersion: target.expectedVersion,
+                    state: "blocked",
+                    reason: error.message,
+                });
+            }
+        }
+        return { targets, snapshots };
+    }
+
     private async snapshotViewTarget(
         corpusId: string,
         target: ViewBuildTarget,
@@ -3021,6 +3822,8 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             throw new ViewBuildStaleError(
                 "View target version is stale or archived",
             );
+        if (target.definition.wiki || target.definition.projectSummary)
+            return this.snapshotInformationalTarget(corpusId, target, current);
         const maintenance = this.resolveMaintenanceTarget(
             target.definition,
             runtime,
@@ -3298,6 +4101,14 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
     ): Promise<ViewMaintenanceResult> {
         validateMaintenanceRequest(request, true);
         const runtime = await this.requireViews(request.corpusId);
+        if ("family" in request) {
+            const timer = this.wikiTimers.get(request.corpusId);
+            if (timer) clearTimeout(timer);
+            this.wikiTimers.delete(request.corpusId);
+            return this.enqueueWrite(request.corpusId, () =>
+                this.maintainWikiFamily(runtime, request),
+            );
+        }
         return this.enqueueWrite(request.corpusId, async () => {
             const plan = await this.planMaintenanceLocked(
                 runtime,
@@ -3398,6 +4209,17 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             corpusId,
             invalid.map((view) => view.viewId),
         );
+        if (
+            !this.viewDrafts ||
+            !runtime.index.listSubjects ||
+            !runtime.index.readFragments
+        )
+            return;
+        const family = await this.viewStore.getWikiFamily(corpusId);
+        family.dirty = true;
+        family.cursor = 0;
+        await this.viewStore.saveWikiFamily(corpusId, family);
+        this.scheduleWikiMaintenance(corpusId);
     }
 
     public async updateViewMaintenance(
@@ -3577,6 +4399,17 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             ...inventoryEvidence(conflict.candidate),
         };
         validateConstructedGuide(conflict.input, output);
+        if (informationalWiki(output.content))
+            return this.enqueueWrite(request.corpusId, async () => {
+                await this.recheckViewInput(conflict.input);
+                const saved = await this.viewStore.resolveViewConflict(
+                    request,
+                    output,
+                );
+                await this.viewStore.makeInformationalVisible(saved.version);
+                await this.indexViewLocked(saved.version);
+                return saved;
+            });
         const support = await this.viewAdapter.validate(
             conflict.input,
             output,
@@ -3599,6 +4432,65 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         const question = request.question.trim();
         if (question.length === 0) {
             throw new Error("Memory question cannot be empty");
+        }
+        if (request.answerMode !== "extractive" && this.wikiBudget) {
+            return runWithRequestBudget(
+                new RequestBudget(this.wikiBudget),
+                async () => {
+                    const result = await this.search({
+                        corpusId: request.corpusId,
+                        query: question,
+                        ...(request.sourceIds
+                            ? { sourceIds: request.sourceIds }
+                            : {}),
+                        indexedFragments: true,
+                        limit: Math.min(request.limit ?? 12, 12),
+                        maxResponseChars: Math.min(
+                            request.maxResponseChars ?? 24000,
+                            24000,
+                        ),
+                    });
+                    const generated = await answerIndexedEvidence(
+                        question,
+                        result.matches,
+                        this.wikiBudget!.outputTokens,
+                        this.wikiModelEndpoint,
+                        this.indexedAnswerModel,
+                    );
+                    for (const citation of generated.citations) {
+                        if (!citation.locator?.startsWith("indexed:"))
+                            throw new Error(
+                                "Indexed answer requires an exact indexed locator",
+                            );
+                        const source = await this.getSource(
+                            request.corpusId,
+                            citation.sourceId,
+                        );
+                        if (source?.activeRevisionId !== citation.revisionId)
+                            throw new Error(
+                                "Indexed answer evidence changed before delivery",
+                            );
+                        const current = await this.getSourceContent({
+                            corpusId: request.corpusId,
+                            sourceId: citation.sourceId,
+                            revisionId: citation.revisionId,
+                            indexedLocator: citation.locator,
+                        });
+                        if (current.content !== citation.snippet)
+                            throw new Error(
+                                "Indexed answer evidence is unavailable or changed",
+                            );
+                    }
+                    return {
+                        question,
+                        ...generated,
+                        mode: "synthesized",
+                        grounded: true,
+                        indexVersion: result.indexVersion,
+                        warnings: result.warnings,
+                    };
+                },
+            );
         }
         if (request.answerMode !== "extractive") {
             const synthesized = await this.synthesizeAnswer(request, question);
@@ -3848,12 +4740,19 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         await mkdir(candidateDirectory, { recursive: true });
         const candidateIndex = this.indexFactory(corpusId, candidateDirectory);
         try {
-            await raceWithAbort(
+            const rebuild = () =>
                 candidateIndex.rebuild(
                     this.activeDocuments(candidateManifest),
                     signal,
                     async () => {},
-                ),
+                );
+            await raceWithAbort(
+                this.wikiBudget
+                    ? runWithRequestBudget(
+                          new RequestBudget(this.wikiBudget),
+                          rebuild,
+                      )
+                    : rebuild(),
                 signal,
             );
             this.throwIfAborted(signal);

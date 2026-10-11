@@ -24,6 +24,10 @@ export interface DocPartOptions {
     maxTokensPerPart?: number;
 }
 
+export function countDocTokens(text: string): number {
+    return countTokens(text);
+}
+
 /**
  * Import a text document as DocMemory
  * Uses file extensions to determine how to import the text files.

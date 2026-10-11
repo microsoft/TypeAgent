@@ -64,6 +64,22 @@ export const viewDefinitionSchema = z.strictObject({
     kind: z.enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"]),
     selector: viewSelectorSchema,
     maintenance: viewMaintenanceDefinitionSchema.optional(),
+    wiki: z
+        .strictObject({
+            construction: z.literal("informational-wiki-v1"),
+            query: z.string().trim().min(1).max(200),
+            aliases: z.string().trim().min(1).max(200).array().max(7),
+            excludedSourceIds: id.array().max(32),
+        })
+        .optional(),
+    projectSummary: z
+        .strictObject({
+            construction: z.literal("informational-project-summary-v1"),
+            query: z.string().trim().min(1).max(200),
+            aliases: z.string().trim().min(1).max(200).array().max(7),
+            excludedSourceIds: id.array().max(32),
+        })
+        .optional(),
 });
 export const viewMaintenancePlanSchema = z.object({
     corpusId: id,
@@ -81,7 +97,9 @@ export const viewMaintenancePlanSchema = z.object({
         .max(32),
 });
 const citation = source.extend({
-    locator: z.string().regex(/^chars:\d+-\d+$/),
+    locator: z
+        .string()
+        .regex(/^(chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/),
     excerpt: text,
     evidence: eventEvidence.optional(),
 });
@@ -344,6 +362,44 @@ const projectContent = guideContent.extend({
     kind: z.literal("projectBrief"),
     sections: section.extend({ details: projectDetails }).array().length(7),
 });
+const informationalProjectDetails = z.discriminatedUnion("kind", [
+    z.strictObject({
+        kind: z.literal("goalsScope"),
+        inventoryIds: id.array().length(0),
+    }),
+    z.strictObject({
+        kind: z.literal("owners"),
+        assignments: z.array(z.never()).length(0),
+    }),
+    projectDetails.options[2].extend({ inventoryIds: id.array().length(0) }),
+    z.strictObject({
+        kind: z.literal("milestones"),
+        items: z.array(z.never()).length(0),
+    }),
+    z.strictObject({
+        kind: z.literal("decisions"),
+        items: z.array(z.never()).length(0),
+    }),
+    z.strictObject({
+        kind: z.literal("risks"),
+        items: z.array(z.never()).length(0),
+    }),
+    z.strictObject({
+        kind: z.literal("context"),
+        asOf: z.null(),
+        basis: z.literal("unknown"),
+        inventoryIds: id.array().length(0),
+    }),
+]);
+const informationalProjectContent = guideContent.extend({
+    kind: z.literal("projectBrief"),
+    construction: z.literal("informational-project-summary-v1"),
+    sections: section
+        .omit({ details: true })
+        .extend({ details: informationalProjectDetails })
+        .array()
+        .length(7),
+});
 const timelineDetails = z.strictObject({
     kind: z.literal("event"),
     identity: z.discriminatedUnion("kind", [
@@ -379,6 +435,7 @@ const timelineContent = guideContent.extend({
 });
 const wikiContent = guideContent.extend({
     kind: z.literal("wiki"),
+    construction: z.literal("informational-wiki-v1").optional(),
     index: z
         .strictObject({
             pageId: id,
@@ -394,28 +451,41 @@ const wikiContent = guideContent.extend({
             role: z.literal("page"),
             heading: text,
             body: text,
-            details: z.strictObject({
-                kind: z.literal("page"),
-                taxonomy: z.enum(["concept", "system", "project"]),
-                inventoryIds,
-                mergedPageIds: id.array().max(128),
-            }),
+            details: z.union([
+                z.strictObject({
+                    kind: z.literal("page"),
+                    taxonomy: z.enum(["concept", "system", "project"]),
+                    inventoryIds,
+                    mergedPageIds: id.array().max(128),
+                }),
+                z.strictObject({
+                    kind: z.literal("page"),
+                    construction: z.literal("informational-wiki-v1"),
+                    taxonomy: z.enum(["concept", "system", "project"]),
+                    note: z.string().max(4000),
+                    mergedPageIds: id.array().length(0),
+                }),
+            ]),
         })
         .array()
         .min(1)
         .max(32),
 });
-const content = z.discriminatedUnion("kind", [
+const content = z.union([
     guideContent,
     projectContent,
     timelineContent,
     wikiContent,
+    informationalProjectContent,
 ]);
-const requestContent = z.discriminatedUnion("kind", [
+const requestContent = z.union([
     guideContent.extend({ citations: citation.array().max(1000) }),
     projectContent.extend({ citations: citation.array().max(1000) }),
     timelineContent.extend({ citations: citation.array().max(1000) }),
     wikiContent.extend({ citations: citation.array().max(1000) }),
+    informationalProjectContent.extend({
+        citations: citation.array().max(1000),
+    }),
 ]);
 export const viewSynthesisSchema = z.strictObject({
     content: requestContent,
@@ -578,6 +648,8 @@ const snapshot = z.object({
         "project-brief-v1",
         "timeline-v1",
         "wiki-v1",
+        "informational-wiki-v1",
+        "informational-project-summary-v1",
     ]),
     selectionFingerprint: hash.optional(),
     model: text,
@@ -720,9 +792,12 @@ export const viewVersionSchema = z.object({
         ]),
         selector: viewSelectorSchema,
         maintenance: viewMaintenanceDefinitionSchema.optional(),
+        wiki: viewDefinitionSchema.shape.wiki,
+        projectSummary: viewDefinitionSchema.shape.projectSummary,
     }),
     content: z.union([
         projectContent,
+        informationalProjectContent,
         timelineContent,
         wikiContent,
         z.object({
@@ -789,6 +864,13 @@ export const viewVersionSchema = z.object({
 export const viewSnapshotSchema = z.object({
     head: head.nullable(),
     views: viewVersionSchema.array(),
+    wikiFamily: z
+        .strictObject({
+            enabled: z.boolean(),
+            pending: z.boolean(),
+            error: z.string().optional(),
+        })
+        .optional(),
 });
 export const viewHistoryEntrySchema = z.object({
     commitId: head,

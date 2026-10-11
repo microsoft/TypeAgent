@@ -588,7 +588,7 @@ export function maintenanceManifest(
                     ),
                 ),
                 context: structuredClone(snapshot.dependencies),
-                inventoryIds: [...page.details.inventoryIds],
+                inventoryIds: [...(page.details.inventoryIds ?? [])],
             };
         }),
     };

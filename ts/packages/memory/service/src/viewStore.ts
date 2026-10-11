@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { informationalView } from "./informationalView.js";
 
 import { randomUUID } from "node:crypto";
 import { readdir, rm } from "node:fs/promises";
@@ -20,6 +21,7 @@ import {
     rebaseViewEdits,
     reconcileResolutionEdits,
     recordViewEdits,
+    sameViewBuildEvidence,
     viewHash,
 } from "./viewMerge.js";
 import { assertPublicationProof } from "./viewPublication.js";
@@ -62,10 +64,20 @@ interface ViewStoreState {
     publicationPolicy?: ViewPublicationPolicy;
     publications?: Record<string, ViewPublicationStatus>;
     viewIndexCleanup?: string[];
+    wikiFamily?: WikiFamilyState;
     maintenanceReceipts?: Record<
         string,
         Pick<ViewMaintenanceResult, "receiptId" | "plan"> & { jobId?: string }
     >;
+}
+
+export interface WikiFamilyState {
+    enabled: boolean;
+    dirty: boolean;
+    cursor: number;
+    indexVersion?: string;
+    error?: string;
+    descriptors: Array<{ viewId: string; query: string; sourceIds: string[] }>;
 }
 
 function forgottenEventIds(marker: string): Set<string> | undefined {
@@ -123,6 +135,62 @@ export class TypedViewStore {
         return new ViewHistory(this.viewDirectory(corpusId), () => ({
             views: {},
         }));
+    }
+
+    public async getWikiFamily(corpusId: string): Promise<WikiFamilyState> {
+        return (
+            (await this.history(corpusId).read()).state.wikiFamily ?? {
+                enabled: true,
+                dirty: true,
+                cursor: 0,
+                descriptors: [],
+            }
+        );
+    }
+
+    public async saveWikiFamily(
+        corpusId: string,
+        family: WikiFamilyState,
+    ): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        state.wikiFamily = structuredClone(family);
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Checkpoint informational wiki maintenance",
+        );
+    }
+
+    public async makeInformationalVisible(
+        version: ViewVersion,
+    ): Promise<ViewPublicationStatus> {
+        const { head, state } = await this.history(version.corpusId).read();
+        const current = viewVersions(state, version.viewId).at(-1);
+        if (
+            current?.revisionId !== version.revisionId ||
+            current.state !== "draft" ||
+            !informationalView(current.content)
+        )
+            throw new Error(
+                "Informational visibility requires the exact current page",
+            );
+        const publication: ViewPublicationStatus = {
+            viewId: version.viewId,
+            latestBuiltRevisionId: version.revisionId,
+            publishedRevisionId: version.revisionId,
+            indexState: "pending",
+            reason: "Informational page automatically visible; derivative indexing pending",
+        };
+        state.publications ??= {};
+        state.publications[version.viewId] = publication;
+        await this.commitBuildState(
+            version.corpusId,
+            head,
+            state,
+            "Accept current informational page",
+        );
+        return publication;
     }
 
     private entries(state: ViewStoreState): Record<string, string> {
@@ -326,6 +394,7 @@ export class TypedViewStore {
         request: ViewBuildRequest,
         snapshots: ViewBuildSnapshot[],
         maintenancePlan?: ViewMaintenancePlan,
+        wikiFamily?: WikiFamilyState,
     ): Promise<{ job: ViewBuildJob; admitted: boolean }> {
         const { head, state } = await this.history(request.corpusId).read();
         const fingerprint = viewHash({ request, snapshots });
@@ -358,6 +427,7 @@ export class TypedViewStore {
         };
         state.builds ??= {};
         state.builds[job.jobId] = job;
+        if (wikiFamily) state.wikiFamily = structuredClone(wikiFamily);
         await this.commitBuildState(
             request.corpusId,
             head,
@@ -487,6 +557,20 @@ export class TypedViewStore {
             (job) => job.state === "running",
         );
         if (!running.length) return;
+        if (
+            state.wikiFamily &&
+            running.some((job) =>
+                job.results.some(
+                    (result) =>
+                        result.snapshot.pipeline === "informational-wiki-v1",
+                ),
+            )
+        ) {
+            state.wikiFamily.dirty = true;
+            state.wikiFamily.cursor = 0;
+            state.wikiFamily.error =
+                "Interrupted wiki admission; retry pending indexed work";
+        }
         for (const job of running) {
             job.state = "interrupted";
             job.updatedAt = timestamp();
@@ -522,6 +606,20 @@ export class TypedViewStore {
         return (await this.history(corpusId).read()).state.conflicts?.[
             conflictId
         ];
+    }
+
+    public async hasPendingInformationalInput(
+        corpusId: string,
+        viewId: string,
+        input: ViewBuildSnapshot,
+    ): Promise<boolean> {
+        const { state } = await this.history(corpusId).read();
+        return Object.values(state.conflicts ?? {}).some(
+            (conflict) =>
+                conflict.state === "pending" &&
+                conflict.viewId === viewId &&
+                sameViewBuildEvidence(conflict.input, input),
+        );
     }
 
     public async materializeViewBuild(
@@ -938,6 +1036,17 @@ export class TypedViewStore {
             ),
         );
         state.maintenanceReceipts = {};
+        if (state.wikiFamily) {
+            state.wikiFamily.descriptors = state.wikiFamily.descriptors.filter(
+                (descriptor) =>
+                    !clearingDerived &&
+                    !affected.has(descriptor.viewId) &&
+                    !descriptor.sourceIds.includes(sourceId),
+            );
+            state.wikiFamily.dirty = true;
+            state.wikiFamily.cursor = 0;
+            delete state.wikiFamily.indexVersion;
+        }
         for (const job of Object.values(state.builds))
             delete job.maintenancePlan;
         if (state.viewIndexCleanup)
@@ -1138,15 +1247,36 @@ export class TypedViewStore {
         request: ViewReadRequest,
     ): Promise<ViewPublicationStatus> {
         const { state } = await this.history(request.corpusId).read();
-        const publication = state.publications?.[request.viewId] ?? {
-            viewId: request.viewId,
+        return this.publicationStatus(state, request.viewId);
+    }
+
+    public async listPublishedViews(corpusId: string) {
+        const { state } = await this.history(corpusId).read();
+        return Object.entries(state.views).map(([viewId, versions]) => {
+            const publication = this.publicationStatus(state, viewId);
+            return {
+                current: versions[versions.length - 1],
+                view: versions.find(
+                    (version) =>
+                        version.revisionId === publication.publishedRevisionId,
+                ),
+                publication,
+            };
+        });
+    }
+
+    private publicationStatus(
+        state: ViewStoreState,
+        viewId: string,
+    ): ViewPublicationStatus {
+        const publication = state.publications?.[viewId] ?? {
+            viewId,
             indexState: "absent" as const,
             reason: "No published revision",
         };
         const pending = Object.values(state.conflicts ?? {}).some(
             (conflict) =>
-                conflict.viewId === request.viewId &&
-                conflict.state === "pending",
+                conflict.viewId === viewId && conflict.state === "pending",
         );
         return {
             ...publication,

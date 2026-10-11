@@ -17,7 +17,7 @@ import { FileMemoryService } from "../src/fileMemoryService.js";
 import { runMemoryViewsCli } from "../src/memoryViewsCli.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
 import { validateBuildRequest } from "../src/viewBuildValidation.js";
-import { ViewBuildRunner } from "../src/viewBuilds.js";
+import { abortable, ViewBuildRunner } from "../src/viewBuilds.js";
 import { ViewHistory } from "../src/viewHistory.js";
 import { mergeProse, mergeView } from "../src/viewMerge.js";
 import {
@@ -37,6 +37,16 @@ import type {
 } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
+
+test("already-aborted work consumes the created task rejection without an unhandled close failure", async () => {
+    const controller = new AbortController();
+    const reason = new Error("Service closing");
+    controller.abort(reason);
+    await expect(
+        abortable(Promise.reject(reason), controller.signal),
+    ).rejects.toBe(reason);
+    await new Promise((resolve) => setImmediate(resolve));
+});
 
 function output(
     input: ViewBuildSnapshot,
@@ -796,6 +806,62 @@ describe("durable draft builds and explicit edit merge", () => {
             }
         },
     );
+    test("informational cancellation uses the configured elapsed envelope and reports the actual limit", async () => {
+        const request = await fixture();
+        const job = structuredClone(
+            await wait(await service.buildViews(request)),
+        );
+        job.state = "running";
+        job.results[0].state = "pending";
+        job.results[0].snapshot.pipeline = "informational-wiki-v1";
+        let finish!: () => void;
+        const finished = new Promise<void>((resolve) => {
+            finish = resolve;
+        });
+        const runner = new ViewBuildRunner(
+            {
+                identity: "controlled-never-finishes",
+                generate: async () =>
+                    new Promise<ViewSynthesisOutput>(() => undefined),
+                validate: async () => {
+                    throw new Error(
+                        "Timed-out generation must not reach validation",
+                    );
+                },
+            },
+            {
+                update: async (_corpusId, _jobId, update) => {
+                    update(job);
+                    if (job.state !== "running") finish();
+                    return job;
+                },
+                current: async () => undefined,
+                materialize: async () => {
+                    throw new Error("Timed-out work must not materialize");
+                },
+            },
+            {
+                contextTokens: 21000,
+                inputTokens: 16000,
+                outputTokens: 4000,
+                safetyTokens: 1000,
+                chatAttempts: 24,
+                reservedTokens: 160000,
+                embeddingAttempts: 128,
+                elapsedMs: 20,
+                tokenizer: "unit-test",
+                countTokens: (text) => text.length,
+            },
+        );
+        runner.start(job);
+        await finished;
+        await runner.close();
+        expect(job.state).toBe("cancelled");
+        expect(job.results[0].reason).toBe(
+            "Evidence-first synthesis exceeded 0.02 second limit",
+        );
+    });
+
     test("finished runner persistence errors stay explicit and source forget erases their retained payload", async () => {
         const request = await fixture();
         const job = structuredClone(

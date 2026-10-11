@@ -689,11 +689,31 @@ describe("actual configured evidence-first adapter and durable service", () => {
         ]);
         expect(calls[0].input).not.toHaveProperty("output");
         expect(calls[0].input).not.toHaveProperty("inventory");
+        const labeledSources = evidenceArray(calls[0].input.inputs).map(
+            evidenceRecord,
+        );
+        expect(labeledSources.every((source) => !("content" in source))).toBe(
+            true,
+        );
+        expect(
+            labeledSources.every(
+                (source) => evidenceArray(source.passages).length > 0,
+            ),
+        ).toBe(true);
         expect(calls[1].input).not.toHaveProperty("output");
         expect(JSON.stringify(calls.slice(0, 2))).not.toContain(
             "Controlled conditional guide",
         );
         const result = job.results[0];
+        expect(calls[3].input.inventory).toEqual(result.inventory);
+        expect(calls[3].input.output).not.toHaveProperty("inventory");
+        expect(calls[3].input.output).not.toHaveProperty("inventoryAudit");
+        expect(evidenceRecord(calls[3].input.output)).toHaveProperty(
+            "content.sections",
+        );
+        expect(evidenceRecord(calls[3].input.output)).toHaveProperty(
+            "relationships",
+        );
         expect(result.inventory!.items).toHaveLength(6);
         expect(result.inventoryAudit!.supported).toBe(true);
         expect(result.coverage!.reuseEligibility).toBe("diagnosticOnly");

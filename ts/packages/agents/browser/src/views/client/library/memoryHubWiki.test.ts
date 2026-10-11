@@ -85,6 +85,156 @@ async function settle() {
     for (let index = 0; index < 30; index++) await Promise.resolve();
 }
 
+test("informational editor retains retrieval identity and edits explicit source exclusions", () => {
+    const page: WikiContent = {
+        kind: "wiki",
+        construction: "informational-wiki-v1",
+        title: "Informational",
+        summary: "Limited summary: selected indexed fragments only;",
+        citations: [citation],
+        sections: [
+            {
+                id: "page",
+                role: "page",
+                heading: "Concept",
+                body: "Limited prose",
+                details: {
+                    kind: "page",
+                    construction: "informational-wiki-v1",
+                    taxonomy: "concept",
+                    note: "",
+                    mergedPageIds: [],
+                },
+            },
+        ],
+        index: [{ pageId: "page", title: "Concept", taxonomy: "concept" }],
+    };
+    const retrieval = {
+        construction: "informational-wiki-v1" as const,
+        query: "concept",
+        aliases: [],
+        excludedSourceIds: [],
+    };
+    const changed = jest.fn();
+    const editor = createWikiEditor(page, [], changed, jest.fn(), retrieval);
+    const exclude = editor.element.querySelector<HTMLInputElement>(
+        '[aria-label="Exclude source s"]',
+    )!;
+    expect(exclude).not.toBeNull();
+    exclude.checked = true;
+    exclude.dispatchEvent(new Event("change"));
+    expect(editor.retrieval()).toEqual({
+        ...retrieval,
+        excludedSourceIds: ["s"],
+    });
+    expect(retrieval.excludedSourceIds).toEqual([]);
+    expect(editor.read().sections[0].id).toBe("page");
+    expect(changed).toHaveBeenCalled();
+});
+
+test("Memory Hub saves source exclusions with the informational retrieval definition", async () => {
+    invoke.mockClear();
+    const retrieval = {
+        construction: "informational-wiki-v1" as const,
+        query: "pool pressure",
+        aliases: ["pool"],
+        excludedSourceIds: [],
+    };
+    const page: WikiContent = {
+        ...content,
+        construction: "informational-wiki-v1",
+        sections: [
+            {
+                ...content.sections[0],
+                details: {
+                    kind: "page",
+                    construction: "informational-wiki-v1",
+                    taxonomy: "concept",
+                    note: "",
+                    mergedPageIds: [],
+                },
+            },
+        ],
+        index: [content.index[0]],
+    };
+    invoke.mockImplementation(async (method) => {
+        if (method === "memoryListCorpora")
+            return [{ corpusId: "c", name: "Synthetic collection" }];
+        if (method === "memoryViewCapabilities")
+            return {
+                derivedViews: {
+                    builds: true,
+                    kinds: ["wiki"],
+                    informationalWiki: true,
+                },
+            };
+        if (method === "memoryListViews")
+            return {
+                head: "a".repeat(40),
+                views: [
+                    {
+                        corpusId: "c",
+                        viewId: "wiki",
+                        revisionId: "v",
+                        version: 1,
+                        state: "draft",
+                        provenance: "generated",
+                        content: page,
+                        relationships: [],
+                        definition: {
+                            viewId: "wiki",
+                            kind: "wiki",
+                            selector: {
+                                kind: "sources",
+                                sources: [{ sourceId: "s", revisionId: "r" }],
+                            },
+                            wiki: retrieval,
+                        },
+                    },
+                ],
+            };
+        if (method === "memoryListViewBuilds") return [];
+        if (method === "memoryGetViewPublicationPolicy")
+            return { revision: 0, autoPublish: true, views: {} };
+        if (method === "memoryGetViewPublication")
+            return { viewId: "wiki", indexState: "absent", reason: "Draft" };
+        if (method === "memoryListSources") return { items: [], total: 0 };
+        if (method === "memorySaveViewDraft") return {};
+        throw new Error(`Unexpected informational client call ${method}`);
+    });
+    const host = document.createElement("div");
+    document.body.replaceChildren(host);
+    const onError = jest.fn();
+    const mounted = mountMemoryHubViews(host, { scope: () => "c", onError });
+    try {
+        await mounted.refresh();
+        await settle();
+        click(host, "Payments wiki");
+        click(host, "Edit");
+        click(host, "Edit selected wiki page");
+        const excluded = host.querySelector<HTMLInputElement>(
+            '[aria-label="Exclude source s"]',
+        )!;
+        expect(excluded).not.toBeNull();
+        excluded.checked = true;
+        excluded.dispatchEvent(new Event("change"));
+        click(host, "Save explicit edits");
+        await settle();
+        expect(invoke).toHaveBeenCalledWith(
+            "memorySaveViewDraft",
+            expect.objectContaining({
+                definition: expect.objectContaining({
+                    wiki: { ...retrieval, excludedSourceIds: ["s"] },
+                }),
+            }),
+        );
+        expect(onError).not.toHaveBeenCalled();
+    } finally {
+        mounted.dispose();
+        (invokeView as jest.Mock).mockReset();
+    }
+});
+
 test("typed index navigation, reader, named editor, exact proof and focus retain identities without raw-link authority", () => {
     const changed = jest.fn();
     const evidence = jest.fn();

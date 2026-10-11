@@ -291,6 +291,7 @@ export type MemoryCenterInvokeFunctions = {
         revisionId?: string;
         offset?: number;
         maxChars?: number;
+        indexedLocator?: string;
     }): Promise<MemoryCenterContent>;
     memoryGetSourceKnowledge(params: {
         corpusId: string;

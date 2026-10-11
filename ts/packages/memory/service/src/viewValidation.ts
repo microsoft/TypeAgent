@@ -18,6 +18,17 @@ import type {
     ViewSourceSelector,
 } from "./viewTypes.js";
 import { validateWiki } from "./wiki.js";
+import {
+    informationalWiki,
+    validateWikiSelector,
+} from "./informationalWiki.js";
+import { parseIndexedLocator } from "./indexedFragments.js";
+import {
+    informationalProject,
+    validateInformationalProjectContent,
+    validateProjectSelector,
+} from "./informationalProject.js";
+import { informationalView } from "./informationalView.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -138,7 +149,11 @@ function validateCanonicalEvidence(
     assertViewIdentifier("event ID", value.evidence.eventId);
 }
 
-function validateCitation(value: ViewCitation, sources: Set<string>): void {
+function validateCitation(
+    value: ViewCitation,
+    sources: Set<string>,
+    informational = false,
+): void {
     if (
         !value ||
         !sources.has(
@@ -150,9 +165,12 @@ function validateCitation(value: ViewCitation, sources: Set<string>): void {
         throw new Error("Citation is outside the selected source revisions");
     if (
         typeof value.locator !== "string" ||
-        !/^chars:\d+-\d+$/.test(value.locator)
+        (!(informational && value.locator.startsWith("indexed:")) &&
+            !/^chars:\d+-\d+$/.test(value.locator))
     )
         throw new Error("Exact UTF-16 citation offsets are required");
+    if (informational && value.locator.startsWith("indexed:"))
+        parseIndexedLocator(value.locator);
     text(value.excerpt, "Citation excerpt");
     onlyKeys(
         value,
@@ -279,7 +297,11 @@ function validateRelationships(
         if (!Array.isArray(edge.citations) || !edge.citations.length)
             throw new Error("Relationships require exact supporting citations");
         for (const citation of edge.citations)
-            validateCitation(citation, sources);
+            validateCitation(
+                citation,
+                sources,
+                informationalView(request.content),
+            );
         const target = edge.to;
         if (
             (request.content.kind === "timeline" ||
@@ -336,10 +358,19 @@ export function validateViewDraft(request: ViewSaveRequest): void {
         throw new Error("View definition identity does not match");
     onlyKeys(
         request.definition,
-        ["viewId", "kind", "selector", "maintenance"],
+        ["viewId", "kind", "selector", "maintenance", "wiki", "projectSummary"],
         "view definition",
     );
     validateMaintenanceDefinition(request.definition);
+    validateWikiSelector(request.definition);
+    validateProjectSelector(request.definition);
+    if (!!request.definition.wiki !== informationalWiki(request.content))
+        throw new Error("Wiki content and construction definition differ");
+    if (
+        !!request.definition.projectSummary !==
+        informationalProject(request.content)
+    )
+        throw new Error("Project content and construction definition differ");
     const sources = validateSelector(request.definition.selector);
     const sections = validateDraftContent(request, sources);
     validateRelationships(request.relationships, request, sources, sections);
@@ -361,8 +392,11 @@ function validateDraftContent(
         request.content.sections,
         request.content.kind,
     );
-    if (request.content.kind === "projectBrief")
-        validateProjectBrief(request.content);
+    if (request.content.kind === "projectBrief") {
+        if (informationalProject(request.content))
+            validateInformationalProjectContent(request.content);
+        else validateProjectBrief(request.content);
+    }
     if (request.content.kind === "timeline") validateTimeline(request.content);
     if (request.content.kind === "wiki") validateWiki(request.content);
     if (request.content.agentEdition !== undefined)
@@ -378,7 +412,12 @@ function validateDraftContent(
             "sections",
             "citations",
             ...(request.content.kind === "timeline" ? ["generatedAt"] : []),
-            ...(request.content.kind === "wiki" ? ["index"] : []),
+            ...(request.content.kind === "wiki"
+                ? ["index", "construction"]
+                : []),
+            ...(request.content.kind === "projectBrief"
+                ? ["construction"]
+                : []),
         ],
         "guide content",
     );
@@ -396,6 +435,7 @@ function validateDraftContent(
                 excerpt: citation.excerpt,
             },
             sources,
+            informationalView(request.content),
         );
     }
     return sections;

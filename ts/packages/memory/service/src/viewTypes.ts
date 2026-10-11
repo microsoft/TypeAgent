@@ -62,12 +62,23 @@ export interface ViewSection {
     body: string;
     details?: ProjectBriefDetails | TimelineRecordDetails | WikiPageDetails;
 }
-export interface WikiPageDetails {
+export interface LegacyWikiPageDetails {
     kind: "page";
     taxonomy: "concept" | "system" | "project";
     inventoryIds: string[];
     mergedPageIds: string[];
 }
+export interface InformationalWikiPageDetails {
+    kind: "page";
+    construction: "informational-wiki-v1";
+    taxonomy: "concept" | "system" | "project";
+    note: string;
+    inventoryIds?: never;
+    mergedPageIds: string[];
+}
+export type WikiPageDetails =
+    | LegacyWikiPageDetails
+    | InformationalWikiPageDetails;
 export type WikiPage = Omit<ViewSection, "role" | "details"> & {
     role: "page";
     details: WikiPageDetails;
@@ -79,6 +90,7 @@ export interface WikiIndexEntry {
 }
 export interface WikiContent {
     kind: "wiki";
+    construction?: "informational-wiki-v1";
     title: string;
     summary?: string;
     index: WikiIndexEntry[];
@@ -178,6 +190,7 @@ export type ProjectBriefSection = Omit<ViewSection, "role" | "details"> & {
 };
 export interface ProjectBriefContent {
     kind: "projectBrief";
+    construction?: "informational-project-summary-v1";
     title: string;
     summary?: string;
     sections: ProjectBriefSection[];
@@ -255,6 +268,18 @@ export interface ViewDefinitionInput {
     kind: ViewKind;
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
+    wiki?: {
+        construction: "informational-wiki-v1";
+        query: string;
+        aliases: string[];
+        excludedSourceIds: string[];
+    };
+    projectSummary?: {
+        construction: "informational-project-summary-v1";
+        query: string;
+        aliases: string[];
+        excludedSourceIds: string[];
+    };
 }
 export interface ViewDefinition {
     viewId: string;
@@ -262,6 +287,8 @@ export interface ViewDefinition {
     kind: ViewKind;
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
+    wiki?: NonNullable<ViewDefinitionInput["wiki"]>;
+    projectSummary?: NonNullable<ViewDefinitionInput["projectSummary"]>;
 }
 export interface ViewVersion {
     corpusId: string;
@@ -295,6 +322,11 @@ export interface ViewVersion {
 export interface ViewSnapshot {
     head: string | null;
     views: ViewVersion[];
+    wikiFamily?: {
+        enabled: boolean;
+        pending: boolean;
+        error?: string;
+    };
 }
 export interface ViewSourceUsageRequest {
     corpusId: string;
@@ -428,7 +460,9 @@ export interface ViewBuildSnapshot {
         | "troubleshooting-v1"
         | "project-brief-v1"
         | "timeline-v1"
-        | "wiki-v1";
+        | "wiki-v1"
+        | "informational-wiki-v1"
+        | "informational-project-summary-v1";
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;

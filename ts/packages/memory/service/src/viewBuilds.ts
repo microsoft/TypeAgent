@@ -15,7 +15,13 @@ import { validateInventoryAudit } from "./viewInventory.js";
 import { mergeView } from "./viewMerge.js";
 import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
+import { informationalPipeline } from "./informationalView.js";
 import { validateMaintenanceConstruction } from "./viewMaintenance.js";
+import {
+    RequestBudget,
+    runWithRequestBudget,
+    type RequestBudgetLimits,
+} from "@typeagent/aiclient";
 
 export class ViewBuildStaleError extends Error {}
 
@@ -32,6 +38,7 @@ export interface ViewBuildOwner {
         update: (job: ViewBuildJob) => void,
     ): Promise<ViewBuildJob>;
     current(input: ViewBuildSnapshot): Promise<ViewVersion | undefined>;
+    unchanged?(input: ViewBuildSnapshot): Promise<boolean>;
     materialize(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
@@ -58,6 +65,7 @@ export class ViewBuildRunner {
     public constructor(
         private readonly adapter: ViewSynthesisAdapter,
         private readonly owner: ViewBuildOwner,
+        private readonly informationalLimits?: RequestBudgetLimits,
     ) {}
 
     public assertPersistence(jobId: string): void {
@@ -88,7 +96,20 @@ export class ViewBuildRunner {
             ),
         };
         this.controllers.set(job.jobId, { ...scope, controller });
-        const task = this.tail.then(() => this.run(job, controller.signal));
+        const task = this.tail.then(() => {
+            if (
+                !job.results.some((result) =>
+                    informationalPipeline(result.snapshot.pipeline),
+                )
+            )
+                return this.run(job, controller.signal);
+            if (!this.informationalLimits)
+                return this.blockInformationalJob(job);
+            return runWithRequestBudget(
+                new RequestBudget(this.informationalLimits),
+                () => this.run(job, controller.signal),
+            );
+        });
         this.tail = task
             .catch((error: unknown) => {
                 if (this.purged.has(job.jobId)) return;
@@ -100,6 +121,17 @@ export class ViewBuildRunner {
                 });
             })
             .finally(() => this.controllers.delete(job.jobId));
+    }
+
+    private async blockInformationalJob(job: ViewBuildJob): Promise<void> {
+        await this.owner.update(job.corpusId, job.jobId, (current) => {
+            current.state = "failed";
+            for (const result of current.results) {
+                result.state = "blocked";
+                result.reason =
+                    "An explicit bounded request budget is required before informational inference";
+            }
+        });
     }
 
     public assertCapacity(): void {
@@ -242,13 +274,16 @@ export class ViewBuildRunner {
         result: ViewBuildTargetResult,
         signal: AbortSignal,
     ): Promise<void> {
+        const timeoutMs = informationalPipeline(result.snapshot.pipeline)
+            ? (this.informationalLimits?.elapsedMs ?? 120_000)
+            : 300_000;
         const timer = setTimeout(
             () =>
                 this.cancel(
                     job.jobId,
-                    "Evidence-first synthesis exceeded 300 second limit",
+                    `Evidence-first synthesis exceeded ${timeoutMs / 1000} second limit`,
                 ),
-            300_000,
+            timeoutMs,
         );
         let validation = false;
         try {
@@ -266,7 +301,24 @@ export class ViewBuildRunner {
                 return;
             }
             validation = true;
-            const evidence = await this.prepareInventory(job, result, signal);
+            const informational = informationalPipeline(
+                result.snapshot.pipeline,
+            );
+            if (
+                informational &&
+                (await this.owner.unchanged?.(result.snapshot))
+            ) {
+                await this.result(
+                    job,
+                    result.viewId,
+                    "skipped",
+                    "Unchanged indexed evidence and definition; no synthesis required",
+                );
+                return;
+            }
+            const evidence = informational
+                ? undefined
+                : await this.prepareInventory(job, result, signal);
             const inventory = evidence?.inventory;
             validation = false;
             await this.result(
@@ -298,13 +350,18 @@ export class ViewBuildRunner {
                 "Checking actual artifact coverage, exclusions and semantic support",
                 candidate.coverage ? { coverage: candidate.coverage } : {},
             );
-            validateSupport(
-                candidate,
-                await abortable(
-                    this.adapter.validate(result.snapshot, candidate, signal),
-                    signal,
-                ),
-            );
+            if (!informational)
+                validateSupport(
+                    candidate,
+                    await abortable(
+                        this.adapter.validate(
+                            result.snapshot,
+                            candidate,
+                            signal,
+                        ),
+                        signal,
+                    ),
+                );
             validation = false;
             const current = await this.owner.current(result.snapshot);
             const { output, conflicts } = mergeView(
@@ -316,16 +373,24 @@ export class ViewBuildRunner {
             if (!conflicts.length) {
                 validation = true;
                 validateConstructedGuide(result.snapshot, output);
-                const support = await abortable(
-                    this.adapter.validate(result.snapshot, output, signal),
-                    signal,
-                );
-                validateSupport(output, support);
-                proof = publicationProof(
-                    result.snapshot.fingerprint,
-                    output,
-                    support,
-                );
+                const support = informational
+                    ? undefined
+                    : await abortable(
+                          this.adapter.validate(
+                              result.snapshot,
+                              output,
+                              signal,
+                          ),
+                          signal,
+                      );
+                if (support) {
+                    validateSupport(output, support);
+                    proof = publicationProof(
+                        result.snapshot.fingerprint,
+                        output,
+                        support,
+                    );
+                }
             }
             validation = false;
             signal.throwIfAborted();
@@ -398,11 +463,11 @@ export async function abortable<T>(
     work: Promise<T>,
     signal: AbortSignal,
 ): Promise<T> {
-    signal.throwIfAborted();
     let abort: (() => void) | undefined;
     const cancelled = new Promise<never>((_resolve, reject) => {
         abort = () => reject(signal.reason);
-        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+        else signal.addEventListener("abort", abort, { once: true });
     });
     try {
         return await Promise.race([work, cancelled]);

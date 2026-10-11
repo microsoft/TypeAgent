@@ -65,7 +65,40 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             expectedVersion: target.expectedVersion,
             expectedHead: request.expectedHead,
             definition: target.definition,
-            content: selectionValidationContent(target.definition?.kind),
+            content: target.definition?.wiki
+                ? {
+                      kind: "wiki",
+                      construction: "informational-wiki-v1",
+                      title: "Selection validation",
+                      summary:
+                          "Limited summary: selected indexed fragments only; validation",
+                      sections: [
+                          {
+                              id: target.definition.viewId,
+                              role: "page",
+                              heading: "Selection validation",
+                              body: "Selection validation",
+                              details: {
+                                  kind: "page",
+                                  construction: "informational-wiki-v1",
+                                  taxonomy: "concept",
+                                  note: "",
+                                  mergedPageIds: [],
+                              },
+                          },
+                      ],
+                      index: [
+                          {
+                              pageId: target.definition.viewId,
+                              title: "Selection validation",
+                              taxonomy: "concept",
+                          },
+                      ],
+                      citations: [],
+                  }
+                : target.definition?.projectSummary
+                  ? projectSelectionContent(target.definition)
+                  : selectionValidationContent(target.definition?.kind),
             relationships: [],
         });
         const id = target.definition.viewId;
@@ -85,6 +118,22 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             );
     }
 
+    function projectSelectionContent(
+        _definition: ViewBuildRequest["targets"][number]["definition"],
+    ): DerivedViewContent {
+        const content = emptyProjectBrief();
+        content.construction = "informational-project-summary-v1";
+        content.summary =
+            "Limited summary: selected indexed fragments only; validation";
+        for (const section of content.sections) {
+            if ("inventoryIds" in section.details)
+                section.details.inventoryIds = [];
+            if ("items" in section.details) section.details.items = [];
+            if (section.details.kind === "owners")
+                section.details.assignments = [];
+        }
+        return content;
+    }
     function selectionValidationContent(kind: ViewKind): DerivedViewContent {
         if (kind === "wiki") return emptyWiki();
         if (kind === "projectBrief") return emptyProjectBrief();

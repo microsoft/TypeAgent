@@ -37,6 +37,10 @@ export function derivedDefinitionInput(
         ...(version.definition.maintenance
             ? { maintenance: version.definition.maintenance }
             : {}),
+        ...(version.definition.wiki ? { wiki: version.definition.wiki } : {}),
+        ...(version.definition.projectSummary
+            ? { projectSummary: version.definition.projectSummary }
+            : {}),
     };
 }
 
@@ -49,6 +53,8 @@ export function materializeDefinition(
             definition.kind,
             definition.selector,
             definition.maintenance,
+            definition.wiki,
+            definition.projectSummary,
         ]);
     return {
         ...structuredClone(input),

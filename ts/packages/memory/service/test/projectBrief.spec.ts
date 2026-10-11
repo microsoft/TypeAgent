@@ -653,7 +653,7 @@ describe("project brief configured adapter, publication and lifecycle", () => {
         });
     });
     test("human save cannot relabel unknown ownership as unassigned", async () => {
-        expect((await build()).results[0].state).toBe("draft");
+        expect((await build()).results[0]).toMatchObject({ state: "draft" });
         const { view, content } = await current();
         const edited = structuredClone(content);
         const owners = edited.sections.find(
@@ -704,7 +704,9 @@ describe("project brief configured adapter, publication and lifecycle", () => {
                 }
                 return value;
             };
-            expect((await build()).results[0].state).toBe("draft");
+            const built = await build();
+            expect(built.results[0].reason).toContain("Validated draft");
+            expect(built.results[0].state).toBe("draft");
             const edited = structuredClone((await current()).content);
             expect(
                 edited.sections.find((section) => section.role === "owners")

@@ -335,13 +335,14 @@ function validateStatus(
                 `Project ${kind} unknown/not-applicable state differs from checked evidence`,
             );
     }
+
     if (
         details.project !== "unknown" &&
         !fieldEvidence(
             items,
             "projectStatus",
             new RegExp(
-                `\\bproject(?: status)?\\s*(?:is|:)?\\s*${details.project}\\b`,
+                `\\bproject(?: status)?\\s*(?:is|as|:)?\\s*${details.project}\\b`,
                 "i",
             ),
         )
@@ -356,13 +357,47 @@ function validateStatus(
             items,
             "incidentStatus",
             new RegExp(
-                `\\bincident(?: status)?\\s*(?:is|:)?\\s*${details.incident}\\b`,
+                `\\bincident(?: status)?\\s*(?:is|as|:)?\\s*${details.incident}\\b`,
                 "i",
             ),
         )
     )
         throw new Error("Incident status requires explicit incident evidence");
     validateCapacity(details.capacity, items);
+}
+
+export function projectFieldStates(
+    items: ViewInventoryItem[],
+    kind: "projectStatus" | "incidentStatus" | "capacity",
+    states: readonly string[],
+): string[] {
+    return states.filter((state) => {
+        if (kind === "capacity") {
+            const blocked = items.some(
+                (item) => item.kind === kind && item.status === "blocked",
+            );
+            if (blocked) return state === "pendingOwnerReview";
+            if (state === "pendingOwnerReview") return false;
+        }
+        if (state === "unknown" || state === "notApplicable")
+            return items.some(
+                (item) => item.kind === kind && item.status === state,
+            );
+        const field =
+            kind === "projectStatus"
+                ? "project"
+                : kind === "incidentStatus"
+                  ? "incident"
+                  : "capacity";
+        return fieldEvidence(
+            items,
+            kind,
+            new RegExp(
+                `\\b${field}(?: ${field === "capacity" ? "validation" : "status"})?\\s*(?:is|as|:)?\\s*${state}\\b`,
+                "i",
+            ),
+        );
+    });
 }
 
 function validateCapacity(
@@ -374,7 +409,7 @@ function validateCapacity(
         !fieldEvidence(
             items,
             "capacity",
-            /\bcapacity(?: validation)?\s*(?:is|:)?\s*validated\b/i,
+            /\bcapacity(?: validation)?\s*(?:is|as|:)?\s*validated\b/i,
         )
     )
         throw new Error(
