@@ -21,6 +21,7 @@ import { authoredRelationships } from "../src/viewRelationships.js";
 import { wikiIndex } from "../src/viewContent.js";
 import { reserveSerializedRequest, type ChatModel } from "@typeagent/aiclient";
 import { TypedViewStore } from "../src/viewStore.js";
+import { ViewBuildStaleError } from "../src/viewBuilds.js";
 
 async function waitForViewBuild(
     service: FileMemoryService,
@@ -202,13 +203,27 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
         corpusId: string,
         operation: "update" | "pause" = "update",
     ) {
-        const snapshot = await service.listViews(corpusId);
-        const result = await service.maintainViews({
-            corpusId,
-            expectedHead: snapshot.head,
-            family: "wiki",
-            operation,
-        });
+        const maintain = async () => {
+            for (let attempt = 0; attempt < 10; attempt++) {
+                const snapshot = await service.listViews(corpusId);
+                try {
+                    return await service.maintainViews({
+                        corpusId,
+                        expectedHead: snapshot.head,
+                        family: "wiki",
+                        operation,
+                    });
+                } catch (error) {
+                    if (
+                        !(error instanceof ViewBuildStaleError) ||
+                        attempt === 9
+                    )
+                        throw error;
+                }
+            }
+            throw new Error("Mock family optimistic head retries exhausted");
+        };
+        const result = await maintain();
         if (result.job) {
             const job = await waitForViewBuild(service, result.job);
             expect(job.state).toBe("complete");
@@ -304,6 +319,48 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             sourceId: source.sourceId,
             revisionId: source.activeRevisionId,
         }));
+        const obsolete = {
+            corpusId,
+            expectedHead: (await service.listViews(corpusId)).head,
+            targets: [
+                {
+                    expectedVersion: 0,
+                    definition: {
+                        viewId: "obsolete-project",
+                        kind: "projectBrief" as const,
+                        selector: { kind: "sources" as const, sources },
+                    },
+                },
+            ],
+        };
+        await expect(service.buildViews(obsolete)).rejects.toThrow(
+            "Project construction requires informational-project-summary-v1",
+        );
+        const unsupported = {
+            ...obsolete,
+            targets: [
+                {
+                    ...obsolete.targets[0],
+                    definition: {
+                        ...obsolete.targets[0].definition,
+                        projectSummary: {
+                            construction:
+                                "informational-project-summary-v1" as const,
+                            query: "Acquisition",
+                            aliases: [],
+                            excludedSourceIds: [],
+                        },
+                    },
+                },
+            ],
+        };
+        Object.assign(unsupported.targets[0].definition.projectSummary, {
+            construction: "project-brief-v1",
+        });
+        await expect(service.buildViews(unsupported)).rejects.toThrow(
+            "Invalid informational project-summary selector",
+        );
+        await update(corpusId, "pause");
         const job = await waitForViewBuild(
             service,
             await service.buildViews({
@@ -337,6 +394,22 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             kind: "projectBrief",
             construction: "informational-project-summary-v1",
         });
+        expect(job.results[0].snapshot.pipeline).toBe(
+            "informational-project-summary-v1",
+        );
+        expect(job.results[0].inventory).toBeUndefined();
+        expect(job.results[0].coverage).toBeUndefined();
+        for (const citation of view.content.citations)
+            expect(
+                (
+                    await service.getSourceContent({
+                        corpusId,
+                        sourceId: citation.sourceId,
+                        revisionId: citation.revisionId,
+                        indexedLocator: citation.locator,
+                    })
+                ).content,
+            ).toBe(citation.excerpt);
         expect(
             view.content.citations.every(
                 (citation) => citation.sourceId === "relevant",
@@ -353,11 +426,47 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
                 })
             )?.indexState,
         ).toBe("ready");
+        const editedContent = structuredClone(view.content);
+        editedContent.title = "Human project title";
+        const status = editedContent.sections.find(
+            (section) => section.role === "status",
+        )?.details;
+        if (status?.kind !== "status")
+            throw new Error("Project status missing");
+        status.project = "blocked";
+        await service.close();
+        service = open();
+        await service.saveViewDraft({
+            corpusId,
+            viewId: view.viewId,
+            expectedVersion: view.version,
+            expectedHead: (await service.listViews(corpusId)).head,
+            definition: {
+                viewId: view.viewId,
+                kind: view.definition.kind,
+                selector: view.definition.selector,
+                projectSummary: {
+                    ...view.definition.projectSummary!,
+                    excludedSourceIds: ["irrelevant"],
+                },
+            },
+            content: editedContent,
+            relationships: authoredRelationships(view),
+        });
+        const edited = (await service.getView({
+            corpusId,
+            viewId: view.viewId,
+        }))!;
         await service.close();
         service = open();
         expect(
             (await service.getView({ corpusId, viewId: view.viewId }))?.content,
-        ).toEqual(view.content);
+        ).toEqual(editedContent);
+        expect(
+            (await service.getView({ corpusId, viewId: view.viewId }))
+                ?.definition.projectSummary?.excludedSourceIds,
+        ).toEqual(["irrelevant"]);
+        expect(edited.edits?.length).toBeGreaterThan(0);
     });
 
     test("normal source answer consumes exact expanded fragments and returns resolvable anchors (mock model)", async () => {

@@ -22,12 +22,29 @@ const {
         ).href
     );
 const {
-    projectBriefTestAnswer,
     projectSources,
-}: typeof import("../../service/dist/test/projectBriefTestModel.js") =
+}: typeof import("../../service/dist/test/projectTestSources.js") =
     await import(
         new URL(
-            "../../../service/dist/test/projectBriefTestModel.js",
+            "../../../service/dist/test/projectTestSources.js",
+            import.meta.url,
+        ).href
+    );
+const {
+    FakeIndexedCorpusIndex,
+}: typeof import("../../service/dist/test/fakeIndexedCorpusIndex.js") =
+    await import(
+        new URL(
+            "../../../service/dist/test/fakeIndexedCorpusIndex.js",
+            import.meta.url,
+        ).href
+    );
+const {
+    projectSummaryTestResponse,
+}: typeof import("../../service/dist/test/informationalProjectTestModel.js") =
+    await import(
+        new URL(
+            "../../../service/dist/test/informationalProjectTestModel.js",
             import.meta.url,
         ).href
     );
@@ -50,6 +67,11 @@ const {
     wikiTestAnswer,
 }: typeof import("../../service/dist/test/wikiTestModel.js") = await import(
     new URL("../../../service/dist/test/wikiTestModel.js", import.meta.url).href
+);
+const {
+    createConfiguredViewSynthesisAdapter,
+}: typeof import("../../service/dist/viewSynthesis.js") = await import(
+    new URL("../../../service/dist/viewSynthesis.js", import.meta.url).href
 );
 
 test.each([
@@ -87,15 +109,19 @@ test.each([
                         "Expected configured strict evidence-first request",
                     );
                 stages.push(schema.name);
-                const answer = (
-                    kind === "wiki"
-                        ? wikiTestAnswer
-                        : kind === "timeline"
-                          ? timelineTestAnswer
-                          : kind === "projectBrief"
-                            ? projectBriefTestAnswer
-                            : inventoryTestAnswer
-                )(schema.name, JSON.parse(user.content));
+                const answer =
+                    kind === "projectBrief"
+                        ? projectSummaryTestResponse(
+                              JSON.parse(user.content).fragments,
+                          )
+                        : (kind === "wiki"
+                              ? wikiTestAnswer
+                              : kind === "timeline"
+                                ? timelineTestAnswer
+                                : inventoryTestAnswer)(
+                              schema.name,
+                              JSON.parse(user.content),
+                          );
                 response.writeHead(200, { "content-type": "application/json" });
                 response.end(
                     JSON.stringify({
@@ -150,9 +176,31 @@ test.each([
         const open = () =>
             new FileMemoryService(root, {
                 viewDrafts: true,
+                ...(kind === "projectBrief"
+                    ? {
+                          informationalBudget: {
+                              contextTokens: 21000,
+                              inputTokens: 16000,
+                              outputTokens: 4000,
+                              safetyTokens: 1000,
+                              chatAttempts: 4,
+                              reservedTokens: 64000,
+                              embeddingAttempts: 8,
+                              elapsedMs: 60000,
+                              tokenizer: "synthetic-loopback",
+                              countTokens: (text: string) =>
+                                  Math.ceil(text.length / 3),
+                          },
+                      }
+                    : {}),
                 viewModelEndpoint: `openai:${endpoint}`,
+                viewSynthesisAdapter: createConfiguredViewSynthesisAdapter(
+                    `openai:${endpoint}`,
+                ),
                 indexFactory: (_id, directory) =>
-                    new FakeSemanticCorpusIndex(directory),
+                    kind === "projectBrief"
+                        ? new FakeIndexedCorpusIndex(directory)
+                        : new FakeSemanticCorpusIndex(directory),
             });
         try {
             const malformed = await fetch(
@@ -210,6 +258,17 @@ test.each([
                         definition: {
                             viewId: "guide",
                             kind,
+                            ...(kind === "projectBrief"
+                                ? {
+                                      projectSummary: {
+                                          construction:
+                                              "informational-project-summary-v1" as const,
+                                          query: "Payments",
+                                          aliases: [],
+                                          excludedSourceIds: [],
+                                      },
+                                  }
+                                : {}),
                             selector:
                                 kind === "timeline"
                                     ? {
@@ -236,23 +295,29 @@ test.each([
                     throw new Error("Missing durable MCP inventory receipt");
                 job = current;
             }
-            expect(job.results[0]).toMatchObject({ state: "searchable" });
+            expect(job.results[0]).toMatchObject({
+                state: kind === "projectBrief" ? "draft" : "searchable",
+            });
             expect(job.state).toBe("complete");
-            expect(stages).toEqual([
-                "memory_source_fact_inventory",
-                "memory_source_inventory_check",
-                kind === "wiki"
-                    ? "memory_wiki_construction"
-                    : kind === "timeline"
-                      ? "memory_timeline_construction"
-                      : kind === "projectBrief"
-                        ? "memory_project_brief_construction"
-                        : "memory_inventory_guide_construction",
-                "memory_inventory_artifact_support",
-                "memory_inventory_artifact_support",
-            ]);
+            expect(stages).toEqual(
+                kind === "projectBrief"
+                    ? ["informational_project_summary"]
+                    : [
+                          "memory_source_fact_inventory",
+                          "memory_source_inventory_check",
+                          kind === "wiki"
+                              ? "memory_wiki_construction"
+                              : kind === "timeline"
+                                ? "memory_timeline_construction"
+                                : "memory_inventory_guide_construction",
+                          "memory_inventory_artifact_support",
+                          "memory_inventory_artifact_support",
+                      ],
+            );
             const result = job.results[0];
-            expect(result.state).toBe("searchable");
+            expect(result.state).toBe(
+                kind === "projectBrief" ? "draft" : "searchable",
+            );
             const policy = await client.getViewPublicationPolicy(
                 corpus.corpusId,
             );
@@ -284,18 +349,42 @@ test.each([
                     })
                 ).publishedRevisionId,
             ).toBe(result.revisionId);
-            expect(result.inventory!.items[0].citations[0].revisionId).toBe(
-                source.revisionId,
-            );
-            expect(result.inventoryAudit!.supported).toBe(true);
-            expect(
-                result.coverage!.items.map((item) => item.excerpt).join("\n"),
-            ).toContain("pending owner review");
-            expect(result.coverage!.reuseEligibility).toBe(
-                kind !== "troubleshootingGuide"
-                    ? "requiresFreshEvidence"
-                    : "diagnosticOnly",
-            );
+            if (kind === "projectBrief") {
+                expect(result.snapshot.pipeline).toBe(
+                    "informational-project-summary-v1",
+                );
+                expect(result.inventory).toBeUndefined();
+                expect(result.inventoryAudit).toBeUndefined();
+                expect(result.coverage).toBeUndefined();
+                const view = (await client.listViews(corpus.corpusId)).views[0];
+                expect(view.content.citations[0].locator).toMatch(/^indexed:/);
+                const citation = view.content.citations[0];
+                expect(
+                    (
+                        await client.getSourceContent({
+                            corpusId: corpus.corpusId,
+                            sourceId: citation.sourceId,
+                            revisionId: citation.revisionId,
+                            indexedLocator: citation.locator,
+                        })
+                    ).content,
+                ).toBe(citation.excerpt);
+            } else {
+                expect(result.inventory!.items[0].citations[0].revisionId).toBe(
+                    source.revisionId,
+                );
+                expect(result.inventoryAudit!.supported).toBe(true);
+                expect(
+                    result
+                        .coverage!.items.map((item) => item.excerpt)
+                        .join("\n"),
+                ).toContain("pending owner review");
+                expect(result.coverage!.reuseEligibility).toBe(
+                    kind !== "troubleshootingGuide"
+                        ? "requiresFreshEvidence"
+                        : "diagnosticOnly",
+                );
+            }
             const view = (await client.listViews(corpus.corpusId)).views[0];
             expect(view.generation!.inventory).toEqual(result.inventory);
             expect(view.generation!.coverage).toEqual(result.coverage);
@@ -331,7 +420,7 @@ test.each([
                 expectedHead: latest.head!,
             });
             expect(retry.intent).toEqual(publication.intent);
-            expect(stages).toHaveLength(5);
+            expect(stages).toHaveLength(kind === "projectBrief" ? 1 : 5);
             if (kind === "timeline") {
                 const canonical = (
                     await client.appendEvent({
@@ -447,6 +536,11 @@ test.each([
                     viewId: "guide",
                     kind,
                     selector: edited.definition.selector,
+                    ...(kind === "projectBrief"
+                        ? {
+                              projectSummary: edited.definition.projectSummary,
+                          }
+                        : {}),
                 },
                 content: { ...edited.content, title: humanTitle },
                 relationships: authored,
@@ -471,7 +565,8 @@ test.each([
                 draftSearch.some(
                     (match) => match.view.revisionId === draft.revisionId,
                 ),
-            ).toBe(false);
+            ).toBe(kind === "projectBrief");
+            if (kind === "projectBrief") return;
             async function rebuild(revisionId: string) {
                 if (!client) throw new Error("Missing offline client");
                 const snapshot = await client.listViews(corpus.corpusId);

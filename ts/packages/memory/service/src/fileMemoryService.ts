@@ -2823,6 +2823,8 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         }
         return this.enqueueWrite(request.corpusId, async () => {
             const runtime = await this.getCorpusRuntime(request.corpusId);
+            if (informationalWiki(request.content))
+                await this.ensureDocumentIndex(request.corpusId, runtime);
             for (const selected of request.definition.selector.sources) {
                 const source = runtime.manifest.sources.find(
                     (item) => item.sourceId === selected.sourceId,
@@ -3935,9 +3937,7 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                     ? ("timeline-v1" as const)
                     : target.definition.kind === "wiki"
                       ? ("wiki-v1" as const)
-                      : target.definition.kind === "projectBrief"
-                        ? ("project-brief-v1" as const)
-                        : ("troubleshooting-v1" as const),
+                      : ("troubleshooting-v1" as const),
             model: this.viewAdapter.identity,
             publicationPolicy: effectiveViewPublicationPolicy(
                 await this.viewStore.getViewPublicationPolicy(corpusId),

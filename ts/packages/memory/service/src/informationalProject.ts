@@ -6,11 +6,7 @@ import {
     hydrateInformational,
     informationalSchema,
 } from "./informationalWiki.js";
-import {
-    projectBriefRoles,
-    projectDetailIds,
-    parseProjectBriefDetails,
-} from "./projectBrief.js";
+import { projectBriefRoles, parseProjectBriefDetails } from "./projectBrief.js";
 import { parseIndexedLocator } from "./indexedFragments.js";
 import { viewSourceKey } from "./viewContent.js";
 import { evidenceRecord, evidenceText } from "./viewSynthesisEvidence.js";
@@ -34,7 +30,13 @@ export function informationalProject(content: {
 
 export function validateProjectSelector(definition: ViewDefinitionInput): void {
     const selector = definition.projectSummary;
-    if (!selector) return;
+    if (!selector) {
+        if (definition.kind === "projectBrief")
+            throw new Error(
+                "Project construction requires informational-project-summary-v1",
+            );
+        return;
+    }
     if (
         definition.kind !== "projectBrief" ||
         definition.maintenance ||
@@ -148,13 +150,12 @@ export function hydrateProjectSummary(
         project: raw.projectState,
         incident: raw.incidentState,
         capacity: raw.capacityState,
-        inventoryIds: [],
     });
     const details: Record<
         (typeof projectBriefRoles)[number],
         ProjectBriefDetails
     > = {
-        goalsScope: { kind: "goalsScope", inventoryIds: [] },
+        goalsScope: { kind: "goalsScope" },
         owners: { kind: "owners", assignments: [] },
         status,
         milestones: { kind: "milestones", items: [] },
@@ -164,7 +165,6 @@ export function hydrateProjectSummary(
             kind: "context",
             asOf: null,
             basis: "unknown",
-            inventoryIds: [],
         },
     };
     const content: ProjectBriefContent = {
@@ -213,9 +213,9 @@ export function validateInformationalProjectContent(
         throw new Error("Invalid informational project-summary content");
     for (const section of content.sections) {
         const details = parseProjectBriefDetails(section.details);
-        if (details.kind !== section.role || projectDetailIds(details).length)
+        if (details.kind !== section.role)
             throw new Error(
-                "Informational summaries cannot contain legacy inventory witnesses",
+                "Project summary section role and typed details must match",
             );
     }
 }

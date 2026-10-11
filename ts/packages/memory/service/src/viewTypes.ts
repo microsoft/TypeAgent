@@ -130,11 +130,11 @@ export interface TimelineEvidenceRecord {
     citation: ViewCitation;
 }
 export type ProjectBriefDetails =
-    | { kind: "goalsScope"; inventoryIds: string[] }
+    | { kind: "goalsScope" }
     | {
           kind: "owners";
           assignments: Array<{
-              inventoryId: string;
+              id: string;
               responsibility: string;
               state: "known" | "unknown" | "unassigned";
               owner: string | null;
@@ -149,12 +149,11 @@ export type ProjectBriefDetails =
               | "pendingOwnerReview"
               | "validated"
               | "notApplicable";
-          inventoryIds: string[];
       }
     | {
           kind: "milestones";
           items: Array<{
-              inventoryId: string;
+              id: string;
               status:
                   | "proposed"
                   | "confirmed"
@@ -167,14 +166,14 @@ export type ProjectBriefDetails =
     | {
           kind: "decisions";
           items: Array<{
-              inventoryId: string;
+              id: string;
               status: ViewFactStatus;
           }>;
       }
     | {
           kind: "risks";
           items: Array<{
-              inventoryId: string;
+              id: string;
               status: "open" | "blocked" | "resolved" | "unknown";
           }>;
       }
@@ -182,7 +181,6 @@ export type ProjectBriefDetails =
           kind: "context";
           asOf: string | null;
           basis: "recordEvidence" | "unknown";
-          inventoryIds: string[];
       };
 export type ProjectBriefSection = Omit<ViewSection, "role" | "details"> & {
     role: ProjectBriefDetails["kind"];
@@ -190,7 +188,7 @@ export type ProjectBriefSection = Omit<ViewSection, "role" | "details"> & {
 };
 export interface ProjectBriefContent {
     kind: "projectBrief";
-    construction?: "informational-project-summary-v1";
+    construction: "informational-project-summary-v1";
     title: string;
     summary?: string;
     sections: ProjectBriefSection[];
@@ -458,7 +456,6 @@ export interface ViewBuildSnapshot {
     selectionFingerprint?: string;
     pipeline:
         | "troubleshooting-v1"
-        | "project-brief-v1"
         | "timeline-v1"
         | "wiki-v1"
         | "informational-wiki-v1"

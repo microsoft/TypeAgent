@@ -12,6 +12,7 @@ import { assertViewIdentifier } from "./viewContent.js";
 import { validateIsoTimestamp } from "./timestampValidation.js";
 import { emptyProjectBrief } from "./projectBrief.js";
 import { emptyWiki } from "./wiki.js";
+import { validateProjectSelector } from "./informationalProject.js";
 
 export function parseViewDraftCapability(value: string | undefined): boolean {
     if (value === undefined || value === "true") return true;
@@ -59,6 +60,7 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             )
         )
             throw new Error("Unsupported build target");
+        validateProjectSelector(target.definition);
         validateViewDraft({
             corpusId: request.corpusId,
             viewId: target.definition?.viewId,
@@ -97,7 +99,7 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
                       citations: [],
                   }
                 : target.definition?.projectSummary
-                  ? projectSelectionContent(target.definition)
+                  ? emptyProjectBrief()
                   : selectionValidationContent(target.definition?.kind),
             relationships: [],
         });
@@ -118,25 +120,8 @@ export function validateBuildRequest(request: ViewBuildRequest): void {
             );
     }
 
-    function projectSelectionContent(
-        _definition: ViewBuildRequest["targets"][number]["definition"],
-    ): DerivedViewContent {
-        const content = emptyProjectBrief();
-        content.construction = "informational-project-summary-v1";
-        content.summary =
-            "Limited summary: selected indexed fragments only; validation";
-        for (const section of content.sections) {
-            if ("inventoryIds" in section.details)
-                section.details.inventoryIds = [];
-            if ("items" in section.details) section.details.items = [];
-            if (section.details.kind === "owners")
-                section.details.assignments = [];
-        }
-        return content;
-    }
     function selectionValidationContent(kind: ViewKind): DerivedViewContent {
         if (kind === "wiki") return emptyWiki();
-        if (kind === "projectBrief") return emptyProjectBrief();
         if (kind === "timeline")
             return {
                 kind: "timeline",

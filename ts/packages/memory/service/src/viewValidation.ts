@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { projectBriefRoles, validateProjectBrief } from "./projectBrief.js";
+import { projectBriefRoles } from "./projectBrief.js";
 import { validateTimeline } from "./timeline.js";
 import {
     assertViewIdentifier,
@@ -393,9 +393,7 @@ function validateDraftContent(
         request.content.kind,
     );
     if (request.content.kind === "projectBrief") {
-        if (informationalProject(request.content))
-            validateInformationalProjectContent(request.content);
-        else validateProjectBrief(request.content);
+        validateInformationalProjectContent(request.content);
     }
     if (request.content.kind === "timeline") validateTimeline(request.content);
     if (request.content.kind === "wiki") validateWiki(request.content);
