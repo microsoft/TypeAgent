@@ -628,7 +628,7 @@ export function mountMemoryHubViews(
         sourceHost.append(
             rbNode(
                 "p",
-                "Choose sources relevant to the views you want. Missing facts stay unknown; selecting a source does not guarantee a useful view.",
+                "Choose sources relevant to the views you want. Project summaries can retrieve by query from all ready sources without manual selection; a selection optionally narrows that scope. Missing facts stay unknown.",
             ),
         );
         for (const source of sources) {
@@ -750,7 +750,7 @@ export function mountMemoryHubViews(
             "Indexed project summary query",
         );
         projectQuery.placeholder =
-            "Project name/query for bounded indexed summary (blank: legacy inventory)";
+            "Required project name/query for bounded indexed summary";
         projectQuery.value = rebuilding?.definition.projectSummary?.query ?? "";
         container.replaceChildren(
             kindPicker,
@@ -790,14 +790,14 @@ export function mountMemoryHubViews(
                                 "The view changed; refresh it before rebuilding",
                             );
                     }
-                    const sources = [...selected].map(
+                    const selectedSources = [...selected].map(
                         ([sourceId, revisionId]) => ({
                             sourceId,
                             revisionId,
                         }),
                     );
                     const timelineSources = selectedKinds.has("timeline")
-                        ? await recordSources(corpusId, sources)
+                        ? await recordSources(corpusId, selectedSources)
                         : [];
                     const bounds = viewBuildBounds(
                         cutoff.value,
@@ -808,11 +808,17 @@ export function mountMemoryHubViews(
                     const buildTargets = createViewBuildTargets(
                         selectedKinds,
                         targets,
-                        sources,
+                        selectedSources,
                         timelineSources,
                         selectedEvents,
                         rebuilding,
                         projectQuery.value,
+                        selectedSources.length
+                            ? selectedSources
+                            : sources.map(({ sourceId, revisionId }) => ({
+                                  sourceId,
+                                  revisionId,
+                              })),
                     );
                     if (
                         current !== sequence ||

@@ -201,7 +201,7 @@ export function createProjectBriefEditor(
     root.append(
         rbNode(
             "p",
-            "Project briefs are reading artifacts, not executable guides. Unknown owners and dates are explicit. Edits never change original sources and require exact-artifact evidence checking before publication.",
+            "Project briefs are informational reading artifacts, not executable guides. Unknown owners and dates are explicit. Edits never change original sources; citations open the selected indexed evidence.",
         ),
         text(
             "Project brief title",

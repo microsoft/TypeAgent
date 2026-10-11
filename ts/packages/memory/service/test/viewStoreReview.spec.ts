@@ -12,6 +12,7 @@ describe("project brief item deletion merge regressions", () => {
     function fixture() {
         const content: ProjectBriefContent = {
             kind: "projectBrief",
+            construction: "informational-project-summary-v1",
             title: "Project risks",
             citations: [],
             sections: [
@@ -23,8 +24,8 @@ describe("project brief item deletion merge regressions", () => {
                     details: {
                         kind: "risks",
                         items: [
-                            { inventoryId: "retained", status: "open" },
-                            { inventoryId: "removed", status: "open" },
+                            { id: "retained", status: "open" },
+                            { id: "removed", status: "open" },
                         ],
                     },
                 },
@@ -43,6 +44,12 @@ describe("project brief item deletion merge regressions", () => {
                 viewId: "brief",
                 revisionId: "definition",
                 kind: "projectBrief",
+                projectSummary: {
+                    construction: "informational-project-summary-v1",
+                    query: "Project risks",
+                    aliases: [],
+                    excludedSourceIds: [],
+                },
                 selector: { kind: "sources", sources: [] },
             },
             content: structuredClone(content),
@@ -58,7 +65,7 @@ describe("project brief item deletion merge regressions", () => {
         const candidate: ViewSynthesisOutput = {
             content: structuredClone(content),
             relationships: [],
-            outcome: "diagnosticOnly",
+            outcome: "projectSummary",
             missingEvidence: [],
         };
         return { current, human, candidate };
@@ -73,13 +80,13 @@ describe("project brief item deletion merge regressions", () => {
             const edited = deletingSide === "generated" ? human : generated;
             deleted.sections[0].details = {
                 kind: "risks",
-                items: [{ inventoryId: "retained", status: "open" }],
+                items: [{ id: "retained", status: "open" }],
             };
             edited.sections[0].details = {
                 kind: "risks",
                 items: [
-                    { inventoryId: "retained", status: "blocked" },
-                    { inventoryId: "removed", status: "open" },
+                    { id: "retained", status: "blocked" },
+                    { id: "removed", status: "open" },
                 ],
             };
             current.edits = recordViewEdits(current, human, [], "human");
@@ -88,7 +95,7 @@ describe("project brief item deletion merge regressions", () => {
             expect(merged.conflicts).toEqual([]);
             expect(merged.output.content.sections[0].details).toEqual({
                 kind: "risks",
-                items: [{ inventoryId: "retained", status: "blocked" }],
+                items: [{ id: "retained", status: "blocked" }],
             });
         },
     );
@@ -102,13 +109,13 @@ describe("project brief item deletion merge regressions", () => {
             const edited = deletingSide === "generated" ? human : generated;
             deleted.sections[0].details = {
                 kind: "risks",
-                items: [{ inventoryId: "retained", status: "open" }],
+                items: [{ id: "retained", status: "open" }],
             };
             edited.sections[0].details = {
                 kind: "risks",
                 items: [
-                    { inventoryId: "retained", status: "open" },
-                    { inventoryId: "removed", status: "blocked" },
+                    { id: "retained", status: "open" },
+                    { id: "removed", status: "blocked" },
                 ],
             };
             current.edits = recordViewEdits(current, human, [], "human");

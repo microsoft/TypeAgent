@@ -31,7 +31,6 @@ import {
     hydrateInventoryConstruction,
     inventoryCoverage,
 } from "./viewInventoryCoverage.js";
-import { validateProjectBriefEvidence } from "./projectBrief.js";
 import {
     validateTimelineEvidence,
     validateTimelineCorrections,
@@ -118,24 +117,6 @@ For each decision, itemKeys must be the union of items whose citations cover tha
 metadata has no itemKeys and is limited to a passage containing only the exact source title/identity (optional Markdown heading).
 Other structural headings may be grounded background items, never a way to exclude substantive facts.
 outsideScope is allowed only with a background inventory witness and specific bounded explanation.
-For projectBrief select projectStatus, incidentStatus, capacity, owner, milestone, decision and risk facts separately.
-Owner statements retain the exact recorded responsibility phrase and capitalization from their cited passages,
-so structured responsibilities can use that same phrase without inventing a role or person.
-projectAsOf is a confirmed record assertion of project knowledge as-of, never source capture/modified metadata.
-An as-of cutoff does not establish occurredAt or learnedAt for that assertion or other facts.
-Leave those fields empty unless the evidence explicitly records occurrence or learning, respectively.
-Use explicit unknown ownership, dates and project status. A closed incident is not a completed project.
-For each of projectStatus, incidentStatus and capacity, retain an atomic fact establishing its explicit state,
-or an unknown-status fact citing the source passage that bounds what is known. "Broader completion is not established"
-is projectStatus unknown, not evidence of project blocked/active/complete. Capacity blocked is a distinct state,
-not project blocked. Do not classify a requirement or rollout gate as a milestone without a recorded milestone.
-Separate an accountable owner role from a named or unknown assigned person.
-A request to a documentation owner is not confirmation of an identified assignee. An owner fact is unknown unless
-the source explicitly assigns a recorded person or accountable role; do not treat an article or generic reference
-as a person's name. A risk mention without an explicit lifecycle state is risk status unknown, not confirmed open.
-Security facts such as decoding not proving a signature or disabling authorization hiding a boundary are guards,
-not risk lifecycle assertions. Use prerequisite/authority/background as appropriate rather than a confirmed risk.
-Unexecuted work is not a deferred decision unless the source explicitly records a decision to defer.
 Do not produce view prose, relationships, a proposed artifact or reviewer expectations.`,
                 labelViewInput(input, passages),
                 signal,
@@ -260,34 +241,7 @@ Keep the original rejected hypotheses, attempted/deferred actions and subsequent
 Corrections have corrects/supersedes predicates and refer to existing recordIds; the correcting evidence must explicitly
 name its target and correction. Occurrence, knowledge, capture and generation times are distinct; unknown stays unknown.
 Return outcome chronology and missingEvidence honestly. No exclusions or hidden fact coverage.`
-                      : input.definition.kind === "projectBrief"
-                        ? `${evidenceRules}
-Construct a fixed-template projectBrief with seven sections: goalsScope, owners, status, milestones, decisions, risks, context.
-Use stable meaningful section IDs, heading, connective prose and inventoryIds for each section.
-Include typed details matching each section role. All details reference checked inventory IDs whose immutable statements
-are rendered into that section by the host. Do not retag recovery/guide steps or create execution instructions.
-Status separates project unknown/active/blocked/complete from incident unknown/open/closed/notApplicable and capacity
-unknown/pendingOwnerReview/validated/notApplicable. Blocked capacity remains pendingOwnerReview.
-Owners have responsibility, known/unknown/unassigned state, owner (null unless a confirmed recorded name), inventoryId.
-Include EVERY checked owner assignment, distinguishing a known accountable role from an unknown assigned person.
-Responsibility must be the same exact case-sensitive substring in both the checked owner statement
-and at least one of its cited excerpts. Do not paraphrase that structured field or capitalize it differently.
-Choose a shared recorded phrase; put any explanatory paraphrase only in the readable section body.
-Milestones have inventoryId, source status (proposed/confirmed/blocked/deferred/unknown), date (null unless explicitly recorded).
-Decisions have inventoryId and the checked fact status. Include EVERY checked decision, including rejected alternatives,
-in typed decision items as well as the readable body. Milestones include only checked milestone facts, not requirements,
-guards or proposed implementation activities retagged as milestones. Risks have inventoryId and open/blocked/resolved/unknown status.
-Status inventoryIds must include ALL checked projectStatus, incidentStatus and capacity facts used to establish those
-three states; unrelated facts or a reference hidden only in the section inventoryIds cannot establish typed status.
-Resolved risks require explicit confirmed resolution; confirmed or observed open risks remain open.
-Context has asOf (null if unknown), basis unknown/recordEvidence, inventoryIds. Never use capture or modified metadata
-as project knowledge time. A known asOf requires a confirmed projectAsOf fact, not a generic timing fact.
-goalsScope details contain kind and inventoryIds.
-Every detail object has kind matching the role. Preserve provisional commitments, workload memory/headroom warnings,
-unknown owners, open questions and pending owner review. Inventory coverage cannot be hidden metadata.
-Exclusions are only checked background outsideScope or exact duplicate witnesses. Outcome is projectSummary.
-List missingEvidence honestly; never invent names, commitments, dates, completion or capacity validation.`
-                        : `${evidenceRules}
+                      : `${evidenceRules}
 Construct a conditional troubleshootingGuide, not a raw session concatenation or executable procedure.
 Use all seven roles: description, prerequisites, diagnostic, guard, verification, recovery, context.
 For each section select inventoryIds and write concise connective/conditional prose.
@@ -313,7 +267,6 @@ Use stable section IDs. Do not fabricate a missing recovery or turn recorded val
                             source.records?.map((record) => record.id) ?? [],
                     ),
                     input.maintenance?.subjects,
-                    inventory,
                 ),
             );
             return hydrateInventoryConstruction(input, inventory, raw);
@@ -331,16 +284,6 @@ Use stable section IDs. Do not fabricate a missing recovery or turn recorded val
 Independently audit the FINAL proposed artifact against complete sources and its source-first inventory.
 Inspect every section and every exact relationship assertion for actual semantic support.
 Check the entire body, summary, measurements, epistemic states, temporal distinctions, prerequisites and constraints.
-For projectBrief inspect every section's typed details as well as narrative: project/incident/capacity status,
-owners/responsibilities, provisional milestone dates, decision/risk states and record-evidence as-of.
-For timeline inspect every record's typed identity, event type, state/outcome, occurrence, knowledge and capture fields,
-all narrative and correction predicates/endpoints. Generation time is not evidence time. Do not accept later knowledge,
-invented times or metadata, contradictory status prose, dropped rejected hypotheses, attempted/deferred actions or corrections.
-Unknown ownership and time must remain honest; incident closure never establishes project completion.
-missingContext means indispensable context present in the sources but omitted or contradicted in the artifact.
-Do not list a source's acknowledged unknowns as missingContext when the artifact faithfully states those limits.
-Missing source measurements, dates, assignments or approval may remain explicit missingEvidence; do not reject
-a faithfully bounded project brief merely because its retained sources do not answer every question.
 For wiki inspect every current page, its fixed taxonomy, source-grounded definitions/scope, competing explanations
 and unresolved contradictions, and each relatedTo/contradicts assertion against both endpoint pages' exact evidence.
 Renames/merges cannot invent agreement or erase evidence context; raw wikilinks do not establish relationships.
@@ -514,13 +457,7 @@ function validateLegacyConstructedContent(
         throw new Error(
             "Constructed guide lacks required goal/applicability/safety/trajectory/verification/recovery context sections",
         );
-    if (output.content.kind === "projectBrief") {
-        if (output.outcome !== "projectSummary" || !output.inventory)
-            throw new Error(
-                "Project brief requires a checked source inventory and projectSummary outcome",
-            );
-        validateProjectBriefEvidence(output.content, output.inventory);
-    } else if (output.content.kind === "wiki") {
+    if (output.content.kind === "wiki") {
         if (output.outcome !== "knowledgePages" || !output.inventory)
             throw new Error(
                 "Wiki requires a checked inventory and knowledgePages outcome",

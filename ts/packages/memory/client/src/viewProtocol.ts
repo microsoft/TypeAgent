@@ -59,28 +59,48 @@ export const viewSelectorSchema = z.discriminatedUnion("kind", [
         events: z.strictObject({ eventId: id }).array().max(32),
     }),
 ]);
-export const viewDefinitionSchema = z.strictObject({
-    viewId: id,
-    kind: z.enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"]),
-    selector: viewSelectorSchema,
-    maintenance: viewMaintenanceDefinitionSchema.optional(),
-    wiki: z
-        .strictObject({
-            construction: z.literal("informational-wiki-v1"),
-            query: z.string().trim().min(1).max(200),
-            aliases: z.string().trim().min(1).max(200).array().max(7),
-            excludedSourceIds: id.array().max(32),
-        })
-        .optional(),
-    projectSummary: z
-        .strictObject({
-            construction: z.literal("informational-project-summary-v1"),
-            query: z.string().trim().min(1).max(200),
-            aliases: z.string().trim().min(1).max(200).array().max(7),
-            excludedSourceIds: id.array().max(32),
-        })
-        .optional(),
-});
+export const viewDefinitionSchema = z
+    .strictObject({
+        viewId: id,
+        kind: z.enum([
+            "troubleshootingGuide",
+            "projectBrief",
+            "timeline",
+            "wiki",
+        ]),
+        selector: viewSelectorSchema,
+        maintenance: viewMaintenanceDefinitionSchema.optional(),
+        wiki: z
+            .strictObject({
+                construction: z.literal("informational-wiki-v1"),
+                query: z.string().trim().min(1).max(200),
+                aliases: z.string().trim().min(1).max(200).array().max(7),
+                excludedSourceIds: id.array().max(32),
+            })
+            .optional(),
+        projectSummary: z
+            .strictObject({
+                construction: z.literal("informational-project-summary-v1"),
+                query: z.string().trim().min(1).max(200),
+                aliases: z.string().trim().min(1).max(200).array().max(7),
+                excludedSourceIds: id.array().max(32),
+            })
+            .optional(),
+    })
+    .superRefine((definition, context) => {
+        if (
+            (definition.kind === "projectBrief") !==
+                !!definition.projectSummary ||
+            (definition.projectSummary &&
+                (definition.maintenance || definition.wiki))
+        )
+            context.addIssue({
+                code: "custom",
+                path: ["projectSummary"],
+                message:
+                    "Project construction requires informational-project-summary-v1",
+            });
+    });
 export const viewMaintenancePlanSchema = z.object({
     corpusId: id,
     expectedHead: head.nullable(),
@@ -229,78 +249,6 @@ const factStatus = z.enum([
     "notApplicable",
 ]);
 const inventoryIds = id.array().min(1).max(128);
-const reference = { inventoryId: id };
-const projectDetails = z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("goalsScope"), inventoryIds }),
-    z.strictObject({
-        kind: z.literal("owners"),
-        assignments: z
-            .strictObject({
-                ...reference,
-                responsibility: text,
-                state: z.enum(["known", "unknown", "unassigned"]),
-                owner: text.nullable(),
-            })
-            .array()
-            .min(1)
-            .max(128),
-    }),
-    z.strictObject({
-        kind: z.literal("status"),
-        project: z.enum(["unknown", "active", "blocked", "complete"]),
-        incident: z.enum(["unknown", "open", "closed", "notApplicable"]),
-        capacity: z.enum([
-            "unknown",
-            "pendingOwnerReview",
-            "validated",
-            "notApplicable",
-        ]),
-        inventoryIds,
-    }),
-    z.strictObject({
-        kind: z.literal("milestones"),
-        items: z
-            .strictObject({
-                ...reference,
-                status: z.enum([
-                    "proposed",
-                    "confirmed",
-                    "blocked",
-                    "deferred",
-                    "unknown",
-                ]),
-                date: text.nullable(),
-            })
-            .array()
-            .min(1)
-            .max(128),
-    }),
-    z.strictObject({
-        kind: z.literal("decisions"),
-        items: z
-            .strictObject({ ...reference, status: factStatus })
-            .array()
-            .min(1)
-            .max(128),
-    }),
-    z.strictObject({
-        kind: z.literal("risks"),
-        items: z
-            .strictObject({
-                ...reference,
-                status: z.enum(["open", "blocked", "resolved", "unknown"]),
-            })
-            .array()
-            .min(1)
-            .max(128),
-    }),
-    z.strictObject({
-        kind: z.literal("context"),
-        asOf: text.nullable(),
-        basis: z.enum(["unknown", "recordEvidence"]),
-        inventoryIds,
-    }),
-]);
 const section = z.strictObject({
     id,
     role: z.enum([
@@ -320,7 +268,6 @@ const section = z.strictObject({
     ]),
     heading: text,
     body: text,
-    details: projectDetails.optional(),
 });
 const sectionEndpoint = z.strictObject({
     kind: z.literal("section"),
@@ -358,44 +305,74 @@ const guideContent = z.strictObject({
     sections: section.array().min(1).max(1000),
     citations: citation.array(),
 });
-const projectContent = guideContent.extend({
-    kind: z.literal("projectBrief"),
-    sections: section.extend({ details: projectDetails }).array().length(7),
-});
 const informationalProjectDetails = z.discriminatedUnion("kind", [
     z.strictObject({
         kind: z.literal("goalsScope"),
-        inventoryIds: id.array().length(0),
     }),
     z.strictObject({
         kind: z.literal("owners"),
-        assignments: z.array(z.never()).length(0),
+        assignments: z
+            .strictObject({
+                id,
+                responsibility: text,
+                state: z.enum(["known", "unknown", "unassigned"]),
+                owner: text.nullable(),
+            })
+            .array()
+            .max(128),
     }),
-    projectDetails.options[2].extend({ inventoryIds: id.array().length(0) }),
+    z.strictObject({
+        kind: z.literal("status"),
+        project: z.enum(["unknown", "active", "blocked", "complete"]),
+        incident: z.enum(["unknown", "open", "closed", "notApplicable"]),
+        capacity: z.enum([
+            "unknown",
+            "pendingOwnerReview",
+            "validated",
+            "notApplicable",
+        ]),
+    }),
     z.strictObject({
         kind: z.literal("milestones"),
-        items: z.array(z.never()).length(0),
+        items: z
+            .strictObject({
+                id,
+                status: z.enum([
+                    "proposed",
+                    "confirmed",
+                    "blocked",
+                    "deferred",
+                    "unknown",
+                ]),
+                date: text.nullable(),
+            })
+            .array()
+            .max(128),
     }),
     z.strictObject({
         kind: z.literal("decisions"),
-        items: z.array(z.never()).length(0),
+        items: z.strictObject({ id, status: factStatus }).array().max(128),
     }),
     z.strictObject({
         kind: z.literal("risks"),
-        items: z.array(z.never()).length(0),
+        items: z
+            .strictObject({
+                id,
+                status: z.enum(["open", "blocked", "resolved", "unknown"]),
+            })
+            .array()
+            .max(128),
     }),
     z.strictObject({
         kind: z.literal("context"),
-        asOf: z.null(),
-        basis: z.literal("unknown"),
-        inventoryIds: id.array().length(0),
+        asOf: text.nullable(),
+        basis: z.enum(["unknown", "recordEvidence"]),
     }),
 ]);
 const informationalProjectContent = guideContent.extend({
     kind: z.literal("projectBrief"),
     construction: z.literal("informational-project-summary-v1"),
     sections: section
-        .omit({ details: true })
         .extend({ details: informationalProjectDetails })
         .array()
         .length(7),
@@ -473,14 +450,14 @@ const wikiContent = guideContent.extend({
 });
 const content = z.union([
     guideContent,
-    projectContent,
+
     timelineContent,
     wikiContent,
     informationalProjectContent,
 ]);
 const requestContent = z.union([
     guideContent.extend({ citations: citation.array().max(1000) }),
-    projectContent.extend({ citations: citation.array().max(1000) }),
+
     timelineContent.extend({ citations: citation.array().max(1000) }),
     wikiContent.extend({ citations: citation.array().max(1000) }),
     informationalProjectContent.extend({
@@ -645,7 +622,6 @@ const snapshot = z.object({
         .max(32),
     pipeline: z.enum([
         "troubleshooting-v1",
-        "project-brief-v1",
         "timeline-v1",
         "wiki-v1",
         "informational-wiki-v1",
@@ -796,7 +772,6 @@ export const viewVersionSchema = z.object({
         projectSummary: viewDefinitionSchema.shape.projectSummary,
     }),
     content: z.union([
-        projectContent,
         informationalProjectContent,
         timelineContent,
         wikiContent,

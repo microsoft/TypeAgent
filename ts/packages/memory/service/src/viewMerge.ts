@@ -264,13 +264,12 @@ function mergeIdentifierItems(
     human: string[],
     generated: string[],
 ): string[] | undefined {
-    const entries = (values: string[]) =>
-        values.map((inventoryId) => ({ inventoryId }));
+    const entries = (values: string[]) => values.map((id) => ({ id }));
     return mergeBriefEntries(
         entries(base),
         entries(human),
         entries(generated),
-    )?.map((entry) => entry.inventoryId);
+    )?.map((entry) => entry.id);
 }
 
 function mergeTimelineDetails(
@@ -313,19 +312,19 @@ function mergeBriefFields<T extends object>(
     return result;
 }
 
-function mergeBriefEntries<T extends { inventoryId: string }>(
+function mergeBriefEntries<T extends { id: string }>(
     base: T[],
     human: T[],
     generated: T[],
 ): T[] | undefined {
     const result: T[] = [];
     const ids = new Set(
-        [...generated, ...human, ...base].map((entry) => entry.inventoryId),
+        [...generated, ...human, ...base].map((entry) => entry.id),
     );
     for (const id of ids) {
-        const old = base.find((entry) => entry.inventoryId === id);
-        const edited = human.find((entry) => entry.inventoryId === id);
-        const proposed = generated.find((entry) => entry.inventoryId === id);
+        const old = base.find((entry) => entry.id === id);
+        const edited = human.find((entry) => entry.id === id);
+        const proposed = generated.find((entry) => entry.id === id);
         if (!edited && (!proposed || viewHash(old) === viewHash(proposed)))
             continue;
         if (!proposed && viewHash(old) === viewHash(edited)) continue;
@@ -380,9 +379,11 @@ function mergeProjectDetails(
     }
 }
 
-function mergeBriefItemDetails<
-    D extends { items: Array<{ inventoryId: string }> },
->(base: D, human: D, generated: D): D | undefined {
+function mergeBriefItemDetails<D extends { items: Array<{ id: string }> }>(
+    base: D,
+    human: D,
+    generated: D,
+): D | undefined {
     const fields = mergeBriefFields(base, human, generated, ["items"]);
     const items = mergeBriefEntries(base.items, human.items, generated.items);
     if (!fields || !items) return undefined;

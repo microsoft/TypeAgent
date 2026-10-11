@@ -143,19 +143,18 @@ test("distinct indexed project summaries round-trip through save and MCP without
         "context",
     ];
     const details = [
-        { kind: "goalsScope", inventoryIds: [] },
+        { kind: "goalsScope" },
         { kind: "owners", assignments: [] },
         {
             kind: "status",
             project: "active",
             incident: "unknown",
             capacity: "unknown",
-            inventoryIds: [],
         },
         { kind: "milestones", items: [] },
         { kind: "decisions", items: [] },
         { kind: "risks", items: [] },
-        { kind: "context", asOf: null, basis: "unknown", inventoryIds: [] },
+        { kind: "context", asOf: null, basis: "unknown" },
     ];
     const output = {
         ...synthesis,

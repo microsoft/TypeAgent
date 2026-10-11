@@ -232,6 +232,13 @@ describe("Memory Center preview-first views", () => {
         click(host, "Build views");
         await settle();
         for (const kind of kinds) check(host, kind);
+        if (kinds.includes("Project brief")) {
+            const query = host.querySelector<HTMLInputElement>(
+                '[aria-label="Indexed project summary query"]',
+            )!;
+            query.value = "Project";
+            query.dispatchEvent(new Event("input"));
+        }
         check(host, "Use Evidence");
     }
     async function build(kinds?: string[]) {

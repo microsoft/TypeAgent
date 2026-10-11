@@ -14,6 +14,7 @@ const invoke = invokeMemory as jest.Mock<Promise<unknown>, [string, unknown]>;
 const evidence = invokeView as jest.Mock<Promise<unknown>, [string, unknown]>;
 const content: ProjectBriefContent = {
     kind: "projectBrief",
+    construction: "informational-project-summary-v1",
     title: "Payments reliability",
     summary: "Project active; incident closed",
     citations: [
@@ -30,7 +31,7 @@ const content: ProjectBriefContent = {
             role: "goalsScope",
             heading: "Goals",
             body: "Preserve headroom",
-            details: { kind: "goalsScope", inventoryIds: ["goal"] },
+            details: { kind: "goalsScope" },
         },
         {
             id: "owners",
@@ -41,7 +42,7 @@ const content: ProjectBriefContent = {
                 kind: "owners",
                 assignments: [
                     {
-                        inventoryId: "owner",
+                        id: "owner",
                         responsibility: "Capacity validation",
                         state: "unknown",
                         owner: null,
@@ -59,7 +60,6 @@ const content: ProjectBriefContent = {
                 project: "active",
                 incident: "closed",
                 capacity: "pendingOwnerReview",
-                inventoryIds: ["status"],
             },
         },
         {
@@ -71,7 +71,7 @@ const content: ProjectBriefContent = {
                 kind: "milestones",
                 items: [
                     {
-                        inventoryId: "milestone",
+                        id: "milestone",
                         status: "proposed",
                         date: null,
                     },
@@ -85,7 +85,7 @@ const content: ProjectBriefContent = {
             body: "Query explanation rejected",
             details: {
                 kind: "decisions",
-                items: [{ inventoryId: "decision", status: "rejected" }],
+                items: [{ id: "decision", status: "rejected" }],
             },
         },
         {
@@ -95,7 +95,7 @@ const content: ProjectBriefContent = {
             body: "Workload memory/headroom warning",
             details: {
                 kind: "risks",
-                items: [{ inventoryId: "risk", status: "open" }],
+                items: [{ id: "risk", status: "open" }],
             },
         },
         {
@@ -107,7 +107,6 @@ const content: ProjectBriefContent = {
                 kind: "context",
                 asOf: null,
                 basis: "unknown",
-                inventoryIds: ["context"],
             },
         },
     ],
@@ -125,6 +124,12 @@ const view = {
     definition: {
         viewId: "payments-brief",
         kind: "projectBrief",
+        projectSummary: {
+            construction: "informational-project-summary-v1",
+            query: "Payments",
+            aliases: [],
+            excludedSourceIds: [],
+        },
         selector: {
             kind: "sources",
             sources: [{ sourceId: "status", revisionId: "current" }],
@@ -262,18 +267,14 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
         panel.dispose();
         jest.restoreAllMocks();
     });
-    test("kind picker builds exact sources and fixed-template edits retain project kind and source selector", async () => {
+    test("kind picker builds indexed project summaries and fixed-template edits retain the query selector", async () => {
         await panel.refresh();
         click(host, "Build views");
         await settle();
         host.querySelector<HTMLInputElement>(
             'input[aria-label="Project brief"]',
         )!.click();
-        const checkbox = host.querySelector<HTMLInputElement>(
-            'input[aria-label="Use Status evidence"]',
-        )!;
-        checkbox.checked = true;
-        checkbox.dispatchEvent(new Event("change"));
+        change(host, "Indexed project summary query", "Payments");
         click(host, "Continue to confirmation");
         await settle();
         click(host, "Start build");
@@ -289,6 +290,7 @@ describe("Memory Hub project brief selector, editor and scope safety", () => {
                             viewId: expect.stringMatching(/^projectBrief-/),
                             kind: "projectBrief",
                             selector: view.definition.selector,
+                            projectSummary: view.definition.projectSummary,
                         },
                     },
                 ],

@@ -1312,7 +1312,8 @@ export class TypedViewStore {
             throw new Error(
                 "Resolve the pending merge conflict before publishing",
             );
-        assertPublicationProof(current);
+        if (!informationalView(current.content))
+            assertPublicationProof(current);
         state.publications ??= {};
         const prior = state.publications[request.viewId];
         if (prior?.publishedRevisionId === current.revisionId) return prior;

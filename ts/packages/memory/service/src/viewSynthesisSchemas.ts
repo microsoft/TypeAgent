@@ -10,8 +10,7 @@ import {
     factStatuses,
     sourceDispositions,
 } from "./viewInventory.js";
-import type { ViewKind, ViewFactInventory } from "./viewTypes.js";
-import { projectBriefRoles, projectFieldStates } from "./projectBrief.js";
+import type { ViewKind } from "./viewTypes.js";
 import { wikiTaxonomy } from "./wiki.js";
 import type { WikiSubjectIdentity } from "./viewMaintenanceTypes.js";
 
@@ -37,38 +36,6 @@ function reference(values: readonly string[]): JsonSchemaType {
     const result = choice(values);
     referenceChoices.add(result);
     return result;
-}
-function ownerResponsibilityChoices(
-    item: ViewFactInventory["items"][number],
-): string[] {
-    const quoted = [...item.statement.matchAll(/[`"]([^`"\r\n]+)[`"]/g)]
-        .map((match) => match[1])
-        .filter((phrase) =>
-            item.citations.some((citation) =>
-                citation.excerpt.includes(phrase),
-            ),
-        );
-    if (quoted.length) return [...new Set(quoted)].slice(0, 16);
-    const words = [...item.statement.matchAll(/\S+/g)];
-    for (let size = 5; size >= 1; size--) {
-        const choices = words.flatMap((word, i) => {
-            const last = words[i + size - 1];
-            if (!last) return [];
-            const phrase = item.statement
-                .slice(word.index, last.index + last[0].length)
-                .replace(/^[`"'(]+|[`"',.;:!)]+$/g, "");
-            return /\p{L}/u.test(phrase) &&
-                item.citations.some((citation) =>
-                    citation.excerpt.includes(phrase),
-                )
-                ? [phrase]
-                : [];
-        });
-        if (choices.length) return [...new Set(choices)].slice(0, 16);
-    }
-    throw new Error(
-        "Checked owner fact has no exact shared responsibility phrase",
-    );
 }
 function boundedEnums(root: JsonSchemaType): JsonSchemaType {
     const references: Array<{ schema: JsonSchemaType; count: number }> = [];
@@ -186,8 +153,11 @@ export function createInventoryConstructionSchema(
     kind: ViewKind = "troubleshootingGuide",
     recordIds: string[] = [],
     subjects?: WikiSubjectIdentity[],
-    inventory?: ViewFactInventory,
 ): StructuredOutputJsonSchema {
+    if (kind === "projectBrief")
+        throw new Error(
+            "Project construction requires informational-project-summary-v1",
+        );
     if (kind === "wiki")
         return schema("memory_wiki_construction", {
             content: object({
@@ -248,219 +218,39 @@ export function createInventoryConstructionSchema(
             outcome: choice(["chronology"]),
             missingEvidence: array(text),
         });
-    const ids = array(reference(itemIds));
-    const referenceKind = (
-        kind: ViewFactInventory["items"][number]["kind"],
-    ) => ({
-        inventoryId: reference(
-            inventory?.items
-                .filter((item) => item.kind === kind)
-                .map((item) => item.id) ?? itemIds,
-        ),
-    });
-    const hasAsOf = inventory?.items.some(
-        (item) => item.kind === "projectAsOf" && item.status === "confirmed",
-    );
-    const ownerFacts = inventory?.items.filter((item) => item.kind === "owner");
-    const ownerSchemas = ownerFacts?.length
-        ? ownerFacts.map((item) => {
-              const unassigned =
-                  item.status === "confirmed" &&
-                  [
-                      item.statement,
-                      ...item.citations.map((citation) => citation.excerpt),
-                  ].some((value) =>
-                      /\b(?:owner(?:ship)?(?:\s+is|\s*:)?\s+unassigned|no owner(?:\s+is)?\s+assigned|has no owner)\b/i.test(
-                          value,
-                      ),
-                  );
-              const names = [
-                  ...item.statement.matchAll(
-                      /\b[A-Z][\p{L}'-]+(?: [A-Z][\p{L}'-]+){1,3}\b|<[^<>\s]+>/gu,
-                  ),
-              ]
-                  .map((match) => match[0])
-                  .filter((name) =>
-                      item.citations.some((citation) =>
-                          citation.excerpt.includes(name),
-                      ),
-                  );
-              const known = item.status === "confirmed" && !unassigned;
-              if (known && !names.length)
-                  throw new Error(
-                      "Confirmed owner fact requires an exact recorded person or accountable role",
-                  );
-              return object({
-                  inventoryId: reference([item.id]),
-                  responsibility: choice(ownerResponsibilityChoices(item)),
-                  state: choice([
-                      known ? "known" : unassigned ? "unassigned" : "unknown",
-                  ]),
-                  owner: known
-                      ? names.length
-                          ? choice([...new Set(names)])
-                          : text
-                      : { type: "null" },
-              });
-          })
-        : undefined;
-    const nullableText: JsonSchemaType = { anyOf: [text, { type: "null" }] };
-    const stateChoice = (
-        kind: "projectStatus" | "incidentStatus" | "capacity",
-        states: readonly string[],
-    ) => {
-        const supported = inventory
-            ? projectFieldStates(inventory.items, kind, states)
-            : [];
-        return choice(supported.length ? supported : states);
-    };
-    const details: JsonSchemaType = {
-        anyOf: [
-            object({ kind: choice(["goalsScope"]), inventoryIds: ids }),
-            object({
-                kind: choice(["owners"]),
-                assignments: array({
-                    anyOf: ownerSchemas ?? [
-                        object({
-                            ...referenceKind("owner"),
-                            responsibility: text,
-                            state: choice(["known"]),
-                            owner: text,
-                        }),
-                        object({
-                            ...referenceKind("owner"),
-                            responsibility: text,
-                            state: choice(["unknown", "unassigned"]),
-                            owner: { type: "null" },
-                        }),
-                    ],
-                }),
-            }),
-            object({
-                kind: choice(["status"]),
-                project: stateChoice("projectStatus", [
-                    "unknown",
-                    "active",
-                    "blocked",
-                    "complete",
-                ]),
-                incident: stateChoice("incidentStatus", [
-                    "unknown",
-                    "open",
-                    "closed",
-                    "notApplicable",
-                ]),
-                capacity: stateChoice("capacity", [
-                    "unknown",
-                    "pendingOwnerReview",
-                    "validated",
-                    "notApplicable",
-                ]),
-                inventoryIds: ids,
-            }),
-            object({
-                kind: choice(["milestones"]),
-                items: array(
-                    object({
-                        ...referenceKind("milestone"),
-                        status: choice([
-                            "proposed",
-                            "confirmed",
-                            "blocked",
-                            "deferred",
-                            "unknown",
-                        ]),
-                        date: nullableText,
-                    }),
-                ),
-            }),
-            object({
-                kind: choice(["decisions"]),
-                items: array(
-                    object({
-                        ...referenceKind("decision"),
-                        status: choice(factStatuses),
-                    }),
-                ),
-            }),
-            object({
-                kind: choice(["risks"]),
-                items: array(
-                    object({
-                        ...referenceKind("risk"),
-                        status: choice([
-                            "open",
-                            "blocked",
-                            "resolved",
-                            "unknown",
-                        ]),
-                    }),
-                ),
-            }),
-            object({
-                kind: choice(["context"]),
-                asOf:
-                    inventory && !hasAsOf
-                        ? { type: "null" }
-                        : hasAsOf
-                          ? text
-                          : nullableText,
-                basis: choice(
-                    inventory
-                        ? [hasAsOf ? "recordEvidence" : "unknown"]
-                        : ["unknown", "recordEvidence"],
-                ),
-                inventoryIds: ids,
-            }),
-        ],
-    };
-    return schema(
-        kind === "projectBrief"
-            ? "memory_project_brief_construction"
-            : "memory_inventory_guide_construction",
-        {
-            content: object({
-                title: text,
-                summary: text,
-                sections: array(
-                    object({
-                        id: text,
-                        role: choice(
-                            kind === "projectBrief"
-                                ? projectBriefRoles
-                                : [
-                                      "description",
-                                      "prerequisites",
-                                      "diagnostic",
-                                      "guard",
-                                      "verification",
-                                      "recovery",
-                                      "context",
-                                  ],
-                        ),
-                        heading: text,
-                        prose: text,
-                        inventoryIds: array(reference(itemIds)),
-                        ...(kind === "projectBrief" ? { details } : {}),
-                    }),
-                ),
-            }),
-            exclusions: array(
+    return schema("memory_inventory_guide_construction", {
+        content: object({
+            title: text,
+            summary: text,
+            sections: array(
                 object({
-                    itemId: reference(itemIds),
-                    reason: choice(["duplicate", "outsideScope"]),
-                    duplicateOf: text,
-                    justification: text,
+                    id: text,
+                    role: choice([
+                        "description",
+                        "prerequisites",
+                        "diagnostic",
+                        "guard",
+                        "verification",
+                        "recovery",
+                        "context",
+                    ]),
+                    heading: text,
+                    prose: text,
+                    inventoryIds: array(reference(itemIds)),
                 }),
             ),
-            outcome: choice(
-                kind === "projectBrief"
-                    ? ["projectSummary"]
-                    : ["diagnosticOnly", "verifiedRecovery"],
-            ),
-            missingEvidence: array(text),
-        },
-    );
+        }),
+        exclusions: array(
+            object({
+                itemId: reference(itemIds),
+                reason: choice(["duplicate", "outsideScope"]),
+                duplicateOf: text,
+                justification: text,
+            }),
+        ),
+        outcome: choice(["diagnosticOnly", "verifiedRecovery"]),
+        missingEvidence: array(text),
+    });
 }
 export function createInventorySupportSchema(
     sectionIds: string[],

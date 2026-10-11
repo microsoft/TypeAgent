@@ -14,7 +14,7 @@ import type {
     ViewBuildJob,
 } from "../src/viewTypes.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
-import { projectSources } from "./projectBriefTestModel.js";
+import { projectSources } from "./projectTestSources.js";
 import { timelineTestAnswer } from "./timelineTestModel.js";
 
 const runtimeJest = import.meta.jest;
@@ -1194,7 +1194,7 @@ describe("timeline configured service pipeline", () => {
             "project-context",
         );
         const buildUnrelated = async (
-            kind: "projectBrief" | "troubleshootingGuide",
+            kind: "troubleshootingGuide",
             viewId: string,
         ) => {
             let job = await service.buildViews({
@@ -1233,7 +1233,6 @@ describe("timeline configured service pipeline", () => {
             }
             expect(job.results[0].state).toBe("searchable");
         };
-        await buildUnrelated("projectBrief", "unrelated-brief");
         await buildUnrelated("troubleshootingGuide", "unrelated-guide");
         const forgotten = await service.forgetEvents({
             corpusId,
@@ -1264,7 +1263,6 @@ describe("timeline configured service pipeline", () => {
         snapshot = await service.listViews(corpusId);
         expect(snapshot.views.map((entry) => entry.viewId).sort()).toEqual([
             "document-timeline",
-            "unrelated-brief",
             "unrelated-guide",
         ]);
         const files = await readFile(

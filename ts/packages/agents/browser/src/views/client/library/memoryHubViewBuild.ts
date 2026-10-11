@@ -137,10 +137,22 @@ export function createViewBuildTargets(
     events: Iterable<string>,
     rebuilding?: ViewVersion,
     projectQuery?: string,
+    projectSources: SourceInput[] = sources,
 ): ViewBuildRequest["targets"] {
     const eventInputs = [...events].map((eventId) => ({ eventId }));
     return [...kinds].map((kind) => {
-        const inputs = kind === "timeline" ? timelineSources : sources;
+        if (
+            kind === "projectBrief" &&
+            !rebuilding?.definition.projectSummary &&
+            !projectQuery?.trim()
+        )
+            throw new Error("A project summary requires a project query");
+        const inputs =
+            kind === "timeline"
+                ? timelineSources
+                : kind === "projectBrief"
+                  ? projectSources
+                  : sources;
         const count =
             inputs.length + (kind === "timeline" ? eventInputs.length : 0);
         if (!count) throw new Error(`${kind} has no compatible evidence`);
@@ -174,12 +186,12 @@ export function createViewBuildTargets(
                     : {}),
                 ...(rebuilding?.definition.projectSummary
                     ? { projectSummary: rebuilding.definition.projectSummary }
-                    : kind === "projectBrief" && projectQuery?.trim()
+                    : kind === "projectBrief"
                       ? {
                             projectSummary: {
                                 construction:
                                     "informational-project-summary-v1" as const,
-                                query: projectQuery.trim(),
+                                query: projectQuery!.trim(),
                                 aliases: [],
                                 excludedSourceIds: [],
                             },
