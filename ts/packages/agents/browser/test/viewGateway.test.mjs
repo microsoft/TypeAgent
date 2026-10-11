@@ -12,6 +12,74 @@ import {
     getBrowserViewDestination,
 } from "@typeagent/browser-control-rpc/viewRoutes";
 import { validateViewRequest } from "../dist/views/server/features/views/viewValidation.mjs";
+
+test("indexed Search/Ask citations preserve their exact locator through the HTTP gateway", () => {
+    const params = {
+        corpusId: "corpus",
+        kind: "source",
+        objectId: "source",
+        revisionId: "revision",
+        locator: `indexed:0:${"a".repeat(64)}:18-42`,
+        offset: 0,
+    };
+    assert.deepEqual(
+        validateViewRequest({ method: "memoryHubEvidence", params }),
+        { method: "memoryHubEvidence", params },
+    );
+    for (const locator of [
+        "indexed:0:bad:18-42",
+        `indexed:-1:${"a".repeat(64)}:18-42`,
+        "latest",
+    ]) {
+        assert.throws(() =>
+            validateViewRequest({
+                method: "memoryHubEvidence",
+                params: { ...params, locator },
+            }),
+        );
+    }
+});
+
+test("informational indexed evidence and family operations pass the strict browser gateway", () => {
+    const params = {
+        corpusId: "corpus",
+        sourceId: "source",
+        revisionId: "revision",
+        indexedLocator: `indexed:0:${"a".repeat(64)}:0-2000`,
+    };
+    assert.deepEqual(
+        validateViewRequest({ method: "memoryGetSourceContent", params })
+            .params,
+        params,
+    );
+    assert.throws(() =>
+        validateViewRequest({
+            method: "memoryGetSourceContent",
+            params: { ...params, indexedLocator: "made-up" },
+        }),
+    );
+    for (const operation of ["update", "pause", "resume", "rebuild"]) {
+        const family = {
+            corpusId: "corpus",
+            expectedHead: null,
+            family: "wiki",
+            operation,
+        };
+        assert.deepEqual(
+            validateViewRequest({
+                method: "memoryMaintainViews",
+                params: family,
+            }).params,
+            family,
+        );
+        assert.throws(() =>
+            validateViewRequest({
+                method: "memoryMaintainViews",
+                params: { ...family, approval: true },
+            }),
+        );
+    }
+});
 import { viewMethods } from "@typeagent/browser-control-rpc/viewRpc";
 
 const removedMethods = [

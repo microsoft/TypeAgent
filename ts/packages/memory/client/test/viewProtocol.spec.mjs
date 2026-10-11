@@ -14,6 +14,73 @@ import {
     viewToolNames,
     viewVersionSchema,
 } from "../dist/viewProtocol.js";
+import { viewMaintenanceRequestSchema } from "../dist/viewMaintenanceProtocol.js";
+import { searchRequestSchema } from "../dist/protocol.js";
+
+test("bounded indexed search flag survives protocol round-trip and rejects nonboolean input", () => {
+    const request = {
+        corpusId: "corpus",
+        query: "qualification",
+        indexedFragments: true,
+        limit: 12,
+        maxResponseChars: 24000,
+    };
+    assert.deepEqual(
+        searchRequestSchema.parse(JSON.parse(JSON.stringify(request))),
+        request,
+    );
+    assert.equal(
+        searchRequestSchema.safeParse({ ...request, indexedFragments: "true" })
+            .success,
+        false,
+    );
+});
+
+test("informational family requests round-trip without weakening legacy target guards", () => {
+    for (const operation of ["update", "rebuild", "pause", "resume"]) {
+        const request = {
+            corpusId: "corpus",
+            expectedHead: null,
+            family: "wiki",
+            operation,
+        };
+        assert.deepEqual(
+            viewMaintenanceRequestSchema.parse(
+                JSON.parse(JSON.stringify(request)),
+            ),
+            request,
+        );
+        assert.equal(
+            viewMaintenanceRequestSchema.safeParse({ ...request, targets: [] })
+                .success,
+            false,
+        );
+        assert.equal(
+            viewMaintenanceRequestSchema.safeParse({
+                ...request,
+                approval: true,
+            }).success,
+            false,
+        );
+    }
+    assert.equal(
+        viewMaintenanceRequestSchema.safeParse({
+            corpusId: "corpus",
+            expectedHead: null,
+            targets: [],
+        }).success,
+        false,
+    );
+    assert.equal(
+        viewMaintenanceRequestSchema.safeParse({
+            corpusId: "corpus",
+            expectedHead: null,
+            family: "wiki",
+            operation: "invent",
+        }).success,
+        false,
+    );
+});
 
 const source = { sourceId: "source", revisionId: "source-revision" };
 const definition = {
@@ -64,6 +131,96 @@ const snapshot = {
     model: "model",
     fingerprint: hash,
 };
+
+test("distinct indexed project summaries round-trip through save and MCP without weakening legacy inventories", async () => {
+    const roles = [
+        "goalsScope",
+        "owners",
+        "status",
+        "milestones",
+        "decisions",
+        "risks",
+        "context",
+    ];
+    const details = [
+        { kind: "goalsScope", inventoryIds: [] },
+        { kind: "owners", assignments: [] },
+        {
+            kind: "status",
+            project: "active",
+            incident: "unknown",
+            capacity: "unknown",
+            inventoryIds: [],
+        },
+        { kind: "milestones", items: [] },
+        { kind: "decisions", items: [] },
+        { kind: "risks", items: [] },
+        { kind: "context", asOf: null, basis: "unknown", inventoryIds: [] },
+    ];
+    const output = {
+        ...synthesis,
+        content: {
+            kind: "projectBrief",
+            construction: "informational-project-summary-v1",
+            title: "Project",
+            citations: [citation],
+            sections: roles.map((role, i) => ({
+                ...section,
+                id: role,
+                role,
+                details: details[i],
+            })),
+        },
+    };
+    const projectDefinition = {
+        ...definition,
+        kind: "projectBrief",
+        projectSummary: {
+            construction: "informational-project-summary-v1",
+            query: "Project migration",
+            aliases: [],
+            excludedSourceIds: [],
+        },
+    };
+    const request = { ...saveRequest(output), definition: projectDefinition };
+    assert.deepEqual(
+        viewSaveRequestSchema.parse(JSON.parse(JSON.stringify(request))),
+        request,
+    );
+    const legacy = structuredClone(request);
+    delete legacy.content.construction;
+    delete legacy.definition.projectSummary;
+    assert.equal(viewSaveRequestSchema.safeParse(legacy).success, false);
+    const { version } = persisted(output);
+    version.definition = {
+        ...projectDefinition,
+        revisionId: "definition-revision",
+    };
+    assert.deepEqual(viewVersionSchema.parse(version), version);
+    const client = new McpMemoryServiceClient({
+        callTool: async ({ name }) => {
+            assert.equal(name, viewToolNames.getView);
+            return { content: [], structuredContent: { result: version } };
+        },
+    });
+    assert.deepEqual(
+        await client.getView({ corpusId: "corpus", viewId: "guide" }),
+        version,
+    );
+    assert.equal(
+        viewSaveRequestSchema.safeParse({
+            ...request,
+            definition: {
+                ...projectDefinition,
+                projectSummary: {
+                    ...projectDefinition.projectSummary,
+                    construction: "project-brief-v1",
+                },
+            },
+        }).success,
+        false,
+    );
+});
 
 function persisted(output) {
     const sources = [

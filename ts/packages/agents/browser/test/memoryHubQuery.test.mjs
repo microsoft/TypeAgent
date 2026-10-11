@@ -19,6 +19,171 @@ import {
 import { createHash } from "node:crypto";
 
 const time = "2026-10-02T00:00:00.000Z";
+test("source-plus-informational-view answer preserves derivative lineage through the normal browser workflow", async () => {
+    const { service } = fixture();
+    const text =
+        "Synthetic indexed qualification; local recovery is not overall completion.";
+    const locator = `indexed:0:${"b".repeat(64)}:0-${text.length}`;
+    const citation = {
+        sourceId: "shared",
+        revisionId: "r1",
+        locator,
+        excerpt: text,
+    };
+    service.getCapabilities = async () => ({
+        derivedViews: {
+            informationalWiki: true,
+            search: true,
+            kinds: ["wiki"],
+        },
+    });
+    service.search = async () => ({
+        matches: [
+            {
+                evidenceId: "source",
+                sourceId: "shared",
+                revisionId: "r1",
+                locator,
+                title: "Primary",
+                snippet: text,
+                sourceType: "text",
+                score: 1,
+            },
+        ],
+        warnings: [],
+    });
+    service.searchViews = async () => [
+        {
+            view: {
+                viewId: "page",
+                revisionId: "v1",
+                version: 1,
+                content: { kind: "wiki", title: "Informational page" },
+                createdAt: time,
+                provenance: "generated",
+            },
+            snippet: "Unreviewed derived summary",
+            score: 1,
+            review: "unreviewed",
+            freshness: "current",
+            evidence: [citation],
+        },
+    ];
+    service.getSource = async () => ({ activeRevisionId: "r1" });
+    service.getSourceContent = async () => ({
+        content: text,
+        revisionId: "r1",
+    });
+    const query = createMemoryHubQueryFunctions(
+        () => service,
+        () => undefined,
+        async (_question, evidence) => {
+            const primary = evidence.find((item) => item.kind === "source");
+            const derived = evidence.find((item) => item.kind === "view");
+            assert.ok(primary);
+            assert.ok(derived);
+            assert.equal(derived.review, "unreviewed");
+            assert.deepEqual(derived.evidenceSources, [citation]);
+            return citedAnswer(
+                {
+                    status: "answered",
+                    claims: [
+                        {
+                            text: "Mock combined answer with retained caveat.",
+                            evidenceIds: [primary.id, derived.id],
+                        },
+                    ],
+                    followUps: [],
+                },
+                evidence,
+            );
+        },
+    );
+    const result = await query.memoryHubSearch({
+        corpusId: "a",
+        query: "qualification",
+        generateAnswer: true,
+    });
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.answer.citationIds.length, 2);
+    assert.equal(
+        result.matches.find((item) => item.kind === "view").evidenceSources[0]
+            .locator,
+        locator,
+    );
+});
+test("normal hub answer requests bounded indexed expansion, retains tail context and withholds removed evidence", async () => {
+    const { service, calls } = fixture();
+    const text = `${"context ".repeat(120)}distant qualification`;
+    const locator = `indexed:0:${"a".repeat(64)}:0-${text.length}`;
+    service.getCapabilities = async () => ({
+        derivedViews: {
+            informationalWiki: true,
+            search: false,
+            kinds: ["wiki"],
+        },
+    });
+    service.search = async (request) => {
+        calls.push(["expanded", request]);
+        return {
+            matches: [
+                {
+                    evidenceId: "s:r",
+                    corpusId: "a",
+                    sourceId: "s",
+                    revisionId: "r",
+                    title: "Synthetic",
+                    snippet: text,
+                    locator,
+                    score: 1,
+                    sourceType: "text",
+                },
+            ],
+            warnings: [],
+        };
+    };
+    let removed = false;
+    service.getSource = async () =>
+        removed ? undefined : { activeRevisionId: "r" };
+    service.getSourceContent = async () => ({ content: text, revisionId: "r" });
+    const query = createMemoryHubQueryFunctions(
+        () => service,
+        () => undefined,
+        async (_question, evidence) => {
+            assert.ok(evidence[0].snippet.endsWith("distant qualification"));
+            return {
+                status: "answered",
+                text: "Mock qualified answer",
+                mode: "synthesized",
+                citationIds: [evidence[0].id],
+                followUps: [],
+            };
+        },
+    );
+    const result = await query.memoryHubSearch({
+        corpusId: "a",
+        query: "qualification",
+        generateAnswer: true,
+    });
+    assert.equal(result.answer.status, "answered");
+    assert.equal(
+        calls.find(([name]) => name === "expanded")[1].indexedFragments,
+        true,
+    );
+    removed = true;
+    const withheld = await query.memoryHubSearch({
+        corpusId: "a",
+        query: "qualification",
+        generateAnswer: true,
+    });
+    assert.equal(withheld.answer, undefined);
+    assert.ok(
+        withheld.errors.some(
+            (error) =>
+                error.operation === "answer" && /removed/.test(error.message),
+        ),
+    );
+});
 const corpora = [
     { corpusId: "a", name: "Documents" },
     { corpusId: "b", name: "Web" },

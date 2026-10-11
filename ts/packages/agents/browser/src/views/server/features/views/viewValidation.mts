@@ -160,7 +160,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
             revisionId: optionalText,
             locator: z
                 .string()
-                .regex(/^chars:\d+-\d+$/)
+                .regex(/^(?:chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/)
                 .optional(),
             offset: z
                 .number()
@@ -237,6 +237,10 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryGetSourceContent: z.strictObject({
         ...source,
         revisionId: optionalText,
+        indexedLocator: z
+            .string()
+            .regex(/^indexed:\d+:[0-9a-f]{64}:\d+-\d+$/)
+            .optional(),
         offset: optionalCount,
         maxChars: optionalCount,
     }),

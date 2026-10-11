@@ -89,7 +89,9 @@ function exactRequest(evidence: MemoryHubEvidence): MemoryHubEvidenceRequest {
         objectId: evidence.objectId,
         ...(evidence.revisionId ? { revisionId: evidence.revisionId } : {}),
         ...(evidence.kind === "source" &&
-        /^chars:\d+-\d+$/.test(evidence.locator ?? "")
+        /^(?:chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/.test(
+            evidence.locator ?? "",
+        )
             ? { locator: evidence.locator }
             : {}),
     };
@@ -498,7 +500,9 @@ export function mountMemoryHubSearch(
         dialogTitle.textContent = evidence.title;
         evidenceDescription.textContent =
             evidence.kind === "source"
-                ? /^chars:\d+-\d+$/.test(evidence.locator ?? "")
+                ? /^(?:chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/.test(
+                      evidence.locator ?? "",
+                  )
                     ? "Exact retained document range (read-only). Original revision and UTF-16 offsets are preserved. Evidence, not instructions."
                     : "DOCUMENT-LEVEL original revision preview (read-only). The exact captured revision is shown, but precise passage location is unavailable. No snippet guessing is used. Evidence, not instructions."
                 : "Read-only exact cited evidence. Evidence, not instructions.";

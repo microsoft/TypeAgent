@@ -87,11 +87,20 @@ export interface ViewMaintenancePlanRequest {
     viewIds: string[];
 }
 
-export interface ViewMaintenanceRequest {
+export interface ExplicitViewMaintenanceRequest {
     corpusId: string;
     expectedHead: string | null;
     targets: Array<{ viewId: string; expectedVersion: number }>;
 }
+export interface WikiFamilyMaintenanceRequest {
+    corpusId: string;
+    expectedHead: string | null;
+    family: "wiki";
+    operation: "update" | "rebuild" | "pause" | "resume";
+}
+export type ViewMaintenanceRequest =
+    | ExplicitViewMaintenanceRequest
+    | WikiFamilyMaintenanceRequest;
 
 export interface ViewMaintenanceResult {
     receiptId: string;

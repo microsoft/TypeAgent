@@ -297,6 +297,7 @@ export function mountMemoryHubViews(
         );
         if (current !== sequence) return;
         controls.replaceChildren(
+            ...collectionWikiControls(capabilities),
             rbButton("Build views", () => {
                 exactInitialSources.clear();
                 void action(() => openBuilder());
@@ -306,17 +307,70 @@ export function mountMemoryHubViews(
             }),
         );
         const jobs = collections.flatMap((collection) => collection.jobs);
+        const familyStatus = collections.flatMap((collection) =>
+            wikiStatusDescription(
+                collection.corpusId,
+                collection.views.wikiFamily,
+            ),
+        );
         await loadPendingConflicts(jobs, current);
         if (current !== sequence) return;
         renderDrafts();
+        status.textContent += familyStatus.join(" ");
         if (jobs[0]) renderReceipt(jobs[0]);
         else {
             receipt.replaceChildren();
             receipt.hidden = true;
         }
+
+        function wikiStatusDescription(
+            corpusId: string,
+            family: ViewSnapshot["wikiFamily"],
+        ): string[] {
+            if (!family) return [];
+            return [
+                `${corpusNames.get(corpusId) ?? corpusId}: Wiki ${family.enabled ? "automatic" : "paused"}; ${family.pending ? "bounded work pending" : "up to date"}${family.error ? `; retry needed: ${family.error}` : ""}.`,
+            ];
+        }
+
+        function collectionWikiControls(capabilities: {
+            derivedViews?: { informationalWiki?: true };
+        }): HTMLButtonElement[] {
+            if (!capabilities.derivedViews?.informationalWiki) return [];
+            return (["update", "rebuild", "pause", "resume"] as const).map(
+                (operation) =>
+                    rbButton(
+                        `${operation[0].toUpperCase()}${operation.slice(1)} collection Wiki`,
+                        () => {
+                            void action(async () => {
+                                const corpusId = options.scope();
+                                if (!corpusId)
+                                    throw new Error(
+                                        "Choose one collection to update its Wiki.",
+                                    );
+                                const current = await invokeMemory(
+                                    "memoryListViews",
+                                    { corpusId },
+                                );
+                                const result = await invokeMemory(
+                                    "memoryMaintainViews",
+                                    {
+                                        corpusId,
+                                        expectedHead: current.head,
+                                        family: "wiki",
+                                        operation,
+                                    },
+                                );
+                                if (result.job) renderReceipt(result.job);
+                                await refresh();
+                            });
+                        },
+                    ),
+            );
+        }
         status.textContent = snapshot.views.length
             ? `${snapshot.views.length} saved views${corpusId ? "" : " across your collections"}.`
-            : "No views yet. Build a reusable document from ready sources.";
+            : "No views yet. Wiki pages are discovered from indexed evidence; update this collection Wiki or build a legacy view.";
         if (route && !dirty) await renderRoute(route, current);
     }
 
@@ -690,6 +744,14 @@ export function mountMemoryHubViews(
         };
         buildPolicy.onchange = updateEffective;
         updateEffective();
+        const projectQuery = document.createElement("input");
+        projectQuery.setAttribute(
+            "aria-label",
+            "Indexed project summary query",
+        );
+        projectQuery.placeholder =
+            "Project name/query for bounded indexed summary (blank: legacy inventory)";
+        projectQuery.value = rebuilding?.definition.projectSummary?.query ?? "";
         container.replaceChildren(
             kindPicker,
             sourceHost,
@@ -699,6 +761,7 @@ export function mountMemoryHubViews(
             occurredTo,
             buildPolicy,
             effective,
+            projectQuery,
             rbButton("Continue to confirmation", () => {
                 void action(async () => {
                     if (dirty)
@@ -749,6 +812,7 @@ export function mountMemoryHubViews(
                         timelineSources,
                         selectedEvents,
                         rebuilding,
+                        projectQuery.value,
                     );
                     if (
                         current !== sequence ||
@@ -1417,6 +1481,27 @@ export function mountMemoryHubViews(
     ): void {
         void action(async () => {
             const capturedSequence = sequence;
+            if (citation.locator.startsWith("indexed:")) {
+                const fragment = await invokeMemory("memoryGetSourceContent", {
+                    corpusId: view.corpusId,
+                    sourceId: citation.sourceId,
+                    revisionId: citation.revisionId,
+                    indexedLocator: citation.locator,
+                });
+                if (capturedSequence !== sequence) return;
+                if (fragment.content !== citation.excerpt)
+                    throw new Error(
+                        "Indexed evidence anchor changed or is unavailable.",
+                    );
+                comparison.append(
+                    rbNode(
+                        "h5",
+                        "Indexed-text evidence (not original source offsets)",
+                    ),
+                    rbNode("pre", fragment.content),
+                );
+                return;
+            }
             const original = citation.evidence
                 ? await invokeView("memoryHubEvidence", {
                       corpusId: view.corpusId,
@@ -1498,6 +1583,7 @@ export function mountMemoryHubViews(
                           markDirty();
                       },
                       (citation) => showTimelineEvidence(view, citation),
+                      view.definition.wiki,
                   )
                 : undefined;
         const guideEditor =
@@ -1556,8 +1642,17 @@ export function mountMemoryHubViews(
                             viewId: view.viewId,
                             kind: view.content.kind as ViewKind,
                             selector: view.definition.selector,
+                            ...(wikiEditor?.retrieval()
+                                ? { wiki: wikiEditor.retrieval() }
+                                : {}),
                             ...(view.definition.maintenance
                                 ? { maintenance: view.definition.maintenance }
+                                : {}),
+                            ...(view.definition.projectSummary
+                                ? {
+                                      projectSummary:
+                                          view.definition.projectSummary,
+                                  }
                                 : {}),
                         },
                         content: structuredEditor

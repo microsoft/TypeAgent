@@ -9,16 +9,28 @@ import type {
 } from "./viewTypes.js";
 import { renderInventoryItem } from "./viewInventory.js";
 import { viewSourceKey, wikiIndex } from "./viewContent.js";
+import {
+    informationalWiki,
+    validateInformationalContent,
+} from "./informationalWiki.js";
 export { wikiIndex } from "./viewContent.js";
 
 export const wikiTaxonomy = ["concept", "system", "project"] as const;
 
 export function validateWiki(content: WikiContent): void {
+    if (informationalWiki(content)) {
+        validateInformationalContent(content);
+        return;
+    }
     if (!content.sections.length || content.sections.length > 32)
         throw new Error("Wiki requires 1 to 32 bounded pages");
     const retired = new Set<string>();
     const current = new Set(content.sections.map((page) => page.id));
     for (const page of content.sections) {
+        if ("construction" in page.details)
+            throw new Error(
+                "Informational page details cannot use legacy inventory construction",
+            );
         const details = page.details;
         if (
             page.role !== "page" ||
@@ -81,9 +93,13 @@ export function validateWikiEvidence(
     inventory: ViewFactInventory,
     edges: ViewRelationshipInput[],
 ): void {
+    if (informationalWiki(content))
+        throw new Error(
+            "Informational wiki cannot be validated as legacy inventory evidence",
+        );
     validateWiki(content);
     for (const page of content.sections) {
-        for (const id of page.details.inventoryIds) {
+        for (const id of page.details.inventoryIds ?? []) {
             const item = inventory.items.find((item) => item.id === id);
             if (!item || !page.body.includes(renderInventoryItem(item)))
                 throw new Error(

@@ -91,7 +91,7 @@ export const viewMaintenancePlanRequestSchema = z.strictObject({
     corpusId: id,
     viewIds: id.array().min(1).max(32),
 });
-export const viewMaintenanceRequestSchema = z.strictObject({
+const explicitMaintenanceRequestSchema = z.strictObject({
     corpusId: id,
     expectedHead: head,
     targets: z
@@ -103,6 +103,15 @@ export const viewMaintenanceRequestSchema = z.strictObject({
         .min(1)
         .max(32),
 });
+export const viewMaintenanceRequestSchema = z.union([
+    explicitMaintenanceRequestSchema,
+    z.strictObject({
+        corpusId: id,
+        expectedHead: head,
+        family: z.literal("wiki"),
+        operation: z.enum(["update", "rebuild", "pause", "resume"]),
+    }),
+]);
 export const viewMaintenanceUpdateSchema = z.strictObject({
     corpusId: id,
     viewId: id,

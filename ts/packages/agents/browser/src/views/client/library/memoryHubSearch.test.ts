@@ -199,6 +199,26 @@ test("healthy bounded retrieval notices are not failed retrieval, and explicit d
     );
 });
 
+test("Search/Ask evidence preserves exact indexed locators", async () => {
+    const locator = `indexed:0:${"a".repeat(64)}:12000-13000`;
+    invoke.mockImplementation(async (method: string) =>
+        method === "memoryHubSearch"
+            ? result([{ ...source, locator }])
+            : { title: "Indexed", content: "Exact excerpt", truncated: false },
+    );
+    await mounted.show("worker");
+    button(source.title).click();
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("memoryHubEvidence", {
+        corpusId: "a",
+        kind: "source",
+        objectId: "source",
+        revisionId: "r3",
+        locator,
+        offset: 0,
+    });
+});
+
 test("mixed evidence is answer-first, safely rendered, and exact citations never guess by excerpt", async () => {
     await mounted.show("worker");
     expect(host.querySelector(".phase2-answer")!.textContent).toContain(
@@ -215,6 +235,7 @@ test("mixed evidence is answer-first, safely rendered, and exact citations never
         revisionId: "r3",
         offset: 0,
     });
+
     expect(host.querySelector("dialog pre")!.textContent).toBe(
         "<script>literal original</script>",
     );

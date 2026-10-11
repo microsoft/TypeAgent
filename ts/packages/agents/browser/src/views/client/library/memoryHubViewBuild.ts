@@ -136,6 +136,7 @@ export function createViewBuildTargets(
     timelineSources: SourceInput[],
     events: Iterable<string>,
     rebuilding?: ViewVersion,
+    projectQuery?: string,
 ): ViewBuildRequest["targets"] {
     const eventInputs = [...events].map((eventId) => ({ eventId }));
     return [...kinds].map((kind) => {
@@ -168,6 +169,22 @@ export function createViewBuildTargets(
                 ...(rebuilding?.definition.maintenance
                     ? { maintenance: rebuilding.definition.maintenance }
                     : {}),
+                ...(rebuilding?.definition.wiki
+                    ? { wiki: rebuilding.definition.wiki }
+                    : {}),
+                ...(rebuilding?.definition.projectSummary
+                    ? { projectSummary: rebuilding.definition.projectSummary }
+                    : kind === "projectBrief" && projectQuery?.trim()
+                      ? {
+                            projectSummary: {
+                                construction:
+                                    "informational-project-summary-v1" as const,
+                                query: projectQuery.trim(),
+                                aliases: [],
+                                excludedSourceIds: [],
+                            },
+                        }
+                      : {}),
             },
         };
     });

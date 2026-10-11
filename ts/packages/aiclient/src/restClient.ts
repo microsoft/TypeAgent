@@ -7,6 +7,10 @@ import { filterSecretsFromJsonString } from "@typeagent/common-utils";
 import { otel } from "@typeagent/telemetry";
 import type { EndpointPool, EndpointPoolMember } from "./endpointPool.js";
 import {
+    RequestAdmissionError,
+    reserveSerializedRequest,
+} from "./requestBudget.js";
+import {
     markSuccess,
     markThrottled,
     markTransientFailure,
@@ -283,9 +287,12 @@ async function callFetch(
     throttler?: FetchThrottler,
 ) {
     const safeOptions = redactRequestBody(options);
-    return throttler
-        ? throttler(() => fetchWithTimeout(url, safeOptions, timeout))
-        : fetchWithTimeout(url, safeOptions, timeout);
+    const send = () => {
+        safeOptions?.signal?.throwIfAborted();
+        reserveSerializedRequest(safeOptions);
+        return fetchWithTimeout(url, safeOptions, timeout);
+    };
+    return throttler ? throttler(send) : send();
 }
 
 export type FetchThrottler = (fn: () => Promise<Response>) => Promise<Response>;
@@ -460,7 +467,7 @@ export async function fetchWithRetry(
             retryCount++;
         }
     } catch (e: any) {
-        if (isAbortError(e)) {
+        if (isAbortError(e) || e instanceof RequestAdmissionError) {
             throw e;
         }
         return fetchErrorWithEndpoint(
@@ -782,7 +789,7 @@ async function fetchWithPool(
         } catch (e: any) {
             // If the caller's abort signal fired, propagate immediately
             // instead of rotating to another pool member.
-            if (isAbortError(e)) {
+            if (isAbortError(e) || e instanceof RequestAdmissionError) {
                 throw e;
             }
             // Network error, timeout (AbortError re-thrown as "fetch timeout"),

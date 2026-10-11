@@ -6,6 +6,7 @@ import type {
     WikiPage,
     ViewCitation,
     ViewRelationshipInput,
+    ViewDefinitionInput,
 } from "@typeagent/memory-service";
 import { rbNode, rbButton } from "./memoryHubDocumentUi";
 
@@ -23,9 +24,16 @@ function mergePages(
     from: WikiPage,
     to: WikiPage,
 ) {
+    if ("construction" in from.details || "construction" in to.details)
+        throw new Error(
+            "Informational pages are independently stored and cannot use legacy bundle merges",
+        );
     to.body = `${to.body}\n\n## ${from.heading}\n\n${from.body}`;
     to.details.inventoryIds = [
-        ...new Set([...to.details.inventoryIds, ...from.details.inventoryIds]),
+        ...new Set([
+            ...(to.details.inventoryIds ?? []),
+            ...(from.details.inventoryIds ?? []),
+        ]),
     ];
     to.details.mergedPageIds = [
         ...new Set([
@@ -70,7 +78,11 @@ export function createWikiEditor(
     originalEdges: ViewRelationshipInput[],
     changed: () => void,
     showEvidence: (citation: ViewCitation) => void,
+    retrieval?: ViewDefinitionInput["wiki"],
 ) {
+    const wiki: ViewDefinitionInput["wiki"] = retrieval
+        ? JSON.parse(JSON.stringify(retrieval))
+        : undefined;
     const content: WikiContent = JSON.parse(JSON.stringify(original));
     let edges: ViewRelationshipInput[] = JSON.parse(
         JSON.stringify(originalEdges),
@@ -223,6 +235,83 @@ export function createWikiEditor(
                 true,
             ),
         );
+        if ("construction" in page.details) {
+            const details = page.details;
+            editor.append(
+                field(
+                    "Personal note",
+                    details.note,
+                    (value) => {
+                        details.note = value;
+                    },
+                    true,
+                ),
+            );
+            const category = document.createElement("select");
+            category.setAttribute("aria-label", "Page category");
+            for (const taxonomy of ["concept", "system", "project"] as const) {
+                const option = document.createElement("option");
+                option.value = taxonomy;
+                option.textContent = taxonomy;
+                option.selected = taxonomy === details.taxonomy;
+                category.append(option);
+            }
+            category.onchange = () => {
+                const value = category.value;
+                if (
+                    value !== "concept" &&
+                    value !== "system" &&
+                    value !== "project"
+                )
+                    return;
+                details.taxonomy = value;
+                changed();
+                index(content);
+                renderNavigation();
+            };
+            editor.append(category);
+            if (wiki) {
+                const exclusions = rbNode("fieldset");
+                exclusions.append(
+                    rbNode("legend", "Excluded sources (applies on refresh)"),
+                );
+                for (const sourceId of [
+                    ...new Set([
+                        ...content.citations.map(
+                            (citation) => citation.sourceId,
+                        ),
+                        ...wiki.excludedSourceIds,
+                    ]),
+                ]) {
+                    const label = rbNode("label", sourceId);
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.setAttribute(
+                        "aria-label",
+                        `Exclude source ${sourceId}`,
+                    );
+                    checkbox.checked =
+                        wiki.excludedSourceIds.includes(sourceId);
+                    checkbox.onchange = () => {
+                        wiki.excludedSourceIds = checkbox.checked
+                            ? [
+                                  ...new Set([
+                                      ...wiki.excludedSourceIds,
+                                      sourceId,
+                                  ]),
+                              ]
+                            : wiki.excludedSourceIds.filter(
+                                  (id) => id !== sourceId,
+                              );
+                        changed();
+                    };
+                    label.prepend(checkbox);
+                    exclusions.append(label);
+                }
+                editor.append(exclusions);
+            }
+            return;
+        }
         const target = document.createElement("select");
         target.setAttribute("aria-label", "Merge into wiki page");
         for (const other of content.sections.filter(
@@ -317,6 +406,12 @@ export function createWikiEditor(
             ),
             renderRelationships(page),
         );
+        if ("construction" in page.details) {
+            reader.append(
+                rbNode("p", content.summary),
+                rbNode("p", page.details.note),
+            );
+        }
         for (const edge of edges.filter(
             (edge) =>
                 edge.predicate === "supportedBy" &&
@@ -355,5 +450,7 @@ export function createWikiEditor(
         },
         relationships: () =>
             JSON.parse(JSON.stringify(edges)) as ViewRelationshipInput[],
+        retrieval: (): ViewDefinitionInput["wiki"] =>
+            wiki ? JSON.parse(JSON.stringify(wiki)) : undefined,
     };
 }

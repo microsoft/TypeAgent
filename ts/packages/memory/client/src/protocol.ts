@@ -286,6 +286,10 @@ export const sourceContentRequestSchema = z.object({
     revisionId: identifierSchema.optional(),
     offset: z.number().int().nonnegative().optional(),
     maxChars: z.number().int().positive().max(100_000).optional(),
+    indexedLocator: z
+        .string()
+        .regex(/^indexed:\d+:[0-9a-f]{64}:\d+-\d+$/)
+        .optional(),
 });
 
 export const sourceContentSchema = z.object({
@@ -467,6 +471,7 @@ export const eventForgetResultSchema = z.object({
 });
 
 export const searchRequestSchema = z.object({
+    indexedFragments: z.boolean().optional(),
     corpusId: identifierSchema,
     query: z.string().min(1),
     limit: z.number().int().positive().max(100).optional(),
@@ -565,6 +570,7 @@ export const capabilitiesSchema = z.object({
             builds: z.literal(true).optional(),
             editMerging: z.literal(true).optional(),
             maintenance: z.literal(true).optional(),
+            informationalWiki: z.literal(true).optional(),
         })
         .optional(),
     chatProvider: z.string().optional(),
