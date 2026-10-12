@@ -23,7 +23,7 @@ export function mountMemoryHubWebMaintenance(
     options: { onError: (error: unknown) => void; onOpenGraph: () => void },
 ) {
     const root = document.createElement("section");
-    root.className = "card";
+    root.className = "card memory-web-maintenance";
     root.setAttribute("aria-label", "Browser knowledge graph maintenance");
     const heading = document.createElement("h3");
     heading.textContent = "Browser knowledge graph";

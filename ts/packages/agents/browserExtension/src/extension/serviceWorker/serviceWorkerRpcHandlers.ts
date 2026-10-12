@@ -126,25 +126,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryReindexSource: (params) => forward("memoryReindexSource", params),
         memoryListJobs: (params) => forward("memoryListJobs", params),
         memoryCancelJob: (params) => forward("memoryCancelJob", params),
-        memoryGetHowToSettings: (params) =>
-            forward("memoryGetHowToSettings", params),
-        memoryUpdateHowToSettings: (params) =>
-            forward("memoryUpdateHowToSettings", params),
-        memoryCreateProcedureCandidate: (params) =>
-            forward("memoryCreateProcedureCandidate", params),
-        memoryListProcedureCandidates: (params) =>
-            forward("memoryListProcedureCandidates", params),
-        memoryRejectProcedureCandidate: (params) =>
-            forward("memoryRejectProcedureCandidate", params),
-        memorySaveProcedure: (params) => forward("memorySaveProcedure", params),
-        memoryListProcedures: (params) =>
-            forward("memoryListProcedures", params),
-        memoryGetProcedure: (params) => forward("memoryGetProcedure", params),
-        memorySearchProcedures: (params) =>
-            forward("memorySearchProcedures", params),
-        memoryArchiveProcedure: (params) =>
-            forward("memoryArchiveProcedure", params),
-
         memoryListActivity: (params) => forward("memoryListActivity", params),
         memoryForgetActivity: (params) =>
             forward("memoryForgetActivity", params),

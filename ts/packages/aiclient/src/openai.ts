@@ -64,7 +64,7 @@ import {
     copilotApiSettingsFromConfig,
 } from "./copilotSettings.js";
 import { getProviderChatModel } from "./providerChatModelRegistry.js";
-import type { WireApi } from "@typeagent/config";
+import type { WireApi, ModelRequestConstraints } from "@typeagent/config";
 import {
     getActiveModelProvider,
     resolveTarget,
@@ -89,6 +89,7 @@ export type { ModelInfo, ModelProviders, CompletionUsageStats };
 const debugOpenAI = registerDebug("typeagent:openai");
 
 export type CommonApiSettings = {
+    requestConstraints?: ModelRequestConstraints | undefined;
     provider: ModelProviders;
     modelType: ModelType;
     endpoint: string;
@@ -262,6 +263,14 @@ function parseEndPointName(endpoint?: string): {
 // Cache of per-model endpoint pools. Keyed by
 // `${modelType}:${provider}:${endpointName}`.
 const modelPools = new Map<string, EndpointPool>();
+let poolConfig: ReturnType<typeof getRuntimeConfig> | undefined;
+
+function refreshModelPools(): void {
+    const config = getRuntimeConfig();
+    if (poolConfig === config) return;
+    modelPools.clear();
+    poolConfig = config;
+}
 
 function defaultProvider(): ModelProviders {
     return EnvVars.OPENAI_API_KEY in process.env ? "openai" : "azure";
@@ -272,10 +281,23 @@ function getModelPool(
     modelType: ModelType,
     endpointName?: string,
 ): EndpointPool {
+    refreshModelPools();
     const key = `${modelType}:${provider}:${endpointName ?? ""}`;
     const existing = modelPools.get(key);
     if (existing) return existing;
     const pool = buildModelPool(provider, modelType, endpointName);
+    const config = getRuntimeConfig();
+    const constraintName =
+        provider === "azure" &&
+        !config.azureOpenAI.deployments.has(endpointName?.toLowerCase() ?? "")
+            ? ""
+            : (endpointName ?? "");
+    const requestConstraints = config.modelRequestConstraints?.get(
+        `${provider}:${modelType}:${constraintName}`.toLowerCase(),
+    );
+    if (requestConstraints)
+        for (const member of pool.members)
+            member.settings.requestConstraints = requestConstraints;
     modelPools.set(key, pool);
     return pool;
 }
@@ -307,6 +329,7 @@ function buildModelPool(
 }
 
 export function getChatModelPool(endpoint?: string): EndpointPool {
+    refreshModelPools();
     const endpointName = parseEndPointName(endpoint);
     const key = `${ModelType.Chat}:${endpointName.provider}:${endpointName.name ?? ""}`;
     const existing = modelPools.get(key);
@@ -365,6 +388,17 @@ export function getChatModelPool(endpoint?: string): EndpointPool {
 export function getChatModelSettings(endpoint?: string): ApiSettings {
     const pool = getChatModelPool(endpoint);
     return pool.members[0].settings;
+}
+
+export function getChatModelOutputLimit(
+    applicationLimit: number,
+    endpoint?: string,
+): number {
+    const constraints = getChatModelSettings(endpoint).requestConstraints;
+    return Math.min(
+        applicationLimit,
+        constraints?.outputTokens ?? applicationLimit,
+    );
 }
 
 /**
@@ -453,10 +487,32 @@ export function createChatModel(
             : getChatModelPool(endpoint);
     const settings = pool.members[0].settings;
 
-    // GPT-5 models only support temperature=1; 0 is rejected by the API.
-    if (typeof endpoint === "string" && /gpt.?5/i.test(endpoint)) {
+    if (
+        settings.requestConstraints?.outputTokens !== undefined &&
+        completionSettings?.max_completion_tokens === undefined &&
+        completionSettings?.max_tokens === undefined
+    )
+        completionSettings = {
+            ...completionSettings,
+            max_completion_tokens: settings.requestConstraints.outputTokens,
+        };
+
+    // GPT-5+ models only support the default temperature; other values are
+    // rejected. Check resolved settings because callers often use an alias.
+    if (
+        (settings.provider === "azure" || settings.provider === "openai") &&
+        [
+            typeof endpoint === "string" ? endpoint : undefined,
+            "modelName" in settings ? settings.modelName : undefined,
+            settings.endpoint,
+        ].some(
+            (identifier) =>
+                identifier !== undefined &&
+                /gpt[-_.]?(?:5|6)(?:$|[-_.])/i.test(identifier),
+        )
+    ) {
         completionSettings ??= {};
-        completionSettings.temperature ??= 1;
+        completionSettings.temperature = 1;
     }
 
     let model: ChatModelWithStreaming;

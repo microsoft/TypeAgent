@@ -1,6 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { validateInventoryAudit } from "./viewInventory.js";
+import { inventoryEvidence } from "./viewInventoryCoverage.js";
+import { viewHash } from "./viewMerge.js";
+import { authoredRelationships } from "./viewRelationships.js";
+import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
 import type {
     ViewEffectivePublicationPolicy,
     ViewPublicationPolicy,
@@ -9,11 +14,6 @@ import type {
     ViewSynthesisOutput,
     ViewVersion,
 } from "./viewTypes.js";
-import { authoredRelationships } from "./viewRelationships.js";
-import { viewHash } from "./viewMerge.js";
-import { validateInventoryAudit } from "./viewInventory.js";
-import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
-import { inventoryEvidence } from "./viewInventoryCoverage.js";
 
 export function effectiveViewPublicationPolicy(
     policy: ViewPublicationPolicy,
@@ -37,7 +37,6 @@ export function effectiveViewPublicationPolicy(
 
 export function publicationArtifact(version: ViewVersion): ViewSynthesisOutput {
     if (
-        version.content.kind === "procedure" ||
         !version.generation?.input ||
         !version.generation.outcome ||
         !version.generation.missingEvidence

@@ -67,13 +67,13 @@
           ><span class="hub-nav-label">Inbox</span>
           <span id="inboxBadge" class="hub-badge"></span
         ></a>
-        <a href="#/library" title="Library (Alt+2)"
+        <a href="#/library" title="Sources (Alt+2)"
           ><i class="fa-solid fa-book-open" aria-hidden="true"></i
-          ><span class="hub-nav-label">Library</span></a
+          ><span class="hub-nav-label">Sources</span></a
         >
-        <a href="#/runbooks" title="Runbooks (Alt+3)"
+        <a href="#/views" title="Views (Alt+3)"
           ><i class="fa-solid fa-list-check" aria-hidden="true"></i
-          ><span class="hub-nav-label">Runbooks</span></a
+          ><span class="hub-nav-label">Views</span></a
         >
         <a href="#/explore" title="Explore (Alt+4)"
           ><i class="fa-solid fa-compass" aria-hidden="true"></i
@@ -110,6 +110,7 @@
             >
           </div>
           <div id="hubInbox"></div>
+          <div id="hubViewAttention"></div>
           <div class="pager">
             <button
               id="inboxPrevious"
@@ -149,25 +150,11 @@
           <div id="hubSearch"></div>
         </section>
         <section id="page-library" class="hub-page hidden">
-          <div class="hub-page-head"><h2>Library</h2></div>
+          <div class="hub-page-head"><h2>Sources</h2></div>
           <div id="hubSources"></div>
         </section>
-        <section id="page-runbooks" class="hub-page hidden">
-          <div class="hub-page-head">
-            <h2>Runbooks</h2>
-            <details class="hub-help">
-              <summary aria-label="About runbooks" title="About runbooks">
-                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
-              </summary>
-              <p>
-                Review original evidence beside human guides and derived agent
-                editions. Publishing creates an immutable skill draft; approval
-                and activation are separate catalog actions. Bindings and
-                lifecycle changes never grant execution permission.
-              </p>
-            </details>
-          </div>
-          <div id="hubRunbooks"></div>
+        <section id="page-views" class="hub-page hidden">
+          <div class="hub-page-head"><h2>Views</h2></div>
           <div id="hubDraftViews"></div>
         </section>
         <section id="page-explore" class="hub-page hidden">
@@ -204,6 +191,7 @@
           <div id="hubActivity"></div>
           <div id="hubChanges"></div>
           <div id="hubRunbookActivity"></div>
+          <div id="hubViewActivity"></div>
         </section>
         <section id="page-settings" class="hub-page hidden">
           <div class="hub-page-head"><h2>Settings</h2></div>
@@ -249,7 +237,7 @@
       <div id="drawer-knowledge" class="hidden"></div>
       <div id="drawer-revisions" class="hidden"></div>
       <div id="drawer-usedby" class="hidden">
-        <p>Select Used by to load exact procedure and skill lineage.</p>
+        <p>Select Used by to load exact derived-view dependencies.</p>
       </div>
       <div id="drawer-activity" class="hidden">
         <p>
@@ -275,7 +263,7 @@
       <label class="hub-add-target"
         >Add to
         <select id="addTarget" aria-describedby="addTargetHint">
-          <option value="">Choose a corpus</option>
+          <option value="">Choose a collection</option>
         </select>
       </label>
       <p id="addTargetHint" class="hub-hint">
@@ -311,15 +299,19 @@
         </button>
         <button id="addCreate" class="hub-tile" type="button">
           <i class="fa-solid fa-folder-plus" aria-hidden="true"></i
-          ><span><b>New corpus</b><small>A named collection</small></span>
+          ><span
+            ><b>New collection</b
+            ><small>A named evidence collection</small></span
+          >
         </button>
       </div>
-      <h3 class="hub-group-title">Runbook sources</h3>
+      <h3 class="hub-group-title">Documents and transcripts</h3>
       <div class="hub-tiles">
         <button id="addRunbookFolder" class="hub-tile" type="button">
           <i class="fa-solid fa-folder-tree" aria-hidden="true"></i
           ><span
-            ><b>Folder of guides</b><small>Markdown, HTML, text</small></span
+            ><b>Folder of documents</b
+            ><small>Markdown, HTML, text and guides</small></span
           >
         </button>
         <button id="addRunbookWiki" class="hub-tile" type="button">
@@ -329,6 +321,15 @@
         <button id="addRunbookUrls" class="hub-tile" type="button">
           <i class="fa-solid fa-link" aria-hidden="true"></i
           ><span><b>URL list</b><small>Pages to fetch</small></span>
+        </button>
+        <button id="addConversationFolder" class="hub-tile" type="button">
+          <i class="fa-solid fa-comments" aria-hidden="true"></i>
+          <span
+            ><b>Session transcripts</b
+            ><small
+              >Prepared Markdown or text, not native agent exports</small
+            ></span
+          >
         </button>
       </div>
       <details class="hub-help-block">

@@ -134,7 +134,7 @@ test("explicit snapshot uses one selected page and canonical browser ingestion",
     assert.equal(document.activityType, "captured");
     assert.ok(Number.isFinite(Date.parse(document.capturedAt)));
     assert.equal(mode, "content");
-    assert.equal(options.reportHowToStatus, true);
+    assert.equal(options, undefined);
 });
 
 test("changed, mismatched and own-view snapshots cannot reach ingestion", async () => {

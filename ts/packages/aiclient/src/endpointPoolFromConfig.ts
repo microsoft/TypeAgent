@@ -43,11 +43,11 @@ type PoolOverrideEntry = {
 };
 
 function makeThrottler(maxConcurrency: number): FetchThrottler {
-    const q = priorityQueue<() => Promise<any>>(
+    const q = priorityQueue<() => Promise<Response>>(
         async (task) => task(),
         maxConcurrency,
     );
-    return (fn: () => Promise<any>) => q.push<any>(fn);
+    return (fn: () => Promise<Response>) => q.pushAsync<Response>(fn);
 }
 
 /**

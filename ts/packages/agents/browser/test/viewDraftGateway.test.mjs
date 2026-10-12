@@ -9,13 +9,21 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
+import { viewMethods } from "@typeagent/browser-control-rpc/viewRpc";
 import { FileMemoryService, waitForMemoryJob } from "@typeagent/memory-service";
-import { FakeProcedureCorpusIndex } from "../../../memory/service/dist/test/fakeProcedureCorpusIndex.js";
+import { FakeSemanticCorpusIndex } from "../../../memory/service/dist/test/fakeSemanticCorpusIndex.js";
 import { createMemoryViewFunctions } from "../dist/agent/memoryViews.mjs";
-import {
-    projectBriefTestAnswer,
-    projectSources,
-} from "../../../memory/service/dist/test/projectBriefTestModel.js";
+import { BrowserMemoryService } from "../dist/agent/browserMemoryService.mjs";
+import { createMemoryHubSourceOriginalFunctions } from "../dist/agent/memoryHubSourceOriginal.mjs";
+import { createMemoryHubViewUsageFunctions } from "../dist/agent/memoryHubViewUsage.mjs";
+import { createMemoryHubFunctions } from "../dist/agent/memoryHub.mjs";
+import { createMemoryHubExploreFunctions } from "../dist/agent/memoryHubExplore.mjs";
+import { projectSources } from "../../../memory/service/dist/test/projectTestSources.js";
+import { inventoryTestAnswer } from "../../../memory/service/dist/test/viewInventoryTestModel.js";
+import { projectSummaryTestResponse } from "../../../memory/service/dist/test/informationalProjectTestModel.js";
+import { FakeIndexedCorpusIndex } from "../../../memory/service/dist/test/fakeIndexedCorpusIndex.js";
+import { hydrateProjectSummary } from "../../../memory/service/dist/informationalProject.js";
+import { hydrateInformational } from "../../../memory/service/dist/informationalWiki.js";
 import {
     hydrateInventory,
     parseInventoryAudit,
@@ -26,7 +34,6 @@ import {
 } from "../../../memory/service/dist/viewSynthesisEvidence.js";
 import { hydrateInventoryConstruction } from "../../../memory/service/dist/viewInventoryCoverage.js";
 import { timelineTestAnswer } from "../../../memory/service/dist/test/timelineTestModel.js";
-import { wikiTestAnswer } from "../../../memory/service/dist/test/wikiTestModel.js";
 
 for (const kind of [
     "troubleshootingGuide",
@@ -34,7 +41,7 @@ for (const kind of [
     "timeline",
     "wiki",
 ]) {
-    test(`real views HTTP/parent IPC routes ${kind} builds to the file-backed service owner`, async (t) => {
+    test(`default Browser Views capability admits real ${kind} builds through HTTP/parent IPC without enablement`, async (t) => {
         const root = await mkdtemp(
             path.join(os.tmpdir(), "view-draft-gateway-"),
         );
@@ -60,21 +67,37 @@ for (const kind of [
             "context",
         ];
         const service = new FileMemoryService(root, {
-            viewDrafts: true,
+            informationalViews: kind === "projectBrief" || kind === "wiki",
+            ...(kind === "projectBrief"
+                ? {
+                      informationalBudget: {
+                          contextTokens: 21000,
+                          inputTokens: 16000,
+                          outputTokens: 4000,
+                          safetyTokens: 1000,
+                          chatAttempts: 4,
+                          reservedTokens: 64000,
+                          embeddingAttempts: 8,
+                          elapsedMs: 60000,
+                          tokenizer: "synthetic-gateway",
+                          countTokens: (text) => Math.ceil(text.length / 3),
+                      },
+                  }
+                : {}),
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                kind === "projectBrief" || kind === "wiki"
+                    ? new FakeIndexedCorpusIndex(directory)
+                    : new FakeSemanticCorpusIndex(directory),
             viewSynthesisAdapter: {
                 identity: "offline-gateway-test",
-                ...(kind !== "troubleshootingGuide"
+                ...(kind === "timeline"
                     ? {
                           inventory: async (input) =>
                               hydrateInventory(
                                   input,
-                                  (kind === "wiki"
-                                      ? wikiTestAnswer
-                                      : kind === "timeline"
-                                        ? timelineTestAnswer
-                                        : projectBriefTestAnswer)(
+                                  (kind === "timeline"
+                                      ? timelineTestAnswer
+                                      : inventoryTestAnswer)(
                                       "memory_source_fact_inventory",
                                       labelViewInput(
                                           input,
@@ -84,11 +107,9 @@ for (const kind of [
                               ),
                           checkInventory: async (_input, inventory) =>
                               parseInventoryAudit(
-                                  (kind === "wiki"
-                                      ? wikiTestAnswer
-                                      : kind === "timeline"
-                                        ? timelineTestAnswer
-                                        : projectBriefTestAnswer)(
+                                  (kind === "timeline"
+                                      ? timelineTestAnswer
+                                      : inventoryTestAnswer)(
                                       "memory_source_inventory_check",
                                       { inventory },
                                   ),
@@ -96,20 +117,47 @@ for (const kind of [
                       }
                     : {}),
                 generate: async (input, _signal, inventory) => {
+                    if (kind === "wiki") {
+                        assert.equal(input.pipeline, "informational-wiki-v1");
+                        assert.equal(inventory, undefined);
+                        return hydrateInformational(input, {
+                            title: "Read only wiki",
+                            prose: input.inputs
+                                .map((source) => source.content)
+                                .join("\n\n"),
+                            limits: "Only selected indexed evidence",
+                            citationIds: input.inputs
+                                .flatMap((source) => source.passages ?? [])
+                                .map((_, index) => `f${index}`),
+                        });
+                    }
+                    if (kind === "projectBrief") {
+                        assert.equal(
+                            input.pipeline,
+                            "informational-project-summary-v1",
+                        );
+                        assert.equal(inventory, undefined);
+                        return hydrateProjectSummary(
+                            input,
+                            projectSummaryTestResponse(
+                                input.inputs
+                                    .flatMap((source) => source.passages ?? [])
+                                    .map((passage) => ({
+                                        text: passage.excerpt,
+                                    })),
+                            ),
+                        );
+                    }
                     if (kind !== "troubleshootingGuide")
                         return hydrateInventoryConstruction(
                             input,
                             inventory,
-                            (kind === "wiki"
-                                ? wikiTestAnswer
-                                : kind === "timeline"
-                                  ? timelineTestAnswer
-                                  : projectBriefTestAnswer)(
-                                kind === "wiki"
-                                    ? "memory_wiki_construction"
-                                    : kind === "timeline"
-                                      ? "memory_timeline_construction"
-                                      : "memory_project_brief_construction",
+                            (kind === "timeline"
+                                ? timelineTestAnswer
+                                : inventoryTestAnswer)(
+                                kind === "timeline"
+                                    ? "memory_timeline_construction"
+                                    : "memory_inventory_guide_construction",
                                 { input, inventory },
                             ),
                         );
@@ -183,12 +231,42 @@ for (const kind of [
             await service.close();
             await rm(root, { recursive: true, force: true });
         });
-        createRpc("draft-view-test-parent", child, {
+        const browserMemory = new BrowserMemoryService(service);
+        const capabilities = await browserMemory.getCapabilities();
+        assert.ok(
+            capabilities.derivedViews,
+            "Default Browser memory must expose working Views without opt-in",
+        );
+        assert.equal(capabilities.derivedViews.drafts, true);
+        assert.equal(capabilities.derivedViews.builds, true);
+        assert.ok(capabilities.derivedViews.kinds.includes(kind));
+        const handlers = {
             ...createMemoryViewFunctions(() => service),
+            ...createMemoryHubSourceOriginalFunctions(() => service),
+            ...createMemoryHubViewUsageFunctions(() => service),
+            ...createMemoryHubExploreFunctions(() => service),
             memoryGetSourceContent: (request) =>
                 service.getSourceContent(request),
             memoryListEvents: (request) => service.listEvents(request),
-        });
+            memoryListCorpora: () => service.listCorpora(),
+            memoryGetCorpus: ({ corpusId }) => service.getCorpus(corpusId),
+            memoryGetSource: ({ corpusId, sourceId }) =>
+                service.getSource(corpusId, sourceId),
+            memoryListSources: (request) => service.listSourcesPage(request),
+            memoryListJobs: (request) => service.listJobs(request),
+            memoryListActivity: (request) =>
+                browserMemory.listActivity(request),
+        };
+        Object.assign(handlers, createMemoryHubFunctions(handlers));
+        createRpc(
+            "draft-view-test-parent",
+            child,
+            Object.fromEntries(
+                viewMethods
+                    .filter((method) => method in handlers)
+                    .map((method) => [method, handlers[method]]),
+            ),
+        );
         const ready = await new Promise((resolve, reject) => {
             child.on("message", (message) => {
                 if (message.type === "Success") resolve(message);
@@ -208,6 +286,13 @@ for (const kind of [
             return { status: response.status, body: await response.json() };
         }
         const corpus = await service.createCorpus("Gateway synthetic fixture");
+        if (kind === "wiki")
+            await service.maintainViews({
+                corpusId: corpus.corpusId,
+                expectedHead: (await service.listViews(corpus.corpusId)).head,
+                family: "wiki",
+                operation: "pause",
+            });
         const source = await service.ingestDocument({
             corpusId: corpus.corpusId,
             source: {
@@ -224,6 +309,36 @@ for (const kind of [
                 .builds,
             true,
         );
+        const events = await invoke("memoryListEvents", {
+            corpusId: corpus.corpusId,
+            pageSize: 200,
+        });
+        assert.equal(events.status, 200);
+        assert.equal(events.body.success, true);
+        assert.deepEqual(events.body.data.items, []);
+        assert.equal(
+            (
+                await invoke("memoryGetSourceContent", {
+                    corpusId: corpus.corpusId,
+                    sourceId: source.sourceId,
+                    revisionId: source.revisionId,
+                    offset: 0,
+                    maxChars: 100000,
+                })
+            ).status,
+            200,
+        );
+        assert.equal(
+            (
+                await invoke("memoryGetSourceContent", {
+                    corpusId: corpus.corpusId,
+                    sourceId: source.sourceId,
+                    revisionId: source.revisionId,
+                    maxChars: 120000,
+                })
+            ).status,
+            400,
+        );
         const request = {
             corpusId: corpus.corpusId,
             expectedHead: (await service.listViews(corpus.corpusId)).head,
@@ -233,6 +348,27 @@ for (const kind of [
                     definition: {
                         viewId,
                         kind,
+                        ...(kind === "wiki"
+                            ? {
+                                  wiki: {
+                                      construction: "informational-wiki-v1",
+                                      query: "Read only",
+                                      aliases: [],
+                                      excludedSourceIds: [],
+                                  },
+                              }
+                            : {}),
+                        ...(kind === "projectBrief"
+                            ? {
+                                  projectSummary: {
+                                      construction:
+                                          "informational-project-summary-v1",
+                                      query: "Payments",
+                                      aliases: [],
+                                      excludedSourceIds: [],
+                                  },
+                              }
+                            : {}),
                         selector: {
                             kind:
                                 kind === "timeline"
@@ -256,6 +392,35 @@ for (const kind of [
                 .status,
             400,
         );
+        if (kind === "wiki") {
+            const obsolete = structuredClone(request);
+            delete obsolete.targets[0].definition.wiki;
+            assert.equal(
+                (await invoke("memoryBuildViews", obsolete)).status,
+                400,
+            );
+            const unsupported = structuredClone(request);
+            unsupported.targets[0].definition.wiki.construction = "wiki-v1";
+            assert.equal(
+                (await invoke("memoryBuildViews", unsupported)).status,
+                400,
+            );
+        }
+        if (kind === "projectBrief") {
+            const obsolete = structuredClone(request);
+            delete obsolete.targets[0].definition.projectSummary;
+            assert.equal(
+                (await invoke("memoryBuildViews", obsolete)).status,
+                400,
+            );
+            const unsupported = structuredClone(request);
+            unsupported.targets[0].definition.projectSummary.construction =
+                "project-brief-v1";
+            assert.equal(
+                (await invoke("memoryBuildViews", unsupported)).status,
+                400,
+            );
+        }
         const admitted = await invoke("memoryBuildViews", request);
         assert.equal(admitted.status, 200);
         let job = admitted.body.data;
@@ -268,8 +433,37 @@ for (const kind of [
             assert.equal(status.status, 200);
             job = status.body.data;
         }
-        assert.equal(job.state, "complete");
+        assert.equal(job.state, "complete", JSON.stringify(job.results));
         assert.equal(job.results[0].state, "draft");
+        const original = await invoke("memoryHubSourceOriginal", {
+            corpusId: corpus.corpusId,
+            sourceId: source.sourceId,
+            revisionId: source.revisionId,
+            locator: "chars:0-10",
+        });
+        assert.equal(original.status, 200);
+        assert.equal(original.body.data.available, true);
+        assert.equal(original.body.data.content, sourceText);
+        assert.deepEqual(original.body.data.location, {
+            kind: "characters",
+            start: 0,
+            end: 10,
+        });
+        const usage = await invoke("memoryHubViewUsedBy", {
+            corpusId: corpus.corpusId,
+            sourceId: source.sourceId,
+        });
+        assert.equal(usage.status, 200);
+        assert.ok(
+            usage.body.data.items.some(
+                (item) => item.viewId === viewId && item.revisionId,
+            ),
+        );
+        assert.ok(
+            usage.body.data.items.some((item) => item.jobId === job.jobId),
+        );
+        assert.equal(usage.body.data.total, usage.body.data.items.length);
+        assert.ok(!Object.hasOwn(usage.body.data, "views"));
         if (kind === "timeline") {
             const rejected = await invoke("memoryBuildViews", {
                 ...request,
@@ -376,16 +570,53 @@ for (const kind of [
             ).status,
             400,
         );
-        assert.deepEqual(
-            (
-                await invoke("memorySearchViews", {
-                    corpusId: corpus.corpusId,
-                    query: "Read only",
-                    freshness: "current",
-                })
-            ).body.data,
-            [],
-        );
+        const visible = (
+            await invoke("memorySearchViews", {
+                corpusId: corpus.corpusId,
+                query: kind === "projectBrief" ? "Payments" : "Read only",
+                freshness: "current",
+            })
+        ).body.data;
+        if (kind === "wiki") {
+            assert.equal(visible.length, 1);
+            assert.equal(
+                visible[0].view.content.construction,
+                "informational-wiki-v1",
+            );
+            const citation = visible[0].evidence[0];
+            const resolved = await invoke("memoryGetSourceContent", {
+                corpusId: corpus.corpusId,
+                sourceId: citation.sourceId,
+                revisionId: citation.revisionId,
+                indexedLocator: citation.locator,
+            });
+            assert.equal(resolved.status, 200);
+            assert.equal(resolved.body.data.content, citation.excerpt);
+            const oldMaintenance = await invoke("memoryUpdateViewMaintenance", {
+                corpusId: corpus.corpusId,
+                viewId,
+                expectedHead: views.body.data.head,
+                expectedVersion: visible[0].view.version,
+                maintenance: {
+                    schemaVersion: 1,
+                    scope: { mode: "pinned" },
+                    wikiDiscovery: {
+                        rules: "explicit-subjects-v1",
+                        subjects: [],
+                        createDraftPages: false,
+                    },
+                },
+            });
+            assert.equal(oldMaintenance.status, 400);
+            return;
+        }
+        if (kind === "projectBrief") {
+            assert.equal(visible.length, 1);
+            assert.equal(
+                visible[0].view.content.construction,
+                "informational-project-summary-v1",
+            );
+        } else assert.deepEqual(visible, []);
         assert.match(html, /hubDraftViews/);
         if (kind === "projectBrief") {
             const view = views.body.data.views[0];
@@ -425,7 +656,7 @@ for (const kind of [
                 expectedVersion: latest.version,
                 expectedHead: (await service.listViews(corpus.corpusId)).head,
             });
-            assert.equal(published.status, 200);
+            assert.equal(published.status, 200, JSON.stringify(published.body));
             const found = await invoke("memorySearchViews", {
                 corpusId: corpus.corpusId,
                 query: "Payments reliability",
@@ -439,10 +670,12 @@ for (const kind of [
                 corpusId: corpus.corpusId,
                 sourceId: citation.sourceId,
                 revisionId: citation.revisionId,
+                indexedLocator: citation.locator,
             });
             assert.equal(original.status, 200);
-            assert.equal(original.body.data.content, sourceText);
+            assert.equal(original.body.data.content, citation.excerpt);
             assert.equal(latest.content.agentEdition, undefined);
+            return;
         }
         const maintenanceSnapshot = await service.listViews(corpus.corpusId);
         const maintained = maintenanceSnapshot.views.find(
@@ -456,22 +689,6 @@ for (const kind of [
             maintenance: {
                 schemaVersion: 1,
                 scope: { mode: "currentSources", sourceIds: ["s"] },
-                ...(kind === "wiki"
-                    ? {
-                          wikiDiscovery: {
-                              rules: "explicit-subjects-v1",
-                              createDraftPages: false,
-                              subjects: maintained.content.sections.map(
-                                  (page) => ({
-                                      key: page.id,
-                                      pageId: page.id,
-                                      title: page.heading,
-                                      taxonomy: page.details.taxonomy,
-                                  }),
-                              ),
-                          },
-                      }
-                    : {}),
             },
         });
         assert.equal(definitionUpdate.status, 200);
@@ -501,7 +718,11 @@ for (const kind of [
             "memoryMaintainViews",
             maintenanceRequest,
         );
-        assert.equal(maintenanceReceipt.status, 200);
+        assert.equal(
+            maintenanceReceipt.status,
+            200,
+            JSON.stringify(maintenanceReceipt.body),
+        );
         let maintainedJob = maintenanceReceipt.body.data.job;
         while (maintainedJob.state === "running") {
             await new Promise((resolve) => setTimeout(resolve, 20));
@@ -527,5 +748,16 @@ for (const kind of [
         });
         assert.equal(storedReceipt.status, 200);
         assert.equal(storedReceipt.body.data.job.state, "complete");
+        if (process.env.TYPEAGENT_TEST_BROWSER_WORKFLOW === "true") {
+            const { verifyViewBuildBrowserWorkflow } = await import(
+                "./viewBuildBrowserWorkflow.mjs"
+            );
+            await verifyViewBuildBrowserWorkflow(
+                base,
+                corpus.corpusId,
+                kind,
+                service,
+            );
+        }
     });
 }

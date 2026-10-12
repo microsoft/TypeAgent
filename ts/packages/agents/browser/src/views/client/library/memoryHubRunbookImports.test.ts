@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import { TextEncoder, TextDecoder } from "node:util";
-import type {
-    MemoryBatchImport,
-    RunbookJobResult,
-} from "@typeagent/memory-service";
+import type { MemoryBatchImport } from "@typeagent/memory-service";
 import type {
     RunbookImportResponse,
     RunbookImportBatch,
@@ -21,9 +18,7 @@ let mounted: ReturnType<typeof mountMemoryHubRunbookImports>;
 let scope: string | undefined;
 let onError: jest.Mock;
 let onChanged: jest.Mock;
-let onOpenRunbook: jest.Mock;
 let batches: RunbookImportBatch[];
-let jobs: RunbookJobResult[];
 const batchId = "a".repeat(64);
 
 function batch(
@@ -52,21 +47,7 @@ function batch(
         ],
     };
 }
-function synthesisJob(
-    state: RunbookJobResult["state"] = "failed",
-): RunbookJobResult {
-    return {
-        jobId: "synthesis-job",
-        corpusId: "alpha",
-        sourceId: "source",
-        revisionId: "revision",
-        state,
-        createdAt: "",
-        updatedAt: "",
-        candidateIds: [],
-        warnings: [],
-    };
-}
+
 function control<T extends HTMLElement>(name: string): T {
     return host.querySelector<T>(`[name="${name}"]`)!;
 }
@@ -91,6 +72,38 @@ async function openUrls(): Promise<void> {
     await settle();
     urls();
 }
+
+test("explicit Add destination overrides global scope for every acquisition kind", async () => {
+    for (const kind of ["folder", "wiki", "urls"] as const) {
+        mounted.open(kind, "beta");
+        await settle();
+        expect(control<HTMLSelectElement>("runbook-import-target").value).toBe(
+            "beta",
+        );
+    }
+    urls();
+    click("runbook-import-start");
+    await settle();
+    expect(startRequests()[0][1].corpusId).toBe("beta");
+    expect(scope).toBe("alpha");
+});
+
+test("an unavailable explicit collection never falls back to global scope", async () => {
+    mounted.open("urls", "missing");
+    await settle();
+    expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+            message: expect.stringContaining(
+                "selected collection is unavailable",
+            ),
+        }),
+    );
+    expect(control<HTMLSelectElement>("runbook-import-target").value).toBe("");
+    expect(control<HTMLButtonElement>("runbook-import-start").disabled).toBe(
+        true,
+    );
+    expect(startRequests()).toHaveLength(0);
+});
 function startRequests() {
     return invoke.mock.calls.filter(
         (call) => call[0] === "memoryHubStartRunbookImport",
@@ -115,12 +128,10 @@ beforeEach(() => {
     };
     scope = "alpha";
     batches = [];
-    jobs = [];
     host = document.createElement("div");
     document.body.replaceChildren(host);
     onError = jest.fn();
     onChanged = jest.fn().mockResolvedValue(undefined);
-    onOpenRunbook = jest.fn();
     invoke.mockImplementation(
         async (method: string, parameters: { corpusId?: string }) => {
             if (method === "memoryListCorpora")
@@ -129,7 +140,6 @@ beforeEach(() => {
                     { corpusId: "beta", name: "Beta" },
                 ];
             if (method === "memoryHubRunbookBatches") return batches;
-            if (method === "memoryHubRunbookJobs") return jobs;
             if (method === "memoryHubStartRunbookImport") {
                 const accepted = batch("complete", parameters.corpusId);
                 batches = [
@@ -155,7 +165,6 @@ beforeEach(() => {
         scope: () => scope,
         onError,
         onChanged,
-        onOpenRunbook,
     });
 });
 afterEach(() => {
@@ -187,7 +196,7 @@ test("requires a named target and uses the explicitly chosen corpus instead of a
     expect(host.textContent).toContain(
         "Whole plain Markdown, HTML and text originals",
     );
-    expect(host.textContent).toContain("manual review remains required");
+    expect(host.textContent).toContain("select ready sources to build views");
     expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
@@ -436,7 +445,7 @@ test("Activity prefers the canonical heading over its basename display label", a
     );
 });
 
-test("Activity reads durable interrupted/partial/duplicate states and linked post-commit jobs after remount", async () => {
+test("Activity reads durable interrupted/partial/duplicate acquisition states after remount", async () => {
     batches = [
         {
             ...batch("interrupted"),
@@ -477,41 +486,25 @@ test("Activity reads durable interrupted/partial/duplicate states and linked pos
             ],
         },
     ];
-    jobs = [
-        {
-            jobId: "runbook-job",
-            corpusId: "alpha",
-            sourceId: "source",
-            revisionId: "revision",
-            state: "interrupted",
-            createdAt: "",
-            updatedAt: "",
-            classification: "runbook",
-            confidence: 0.8,
-            reason: "Post-commit restart",
-            candidateIds: ["candidate"],
-            warnings: ["Manual image description required"],
-        },
-    ];
     mounted.dispose();
     mounted = mountMemoryHubRunbookImports(host, {
         scope: () => scope,
         onError,
         onChanged,
-        onOpenRunbook,
     });
     mounted.showActivity();
     await settle();
     expect(host.textContent).toContain("Service restarted");
-    expect(host.textContent).toContain("bounded results, not corpus totals");
+    expect(host.textContent).toContain(
+        "bounded results, not collection totals",
+    );
     expect(host.textContent).toContain("duplicate of 0");
     expect(host.textContent).toContain("Member 0: Guide");
     expect(host.textContent).toContain(
         "Acquisition warning for Guide: Referenced image missing.png was not selected",
     );
     expect(host.textContent).toContain("ingestion-job");
-    expect(host.textContent).toContain(`batches: ${batchId}`);
-    expect(host.textContent).toContain("Manual image description required");
+    expect(host.textContent).toContain(batchId);
     expect(host.textContent).toContain(
         "Orphan selected image was not attached",
     );
@@ -519,8 +512,6 @@ test("Activity reads durable interrupted/partial/duplicate states and linked pos
     expect(host.textContent).toContain(
         "Acquisition rejections were not imported",
     );
-    textButton("Review Runbook candidate").click();
-    expect(onOpenRunbook).toHaveBeenCalledWith("alpha", "candidate");
     textButton("Retry failed/interrupted/cancelled members").click();
     await settle();
     expect(invoke).toHaveBeenCalledWith("memoryHubRetryRunbookBatch", {
@@ -746,61 +737,6 @@ test("durable state changes notify the Hub only after actual server completion",
     expect(jest.getTimerCount()).toBe(0);
 });
 
-test("first Activity observation of an already completed candidate refreshes Inbox once, not every poll", async () => {
-    batches = [batch("complete")];
-    jobs = [
-        {
-            jobId: "ready-job",
-            corpusId: "alpha",
-            sourceId: "source",
-            revisionId: "revision",
-            state: "complete",
-            createdAt: "",
-            updatedAt: "",
-            classification: "runbook",
-            candidateIds: ["imported-candidate"],
-            warnings: [],
-        },
-    ];
-    let inbox: string[] = [];
-    onChanged.mockImplementation(async () => {
-        inbox = jobs.flatMap((job) => job.candidateIds);
-    });
-    mounted.showActivity();
-    await settle();
-    expect(inbox).toEqual(["imported-candidate"]);
-    expect(onChanged).toHaveBeenCalledTimes(1);
-    mounted.showActivity();
-    await settle();
-    expect(onChanged).toHaveBeenCalledTimes(1);
-});
-
-test("candidate-ID transitions refresh the Hub even if job state stays complete", async () => {
-    jobs = [
-        {
-            jobId: "job",
-            corpusId: "alpha",
-            sourceId: "source",
-            revisionId: "revision",
-            state: "complete",
-            createdAt: "",
-            updatedAt: "",
-            candidateIds: [],
-            warnings: [],
-        },
-    ];
-    mounted.showActivity();
-    await settle();
-    expect(onChanged).toHaveBeenCalledTimes(1);
-    jobs = [{ ...jobs[0], candidateIds: ["new-candidate"] }];
-    mounted.showActivity();
-    await settle();
-    expect(onChanged).toHaveBeenCalledTimes(2);
-    mounted.showActivity();
-    await settle();
-    expect(onChanged).toHaveBeenCalledTimes(2);
-});
-
 test("disposal ignores late import completion and callbacks", async () => {
     await openUrls();
     let finish!: (response: RunbookImportResponse) => void;
@@ -818,108 +754,6 @@ test("disposal ignores late import completion and callbacks", async () => {
     expect(onChanged).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
     expect(host.children).toHaveLength(0);
-});
-
-test.each(["failed", "interrupted", "cancelled"] as const)(
-    "post-commit %s synthesis retry uses exact retained identity without batch retry or reacquisition",
-    async (state) => {
-        jobs = [synthesisJob(state)];
-        mounted.showActivity();
-        await settle();
-        onChanged.mockClear();
-        const result = {
-            ...synthesisJob("complete"),
-            jobId: "new-attempt",
-            candidateIds: ["saved-candidate"],
-        };
-        invoke.mockImplementationOnce(async () => {
-            jobs = [...jobs, result];
-            return result;
-        });
-        textButton("Retry post-commit synthesis").click();
-        await settle();
-        expect(invoke).toHaveBeenCalledWith("memoryHubRetryRunbookSynthesis", {
-            corpusId: "alpha",
-            sourceId: "source",
-            revisionId: "revision",
-        });
-        expect(startRequests()).toHaveLength(0);
-        expect(
-            invoke.mock.calls.some(
-                (call) => call[0] === "memoryHubRetryRunbookBatch",
-            ),
-        ).toBe(false);
-        expect(onChanged).toHaveBeenCalledTimes(1);
-        expect(host.textContent).toContain("new-attempt: complete");
-        expect(host.textContent).toContain(
-            "synthesis cancellation is unavailable",
-        );
-        textButton("Review Runbook saved-candidate").click();
-        expect(onOpenRunbook).toHaveBeenCalledWith("alpha", "saved-candidate");
-    },
-);
-
-test("synthesis retry blocks duplicate starts and reports stale/offline errors without claiming success", async () => {
-    jobs = [synthesisJob()];
-    mounted.showActivity();
-    await settle();
-    onChanged.mockClear();
-    let reject!: (error: Error) => void;
-    invoke.mockImplementationOnce(
-        () =>
-            new Promise((_resolve, failure) => {
-                reject = failure;
-            }),
-    );
-    const retry = textButton("Retry post-commit synthesis");
-    retry.click();
-    retry.click();
-    expect(retry.disabled).toBe(true);
-    expect(
-        invoke.mock.calls.filter(
-            (call) => call[0] === "memoryHubRetryRunbookSynthesis",
-        ),
-    ).toHaveLength(1);
-    reject(new Error("Revision is stale; compare the current active revision"));
-    await settle();
-    expect(host.textContent).toContain("Revision is stale");
-    expect(onChanged).not.toHaveBeenCalled();
-    expect(onError).toHaveBeenCalledTimes(1);
-    expect(retry.disabled).toBe(false);
-    invoke.mockRejectedValueOnce(new Error("Offline"));
-    retry.click();
-    await settle();
-    expect(host.textContent).toContain("Offline");
-    expect(onError).toHaveBeenCalledTimes(2);
-    expect(onChanged).not.toHaveBeenCalled();
-});
-
-test("synthesis retry rejects mismatched returned identity and ignores completion after disposal", async () => {
-    jobs = [synthesisJob()];
-    mounted.showActivity();
-    await settle();
-    onChanged.mockClear();
-    invoke.mockResolvedValueOnce({
-        ...synthesisJob("complete"),
-        revisionId: "another-revision",
-    });
-    textButton("Retry post-commit synthesis").click();
-    await settle();
-    expect(host.textContent).toContain("another target or source revision");
-    expect(onChanged).not.toHaveBeenCalled();
-    let finish!: (value: RunbookJobResult) => void;
-    invoke.mockImplementationOnce(
-        () =>
-            new Promise((resolve) => {
-                finish = resolve;
-            }),
-    );
-    textButton("Retry post-commit synthesis").click();
-    mounted.dispose();
-    finish(synthesisJob("complete"));
-    await settle();
-    expect(onChanged).not.toHaveBeenCalled();
-    expect(host.childElementCount).toBe(0);
 });
 
 test("discard requires an explicit choice for unsent selections and is blocked during acquisition", async () => {

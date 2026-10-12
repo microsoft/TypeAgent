@@ -3,19 +3,12 @@
 
 import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
 import type { ViewBuildSnapshot, ViewFactInventory } from "../src/viewTypes.js";
-import { projectBriefTestAnswer } from "./projectBriefTestModel.js";
 
 export function timelineTestAnswer(
     name: string,
     value: unknown,
     prose = "Retained record evidence.",
 ): unknown {
-    if (
-        name === "memory_project_brief_construction" ||
-        (name === "memory_source_fact_inventory" &&
-            (value as ViewBuildSnapshot).definition.kind === "projectBrief")
-    )
-        return projectBriefTestAnswer(name, value);
     if (name !== "memory_timeline_construction")
         return inventoryTestAnswer(name, value);
     const raw = value as {

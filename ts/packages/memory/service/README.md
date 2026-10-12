@@ -18,16 +18,15 @@ restored afterward.
 
 ## Indexed reads and search diagnostics
 
-Document and procedure indexes are reused in memory while their published
+Document indexes are reused in memory while their published
 generation and persisted-file fingerprint remain unchanged. Fingerprints check
 schema, semantic-data, embedding-file and projection/readiness-marker metadata;
 schema validation and recovery still run when these change. A restart loads
 the published generation again. This does not cache queries or model responses.
 
-Prepared document/procedure searches, source knowledge, corpus knowledge and
+Prepared document searches, source knowledge, corpus knowledge and
 document answering can share a per-corpus read reservation. Preparation and
-mutations remain exclusive: ingestion, reindexing, forgetting and procedure
-updates wait for existing readers, and later readers wait behind a queued
+mutations remain exclusive: ingestion, reindexing, forgetting wait for existing readers, and later readers wait behind a queued
 writer. Each async read retains its snapshot until completion. Cold runtime
 loading is single-flight, and shutdown drains the complete preparation/read
 lifetime before releasing storage.
@@ -47,7 +46,7 @@ Queries, source excerpts, prompts, tokens and raw error messages are excluded.
 Tracing does not change retrieval limits, model selection or when the Hub
 returns its evidence and answer.
 
-## Revision assets, acquired batches, and post-commit runbook jobs
+## Revision assets and acquired batches
 
 `IngestionSource.assets?: RevisionAssetInput[]` accepts already-acquired bytes
 (`Uint8Array`), bounded display `name`, sniffed `mimeType`, optional
@@ -101,8 +100,6 @@ Success is not undone by failed members. Restart reconciles committed jobs and
 marks other in-flight members interrupted; retry affects only failed,
 interrupted or cancelled members. Cancellation actually aborts underlying
 ingest jobs and waits for terminal results; committed members remain complete.
-Already-committed post-commit synthesis jobs are separate Activity work; batch
-cancellation does not pretend to stop them.
 Successful/duplicate acquired content is released from batch storage; failed
 content is retained for retry and purged on source forget/corpus clear.
 Source forgetting cancels only matching batch members; unrelated captures are
@@ -159,96 +156,23 @@ Hosts that intend replacement should supply a stable `source.sourceId` derived
 from the acquired document's identity; `documentKeys` alone are member metadata,
 not replacement source IDs.
 
-Runbook synthesis is opt-in: how-to `enabled` and `detectCandidates`, plus
-`preferences.runbook.buildAgentEdition === true`. The other exact runbook keys
-are `describeImages`, `mcpTools`, `approvedAutomations`; optional
-`preferences.extractionGuidance` is supplied to synthesis. Deterministic candidate
-detection remains a separate seed, not a substitute for configured full-document
-synthesis. It now selects task/Guide boundaries, ignores fenced headings and
-ordinary command/continuation prose, and retains multiline actions, prerequisites,
-guards, verification and recovery. Citations use exact end-exclusive UTF-16
-`chars:START-END` offsets and the original source excerpt, including CRLF.
-HTML is eligible for synthesis, not the Markdown detector. The five copied
-synthetic memoryDemo import guides under `test/data/guides` are offline detector
-fixtures only; reviewer/gold answers are not synthesis input.
-`listRunbookJobs(corpusId)` (latest 100) and `getRunbookJob(jobId)` expose
-separate durable post-commit classification/result jobs for Activity/Inbox:
-state, reason/confidence/classification, candidate IDs, warnings and timestamps.
-Model failure never rolls back captured knowledge and does not silently
-fall back to a claimed synthesized edition.
-Job reasons expose queued, synthesizing, and publishing stages. Job reads,
-writes, and removal are serialized per job to avoid Windows reader/rename
-contention; transient Windows rename retries are bounded to two seconds.
-If a background result cannot be persisted, job reads explicitly reject instead
-of returning a permanently running success-shaped snapshot.
-`requestRunbookSynthesis({ corpusId, sourceId, revisionId })` explicitly requests
-the same pipeline for an already-captured ready active revision, using retained
-original content/assets and current corpus preferences/guidance. Missing,
-historical, or nonready revisions and disabled preferences reject explicitly.
-The result is a durable `RunbookJobResult`; poll its existing job ID for model
-failure/completion. Pending/completed work is reused with its actual candidate
-IDs, not claimed as a new overwritten draft. Failed/interrupted work can retry.
-Existing candidate IDs, human edits, and saved procedures are never overwritten.
-After source comparison, select the active revision to propose its own draft.
+Importing instructions retains source evidence only. Builds are explicit; ingestion does not detect or save procedures.
 
-`FileMemoryServiceOptions.runbookSynthesizer` is a typed injectable
-`RunbookSynthesizer` for offline fixtures. Otherwise a configured aiclient model
-is constructed lazily using optional `runbookModelEndpoint`; no model is touched
-unless synthesis is enabled. Set `runbookMultimodal: true` only when the
-configured endpoint supports image input and that capability is approved.
-Without it, unsupported instruction-bearing images make steps explicitly
-manual. No remote images are fetched. Full documents are limited to
-**120,000 UTF-16 characters**, not silently truncated; one model request runs
-globally with **32 queued jobs / 120-second request deadline**.
-Synthesis outputs are bounded to 1 MiB, with at most 20 warnings of 1,000
-characters and a 2,000-character classification reason. Failure diagnostics are
-bounded with an explicit truncation notice; source evidence is never truncated.
+## Derived memory Views
 
-Synthesis supports multiple section-lineaged candidates, prose/tables,
-preconditions, branches, alternatives and retained links. Source/revision/section
-fingerprints make drafts idempotent. UTF-16 `chars:START-END` citations must
-exactly match retained excerpts; invalid locators are never guessed from snippets.
-Unknown asset references are discarded and unsupported steps become manual.
-Semantic derivation is flagged for source-support review; substring validation
-is not a claim of semantic entailment. Link resolution considers at most 100
-retained source identities, requiring the linked URI in the original document.
-Secret command/example redaction uses canonical pure validators. All imported
-editions are draft, binding proposals are never accepted, and nothing executes.
-Pass `runbookBindingValidator` for explicit later catalog-backed human review.
-`FileMemoryService.saveProcedure` additionally resolves review evidence while
-holding the corpus write queue: cited revisions must be retained and current,
-excerpt offsets must match retained/redacted text, human text must be faithful,
-and referenced asset bytes must pass their stored digest. Historical or missing
-evidence and guessed locations cannot be reviewed as current runbooks.
-Replacement rejects obsolete-source candidates with agent editions, including
-linked-source and asset dependencies. Forget removes affected candidates and
-all affected view/procedure versions from the shared store and physically
-replaces its Git object database; see the draft-view privacy boundary below.
-Golden-set quality, live vision parity, safe redacted pixel previews and full
-Phase 4 qualification remain separate work.
-
-## Canonical agent editions and version review
-
-`ProcedureDocument.agentEdition?: AgentEdition` is optional, schema version 1.
-Old human how-tos and unknown `additionalSections` remain unchanged. The
-canonical Markdown appends an `Agent Edition` JSON fence with a
-`typeagent-agent-edition:1` HTML-comment marker (legacy sections with the same
-heading remain human sections unless marked); use
-`procedureToMarkdown` / `procedureFromMarkdown` for lossless edition round trips.
-The human `steps` and edition `humanText` remain separate from derived
-`agentInstruction`. Saving never re-synthesizes or overwrites human edits.
-Procedure versions now use the same typed view/history persistence as draft
-Guides. Procedure JSON/Markdown and hashes are deterministic compatibility
-projections, not independent canonical versions. Index preparation precedes the
-atomic history-ref commit; failed preparations do not save a procedure version.
-
-## Opt-in derived memory views
-
-`new FileMemoryService(privateStore, { viewDrafts: true })` enables the local
-developer/demo capability. It is **off by default**. `getCapabilities()` then
+`new FileMemoryService(privateStore)` enables Views **by default**, without
+user action. Hosts can explicitly disable them with `{ viewDrafts: false }`. `getCapabilities()` normally
 advertises `derivedViews: { kinds: ["troubleshootingGuide", "projectBrief", "timeline", "wiki"], drafts: true,
 history: true, builds: true, editMerging: true, publication: true, search: true }`.
 Automatic scheduling remains unsupported.
+
+`getSourceViewUsage({ corpusId, sourceId, pageSize?, continuationToken? })`
+returns `{ items, total, nextContinuationToken? }` for current derived View
+revisions that depend on a document source. Items contain only `viewId`,
+`revisionId`, `version`, `kind`, `title`, `state` and `provenance`; archived
+Views retain their explicit state. Document selectors, retained evidence and
+relationship references count, but canonical event identities do not. Results
+are ordered by View ID, with pages of 1–200 items (default 50).
 
 `listViews(corpusId)` returns `{ head, views }`, including pending drafts and
 explicit lifecycle state. `getView({ corpusId, viewId, revisionId? })` reads an
@@ -256,10 +180,7 @@ exact per-view revision. `saveViewDraft` creates at `expectedVersion: 0` or edit
 an existing draft with both `expectedVersion` and the exact corpus `expectedHead`.
 `archiveView` uses the same concurrency boundary. `getViewHistory` returns
 `{ commitId, version }` entries; per-view `revisionId` is distinct from the
-corpus commit ID. `publishView` requires an exact validated revision and optimistic guards. Drafts never
-enter procedure search. Existing saved runbooks retain their procedure/edition/
-skill APIs and distinct `procedure` content/definition kind; they cannot be
-overwritten via the generic draft editor.
+corpus commit ID. `publishView` requires an exact validated revision and optimistic guards. Only exact eligible published revisions enter derived View search.
 
 Definitions select explicit source IDs and exact active revision IDs. Content
 has stable typed section IDs and roles, not a generic procedure-step array.
@@ -273,9 +194,7 @@ assertions. Definition revisions remain stable for content-only edits.
 Saves validate endpoint existence, source
 membership/current revisions and UTF-16 excerpts under the corpus write queue.
 Actor attribution comes from the local service owner's OS identity, never a
-request-supplied actor. Each edit records its exact base revision. Saving a
-generated runbook candidate also retains the exact original candidate content
-and fingerprint separately from the human saved content for later merging.
+request-supplied actor. Each edit records its exact base revision. Explicit builds retain the generated content and fingerprint separately from human edits for later merging.
 Manual drafts have no invented generated base.
 
 ### Cross-source Build views
@@ -380,10 +299,10 @@ An unchanged rebuild reapplies removals; changed deleted pages or incompatible
 evidence/edits conflict or fail validation rather than silently discarding edits.
 Unknown bases cannot be overwritten. Invalid omissions cannot hide required facts.
 
-The Library and runbook **Used by** surfaces include all four derived kinds:
+The Library **Used by** surfaces include all four derived kinds:
 current/historical exact revisions, affected section/page IDs, selected membership,
 and pending/completed/conflicted build receipts. Derived dependencies page
-separately from existing procedure/skill dependencies. Historical inspection
+separately from skill dependencies. Historical inspection
 opens the requested revision only; it is not current publication.
 
 Publication precedence remains build > view > corpus, with explicit false
@@ -394,7 +313,7 @@ are excluded. Index retries do not rebuild or republish. Source replace/forget,
 event forget, clear and restart reuse managed history/index/privacy cleanup.
 Canonical-event forget removes dependent timelines even when
 `forgetLinkedSources: false`; disabled reopen preserves stored data/history.
-Unrelated sources, views, procedures and skills retain their existing flows.
+Unrelated sources, views and skills retain their existing flows.
 External backups/exports and secure media erasure remain outside cleanup guarantees.
 
 Offline configured-model/transport fixtures establish lifecycle readiness only.
@@ -449,18 +368,18 @@ Use the actual corpus/head/revision/event IDs, not the illustrative values above
 From the service package:
 
 ```powershell
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts events <corpusId>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts events <corpusId> <nextContinuationToken>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts event <corpusId> <eventId>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts build timeline-request.json
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts read <corpusId> incident-timeline
+node dist\memoryViewsCli.js --store C:\Temp\memory-views events <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views events <corpusId> <nextContinuationToken>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views event <corpusId> <eventId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views build timeline-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views read <corpusId> incident-timeline
 ```
 
 The `events` command returns up to 200 records per page. Pass its
 `nextContinuationToken` as the optional last argument to discover subsequent
 records; repeat until the response has no continuation token.
 Forgetting multiple events aborts affected builds per event but performs one
-managed view-history purge and procedure-index rebuild for the batch. The
+managed view-history purge and affected View-index cleanup for the batch. The
 persisted batch selection is also used for interrupted-purge recovery.
 
 The same `buildViews` request is supported by in-process/RPC clients,
@@ -526,7 +445,7 @@ guards; unrelated views/events/sources are preserved. Cleanup remains quarantine
 until managed derived-data removal completes. External backups and secure media
 erasure remain outside the service's guarantees.
 
-This is an opt-in, offline-tested capability, not release qualification.
+This is a default-enabled, offline-tested capability, not release qualification.
 No event execution, skill activation, scheduler, separate wiki store or migration is added.
 Configured `gpt-4o-2024-11-20` synthesis remains live-unqualified; source inventories
 and independent semantic audits are model-based and may still omit or misinterpret
@@ -574,8 +493,8 @@ field or removal-versus-change overlap remains a durable conflict, never an LLM
 choice. A clean merge still needs exact final-artifact validation.
 Positive model audits are not semantic-quality guarantees.
 Explicit corpus clear also purges derived revisions, proofs, jobs, conflicts,
-policy overrides and indexes from the recoverable private history; legacy procedure
-compatibility behavior and other corpora are preserved.
+policy overrides and indexes from the recoverable private history; other corpora
+are preserved.
 
 In Memory Hub, choose a **named corpus**, select exact retained revisions, choose
 **Project brief** in **View kind**, set a stable view ID and choose **Build views**.
@@ -614,7 +533,7 @@ real IDs/revisions from `sources` and a current head from `list`:
 ```
 
 From the service package, run
-`node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts capabilities`,
+`node dist/memoryViewsCli.js --store <private-store> capabilities`,
 then `build <request.json>`, `read <corpusId> <viewId>`, `history <corpusId> <viewId>`,
 `save <request.json>`, `publish <request.json>` and `search <corpusId> <query>`.
 Only an eligible exact built/edited revision can publish; an unknown human draft
@@ -778,11 +697,13 @@ distillation quality.
 
 ### Real consuming surfaces
 
-The agent server and standalone memory MCP owner pass the developer flag
-explicitly via `TYPEAGENT_MEMORY_VIEW_DRAFTS=true`; unset/false remains off,
-and invalid values fail. Use a fresh task-owned profile/store and alternate port.
+The agent server and standalone memory MCP owner enable Views when
+`TYPEAGENT_MEMORY_VIEW_DRAFTS` is unset or `true`; only explicit `false` disables
+them, and invalid values fail. Model/provider failures remain explicit build
+errors; default enablement never bypasses evidence, publication or review gates.
+Use a fresh task-owned profile/store and alternate port.
 Building this worktree does not alter an already running server.
-The Memory Hub Runbooks page exposes a developer draft Views panel only when
+The Memory Hub Views page exposes derived Views when
 capabilities advertise builds. Choose a named corpus, select exact current
 evidence, choose a stable view ID, then **Build views**. Inspect durable
 progress/receipts, edit stable structured sections and typed relationships,
@@ -799,11 +720,11 @@ The compiled CLI loads existing configured models (never fetches keys) and uses
 the same service methods:
 
 ```powershell
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts build build-request.json
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts builds <corpusId>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts status <corpusId> <jobId>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts inspect <corpusId> <conflictId>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts resolve resolution-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views build build-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views builds <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views status <corpusId> <jobId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views inspect <corpusId> <conflictId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views resolve resolution-request.json
 ```
 
 `build` and `retry` wait for the terminal receipt before releasing their private
@@ -840,43 +761,9 @@ See [the maintenance contract and qualification recipe](../../../docs/architectu
 for schemas, explicit subject metadata, compatibility and release limits.
 Configured-model quality remains separately gated.
 
-`TypedViewStore` generalizes the existing procedure persistence;
-`PersonalHowToStore` remains its compatibility export. Both workflows use one
-private **bare** `personal-how-to/view-history.git` repository per corpus. The
-authoritative state is the tree referenced by `refs/heads/typeagent-history`, so
-there is no competing current-file pointer/cache to recover. The pinned
-isomorphic-git library writes blobs, trees, commits and the single internal ref;
-runtime needs no Git executable, working tree, index, staging area or remote.
-The ref uses the existing atomic JSON/file replacement helper. Object/tree/
-commit preparation failures leave current state and readable history unchanged.
-Expected-head checks and a repository lock prevent lost updates; unchanged
-per-view tree entries retain their blob OIDs. Unreachable failed-preparation
-objects are never served through the view APIs.
-History retains complete typed snapshots; the store does not automatically pack
-objects or prune revisions. Storage growth and long-history read latency must be
-qualified before enabling recurring generation. Privacy purge is independent of
-ordinary retention and also removes unreachable failed-preparation objects.
+`TypedViewStore` persists only derived Views under each corpus's `views` directory. The authoritative snapshot is `state.json` in the private bare `views/view-history.git` tree referenced by `refs/heads/typeagent-history`. Per-view tree entries use `view-<encoded-id>.json`; builds, conflicts, publication policy/status and maintenance receipts share the snapshot. Per-revision indexes are under `views/view-search-index/<view-id-hash>/<revision-id-hash>`.
 
-Replacement marks affected drafts stale, without changing exact historical
-versions. Source forget (including event forget with linked-source deletion)
-first quarantines the history, removes every affected candidate/view revision,
-creates a sanitized baseline repository, and removes the **entire old object
-database**, including unreachable objects. This resets corpus commit history,
-invalidating prior expected heads; unrelated view revision content is retained.
-The quarantine remains until the old procedure search index is removed as well.
-Restart recovery repeats this cleanup before reopening history; a crash before
-index rebuilding therefore cannot retain forgotten search text, even if no
-procedure summaries survive.
-An interrupted purge leaves all view/history reads explicitly unavailable until
-restart recovery completes. Deleting a ref or running ordinary Git GC would
-not erase retained private blobs and is not the purge mechanism. This is not
-a claim of secure erasure from filesystem snapshots, backups or external copies.
-
-This is pre-release storage, with no mandatory migration or import tool.
-An old procedure index without the new history explicitly errors: choose a
-fresh private store/corpus, or reset only a specifically chosen disposable
-corpus with the existing explicit management confirmation. No automatic reset
-or deletion of a running server/user corpus is performed.
+Source replacement marks dependent drafts stale without modifying historical revisions. Forget/clear quarantines history, creates a sanitized baseline, replaces the entire old Git object database (including unreachable blobs), and removes affected View search indexes before reopening reads. Interrupted privacy cleanup rejects reads until restart recovery finishes. No procedure state, settings or index is persisted or migrated by this service.
 
 ### Runnable local CLI
 
@@ -885,11 +772,11 @@ Build from `ts` with `pnpm exec fluid-build packages\memory\service -t build`
 From `ts\packages\memory\service`:
 
 ```powershell
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts create-corpus "Draft views"
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts corpora
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts list <corpusId>
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts save draft-request.json
-node dist\memoryViewsCli.js --store C:\Temp\memory-views --enable-view-drafts history <corpusId> pressure-guide
+node dist\memoryViewsCli.js --store C:\Temp\memory-views create-corpus "Draft views"
+node dist\memoryViewsCli.js --store C:\Temp\memory-views corpora
+node dist\memoryViewsCli.js --store C:\Temp\memory-views list <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views save draft-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views history <corpusId> pressure-guide
 ```
 
 Use the returned corpus ID and `list.head` in the following request (a new
@@ -933,176 +820,22 @@ and expected head. `publish request.json` requires corpus/view/revision IDs,
 expected version and expected head; unsourced manual drafts are not publishable.
 The store must not be owned by a running server; the service storage lock enforces
 this. The CLI never resets data. CLI, service/RPC, MCP and browser consumers use
-the same opt-in derived-view capability.
+the same default-enabled derived-view capability.
 The existing browser Runbook deep links remain intact: Guide is the primary
 human-readable document, its editor explicitly leaves original sources unchanged,
 and Agent edition is an optional executable adaptation, not a peer source.
 
-## Canonical agent edition details
+## Shared instruction-document helpers
 
-An edition contains `goal`, `applicability`, `inputs`, `preconditions`, stable-ID
-`steps`, `verification`, `rollback`, `synthesis`, and `review`. Inputs have
-`id`, `description`, `type` (`string | number | boolean | enum`), `required`,
-`secret`, and optional nonsecret `enumValues`, `defaultValue`, `examples`.
-Secret inputs cannot persist literal examples/defaults/enum values. Steps have
-`id`, `title`, `humanText`, `agentInstruction`, `safety`
-(`readOnly | changesData | unknown`), `citations`, optional `binding`,
-`condition`, `alternatives: { condition, stepId }[]`, `verification`, `rollback`,
-`needsAttention`, `attentionReasons`, `manualReason`, and `assets`.
-Assets are only `{ sourceId, revisionId, assetId, description? }`, never bytes,
-URLs, or paths. Synthesis records `sourceReferences`, optional `linkedDocuments`,
-`model`, `promptVersion`, and `synthesizedAt`.
+Canonical instruction-document Markdown, AgentEdition validation/redaction, source citations, and exact reviewed artifact helpers remain available for independent artifact consumers. These helpers do not provide saved-procedure storage, CRUD, detection, synthesis jobs, publication, or execution. Derived Views remain unreviewed and cannot acquire execution permission through build or publication.
 
-Review is **per procedure version**, not per step. `ProcedureSaveRequest` accepts
-`reviewAgentEdition?: boolean` and `safetyConfirmed?: boolean` as explicit review
-intent. Client/model `review.state` never confers review. The store stamps
-`{ state: "reviewed", procedureVersion, contentHash, reviewedAt,
-safetyConfirmed: true, bindingValidation: "accepted",
-argumentsValidation: "accepted" }` only after validating
-explicit safety confirmation, cited steps, known safety, and accepted bindings.
-`agentEditionContentHash(document)` hashes the entire document with its review
-stamp excluded. Changing even human text or owner notes invalidates review.
-An unchanged trusted saved version may retain review when saved again, with the
-new exact version stamp. Source-stale and archive transitions reset review to
-`{ state: "draft", reason? }`; step attention flags remain. Linked documents,
-step citations, and assets are source dependencies too.
+There is no View-to-skill or View-to-macro promotion contract. The retired host
+export path required a saved procedure and its exact reviewed AgentEdition;
+derived Views do not satisfy that authority boundary. Independent skill catalog
+and binding capabilities remain available, but exporting a View would require a
+separate explicit review and artifact-authority design.
 
-`RunbookBinding` is a discriminated union:
-
-- `mcp`: `{ kind, accepted, serverId, targetId, version: string, fingerprint, arguments? }`
-- `macro`: `{ kind, accepted, targetId, version: number, fingerprint, arguments? }`
-- `flow`: `{ kind, accepted, targetId, version: string, fingerprint, arguments? }`
-- `command`: `{ kind, accepted, text }` (redacted guidance only)
-- `manual`: `{ kind, accepted, reason }`
-
-Canonical catalog target IDs and MCP server IDs use the stable identifier
-contract (1-200 characters). For MCP, persist `serverId` as the actual server
-configuration ID and `targetId` as the actual SDK tool name, never a display
-label or fabricated alias. The host adapter reconstructs the real native
-`JSON.stringify([serverId,targetId])` catalog identity and verifies exact server,
-name, version and fingerprint. A selected compound catalog ID must be decoded
-and server-checked before storing its canonical components. Unsupported native
-names remain explicitly unavailable; local step/input identifiers stay unchanged.
-
-Catalog `arguments?: RunbookBindingArguments` is a parameter-name map of JSON
-literals, arrays/objects and exact `{"$input":"declared-input-id"}` references.
-Use an exact `{"$literal": JSON}` escape when literal data resembles a reference;
-its entire value is literal, including nested marker objects. No interpolation,
-script evaluation or input resolution occurs. Input references can represent
-secret inputs without storing their values. Secret literals are redacted and
-make the binding unaccepted, attention-required and draft; redacted placeholders
-cannot be reviewed as resolved arguments.
-
-The root is always a parameter-name map, not a reference or literal wrapper.
-Interpret markers only within each parameter value. For example,
-`{ "payload": { "$literal": { "$input": "literal-data" } } }` supplies literal
-marker-shaped data to `payload`; a root `$literal` key is just a parameter
-named `$literal`, not an escape for the whole argument map. Nested wrappers
-must have exactly one marker field; malformed markers fail unless they are
-literal data inside an explicit escape. Classification guards must be used
-after bounded JSON validation, not as replacements for validation.
-
-`validateRunbookBindingArguments(value, inputs?)` enforces plain finite JSON,
-declared references when inputs are supplied, depth 16, 10,000 nodes, 65,536
-UTF-16 units per string, and 131,072 encoded UTF-8 bytes per mapping. Object
-keys are at most 200 characters; prototype-related keys, accessors, hidden
-fields, sparse/extended arrays and cycles are rejected, not silently dropped.
-`getRunbookArgumentReferences`, `isRunbookInputReference`,
-`isRunbookLiteralArgument`, `normalizeRunbookBindingArguments` and
-`validateRunbookArgumentReadiness` are browser-safe public helpers.
-
-The host must provide real catalog resolution. The third optional
-`PersonalHowToStore(rootDirectory, publishIndex, runbookBindingValidator?)`
-constructor argument has this contract:
-
-```ts
-type RunbookBindingValidator = (
-  bindings: readonly CatalogRunbookBinding[],
-  context: RunbookBindingValidationContext, // { inputs: readonly AgentEditionInput[] }
-) => Promise<readonly RunbookBindingValidation[]>;
-// Each result: { binding, status: "accepted" | "unavailable" | "rejected" |
-// "drifted", reason?, argumentsValidated? }.
-// Echo the exact binding INCLUDING arguments; acceptance requires argumentsValidated: true.
-```
-
-The context contains current input definitions with default/example literals
-removed; they must never be used as substitute schema-validation values.
-Resolve the real target input schema, validate literal arguments and symbolic
-declared-type/enum fit, and explicitly report unsupported schema fit as
-unavailable. Omitted arguments mean `{}` and still require required-parameter
-validation. Actual runtime input values must later validate against the target
-schema; template acceptance does not resolve them or grant execution permission.
-Older identity-only catalog review stamps remain readable but cannot publish or
-retain reviewed eligibility until explicitly re-reviewed with argument-schema
-validation. Old human guides without an edition remain eligible.
-
-**Integration hook:** the `FileMemoryService` options/constructor and owning host
-must forward `runbookBindingValidator` to the store. Resolve actual MCP schema
-identity, approved macro versions, and approved flow versions; do not accept
-guessed names, missing targets, or stale fingerprints. With no callback,
-catalog-bound editions fail review explicitly as unavailable. Command/manual
-bindings require author acceptance but no external catalog. No code here
-executes commands, tools, macros, or flows; review grants no runtime permission.
-
-Public pure validators/renderers, types, canonicalization, draft normalization,
-and bounded redaction are available through the browser-safe
-`@typeagent/memory-service/agent-edition-validation` subpath (no Node imports).
-Server-side SHA-256/review helpers are also exported from the package root.
-Browser editors can import `procedureToMarkdown`, `procedureFromMarkdown`, and
-`validateProcedureDocument` from
-`@typeagent/memory-service/procedure-markdown` without filesystem/crypto imports.
-The compatibility subpath `@typeagent/memory-service/procedureMarkdown` exports
-the same pure module.
-`procedureFromMarkdown(markdown, previousDocument?)` preserves opaque canonical
-JSON extension fields from the optional prior document while replacing all
-recognized Markdown fields, including honoring removed summary/edition/
-additional sections. Server Markdown saves also use the previous saved document
-for this preservation. Structured editors should clone the full document,
-regenerate canonical Markdown, and send only `document`; Markdown editors can
-parse against the current document and send the resulting `document`, never
-both `document` and `markdown`. Mark local edits draft with `draftAgentEdition`;
-the backend independently verifies and invalidates whole-version review.
-Multiline human steps use three-space-indented continuations; embedded original
-headings, numbered text, and tables remain part of the same step. Single-line
-legacy Markdown output is unchanged.
-Consumers should use `validateAgentEdition`, `validateRunbookBinding`,
-`validateProcedureSaveRequest`, `validateAgentEditionReadiness`, and
-`validateRunbookCatalogBindings` rather than accepting unchecked JSON.
-`getProcedureEvidenceReferences(document)` returns deduplicated root/step/
-synthesis/linked-document citations and reference-only assets. The host must
-resolve these against retained source revisions/assets before accepting review
-or publication, and flag missing/unsupported evidence. Pure shape/provenance
-validation cannot establish that a passage exists, an excerpt is faithful,
-or a cited revision is still current.
-
-The optional `MemoryService` host capabilities `getRevisionAssets`,
-`readRevisionAsset`, `startBatchImport`, `getBatchImport`, `listBatchImports`,
-`retryBatchImport`, `cancelBatchImport`, `listRunbookJobs`, and `getRunbookJob`
-use the asset/batch/runbook modules' public request/result types. The facade
-forwards them without adding storage semantics and rejects unsupported
-implementations explicitly. Raw asset reads are trusted-host operations;
-controlled byte/base64/HTTP transport is the host's responsibility.
-
-Optional `findBatchImport({corpusId,idempotencyKey})` returns an admitted batch
-or `undefined`; an unsupported lookup rejects explicitly. The facade and
-in-process client forward this lookup. Acquisition adapters should look up an
-existing key before refetching URLs and compare its `acquisitionFingerprint`.
-`documentKeys` link acquired documents to opaque response `clientKey` values;
-`rejectedMembers`/`acquisitionIssues` persist acquisition failures. Empty
-`documents` are valid when there is at least one rejected member; completely
-empty batches are not. Selection fingerprints alone do not freeze content
-before admission: durable pre-admission acquisition snapshots remain the
-acquisition adapter's responsibility.
-
-Optional `requestRunbookSynthesis({corpusId,sourceId,revisionId})` explicitly
-requests the existing durable postcommit draft pipeline for an exact retained
-revision. It returns `RunbookJobResult`, including real `candidateIds`, and may
-reuse an existing pending/completed job rather than claiming a new draft.
-Current settings/guidance/model capabilities apply. It does not overwrite edited
-candidates or saved procedures, approve content, or execute bindings. The facade
-and in-process client forward the request and reject unsupported implementations.
-Use separate `getRunbookJob`/`listRunbookJobs` for durable outcomes; model failures
-remain explicit failed jobs without rolling back committed source ingestion.
+Revision assets and batch acquisition remain host/in-process capabilities; unsupported operations fail explicitly. Binary upload and bounded transport remain host responsibilities.
 
 ## Changes receipts
 
@@ -1161,10 +894,10 @@ ordinary document indexes, so its `document-projection.json` marker triggers a
 document-only derived-index reset on the next search or ingestion. Marker
 presence is sufficient, including a malformed obsolete marker. The replacement
 generation is rebuilt from retained content with normal ingestion and has no
-projection marker. Raw revisions, histories, metadata, event ledgers, and
-procedure versions are not rewritten by this reset. The existing checks for
+projection marker. Raw revisions, histories, metadata and event ledgers
+are not rewritten by this reset. The existing checks for
 malformed, incompatible, or future `index-schema.json` descriptors still fail
-explicitly before reset. Event and procedure indexes ignore the retired document
+explicitly before reset. Event and View indexes ignore the retired document
 marker.
 
 Phase 0 management APIs provide corpus status and revision/job counts,
@@ -1186,12 +919,12 @@ failed with an explicit interruption reason so they are never left permanently
 active. The separate website-memory HTML/content-capture extraction modes are
 not part of this service ingestion pipeline.
 
-Each derived document, conversation-event, and procedure index generation
+Each derived document, conversation-event, and View index generation
 records `index-schema.json` with schema version 1, engine `knowpro`, and its
 index kind. The descriptor is written after the semantic index persists and
 before publication. Missing or older descriptors, and current generations
 whose required semantic data is missing, trigger a scoped reset and rebuild
-from retained revisions, events, or procedure versions. Malformed or
+from retained source revisions, events, or exact published View revisions. Malformed or
 unreadable descriptors and future versions fail explicitly rather than
 deleting an index the service cannot interpret. Canonical raw content,
 histories, event ledgers, and forget tombstones are not migrated or removed
@@ -1245,8 +978,8 @@ unsupported labels are rejected. A failed action result retains its
 `verified-observation` provenance alongside `metadata.outcome: "failed"`:
 authority does not assert success. `eventIndexFactory` can
 inject a deterministic
-`CorpusIndexFactory` for offline tests; by default it uses the procedure
-index factory (which defaults to the corpus KnowPro factory). Events can be
+`CorpusIndexFactory` for offline tests; by default it uses the corpus
+KnowPro factory. Events can be
 listed or forgotten independently of documents. Forgetting purges event index
 generations before a later search can access them; linked sources are deleted
 only when explicitly requested and when no retained event still links to them.
@@ -1263,42 +996,6 @@ explicitly suppress a turn (optionally scoped by `conversationIds` and
 event. Tombstones survive restart and are excluded from listing and indexing.
 Clearing a corpus retains tombstones and suppresses its previously indexed
 conversations so retained upstream transcripts cannot backfill them.
-
-Personal how-to storage is corpus-owned but persisted independently from the
-source manifest, so importing, replacing, reindexing, or forgetting sources
-cannot reset its settings. `getPersonalHowToSettings` and
-`updatePersonalHowToSettings` use an optimistic settings revision. Procedure
-candidates can be detected, drafted, rejected, or saved. Saved procedures are
-immutable versions with canonical JSON, a deterministic Markdown projection,
-content hashes, source-revision citations, and version lineage. Markdown saves
-are parsed and validated while retaining additional free-form sections.
-
-`listProcedures`, `getProcedure`, `searchProcedures`, `saveProcedure`, and
-`archiveProcedure` provide the procedure lifecycle. Replacing or forgetting a
-cited source creates a new `stale` procedure version while leaving every older
-version unchanged. The transport-independent personal how-to API is also
-available through the RPC facade.
-
-`searchProcedures` searches the latest version of each procedure independently
-of the source-revision index, using a separate KnowPro index within the same
-corpus. Procedure Markdown is indexed in content mode, so natural-language
-queries use the same structured-knowledge search and message reranking as
-indexed documents. Saved, stale, and archived states are indexed as message
-tags; requested states constrain KnowPro search before ranking and limiting.
-Each commit publishes a new index generation containing only the latest
-version of every procedure. Older versions remain available through
-`getProcedure`, and a missing index generation is rebuilt from the committed
-versions on search. Searches remain corpus-scoped and honor the requested
-states and result limit; omitted states include all three states as before.
-Procedure indexing requires the configured KnowPro extraction and search
-models; it no longer has a separate embedding or lexical fallback.
-
-When both personal how-to settings are enabled, successful Markdown and text
-ingestion detects procedural sections containing ordered or checklist steps.
-Detected candidates use deterministic source-revision identities and citations,
-so unchanged imports and restarts do not create duplicates. Detection runs only
-after the source commit; failures are reported in ingestion job warnings without
-rolling back the committed source or changing authored procedures.
 
 ## Trademarks
 

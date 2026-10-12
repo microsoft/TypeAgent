@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { z } from "zod";
 import {
     validateAgentEdition,
     validateRunbookBindingArguments,
     validateRunbookCatalogIdentity,
 } from "@typeagent/memory-service/agent-edition-validation";
+import { z } from "zod";
 
 export const memoryToolNames = {
     corpusCreate: "memory_corpus_create",
@@ -38,20 +38,6 @@ export const memoryToolNames = {
     answer: "memory_answer",
     knowledgeGraphGet: "memory_knowledge_graph_get",
     capabilities: "memory_capabilities",
-    howToSettingsGet: "memory_how_to_settings_get",
-    howToSettingsUpdate: "memory_how_to_settings_update",
-    runbookSynthesisRequest: "memory_runbook_synthesis_request",
-    runbookJobGet: "memory_runbook_job_get",
-    runbookJobsList: "memory_runbook_jobs_list",
-    procedureCandidateCreate: "memory_procedure_candidate_create",
-    procedureCandidateGet: "memory_procedure_candidate_get",
-    procedureCandidateList: "memory_procedure_candidate_list",
-    procedureCandidateReject: "memory_procedure_candidate_reject",
-    procedureSave: "memory_procedure_save",
-    procedureGet: "memory_procedure_get",
-    procedureList: "memory_procedure_list",
-    procedureSearch: "memory_procedure_search",
-    procedureArchive: "memory_procedure_archive",
 } as const;
 
 export const identifierSchema = z
@@ -274,37 +260,6 @@ export const jobStatusSchema = z.object({
     trace: z.array(ingestionTraceEventSchema).optional(),
 });
 
-export const runbookSynthesisRequestSchema = z
-    .object({
-        corpusId: identifierSchema,
-        sourceId: identifierSchema,
-        revisionId: identifierSchema,
-    })
-    .strict();
-
-export const runbookJobResultSchema = z
-    .object({
-        jobId: identifierSchema,
-        corpusId: identifierSchema,
-        sourceId: identifierSchema,
-        revisionId: identifierSchema,
-        state: z.enum([
-            "running",
-            "complete",
-            "failed",
-            "interrupted",
-            "cancelled",
-        ]),
-        createdAt: z.string(),
-        updatedAt: z.string(),
-        classification: z.enum(["runbook", "reference", "other"]).optional(),
-        confidence: z.number().min(0).max(1).optional(),
-        reason: z.string().optional(),
-        candidateIds: z.array(identifierSchema),
-        warnings: z.array(z.string()),
-    })
-    .strict();
-
 export const pageRequestSchema = z.object({
     pageSize: z.number().int().positive().max(200).optional(),
     continuationToken: z
@@ -331,6 +286,10 @@ export const sourceContentRequestSchema = z.object({
     revisionId: identifierSchema.optional(),
     offset: z.number().int().nonnegative().optional(),
     maxChars: z.number().int().positive().max(100_000).optional(),
+    indexedLocator: z
+        .string()
+        .regex(/^indexed:\d+:[0-9a-f]{64}:\d+-\d+$/)
+        .optional(),
 });
 
 export const sourceContentSchema = z.object({
@@ -401,7 +360,6 @@ export const eventSourceKindSchema = z.enum([
     "conversation",
     "document",
     "web-activity",
-    "procedure",
     "system",
     "other",
 ]);
@@ -513,6 +471,7 @@ export const eventForgetResultSchema = z.object({
 });
 
 export const searchRequestSchema = z.object({
+    indexedFragments: z.boolean().optional(),
     corpusId: identifierSchema,
     query: z.string().min(1),
     limit: z.number().int().positive().max(100).optional(),
@@ -611,6 +570,8 @@ export const capabilitiesSchema = z.object({
             builds: z.literal(true).optional(),
             editMerging: z.literal(true).optional(),
             maintenance: z.literal(true).optional(),
+            informationalWiki: z.literal(true).optional(),
+            informationalProjects: z.literal(true).optional(),
         })
         .optional(),
     chatProvider: z.string().optional(),
@@ -626,31 +587,6 @@ export const capabilitiesSchema = z.object({
     }),
     warnings: z.array(z.string()),
 });
-
-export const personalHowToSettingsSchema = z.object({
-    revision: z.number().int().nonnegative(),
-    updatedAt: z.string(),
-    enabled: z.boolean(),
-    detectCandidates: z.boolean(),
-    preferences: z.record(z.string(), z.unknown()).optional(),
-});
-
-export const personalHowToSettingsUpdateSchema = z.object({
-    corpusId: identifierSchema,
-    expectedRevision: z.number().int().nonnegative(),
-    enabled: z.boolean().optional(),
-    detectCandidates: z.boolean().optional(),
-    preferences: z.record(z.string(), z.unknown()).optional(),
-});
-
-export const procedureStateSchema = z.enum([
-    "detected",
-    "draft",
-    "saved",
-    "stale",
-    "archived",
-    "rejected",
-]);
 
 export const procedureCitationSchema = z.object({
     sourceId: identifierSchema,
@@ -865,102 +801,9 @@ export const procedureDocumentSchema = z.object({
     agentEdition: agentEditionSchema.optional(),
 });
 
-export const procedureCandidateSchema = procedureDocumentSchema.extend({
-    candidateId: identifierSchema,
-    corpusId: identifierSchema,
-    state: z.enum(["detected", "draft", "rejected", "saved"]),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-});
-
-export const procedureCandidateCreateRequestSchema =
-    procedureDocumentSchema.extend({
-        corpusId: identifierSchema,
-        candidateId: identifierSchema.optional(),
-        state: z.enum(["detected", "draft"]).optional(),
-    });
-
-export const procedureCandidateListRequestSchema = z.object({
-    corpusId: identifierSchema,
-    states: z
-        .array(z.enum(["detected", "draft", "rejected", "saved"]))
-        .optional(),
-});
-
-export const procedureCandidateInputSchema = z.object({
-    corpusId: identifierSchema,
-    candidateId: identifierSchema,
-});
-
-export const procedureVersionSchema = z.object({
-    corpusId: identifierSchema,
-    procedureId: identifierSchema,
-    version: z.number().int().positive(),
-    state: z.enum(["saved", "stale", "archived"]),
-    document: procedureDocumentSchema,
-    canonicalJson: z.string(),
-    markdown: z.string(),
-    createdAt: z.string(),
-    jsonHash: z.string(),
-    markdownHash: z.string(),
-    basedOnCandidateId: identifierSchema.optional(),
-    previousVersion: z.number().int().positive().optional(),
-});
-
-export const procedureSummarySchema = z.object({
-    corpusId: identifierSchema,
-    procedureId: identifierSchema,
-    title: z.string(),
-    state: z.enum(["saved", "stale", "archived"]),
-    latestVersion: z.number().int().positive(),
-    updatedAt: z.string(),
-});
-
-export const procedureSaveRequestSchema = z.object({
-    corpusId: identifierSchema,
-    procedureId: identifierSchema.optional(),
-    candidateId: identifierSchema.optional(),
-    expectedVersion: z.number().int().nonnegative().optional(),
-    document: procedureDocumentSchema.optional(),
-    markdown: z.string().optional(),
-    reviewAgentEdition: z.boolean().optional(),
-    safetyConfirmed: z.boolean().optional(),
-});
-
-export const procedureGetRequestSchema = z.object({
-    corpusId: identifierSchema,
-    procedureId: identifierSchema,
-    version: z.number().int().positive().optional(),
-});
-
-export const procedureListRequestSchema = z.object({
-    corpusId: identifierSchema,
-    states: z.array(z.enum(["saved", "stale", "archived"])).optional(),
-});
-
-export const procedureSearchRequestSchema = procedureListRequestSchema.extend({
-    query: z.string().min(1),
-    limit: z.number().int().positive().max(100).optional(),
-});
-
-export const procedureSearchMatchSchema = z.object({
-    procedure: procedureSummarySchema,
-    version: procedureVersionSchema,
-    score: z.number(),
-});
-
-export const procedureArchiveRequestSchema = z.object({
-    corpusId: identifierSchema,
-    procedureId: identifierSchema,
-    expectedVersion: z.number().int().positive().optional(),
-});
-
 export const optionalJobStatusSchema = jobStatusSchema.nullable();
 export const optionalSourceSchema = sourceSchema.nullable();
 export const optionalCorpusStatusSchema = corpusStatusSchema.nullable();
 export const optionalEventSchema = eventSchema.nullable();
-export const optionalProcedureCandidateSchema =
-    procedureCandidateSchema.nullable();
-export const optionalProcedureVersionSchema = procedureVersionSchema.nullable();
 
 export const clearedCountSchema = z.number().int().nonnegative();

@@ -6,25 +6,21 @@ import type {
     RunbookSkillLifecycle,
     RunbookSkillMutation,
 } from "@typeagent/agent-server-protocol";
+import type { MacroManager } from "@typeagent/copilot-macros";
 import {
     allowedSkillTransitions,
     type LiveSkillCatalog,
 } from "@typeagent/skill-catalog";
-import type { PersonalHowToService } from "@typeagent/memory-service";
-import type { MacroManager } from "@typeagent/copilot-macros";
 import type { RegisteredMcpToolCatalog } from "default-agent-provider";
-import { ProcedureArtifactRpcService } from "./procedureArtifacts.js";
 import {
     createRunbookBindingCatalog,
     pageBounds,
 } from "./runbookBindingCatalog.js";
 import { rankRunbookBindings } from "./runbookBindingSuggestions.js";
-import { createRunbookBindingValidator } from "./runbookBindingValidator.js";
 
 export type RunbookHostSources = {
     skillCatalog: LiveSkillCatalog;
     macroManager: MacroManager;
-    procedureService?: Pick<PersonalHowToService, "getProcedure">;
     readMcpCatalogs?: () => Promise<RegisteredMcpToolCatalog[]>;
 };
 
@@ -131,22 +127,6 @@ export function createRunbookHostCapabilities(
         macroManager,
         sources.readMcpCatalogs,
     );
-    const artifacts =
-        sources.procedureService === undefined
-            ? undefined
-            : new ProcedureArtifactRpcService(
-                  sources.procedureService,
-                  skillCatalog,
-                  macroManager,
-                  createRunbookBindingValidator(bindings),
-              );
-    function requireArtifacts() {
-        if (artifacts === undefined)
-            throw new Error(
-                "Procedure artifact catalog is unavailable in this host.",
-            );
-        return artifacts;
-    }
     return {
         async listSkills(request) {
             const { start, end } = pageBounds(request);
@@ -180,16 +160,6 @@ export function createRunbookHostCapabilities(
                       ? "text/markdown"
                       : "application/octet-stream",
             };
-        },
-        previewProcedureArtifact: async (request) => {
-            if (request.kind !== "skill")
-                throw new Error("Runbook artifacts support skills only.");
-            return requireArtifacts().preview(request);
-        },
-        promoteProcedureArtifact: async (request) => {
-            if (request.kind !== "skill")
-                throw new Error("Runbook artifacts support skills only.");
-            return requireArtifacts().promote(request);
         },
         async getSkillLifecycle(request) {
             if (!request.revision)

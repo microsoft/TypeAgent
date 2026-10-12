@@ -1144,28 +1144,26 @@ without starting Copilot, connecting to agent-server, or executing task tools.
 The plugin starts four logical MCP servers from the same bundled entry point and
 single-file release executable:
 
-| Server                | Tool                                 | Description                                                                                     |
-| --------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `typeagent`           | `typeagent-processCommand`           | Send a command to the TypeAgent agent-server                                                    |
-| `typeagent`           | `typeagent-listAgents`               | List available TypeAgent agents                                                                 |
-| `typeagent`           | `typeagent-getStatus`                | Get TypeAgent server status                                                                     |
-| `typeagent`           | four structured-action tools         | Search complete contracts, execute, continue, and cancel through Dispatcher in Direct/MCP modes |
-| `typeagent-workspace` | `read`                               | Read bounded text under approved workspace roots                                                |
-| `typeagent-workspace` | `glob`                               | Find bounded, deterministically ordered workspace files                                         |
-| `typeagent-workspace` | `grep`                               | Search bounded workspace text                                                                   |
-| `typeagent-workspace` | `fetch`                              | Fetch bounded public HTTP(S) text without ambient credentials or private-network access         |
-| `typeagent-macros`    | `list_macros`                        | List and search reusable captured procedures                                                    |
-| `typeagent-macros`    | `run_macro`                          | Replay an approved macro or return an agent-runner handoff                                      |
-| `typeagent-macros`    | lifecycle tools                      | Capture-derived draft validation, approval, disablement, and candidate submission               |
-| `typeagent-skills`    | `typeagent-listSkills`               | List local immutable skill package revisions                                                    |
-| `typeagent-skills`    | `typeagent-searchSkills`             | Search the local catalog by exact name or origin-qualified identity                             |
-| `typeagent-skills`    | `typeagent-getSkill`                 | Get revision metadata and its complete file manifest                                            |
-| `typeagent-skills`    | `typeagent-previewProcedureArtifact` | Preview a skill or macro artifact from a saved procedure without changing state                 |
-| `typeagent-skills`    | `typeagent-promoteProcedureArtifact` | Generate and publish a skill draft or macro from a saved procedure                              |
-| `typeagent-skills`    | `typeagent-previewSkillAcquisition`  | Validate and preview a directory, Git, or archive source without publishing                     |
-| `typeagent-skills`    | `typeagent-checkSkillUpdate`         | Check whether a source differs from its catalog revision without publishing                     |
-| `typeagent-skills`    | `typeagent-acquireAndPublishSkill`   | Acquire a source and publish its validated package as a draft                                   |
-| `typeagent-skills`    | `typeagent-updateSkill`              | Reacquire a source and publish a changed draft revision                                         |
+| Server                | Tool                                | Description                                                                                     |
+| --------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `typeagent`           | `typeagent-processCommand`          | Send a command to the TypeAgent agent-server                                                    |
+| `typeagent`           | `typeagent-listAgents`              | List available TypeAgent agents                                                                 |
+| `typeagent`           | `typeagent-getStatus`               | Get TypeAgent server status                                                                     |
+| `typeagent`           | four structured-action tools        | Search complete contracts, execute, continue, and cancel through Dispatcher in Direct/MCP modes |
+| `typeagent-workspace` | `read`                              | Read bounded text under approved workspace roots                                                |
+| `typeagent-workspace` | `glob`                              | Find bounded, deterministically ordered workspace files                                         |
+| `typeagent-workspace` | `grep`                              | Search bounded workspace text                                                                   |
+| `typeagent-workspace` | `fetch`                             | Fetch bounded public HTTP(S) text without ambient credentials or private-network access         |
+| `typeagent-macros`    | `list_macros`                       | List and search reusable captured procedures                                                    |
+| `typeagent-macros`    | `run_macro`                         | Replay an approved macro or return an agent-runner handoff                                      |
+| `typeagent-macros`    | lifecycle tools                     | Capture-derived draft validation, approval, disablement, and candidate submission               |
+| `typeagent-skills`    | `typeagent-listSkills`              | List local immutable skill package revisions                                                    |
+| `typeagent-skills`    | `typeagent-searchSkills`            | Search the local catalog by exact name or origin-qualified identity                             |
+| `typeagent-skills`    | `typeagent-getSkill`                | Get revision metadata and its complete file manifest                                            |
+| `typeagent-skills`    | `typeagent-previewSkillAcquisition` | Validate and preview a directory, Git, or archive source without publishing                     |
+| `typeagent-skills`    | `typeagent-checkSkillUpdate`        | Check whether a source differs from its catalog revision without publishing                     |
+| `typeagent-skills`    | `typeagent-acquireAndPublishSkill`  | Acquire a source and publish its validated package as a draft                                   |
+| `typeagent-skills`    | `typeagent-updateSkill`             | Reacquire a source and publish a changed draft revision                                         |
 
 `typeagent-skills` implements the `io.modelcontextprotocol/skills` read
 extension (`server/discover`, `skills/list`, and `skills/get`) and publishes

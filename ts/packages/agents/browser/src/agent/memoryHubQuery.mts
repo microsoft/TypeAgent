@@ -6,10 +6,9 @@ import {
     conversationCorpusName,
     conversationProducerId,
     canonicalizeProcedure,
+    resolveReviewedWikiBudget,
     type MemoryService,
-    type PersonalHowToService,
     type MemoryEvent,
-    type ProcedureSearchMatch,
     type MemoryViewService,
 } from "@typeagent/memory-service";
 import type {
@@ -24,6 +23,7 @@ import type {
 import type { MemoryCenterCorpus } from "@typeagent/browser-control-rpc/serviceTypes";
 import { z } from "zod";
 import { randomUUID, createHash } from "node:crypto";
+import { RequestBudget, runWithRequestBudget } from "@typeagent/aiclient";
 import {
     currentSearchTraceId,
     isSearchTimingEnabled,
@@ -35,8 +35,7 @@ import { timed } from "./memoryHubQuerySupport.mjs";
 import { memoryHubSearchInsights } from "./memoryHubSearchInsights.mjs";
 export { timed } from "./memoryHubQuerySupport.mjs";
 
-export type MemoryHubReadService = MemoryService &
-    Partial<PersonalHowToService & MemoryViewService>;
+export type MemoryHubReadService = MemoryService & Partial<MemoryViewService>;
 export type MemoryHubSynthesizer = (
     question: string,
     evidence: MemoryHubEvidence[],
@@ -98,37 +97,6 @@ function inDateRange(
     );
 }
 
-async function procedureMatchesFilters(
-    service: MemoryHubReadService,
-    corpusId: string,
-    match: ProcedureSearchMatch,
-    request: MemoryHubSearchRequest,
-    deadline: number,
-): Promise<boolean> {
-    if (!inDateRange(match.version.createdAt, request)) return false;
-    if (!request.sourceTypes?.length && !request.tags?.length) return true;
-    for (const citation of match.version.document.citations) {
-        const remaining = deadline - Date.now();
-        if (remaining <= 0)
-            throw new Error(
-                "Procedure filter deadline exceeded; the underlying read may still finish.",
-            );
-        const source = await timed(
-            service.getSource(corpusId, citation.sourceId),
-            remaining,
-        );
-        if (
-            source &&
-            (!request.sourceTypes?.length ||
-                request.sourceTypes.includes(source.sourceType)) &&
-            (!request.tags?.length ||
-                request.tags.every((tag) => source.tags?.includes(tag)))
-        )
-            return true;
-    }
-    return false;
-}
-
 async function documentResults(
     service: MemoryHubReadService,
     corpus: MemoryCenterCorpus,
@@ -136,13 +104,19 @@ async function documentResults(
     result: MemoryHubSearchResult,
 ): Promise<MemoryHubEvidence[]> {
     const traceId = currentSearchTraceId();
+    const bounded =
+        request.generateAnswer &&
+        (await service.getCapabilities()).derivedViews?.informationalWiki ===
+            true;
     const searched = await timed(
         service.search({
             ...(traceId === undefined ? {} : { traceId }),
             corpusId: corpus.corpusId,
             query: request.query,
-            limit: 100,
-            maxResponseChars: 100_000,
+            ...(bounded
+                ? { indexedFragments: true, limit: 12, maxResponseChars: 24000 }
+                : {}),
+            ...(!bounded ? { limit: 100, maxResponseChars: 100_000 } : {}),
             ...(request.sourceTypes === undefined
                 ? {}
                 : { sourceTypes: request.sourceTypes }),
@@ -185,58 +159,6 @@ async function documentResults(
             ? {}
             : { eventTime: evidence.capturedAt }),
     }));
-}
-
-async function procedureResults(
-    service: MemoryHubReadService,
-    corpus: MemoryCenterCorpus,
-    request: MemoryHubSearchRequest,
-): Promise<MemoryHubEvidence[]> {
-    if (!service.searchProcedures)
-        throw new Error("Procedure retrieval is unavailable in this host.");
-    const deadline = Date.now() + 30_000;
-    const traceId = currentSearchTraceId();
-    const matches = await timed(
-        service.searchProcedures({
-            ...(traceId === undefined ? {} : { traceId }),
-            corpusId: corpus.corpusId,
-            query: request.query,
-            states: ["saved", "stale"],
-            limit: 100,
-        }),
-    );
-    const result: MemoryHubEvidence[] = [];
-    for (const match of matches) {
-        if (
-            !(await procedureMatchesFilters(
-                service,
-                corpus.corpusId,
-                match,
-                request,
-                deadline,
-            ))
-        )
-            continue;
-        result.push({
-            id: JSON.stringify([
-                "procedure",
-                corpus.corpusId,
-                match.procedure.procedureId,
-                match.version.version,
-            ]),
-            kind: "procedure",
-            corpusId: corpus.corpusId,
-            corpusName: corpus.name,
-            objectId: match.procedure.procedureId,
-            title: match.procedure.title,
-            snippet: match.version.markdown.slice(0, 4_000),
-            score: match.score,
-            rank: result.length + 1,
-            procedureVersion: match.version.version,
-            procedureState: match.procedure.state,
-        });
-    }
-    return result;
 }
 
 async function conversationResults(
@@ -316,10 +238,7 @@ async function viewResults(
     );
     const results: MemoryHubEvidence[] = [];
     for (const match of matches) {
-        if (
-            match.view.content.kind === "procedure" ||
-            !capabilities.derivedViews.kinds.includes(match.view.content.kind)
-        )
+        if (!capabilities.derivedViews.kinds.includes(match.view.content.kind))
             continue;
         if (!inDateRange(match.view.createdAt, request)) continue;
         if (request.tags?.length || request.sourceTypes?.length) {
@@ -414,15 +333,15 @@ async function collectResults(
     const lists: MemoryHubEvidence[][] = [];
     const collect = async (
         corpus: MemoryCenterCorpus,
-        operation: "search" | "procedures" | "conversations" | "views",
+        operation: "search" | "conversations" | "views",
         work: () => Promise<MemoryHubEvidence[]>,
     ) => {
         try {
             const list = await timeSearchStage(
                 operation === "search"
                     ? "hub.documentRetrieval"
-                    : operation === "procedures"
-                      ? "hub.procedureRetrieval"
+                    : operation === "views"
+                      ? "hub.viewRetrieval"
                       : "hub.conversationRetrieval",
                 work,
             );
@@ -448,9 +367,6 @@ async function collectResults(
             await Promise.all([
                 collect(corpus, "search", () =>
                     documentResults(service, corpus, request, result),
-                ),
-                collect(corpus, "procedures", () =>
-                    procedureResults(service, corpus, request),
                 ),
                 collect(corpus, "views", () =>
                     viewResults(service, corpus, request),
@@ -521,6 +437,24 @@ async function sourceRangeEvidence(
     request: MemoryHubEvidenceRequest,
     title: string,
 ): Promise<MemoryHubEvidenceContent> {
+    if (request.locator?.startsWith("indexed:")) {
+        const fragment = await timed(
+            service.getSourceContent({
+                corpusId: request.corpusId,
+                sourceId: request.objectId,
+                ...(request.revisionId
+                    ? { revisionId: request.revisionId }
+                    : {}),
+                indexedLocator: request.locator,
+            }),
+        );
+        return pageText(
+            `${title} (indexed text, not original offsets)`,
+            fragment.content,
+            request,
+            request,
+        );
+    }
     const match = /^chars:(\d+)-(\d+)$/.exec(request.locator ?? "");
     const start = Number(match?.[1]);
     const end = Number(match?.[2]);
@@ -594,23 +528,6 @@ async function evidenceContent(
                 : {}),
             provenance: { ...request, revisionId: content.revisionId },
         };
-    }
-    if (request.kind === "procedure") {
-        if (!service.getProcedure)
-            throw new Error("Procedure evidence is unavailable.");
-        const version = await timed(
-            service.getProcedure(
-                request.corpusId,
-                request.objectId,
-                request.procedureVersion,
-            ),
-        );
-        if (!version)
-            throw new Error("Cited procedure version is no longer available.");
-        return pageText(version.document.title, version.markdown, request, {
-            ...request,
-            procedureVersion: version.version,
-        });
     }
     if (request.kind === "view") {
         return publishedViewEvidence(service, request);
@@ -695,6 +612,51 @@ async function evidenceContent(
     );
 }
 
+async function recheckIndexedAnswer(
+    service: MemoryHubReadService,
+    result: MemoryHubSearchResult,
+): Promise<void> {
+    for (const item of result.matches.filter((match) =>
+        result.answer?.citationIds.includes(match.id),
+    )) {
+        const anchors =
+            item.kind === "view"
+                ? (item.evidenceSources ?? [])
+                : item.sourceId && item.revisionId && item.locator
+                  ? [
+                        {
+                            sourceId: item.sourceId,
+                            revisionId: item.revisionId,
+                            locator: item.locator,
+                            excerpt: item.snippet,
+                        },
+                    ]
+                  : [];
+        for (const anchor of anchors.filter((citation) =>
+            citation.locator.startsWith("indexed:"),
+        )) {
+            const source = await service.getSource(
+                item.corpusId,
+                anchor.sourceId,
+            );
+            if (source?.activeRevisionId !== anchor.revisionId)
+                throw new Error(
+                    "Answer source changed or was removed before delivery",
+                );
+            const resolved = await service.getSourceContent({
+                corpusId: item.corpusId,
+                sourceId: anchor.sourceId,
+                revisionId: anchor.revisionId,
+                indexedLocator: anchor.locator,
+            });
+            if (resolved.content !== anchor.excerpt)
+                throw new Error(
+                    "Answer indexed evidence is unavailable or changed",
+                );
+        }
+    }
+}
+
 export function createMemoryHubQueryFunctions(
     getService: () => MemoryHubReadService,
     getConversationId: () => string | undefined,
@@ -702,120 +664,143 @@ export function createMemoryHubQueryFunctions(
 ): Pick<MemoryHubFunctions, "memoryHubSearch" | "memoryHubEvidence"> {
     return {
         async memoryHubSearch(request) {
-            return runWithSearchTiming(
-                isSearchTimingEnabled() ? randomUUID() : undefined,
-                "memoryHub.search",
-                () =>
-                    timeSearchStage("hub.total", async () => {
-                        validateRequest(request);
-                        const service = getService();
-                        const corpora = await queryCorpora(
-                            service,
-                            request.corpusId,
-                        );
-                        const result: MemoryHubSearchResult = {
-                            query: request.query.trim(),
-                            matches: [],
-                            ranking: "reciprocal-rank-fusion",
-                            warnings: [],
-                            errors: [],
-                        };
-                        const lists = await timeSearchStage(
-                            "hub.retrieval",
-                            () =>
-                                collectResults(
-                                    service,
-                                    corpora,
-                                    request,
-                                    result,
-                                    getConversationId(),
-                                ),
-                        );
-                        result.matches = timeSearchStage("hub.fusion", () =>
-                            fuseEvidence(lists, request.limit ?? 30),
-                        );
-                        result.insights = await timeSearchStage(
-                            "hub.insights",
-                            () =>
-                                memoryHubSearchInsights(
-                                    service,
-                                    request,
-                                    result.matches.filter(
-                                        (evidence) => evidence.kind !== "view",
-                                    ),
-                                ),
-                        );
-                        result.errors.sort(
-                            (a, b) =>
-                                a.corpusId.localeCompare(b.corpusId) ||
-                                a.operation.localeCompare(b.operation),
-                        );
-                        result.warnings = [...new Set(result.warnings)].sort();
-                        result.warnings.push(
-                            "Results are a bounded evidence selection, not complete corpus totals. Procedure retrieval is limited to 100 candidates per corpus.",
-                        );
-                        if (
-                            request.generateAnswer &&
-                            result.matches.some(
-                                (evidence) => evidence.kind !== "view",
-                            )
-                        ) {
-                            result.warnings.push(
-                                "Answer context uses at most 20 evidence records, 800 characters per excerpt and 32,000 characters overall. Open cited evidence to inspect the original.",
+            const work = () =>
+                runWithSearchTiming(
+                    isSearchTimingEnabled() ? randomUUID() : undefined,
+                    "memoryHub.search",
+                    () =>
+                        timeSearchStage("hub.total", async () => {
+                            validateRequest(request);
+                            const service = getService();
+                            const corpora = await queryCorpora(
+                                service,
+                                request.corpusId,
                             );
-                            try {
-                                result.answer = await timeSearchStage(
-                                    "hub.synthesis",
-                                    () =>
-                                        timed(
-                                            synthesize(
-                                                result.query,
-                                                result.matches.filter(
-                                                    (evidence) =>
-                                                        evidence.kind !==
-                                                        "view",
+                            const result: MemoryHubSearchResult = {
+                                query: request.query.trim(),
+                                matches: [],
+                                ranking: "reciprocal-rank-fusion",
+                                warnings: [],
+                                errors: [],
+                            };
+                            const lists = await timeSearchStage(
+                                "hub.retrieval",
+                                () =>
+                                    collectResults(
+                                        service,
+                                        corpora,
+                                        request,
+                                        result,
+                                        getConversationId(),
+                                    ),
+                            );
+                            result.matches = timeSearchStage("hub.fusion", () =>
+                                fuseEvidence(lists, request.limit ?? 30),
+                            );
+                            result.insights = await timeSearchStage(
+                                "hub.insights",
+                                () =>
+                                    memoryHubSearchInsights(
+                                        service,
+                                        request,
+                                        result.matches.filter(
+                                            (evidence) =>
+                                                evidence.kind !== "view",
+                                        ),
+                                    ),
+                            );
+                            result.errors.sort(
+                                (a, b) =>
+                                    a.corpusId.localeCompare(b.corpusId) ||
+                                    a.operation.localeCompare(b.operation),
+                            );
+                            result.warnings = [
+                                ...new Set(result.warnings),
+                            ].sort();
+                            result.warnings.push(
+                                "Results are a bounded evidence selection, not complete corpus totals.",
+                            );
+                            if (
+                                request.generateAnswer &&
+                                result.matches.some(
+                                    (evidence) => evidence.kind !== "view",
+                                )
+                            ) {
+                                result.warnings.push(
+                                    "Answer context uses at most 20 evidence records and 32,000 characters overall; indexed source windows retain up to 2,000 characters. This is a limited selection, not exhaustive coverage.",
+                                );
+                                try {
+                                    result.answer = await timeSearchStage(
+                                        "hub.synthesis",
+                                        () =>
+                                            timed(
+                                                synthesize(
+                                                    result.query,
+                                                    result.matches.filter(
+                                                        (evidence) =>
+                                                            evidence.kind !==
+                                                                "view" ||
+                                                            (evidence.viewKind ===
+                                                                "wiki" &&
+                                                                evidence.evidenceSources?.some(
+                                                                    (
+                                                                        citation,
+                                                                    ) =>
+                                                                        citation.locator.startsWith(
+                                                                            "indexed:",
+                                                                        ),
+                                                                )),
+                                                    ),
                                                 ),
                                             ),
-                                        ),
-                                );
-                                const ids = new Set(
-                                    result.matches.map((item) => item.id),
-                                );
-                                if (
-                                    (result.answer.status !== "noAnswer" &&
-                                        !result.answer.citationIds.length) ||
-                                    result.answer.citationIds.some(
-                                        (id) => !ids.has(id),
-                                    )
-                                ) {
-                                    delete result.answer;
-                                    throw new Error(
-                                        "Answer generation returned unsupported citations.",
                                     );
+                                    const ids = new Set(
+                                        result.matches.map((item) => item.id),
+                                    );
+                                    if (
+                                        (result.answer.status !== "noAnswer" &&
+                                            !result.answer.citationIds
+                                                .length) ||
+                                        result.answer.citationIds.some(
+                                            (id) => !ids.has(id),
+                                        )
+                                    ) {
+                                        delete result.answer;
+                                        throw new Error(
+                                            "Answer generation returned unsupported citations.",
+                                        );
+                                    }
+                                    await recheckIndexedAnswer(service, result);
+                                } catch (error) {
+                                    delete result.answer;
+                                    result.errors.push({
+                                        corpusId: "*",
+                                        operation: "answer",
+                                        message: message(error),
+                                    });
                                 }
-                            } catch (error) {
-                                result.errors.push({
-                                    corpusId: "*",
-                                    operation: "answer",
-                                    message: message(error),
-                                });
+                            } else if (
+                                request.generateAnswer &&
+                                result.matches.length
+                            ) {
+                                result.answer = {
+                                    status: "noAnswer",
+                                    text: "Only derived guides matched. Open their original evidence before making an independently corroborated answer.",
+                                    mode: "extractive",
+                                    citationIds: [],
+                                    followUps: [],
+                                };
                             }
-                        } else if (
-                            request.generateAnswer &&
-                            result.matches.length
-                        ) {
-                            result.answer = {
-                                status: "noAnswer",
-                                text: "Only derived guides matched. Open their original evidence before making an independently corroborated answer.",
-                                mode: "extractive",
-                                citationIds: [],
-                                followUps: [],
-                            };
-                        }
-                        return result;
-                    }),
-                { generateAnswer: request.generateAnswer ?? false },
-            );
+                            return result;
+                        }),
+                    { generateAnswer: request.generateAnswer ?? false },
+                );
+            const reviewed = request.generateAnswer
+                ? resolveReviewedWikiBudget()
+                : undefined;
+            return reviewed
+                ? runWithRequestBudget(new RequestBudget(reviewed), work)
+                : work();
         },
         memoryHubEvidence: (request) => evidenceContent(getService(), request),
     };

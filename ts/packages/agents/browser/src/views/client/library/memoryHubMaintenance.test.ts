@@ -55,6 +55,61 @@ function click(host: HTMLElement, title: string): void {
     button.click();
 }
 
+test("friendly update scope fields produce the exact typed selector and keep JSON in a closed disclosure", async () => {
+    invoke.mockReset();
+    invoke.mockResolvedValue({ version: view });
+    let pending: Promise<void> | undefined;
+    const changed = jest.fn();
+    const host = createMaintenancePanel(view, head, {
+        action: (operation) => {
+            pending = operation();
+        },
+        onChange: changed,
+        dirty: () => false,
+        saved: async () => {},
+        onBuild: () => {},
+        isCurrent: () => true,
+    });
+    const mode = host.querySelector<HTMLSelectElement>(
+        '[aria-label="Sources for future updates"]',
+    )!;
+    mode.value = "scopedSources";
+    mode.dispatchEvent(new Event("change"));
+    for (const [label, value] of [
+        ["Source types (comma separated)", "markdown, text"],
+        ["All tags (comma separated)", "reviewed, reviewed, project"],
+        ["Exact project metadata", "Payments"],
+    ]) {
+        const input = host.querySelector<HTMLInputElement>(
+            `[aria-label="${label}"]`,
+        )!;
+        input.value = value;
+        input.dispatchEvent(new Event("input"));
+    }
+    expect(host.querySelector("textarea")!.closest("details")!.open).toBe(
+        false,
+    );
+    click(host, "Save maintenance definition");
+    await pending;
+    expect(invoke).toHaveBeenCalledWith(
+        "memoryUpdateViewMaintenance",
+        expect.objectContaining({
+            expectedHead: head,
+            expectedVersion: view.version,
+            maintenance: {
+                schemaVersion: 1,
+                scope: {
+                    mode: "scopedSources",
+                    sourceTypes: ["markdown", "text"],
+                    tags: ["reviewed", "project"],
+                    project: "Payments",
+                },
+            },
+        }),
+    );
+    expect(changed).toHaveBeenCalledTimes(4);
+});
+
 test("maintenance editor sends explicit guarded configuration, previews blockers and uses fresh plans", async () => {
     invoke.mockReset();
     const errors: unknown[] = [];

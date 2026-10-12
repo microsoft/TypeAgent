@@ -198,6 +198,10 @@ function hydrateDecision(
         selected,
         items.filter((item) => itemIds.includes(item.id)),
     );
+    if (typeof raw.reason !== "string" || !raw.reason.trim())
+        throw new Error(
+            `Source decision ${index} (${disposition}) requires a nonempty reason`,
+        );
     const reason = evidenceText(raw.reason);
     if (reason.length > 1800)
         throw new Error("Source decision justification exceeds bound");
@@ -224,6 +228,7 @@ export function hydrateInventory(
         items,
         [...new Set(items.map((item) => item.key))],
         (item) => item.key,
+        "Source inventory contains duplicated item keys",
     );
     const sourceDecisions = evidenceArray(raw.sourceDecisions).map(
         (decision, index) =>
@@ -233,6 +238,7 @@ export function hydrateInventory(
         sourceDecisions.flatMap((decision) => decision.passageIds),
         passages.map((passage) => passage.passageId),
         (id) => id,
+        "Source inventory decisions omitted or duplicated retained passages",
     );
     const inventory = {
         schemaVersion: 1 as const,

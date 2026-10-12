@@ -7,13 +7,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { waitForMemoryJob } from "../src/rpcFacade.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
 import type {
     ViewBuildJob,
     ViewBuildSnapshot,
-    ViewSynthesisOutput,
     ViewSupportReport,
+    ViewSynthesisOutput,
 } from "../src/viewTypes.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
 const fixtures = fileURLToPath(
     new URL("../../test/fixtures/distillation/", import.meta.url),
@@ -150,7 +150,7 @@ test("complete real synthetic sources: early, eight-document closure, then two e
     const service = new FileMemoryService(root, {
         viewDrafts: true,
         indexFactory: (_id, directory) =>
-            new FakeProcedureCorpusIndex(directory),
+            new FakeSemanticCorpusIndex(directory),
         viewSynthesisAdapter: {
             identity: "offline-checkpoint-model",
             generate: async (input) => {

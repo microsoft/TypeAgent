@@ -10,7 +10,7 @@ import {
     waitForMemoryJob,
 } from "../src/rpcFacade.js";
 import type { MemoryChangeReceipt, MemoryService } from "../src/types.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
 describe("durable change receipts", () => {
     let root: string;
@@ -21,7 +21,7 @@ describe("durable change receipts", () => {
     function openService() {
         return new FileMemoryService(root, {
             indexFactory: (_id, directory) => {
-                const index = new FakeProcedureCorpusIndex(directory);
+                const index = new FakeSemanticCorpusIndex(directory);
                 const rebuild = index.rebuild.bind(index);
                 index.rebuild = async (documents) => {
                     if (failRebuild) {

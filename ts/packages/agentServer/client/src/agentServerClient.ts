@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import type { ChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
+import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createAgentRpcServer } from "@typeagent/agent-rpc/server";
 import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
@@ -12,76 +12,73 @@ import {
     wrapClientIOForCompletion,
 } from "@typeagent/dispatcher-rpc/dispatcher/client";
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
-import WebSocket from "isomorphic-ws";
-import { spawn } from "child_process";
 import type { StdioOptions } from "child_process";
+import { spawn } from "child_process";
 import fs from "fs";
+import WebSocket from "isomorphic-ws";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import registerDebug from "debug";
+import type { RunbookHostCapabilities } from "@typeagent/agent-server-protocol";
 import {
-    AgentServerInvokeFunctions,
-    AgentServerChannelName,
     AGENT_SERVER_DEFAULT_PORT,
-    DispatcherConnectOptions,
-    CreateConversationOptions,
-    ConversationInfo,
-    ConversationMatch,
-    ConversationContentMatch,
-    JoinConversationResult,
-    RenameConversationOptions,
-    SpeechToken,
+    AgentServerChannelName,
+    AgentServerInvokeFunctions,
     ApproveMacroRequest,
     ArmRecordingRequest,
-    MacroLearningMode,
-    MacroLearningPreference,
-    MacroLearningJob,
+    CatalogEntry,
+    CatalogSearchResult,
+    ChangeSkillStateRequest,
+    CheckSkillUpdateResponse,
     ClaimRecordingRequest,
+    ConversationContentMatch,
+    ConversationInfo,
+    ConversationMatch,
     CopilotToolMacro,
+    CreateConversationOptions,
     CreateMacroFromTraceRequest,
     DeleteMacroRequest,
     DisableMacroRequest,
+    DispatcherConnectOptions,
     FinalizeRecordingRequest,
+    GetSkillRequest,
     InspectMacroRequest,
+    JoinConversationResult,
     ListMacrosRequest,
+    ListSkillsRequest,
+    MacroLearningJob,
+    MacroLearningMode,
+    MacroLearningPreference,
     MacroMatch,
     MacroRequirements,
     MacroRunRecord,
     MacroSummary,
     MacroValidationReport,
     MacroVersionRef,
+    PublishSkillRequest,
+    ReadSkillFileRequest,
+    ReadSkillFileResponse,
     RecordingState,
     RecordingToken,
+    RenameConversationOptions,
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
-    SubmitMacroCandidateRequest,
-    TraceSummary,
-    ValidateMacroRequest,
-    CatalogEntry,
-    CatalogSearchResult,
-    ListSkillsRequest,
     SearchSkillsRequest,
-    SkillGrammarRoutingResult,
-    GetSkillRequest,
-    ReadSkillFileRequest,
-    ReadSkillFileResponse,
-    PublishSkillRequest,
-    ChangeSkillStateRequest,
     SelectSkillRevisionRequest,
     SkillAcquisitionPreview,
     SkillAcquisitionRequest,
-    CheckSkillUpdateResponse,
     SkillAcquisitionRevisionResponse,
-    ProcedureArtifactRequest,
-    ProcedureArtifactPreview,
-    ProcedureArtifactPromotion,
-    getDispatcherChannelName,
+    SkillGrammarRoutingResult,
+    SpeechToken,
+    SubmitMacroCandidateRequest,
+    TraceSummary,
+    ValidateMacroRequest,
     getClientIOChannelName,
+    getDispatcherChannelName,
 } from "@typeagent/agent-server-protocol";
-import type { RunbookHostCapabilities } from "@typeagent/agent-server-protocol";
+import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:agent-server-client");
 const debugErr = registerDebug("typeagent:agent-server-client:error");
@@ -251,12 +248,6 @@ export type AgentServerConnection = {
     updateSkill?(
         request: SkillAcquisitionRequest,
     ): Promise<SkillAcquisitionRevisionResponse>;
-    previewProcedureArtifact?(
-        request: ProcedureArtifactRequest,
-    ): Promise<ProcedureArtifactPreview>;
-    promoteProcedureArtifact?(
-        request: ProcedureArtifactRequest,
-    ): Promise<ProcedureArtifactPromotion>;
 
     joinConversation(
         clientIO: ClientIO,
@@ -640,18 +631,6 @@ export function createAgentServerConnection(
             request: SkillAcquisitionRequest,
         ): Promise<SkillAcquisitionRevisionResponse> {
             return rpc.invoke("updateSkill", request);
-        },
-
-        async previewProcedureArtifact(
-            request: ProcedureArtifactRequest,
-        ): Promise<ProcedureArtifactPreview> {
-            return rpc.invoke("previewProcedureArtifact", request);
-        },
-
-        async promoteProcedureArtifact(
-            request: ProcedureArtifactRequest,
-        ): Promise<ProcedureArtifactPromotion> {
-            return rpc.invoke("promoteProcedureArtifact", request);
         },
 
         async joinConversation(

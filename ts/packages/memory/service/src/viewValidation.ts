@@ -1,23 +1,34 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-    ViewSaveRequest,
-    ViewCitation,
-    ViewEndpoint,
-    ViewSourceSelector,
-    ViewSection,
-    ViewRelationshipInput,
-    ViewArchiveRequest,
-} from "./viewTypes.js";
+import { projectBriefRoles } from "./projectBrief.js";
+import { validateTimeline } from "./timeline.js";
 import {
     assertViewIdentifier,
     viewSourceKey as sourceKey,
 } from "./viewContent.js";
-import { projectBriefRoles, validateProjectBrief } from "./projectBrief.js";
-import { validateTimeline } from "./timeline.js";
-import { validateWiki } from "./wiki.js";
 import { validateMaintenanceDefinition } from "./viewMaintenance.js";
+import type {
+    ViewArchiveRequest,
+    ViewCitation,
+    ViewEndpoint,
+    ViewRelationshipInput,
+    ViewSaveRequest,
+    ViewSection,
+    ViewSourceSelector,
+} from "./viewTypes.js";
+import { validateWiki } from "./wiki.js";
+import {
+    informationalWiki,
+    validateWikiSelector,
+} from "./informationalWiki.js";
+import { parseIndexedLocator } from "./indexedFragments.js";
+import {
+    informationalProject,
+    validateInformationalProjectContent,
+    validateProjectSelector,
+} from "./informationalProject.js";
+import { informationalView } from "./informationalView.js";
 
 function text(value: unknown, label: string): asserts value is string {
     if (typeof value !== "string" || !value.trim())
@@ -138,7 +149,11 @@ function validateCanonicalEvidence(
     assertViewIdentifier("event ID", value.evidence.eventId);
 }
 
-function validateCitation(value: ViewCitation, sources: Set<string>): void {
+function validateCitation(
+    value: ViewCitation,
+    sources: Set<string>,
+    informational = false,
+): void {
     if (
         !value ||
         !sources.has(
@@ -150,9 +165,12 @@ function validateCitation(value: ViewCitation, sources: Set<string>): void {
         throw new Error("Citation is outside the selected source revisions");
     if (
         typeof value.locator !== "string" ||
-        !/^chars:\d+-\d+$/.test(value.locator)
+        (!(informational && value.locator.startsWith("indexed:")) &&
+            !/^chars:\d+-\d+$/.test(value.locator))
     )
         throw new Error("Exact UTF-16 citation offsets are required");
+    if (informational && value.locator.startsWith("indexed:"))
+        parseIndexedLocator(value.locator);
     text(value.excerpt, "Citation excerpt");
     onlyKeys(
         value,
@@ -203,25 +221,16 @@ function validateRelationshipDirection(
     kind: ViewSaveRequest["content"]["kind"],
 ): void {
     if (
-        ![
-            "supportedBy",
-            "dependsOn",
-            "corrects",
-            "supersedes",
-            "relatedTo",
-            "contradicts",
-        ].includes(edge.predicate)
+        !["supportedBy", "dependsOn", "corrects", "supersedes"].includes(
+            edge.predicate,
+        )
     )
         throw new Error("Unsupported relationship predicate");
     const correction =
         edge.predicate === "corrects" || edge.predicate === "supersedes";
-    const pageLink =
-        edge.predicate === "relatedTo" || edge.predicate === "contradicts";
     if (
         edge.from?.kind !== "section" ||
-        (correction || pageLink
-            ? edge.to?.kind !== "section"
-            : edge.to?.kind !== "source")
+        (correction ? edge.to?.kind !== "section" : edge.to?.kind !== "source")
     )
         throw new Error(
             "Evidence relationships require section-to-source endpoints; corrections require section-to-section endpoints",
@@ -235,13 +244,6 @@ function validateRelationshipDirection(
         throw new Error(
             "Corrections require distinct existing timeline records",
         );
-    if (
-        pageLink &&
-        (kind !== "wiki" ||
-            edge.to.kind !== "section" ||
-            edge.from.sectionId === edge.to.sectionId)
-    )
-        throw new Error("Wiki links require distinct current wiki pages");
 }
 
 function validateRelationships(
@@ -279,7 +281,11 @@ function validateRelationships(
         if (!Array.isArray(edge.citations) || !edge.citations.length)
             throw new Error("Relationships require exact supporting citations");
         for (const citation of edge.citations)
-            validateCitation(citation, sources);
+            validateCitation(
+                citation,
+                sources,
+                informationalView(request.content),
+            );
         const target = edge.to;
         if (
             (request.content.kind === "timeline" ||
@@ -336,10 +342,19 @@ export function validateViewDraft(request: ViewSaveRequest): void {
         throw new Error("View definition identity does not match");
     onlyKeys(
         request.definition,
-        ["viewId", "kind", "selector", "maintenance"],
+        ["viewId", "kind", "selector", "maintenance", "wiki", "projectSummary"],
         "view definition",
     );
     validateMaintenanceDefinition(request.definition);
+    validateWikiSelector(request.definition);
+    validateProjectSelector(request.definition);
+    if (!!request.definition.wiki !== informationalWiki(request.content))
+        throw new Error("Wiki content and construction definition differ");
+    if (
+        !!request.definition.projectSummary !==
+        informationalProject(request.content)
+    )
+        throw new Error("Project content and construction definition differ");
     const sources = validateSelector(request.definition.selector);
     const sections = validateDraftContent(request, sources);
     validateRelationships(request.relationships, request, sources, sections);
@@ -361,17 +376,14 @@ function validateDraftContent(
         request.content.sections,
         request.content.kind,
     );
-    if (request.content.kind === "projectBrief")
-        validateProjectBrief(request.content);
+    if (request.content.kind === "projectBrief") {
+        validateInformationalProjectContent(request.content);
+    }
     if (request.content.kind === "timeline") validateTimeline(request.content);
     if (request.content.kind === "wiki") validateWiki(request.content);
     if (request.content.agentEdition !== undefined)
         throw new Error(
-            "Agent editions are edited through the runbook compatibility workflow",
-        );
-    if (request.content.compatibilityFields !== undefined)
-        throw new Error(
-            "Compatibility fields are reserved for existing runbooks",
+            "Agent editions are not supported in derived view drafts",
         );
     onlyKeys(
         request.content,
@@ -382,7 +394,12 @@ function validateDraftContent(
             "sections",
             "citations",
             ...(request.content.kind === "timeline" ? ["generatedAt"] : []),
-            ...(request.content.kind === "wiki" ? ["index"] : []),
+            ...(request.content.kind === "wiki"
+                ? ["index", "construction"]
+                : []),
+            ...(request.content.kind === "projectBrief"
+                ? ["construction"]
+                : []),
         ],
         "guide content",
     );
@@ -400,6 +417,7 @@ function validateDraftContent(
                 excerpt: citation.excerpt,
             },
             sources,
+            informationalView(request.content),
         );
     }
     return sections;

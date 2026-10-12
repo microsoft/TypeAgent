@@ -6,14 +6,12 @@ import type {
     MemoryCenterInvokeFunctions,
     MemoryCenterCorpus,
     MemoryCenterPage,
-    MemoryCenterProcedureSummary,
     MemoryCenterSource,
     MemoryCenterCorpusStatus,
 } from "./serviceTypes.js";
 import type { BrowserCapturePage } from "./browserControl.js";
-import type { MemoryHubRunbookFunctions } from "./runbookViewTypes.js";
+import type { ViewVersion } from "@typeagent/memory-service";
 import type { MemoryHubRunbookImportFunctions } from "./runbookImportViewTypes.js";
-export type * from "./runbookViewTypes.js";
 export type * from "./runbookImportViewTypes.js";
 
 export type MemoryHubSearchRequest = {
@@ -33,7 +31,7 @@ export type MemoryHubSearchRequest = {
 
 export type MemoryHubEvidence = {
     id: string;
-    kind: "source" | "procedure" | "conversation" | "view" | "event";
+    kind: "source" | "conversation" | "view" | "event";
     corpusId: string;
     corpusName: string;
     objectId: string;
@@ -46,11 +44,9 @@ export type MemoryHubEvidence = {
     sourceType?: MemoryCenterSource["sourceType"];
     locator?: string;
     canonicalUri?: string;
-    procedureVersion?: number;
-    procedureState?: "saved" | "stale" | "archived";
     viewKind?: "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki";
     viewVersion?: number;
-    viewProvenance?: "human" | "procedure" | "generated" | "merged";
+    viewProvenance?: ViewVersion["provenance"];
     review?: "unreviewed";
     freshness?: "current";
     evidenceSources?: Array<{
@@ -98,7 +94,6 @@ export type MemoryHubEvidenceRequest = {
     kind: MemoryHubEvidence["kind"];
     objectId: string;
     revisionId?: string;
-    procedureVersion?: number;
     offset?: number;
     locator?: string;
 };
@@ -154,7 +149,6 @@ export type MemoryHubExploreResult = {
         entities: number;
         topics: number;
         relationships: number;
-        procedures: number;
     };
     entities: Array<{
         id: string;
@@ -200,13 +194,7 @@ export type MemoryHubChangeReceipt = {
 export type MemoryHubInboxItem = {
     id: string;
     fingerprint: string;
-    kind:
-        | "candidate"
-        | "staleProcedure"
-        | "job"
-        | "skillDraft"
-        | "bindingDrift"
-        | "runbookWarning";
+    kind: "job";
     corpusId: string;
     corpusName: string;
     objectId: string;
@@ -216,14 +204,11 @@ export type MemoryHubInboxItem = {
     severity: "attention" | "info";
     sourceId?: string;
     jobState?: "failed" | "partial";
-    skillRevisionId?: string;
 };
 
 export type MemoryHubError = {
     corpusId: string;
     operation:
-        | "candidates"
-        | "procedures"
         | "views"
         | "jobs"
         | "sources"
@@ -231,21 +216,64 @@ export type MemoryHubError = {
         | "conversations"
         | "answer"
         | "graph"
-        | "changes"
-        | "skills"
-        | "bindings"
-        | "runbooks";
+        | "changes";
     message: string;
 };
 
 export type MemoryHubSnapshot = {
     corpora: MemoryCenterCorpus[];
     inbox: MemoryHubInboxItem[];
-    procedures: Array<MemoryCenterProcedureSummary & { corpusName: string }>;
     errors: MemoryHubError[];
 };
 
+export type MemoryHubSourceOriginalRequest = {
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    locator?: string;
+    offset?: number;
+};
+
+export type MemoryHubSourceOriginal = {
+    available: boolean;
+    title: string;
+    content: string;
+    offset: number;
+    totalChars: number;
+    nextOffset?: number;
+    location?: { kind: "characters"; start: number; end: number };
+    error?: string;
+};
+
+export type DerivedViewUsage = {
+    corpusId: string;
+    viewId: string;
+    kind: ViewVersion["content"]["kind"];
+    title: string;
+    revisionId?: string;
+    version?: number;
+    jobId?: string;
+    conflictId?: string;
+    state: "current" | "historical" | "build" | "conflict";
+    sectionIds: string[];
+    reason: string;
+};
+
+export type ViewSourceUsagePage = MemoryCenterPage<DerivedViewUsage>;
+export type ViewSourceUsageRequest = {
+    corpusId: string;
+    sourceId: string;
+    pageSize?: number;
+    continuationToken?: string;
+};
+
 export type MemoryHubFunctions = {
+    memoryHubViewUsedBy(
+        params: ViewSourceUsageRequest,
+    ): Promise<ViewSourceUsagePage>;
+    memoryHubSourceOriginal(
+        params: MemoryHubSourceOriginalRequest,
+    ): Promise<MemoryHubSourceOriginal>;
     memoryHubKnowledge(
         params: MemoryHubKnowledgeRequest,
     ): Promise<MemoryHubKnowledgePage>;
@@ -288,8 +316,7 @@ export type MemoryHubFunctions = {
 };
 
 export type ViewInvokeFunctions = MemoryCenterInvokeFunctions &
-    MemoryHubFunctions &
-    MemoryHubRunbookFunctions & {
+    MemoryHubFunctions & {
         [M in keyof MemoryHubRunbookImportFunctions]: MemoryHubRunbookImportFunctions[M];
     } & Pick<
         BrowserAgentInvokeFunctions,
@@ -357,27 +384,13 @@ export type ViewCancelResult = {
 
 export type ViewMethod = keyof ViewInvokeFunctions;
 export const viewMethods = [
+    "memoryHubViewUsedBy",
+    "memoryHubSourceOriginal",
     "memoryHubStartRunbookImport",
     "memoryHubRunbookBatches",
     "memoryHubRunbookBatch",
     "memoryHubRetryRunbookBatch",
     "memoryHubCancelRunbookBatch",
-    "memoryHubRunbookJobs",
-    "memoryHubRunbooks",
-    "memoryHubRunbook",
-    "memoryHubSaveRunbook",
-    "memoryHubRunbookHistory",
-    "memoryHubRunbookOriginal",
-    "memoryHubRunbookUsedBy",
-    "memoryHubSuggestBindings",
-    "memoryHubAcceptBinding",
-    "memoryHubPreviewSkill",
-    "memoryHubPublishSkill",
-    "memoryHubSkillAction",
-    "memoryHubSkillFile",
-    "memoryHubCompareRunbook",
-    "memoryHubSynthesizeRunbook",
-    "memoryHubReadRunbookAsset",
     "memoryHubSearch",
     "memoryHubEvidence",
     "memoryHubExplore",
@@ -412,6 +425,7 @@ export const viewMethods = [
     "memoryGetViewConflict",
     "memoryResolveViewConflict",
     "memoryListCorpora",
+    "memoryListEvents",
     "memoryGetCorpus",
     "memoryListSources",
     "memoryGetSource",
@@ -428,16 +442,6 @@ export const viewMethods = [
     "memoryReindexSource",
     "memoryListJobs",
     "memoryCancelJob",
-    "memoryGetHowToSettings",
-    "memoryUpdateHowToSettings",
-    "memoryCreateProcedureCandidate",
-    "memoryListProcedureCandidates",
-    "memoryRejectProcedureCandidate",
-    "memorySaveProcedure",
-    "memoryListProcedures",
-    "memoryGetProcedure",
-    "memorySearchProcedures",
-    "memoryArchiveProcedure",
     "memoryListActivity",
     "memoryForgetActivity",
     "getLibraryStats",

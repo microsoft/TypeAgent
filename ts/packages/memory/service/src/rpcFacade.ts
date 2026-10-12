@@ -5,9 +5,7 @@ import type {
     IngestionJobStatus,
     JobProgress,
     MemoryService,
-    PersonalHowToService,
 } from "./types.js";
-import { validateProcedureSaveRequest } from "./agentEdition.js";
 import type { MemoryViewService } from "./viewTypes.js";
 
 export interface MemoryJobWaitOptions {
@@ -21,8 +19,8 @@ function unsupportedCapability(operation: string): Promise<never> {
 }
 
 export function createMemoryServiceRpcFacade(
-    service: MemoryService & Partial<PersonalHowToService & MemoryViewService>,
-): MemoryService & PersonalHowToService & MemoryViewService {
+    service: MemoryService & Partial<MemoryViewService>,
+): MemoryService & MemoryViewService {
     return {
         planViewMaintenance: (...args) =>
             service.planViewMaintenance?.(...args) ??
@@ -75,6 +73,9 @@ export function createMemoryServiceRpcFacade(
         listViews: (...args) =>
             service.listViews?.(...args) ??
             unsupportedCapability("view drafts"),
+        getSourceViewUsage: (...args) =>
+            service.getSourceViewUsage?.(...args) ??
+            unsupportedCapability("source View usage"),
         getView: (...args) =>
             service.getView?.(...args) ?? unsupportedCapability("view drafts"),
         saveViewDraft: (...args) =>
@@ -125,15 +126,6 @@ export function createMemoryServiceRpcFacade(
         cancelBatchImport: (batchId) =>
             service.cancelBatchImport?.(batchId) ??
             unsupportedCapability("batch imports"),
-        listRunbookJobs: (corpusId) =>
-            service.listRunbookJobs?.(corpusId) ??
-            unsupportedCapability("runbook jobs"),
-        getRunbookJob: (jobId) =>
-            service.getRunbookJob?.(jobId) ??
-            unsupportedCapability("runbook jobs"),
-        requestRunbookSynthesis: (request) =>
-            service.requestRunbookSynthesis?.(request) ??
-            unsupportedCapability("runbook synthesis"),
         listSources: (...args) => service.listSources(...args),
         listSourcesPage: (...args) => service.listSourcesPage(...args),
         getSource: (...args) => service.getSource(...args),
@@ -163,26 +155,6 @@ export function createMemoryServiceRpcFacade(
         answer: (...args) => service.answer(...args),
         getKnowledgeGraph: (...args) => service.getKnowledgeGraph(...args),
         getCapabilities: (...args) => service.getCapabilities(...args),
-        getPersonalHowToSettings: (...args) =>
-            service.getPersonalHowToSettings!(...args),
-        updatePersonalHowToSettings: (...args) =>
-            service.updatePersonalHowToSettings!(...args),
-        createProcedureCandidate: (...args) =>
-            service.createProcedureCandidate!(...args),
-        getProcedureCandidate: (...args) =>
-            service.getProcedureCandidate!(...args),
-        listProcedureCandidates: (...args) =>
-            service.listProcedureCandidates!(...args),
-        rejectProcedureCandidate: (...args) =>
-            service.rejectProcedureCandidate!(...args),
-        saveProcedure: async (request) => {
-            validateProcedureSaveRequest(request);
-            return service.saveProcedure!(request);
-        },
-        listProcedures: (...args) => service.listProcedures!(...args),
-        getProcedure: (...args) => service.getProcedure!(...args),
-        searchProcedures: (...args) => service.searchProcedures!(...args),
-        archiveProcedure: (...args) => service.archiveProcedure!(...args),
     };
 }
 

@@ -1,0 +1,1543 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+import { informationalView } from "./informationalView.js";
+
+import { randomUUID } from "node:crypto";
+import { readdir, rm } from "node:fs/promises";
+import path from "node:path";
+import {
+    canonicalizeProcedure as canonicalize,
+    getProcedureEvidenceReferences,
+} from "./agentEdition.js";
+import { retryFilesystemPublication } from "./filesystemPublication.js";
+import { assertViewIdentifier } from "./viewContent.js";
+import { ViewHistory } from "./viewHistory.js";
+import {
+    inventoryCoverage,
+    inventoryEvidence,
+} from "./viewInventoryCoverage.js";
+import { maintenanceManifest } from "./viewMaintenance.js";
+import {
+    rebaseViewEdits,
+    reconcileResolutionEdits,
+    recordViewEdits,
+    sameViewBuildEvidence,
+    viewHash,
+} from "./viewMerge.js";
+import { reusableWikiAssessment } from "./wikiAdmission.js";
+import { assertWikiContribution } from "./wikiContribution.js";
+import { assertPublicationProof } from "./viewPublication.js";
+import {
+    authoredRelationships,
+    editedViewState,
+    materializeDefinition,
+    preserveMaintenanceDefinition,
+    versionRelationships,
+} from "./viewRelationships.js";
+import type {
+    ViewArchiveRequest,
+    ViewBuildJob,
+    ViewBuildRequest,
+    ViewBuildSnapshot,
+    ViewBuildTargetResult,
+    ViewConflictResolution,
+    ViewHistoryEntry,
+    ViewMaintenancePlan,
+    ViewMaintenanceResult,
+    ViewMaintenanceUpdate,
+    ViewMergeConflict,
+    ViewPublicationPolicy,
+    ViewPublicationPolicyUpdate,
+    ViewPublicationProof,
+    ViewPublicationStatus,
+    ViewPublishRequest,
+    ViewReadRequest,
+    ViewSaveRequest,
+    ViewSnapshot,
+    ViewSourceUsage,
+    ViewSynthesisOutput,
+    ViewVersion,
+    WikiSubjectAssessment,
+} from "./viewTypes.js";
+
+interface ViewStoreState {
+    views: Record<string, ViewVersion[]>;
+    builds?: Record<string, ViewBuildJob>;
+    conflicts?: Record<string, ViewMergeConflict>;
+    publicationPolicy?: ViewPublicationPolicy;
+    publications?: Record<string, ViewPublicationStatus>;
+    viewIndexCleanup?: string[];
+    wikiFamily?: WikiFamilyState;
+    projectFamily?: WikiFamilyState;
+    maintenanceReceipts?: Record<
+        string,
+        Pick<ViewMaintenanceResult, "receiptId" | "plan"> & { jobId?: string }
+    >;
+}
+
+export interface WikiFamilyState {
+    enabled: boolean;
+    dirty: boolean;
+    cursor: number;
+    indexVersion?: string;
+    error?: string;
+    descriptors: Array<{
+        viewId: string;
+        query: string;
+        sourceIds: string[];
+        identity?: import("./types.js").IndexedSubjectIdentity;
+    }>;
+}
+
+function forgottenEventIds(marker: string): Set<string> | undefined {
+    if (!marker.startsWith("{")) return undefined;
+    const selection: unknown = JSON.parse(marker);
+    if (!selection || typeof selection !== "object" || !("kind" in selection))
+        throw new Error("Invalid event privacy purge selection");
+    if (selection.kind === "event" && "eventId" in selection) {
+        if (typeof selection.eventId !== "string")
+            throw new Error("Invalid event privacy purge selection");
+        assertViewIdentifier("event ID", selection.eventId);
+        return new Set([selection.eventId]);
+    }
+    if (
+        selection.kind !== "events" ||
+        !("eventIds" in selection) ||
+        !Array.isArray(selection.eventIds) ||
+        !selection.eventIds.length
+    )
+        throw new Error("Invalid event privacy purge selection");
+    return new Set(
+        selection.eventIds.map((id: unknown) => {
+            if (typeof id !== "string")
+                throw new Error("Invalid event privacy purge selection");
+            assertViewIdentifier("event ID", id);
+            return id;
+        }),
+    );
+}
+
+function viewVersions(state: ViewStoreState, viewId: string): ViewVersion[] {
+    return Object.prototype.hasOwnProperty.call(state.views, viewId)
+        ? state.views[viewId]
+        : [];
+}
+
+function timestamp(): string {
+    return new Date().toISOString();
+}
+
+function validateIdentifier(kind: string, value: string): void {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) {
+        throw new Error(`Invalid ${kind} '${value}'`);
+    }
+}
+
+export class TypedViewStore {
+    public constructor(
+        private readonly rootDirectory: string,
+        private readonly actor = "local-owner",
+    ) {}
+
+    private history(corpusId: string): ViewHistory<ViewStoreState> {
+        validateIdentifier("corpus ID", corpusId);
+        return new ViewHistory(this.viewDirectory(corpusId), () => ({
+            views: {},
+        }));
+    }
+
+    public async getWikiFamily(
+        corpusId: string,
+        family: "wiki" | "projects" = "wiki",
+    ): Promise<WikiFamilyState> {
+        return (
+            (await this.history(corpusId).read()).state[
+                family === "wiki" ? "wikiFamily" : "projectFamily"
+            ] ?? {
+                enabled: true,
+                dirty: true,
+                cursor: 0,
+                descriptors: [],
+            }
+        );
+    }
+
+    public async saveWikiFamily(
+        corpusId: string,
+        family: WikiFamilyState,
+        kind: "wiki" | "projects" = "wiki",
+    ): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        state[kind === "wiki" ? "wikiFamily" : "projectFamily"] =
+            structuredClone(family);
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Checkpoint informational ${kind} maintenance`,
+        );
+    }
+
+    public async makeInformationalVisible(
+        version: ViewVersion,
+    ): Promise<ViewPublicationStatus> {
+        const { head, state } = await this.history(version.corpusId).read();
+        const current = viewVersions(state, version.viewId).at(-1);
+        if (
+            current?.revisionId !== version.revisionId ||
+            current.state !== "draft" ||
+            !informationalView(current.content)
+        )
+            throw new Error(
+                "Informational visibility requires the exact current page",
+            );
+        const publication: ViewPublicationStatus = {
+            viewId: version.viewId,
+            latestBuiltRevisionId: version.revisionId,
+            publishedRevisionId: version.revisionId,
+            indexState: "pending",
+            reason: "Informational page automatically visible; derivative indexing pending",
+        };
+        state.publications ??= {};
+        state.publications[version.viewId] = publication;
+        await this.commitBuildState(
+            version.corpusId,
+            head,
+            state,
+            "Accept current informational page",
+        );
+        return publication;
+    }
+
+    private entries(state: ViewStoreState): Record<string, string> {
+        return Object.fromEntries(
+            Object.entries(state.views).map(([id, versions]) => [
+                `view-${encodeURIComponent(id)}.json`,
+                canonicalize(versions),
+            ]),
+        );
+    }
+
+    public async listViews(corpusId: string): Promise<ViewSnapshot> {
+        const snapshot = await this.history(corpusId).read();
+        return {
+            head: snapshot.head,
+            views: Object.values(snapshot.state.views).map(
+                (versions) => versions[versions.length - 1],
+            ),
+        };
+    }
+
+    public async getView(
+        request: ViewReadRequest,
+    ): Promise<ViewVersion | undefined> {
+        assertViewIdentifier("view ID", request.viewId);
+        const state = (await this.history(request.corpusId).read()).state;
+        const versions = viewVersions(state, request.viewId);
+        return request.revisionId === undefined
+            ? versions.at(-1)
+            : versions.find(
+                  (version) => version.revisionId === request.revisionId,
+              );
+    }
+
+    public async sourceUsage(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<ViewSourceUsage[]> {
+        const snapshot = await this.listViews(corpusId);
+        const documentReference = (reference: {
+            sourceId: string;
+            evidence?: { kind: "event"; eventId: string };
+        }) => reference.sourceId === sourceId && !reference.evidence;
+        return snapshot.views
+            .filter((view) => {
+                const content = [
+                    view.content,
+                    ...(view.generation ? [view.generation.content] : []),
+                ];
+                const references = content.flatMap((item) => {
+                    const evidence = getProcedureEvidenceReferences(item);
+                    return [...evidence.citations, ...evidence.assets];
+                });
+                const endpoints = view.relationships.flatMap((edge) => [
+                    edge.from,
+                    edge.to,
+                ]);
+                return (
+                    view.definition.selector.sources.some(documentReference) ||
+                    references.some(documentReference) ||
+                    view.generation?.input?.inputs.some(documentReference) ||
+                    endpoints.some(
+                        (endpoint) =>
+                            endpoint.kind === "source" &&
+                            documentReference(endpoint),
+                    ) ||
+                    view.relationships.some(
+                        (edge) =>
+                            "citations" in edge &&
+                            edge.citations?.some(documentReference),
+                    )
+                );
+            })
+            .sort((left, right) =>
+                left.viewId < right.viewId
+                    ? -1
+                    : left.viewId > right.viewId
+                      ? 1
+                      : 0,
+            )
+            .map((view) => ({
+                viewId: view.viewId,
+                revisionId: view.revisionId,
+                version: view.version,
+                kind: view.definition.kind,
+                title: view.content.title,
+                state: view.state,
+                provenance: view.provenance,
+            }));
+    }
+
+    public async saveViewDraft(
+        request: ViewSaveRequest,
+        validation?: ViewPublicationProof,
+    ): Promise<ViewHistoryEntry> {
+        const history = this.history(request.corpusId);
+        const { head, state } = await history.read();
+        if (head !== request.expectedHead)
+            throw new Error("View history head conflict");
+        const versions = viewVersions(state, request.viewId);
+        const current = versions.at(-1);
+        if ((current?.version ?? 0) !== request.expectedVersion)
+            throw new Error("View version conflict");
+        if (current?.state === "archived")
+            throw new Error(`Cannot edit a ${current.state} view`);
+        const version: ViewVersion = {
+            corpusId: request.corpusId,
+            viewId: request.viewId,
+            revisionId: randomUUID(),
+            version: request.expectedVersion + 1,
+            state: editedViewState(current),
+            createdAt: timestamp(),
+            actor: this.actor,
+            provenance: "human",
+            ...(validation ? { validation } : {}),
+            ...(current?.generation
+                ? { generation: structuredClone(current.generation) }
+                : {}),
+            ...(current?.maintenance
+                ? { maintenance: structuredClone(current.maintenance) }
+                : {}),
+            edits: recordViewEdits(
+                current,
+                request.content,
+                request.relationships,
+                this.actor,
+            ),
+            ...(current ? { baseRevisionId: current.revisionId } : {}),
+            definition: materializeDefinition(
+                preserveMaintenanceDefinition(
+                    request.definition,
+                    current?.definition,
+                ),
+                current?.definition,
+            ),
+            content: structuredClone(request.content),
+            relationships: [],
+        };
+        version.relationships = versionRelationships(
+            version,
+            request.relationships,
+            current?.generation !== undefined,
+        );
+        if (current?.maintenance)
+            version.maintenance = maintenanceManifest(
+                current.maintenance,
+                version,
+            );
+        if (version.generation?.inventory) {
+            version.generation.coverage = inventoryCoverage({
+                content: request.content,
+                relationships: request.relationships,
+                outcome: version.generation.outcome ?? "diagnosticOnly",
+                missingEvidence: ["Human edits retain source inventory limits"],
+                ...inventoryEvidence(version.generation),
+            });
+        }
+        state.views[request.viewId] = [...versions, version];
+        const commitId = await history.commit(
+            head,
+            state,
+            this.entries(state),
+            this.actor,
+            `Draft ${request.viewId} revision ${version.revisionId}; base ${version.baseRevisionId ?? "none"}`,
+        );
+        return { commitId, version };
+    }
+
+    private async commitBuildState(
+        corpusId: string,
+        head: string | null,
+        state: ViewStoreState,
+        message: string,
+    ): Promise<string> {
+        return this.history(corpusId).commit(
+            head,
+            state,
+            this.entries(state),
+            this.actor,
+            message,
+        );
+    }
+
+    public async listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
+        const { state } = await this.history(corpusId).read();
+        return Object.values(state.builds ?? {})
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .slice(0, 100);
+    }
+
+    public async getViewBuild(
+        corpusId: string,
+        jobId: string,
+    ): Promise<ViewBuildJob | undefined> {
+        assertViewIdentifier("build job ID", jobId);
+        const { state } = await this.history(corpusId).read();
+        return state.builds?.[jobId];
+    }
+
+    public async admitViewBuild(
+        request: ViewBuildRequest,
+        snapshots: ViewBuildSnapshot[],
+        maintenancePlan?: ViewMaintenancePlan,
+        wikiFamily?: WikiFamilyState,
+        familyKind: "wiki" | "projects" = "wiki",
+    ): Promise<{ job: ViewBuildJob; admitted: boolean }> {
+        const { head, state } = await this.history(request.corpusId).read();
+        const fingerprint = viewHash({ request, snapshots });
+        const existing = Object.values(state.builds ?? {}).find(
+            (job) => job.fingerprint === fingerprint,
+        );
+        if (existing) return { job: existing, admitted: false };
+        if (head !== request.expectedHead)
+            throw new Error("View history head conflict at build admission");
+        const timestamp = new Date().toISOString();
+        const job: ViewBuildJob = {
+            jobId: randomUUID(),
+            corpusId: request.corpusId,
+            fingerprint,
+            request: structuredClone(request),
+            actor: this.actor,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            state: "running",
+            publication: snapshots.some(
+                (snapshot) => snapshot.publicationPolicy?.autoPublish,
+            ),
+            results: snapshots.map((snapshot) => ({
+                viewId: snapshot.definition.viewId,
+                snapshot,
+                state: "pending",
+                reason: "Queued for cross-source synthesis",
+            })),
+            ...(maintenancePlan ? { maintenancePlan } : {}),
+        };
+        state.builds ??= {};
+        state.builds[job.jobId] = job;
+        if (wikiFamily)
+            state[familyKind === "wiki" ? "wikiFamily" : "projectFamily"] =
+                structuredClone(wikiFamily);
+        await this.commitBuildState(
+            request.corpusId,
+            head,
+            state,
+            `Admit draft build ${job.jobId}`,
+        );
+        return { job, admitted: true };
+    }
+
+    public async recordViewMaintenance(
+        plan: ViewMaintenancePlan,
+        job?: ViewBuildJob,
+    ): Promise<ViewMaintenanceResult> {
+        const { head, state } = await this.history(plan.corpusId).read();
+        const receipt: ViewMaintenanceResult = {
+            receiptId: randomUUID(),
+            plan,
+            ...(job ? { job } : {}),
+        };
+        state.maintenanceReceipts ??= {};
+        state.maintenanceReceipts[receipt.receiptId] = {
+            receiptId: receipt.receiptId,
+            plan,
+            ...(job ? { jobId: job.jobId } : {}),
+        };
+        const entries = Object.entries(state.maintenanceReceipts);
+        state.maintenanceReceipts = Object.fromEntries(entries.slice(-100));
+        await this.commitBuildState(
+            plan.corpusId,
+            head,
+            state,
+            "Record manual view maintenance plan",
+        );
+        return receipt;
+    }
+
+    public async getViewMaintenance(
+        corpusId: string,
+        receiptId: string,
+    ): Promise<ViewMaintenanceResult | undefined> {
+        const { state } = await this.history(corpusId).read();
+        const receipt = state.maintenanceReceipts?.[receiptId];
+        if (!receipt) return undefined;
+        if (!receipt.jobId)
+            return { receiptId: receipt.receiptId, plan: receipt.plan };
+        const job = state.builds?.[receipt.jobId];
+        if (!job)
+            throw new Error(
+                "Maintenance receipt references a missing build job",
+            );
+        return { receiptId: receipt.receiptId, plan: receipt.plan, job };
+    }
+
+    public async updateViewMaintenance(
+        request: ViewMaintenanceUpdate,
+    ): Promise<ViewHistoryEntry> {
+        const { head, state } = await this.history(request.corpusId).read();
+        const current = viewVersions(state, request.viewId).at(-1);
+        if (
+            head !== request.expectedHead ||
+            current?.version !== request.expectedVersion
+        )
+            throw new Error(
+                "View maintenance definition head or version conflict",
+            );
+        if (!current || current.state === "archived")
+            throw new Error(
+                "View is not eligible for maintenance configuration",
+            );
+        const definition = materializeDefinition(
+            { ...current.definition, maintenance: request.maintenance },
+            current.definition,
+        );
+        const version: ViewVersion = {
+            ...current,
+            definition,
+            revisionId: randomUUID(),
+            baseRevisionId: current.revisionId,
+            version: current.version + 1,
+            createdAt: timestamp(),
+            actor: this.actor,
+            state:
+                request.maintenance.scope.mode === "pinned"
+                    ? current.state
+                    : "stale",
+        };
+        version.relationships = versionRelationships(
+            version,
+            authoredRelationships(current),
+            !!current.generation,
+        );
+        state.views[request.viewId].push(version);
+        const commitId = await this.commitBuildState(
+            request.corpusId,
+            head,
+            state,
+            "Update explicit view maintenance definition",
+        );
+        return { commitId, version };
+    }
+
+    public async updateViewBuild(
+        corpusId: string,
+        jobId: string,
+        update: (job: ViewBuildJob) => void,
+    ): Promise<ViewBuildJob> {
+        const { head, state } = await this.history(corpusId).read();
+        const job = state.builds?.[jobId];
+        if (!job)
+            throw new Error(
+                "View build was removed or forgotten; cannot persist a result",
+            );
+        update(job);
+        job.updatedAt = timestamp();
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Build receipt ${jobId}`,
+        );
+        return job;
+    }
+
+    public async recoverViewBuilds(corpusId: string): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        const running = Object.values(state.builds ?? {}).filter(
+            (job) => job.state === "running",
+        );
+        if (!running.length) return;
+        for (const kind of ["wiki", "projects"] as const) {
+            const family =
+                state[kind === "wiki" ? "wikiFamily" : "projectFamily"];
+            if (
+                family &&
+                running.some((job) =>
+                    job.results.some(
+                        (result) =>
+                            result.snapshot.pipeline ===
+                            (kind === "wiki"
+                                ? "informational-wiki-v1"
+                                : "informational-project-summary-v1"),
+                    ),
+                )
+            ) {
+                family.dirty = true;
+                family.cursor = 0;
+                family.error = `Interrupted ${kind} admission; retry pending indexed work`;
+            }
+        }
+        for (const job of running) {
+            job.state = "interrupted";
+            job.updatedAt = timestamp();
+            for (const result of job.results) {
+                if (
+                    [
+                        "pending",
+                        "inventorying",
+                        "checkingInventory",
+                        "generating",
+                        "validating",
+                    ].includes(result.state)
+                ) {
+                    result.state = "interrupted";
+                    result.reason =
+                        "Service restarted before durable materialization; explicit retry required";
+                }
+            }
+        }
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Reconcile interrupted draft builds",
+        );
+    }
+
+    public async getViewConflict(
+        corpusId: string,
+        conflictId: string,
+    ): Promise<ViewMergeConflict | undefined> {
+        assertViewIdentifier("conflict ID", conflictId);
+        return (await this.history(corpusId).read()).state.conflicts?.[
+            conflictId
+        ];
+    }
+
+    public async pendingWikiContributionConflict(
+        input: ViewBuildSnapshot,
+    ): Promise<ViewMergeConflict | undefined> {
+        const { state } = await this.history(input.corpusId).read();
+        for (const result of Object.values(state.builds ?? {}).flatMap(
+            (job) => job.results,
+        )) {
+            if (
+                result.viewId !== input.definition.viewId ||
+                result.wikiAssessment?.disposition !== "contribute" ||
+                !result.conflictId ||
+                !sameViewBuildEvidence(result.snapshot, input)
+            )
+                continue;
+            const conflict = state.conflicts?.[result.conflictId];
+            if (
+                conflict?.state === "pending" &&
+                viewVersions(state, conflict.viewId).at(-1)?.revisionId ===
+                    conflict.expectedRevisionId
+            )
+                return conflict;
+        }
+        return undefined;
+    }
+
+    public async hasPendingInformationalInput(
+        corpusId: string,
+        viewId: string,
+        input: ViewBuildSnapshot,
+    ): Promise<boolean> {
+        const { state } = await this.history(corpusId).read();
+        const pendingConflict = Object.values(state.conflicts ?? {}).some(
+            (conflict) =>
+                conflict.state === "pending" &&
+                conflict.viewId === viewId &&
+                sameViewBuildEvidence(conflict.input, input),
+        );
+        if (pendingConflict) return true;
+        return Object.values(state.builds ?? {}).some((job) =>
+            job.results.some((result) => {
+                if (result.viewId !== viewId) return false;
+                const canonicalId = result.wikiAssessment?.canonicalViewId;
+                if (!canonicalId) return false;
+                const publication = this.publicationStatus(state, canonicalId);
+                return (
+                    publication.indexState === "ready" &&
+                    !publication.blockedReason &&
+                    publication.publishedRevisionId ===
+                        result.wikiAssessment?.canonicalRevisionId &&
+                    reusableWikiAssessment(
+                        result,
+                        input,
+                        viewVersions(state, canonicalId).at(-1),
+                    )
+                );
+            }),
+        );
+    }
+
+    public async materializeViewBuild(
+        corpusId: string,
+        jobId: string,
+        viewId: string,
+        candidate: ViewSynthesisOutput,
+        merged: ViewSynthesisOutput,
+        conflicts: string[],
+        validation?: ViewPublicationProof,
+        contribution?: {
+            input: ViewBuildSnapshot;
+            verification: WikiSubjectAssessment;
+        },
+    ): Promise<ViewBuildTargetResult> {
+        const { head, state } = await this.history(corpusId).read();
+        const job = state.builds?.[jobId];
+        const result = job?.results.find((entry) => entry.viewId === viewId);
+        if (!job || !result || job.state !== "running")
+            throw new Error("Build is no longer eligible for materialization");
+        const input = contribution?.input ?? result.snapshot;
+        if (contribution)
+            assertWikiContribution(result, contribution, conflicts.length > 0);
+        const targetId = input.definition.viewId;
+        const current = viewVersions(state, targetId).at(-1);
+        if (
+            (current?.version ?? 0) !== input.expectedVersion ||
+            current?.revisionId !== input.targetRevisionId ||
+            current?.state === "archived"
+        )
+            throw new Error("View target changed during build");
+        if (conflicts.length) {
+            if (!current)
+                throw new Error("A missing target cannot have edit conflicts");
+            const target = { ...result, viewId: targetId, snapshot: input };
+            this.recordMergeConflict(
+                state,
+                job,
+                target,
+                current,
+                candidate,
+                conflicts,
+            );
+            result.state = target.state;
+            result.reason = target.reason;
+            if (target.conflictId) result.conflictId = target.conflictId;
+        } else {
+            const version = this.generatedVersion(
+                input,
+                current,
+                candidate,
+                merged,
+            );
+            if (validation) version.validation = validation;
+            state.views[targetId] = [...viewVersions(state, targetId), version];
+            result.state = version.provenance === "merged" ? "merged" : "draft";
+            result.reason =
+                "Validated draft saved; no publication, review or execution authority";
+            result.revisionId = version.revisionId;
+            if (contribution) {
+                result.wikiContribution = {
+                    input,
+                    revisionId: version.revisionId,
+                    state: "committed",
+                    verification: contribution.verification,
+                };
+                result.state = "validating";
+                result.reason =
+                    "Canonical contribution committed; publication/index binding pending";
+            }
+            state.publications ??= {};
+            const publication = state.publications[targetId] ?? {
+                viewId: targetId,
+                indexState: "absent" as const,
+                reason: "No published revision",
+            };
+            publication.latestBuiltRevisionId = version.revisionId;
+            state.publications[targetId] = publication;
+            result.missingEvidence = candidate.missingEvidence;
+            if (merged.coverage) result.coverage = merged.coverage;
+        }
+        job.updatedAt = timestamp();
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Materialize draft build ${jobId}: ${viewId} ${result.state}`,
+        );
+        return result;
+    }
+
+    private recordMergeConflict(
+        state: ViewStoreState,
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        current: ViewVersion,
+        candidate: ViewSynthesisOutput,
+        targets: string[],
+    ): void {
+        const identity = viewHash({
+            viewId: current.viewId,
+            current: current.revisionId,
+            input: result.snapshot.fingerprint,
+            candidate,
+            targets,
+        });
+        state.conflicts ??= {};
+        let conflict = Object.values(state.conflicts).find(
+            (entry) => entry.identity === identity,
+        );
+        if (!conflict) {
+            conflict = {
+                event: {
+                    kind: "viewMergeConflict",
+                    editIds: (current.edits ?? [])
+                        .filter((edit) => edit.status !== "cleared")
+                        .map((edit) => edit.id),
+                    evidence: result.snapshot.inputs.map(
+                        ({ sourceId, revisionId }) => ({
+                            sourceId,
+                            revisionId,
+                        }),
+                    ),
+                },
+                conflictId: randomUUID(),
+                identity,
+                corpusId: job.corpusId,
+                viewId: current.viewId,
+                jobId: job.jobId,
+                createdAt: timestamp(),
+                actor: "memory-view-generator",
+                state: "pending",
+                expectedRevisionId: current.revisionId,
+                input: result.snapshot,
+                base: current.generation,
+                human: current,
+                candidate,
+                targets,
+                reason: "Explicit edits cannot be preserved safely; authenticated resolution required",
+            };
+            state.conflicts[conflict.conflictId] = conflict;
+        }
+        result.state = "conflicted";
+        result.conflictId = conflict.conflictId;
+        result.reason = conflict.reason;
+    }
+
+    private generatedVersion(
+        input: ViewBuildSnapshot,
+        current: ViewVersion | undefined,
+        candidate: ViewSynthesisOutput,
+        merged: ViewSynthesisOutput,
+    ): ViewVersion & {
+        generation: NonNullable<ViewVersion["generation"]>;
+        edits: NonNullable<ViewVersion["edits"]>;
+    } {
+        const candidateId = randomUUID();
+        const edits = rebaseViewEdits(current, candidate, merged, candidateId);
+        const version: ViewVersion & {
+            generation: NonNullable<ViewVersion["generation"]>;
+            edits: NonNullable<ViewVersion["edits"]>;
+        } = {
+            corpusId: input.corpusId,
+            viewId: input.definition.viewId,
+            revisionId: randomUUID(),
+            version: (current?.version ?? 0) + 1,
+            state: "draft",
+            createdAt: timestamp(),
+            actor: "memory-view-generator",
+            ...(current ? { baseRevisionId: current.revisionId } : {}),
+            provenance: edits.some((edit) => edit.status !== "cleared")
+                ? "merged"
+                : "generated",
+            definition: materializeDefinition(
+                input.definition,
+                current?.definition,
+            ),
+            content: structuredClone(merged.content),
+            generation: {
+                candidateId,
+                content: structuredClone(candidate.content),
+                fingerprint: viewHash(candidate.content),
+                relationships: structuredClone(candidate.relationships),
+                input,
+                outcome: candidate.outcome,
+                missingEvidence: merged.missingEvidence,
+                ...inventoryEvidence(merged),
+            },
+            edits,
+            relationships: [],
+        };
+        version.relationships = versionRelationships(
+            version,
+            merged.relationships,
+            true,
+        );
+        if (input.maintenance)
+            version.maintenance = maintenanceManifest(
+                input.maintenance,
+                version,
+            );
+        return version;
+    }
+
+    public async resolveViewConflict(
+        request: ViewConflictResolution,
+        output: ViewSynthesisOutput,
+        validation?: ViewPublicationProof,
+    ): Promise<ViewHistoryEntry> {
+        const { head, state } = await this.history(request.corpusId).read();
+        const conflict = state.conflicts?.[request.conflictId];
+        const current = conflict && viewVersions(state, conflict.viewId).at(-1);
+        if (
+            head !== request.expectedHead ||
+            !conflict ||
+            conflict.state !== "pending" ||
+            !current ||
+            current.version !== request.expectedVersion ||
+            current.revisionId !== request.expectedRevisionId ||
+            current.revisionId !== conflict.expectedRevisionId ||
+            request.inputFingerprint !== conflict.input.fingerprint
+        )
+            throw new Error(
+                "Conflict resolution head/target/input guard changed",
+            );
+        const version = this.generatedVersion(
+            conflict.input,
+            current,
+            conflict.candidate,
+            output,
+        );
+        version.actor = this.actor;
+        if (validation) version.validation = validation;
+        version.provenance = "human";
+        if (request.choice === "generated")
+            version.edits = (current.edits ?? []).map((edit) => ({
+                ...edit,
+                status: "cleared",
+            }));
+        else {
+            const baseline = {
+                ...version,
+                content: conflict.candidate.content,
+                edits: [],
+                relationships: versionRelationships(
+                    version,
+                    conflict.candidate.relationships,
+                    true,
+                ),
+            };
+            const fresh = recordViewEdits(
+                baseline,
+                output.content,
+                output.relationships,
+                this.actor,
+            );
+            version.edits = reconcileResolutionEdits(
+                current,
+                version.edits,
+                fresh,
+                output,
+            );
+        }
+        version.relationships = versionRelationships(
+            version,
+            output.relationships,
+            true,
+        );
+        state.views[version.viewId] = [
+            ...viewVersions(state, version.viewId),
+            version,
+        ];
+        conflict.state = "resolved";
+        conflict.resolutionRevisionId = version.revisionId;
+        const commitId = await this.commitBuildState(
+            request.corpusId,
+            head,
+            state,
+            `Resolve view conflict ${conflict.conflictId} by ${this.actor}`,
+        );
+        return { commitId, version };
+    }
+
+    public async archiveView(
+        request: ViewArchiveRequest,
+    ): Promise<ViewHistoryEntry> {
+        const history = this.history(request.corpusId);
+        const { head, state } = await history.read();
+        if (head !== request.expectedHead)
+            throw new Error("View history head conflict");
+        const versions = viewVersions(state, request.viewId);
+        const current = versions.at(-1);
+        if (!current) throw new Error(`Unknown view '${request.viewId}'`);
+        if (current.version !== request.expectedVersion)
+            throw new Error("View version conflict");
+        if (current.state === "archived")
+            throw new Error("View is already archived");
+        const version: ViewVersion = {
+            ...current,
+            revisionId: randomUUID(),
+            version: current.version + 1,
+            baseRevisionId: current.revisionId,
+            state: "archived",
+            actor: this.actor,
+            createdAt: timestamp(),
+        };
+        version.relationships = versionRelationships(
+            version,
+            authoredRelationships(current),
+            current.generation?.input !== undefined,
+        );
+        state.views[request.viewId] = [...versions, version];
+        if (state.publications?.[request.viewId]?.publishedRevisionId) {
+            delete state.publications[request.viewId];
+            state.viewIndexCleanup = [
+                ...new Set([...(state.viewIndexCleanup ?? []), request.viewId]),
+            ];
+        }
+        const commitId = await history.commit(
+            head,
+            state,
+            this.entries(state),
+            this.actor,
+            `Archive ${request.viewId}`,
+        );
+        return { commitId, version };
+    }
+
+    public async getViewHistory(
+        request: ViewReadRequest,
+    ): Promise<ViewHistoryEntry[]> {
+        assertViewIdentifier("view ID", request.viewId);
+        const commits = (
+            await this.history(request.corpusId).history()
+        ).reverse();
+        const seen = new Set<string>();
+        const entries = commits.flatMap(({ commitId, state }) => {
+            const versions = viewVersions(state, request.viewId);
+            return versions.flatMap((version) => {
+                if (seen.has(version.revisionId)) return [];
+                seen.add(version.revisionId);
+                return [{ commitId, version }];
+            });
+        });
+        return entries
+            .reverse()
+            .filter(
+                (entry) =>
+                    request.revisionId === undefined ||
+                    entry.version.revisionId === request.revisionId,
+            );
+    }
+
+    private sanitize(state: ViewStoreState, sourceId: string): ViewStoreState {
+        const clearingDerived = sourceId === "@clear-derived-views";
+        const forgottenEvents = forgottenEventIds(sourceId);
+        const matches = (value: {
+            sourceId: string;
+            evidence?: { kind: "event"; eventId: string };
+        }) =>
+            forgottenEvents
+                ? value.evidence !== undefined &&
+                  forgottenEvents.has(value.evidence.eventId)
+                : !value.evidence && value.sourceId === sourceId;
+        const selected = (
+            definition: Pick<ViewVersion["definition"], "selector">,
+        ) =>
+            forgottenEvents
+                ? definition.selector.events?.some((event) =>
+                      forgottenEvents.has(event.eventId),
+                  )
+                : definition.selector.sources.some(
+                      (source) => source.sourceId === sourceId,
+                  );
+        const affected = new Set(
+            Object.entries(state.views).flatMap(([id, versions]) =>
+                versions.some((version) => {
+                    if (clearingDerived) return true;
+                    const content = [
+                        version.content,
+                        ...(version.generation
+                            ? [version.generation.content]
+                            : []),
+                    ];
+                    const references = content.flatMap((item) => {
+                        const evidence = getProcedureEvidenceReferences(item);
+                        return [...evidence.citations, ...evidence.assets];
+                    });
+                    return (
+                        selected(version.definition) ||
+                        references.some(matches) ||
+                        (!forgottenEvents &&
+                            version.maintenance?.privacySources.includes(
+                                sourceId,
+                            ))
+                    );
+                })
+                    ? [id]
+                    : [],
+            ),
+        );
+        state.views = Object.fromEntries(
+            Object.entries(state.views).filter(([id]) => !affected.has(id)),
+        );
+        state.builds = Object.fromEntries(
+            Object.entries(state.builds ?? {}).filter(
+                ([, job]) =>
+                    !clearingDerived &&
+                    !job.results.some(
+                        (result) =>
+                            result.snapshot.inputs.some(matches) ||
+                            result.wikiContribution?.input.inputs.some(
+                                matches,
+                            ) ||
+                            (!forgottenEvents &&
+                                result.snapshot.maintenance?.privacySources.includes(
+                                    sourceId,
+                                )) ||
+                            selected(result.snapshot.definition) ||
+                            affected.has(result.viewId) ||
+                            (!!result.wikiAssessment?.canonicalViewId &&
+                                affected.has(
+                                    result.wikiAssessment.canonicalViewId,
+                                )),
+                    ),
+            ),
+        );
+        state.conflicts = Object.fromEntries(
+            Object.entries(state.conflicts ?? {}).filter(
+                ([, conflict]) =>
+                    !clearingDerived &&
+                    !affected.has(conflict.viewId) &&
+                    !conflict.input.inputs.some(matches) &&
+                    (forgottenEvents !== undefined ||
+                        !conflict.input.maintenance?.privacySources.includes(
+                            sourceId,
+                        )) &&
+                    !selected(conflict.input.definition),
+            ),
+        );
+        state.publications = Object.fromEntries(
+            Object.entries(state.publications ?? {}).filter(
+                ([id]) => !clearingDerived && !affected.has(id),
+            ),
+        );
+        state.maintenanceReceipts = {};
+        for (const family of [state.wikiFamily, state.projectFamily]) {
+            if (!family) continue;
+            family.descriptors = family.descriptors.filter(
+                (descriptor) =>
+                    !clearingDerived &&
+                    !affected.has(descriptor.viewId) &&
+                    !descriptor.sourceIds.includes(sourceId),
+            );
+            family.dirty = true;
+            family.cursor = 0;
+            delete family.indexVersion;
+        }
+        for (const job of Object.values(state.builds))
+            delete job.maintenancePlan;
+        if (state.viewIndexCleanup)
+            state.viewIndexCleanup = state.viewIndexCleanup.filter(
+                (id) => !clearingDerived && !affected.has(id),
+            );
+        if (state.publicationPolicy)
+            state.publicationPolicy.views = Object.fromEntries(
+                Object.entries(state.publicationPolicy.views).filter(
+                    ([id]) => !clearingDerived && !affected.has(id),
+                ),
+            );
+        return state;
+    }
+
+    public async forgetSource(
+        corpusId: string,
+        sourceId: string,
+    ): Promise<void> {
+        await this.history(corpusId).purge(
+            sourceId,
+            (state, id) => this.sanitize(state, id),
+            (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
+        );
+    }
+
+    public async forgetEvent(corpusId: string, eventId: string): Promise<void> {
+        await this.forgetEvents(corpusId, [eventId]);
+    }
+
+    public async forgetEvents(
+        corpusId: string,
+        eventIds: string[],
+    ): Promise<void> {
+        if (!eventIds.length) return;
+        for (const id of eventIds) assertViewIdentifier("event ID", id);
+        await this.history(corpusId).purge(
+            JSON.stringify({
+                kind: "events",
+                eventIds: [...new Set(eventIds)],
+            }),
+            (state, id) => this.sanitize(state, id),
+            (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
+        );
+    }
+
+    public async clearDerivedViews(corpusId: string): Promise<void> {
+        const history = this.history(corpusId);
+        const { state } = await history.read();
+        if (
+            !Object.keys(state.views).length &&
+            !Object.keys(state.builds ?? {}).length &&
+            !Object.keys(state.conflicts ?? {}).length &&
+            !Object.keys(state.maintenanceReceipts ?? {}).length &&
+            !Object.keys(state.publications ?? {}).length &&
+            !state.viewIndexCleanup?.length &&
+            !Object.keys(state.publicationPolicy?.views ?? {}).length
+        )
+            return;
+        // This identity cannot collide with a validated source ID and is recoverable by the same purge journal.
+        await history.purge(
+            "@clear-derived-views",
+            (state, id) => this.sanitize(state, id),
+            (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
+        );
+    }
+
+    public async recover(corpusId: string): Promise<void> {
+        await this.history(corpusId).recoverPurge(
+            (state, id) => this.sanitize(state, id),
+            (state) => this.entries(state),
+            () => this.removeSearchIndex(corpusId),
+        );
+    }
+
+    private async removeSearchIndex(corpusId: string): Promise<void> {
+        const { state } = await this.history(corpusId).read(undefined, true);
+        const retained = new Set(
+            Object.keys(state.views).map((id) => viewHash(id)),
+        );
+        const root = path.join(
+            this.viewDirectory(corpusId),
+            "view-search-index",
+        );
+        let entries: string[];
+        try {
+            entries = await readdir(root);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            entries = [];
+        }
+        for (const entry of entries) {
+            if (!/^[0-9a-f]{64}$/.test(entry))
+                throw new Error(
+                    "Unexpected derived view index directory during privacy cleanup",
+                );
+            if (!retained.has(entry))
+                await retryFilesystemPublication(() =>
+                    rm(path.join(root, entry), {
+                        recursive: true,
+                        force: true,
+                    }),
+                );
+        }
+    }
+
+    public async getViewPublicationPolicy(
+        corpusId: string,
+    ): Promise<ViewPublicationPolicy> {
+        const { state } = await this.history(corpusId).read();
+        return (
+            state.publicationPolicy ?? {
+                revision: 0,
+                autoPublish: true,
+                views: {},
+            }
+        );
+    }
+
+    public async initializeViewPublicationPolicy(
+        corpusId: string,
+    ): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        if (state.publicationPolicy) return;
+        state.publicationPolicy = { revision: 0, autoPublish: true, views: {} };
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            "Initialize corpus auto-publish policy",
+        );
+    }
+
+    public async getViewIndexCleanup(corpusId: string): Promise<string[]> {
+        return (
+            (await this.history(corpusId).read()).state.viewIndexCleanup ?? []
+        );
+    }
+
+    public async completeViewIndexCleanup(
+        corpusId: string,
+        viewId: string,
+    ): Promise<void> {
+        const { head, state } = await this.history(corpusId).read();
+        state.viewIndexCleanup = (state.viewIndexCleanup ?? []).filter(
+            (id) => id !== viewId,
+        );
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Complete archived view index cleanup ${viewId}`,
+        );
+    }
+
+    public async updateViewPublicationPolicy(
+        request: ViewPublicationPolicyUpdate,
+    ): Promise<ViewPublicationPolicy> {
+        const { head, state } = await this.history(request.corpusId).read();
+        if (head !== request.expectedHead)
+            throw new Error("View policy history head conflict");
+        const policy = state.publicationPolicy ?? {
+            revision: 0,
+            autoPublish: true,
+            views: {},
+        };
+        if (request.viewId !== undefined) {
+            assertViewIdentifier("view ID", request.viewId);
+            const prior = policy.views[request.viewId];
+            if ((prior?.revision ?? 0) !== request.expectedRevision)
+                throw new Error("View policy revision conflict");
+            policy.views[request.viewId] = {
+                revision: request.expectedRevision + 1,
+                autoPublish: request.autoPublish,
+            };
+        } else {
+            if (policy.revision !== request.expectedRevision)
+                throw new Error("Corpus publication policy revision conflict");
+            if (request.autoPublish === null)
+                throw new Error("Corpus publication setting cannot inherit");
+            policy.revision++;
+            policy.autoPublish = request.autoPublish;
+        }
+        state.publicationPolicy = policy;
+        await this.commitBuildState(
+            request.corpusId,
+            head,
+            state,
+            "Update auto-publish policy",
+        );
+        return policy;
+    }
+
+    public async getViewPublication(
+        request: ViewReadRequest,
+    ): Promise<ViewPublicationStatus> {
+        const { state } = await this.history(request.corpusId).read();
+        return this.publicationStatus(state, request.viewId);
+    }
+
+    public async listPublishedViews(corpusId: string) {
+        const { state } = await this.history(corpusId).read();
+        return Object.entries(state.views).map(([viewId, versions]) => {
+            const publication = this.publicationStatus(state, viewId);
+            return {
+                current: versions[versions.length - 1],
+                view: versions.find(
+                    (version) =>
+                        version.revisionId === publication.publishedRevisionId,
+                ),
+                publication,
+            };
+        });
+    }
+
+    private publicationStatus(
+        state: ViewStoreState,
+        viewId: string,
+    ): ViewPublicationStatus {
+        const publication = state.publications?.[viewId] ?? {
+            viewId,
+            indexState: "absent" as const,
+            reason: "No published revision",
+        };
+        const pending = Object.values(state.conflicts ?? {}).some(
+            (conflict) =>
+                conflict.viewId === viewId && conflict.state === "pending",
+        );
+        return {
+            ...publication,
+            ...(pending
+                ? {
+                      blockedReason:
+                          "Resolve the pending merge conflict before publishing or searching",
+                  }
+                : {}),
+        };
+    }
+
+    public async publishView(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
+        const { head, state } = await this.history(request.corpusId).read();
+        const current = viewVersions(state, request.viewId).at(-1);
+        if (
+            head !== request.expectedHead ||
+            current?.revisionId !== request.revisionId ||
+            current.version !== request.expectedVersion
+        )
+            throw new Error("Publication head or target revision conflict");
+        if (current.state !== "draft")
+            throw new Error("Only a current eligible draft may publish");
+        if (
+            Object.values(state.conflicts ?? {}).some(
+                (conflict) =>
+                    conflict.viewId === request.viewId &&
+                    conflict.state === "pending",
+            )
+        )
+            throw new Error(
+                "Resolve the pending merge conflict before publishing",
+            );
+        if (!informationalView(current.content))
+            assertPublicationProof(current);
+        state.publications ??= {};
+        const prior = state.publications[request.viewId];
+        if (prior?.publishedRevisionId === current.revisionId) return prior;
+        const publication: ViewPublicationStatus = {
+            viewId: request.viewId,
+            ...(prior?.latestBuiltRevisionId
+                ? { latestBuiltRevisionId: prior.latestBuiltRevisionId }
+                : {}),
+            publishedRevisionId: current.revisionId,
+            indexState: "pending",
+            reason: "Published, indexing pending",
+            intent: {
+                revisionId: current.revisionId,
+                actor: this.actor,
+                createdAt: timestamp(),
+            },
+        };
+        state.publications[request.viewId] = publication;
+        await this.commitBuildState(
+            request.corpusId,
+            head,
+            state,
+            `Publish ${request.viewId} revision ${current.revisionId}`,
+        );
+        return publication;
+    }
+
+    public async updateViewIndex(
+        corpusId: string,
+        viewId: string,
+        revisionId: string,
+        error?: string,
+    ): Promise<ViewPublicationStatus> {
+        if (
+            viewId === "__proto__" ||
+            viewId === "constructor" ||
+            viewId === "prototype"
+        )
+            throw new Error("Invalid view identifier");
+        const { head, state } = await this.history(corpusId).read();
+        const publication = state.publications?.[viewId];
+        if (!publication || publication.publishedRevisionId !== revisionId)
+            throw new Error(
+                "Published revision changed before index completion",
+            );
+        publication.indexState = error === undefined ? "ready" : "failed";
+        publication.reason =
+            error === undefined
+                ? "Exact published revision is searchable"
+                : error;
+        if (error === undefined) publication.indexedRevisionId = revisionId;
+        else delete publication.indexedRevisionId;
+        await this.commitBuildState(
+            corpusId,
+            head,
+            state,
+            `Index ${viewId} revision ${revisionId}: ${publication.indexState}`,
+        );
+        return publication;
+    }
+
+    private async invalidateDrafts(
+        corpusId: string,
+        invalidate: (version: ViewVersion) => boolean,
+    ): Promise<void> {
+        const history = this.history(corpusId);
+        const snapshot = await history.read();
+        let changed = false;
+        for (const [id, versions] of Object.entries(snapshot.state.views)) {
+            const current = versions.at(-1)!;
+            if (current.state !== "draft" || !invalidate(current)) continue;
+            const next: ViewVersion = {
+                ...current,
+                revisionId: randomUUID(),
+                version: current.version + 1,
+                baseRevisionId: current.revisionId,
+                state: "stale",
+                actor: "memory-service",
+                createdAt: timestamp(),
+            };
+            next.relationships = versionRelationships(
+                next,
+                authoredRelationships(current),
+                current.generation?.input !== undefined,
+            );
+            snapshot.state.views[id] = [...versions, next];
+            changed = true;
+        }
+        if (changed)
+            await history.commit(
+                snapshot.head,
+                snapshot.state,
+                this.entries(snapshot.state),
+                "memory-service",
+                "Invalidate changed view evidence or membership",
+            );
+    }
+
+    public async markSourceRevisionStale(
+        corpusId: string,
+        sourceId: string,
+        activeRevisionId?: string,
+    ): Promise<void> {
+        await this.invalidateDrafts(corpusId, (view) =>
+            view.definition.selector.sources.some(
+                (source) =>
+                    source.sourceId === sourceId &&
+                    source.revisionId !== activeRevisionId,
+            ),
+        );
+    }
+
+    public async markMaintenanceStale(
+        corpusId: string,
+        viewIds: string[],
+    ): Promise<void> {
+        const selected = new Set(viewIds);
+        await this.invalidateDrafts(corpusId, (view) =>
+            selected.has(view.viewId),
+        );
+    }
+
+    private viewDirectory(corpusId: string): string {
+        return path.join(this.rootDirectory, corpusId, "views");
+    }
+}
