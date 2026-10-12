@@ -9,7 +9,10 @@ import type {
     ViewSynthesisOutput,
     ViewVersion,
     ViewPublicationProof,
+    WikiPagePurposeContext,
+    WikiSubjectAssessment,
 } from "./viewTypes.js";
+import { parseWikiAssessment, wikiPageContext } from "./wikiAdmission.js";
 import { publicationProof } from "./viewPublication.js";
 import { validateInventoryAudit } from "./viewInventory.js";
 import { mergeView } from "./viewMerge.js";
@@ -38,6 +41,26 @@ export interface ViewBuildOwner {
     ): Promise<ViewBuildJob>;
     current(input: ViewBuildSnapshot): Promise<ViewVersion | undefined>;
     unchanged?(input: ViewBuildSnapshot): Promise<boolean>;
+    wikiPages?(input: ViewBuildSnapshot): Promise<WikiPagePurposeContext[]>;
+    recordWikiAssessment?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        assessment: WikiSubjectAssessment,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<void>;
+    contributeWikiSubject?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        assessment: WikiSubjectAssessment,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<void>;
+    resumeWikiContribution?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<boolean>;
     materialize(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
@@ -174,6 +197,15 @@ export class ViewBuildRunner {
         }
     }
 
+    public trackContribution(jobId: string, input: ViewBuildSnapshot): void {
+        const scope = this.controllers.get(jobId);
+        if (!scope)
+            throw new ViewBuildStaleError(
+                "Wiki contribution no longer has an active owner",
+            );
+        for (const source of input.inputs) scope.sources.add(source.sourceId);
+    }
+
     public forgetEvent(corpusId: string, eventId: string): void {
         for (const [jobId, failure] of this.failures)
             if (failure.corpusId === corpusId && failure.events.has(eventId))
@@ -293,17 +325,15 @@ export class ViewBuildRunner {
                 result.snapshot.pipeline,
             );
             if (
-                informational &&
-                (await this.owner.unchanged?.(result.snapshot))
-            ) {
-                await this.result(
+                (await this.skipInformationalTarget(
                     job,
-                    result.viewId,
-                    "skipped",
-                    "Unchanged indexed evidence and definition; no synthesis required",
-                );
+                    result,
+                    signal,
+                    informational,
+                )) ||
+                (await this.assessWikiAdmission(job, result, signal))
+            )
                 return;
-            }
             const evidence = informational
                 ? undefined
                 : await this.prepareInventory(job, result, signal);
@@ -325,6 +355,7 @@ export class ViewBuildRunner {
                 if (evidence?.inventoryAudit)
                     candidate.inventoryAudit = evidence.inventoryAudit;
             }
+
             validation = true;
             validateConstructedGuide(result.snapshot, candidate);
             await this.result(
@@ -357,6 +388,11 @@ export class ViewBuildRunner {
             if (!conflicts.length) {
                 validation = true;
                 validateConstructedGuide(result.snapshot, output);
+                await this.verifyContributionRefresh(
+                    result.snapshot,
+                    output,
+                    signal,
+                );
                 const support = informational
                     ? undefined
                     : await abortable(
@@ -401,6 +437,125 @@ export class ViewBuildRunner {
         } finally {
             clearTimeout(timer);
         }
+    }
+
+    private async verifyContributionRefresh(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (!input.wikiContribution) return;
+        if (!this.adapter.assessWikiSubject)
+            throw new Error(
+                "Wiki contribution refresh lacks actual-prose coverage checker",
+            );
+        const context = wikiPageContext(
+            input,
+            {
+                viewId: input.definition.viewId,
+                revisionId: input.targetRevisionId!,
+                definition: {
+                    ...input.definition,
+                    revisionId: input.definitionRevisionId!,
+                },
+                content: output.content,
+            },
+            undefined,
+            false,
+        );
+        const coverage = parseWikiAssessment(
+            await abortable(
+                this.adapter.assessWikiSubject(input, [context], signal),
+                signal,
+            ),
+            [context],
+            input.wikiContribution.essentialDistinctions,
+        );
+        if (coverage.disposition !== "covered")
+            throw new Error(
+                "Wiki contribution refresh did not preserve essential old/new distinctions in actual prose",
+            );
+    }
+
+    private async skipInformationalTarget(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+        informational: boolean,
+    ): Promise<boolean> {
+        if (!informational) return false;
+        if (await this.owner.unchanged?.(result.snapshot)) {
+            await this.result(
+                job,
+                result.viewId,
+                "skipped",
+                "Unchanged indexed evidence and definition; no synthesis required",
+            );
+            return true;
+        }
+        return (
+            (await this.owner.resumeWikiContribution?.(job, result, signal)) ??
+            false
+        );
+    }
+
+    private async assessWikiAdmission(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<boolean> {
+        if (
+            !job.maintenancePlan ||
+            result.snapshot.pipeline !== "informational-wiki-v1" ||
+            result.snapshot.expectedVersion !== 0 ||
+            !this.adapter.assessWikiSubject
+        )
+            return false;
+        if (!this.owner.wikiPages || !this.owner.recordWikiAssessment)
+            throw new Error(
+                "Wiki purpose assessment requires current-page context and guarded receipts",
+            );
+        const pages = await this.owner.wikiPages(result.snapshot);
+        if (!pages.length) return false;
+        await this.result(
+            job,
+            result.viewId,
+            "generating",
+            "Comparing standalone purpose with nominated current pages",
+        );
+        const assessment = parseWikiAssessment(
+            await abortable(
+                this.adapter.assessWikiSubject(result.snapshot, pages, signal),
+                signal,
+            ),
+            pages,
+        );
+        signal.throwIfAborted();
+        await this.owner.recordWikiAssessment(
+            job,
+            result,
+            assessment,
+            pages,
+            signal,
+        );
+        if (assessment.disposition === "contribute") {
+            if (!this.owner.contributeWikiSubject)
+                throw new Error(
+                    "Wiki contribution requires guarded canonical materialization",
+                );
+            await this.owner.contributeWikiSubject(
+                job,
+                result,
+                assessment,
+                pages,
+                signal,
+            );
+            return true;
+        }
+        return (
+            assessment.disposition === "covered" ||
+            assessment.disposition === "ambiguous"
+        );
     }
 
     private async run(job: ViewBuildJob, signal: AbortSignal): Promise<void> {

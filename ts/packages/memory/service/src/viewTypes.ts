@@ -451,6 +451,12 @@ export interface ViewBuildSnapshot {
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
     maintenance?: ViewMaintenanceSnapshot;
+    wikiContribution?: {
+        candidateViewId: string;
+        query: string;
+        purpose: string;
+        essentialDistinctions: WikiSubjectAssessment["essentialDistinctions"];
+    };
 }
 export interface ViewSynthesisOutput {
     content: DerivedViewContent;
@@ -565,6 +571,11 @@ export interface ViewSupportReport {
 }
 export interface ViewSynthesisAdapter {
     identity: string;
+    assessWikiSubject?(
+        input: ViewBuildSnapshot,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<WikiSubjectAssessment>;
     inventory?(
         input: ViewBuildSnapshot,
         signal: AbortSignal,
@@ -584,6 +595,35 @@ export interface ViewSynthesisAdapter {
         output: ViewSynthesisOutput,
         signal: AbortSignal,
     ): Promise<ViewSupportReport>;
+}
+export interface WikiPagePurposeContext {
+    viewId: string;
+    revisionId: string;
+    query: string;
+    aliases: string[];
+    identity?: import("./types.js").IndexedSubjectIdentity;
+    candidateIdentity?: import("./types.js").IndexedSubjectIdentity;
+    title: string;
+    prose: string;
+    proseTruncated: boolean;
+    sharedFragmentIds: string[];
+    candidateFragmentIds: string[];
+    contributingSources: Array<{ sourceId: string; revisionId: string }>;
+    sourceOverlap: { shared: number; union: number; subset: boolean };
+}
+export interface WikiSubjectAssessment {
+    disposition: "distinct" | "covered" | "contribute" | "ambiguous";
+    purpose: string;
+    reason: string;
+    /** Empty for distinct/ambiguous; covered/contribute name a supplied current page. */
+    canonicalViewId: string;
+    sharedFragmentIds: string[];
+    ambiguousViewIds: string[];
+    essentialDistinctions: Array<{
+        fragmentId: string;
+        statement: string;
+        canonicalExcerpt: string;
+    }>;
 }
 export type ViewBuildResultState =
     | "pending"
@@ -614,6 +654,13 @@ export interface ViewBuildTargetResult {
     inventoryAudit?: ViewInventoryAudit;
     coverage?: ViewInventoryCoverage;
     publication?: ViewPublicationStatus;
+    wikiAssessment?: WikiSubjectAssessment & { canonicalRevisionId?: string };
+    wikiContribution?: {
+        input: ViewBuildSnapshot;
+        revisionId: string;
+        state: "committed" | "bound";
+        verification: WikiSubjectAssessment;
+    };
 }
 export interface ViewBuildJob {
     jobId: string;

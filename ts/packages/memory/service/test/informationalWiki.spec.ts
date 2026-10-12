@@ -655,7 +655,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             const admitted = await admitFreshBuild(request);
             expect(admitted.results[0].snapshot.model).toBe(
                 family === "wiki"
-                    ? "mock-informational:wiki-grouping-v1"
+                    ? "mock-informational:wiki-source-contribution-v3"
                     : "mock-informational:project-attribution-v3",
             );
             expect((await service.buildViews(request)).jobId).toBe(
