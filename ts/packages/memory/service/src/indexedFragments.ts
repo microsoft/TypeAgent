@@ -116,47 +116,12 @@ function diverseBlocks(blocks: IndexedBlock[], limit: number): IndexedBlock[] {
 const contextualHeading =
     /^#{1,6} [^\n]*(qualif|contrast|warn|correct|limit|caveat|counterexample|scope|observation|measurement)/im;
 
-export function selectIndexedFragments(
-    blocks: Iterable<IndexedBlock>,
-    request: IndexedFragmentRequest,
-): IndexedFragmentSelection {
-    const maxFragments = bound(request.maxFragments, 12, 12);
-    const window = bound(request.maxCharsPerFragment, 2000, 2000);
-    const readLimit = bound(request.maxReadChars, 32000, 32000);
-    if (
-        !request.terms.length ||
-        (request.query !== undefined && !request.query.trim()) ||
-        request.terms.length > 8 ||
-        request.terms.some((term) => !term.trim() || term.length > 200)
-    )
-        throw new Error("Invalid bounded indexed-fragment selector");
-    const terms = [
-        ...new Set(
-            request.terms.flatMap(
-                (term) =>
-                    term.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? [],
-            ),
-        ),
-    ].filter((term) => term.length > 2);
-    const eligible = new Set(request.sourceIds);
-    const fragments: IndexedFragmentSelection["fragments"] = [];
-    let readChars = 0;
-    let neighborhoodChars = 0;
-    let limited = false;
-    const seen = new Set<string>();
-    const selectedRanges = new Map<
-        string,
-        Array<{ start: number; end: number }>
-    >();
-    const candidates = [...blocks].filter((block) =>
-        eligible.has(block.sourceId),
-    );
-    const selected = diverseBlocks(
-        candidates,
-        Math.max(2, Math.floor(maxFragments / 3)),
-    );
-    limited = candidates.length > selected.length;
-    const windows = selected.map((block) => {
+function candidateWindows(
+    blocks: IndexedBlock[],
+    terms: string[],
+    window: number,
+): Array<Array<{ block: IndexedBlock; offset: number }>> {
+    return blocks.map((block) => {
         const headings = [...block.text.matchAll(/^#{1,6} .+$/gm)];
         const important = headings.filter((heading) =>
             contextualHeading.test(heading[0]),
@@ -204,11 +169,131 @@ export function selectIndexedFragments(
                 ...balancedOffsets(block.text.length, window),
             ]),
         ];
-        return offsets.map((offset) => ({
-            block,
-            offset,
-        }));
+        return offsets.map((offset) => ({ block, offset }));
     });
+}
+
+interface FragmentSelectionState {
+    fragments: IndexedFragmentSelection["fragments"];
+    readChars: number;
+    neighborhoodChars: number;
+    limited: boolean;
+    seen: Set<string>;
+    selectedRanges: Map<string, Array<{ start: number; end: number }>>;
+}
+
+function readCandidate(
+    item: { block: IndexedBlock; offset: number },
+    request: IndexedFragmentRequest,
+    terms: string[],
+    window: number,
+    readLimit: number,
+    maxFragments: number,
+    state: FragmentSelectionState,
+): void {
+    const { block } = item;
+    let offset = item.offset;
+    const contextChars = Math.min(
+        offset,
+        1000,
+        4000 - state.neighborhoodChars,
+        readLimit - state.readChars,
+    );
+    if (contextChars > 0) {
+        const nearby = block.text.slice(offset - contextChars, offset);
+        state.readChars += nearby.length;
+        state.neighborhoodChars += nearby.length;
+        const heading = nearby.lastIndexOf("\n## ");
+        if (
+            heading >= 0 &&
+            !/^#{1,6} /m.test(block.text.slice(offset, offset + 8))
+        )
+            offset = offset - contextChars + heading + 1;
+    }
+    if (state.readChars >= readLimit) {
+        state.limited = true;
+        return;
+    }
+    const end = Math.min(
+        block.text.length,
+        offset + window,
+        offset + readLimit - state.readChars,
+    );
+    const snippet = block.text.slice(offset, end);
+    state.readChars += snippet.length;
+    const lower = snippet.toLocaleLowerCase();
+    if (
+        !terms.some((term) => lower.includes(term)) &&
+        !request.query &&
+        !contextualHeading.test(snippet)
+    )
+        return;
+    const locator = indexedLocator(block, offset, end);
+    const key = `${block.sourceId}:${block.revisionId}:${locator}`;
+    if (state.seen.has(key)) return;
+    const blockKey = `${block.sourceId}:${block.revisionId}:${block.blockOrdinal}`;
+    const ranges = state.selectedRanges.get(blockKey) ?? [];
+    if (
+        ranges.some(
+            (range) =>
+                (range.start <= offset && range.end >= end) ||
+                (offset <= range.start && end >= range.end),
+        )
+    )
+        return;
+    state.seen.add(key);
+    ranges.push({ start: offset, end });
+    state.selectedRanges.set(blockKey, ranges);
+    state.fragments.push({
+        sourceId: block.sourceId,
+        revisionId: block.revisionId,
+        locator,
+        snippet,
+        score: block.score,
+    });
+    if (state.fragments.length >= maxFragments) state.limited = true;
+}
+
+export function selectIndexedFragments(
+    blocks: Iterable<IndexedBlock>,
+    request: IndexedFragmentRequest,
+): IndexedFragmentSelection {
+    const maxFragments = bound(request.maxFragments, 12, 12);
+    const window = bound(request.maxCharsPerFragment, 2000, 2000);
+    const readLimit = bound(request.maxReadChars, 32000, 32000);
+    if (
+        !request.terms.length ||
+        (request.query !== undefined && !request.query.trim()) ||
+        request.terms.length > 8 ||
+        request.terms.some((term) => !term.trim() || term.length > 200)
+    )
+        throw new Error("Invalid bounded indexed-fragment selector");
+    const terms = [
+        ...new Set(
+            request.terms.flatMap(
+                (term) =>
+                    term.toLocaleLowerCase().match(/[\p{L}\p{N}-]+/gu) ?? [],
+            ),
+        ),
+    ].filter((term) => term.length > 2);
+    const eligible = new Set(request.sourceIds);
+    const state: FragmentSelectionState = {
+        fragments: [],
+        readChars: 0,
+        neighborhoodChars: 0,
+        limited: false,
+        seen: new Set(),
+        selectedRanges: new Map(),
+    };
+    const candidates = [...blocks].filter((block) =>
+        eligible.has(block.sourceId),
+    );
+    const selected = diverseBlocks(
+        candidates,
+        Math.max(2, Math.floor(maxFragments / 3)),
+    );
+    state.limited = candidates.length > selected.length;
+    const windows = candidateWindows(selected, terms, window);
     // Interleave sources so an earlier long block cannot hide a newly indexed correction.
     for (
         let index = 0;
@@ -218,75 +303,34 @@ export function selectIndexedFragments(
         for (const items of windows) {
             const item = items[index];
             if (!item) continue;
-            const { block } = item;
-            let offset = item.offset;
-            if (readChars >= readLimit || fragments.length >= maxFragments) {
-                limited = true;
+            if (
+                state.readChars >= readLimit ||
+                state.fragments.length >= maxFragments
+            ) {
+                state.limited = true;
                 break;
             }
-            const contextChars = Math.min(
-                offset,
-                1000,
-                4000 - neighborhoodChars,
-                readLimit - readChars,
+            readCandidate(
+                item,
+                request,
+                terms,
+                window,
+                readLimit,
+                maxFragments,
+                state,
             );
-            if (contextChars > 0) {
-                const nearby = block.text.slice(offset - contextChars, offset);
-                readChars += nearby.length;
-                neighborhoodChars += nearby.length;
-                const heading = nearby.lastIndexOf("\n## ");
-                if (
-                    heading >= 0 &&
-                    !/^#{1,6} /m.test(block.text.slice(offset, offset + 8))
-                )
-                    offset = offset - contextChars + heading + 1;
-            }
-            if (readChars >= readLimit) {
-                limited = true;
-                break;
-            }
-            const end = Math.min(
-                block.text.length,
-                offset + window,
-                offset + readLimit - readChars,
-            );
-            const snippet = block.text.slice(offset, end);
-            readChars += snippet.length;
-            const lower = snippet.toLocaleLowerCase();
-            if (
-                !terms.some((term) => lower.includes(term)) &&
-                !request.query &&
-                !contextualHeading.test(snippet)
-            )
-                continue;
-            const locator = indexedLocator(block, offset, end);
-            const key = `${block.sourceId}:${block.revisionId}:${locator}`;
-            if (seen.has(key)) continue;
-            const blockKey = `${block.sourceId}:${block.revisionId}:${block.blockOrdinal}`;
-            const ranges = selectedRanges.get(blockKey) ?? [];
-            if (
-                ranges.some(
-                    (range) =>
-                        (range.start <= offset && range.end >= end) ||
-                        (offset <= range.start && end >= range.end),
-                )
-            )
-                continue;
-            seen.add(key);
-            ranges.push({ start: offset, end });
-            selectedRanges.set(blockKey, ranges);
-            fragments.push({
-                sourceId: block.sourceId,
-                revisionId: block.revisionId,
-                locator,
-                snippet,
-                score: block.score,
-            });
         }
-        if (readChars >= readLimit || fragments.length >= maxFragments) {
-            limited = true;
+        if (
+            state.readChars >= readLimit ||
+            state.fragments.length >= maxFragments
+        ) {
+            state.limited = true;
             break;
         }
     }
-    return { fragments, readChars, limited };
+    return {
+        fragments: state.fragments,
+        readChars: state.readChars,
+        limited: state.limited,
+    };
 }

@@ -251,6 +251,103 @@ export function mountMemoryHubViewActivity(
         return card;
     }
 
+    function appendJobSummary(
+        corpus: { corpusId: string; name: string },
+        job: ViewBuildJob,
+    ): void {
+        const row = rbNode("article", undefined, "card");
+        row.append(
+            rbButton(
+                `${job.maintenancePlan ? "Update" : "Build"} · ${corpus.name} · ${job.state}`,
+                () => options.onOpenBuild(corpus.corpusId, job.jobId),
+            ),
+            rbNode("p", viewBuildSummary(job)),
+        );
+        list.append(row);
+    }
+
+    async function appendResultAttention(
+        corpus: { corpusId: string; name: string },
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        current: number,
+    ): Promise<boolean> {
+        if (result.conflictId) {
+            const conflict = await invokeMemory("memoryGetViewConflict", {
+                corpusId: corpus.corpusId,
+                conflictId: result.conflictId,
+            });
+            if (disposed || current !== sequence) return false;
+            if (!conflict || conflict.state === "resolved") return true;
+        }
+        const item = rbNode("article", undefined, "card");
+        item.append(
+            rbNode("h4", `${resultTitle(result)} · ${states[result.state]}`),
+            rbNode("p", `${corpus.name} · ${result.reason}`),
+            rbButton(
+                result.conflictId ? "Resolve conflict" : "Inspect operation",
+                () =>
+                    result.conflictId
+                        ? options.onOpenView(corpus.corpusId, result.viewId)
+                        : options.onOpenBuild(corpus.corpusId, job.jobId),
+            ),
+        );
+        attentionHost.append(item);
+        return true;
+    }
+
+    async function renderGroups(
+        groups: Array<{
+            corpus: { corpusId: string; name: string };
+            jobs: ViewBuildJob[];
+            alerts: HTMLElement[];
+        }>,
+        current: number,
+    ): Promise<{ total: number; running: boolean; current: boolean }> {
+        let total = 0;
+        let running = false;
+        const seen = new Set<string>();
+        for (const { corpus, jobs, alerts } of groups) {
+            attentionHost.append(...alerts);
+            const ordered = [...jobs].sort((a, b) =>
+                b.updatedAt.localeCompare(a.updatedAt),
+            );
+            for (const job of ordered) {
+                total++;
+                running ||= job.state === "running";
+                appendJobSummary(corpus, job);
+                for (const result of job.results) {
+                    const key = JSON.stringify([
+                        corpus.corpusId,
+                        result.viewId,
+                    ]);
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    if (
+                        ![
+                            "conflicted",
+                            "failed",
+                            "blocked",
+                            "stale",
+                            "interrupted",
+                        ].includes(result.state)
+                    )
+                        continue;
+                    if (
+                        !(await appendResultAttention(
+                            corpus,
+                            job,
+                            result,
+                            current,
+                        ))
+                    )
+                        return { total, running, current: false };
+                }
+            }
+        }
+        return { total, running, current: true };
+    }
+
     async function refresh(): Promise<void> {
         const current = ++sequence;
         const scope = options.scope();
@@ -289,82 +386,9 @@ export function mountMemoryHubViewActivity(
             return;
         list.replaceChildren();
         attentionHost.replaceChildren();
-        let total = 0;
-        let running = false;
-        const seen = new Set<string>();
-        for (const { corpus, jobs, alerts } of groups) {
-            attentionHost.append(...alerts);
-            const ordered = [...jobs].sort((a, b) =>
-                b.updatedAt.localeCompare(a.updatedAt),
-            );
-            for (const job of ordered) {
-                total++;
-                running ||= job.state === "running";
-                const row = rbNode("article", undefined, "card");
-                row.append(
-                    rbButton(
-                        `${job.maintenancePlan ? "Update" : "Build"} · ${corpus.name} · ${job.state}`,
-                        () => options.onOpenBuild(corpus.corpusId, job.jobId),
-                    ),
-                    rbNode("p", viewBuildSummary(job)),
-                );
-                list.append(row);
-                for (const result of job.results) {
-                    const key = JSON.stringify([
-                        corpus.corpusId,
-                        result.viewId,
-                    ]);
-                    if (seen.has(key)) continue;
-                    seen.add(key);
-                    if (
-                        ![
-                            "conflicted",
-                            "failed",
-                            "blocked",
-                            "stale",
-                            "interrupted",
-                        ].includes(result.state)
-                    )
-                        continue;
-                    if (result.conflictId) {
-                        const conflict = await invokeMemory(
-                            "memoryGetViewConflict",
-                            {
-                                corpusId: corpus.corpusId,
-                                conflictId: result.conflictId,
-                            },
-                        );
-                        if (disposed || current !== sequence) return;
-                        if (!conflict || conflict.state === "resolved")
-                            continue;
-                    }
-                    const item = rbNode("article", undefined, "card");
-                    item.append(
-                        rbNode(
-                            "h4",
-                            `${resultTitle(result)} · ${states[result.state]}`,
-                        ),
-                        rbNode("p", `${corpus.name} · ${result.reason}`),
-                        rbButton(
-                            result.conflictId
-                                ? "Resolve conflict"
-                                : "Inspect operation",
-                            () =>
-                                result.conflictId
-                                    ? options.onOpenView(
-                                          corpus.corpusId,
-                                          result.viewId,
-                                      )
-                                    : options.onOpenBuild(
-                                          corpus.corpusId,
-                                          job.jobId,
-                                      ),
-                        ),
-                    );
-                    attentionHost.append(item);
-                }
-            }
-        }
+        const rendered = await renderGroups(groups, current);
+        if (!rendered.current) return;
+        const { total, running } = rendered;
         status.textContent = total
             ? `${total} view operations. Results are recorded per target.`
             : "No view builds yet.";
