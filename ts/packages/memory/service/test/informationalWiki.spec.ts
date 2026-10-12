@@ -264,6 +264,7 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             const job = await waitForViewBuild(service, result.job);
             expect(job.state).toBe("complete");
         }
+        if (operation === "pause") await projects(corpusId, "pause");
         return result;
     }
     async function add(corpusId: string, sourceId: string, text: string) {
@@ -995,8 +996,10 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             "second",
             "Acquisition next source remains conditional.",
         );
+        const pausedHead = (await service.listViews(corpusId)).head;
         await new Promise((resolve) => setTimeout(resolve, 400));
         expect(generated).toBe(calls);
+        expect((await service.listViews(corpusId)).head).toBe(pausedHead);
     });
 
     test("close drains active family admission before cancelling its newly admitted build", async () => {

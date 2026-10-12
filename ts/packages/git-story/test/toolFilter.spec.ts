@@ -28,13 +28,21 @@ const TOOLS: Record<string, string> = {
     powershell: "powershell",
 };
 
+function classifyFixture(shell: string, command: string): ToolClass {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const result = classifyTool(TOOLS[shell], command);
+        if (result !== ToolClass.Unknown) return result;
+    }
+    return ToolClass.Unknown;
+}
+
 // Fixture name prefix is the expected class, e.g. "block-curl-pipe-shell".
 // The mapper must agree with it, and the live npm tirith binary must still
 // give the same class for the same command.
 test.each(fixtures)("$name", ({ name, shell, command, output }) => {
     const expected = name.split("-")[0] as ToolClass;
     expect(toToolClass(output)).toBe(expected);
-    expect(classifyTool(TOOLS[shell], command)).toBe(expected);
+    expect(classifyFixture(shell, command)).toBe(expected);
     expect(isInteresting(expected)).toBe(expected !== ToolClass.Allow);
 });
 

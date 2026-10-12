@@ -4869,7 +4869,8 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
             family.dirty = true;
             family.cursor = 0;
             await this.viewStore.saveWikiFamily(corpusId, family, kind);
-            if (!family.error) this.scheduleWikiMaintenance(corpusId, kind);
+            if (family.enabled && !family.error)
+                this.scheduleWikiMaintenance(corpusId, kind);
         }
     }
 

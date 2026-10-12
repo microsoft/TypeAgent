@@ -127,6 +127,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
     }
     const open = () =>
         new FileMemoryService(root, {
+            informationalViews: false,
             indexFactory: (_id: string, directory: string) =>
                 new ControlledIndex(directory),
             viewPublicationCheckpoint: async (point) => {
@@ -594,6 +595,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
         const create = () =>
             new FileMemoryService(root, {
                 viewDrafts: true,
+                informationalViews: false,
                 indexFactory: (id, directory) =>
                     createKnowProCorpusIndex(id, directory, () => {
                         const settings = createDocMemorySettings(

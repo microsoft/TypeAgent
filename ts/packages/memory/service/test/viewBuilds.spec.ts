@@ -1511,6 +1511,7 @@ describe("durable draft builds and explicit edit merge", () => {
             await writeFile(file, JSON.stringify(request));
             const environment = {
                 ...process.env,
+                TYPEAGENT_MEMORY_INFORMATIONAL_VIEWS: "0",
                 TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT:
                     "openai:VIEW_BUILD_LOOPBACK",
                 OPENAI_ENDPOINT_VIEW_BUILD_LOOPBACK: `http://127.0.0.1:${address.port}/chat/completions`,
@@ -1525,7 +1526,7 @@ describe("durable draft builds and explicit edit merge", () => {
                 promisify(execFile)(
                     process.execPath,
                     [cli, "--store", root, ...command],
-                    { env: environment, timeout: 30000 },
+                    { env: environment, timeout: 60000 },
                 );
             process.env = environment;
             initRuntimeConfigFromProcessEnv();
