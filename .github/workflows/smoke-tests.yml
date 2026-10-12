@@ -41,13 +41,11 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      # The following two steps (permissions checks) ensure that only users with write access can run this workflow on a PR (except trusted bots)
-      # PRs from forks we check the permissions of the user that triggered the workflow (github.triggering_actor)
-      # This means that if a user without write access opens a PR from a fork, they cannot run this workflow
-      # Users with write access can still run this workflow on a PR from a fork
-      # For PRs from the same repo, we allow the workflow to run as normal
+      # PR runs require write access unless the triggering actor is an exact trusted bot login.
+      # Check triggering_actor so a maintainer can rerun a fork PR.
+      # Reject the run unless the permission check explicitly confirms write access.
       - name: Get User Permission
-        if: ${{ github.event_name == 'pull_request_target' && !contains('github-merge-queue[bot],typeagent-bot[bot]', github.triggering_actor) }}
+        if: ${{ github.event_name == 'pull_request_target' && !contains(fromJSON('["github-merge-queue[bot]", "typeagent-bot[bot]"]'), github.triggering_actor) }}
         id: checkAccess
         uses: actions-cool/check-user-permission@c21884f3dda18dafc2f8b402fe807ccc9ec1aa5e # v2.4.0
         with:
@@ -56,7 +54,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Check User Permission
-        if: ${{ github.event_name == 'pull_request_target' && !contains('github-merge-queue[bot],typeagent-bot[bot]', github.triggering_actor) && steps.checkAccess.outputs.require-result == 'false' }}
+        if: ${{ github.event_name == 'pull_request_target' && !contains(fromJSON('["github-merge-queue[bot]", "typeagent-bot[bot]"]'), github.triggering_actor) && steps.checkAccess.outputs.require-result != 'true' }}
         run: |
           echo "${{ github.triggering_actor }} does not have permissions on this repo."
           echo "Current permission level is ${{ steps.checkAccess.outputs.user-permission }}"
