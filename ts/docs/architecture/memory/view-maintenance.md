@@ -85,6 +85,78 @@ the timeline/troubleshooting pipeline and project goals/scope remain unchanged.
 Versioned synthesis identity is shared by snapshot fingerprints and repeated
 build-receipt lookup, preserving request idempotence across prompt revisions.
 
+### Source-overlap Wiki admission and contribution
+
+Only new, unmaterialized automatic Wiki candidates undergo purpose admission.
+The current published/index-ready pages nominate at most eight comparisons.
+Contributing source sets are derived from actual page citations and incoming
+selected indexed passages, **not** all queried sources, descriptors or derivative
+Wiki indexes. Keys include both source ID and exact revision ID. Empty sets do
+not overlap; a replacement revision is not interchangeable with its predecessor.
+Identical/subset sets rank first, then exact shared/union ratio and exact-fragment
+overlap, with stable-ID ties. No guessed "high overlap" threshold makes a decision.
+
+Source overlap nominates comparison even if locators differ. Exact shared
+fragments are separately recorded. Scope/content review preserves independently
+useful purposes, explicit projects/episodes, units/statistics, cohorts and
+qualifications. A resource definition and its scoped failure explanation can
+share a canonical page without unifying the underlying KnowPro entity/topic.
+
+The typed assessment has four outcomes:
+
+- `distinct`: construct an independent new page.
+- `covered`: every selected fragment's essential distinctions have explicit
+  exact witnesses in actual canonical prose; citation overlap alone is not
+  coverage. Truncated comparison prose cannot prove complete coverage.
+- `contribute`: missing essential distinctions belong in the same scoped
+  canonical purpose. Refresh the canonical stable ID using its exact cited
+  indexed evidence plus incoming current indexed evidence. Existing prose is
+  comparison/merge context, never source truth. Preserve earlier qualifications.
+- `ambiguous`: multiple existing pages serve that purpose. Persist their IDs
+  in a blocked receipt for explicit review; never delete/merge historical pages.
+  No new Inbox request/response or graph-canonicalization feature is provided.
+
+Contribution takes the bounded union of two existing reads: at most 24 distinct
+fragments, 2,000 characters each, 48,000 excerpt characters total. These are
+application evidence bounds, not provider context/token quotas or test envelopes.
+Overflow blocks explicitly rather than dropping earlier facts. Existing aliases
+are retained and candidate selectors are added within the existing seven-alias
+contract; capacity exhaustion is explicit, never silent alias deletion.
+
+Refresh uses the existing generated-base merge/edit-conflict machinery. Titles,
+taxonomy, personal notes, aliases, exclusions, references and editorial changes
+remain preserved or explicitly conflicted. The merged actual prose is checked
+against **all combined evidence**, including earlier qualifications and novel
+contrasts. Unsupported claims or missing essential distinctions cannot bind
+the candidate. Target version/definition/revision, source revisions/content,
+indexed locators, exclusions, suppression/forgetting and cancellation are
+rechecked before accepting the canonical update.
+
+The existing build result atomically records the canonical contribution and
+its frozen input with state `committed`. Only after that exact canonical revision
+is visible and derivative-index-ready does the receipt become `bound` and the
+unmaterialized candidate become a genuine covered `skipped` result. Index,
+provider, conflict or stale failures remain incomplete and do not advance family
+completion. Unresolved contribution edit conflicts remain pending/blocked
+without repeating model calls; authenticated conflict resolution is required.
+Retry of a matching committed contribution finishes indexing/binding without
+another canonical version or synthesis. Already-ready indexing is not reset.
+Privacy purge and runtime cancellation include borrowed canonical evidence.
+Initial missing-distinction requirements are remapped to combined fragment IDs
+and must survive the final coverage assessment unchanged, with exact new prose
+witnesses. A later checker cannot silently weaken/omit the original requirement.
+Subsequent canonical maintenance retains still-eligible cited fragments and
+checks contribution coverage again; obsolete source revisions/exclusions are
+never copied forward as evidence. Explicit changes of the canonical query
+invalidate that old-purpose preservation context.
+
+Replay requires unchanged candidate evidence/model plus the exact current
+canonical publication/revision and bound contribution receipt. Normal refresh
+uses the added selectors to retrieve the contributing explanation. Wiki prompt
+identity is `wiki-source-contribution-v3`; Projects and their prompt identity
+are unchanged. Offline tests verify these mechanics; they do not establish
+real-model semantic quality or authorize another live rebuild/ingestion.
+
 Project retrieval searches current eligible indexed postings across the
 collection before selecting bounded fragments. Neither the first/last 32
 documents nor a user's source selection defines automatic coverage. The saved

@@ -122,4 +122,36 @@ test("wiki prompt keeps retrieval identity independent of labels and requires pr
         "coverage limits in the prose as well as limits",
     );
     expect(instructions).toContain("corrections, counterexamples");
+    expect(instructions).toContain("independently useful explanatory purpose");
+    expect(instructions).toContain("sentence-shaped state");
+    expect(instructions).toContain("platform overview");
+    await expect(
+        createConfiguredViewSynthesisAdapter("test").assessWikiSubject!(
+            input,
+            [
+                {
+                    viewId: "existing",
+                    revisionId: "current",
+                    query: "accountability",
+                    aliases: [],
+                    title: "Accountability",
+                    prose: "Same scoped concept",
+                    proseTruncated: false,
+                    sharedFragmentIds: ["f0"],
+                    candidateFragmentIds: ["f0"],
+                    contributingSources: [
+                        { sourceId: "source", revisionId: "revision" },
+                    ],
+                    sourceOverlap: { shared: 1, union: 1, subset: true },
+                },
+            ],
+            new AbortController().signal,
+        ),
+    ).rejects.toThrow("Controlled provider failure");
+    expect(instructions).toContain(
+        "before generating a new automatic Wiki page",
+    );
+    expect(instructions).toContain("exact shared fragment IDs");
+    expect(instructions).toContain("actual page prose");
+    expect(instructions).toContain("ALL essential distinctions");
 });

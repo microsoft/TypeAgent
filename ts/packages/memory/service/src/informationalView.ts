@@ -8,7 +8,7 @@ export function viewSynthesisIdentity(
     definition: ViewDefinitionInput,
 ): string {
     if (definition.projectSummary) return `${model}:project-attribution-v3`;
-    if (definition.wiki) return `${model}:wiki-grouping-v1`;
+    if (definition.wiki) return `${model}:wiki-source-contribution-v3`;
     return model;
 }
 

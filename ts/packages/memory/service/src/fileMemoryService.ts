@@ -116,6 +116,7 @@ import {
     ViewBuildRunner,
     ViewBuildStaleError,
     safeError,
+    abortable,
 } from "./viewBuilds.js";
 import { inventoryEvidence } from "./viewInventoryCoverage.js";
 import {
@@ -126,7 +127,7 @@ import {
     assertMaintenanceMembership,
     validateMaintenanceRequest,
 } from "./viewMaintenanceValidation.js";
-import { sameViewBuildEvidence, viewHash } from "./viewMerge.js";
+import { mergeView, sameViewBuildEvidence, viewHash } from "./viewMerge.js";
 import {
     informationalView as informationalWiki,
     viewSynthesisIdentity,
@@ -148,6 +149,21 @@ import {
     derivedDefinitionInput,
 } from "./viewRelationships.js";
 import { TypedViewStore, type WikiFamilyState } from "./viewStore.js";
+import {
+    nominateWikiPages,
+    parseWikiAssessment,
+    wikiPageContext,
+} from "./wikiAdmission.js";
+import {
+    refreshWikiContributionInput,
+    wikiContributionInput,
+} from "./wikiContribution.js";
+import { viewSourceKey } from "./viewContent.js";
+import type {
+    WikiPagePurposeContext,
+    WikiSubjectAssessment,
+    ViewBuildTargetResult,
+} from "./viewTypes.js";
 import {
     discoverInformationalDescriptors,
     retireWikiCandidate,
@@ -960,6 +976,37 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                         )
                     );
                 },
+                wikiPages: (input) => this.wikiAdmissionPages(input),
+                contributeWikiSubject: (
+                    job,
+                    result,
+                    assessment,
+                    pages,
+                    signal,
+                ) =>
+                    this.contributeWikiSubject(
+                        job,
+                        result,
+                        assessment,
+                        pages,
+                        signal,
+                    ),
+                resumeWikiContribution: (job, result, signal) =>
+                    this.resumeWikiContribution(job, result, signal),
+                recordWikiAssessment: (
+                    job,
+                    result,
+                    assessment,
+                    pages,
+                    signal,
+                ) =>
+                    this.recordWikiAssessment(
+                        job,
+                        result,
+                        assessment,
+                        pages,
+                        signal,
+                    ),
                 update: async (corpusId, jobId, update) => {
                     const job = await this.enqueueWrite(corpusId, () =>
                         this.viewStore.updateViewBuild(corpusId, jobId, update),
@@ -3532,7 +3579,424 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                 target.definition,
             ),
         };
-        return { ...snapshot, fingerprint: viewHash(snapshot) };
+        const frozen = { ...snapshot, fingerprint: viewHash(snapshot) };
+        if (!target.definition.wiki) return frozen;
+        if (
+            current?.generation?.input?.wikiContribution &&
+            inputs.some((input) =>
+                runtime.manifest.knowledgeSuppressions?.some(
+                    (entry) => entry.sourceId === input.sourceId,
+                ),
+            )
+        )
+            throw new ViewBuildStaleError(
+                "Wiki contribution refresh has suppressed evidence; reconcile eligibility before synthesis",
+            );
+        return refreshWikiContributionInput(
+            frozen,
+            current,
+            new Set(
+                runtime.manifest.sources.flatMap((source) =>
+                    source.revisions.some(
+                        (revision) =>
+                            revision.revisionId === source.activeRevisionId &&
+                            revision.state === "ready",
+                    )
+                        ? [
+                              viewSourceKey({
+                                  sourceId: source.sourceId,
+                                  revisionId: source.activeRevisionId,
+                              }),
+                          ]
+                        : [],
+                ),
+            ),
+        );
+    }
+
+    private async wikiAdmissionPages(
+        input: ViewBuildSnapshot,
+    ): Promise<WikiPagePurposeContext[]> {
+        const family = await this.viewStore.getWikiFamily(input.corpusId);
+        const published = await this.viewStore.listPublishedViews(
+            input.corpusId,
+        );
+        const views: ViewVersion[] = [];
+        for (const entry of published) {
+            if (
+                entry.view &&
+                entry.view.revisionId === entry.current.revisionId &&
+                entry.publication.indexState === "ready" &&
+                !entry.publication.blockedReason &&
+                (await this.informationalVersionEligible(
+                    entry.view,
+                    entry.current,
+                ))
+            )
+                views.push(entry.view);
+        }
+        return nominateWikiPages(
+            input,
+            views,
+            new Map(
+                family.descriptors.map((descriptor) => [
+                    descriptor.viewId,
+                    descriptor.identity,
+                ]),
+            ),
+        );
+    }
+
+    private async checkWikiContributionInput(
+        input: ViewBuildSnapshot,
+        checkTarget = true,
+    ): Promise<void> {
+        const current = await this.viewStore.getView({
+            corpusId: input.corpusId,
+            viewId: input.definition.viewId,
+        });
+        if (
+            !current ||
+            current.state !== "draft" ||
+            (checkTarget &&
+                (current.version !== input.expectedVersion ||
+                    current.revisionId !== input.targetRevisionId ||
+                    current.definition.revisionId !==
+                        input.definitionRevisionId))
+        )
+            throw new ViewBuildStaleError(
+                "Wiki canonical target changed during contribution",
+            );
+        const runtime = await this.getCorpusRuntime(input.corpusId);
+        for (const retained of input.inputs) {
+            const source = runtime.manifest.sources.find(
+                (entry) => entry.sourceId === retained.sourceId,
+            );
+            const revision = source?.revisions.find(
+                (entry) => entry.revisionId === retained.revisionId,
+            );
+            if (
+                !source ||
+                !revision ||
+                revision.state !== "ready" ||
+                source.activeRevisionId !== retained.revisionId ||
+                viewHash(revision.content) !== retained.contentHash ||
+                current.definition.wiki?.excludedSourceIds.includes(
+                    retained.sourceId,
+                ) ||
+                runtime.manifest.knowledgeSuppressions?.some(
+                    (entry) => entry.sourceId === retained.sourceId,
+                )
+            )
+                throw new ViewBuildStaleError(
+                    "Wiki contribution evidence was replaced, excluded, suppressed or forgotten",
+                );
+            for (const citation of retained.passages ?? [])
+                if (
+                    !(await this.validateIndexedDraftCitation(
+                        runtime,
+                        citation,
+                        true,
+                    ))
+                )
+                    throw new Error(
+                        "Wiki contribution requires exact indexed evidence",
+                    );
+        }
+    }
+
+    private async contributeWikiSubject(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        assessment: WikiSubjectAssessment,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<void> {
+        const nominated = pages.find(
+            (page) => page.viewId === assessment.canonicalViewId,
+        );
+        const current = await this.viewStore.getView({
+            corpusId: job.corpusId,
+            viewId: assessment.canonicalViewId,
+        });
+        if (!current || current.revisionId !== nominated?.revisionId)
+            throw new ViewBuildStaleError(
+                "Wiki contribution canonical changed after assessment",
+            );
+        this.viewBuilds.trackContribution(
+            job.jobId,
+            current.generation!.input!,
+        );
+        const input = wikiContributionInput(
+            result.snapshot,
+            current,
+            assessment,
+        );
+        this.viewBuilds.trackContribution(job.jobId, input);
+        await this.checkWikiContributionInput(input);
+        signal.throwIfAborted();
+        const candidate = await abortable(
+            this.viewAdapter.generate(input, signal),
+            signal,
+        );
+        signal.throwIfAborted();
+        validateConstructedGuide(input, candidate);
+        const { output, conflicts } = mergeView(
+            current,
+            candidate,
+            input.inputs,
+        );
+        let verification = assessment;
+        if (!conflicts.length) {
+            validateConstructedGuide(input, output);
+            const context = wikiPageContext(
+                input,
+                {
+                    ...current,
+                    definition: { ...current.definition, ...input.definition },
+                    content: output.content,
+                },
+                undefined,
+                false,
+            );
+            if (!this.viewAdapter.assessWikiSubject)
+                throw new Error(
+                    "Wiki contribution lacks actual-prose coverage checker",
+                );
+            verification = parseWikiAssessment(
+                await abortable(
+                    this.viewAdapter.assessWikiSubject(
+                        input,
+                        [context],
+                        signal,
+                    ),
+                    signal,
+                ),
+                [context],
+                input.wikiContribution?.essentialDistinctions,
+            );
+            if (verification.disposition !== "covered")
+                throw new Error(
+                    "Wiki canonical contribution did not cover all essential old/new distinctions in actual prose",
+                );
+        }
+        await this.enqueueWrite(job.corpusId, async () => {
+            signal.throwIfAborted();
+            await this.recheckViewInput(result.snapshot);
+            await this.checkWikiContributionInput(input);
+            const saved = await this.viewStore.materializeViewBuild(
+                job.corpusId,
+                job.jobId,
+                result.viewId,
+                candidate,
+                output,
+                conflicts,
+                undefined,
+                { input, verification },
+            );
+            if (conflicts.length) return;
+            if (!saved.wikiContribution)
+                throw new Error("Durable Wiki contribution receipt missing");
+            await this.bindWikiContribution(
+                job,
+                result,
+                saved.wikiContribution,
+                signal,
+            );
+        });
+    }
+
+    private async bindWikiContribution(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        contribution: NonNullable<ViewBuildTargetResult["wikiContribution"]>,
+        signal: AbortSignal,
+    ): Promise<void> {
+        signal.throwIfAborted();
+        await this.recheckViewInput(result.snapshot);
+        await this.checkWikiContributionInput(contribution.input, false);
+        const canonical = await this.viewStore.getView({
+            corpusId: job.corpusId,
+            viewId: contribution.input.definition.viewId,
+        });
+        if (!canonical || canonical.revisionId !== contribution.revisionId)
+            throw new ViewBuildStaleError(
+                "Committed Wiki contribution canonical revision changed before binding",
+            );
+        await this.assertViewPublicationFresh(canonical);
+        const context = wikiPageContext(
+            contribution.input,
+            canonical,
+            undefined,
+            false,
+        );
+        if (
+            parseWikiAssessment(
+                contribution.verification,
+                [context],
+                contribution.input.wikiContribution?.essentialDistinctions,
+            ).disposition !== "covered"
+        )
+            throw new Error(
+                "Wiki contribution binding requires verified complete actual-prose coverage",
+            );
+        let publication = await this.viewStore.getViewPublication({
+            corpusId: job.corpusId,
+            viewId: canonical.viewId,
+        });
+        if (publication.publishedRevisionId !== canonical.revisionId)
+            publication =
+                await this.viewStore.makeInformationalVisible(canonical);
+        if (publication.indexState !== "ready")
+            publication = await this.indexViewLocked(canonical);
+        signal.throwIfAborted();
+        if (
+            publication.indexState !== "ready" ||
+            publication.blockedReason ||
+            publication.publishedRevisionId !== canonical.revisionId
+        )
+            throw new Error(
+                `Wiki contribution cannot bind before current derivative index is ready: ${publication.reason}`,
+            );
+        await this.viewStore.updateViewBuild(
+            job.corpusId,
+            job.jobId,
+            (current) => {
+                const target = current.results.find(
+                    (entry) => entry.viewId === result.viewId,
+                );
+                if (
+                    !target ||
+                    current.state !== "running" ||
+                    target.wikiAssessment?.disposition !== "contribute"
+                )
+                    throw new ViewBuildStaleError(
+                        "Wiki contribution candidate is no longer active",
+                    );
+                target.wikiContribution = { ...contribution, state: "bound" };
+                target.wikiAssessment.canonicalRevisionId =
+                    canonical.revisionId;
+                target.state = "skipped";
+                target.reason = `Essential distinctions contributed to canonical ${canonical.viewId}; current publication/index binding complete`;
+            },
+        );
+    }
+
+    private async resumeWikiContribution(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<boolean> {
+        if (
+            result.snapshot.pipeline !== "informational-wiki-v1" ||
+            result.snapshot.expectedVersion !== 0
+        )
+            return false;
+        const prior = (await this.viewStore.listViewBuilds(job.corpusId))
+            .flatMap((entry) => entry.results)
+            .find(
+                (entry) =>
+                    entry.viewId === result.viewId &&
+                    entry.wikiContribution &&
+                    sameViewBuildEvidence(entry.snapshot, result.snapshot),
+            );
+        if (!prior?.wikiContribution) return false;
+        const canonical = await this.viewStore.getView({
+            corpusId: job.corpusId,
+            viewId: prior.wikiContribution.input.definition.viewId,
+        });
+        if (
+            !canonical ||
+            canonical.revisionId !== prior.wikiContribution.revisionId
+        )
+            return false;
+        this.viewBuilds.trackContribution(
+            job.jobId,
+            prior.wikiContribution.input,
+        );
+        await this.enqueueWrite(job.corpusId, async () => {
+            await this.viewStore.updateViewBuild(
+                job.corpusId,
+                job.jobId,
+                (current) => {
+                    const target = current.results.find(
+                        (entry) => entry.viewId === result.viewId,
+                    );
+                    if (!target || !prior.wikiAssessment)
+                        throw new Error(
+                            "Wiki contribution retry receipt missing",
+                        );
+                    target.wikiAssessment = structuredClone(
+                        prior.wikiAssessment,
+                    );
+                    target.wikiContribution = structuredClone(
+                        prior.wikiContribution!,
+                    );
+                },
+            );
+            await this.bindWikiContribution(
+                job,
+                result,
+                prior.wikiContribution!,
+                signal,
+            );
+        });
+        return true;
+    }
+
+    private async recordWikiAssessment(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        assessment: WikiSubjectAssessment,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<void> {
+        await this.enqueueWrite(job.corpusId, async () => {
+            signal.throwIfAborted();
+            await this.recheckViewInput(result.snapshot);
+            const canonical = pages.find(
+                (page) => page.viewId === assessment.canonicalViewId,
+            );
+            for (const nominated of pages.filter(
+                (page) =>
+                    page.viewId === canonical?.viewId ||
+                    assessment.ambiguousViewIds.includes(page.viewId),
+            )) {
+                const current = (
+                    await this.wikiAdmissionPages(result.snapshot)
+                ).find((page) => page.viewId === nominated.viewId);
+                if (!current || current.revisionId !== nominated.revisionId)
+                    throw new ViewBuildStaleError(
+                        "Wiki purpose canonical page changed during assessment",
+                    );
+            }
+            await this.viewStore.updateViewBuild(
+                job.corpusId,
+                job.jobId,
+                (current) => {
+                    const target = current.results.find(
+                        (entry) => entry.viewId === result.viewId,
+                    );
+                    if (!target || current.state !== "running")
+                        throw new ViewBuildStaleError(
+                            "Wiki purpose target is no longer active",
+                        );
+                    target.wikiAssessment = {
+                        ...assessment,
+                        ...(canonical
+                            ? { canonicalRevisionId: canonical.revisionId }
+                            : {}),
+                    };
+                    if (assessment.disposition === "covered") {
+                        target.state = "skipped";
+                        target.reason = `Standalone purpose already covered by ${assessment.canonicalViewId}: ${assessment.reason}`;
+                    } else if (assessment.disposition === "ambiguous") {
+                        target.state = "blocked";
+                        target.reason = `Multiple existing Wiki pages require explicit ambiguity review (${assessment.ambiguousViewIds.join(", ")}): ${assessment.reason}`;
+                    }
+                },
+            );
+        });
     }
 
     private async checkpointInformationalFamilies(
@@ -3559,9 +4023,12 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                 const retryableChange =
                     results.some((result) => result.state === "stale") &&
                     !results.some((result) =>
-                        ["failed", "cancelled", "conflicted"].includes(
-                            result.state,
-                        ),
+                        [
+                            "failed",
+                            "cancelled",
+                            "conflicted",
+                            "blocked",
+                        ].includes(result.state),
                     );
                 if (retryableChange) delete family.error;
                 else
@@ -3850,6 +4317,28 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
                     continue;
                 }
                 target.definition = input.definition;
+                const contributionConflict =
+                    kind === "wiki" && !current
+                        ? await this.viewStore.pendingWikiContributionConflict(
+                              input,
+                          )
+                        : undefined;
+                if (
+                    contributionConflict &&
+                    (await this.informationalVersionEligible(
+                        contributionConflict.human,
+                    ))
+                ) {
+                    family.dirty = true;
+                    family.error = `Wiki contribution requires resolution of canonical edit conflict ${contributionConflict.conflictId}`;
+                    plan.targets.push({
+                        viewId: descriptor.viewId,
+                        expectedVersion: 0,
+                        state: "blocked",
+                        reason: family.error,
+                    });
+                    continue;
+                }
                 if (
                     sameViewBuildEvidence(current?.generation?.input, input) &&
                     !rebuild
@@ -4506,6 +4995,19 @@ export class FileMemoryService implements MemoryService, MemoryViewService {
         for (const result of job.results.filter(
             (result) => !["draft", "merged", "skipped"].includes(result.state),
         )) {
+            const contributionConflict =
+                await this.viewStore.pendingWikiContributionConflict(
+                    result.snapshot,
+                );
+            if (
+                contributionConflict &&
+                (await this.informationalVersionEligible(
+                    contributionConflict.human,
+                ))
+            )
+                throw new Error(
+                    `Resolve canonical Wiki edit conflict ${contributionConflict.conflictId} before retrying this contribution`,
+                );
             const view = await this.getView({
                 corpusId: job.corpusId,
                 viewId: result.viewId,

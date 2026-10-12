@@ -24,6 +24,8 @@ import {
     sameViewBuildEvidence,
     viewHash,
 } from "./viewMerge.js";
+import { reusableWikiAssessment } from "./wikiAdmission.js";
+import { assertWikiContribution } from "./wikiContribution.js";
 import { assertPublicationProof } from "./viewPublication.js";
 import {
     authoredRelationships,
@@ -55,6 +57,7 @@ import type {
     ViewSourceUsage,
     ViewSynthesisOutput,
     ViewVersion,
+    WikiSubjectAssessment,
 } from "./viewTypes.js";
 
 interface ViewStoreState {
@@ -630,17 +633,62 @@ export class TypedViewStore {
         ];
     }
 
+    public async pendingWikiContributionConflict(
+        input: ViewBuildSnapshot,
+    ): Promise<ViewMergeConflict | undefined> {
+        const { state } = await this.history(input.corpusId).read();
+        for (const result of Object.values(state.builds ?? {}).flatMap(
+            (job) => job.results,
+        )) {
+            if (
+                result.viewId !== input.definition.viewId ||
+                result.wikiAssessment?.disposition !== "contribute" ||
+                !result.conflictId ||
+                !sameViewBuildEvidence(result.snapshot, input)
+            )
+                continue;
+            const conflict = state.conflicts?.[result.conflictId];
+            if (
+                conflict?.state === "pending" &&
+                viewVersions(state, conflict.viewId).at(-1)?.revisionId ===
+                    conflict.expectedRevisionId
+            )
+                return conflict;
+        }
+        return undefined;
+    }
+
     public async hasPendingInformationalInput(
         corpusId: string,
         viewId: string,
         input: ViewBuildSnapshot,
     ): Promise<boolean> {
         const { state } = await this.history(corpusId).read();
-        return Object.values(state.conflicts ?? {}).some(
+        const pendingConflict = Object.values(state.conflicts ?? {}).some(
             (conflict) =>
                 conflict.state === "pending" &&
                 conflict.viewId === viewId &&
                 sameViewBuildEvidence(conflict.input, input),
+        );
+        if (pendingConflict) return true;
+        return Object.values(state.builds ?? {}).some((job) =>
+            job.results.some((result) => {
+                if (result.viewId !== viewId) return false;
+                const canonicalId = result.wikiAssessment?.canonicalViewId;
+                if (!canonicalId) return false;
+                const publication = this.publicationStatus(state, canonicalId);
+                return (
+                    publication.indexState === "ready" &&
+                    !publication.blockedReason &&
+                    publication.publishedRevisionId ===
+                        result.wikiAssessment?.canonicalRevisionId &&
+                    reusableWikiAssessment(
+                        result,
+                        input,
+                        viewVersions(state, canonicalId).at(-1),
+                    )
+                );
+            }),
         );
     }
 
@@ -652,51 +700,74 @@ export class TypedViewStore {
         merged: ViewSynthesisOutput,
         conflicts: string[],
         validation?: ViewPublicationProof,
+        contribution?: {
+            input: ViewBuildSnapshot;
+            verification: WikiSubjectAssessment;
+        },
     ): Promise<ViewBuildTargetResult> {
         const { head, state } = await this.history(corpusId).read();
         const job = state.builds?.[jobId];
         const result = job?.results.find((entry) => entry.viewId === viewId);
         if (!job || !result || job.state !== "running")
             throw new Error("Build is no longer eligible for materialization");
-        const current = viewVersions(state, viewId).at(-1);
+        const input = contribution?.input ?? result.snapshot;
+        if (contribution)
+            assertWikiContribution(result, contribution, conflicts.length > 0);
+        const targetId = input.definition.viewId;
+        const current = viewVersions(state, targetId).at(-1);
         if (
-            (current?.version ?? 0) !== result.snapshot.expectedVersion ||
-            current?.revisionId !== result.snapshot.targetRevisionId ||
+            (current?.version ?? 0) !== input.expectedVersion ||
+            current?.revisionId !== input.targetRevisionId ||
             current?.state === "archived"
         )
             throw new Error("View target changed during build");
         if (conflicts.length) {
             if (!current)
                 throw new Error("A missing target cannot have edit conflicts");
+            const target = { ...result, viewId: targetId, snapshot: input };
             this.recordMergeConflict(
                 state,
                 job,
-                result,
+                target,
                 current,
                 candidate,
                 conflicts,
             );
+            result.state = target.state;
+            result.reason = target.reason;
+            if (target.conflictId) result.conflictId = target.conflictId;
         } else {
             const version = this.generatedVersion(
-                result.snapshot,
+                input,
                 current,
                 candidate,
                 merged,
             );
             if (validation) version.validation = validation;
-            state.views[viewId] = [...viewVersions(state, viewId), version];
+            state.views[targetId] = [...viewVersions(state, targetId), version];
             result.state = version.provenance === "merged" ? "merged" : "draft";
             result.reason =
                 "Validated draft saved; no publication, review or execution authority";
             result.revisionId = version.revisionId;
+            if (contribution) {
+                result.wikiContribution = {
+                    input,
+                    revisionId: version.revisionId,
+                    state: "committed",
+                    verification: contribution.verification,
+                };
+                result.state = "validating";
+                result.reason =
+                    "Canonical contribution committed; publication/index binding pending";
+            }
             state.publications ??= {};
-            const publication = state.publications[viewId] ?? {
-                viewId,
+            const publication = state.publications[targetId] ?? {
+                viewId: targetId,
                 indexState: "absent" as const,
                 reason: "No published revision",
             };
             publication.latestBuiltRevisionId = version.revisionId;
-            state.publications[viewId] = publication;
+            state.publications[targetId] = publication;
             result.missingEvidence = candidate.missingEvidence;
             if (merged.coverage) result.coverage = merged.coverage;
         }
@@ -1030,12 +1101,19 @@ export class TypedViewStore {
                     !job.results.some(
                         (result) =>
                             result.snapshot.inputs.some(matches) ||
+                            result.wikiContribution?.input.inputs.some(
+                                matches,
+                            ) ||
                             (!forgottenEvents &&
                                 result.snapshot.maintenance?.privacySources.includes(
                                     sourceId,
                                 )) ||
                             selected(result.snapshot.definition) ||
-                            affected.has(result.viewId),
+                            affected.has(result.viewId) ||
+                            (!!result.wikiAssessment?.canonicalViewId &&
+                                affected.has(
+                                    result.wikiAssessment.canonicalViewId,
+                                )),
                     ),
             ),
         );
