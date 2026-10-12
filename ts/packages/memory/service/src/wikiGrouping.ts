@@ -180,9 +180,7 @@ function lexicalDescriptors(
             ) &&
             compatibleSubjectIdentity(descriptor.identity, subject.identity) &&
             (!symbol ||
-                aliases.some(
-                    (alias) => alias.trim() === subject.term.trim(),
-                ))
+                aliases.some((alias) => alias.trim() === subject.term.trim()))
         );
     });
 }
@@ -229,9 +227,7 @@ function applySubject(
         kind,
     );
     const nominations = lexical.filter((descriptor) => {
-        const view = views.find(
-            (entry) => entry.viewId === descriptor.viewId,
-        );
+        const view = views.find((entry) => entry.viewId === descriptor.viewId);
         return sharedEvidence(
             [
                 ...descriptor.sourceIds,
@@ -264,9 +260,7 @@ function applySubject(
             });
         return;
     }
-    prior.sourceIds = [
-        ...new Set([...prior.sourceIds, ...subject.sourceIds]),
-    ];
+    prior.sourceIds = [...new Set([...prior.sourceIds, ...subject.sourceIds])];
     if (subject.identity) mergeSubjectIdentity(prior, subject.identity);
     // Only unmaterialized nominations can be retired; saved records and their edits remain intact.
     family.descriptors = family.descriptors.filter(
