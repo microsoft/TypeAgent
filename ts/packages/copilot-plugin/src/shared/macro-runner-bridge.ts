@@ -127,7 +127,7 @@ function endpoint(sessionId: string): string {
     const key = createHash("sha256").update(sessionId).digest("hex");
     return process.platform === "win32"
         ? `\\\\.\\pipe\\typeagent-macro-${key}`
-        : join(hostDirectory(), `${key}.sock`);
+        : join(hostDirectory(), `${key.slice(0, 32)}.sock`);
 }
 
 function readMessage(socket: Socket): Promise<unknown> {
