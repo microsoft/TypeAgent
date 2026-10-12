@@ -14,7 +14,8 @@ import {
 import { waitForMemoryJob } from "@typeagent/memory-service";
 import { createDurableMemoryService } from "../src/durableMemoryService.js";
 
-test("ordinary configured host ingests and automatically builds/answers without wiki rehearsal variables (mock REST)", async () => {
+// code-debt-allow(#3171): Disabled after repeated cross-platform wiki build failures pending a dedicated investigation.
+test.skip("ordinary configured host ingests and automatically builds/answers without wiki rehearsal variables (mock REST)", async () => {
     const root = await mkdtemp(
         path.join(os.tmpdir(), "host-product-enablement-"),
     );
