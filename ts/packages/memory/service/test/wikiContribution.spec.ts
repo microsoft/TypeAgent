@@ -21,6 +21,7 @@ import {
 import { viewSourceKey } from "../src/viewContent.js";
 import { derivedDefinitionInput } from "../src/viewRelationships.js";
 import { mergeView, recordViewEdits, viewHash } from "../src/viewMerge.js";
+import { ViewBuildStaleError } from "../src/viewBuilds.js";
 import { TypedViewStore } from "../src/viewStore.js";
 import type { IndexedFragmentRequest, IndexedDocument } from "../src/types.js";
 import type {
@@ -509,6 +510,28 @@ async function terminal(
     return job;
 }
 
+async function maintainFamily(
+    service: FileMemoryService,
+    corpusId: string,
+    family: "wiki" | "projects",
+    operation: "update" | "pause" | "resume" | "rebuild",
+) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+            return await service.maintainViews({
+                corpusId,
+                expectedHead: (await service.listViews(corpusId)).head,
+                family,
+                operation,
+            });
+        } catch (error) {
+            if (!(error instanceof ViewBuildStaleError) || attempt === 9)
+                throw error;
+        }
+    }
+    throw new Error("Contribution family optimistic head retries exhausted");
+}
+
 async function rehearsal(
     mode:
         | "success"
@@ -562,12 +585,7 @@ async function rehearsal(
                         "Generated incompatible lease explanation",
                     );
                 if (mode === "stale") {
-                    await service.maintainViews({
-                        corpusId,
-                        expectedHead: (await service.listViews(corpusId)).head,
-                        family: "wiki",
-                        operation: "pause",
-                    });
+                    await maintainFamily(service, corpusId, "wiki", "pause");
                     const page = (await service.listViews(corpusId)).views[0];
                     const content = structuredClone(page.content);
                     content.title = "Human retained title";
@@ -593,12 +611,7 @@ async function rehearsal(
                     });
                 }
                 if (mode === "replacement") {
-                    await service.maintainViews({
-                        corpusId,
-                        expectedHead: (await service.listViews(corpusId)).head,
-                        family: "wiki",
-                        operation: "pause",
-                    });
+                    await maintainFamily(service, corpusId, "wiki", "pause");
                     const replacement = await service.ingestDocument({
                         corpusId,
                         source: {
@@ -640,12 +653,7 @@ async function rehearsal(
             "Offline canonical contribution",
         ));
         for (const family of ["wiki", "projects"] as const)
-            await service.maintainViews({
-                corpusId,
-                expectedHead: (await service.listViews(corpusId)).head,
-                family,
-                operation: "pause",
-            });
+            await maintainFamily(service, corpusId, family, "pause");
         const ingestion = await service.ingestDocument({
             corpusId,
             source: {
@@ -658,19 +666,9 @@ async function rehearsal(
         expect((await waitForMemoryJob(service, ingestion.jobId)).state).toBe(
             "complete",
         );
-        const first = await service.maintainViews({
-            corpusId,
-            expectedHead: (await service.listViews(corpusId)).head,
-            family: "wiki",
-            operation: "resume",
-        });
+        const first = await maintainFamily(service, corpusId, "wiki", "resume");
         expect((await terminal(service, first.job)).state).toBe("complete");
-        await service.maintainViews({
-            corpusId,
-            expectedHead: (await service.listViews(corpusId)).head,
-            family: "wiki",
-            operation: "pause",
-        });
+        await maintainFamily(service, corpusId, "wiki", "pause");
         const original = (await service.listViews(corpusId)).views[0];
         if (mode === "conflict") {
             const content = structuredClone(original.content);
@@ -690,12 +688,12 @@ async function rehearsal(
         }
         ContributionIndex.includeCommand = true;
         ContributionIndex.failDerived = mode === "index";
-        const second = await service.maintainViews({
+        const second = await maintainFamily(
+            service,
             corpusId,
-            expectedHead: (await service.listViews(corpusId)).head,
-            family: "wiki",
-            operation: "resume",
-        });
+            "wiki",
+            "resume",
+        );
         if (mode === "forget") {
             const jobId = second.job!.jobId;
             let remaining = await service.getViewBuild({ corpusId, jobId });
@@ -731,12 +729,7 @@ async function rehearsal(
         }
         if (mode === "binding-replay") {
             expect(result.wikiContribution?.state).toBe("bound");
-            await service.maintainViews({
-                corpusId,
-                expectedHead: (await service.listViews(corpusId)).head,
-                family: "wiki",
-                operation: "pause",
-            });
+            await maintainFamily(service, corpusId, "wiki", "pause");
             await new TypedViewStore(root).updateViewBuild(
                 corpusId,
                 job.jobId,
@@ -809,12 +802,12 @@ async function rehearsal(
                         .sections[0].body,
                 ).toContain("Human incompatible");
                 const before = [generated, assessed];
-                const blocked = await service.maintainViews({
+                const blocked = await maintainFamily(
+                    service,
                     corpusId,
-                    expectedHead: (await service.listViews(corpusId)).head,
-                    family: "wiki",
-                    operation: "update",
-                });
+                    "wiki",
+                    "update",
+                );
                 expect(blocked.job).toBeUndefined();
                 expect(
                     blocked.plan.targets.some(
@@ -845,12 +838,12 @@ async function rehearsal(
         const before = [generated, assessed];
         await service.close();
         service = open();
-        const update = await service.maintainViews({
+        const update = await maintainFamily(
+            service,
             corpusId,
-            expectedHead: (await service.listViews(corpusId)).head,
-            family: "wiki",
-            operation: "update",
-        });
+            "wiki",
+            "update",
+        );
         expect(update.job).toBeUndefined();
         expect([generated, assessed]).toEqual(before);
         expect((await service.listViews(corpusId)).views).toHaveLength(1);
