@@ -61,6 +61,34 @@ async function captureTrace(
 }
 
 describe("MacroManager draft catalog", () => {
+    it("checks the current runnable route without changing immutable inspection", async () => {
+        const instanceDir = await mkdtemp(path.join(os.tmpdir(), "catalog-"));
+        const manager = new MacroManager(instanceDir);
+        const traceId = await captureTrace(manager);
+        const draft = await manager.createMacroFromTrace({
+            traceId,
+            name: "Read package",
+        });
+        await expect(
+            manager.inspectMacro({ ...draft, requireRunnable: true }),
+        ).rejects.toThrow("Only approved macros can run");
+        const approved = await manager.approveMacro(draft);
+        await expect(
+            manager.inspectMacro({ ...approved, requireRunnable: true }),
+        ).resolves.toMatchObject(approved);
+        await manager.disableMacro({ macroId: approved.macroId });
+        await expect(manager.inspectMacro(approved)).resolves.toMatchObject(
+            approved,
+        );
+        await expect(
+            manager.inspectMacro({ ...approved, requireRunnable: true }),
+        ).rejects.toThrow("no longer the current approved version");
+        await manager.deleteMacro({ macroId: approved.macroId });
+        await expect(
+            manager.inspectMacro({ ...approved, requireRunnable: true }),
+        ).rejects.toThrow("Macro version not found");
+    });
+
     it("replays a captured workflow with a different prompt-derived input", async () => {
         const instanceDir = await mkdtemp(path.join(os.tmpdir(), "catalog-"));
         const calls: unknown[] = [];

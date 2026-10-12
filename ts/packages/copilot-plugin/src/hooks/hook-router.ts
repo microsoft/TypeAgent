@@ -30,6 +30,7 @@ import type {
 import { connectToAgentServer } from "../shared/typeagent-client.js";
 import { redactTraceValue } from "@typeagent/copilot-macros";
 import { getMacroFeatures } from "../shared/macro-features.js";
+import { isMacroRunnerSession } from "../shared/macro-runner-bridge.js";
 import {
     getConfigPath,
     getMode,
@@ -331,6 +332,7 @@ export async function routePrompt(
     signal: AbortSignal,
     dependencies: RoutePromptDependencies = routePromptDefaults,
 ): Promise<UserPromptSubmittedOutput> {
+    if (isMacroRunnerSession(input.sessionId)) return {};
     if (mode === "bypass") return {};
     if (await dependencies.claimRecording(input)) return {};
     if (mode === "mcp") return dependencies.mcp(input);

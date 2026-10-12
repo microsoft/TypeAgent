@@ -366,8 +366,14 @@ export class TypeAgentMacroMcpServer {
         );
         this.server.tool(
             "inspect_macro",
-            "Inspect one immutable macro version.",
+            "Inspect one immutable macro version for catalog or draft review. Running a macro does not require this tool.",
             macroRefSchema,
+            {
+                readOnlyHint: true,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: false,
+            },
             (request) => adapter.inspectMacro(request),
         );
         this.server.tool(
@@ -412,7 +418,7 @@ export class TypeAgentMacroMcpServer {
         );
         this.server.tool(
             "run_macro",
-            "Run an approved macro by replaying its captured MCP tool calls.",
+            "Validate and run an approved macro, or return its complete validated agentRequired launch for typeagent-macro-runner. Execute the returned handoff without another inspect_macro call.",
             {
                 macroId: z.string().min(1),
                 version: z.number().int().positive().optional(),
