@@ -393,6 +393,15 @@ importers:
         specifier: ^5.0.1
         version: 5.0.10
 
+  examples/decision:
+    dependencies:
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../packages/aiclient
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+
   examples/docuProc:
     dependencies:
       '@typeagent/agent-runtime':

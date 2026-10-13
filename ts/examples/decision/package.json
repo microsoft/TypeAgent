@@ -1,0 +1,20 @@
+{
+  "name": "decision-model-example",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Copilot and Azure decisions samples using TypeAgent AI Client",
+  "scripts": {
+    "build": "node --check decision.mjs && node --check main.mjs",
+    "start": "node main.mjs",
+    "test:local": "node --test decision.spec.mjs",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore"
+  },
+  "dependencies": {
+    "@typeagent/aiclient": "workspace:*",
+    "@typeagent/config": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
