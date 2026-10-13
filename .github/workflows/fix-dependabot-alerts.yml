@@ -38,6 +38,7 @@ permissions:
 env:
   ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+  DEPENDABOT_ALERTS_FILE: /tmp/dependabot-alerts.json
 
 jobs:
   fix-alerts:
@@ -66,20 +67,25 @@ jobs:
           app-id: ${{ vars.DEPENDABOT_APP_ID }}
           private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
 
-      - name: Verify gh authentication
+      - name: Verify gh authentication and cache alerts
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh auth status
           echo "---"
-          # Probe the Dependabot API with a 1-item page. If the call fails the
-          # subsequent discovery step would silently produce an empty workspace
-          # list and the entire job would report "No fixable alerts found" —
-          # masking infra outages as "everything's fine". Fail fast instead.
-          if ! gh api "repos/${{ github.repository }}/dependabot/alerts?per_page=1" --jq 'length'; then
-            echo "::error::Dependabot API probe failed — aborting before silently misreporting alerts"
+          # Fetch once while the GitHub App token is fresh. The per-package loop
+          # can run for more than an hour, so every later script invocation reads
+          # this snapshot instead of making another authenticated API request.
+          if ! gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" \
+            --paginate \
+            --slurp > "$DEPENDABOT_ALERTS_FILE.pages"; then
+            echo "::error::Dependabot API fetch failed — aborting before silently misreporting alerts"
             exit 1
           fi
+          jq 'add // []' "$DEPENDABOT_ALERTS_FILE.pages" > "$DEPENDABOT_ALERTS_FILE"
+          rm "$DEPENDABOT_ALERTS_FILE.pages"
+          jq -e 'type == "array"' "$DEPENDABOT_ALERTS_FILE" > /dev/null
+          echo "Cached $(jq 'length' "$DEPENDABOT_ALERTS_FILE") open Dependabot alert(s)"
 
       # Install ts/ dependencies once before the per-workspace loop.
       # The fix-dependabot-alerts.mjs script lives under ts/tools/scripts/ and
@@ -111,8 +117,8 @@ jobs:
 
       # ── Analyse and fix alerts across workspaces ──────────────────────
       #
-      # Auto-discovers which workspaces have open alerts by querying the
-      # Dependabot API, then for each workspace:
+      # Auto-discovers which workspaces have open alerts from the cached
+      # Dependabot API snapshot, then for each workspace:
       # 1. Installs dependencies (if not already installed)
       # 2. Dry-run to discover fixable packages
       # 3. Applies each package's fix individually
@@ -121,7 +127,6 @@ jobs:
       - name: Analyse and fix alerts
         id: fix
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           # Enforce the org's 7-day release-age policy in every workspace the
           # script processes. Without this, workspaces that lack a
           # pnpm-workspace.yaml (e.g. docs/) would fall back to 0 (disabled)
@@ -156,7 +161,31 @@ jobs:
           NOW_EPOCH=$(date -u +%s)
           COOLDOWN_SECONDS=$((ROLLBACK_COOLDOWN_DAYS * 86400))
 
-          # Discover workspaces with open npm alerts from the Dependabot API.
+          # The index is the rollback point between package attempts. Successful
+          # fixes are staged; the current attempt remains unstaged until its
+          # clean build passes.
+          attempt_has_changes() {
+            ! git -C "$GITHUB_WORKSPACE" diff --quiet ||
+              [ -n "$(git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard)" ]
+          }
+
+          rollback_attempt() {
+            git -C "$GITHUB_WORKSPACE" restore --worktree -- .
+            while IFS= read -r -d '' path; do
+              rm -rf -- "$GITHUB_WORKSPACE/$path"
+            done < <(git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard -z)
+          }
+
+          restore_dependencies() {
+            if [ "$WS_DIR" = "ts" ]; then
+              pnpm install --frozen-lockfile --strict-peer-dependencies
+            else
+              pnpm install --frozen-lockfile
+            fi
+          }
+
+          # Discover workspaces from the alert snapshot fetched before the
+          # long-running loop.
           #
           # NOTE: `split("/")[0]` collapses every alert manifest_path to its
           # leading directory (so `ts/packages/X/package.json` → `ts`). This is
@@ -165,9 +194,9 @@ jobs:
           # manifest_path points outside those roots (e.g. a future workspace
           # under `subprojects/foo/package.json`). Revisit if/when a third
           # workspace root is added.
-          WORKSPACES=$(gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" \
-            --paginate \
-            --jq '[.[] | select(.dependency.package.ecosystem == "npm") | .dependency.manifest_path | split("/")[0]] | unique | .[]')
+          WORKSPACES=$(jq -r \
+            '[.[] | select(.dependency.package.ecosystem == "npm") | .dependency.manifest_path | split("/")[0]] | unique | .[]' \
+            "$DEPENDABOT_ALERTS_FILE")
 
           if [ -z "$WORKSPACES" ]; then
             echo "No open npm Dependabot alerts found 🎉"
@@ -204,7 +233,9 @@ jobs:
 
             # ── Step 1: Discover fixable packages ───────────────────
             echo "::group::Analysing $WS_DIR alerts"
-            node "$SCRIPT" --dry-run --json --skip-install > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
+            node "$SCRIPT" --dry-run --json --skip-install \
+              --alerts-file="$DEPENDABOT_ALERTS_FILE" \
+              > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
 
             if ! jq -e '.summary' /tmp/dep-analysis.json > /dev/null 2>&1; then
               echo "::warning::No valid analysis for $WS_DIR — see log below"
@@ -245,6 +276,7 @@ jobs:
               echo "Capturing dependency chains for $WS_BLOCKED blocked package(s) in $WS_DIR"
               CHAINS_OUT="/tmp/dep-chains-$WS_DIR.txt"
               NO_COLOR=1 node "$SCRIPT" --dry-run --show-chains --skip-install \
+                --alerts-file="$DEPENDABOT_ALERTS_FILE" \
                 > "$CHAINS_OUT" 2>&1 || true
               if [ -s "$CHAINS_OUT" ]; then
                 {
@@ -305,9 +337,10 @@ jobs:
                 fi
               fi
 
-              # Save a rollback point
-              cp package.json /tmp/pkg-backup.json
-              cp pnpm-lock.yaml /tmp/lock-backup.yaml 2>/dev/null || true
+              # Stage all previously verified fixes. This makes the index the
+              # exact rollback point for this package and keeps its changes
+              # separate from the cumulative repository diff.
+              git -C "$GITHUB_WORKSPACE" add -A
 
               # Build targeted args
               read -r -a extra_args <<< "$FLAGS"
@@ -323,20 +356,21 @@ jobs:
               done
               filtered_args+=("--auto-fix=$PKG")
               filtered_args+=("--skip-install")
+              filtered_args+=("--alerts-file=$DEPENDABOT_ALERTS_FILE")
               echo "Running: fix-dependabot-alerts.mjs ${filtered_args[*]}"
               set +e
               node "$SCRIPT" "${filtered_args[@]}" 2>&1
               fix_exit=$?
               set -e
 
-              if [ "$fix_exit" -ne 0 ] && git diff --quiet; then
+              if [ "$fix_exit" -ne 0 ] && ! attempt_has_changes; then
                 echo "::warning::Script failed for $PKG in $WS_DIR (exit $fix_exit) with no file changes"
                 TOTAL_FAILED=$((TOTAL_FAILED + 1))
                 echo "::endgroup::"
                 continue
               fi
 
-              if ! git diff --quiet; then
+              if attempt_has_changes; then
                 echo "Changes detected, reinstalling and verifying build..."
                 set +e
                 if [ "$WS_DIR" = "ts" ]; then
@@ -349,10 +383,8 @@ jobs:
 
                 if [ "$install_exit" -ne 0 ]; then
                   echo "::warning::pnpm install failed after fixing $PKG in $WS_DIR — rolling back"
-                  cp /tmp/pkg-backup.json package.json
-                  cp /tmp/lock-backup.yaml pnpm-lock.yaml 2>/dev/null || true
-                  pnpm install 2>&1 || true
-                  git checkout -- . 2>/dev/null || true
+                  rollback_attempt
+                  restore_dependencies
                   ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
                   TOTAL_FAILED=$((TOTAL_FAILED + 1))
                   jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
@@ -368,16 +400,20 @@ jobs:
                 fi
 
                 set +e
-                pnpm run build 2>&1
+                if [ "$WS_DIR" = "ts" ]; then
+                  # A forced rebuild catches dependency-only type breakage that
+                  # fluid-build's incremental cache can otherwise skip.
+                  pnpm run rebuild 2>&1
+                else
+                  pnpm run build 2>&1
+                fi
                 build_exit=$?
                 set -e
 
                 if [ "$build_exit" -ne 0 ]; then
                   echo "::warning::Build failed after fixing $PKG in $WS_DIR — rolling back"
-                  cp /tmp/pkg-backup.json package.json
-                  cp /tmp/lock-backup.yaml pnpm-lock.yaml 2>/dev/null || true
-                  pnpm install 2>&1 || true
-                  git checkout -- . 2>/dev/null || true
+                  rollback_attempt
+                  restore_dependencies
                   ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
                   TOTAL_FAILED=$((TOTAL_FAILED + 1))
                   jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
@@ -386,6 +422,7 @@ jobs:
                      "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
                 else
                   echo "✅ $PKG fixed and build passed"
+                  git -C "$GITHUB_WORKSPACE" add -A
                   ALL_APPLIED="$ALL_APPLIED $PKG"
                   TOTAL_RESOLVED=$((TOTAL_RESOLVED + 1))
                   # Successful upgrade — clear any stale rollback record.
@@ -424,12 +461,12 @@ jobs:
           echo "failed_workspaces=$ALL_FAILED_WORKSPACES" >> "$GITHUB_OUTPUT"
 
           cd "$GITHUB_WORKSPACE"
-          if git diff --quiet; then
+          if git diff --cached --quiet; then
             echo "changes=false" >> "$GITHUB_OUTPUT"
           else
             echo "changes=true" >> "$GITHUB_OUTPUT"
             echo "Files changed:"
-            git diff --stat
+            git diff --cached --stat
           fi
 
       # ── Final build + shell packaging verification ──────────────────

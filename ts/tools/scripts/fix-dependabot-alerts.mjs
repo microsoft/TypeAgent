@@ -68,6 +68,7 @@ const KNOWN_FLAG_PREFIXES = [
     "--prune-overrides",
     "--skip-shell-check",
     "--skip-install",
+    "--alerts-file",
     "--json",
     "--verbose",
     "--min-release-age-days",
@@ -143,8 +144,20 @@ const SHOW_CHAINS_FULL = args.includes("--show-chains=full");
 const PRUNE_OVERRIDES = args.includes("--prune-overrides");
 const SKIP_SHELL_CHECK = args.includes("--skip-shell-check");
 const SKIP_INSTALL = args.includes("--skip-install");
+const ALERTS_FILE = args
+    .find((a) => a.startsWith("--alerts-file="))
+    ?.slice("--alerts-file=".length);
 const JSON_OUTPUT = args.includes("--json");
 const VERBOSE = args.includes("--verbose");
+if (
+    IS_MAIN &&
+    (args.includes("--alerts-file") || args.some((a) => a === "--alerts-file="))
+) {
+    console.error(
+        "Error: --alerts-file requires a path.\nRun with --help to see available options.",
+    );
+    process.exit(1);
+}
 
 // Minimum age (in days) a published version must have before it is eligible
 // to be adopted as a fix. When a security fix would require a version younger
@@ -227,6 +240,9 @@ Options:
                       electron-builder validates exact version matches.
   --skip-install      Skip the initial pnpm install --frozen-lockfile. Use when
                       dependencies are already installed (e.g. in CI).
+  --alerts-file=PATH  Read a cached JSON array of Dependabot alerts instead of
+                      calling the GitHub API. Useful for long-running CI jobs
+                      whose authentication token may expire.
   --json              Output results as structured JSON (for CI integration)
   --verbose           Show detailed constraint analysis, advisory IDs, and
                       debug output
@@ -2520,48 +2536,78 @@ async function classifyWithFixPlan(entry, whyData) {
 
 // ── Stage functions ──────────────────────────────────────────────────────────
 
-/** Stage 1: Fetch open Dependabot alerts from GitHub. */
+/** Read a cached array produced by the Dependabot alerts API. */
+function readAlertsSnapshot(filePath) {
+    let alerts;
+    try {
+        alerts = JSON.parse(readFileSync(resolve(filePath), "utf-8"));
+    } catch (e) {
+        throw new Error(
+            `Cannot read alerts snapshot "${filePath}": ${e.message}`,
+        );
+    }
+    if (!Array.isArray(alerts)) {
+        throw new Error(
+            `Dependabot alerts snapshot "${filePath}" must contain a JSON array`,
+        );
+    }
+    return alerts;
+}
+
 function fetchAlerts() {
-    header("Fetching open Dependabot alerts from GitHub");
+    header(
+        ALERTS_FILE
+            ? "Reading cached Dependabot alerts"
+            : "Fetching open Dependabot alerts from GitHub",
+    );
 
     let alerts;
     try {
-        const remoteUrl = runCmd("git", ["remote", "get-url", "origin"]);
-        const match = remoteUrl.match(
-            /github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?$/,
-        );
-        if (!match) {
-            throw new Error(
-                `Cannot parse GitHub owner/repo from remote: ${remoteUrl}`,
+        if (ALERTS_FILE) {
+            alerts = readAlertsSnapshot(ALERTS_FILE);
+            log(
+                `  Snapshot: ${clr.chrome(resolve(ALERTS_FILE))} (${alerts.length} alert(s))`,
             );
-        }
-        const [, owner, repo] = match;
-        if (
-            !/^[A-Za-z0-9._-]+$/.test(owner) ||
-            !/^[A-Za-z0-9._-]+$/.test(repo)
-        ) {
-            throw new Error(
-                `Unexpected characters in owner/repo parsed from remote: ${owner}/${repo}`,
+        } else {
+            const remoteUrl = runCmd("git", ["remote", "get-url", "origin"]);
+            const match = remoteUrl.match(
+                /github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?$/,
             );
+            if (!match) {
+                throw new Error(
+                    `Cannot parse GitHub owner/repo from remote: ${remoteUrl}`,
+                );
+            }
+            const [, owner, repo] = match;
+            if (
+                !/^[A-Za-z0-9._-]+$/.test(owner) ||
+                !/^[A-Za-z0-9._-]+$/.test(repo)
+            ) {
+                throw new Error(
+                    `Unexpected characters in owner/repo parsed from remote: ${owner}/${repo}`,
+                );
+            }
+            log(`  Repository: ${clr.chrome(owner + "/" + repo)}`);
+
+            const raw = runCmd(
+                "gh",
+                [
+                    "api",
+                    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?state=open&per_page=100`,
+                    "--paginate",
+                ],
+                { timeout: 120000 },
+            );
+
+            alerts = parsePaginatedJson(raw);
         }
-        log(`  Repository: ${clr.chrome(owner + "/" + repo)}`);
-
-        const raw = runCmd(
-            "gh",
-            [
-                "api",
-                `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?state=open&per_page=100`,
-                "--paginate",
-            ],
-            { timeout: 120000 },
-        );
-
-        alerts = parsePaginatedJson(raw);
     } catch (e) {
-        console.error("Failed to fetch alerts:", e.message);
-        console.error(
-            "Make sure `gh` is installed, authenticated, and has access to Dependabot alerts.",
-        );
+        console.error("Failed to load alerts:", e.message);
+        if (!ALERTS_FILE) {
+            console.error(
+                "Make sure `gh` is installed, authenticated, and has access to Dependabot alerts.",
+            );
+        }
         process.exit(1);
     }
 
@@ -3690,7 +3736,7 @@ async function main() {
     }
 }
 
-export { assessFixMaturity, getNpmInfo };
+export { assessFixMaturity, getNpmInfo, readAlertsSnapshot };
 
 // Kick off a full run only when invoked directly (see IS_MAIN near the top),
 // so importing this module for unit tests never triggers a run.
