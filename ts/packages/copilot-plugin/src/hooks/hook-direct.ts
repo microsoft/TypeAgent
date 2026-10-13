@@ -23,7 +23,11 @@ import type {
     UserPromptSubmittedInput,
     UserPromptSubmittedOutput,
 } from "@typeagent/agent-harness-hooks/copilot-cli";
-import { macroHandoffContext } from "../shared/macro-handoff.js";
+import {
+    requestMacroRunner,
+    isMacroRunnerSession,
+} from "../shared/macro-runner-bridge.js";
+import type { AgentHandoff } from "@typeagent/agent-sdk";
 
 export interface DirectHandlingOptions {
     forceHandled?: boolean;
@@ -32,11 +36,17 @@ export interface DirectHandlingOptions {
 export interface DirectDependencies {
     connectToTypeAgent: typeof connectToTypeAgent;
     emitProgress: typeof emitProgress;
+    runAgentHandoff: (
+        sessionId: string,
+        handoff: AgentHandoff,
+        submittedAt: number,
+    ) => Promise<string>;
 }
 
 const defaultDependencies: DirectDependencies = {
     connectToTypeAgent,
     emitProgress,
+    runAgentHandoff: requestMacroRunner,
 };
 
 function toForcedCommandOutput(
@@ -85,6 +95,7 @@ export async function handleDirect(
     options: DirectHandlingOptions = {},
     dependencies: DirectDependencies = defaultDependencies,
 ): Promise<UserPromptSubmittedOutput> {
+    if (isMacroRunnerSession(input.sessionId)) return {};
     dependencies.emitProgress("Routing to TypeAgent...", { temporary: true });
 
     const responseCollector = { messages: [] as string[] };
@@ -170,9 +181,15 @@ export async function handleDirect(
         if (pendingPrompts.length > 0) return pendingResult();
         if (hasSuccessfulAgentHandoff(result)) {
             acceptedMacro = true;
+            const responseContent = await dependencies.runAgentHandoff(
+                input.sessionId,
+                result.agentHandoff,
+                input.timestamp,
+            );
             return {
-                modifiedPrompt: input.prompt,
-                additionalContext: macroHandoffContext(result.agentHandoff),
+                handled: true,
+                responseContent,
+                handledBy: "typeagent",
             };
         }
         if (options.forceHandled || acceptedMacro) {

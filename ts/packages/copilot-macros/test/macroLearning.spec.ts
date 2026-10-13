@@ -434,6 +434,13 @@ describe("durable macro learning", () => {
                 inputs: { step_1_path: "package.json" },
             }),
         ).rejects.toThrow("suppressed");
+        await expect(
+            manager.inspectMacro({
+                macroId: source.macroId,
+                version: 2,
+                requireRunnable: true,
+            }),
+        ).rejects.toThrow("suppressed");
         expect(host.callTool).not.toHaveBeenCalled();
     });
 

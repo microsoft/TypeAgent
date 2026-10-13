@@ -61,6 +61,7 @@ function createDependencies(
             return dispatcher;
         }),
         emitProgress,
+        runAgentHandoff: jest.fn(async () => "Host macro answer"),
     };
     return { dependencies, close, emitProgress };
 }
@@ -79,7 +80,59 @@ function setDisplay(content: DisplayContent): EmitDisplay {
 const forced = { forceHandled: true };
 
 describe("direct TypeAgent hook", () => {
-    it("continues Copilot with the complete runner launch instead of claiming completion", async () => {
+    it("returns the native host answer without a root-model handoff turn", async () => {
+        const handoff = {
+            agentName: "typeagent-macro-runner",
+            payload: { macro: "approved" },
+        };
+        const { dependencies, close } = createDependencies({
+            agentHandoff: handoff,
+        });
+        const runAgentHandoff = jest.fn(
+            async () => "Vega checklist\n1. Ready\n2. Verified",
+        );
+        const result = await handleDirect(
+            input,
+            {},
+            { ...dependencies, runAgentHandoff },
+        );
+        expect(result).toEqual({
+            handled: true,
+            handledBy: "typeagent",
+            responseContent: "Vega checklist\n1. Ready\n2. Verified",
+        });
+        expect(runAgentHandoff).toHaveBeenCalledWith(
+            input.sessionId,
+            handoff,
+            input.timestamp,
+        );
+        expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("makes host execution failures terminal instead of delegating or rerouting", async () => {
+        const { dependencies } = createDependencies({
+            agentHandoff: { agentName: "typeagent-macro-runner", payload: {} },
+        });
+        const runAgentHandoff = jest.fn(async () => {
+            throw new Error("Macro cancelled");
+        });
+        const error = jest.spyOn(console, "error").mockImplementation(() => {});
+        try {
+            const result = await handleDirect(
+                input,
+                {},
+                { ...dependencies, runAgentHandoff },
+            );
+            expect(result.handled).toBe(true);
+            expect(result.responseContent).toContain("Macro cancelled");
+            expect(result.additionalContext).toBeUndefined();
+            expect(runAgentHandoff).toHaveBeenCalledTimes(1);
+        } finally {
+            error.mockRestore();
+        }
+    });
+
+    it("always uses the native host for macro handoffs without caller context", async () => {
         const launch = {
             agent: "typeagent-macro-runner",
             macro: { macroId: "approved", version: 2 },
@@ -93,13 +146,17 @@ describe("direct TypeAgent hook", () => {
             },
         });
         const result = await handleDirect(input, {}, dependencies);
-        expect(result.handled).toBeUndefined();
-        expect(result.modifiedPrompt).toBe(input.prompt);
-        expect(result.additionalContext).toContain(
-            JSON.stringify({ status: "agentRequired", launch }, null, 2),
-        );
-        expect(result.additionalContext).toContain(
-            "Do not call run_macro again",
+        expect(result).toEqual({
+            handled: true,
+            handledBy: "typeagent",
+            responseContent: "Host macro answer",
+        });
+        expect(result.modifiedPrompt).toBeUndefined();
+        expect(result.additionalContext).toBeUndefined();
+        expect(dependencies.runAgentHandoff).toHaveBeenCalledWith(
+            input.sessionId,
+            expect.objectContaining({ payload: launch }),
+            input.timestamp,
         );
     });
 

@@ -1,5 +1,6 @@
 ---
 name: typeagent-macro-runner
+model: gpt-6-luna
 description: "Runs an approved TypeAgent macro from a structured agentRequired handoff using live Copilot tools and permissions. Use when run_macro returns a typeagent-macro-runner launch payload."
 tools: ["*"]
 user-invocable: false
@@ -8,6 +9,10 @@ user-invocable: false
 Execute exactly one approved TypeAgent macro from the supplied structured
 launch payload.
 
+You are the runner, not its caller. Execute the steps yourself; do not use
+`task` or another agent to delegate the launch or any step. Guidance to invoke
+the runner applies only to the caller before this agent starts, not to you.
+
 ## Required Input
 
 Require the complete `launch` object returned by `run_macro`. Reject requests
@@ -15,13 +20,22 @@ that provide only a macro name or free-form procedure.
 
 ## Procedure
 
-1. Call `inspect_macro` with `launch.macro.macroId` and
-   `launch.macro.version`. Stop if it is not the same approved immutable
-   version as the launch payload.
+1. The server validates the macro before returning this handoff. Require
+   `launch.macro.state` to be `approved` and the candidate source ID/version
+   to match `launch.macro`. Stop if the launch is incomplete or inconsistent.
+   Do not call `inspect_macro` or another catalog tool before execution.
+   Start with the first recorded step; use the complete supplied macro.
 2. Execute the whole macro in step order using the supplied inputs and prior
    step results. Do not split execution between deterministic replay and this
    runner. Resolve tools as described below; do not assume an MCP server name
    means TypeAgent can replay the tool.
+   Resolve each step's bindings before invoking it: input bindings use
+   `launch.inputs`, and `stepResult` bindings use the completed prior step's
+   actual result. A binding overrides the captured argument value; never
+   replay a captured document ID when it has a result binding. Execute steps
+   strictly one at a time, checking postconditions before the next step.
+   Do not start a dependent step speculatively or in parallel, even if its
+   captured example arguments are available.
    If a required tool is unavailable, stop and report it rather than silently
    substituting another tool.
 3. Use Copilot's live tool permissions. A denied or cancelled tool call is a
@@ -81,6 +95,6 @@ new draft's guards, and explicitly approve it. Never change the old version.
 
 Do not call `run_macro` recursively. Do not submit a candidate after permission
 denial, cancellation, timeout, or an unsuccessful adaptation.
-Use tools only for the approved procedure and its inspection, required tool
+Use tools only for the approved procedure, required tool
 discovery, and successful candidate submission. Do not call other macro
 lifecycle tools, change permissions, or install tools to complete the run.
