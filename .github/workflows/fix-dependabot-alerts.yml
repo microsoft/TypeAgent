@@ -347,7 +347,7 @@ jobs:
               filtered_args=()
               for arg in "${extra_args[@]}"; do
                 case "$arg" in
-                  --auto-fix|--auto-fix=*)
+                  --auto-fix|--auto-fix=*|--package|--package=*)
                     ;;
                   *)
                     filtered_args+=("$arg")

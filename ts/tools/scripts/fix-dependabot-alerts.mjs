@@ -3399,7 +3399,7 @@ function formatActionTag(entry) {
     return `[${parts.join("+")}]`;
 }
 
-/** Stage 6: Print summary and set exit code. */
+/** Stage 6: Print the text summary. */
 function printSummary(results) {
     header("Summary");
 
@@ -3588,14 +3588,14 @@ function printSummary(results) {
     }
 
     log("");
+}
 
-    if (
-        results.blocked.length > 0 ||
+function getResultsExitCode(results) {
+    return results.blocked.length > 0 ||
         results.noPatch.length > 0 ||
         results.failed.length > 0
-    ) {
-        process.exit(1);
-    }
+        ? 1
+        : 0;
 }
 
 /**
@@ -3773,6 +3773,7 @@ async function main() {
     } else {
         printSummary(results);
     }
+    process.exitCode = getResultsExitCode(results);
 }
 
 export {
