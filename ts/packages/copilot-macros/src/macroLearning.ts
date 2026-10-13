@@ -23,6 +23,8 @@ import {
 } from "./macroLearningParsers.js";
 import { induceMacroFromTrace } from "./macroDefinition.js";
 import { redactTraceValue } from "./redaction.js";
+import { learningToolResult } from "./resultEvidence.js";
+import { setMacroCapabilities } from "./resultPath.js";
 import {
     assertLearningBuild,
     assertLearningGrammar,
@@ -648,11 +650,10 @@ export class MacroLearningEngine {
                     job.traceId,
                     {
                         ...trace,
-                        toolCalls: trace.toolCalls.map((call) =>
-                            call.modelResult !== undefined
-                                ? { ...call, result: call.modelResult }
-                                : call,
-                        ),
+                        toolCalls: trace.toolCalls.map((call) => ({
+                            ...call,
+                            result: learningToolResult(call),
+                        })),
                     },
                     macroId,
                     "Learning draft",
@@ -688,6 +689,7 @@ export class MacroLearningEngine {
                         : "agentRequired",
                     warnings: [],
                 };
+                setMacroCapabilities(draft);
                 assertLearningBuild(build, draft, trace);
                 if (
                     draft.steps.some(

@@ -14,6 +14,13 @@ import type {
     ReplayToolHost,
     ValueExpression,
 } from "./contracts.js";
+import { learningToolResult, omittedResultPath } from "./resultEvidence.js";
+import {
+    assertMacroCapabilities,
+    constructResultPath,
+    setMacroCapabilities,
+    validateResultSuffix,
+} from "./resultPath.js";
 
 async function classifyTool(
     toolName: string,
@@ -86,12 +93,46 @@ function findPriorResultExpression(
     for (let index = priorCalls.length - 1; index >= 0; index--) {
         const resultPath = findValuePath(priorCalls[index].result, leaf);
         if (resultPath !== undefined) {
+            if (omittedResultPath(priorCalls[index], resultPath)) continue;
             return {
                 kind: "stepResult",
                 stepId: priorSteps[index].id,
                 ...(resultPath.length > 0 ? { path: resultPath } : {}),
             };
         }
+        const constructed = findConstructedPath(priorCalls[index].result, leaf);
+        if (
+            constructed &&
+            !omittedResultPath(priorCalls[index], constructed.path)
+        ) {
+            return {
+                kind: "resultPath",
+                stepId: priorSteps[index].id,
+                ...constructed,
+            };
+        }
+    }
+
+    function findConstructedPath(
+        root: unknown,
+        target: string,
+        path: string[] = [],
+    ): { path: string[]; suffix: string } | undefined {
+        if (typeof root === "string" && target.startsWith(root)) {
+            const suffix = target.slice(root.length);
+            try {
+                if (constructResultPath(root, suffix) === target)
+                    return { path, suffix };
+            } catch {
+                /* Not an admitted relative drive-item construction. */
+            }
+        }
+        if (!root || typeof root !== "object") return undefined;
+        for (const [key, child] of Object.entries(root)) {
+            const found = findConstructedPath(child, target, [...path, key]);
+            if (found) return found;
+        }
+        return undefined;
     }
     return undefined;
 }
@@ -182,11 +223,21 @@ export async function induceMacroFromTrace(
         );
     }
     const agentRequired = executionClasses.includes("agentRequired");
-    const calls = trace.toolCalls.map((call) =>
-        agentRequired && call.modelResult !== undefined
-            ? { ...call, result: call.modelResult }
-            : call,
-    );
+    const calls = trace.toolCalls.map((call) => {
+        const projected = {
+            ...call,
+            result: agentRequired
+                ? learningToolResult(call)
+                : call.resultArtifact
+                  ? call.resultArtifact.view
+                  : call.result,
+        };
+        if (!agentRequired) {
+            delete projected.modelResult;
+            delete projected.modelResultArtifact;
+        }
+        return projected;
+    });
     for (const [index, call] of calls.entries()) {
         const id = `step-${index + 1}`;
         const executionClass = executionClasses[index];
@@ -224,11 +275,17 @@ export async function induceMacroFromTrace(
             sourceToolCallId: call.toolCallId,
             ...(call.result === undefined
                 ? {}
-                : { postconditions: inferPostconditions(call.result) }),
+                : {
+                      postconditions: inferPostconditions(call.result).filter(
+                          (guard) =>
+                              guard.kind !== "resultPathExists" ||
+                              !omittedResultPath(call, guard.path),
+                      ),
+                  }),
         });
     }
 
-    return {
+    const macro: CopilotToolMacro = {
         schemaVersion: 1,
         macroId,
         version: 1,
@@ -242,6 +299,8 @@ export async function induceMacroFromTrace(
         createdAt,
         warnings,
     };
+    setMacroCapabilities(macro);
+    return macro;
 }
 
 function validateExpression(
@@ -282,7 +341,14 @@ function validateExpression(
             ? undefined
             : `Unknown input: ${expression.name}`;
     }
-    if (expression.kind === "stepResult") {
+    if (expression.kind === "stepResult" || expression.kind === "resultPath") {
+        if (expression.kind === "resultPath") {
+            try {
+                validateResultSuffix(expression.suffix);
+            } catch {
+                return "Unsupported result-path suffix.";
+            }
+        }
         const referencedIndex = macro.steps.findIndex(
             (step) => step.id === expression.stepId,
         );
@@ -291,6 +357,12 @@ function validateExpression(
             return `Step result must reference an earlier step: ${expression.stepId}`;
         }
     }
+    if (
+        !["literal", "input", "stepResult", "resultPath"].includes(
+            expression.kind,
+        )
+    )
+        return "Unsupported macro expression.";
     return undefined;
 }
 
@@ -299,6 +371,15 @@ export function validateMacro(
     trace?: RecordedInteractionTrace,
 ): MacroValidationReport {
     const issues: MacroValidationIssue[] = [];
+    try {
+        assertMacroCapabilities(macro);
+    } catch (error) {
+        issues.push({
+            severity: "error",
+            code: "unsupportedCapabilities",
+            message: String(error),
+        });
+    }
     if (!macro.name.trim()) {
         issues.push({
             severity: "error",

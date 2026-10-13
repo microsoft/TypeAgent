@@ -5,7 +5,11 @@ import type { CopilotSession, SessionEvent } from "@github/copilot-sdk";
 import type { PreToolUseOutput } from "@typeagent/agent-harness-hooks/copilot-cli";
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
-import type { InspectMacroRequest } from "@typeagent/copilot-macros";
+import {
+    assertMacroCapabilities,
+    type CopilotToolMacro,
+    type InspectMacroRequest,
+} from "@typeagent/copilot-macros";
 import {
     markMacroRunnerSession,
     clearMacroRunnerSession,
@@ -53,6 +57,7 @@ export async function executeNativeMacro(
     dependencies: MacroRunnerDependencies,
 ): Promise<string> {
     const launch = launchSchema.parse(payload);
+    assertMacroCapabilities(launch.macro as unknown as CopilotToolMacro);
     if (
         launch.candidate.sourceMacroId !== launch.macro.macroId ||
         launch.candidate.sourceVersion !== launch.macro.version

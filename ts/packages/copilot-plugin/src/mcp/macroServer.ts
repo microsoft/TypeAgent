@@ -282,6 +282,16 @@ const boundValueExpressionSchema = z.discriminatedUnion("kind", [
         stepId: z.string().min(1),
         path: z.array(z.string()).optional(),
     }),
+    z.object({
+        kind: z.literal("resultPath"),
+        stepId: z.string().min(1),
+        path: z.array(z.string()),
+        suffix: z
+            .string()
+            .regex(
+                /^(?:\/content|\?\$select=[A-Za-z][A-Za-z0-9]*(?:,[A-Za-z][A-Za-z0-9]*){0,19})(?![\s\S])/,
+            ),
+    }),
 ]);
 
 const valueExpressionSchema = z.discriminatedUnion("kind", [

@@ -471,3 +471,4 @@ ts/config.local.yaml.bak
 /ts/tmp/bundled-agent-server
 /ts/msi-test-stage
 /ts/msi-test-output
+/ts/packages/copilot-plugin-eval/.native-*

@@ -15,6 +15,7 @@ import {
     assertLearningRequests,
     assertLearningValue,
 } from "./macroLearningValidation.js";
+import { validateResultSuffix } from "./resultPath.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -117,6 +118,7 @@ function parseBoundExpression(value: unknown): BoundExpression {
         "name",
         "stepId",
         "path",
+        "suffix",
     ]);
     switch (expression.kind) {
         case "literal":
@@ -137,6 +139,15 @@ function parseBoundExpression(value: unknown): BoundExpression {
                 ...(expression.path === undefined
                     ? {}
                     : { path: parsePath(expression.path, true) }),
+            };
+        case "resultPath":
+            record(value, ["kind", "stepId", "path", "suffix"]);
+            validateResultSuffix(expression.suffix);
+            return {
+                kind: "resultPath",
+                stepId: text(expression.stepId, "result reference", 2_000),
+                path: parsePath(expression.path, true),
+                suffix: expression.suffix,
             };
         default:
             throw new Error("Unsupported learning expression kind.");

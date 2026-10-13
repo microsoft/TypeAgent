@@ -31,6 +31,446 @@ microbenchmark is not a substitute. Throughput/load tests, cold-start campaigns,
 Direct-hook comparisons and a broad adversarial suite are outside this initial
 scope. Weather is removed and calendar is deferred.
 
+## Native macro evaluation - gated controller and offline tooling
+
+The macro validation campaign is separate from the historical seven-candidate
+evaluation below. Its prospective `macro-native-eval-v1` protocol uses the actual
+interactive CLI, synthetic fixtures and independent event/backend/content
+oracles. The packaged native controller is implemented for a bounded synthetic
+Direct learning/reuse/restart rehearsal. **Packaged live acceptance is pending.**
+Offline adapter tests are not native acceptance or a measured campaign.
+
+**Current task gate:** ordinary Copilot `bypass` is not a grammar miss. The
+additive ordinary-route grader candidate remains proof-blocked with `callback:
+null`; fresh all-actor mode transitions alone cannot admit a task-bearing launch.
+Offline preflight and an explicitly scheduled metadata-only diagnostic remain
+available. No grader schema is changed by this controller.
+
+Metadata diagnostics seed an owned bypass config and opt-in control admission.
+They invoke the native SDK registry and existing local mode/status commands (not chat),
+collect actual extension/MCP/compiled-hook mode and config-root receipts, verify
+live actor ancestry against the owned console tree, and preserve disagreements.
+The compiled-hook getter is not a native user-prompt hook invocation. Every
+native model-start/call event is reported, including telemetry persisted during
+cleanup; service model usage remains unknown without a complete service contract.
+An empty canonical target-turn counter is never a zero-model claim.
+
+The bounded metadata diagnostic stopped before hook-registration consent with
+pending fixture tool-name warnings. Four actual MCP startup receipts and the
+native-extension startup receipt agreed on the exact owned root/bypass/digest;
+they did **not** prove a native user-prompt invocation or SDK status runtime.
+There is no evidence justifying a `TYPEAGENT_PLUGIN_DATA` helper override.
+The status child now uses the canonical installed `node` hook runtime, since
+the actual native extension executable is `copilot.exe`, not Node.
+
+Metadata-only startup may defer catalog warnings only during exactly verified
+hook-registration consent, not subsequent general catalog loading. Unknown permissions,
+failed MCP initialization, model telemetry, persistent warnings at complete
+catalog, and any task admission remain strict failures. This correction is
+offline-tested, not reexecuted live. Per-request owned control mismatch now
+fails before service translation; fresh all-actor transitions and the bypass
+grader contract remain blocked.
+
+With `diagnosticOnly: true`, the owned admission enables fixed bypass/delegate,
+MCP/mixed and Direct/mixed transitions using `commands.list/invoke` and
+`tools.getCurrentMetadata`. Four actual MCP processes refresh their public
+receipts on owned config writes; the registered status getter runs canonical
+Node and snapshots each phase. No `send`, tool execution, recording lease or
+model command is used. Request context is projected only from parsed hook input;
+startup/status has `source.request: null`. Neither this child nor controller IPC
+is a native callback. `native-control-diagnostic-result.json` retains partial
+outcomes even when startup blocks; callback/capture remain null.
+The coordinator now waits for the controller's exact-session, consent-aware
+full-catalog admission before querying the SDK. Rejected safe tool-name metadata
+is persisted before validation. These post-diagnostic corrections are offline
+regressions, not another live run or proof of the observed mismatch's cause.
+
+The subsequent bounded diagnostic accepted only checked owned workspace/hook
+consent and reached five connected MCP servers without restriction warnings.
+Actual `commands.list` returned the expected status/mode commands; SDK tool
+metadata failed the exact filter before any setter/status invocation. No
+rejected projection was retained in that attempt, so its mismatch cause is
+unresolved. There were no transitions, native prompt callbacks, capture or task
+events; service model usage remains unknown. The corrected catalog-admission
+barrier/projection persistence is offline-tested only; another launch requires
+parent scheduling.
+
+A later single bounded attempt stopped before SDK queries: the readiness
+predicate returned a boolean, so the admission writer omitted the observed
+session ID. The receiver correctly rejected that missing exact-session binding.
+`nativeReadyObservation` now returns the original complete frame, with unit and
+lifecycle assertions for the serialized session ID. This correction is offline
+only; no second boot, setter, getter or verification bridge ran.
+
+The diagnostic now checks the initial exact owned root before any setter and
+uses the registered status getter's public `spawnSync` child PID plus staged
+script hash as read-only getter provenance, never native-hook authentication.
+It exercises bypass → MCP mixed → Direct → restored bypass and snapshots safe
+tool names/schema shape at each phase. Model-visible `task` is optional; the
+authenticated host task API is separate and uninvoked. Pending workflow inventory
+can accompany independently verified pure controls but never enables workflows
+or satisfies the conditional bridge-implementation gate.
+Known registration reload can leave historical MCP receipt files. Admission now
+contains current owned OS identities; only those actors participate in mode
+snapshots. Historical files remain intact, and duplicate current-role receipts
+fail closed. This is metadata control-plane selection, not callback authentication.
+
+The next authorized single CLI 1.0.95 metadata diagnostic proved exact-session
+admission, the initial registered canonical Node getter and all four transitions,
+including restored bypass with saved mixed routing. Current OS-admitted actors
+agreed on the owned config/data root and public digest at every phase. The
+persisted safe SDK catalog contained the exact synthetic document tools and
+non-MCP `task`, but also `extensions_reload` and `extensions_manage`. These
+unexpected tools keep the workflow inventory and conditional bridge prerequisite
+**blocked**; their presence in metadata is not execution or permission proof.
+No tool was invoked to probe them, no filter was relaxed, and no normal-hook
+verification bridge or workflow ran. Rejection diagnostics now retain exact
+unexpected names, with an offline regression for this observed catalog.
+The attempt took 59.978 seconds excluding cleanup; native model/target counters
+were zero, service usage unknown. Independent cleanup found no exact owned
+survivors, listener or owned window. Further launch requires new authorization.
+
+Offline investigation of that inventory preserved the actual projection. The
+installed SDK 1.0.13 describes `getCurrentMetadata` as a **currently initialized
+lightweight tool snapshot**, with `CurrentToolMetadata.name` labeled
+**model-facing**. It supplies no enabled-state, execution-permission or
+registration-only discriminator. Consequently the extra management names cannot
+be exempted as harmless registered-but-disabled tools, and the controller's
+fail-closed inventory check is not proven to use the wrong semantics.
+
+The pinned CLI 1.0.95 help supports both `--available-tools` (model availability
+allowlist) and `--excluded-tools` (model availability exclusion). SDK
+`SessionConfigBase` documents exact bare names across any source and exclusions
+taking precedence over availability. Execution permission controls remain
+separate; neither metadata presence nor Manual Approval proves management-tool
+denial. The installed CLI ships an opaque executable, not readable registration/
+filter implementation, and the preserved startup log has no exact filter cause.
+Whether these tools are injected after filtering, included only in a wider
+snapshot, or executable despite restrictions remains unresolved.
+
+No launch or predicate was changed on that evidence. A smallest **proposed,
+unexecuted** follow-up is a newly authorized metadata-only run retaining the
+existing allowlist and adding exactly
+`--excluded-tools extensions_reload extensions_manage`, then observing the
+initial owned getter and actual safe SDK snapshot. These documented exact
+exclusions are a conservative hypothesis, not a demonstrated CLI fix or a
+permission grant. Remaining extra tools must still block; never invoke them to
+probe denial, silently filter them, or treat controls success as workflow/
+bridge admission.
+
+The offline entrypoint is `scripts/macro-eval.mjs`, with `plan`, `grade` and
+`report` commands. It takes explicit corpus/evidence files and refuses output
+overwrite. Planning is unexecuted; invalid/failed/blocked grades persist their
+verdict and exit unsuccessfully. Reports retain incomplete trial populations.
+It does not launch a native session or claim live acceptance.
+
+### Gated native rehearsal
+
+`native` defaults to **offline preflight**. It requires an explicit reviewed
+corpus, JSON configuration, absolute shared-helper **scripts** directory and
+fresh output directory. Only `--execute-live true` admits launches; schedule an
+exclusive unrecorded live slot first. The controller never starts OBS.
+
+```powershell
+node scripts\macro-eval.mjs native --corpus <reviewed-corpus.json> --input <native-config.json> --console-helper-dir D:\repos\shared-config\skills\copilot-cli-obs-demo\scripts --output <fresh-owned-directory>
+# Same command plus --execute-live true, ONLY in the parent's scheduled live slot.
+```
+
+Native configuration (replace executable/config paths and IDs with reviewed
+values; no credentials or arbitrary environment/CLI arguments):
+
+```json
+{
+  "cliExecutable": "D:\\admitted\\copilot.exe",
+  "cliVersion": "1.0.95",
+  "configDirectory": "D:\\repos\\TypeAgent\\ts",
+  "port": 19983,
+  "rootModel": "gpt-5.6-sol",
+  "runnerModel": "gpt-6-luna",
+  "maxTargetModelTurns": 20,
+  "maxDurationMs": 300000,
+  "trainingCase": "doc-source-01",
+  "reuseCase": "doc-positive-01",
+  "restart": false,
+  "approveSyntheticReadsOnce": false,
+  "reviewSyntheticDraft": false
+}
+```
+
+Use an actually unused explicit port; occupied ports fail without stopping the
+occupant. Explicit CLI 1.0.89 or 1.0.95 admission is verified at live start;
+both always receive `--experimental`. Admission is not compatibility acceptance.
+Existing built plugin/server/client runtimes and provisioned
+model configuration are required; no automatic install/build/config copying.
+Output owns new workspace, plugin snapshot, CLI homes, stores, private helper
+configs and preallocated backend audit. Every fixture producer gets
+`--append-audit`, including after service restart. A manifest hashes source,
+runtime/helper files, corpus and explicit configuration, without serializing
+inherited authentication. No global configuration or existing output is changed.
+
+The journey runs an ordinary CLI baseline with routing bypassed, arms Prepare
+recording in Direct mode (the recording hook delegates the selected training
+interaction to ordinary Copilot), validates/reviews the exact guarded learned
+two-step synthetic dependency, then tests changed-input host-controlled Direct
+reuse. `restart: true` additionally closes only the owned console/service,
+restarts the same owned stores and opens a fresh CLI home/session. Publication
+requires `reviewSyntheticDraft: true`: this is a bounded external controller
+review, not target-model self-approval or publication-UI acceptance.
+
+Normal native tool permissions remain in force. The default stops at execution
+consent. `approveSyntheticReadsOnce: true` permits only a visible one-time
+synthetic lookup/fetch menu with the exact admitted tool/argument JSON, never
+blanket grants, remembered approvals or inspection. Owned folder trust and the
+exact `register hooks` request are admitted once; optional installation is
+declined. Unknown interactions, native errors/cancellation and finite deadline/
+turn bounds stop the run and preserve its verdict/evidence. Cleanup checks exact
+owned process identities; it never kills shared Windows Terminal or sweeps names.
+Folder trust also verifies the owned workspace's generated content against the
+manifest. CLI version admission uses the executable's actual version header,
+not its containing directory; a mismatched version is blocked before service or
+interactive CLI startup. The version probe uses a fresh owned home and the shared
+helper's sanitized child environment, and retains its non-secret observation.
+Both baseline and reuse timing starts immediately before controller submission
+and ends at observed native terminal proof, not at the later root user event.
+
+Evidence comes from actual native JSONL events and independent fixture/backend
+route notifications. It uses `agentId`/`data.parentToolCallId` for child identity
+and causal `parentId` chains; it never appends a fabricated `session.idle`.
+Missing route attribution stays unknown/blocked. Source/runtime drift, provider
+usage/cost and credit ceilings remain campaign-admission responsibilities;
+turn/deadline limits are not monetary caps. This rehearsal does not execute the
+paired/stress plan, claim speedup, or freeze the corpus.
+
+**Explicit blockers:** caller/MCP scoring, negative/conversation/native-tool
+families, policy controls, publication UI, recording and paired/stress scheduling
+are not admitted by this entrypoint. `executionPath` may only be `direct`.
+Caller/MCP cannot currently be represented honestly by the grader's
+grammar/miss/unknown route schema when `run_macro` executes without a grammar hit.
+Nonmacro Direct literal responses can have no `turnId` or host phase report.
+Actual CLI events show successful `hook.end` (`userPromptSubmitted`,
+`output.handled: true`, exact `responseContent`) causally preceding the matching
+root user/answer interaction. The controller retains that proof but **does not
+relax the grader**; these trials remain blocked pending the owner's explicit
+handled-hook completion contract. A fresh ordinary baseline/armed training avoids
+depending on that unsupported completion path.
+
+Native-controller offline regressions:
+
+```powershell
+node --test scripts\test\macro-eval-native.spec.mjs
+```
+
+### Consolidated staging and restriction preflight
+
+Canonical staging now bundles the **current compiled** hook/MCP dependency
+graphs into the owned snapshot, retains the complete dist runtime/assets and
+guidance, and records dependency and unchanged-extension hashes. It handles both
+thin tsc output and already-bundled entries; a distinct createRequire binding
+avoids collisions with the product bundle's existing banner. Both executable
+entries must pass Node syntax checks before a manifest is admitted. Missing
+dependencies, changed closure inputs, extension drift, failed native hooks,
+unrecognized availability names and failed MCP initialization block tasks.
+Startup must report the complete configured plugin-plus-fixture MCP catalog,
+not just a session header. The generated workspace has its own empty Git root
+to stop parent-repository instruction discovery; this is not a security boundary.
+
+The exact model-availability selectors are
+`mcp:macro-eval-docs-lookup_document`,
+`mcp:macro-eval-docs-fetch_document`, and `builtin:task`. These are
+source-qualified SDK wire-name selectors, **not execution approvals**. There
+are no new allow-tool/allow-all grants or permission inheritance. CLI 1.0.95
+accepted these selectors without unknown-name warnings in the single zero-model
+diagnostic; unrelated tools were visibly disabled and Manual Approval remained.
+Actual native unrelated-tool denial/non-autoapproval still needs a separately
+authorized invocation; fixture rejection alone does not prove native permissions.
+
+For a scheduled **zero-model diagnostic only**, set `diagnosticOnly: true`,
+`maxTargetModelTurns: 0`, `maxDurationMs` at most `180000`, and `restart: false`
+in the same native configuration. It checks compiled status-hook IPC, the
+audited fixture catalog and an unrelated fixture-operation rejection, then
+native startup. It never submits native commands/tasks or performs capture,
+Prepare, publication or reuse. Even successful startup remains blocked on the
+unproved native negative permission/exposure gate. Deadline cleanup has its
+own finite Close allowance, independent of the exhausted task budget.
+
+The actual diagnostic retained zero native model turns, user messages and tool
+calls. Hook status IPC and exact OS listener ownership passed. Four plugin MCP
+processes failed because the first staging revision rebundled an already-bundled
+entry with the same `__cr` banner binding; the original result remains
+harness-invalid after its deadline/Close timeout. The corrected helper passes
+isolated missing-dependency/banner/hash regressions and real initialize-only
+handshakes for all four current MCP modes without a service or model. **No
+interactive CLI rerun after that correction had been executed at that handoff.** Separate
+cleanup verified all 15 owned identities, the owned HWND and the port cleared.
+This is startup correctness evidence, not macro acceptance or a speedup result.
+
+The next authorized single corrected CLI 1.0.95 rehearsal passed admission,
+current closure/syntax/hash checks, exact listener ownership, owned workspace
+trust/hook registration, and **all five** configured MCP connections. Exact
+source-qualified availability selectors produced no unknown-name warnings.
+It stopped at the first baseline: the controller's owned config contained
+`mode: bypass`, but the successful native hook actually handled the synthetic
+document request through TypeAgent, returning empty conversation-corpus/search
+results instead of fixture content. The fixture audit stayed empty. This proves
+a runtime mode-control/binding mismatch, not its exact environment/path cause;
+the effective runtime config path has not been independently observed. Do not
+repair it by writing global config, relaxing completion grading, or approving
+additional tools. A future metadata gate must prove effective mode and owned
+config-path binding before task submission.
+
+The original baseline remains blocked: no required lookup/fetch, changed binding,
+full content or supported native completion. Capture, Prepare, external review,
+publication and reuse were not reached. Controller-submit-to-observed-answer
+was 51.884s; startup was 56.156s, not a speed comparison. There were zero
+canonical native target-turn events, plus one separate persisted
+`model.turn_started`/model-call telemetry record for `gpt-4o-mini` after the
+observed answer; its purpose is unproved and service translation usage is
+unknown. Selected root Sol/runner Luna configuration does not prove those models
+executed. Exact cleanup independently cleared 13 owned identities, the HWND and
+port 19990. No retry/rescue or WorkIQ wiring was performed.
+
+```powershell
+node --test scripts\test\macro-eval-native.spec.mjs scripts\test\macro-eval-staging.spec.mjs
+```
+
+The first authorized unrecorded admission attempt on October 12 was **blocked
+before any model turn**: its inherited-context version probe reported CLI
+**1.0.95**, while the manifest required 1.0.89. The subsequent explicitly
+authorized 1.0.95 attempt was also blocked before startup: the now-isolated,
+`--no-auto-update` probe of the configured `1.0.89` executable reported **1.0.89**.
+The independent binary metadata also identifies that file as 1.0.89. A separate
+installed WinGet executable has 1.0.95 metadata and a different hash; it was
+identified without launching another rehearsal. The earlier unsanitized probe
+is not proof of a binary's isolated runtime identity. The exact cause of its
+different output has not been isolated between inherited context and automatic
+update handling.
+
+Neither attempt started a service, interactive terminal, fixture call,
+publication or OBS session. No 1.0.95 extension/API/event or task compatibility
+was accepted. Use the actual resolved binary path and schedule another slot
+explicitly; the controller does not update binaries, inherit permission flags,
+silently choose a PATH fallback or change the required version. Version evidence
+retains resolved executable path, SHA-256, explicit expectation and actual header.
+
+The corrected WinGet-path attempt subsequently **passed 1.0.95 version admission**
+with the same isolated home/workspace/environment and `--no-auto-update` used for
+the real launch. The final executable SHA-256 was frozen and rechecked. It then
+stopped at service readiness: stdout advertised port 19985 and the TCP probe
+connected, but the OS listener-ownership query returned no listener. No interactive
+CLI, task, recording, publication or macro execution began.
+
+Readonly source inspection also confirmed that agent-server runs an owned
+supervisor/worker pair; the controller had incorrectly required the listener PID
+to equal the supervisor PID. The controller now checks exact supervisor identity
+and actual worker ancestry, retains bounded listener observations, and never
+accepts an unrelated listener or skips missing ownership proof. Numeric child
+exit codes are normalized to harness-invalid verdicts rather than copied into
+evaluation status. These fixes passed offline regressions; the original failed
+attempt and its numeric raw verdict remain unchanged. No second live attempt was
+made, and 1.0.95 extension/API/event or macro lifecycle compatibility remains
+unaccepted.
+
+Subsequent offline Windows probes reproduced the missing listener proof on a
+fresh, owned disposable loopback socket: the CIM instance's raw `State` was `0`,
+its displayed state was null, and `Get-NetTCPConnection -State Listen` returned
+no match. This is separate from the supervisor/worker PID defect. The controller
+now requests the native Windows `GetExtendedTcpTable` **listener-only**
+`TCP_TABLE_OWNER_PID_LISTENER` table directly, instead of guessing or fabricating
+a state. The native API's raw state is retained unchanged (also `0` on this
+platform); listener classification comes from the requested OS table. Real
+Windows tests verify that this table includes the actual listener and excludes
+both established same-port connections and bound-but-not-listening sockets.
+
+Readiness requires exactly one OS-classified listener on the explicit port and
+`127.0.0.1`, and stable PID, parent PID, creation time and executable path for the
+entire owned supervisor/wrapper/worker ancestry across process snapshots taken
+before and after the OS query. Children predating their parent, missing paths,
+changed identities, unrelated owners and widened bind addresses stop the run.
+Service launch explicitly passes `--host 127.0.0.1`. OS/API/permission failures
+block rather than falling back to a banner or TCP handshake. Windows PowerShell's
+native-API compilation scratch stays inside the owned output directory. No
+shared-helper change is required. These are offline OS fixtures, **not** a
+TypeAgent service/model rehearsal or live macro acceptance.
+
+The next single unrecorded 1.0.95 attempt used the updated matched product:
+fresh macro/provider/plugin source and built-runtime hashes were retained,
+and the staged extension was checked against the current built extension.
+Actual service listener ownership passed. Exact owned-workspace trust was
+accepted once, but the controller falsely rejected the unchanged
+`register hooks`-only permission prompt because its padded box border matched
+the extra-scope guard. The attempt stopped before extension approval or any
+target turn, fixture call, capture, Prepare, review or publication. Owned process
+identities and the port were verified clear. The parser now removes presentation
+borders and compares the complete scope paragraph exactly; multiline extra
+scopes remain blocked. This fix is offline-tested only, with no retry or live
+extension/lifecycle acceptance implied.
+
+The corrected attempt reached an actual ordinary baseline: native CLI 1.0.95
+selected Sol 5.6, performed three native model turns and exactly the synthetic
+lookup/fetch calls, returned full content with fresh ID binding, and emitted
+root-turn completion. Its grade remained blocked because route attribution was
+unknown. The native hook reported `ERR_MODULE_NOT_FOUND` for `hook-direct.js`:
+the current hook router was a thin `tsc` artifact with relative imports, while
+the stage helper requires self-contained bundles. Matching the extension alone
+did not establish a complete portable hook/MCP runtime. The ordinary CLI
+continued after that failed hook; this is not accepted fallback evidence.
+
+The controller now checks copied hook/MCP entry-point imports without executing
+them, rejects unbundled artifacts before service/CLI launch, and stops on failed
+native hooks or unresolved tool-allowlist warnings. Rebuild the product plugin
+bundles **last**, after dependency-aware `tsc` builds; the controller never repairs
+product files or broadens permissions. The observed CLI also warned that the
+configured synthetic allowlist names were unknown during startup, despite
+subsequently executing tools with those exact names. Exact restriction readiness
+therefore remains a separate admission blocker; do not suppress the warnings or
+infer a corrected spelling. No capture/Prepare/publication/reuse ran, and the
+owned processes/window/port were cleared. These new guards are offline-tested,
+not a retry or live acceptance.
+
+The offline modules include:
+
+- `scripts/macro-eval-corpus.mjs` and `scripts/macro-eval-fixture.mjs`: validated
+  reviewed scenarios and an audited local document MCP using corpus identities.
+- `scripts/macro-eval-grade.mjs`: independent content/binding, route and native
+  completion checks; unsupported families or missing evidence cannot pass.
+
+- `scripts/macro-eval-plan.mjs`: explicit models and turn/deadline bounds, reviewed
+  case IDs, seeded paired order, fresh-session/store requirements and a distinct
+  warm/restart stress schedule. Performance campaigns measure one family at a
+  time; scheduler seeds are not model sampling seeds.
+- `scripts/macro-eval-report.mjs`: keeps missing/failed/blocked/harness-invalid
+  trials in reporting, checks identical trial identities/timing boundaries, and
+  computes paired observations only for correct grammar-hit reuse. Preparation
+  overhead must be known for positive break-even estimates; nonpositive savings
+  have no observed break-even. Unavailable provider usage/cost remains unknown.
+
+Run their offline tests from this package:
+
+```powershell
+node --test scripts\test\macro-eval-plan.spec.mjs scripts\test\macro-eval-entrypoints.spec.mjs
+```
+
+An offline plan can be generated from any working directory using absolute
+entrypoint/corpus/output paths. For example, from this package:
+
+```powershell
+node scripts\macro-eval.mjs plan --corpus <reviewed-corpus.json> --output <new-plan.json> --mode paired --cases doc-positive-01 --repetitions 10 --seed 17 --root-model gpt-5.6-sol --runner-model gpt-6-luna --max-target-model-turns 100 --max-duration-ms 600000
+node scripts\macro-eval.mjs grade --corpus <reviewed-corpus.json> --input <native-evidence.json> --output <new-grade.json>
+node scripts\macro-eval.mjs report --input <campaign.json> --output <new-report.json>
+```
+
+Angle-bracket values are placeholders, not literal PowerShell arguments. Grade
+input supplies a `scenarioId` and actual `events`, `backendAudit`, `answer`,
+`routeEvidence` and `executionEvidence`; it cannot override the corpus oracle.
+Report input contains the saved `plan`, `results` rows and optional complete
+`preparation` timing. The native adapter must collect these inputs; do not
+fabricate evidence to make a grade pass.
+
+These tests do not start Copilot, services or OBS, spend a live campaign budget,
+or demonstrate a speedup. Turn/deadline limits are not monetary caps and do not
+account for preparation/service-side model work. The old evaluation ledger and
+spending authorization must not be inherited by the macro campaign.
+
 ## Implementation and protocol history
 
 **Current protocol: 7, with independent `common-files-v1` and `lists-v1` categories.**

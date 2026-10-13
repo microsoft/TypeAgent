@@ -10,6 +10,12 @@ import { executeNativeMacro, MacroRunnerObserver } from "./macro-runner.js";
 import { startMacroRunnerBridge } from "../shared/macro-runner-bridge.js";
 import { validateMacroHandoff } from "../shared/macro-handoff.js";
 import { connectToAgentServer } from "../shared/typeagent-client.js";
+import {
+    publishControlMetadata,
+    assertControlBinding,
+    controlDiagnosticEnabled,
+} from "../shared/control-metadata.js";
+import { runControlDiagnostic } from "./control-diagnostic.js";
 
 const runnerObserver = new MacroRunnerObserver();
 
@@ -25,6 +31,9 @@ const commands = createExtensionCommands(
         await sessionSend(task);
     },
 );
+
+const initialControl = publishControlMetadata("native-extension-startup");
+assertControlBinding(initialControl);
 
 const lifecycle = await joinTypeAgentSession({
     requestedEnvironmentVariables: ["TYPEAGENT_TUNNEL_TOKEN"],
@@ -80,6 +89,32 @@ process.once("SIGINT", () => void lifecycle.close());
 process.once("SIGTERM", () => void lifecycle.close());
 process.once("exit", () => lifecycle.closeSync());
 sessionLog = (message) => session.log(message);
+if (initialControl && controlDiagnosticEnabled(initialControl)) {
+    void runControlDiagnostic(
+        session.rpc,
+        initialControl,
+        session.sessionId,
+    ).catch((error) =>
+        console.error(
+            `[control] ${error instanceof Error ? error.message : "Diagnostic failed"}`,
+        ),
+    );
+} else if (initialControl) {
+    const registry = await session.rpc.commands.list();
+    const status = registry.commands.filter((command) =>
+        ["typeagent-status", "typeagent:typeagent-status"].includes(
+            command.name,
+        ),
+    );
+    if (status.length !== 1)
+        throw new Error(
+            "Exactly one registered TypeAgent status command required for control metadata",
+        );
+    await session.rpc.commands.invoke({
+        name: status[0].name,
+        input: "--control",
+    });
+}
 sessionSend = async (task) => {
     await session.send({ prompt: task });
 };

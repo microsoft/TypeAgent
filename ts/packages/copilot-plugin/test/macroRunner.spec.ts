@@ -30,7 +30,13 @@ import type { CopilotSession, SessionEvent } from "@github/copilot-sdk";
 
 const launch = {
     agent: "typeagent-macro-runner",
-    macro: { macroId: "approved", version: 2, state: "approved" },
+    macro: {
+        macroId: "approved",
+        version: 2,
+        state: "approved",
+        schemaVersion: 1,
+        steps: [],
+    },
     inputs: { topic: "Vega" },
     budgets: {
         maxToolCalls: 10,
@@ -228,6 +234,16 @@ describe("host-controlled macro runner", () => {
 
     it.each([
         { ...launch, macro: { ...launch.macro, state: "draft" } },
+        { ...launch, macro: { ...launch.macro, schemaVersion: 99 } },
+        { ...launch, macro: { ...launch.macro, capabilities: ["unknown"] } },
+        {
+            ...launch,
+            macro: {
+                ...launch.macro,
+                schemaVersion: 2,
+                capabilities: ["result-path-v1"],
+            },
+        },
         { ...launch, candidate: { ...launch.candidate, sourceVersion: 3 } },
         { ...launch, budgets: { ...launch.budgets, maxRetries: -1 } },
     ])(

@@ -31,6 +31,59 @@ Registered alongside routing (calls are disabled in bypass mode):
 
 The hook output fields `handled`, `responseContent`, and `handledBy` are supported in current Copilot CLI behavior, allowing the hook to skip the agentic loop entirely when TypeAgent handles a request. For local runtime debugging against the runtime repo, use `pnpm copilot:dev`.
 
+### Owned native control metadata
+
+The evaluator can opt in with an owned `TYPEAGENT_USER_DATA_DIR/native-control-admission.json`
+paired with its parent `evaluation-owner.json`. Normal sessions are unchanged.
+The registered pure `/typeagent-status --control` getter reports only effective
+mode, resolved config/data paths, public source/actor provenance and a digest of
+the mode/routing binding. It also executes the compiled hook's read-only
+`--control-metadata` branch; it does not send a task. Opted-in extension, MCP and
+hook startup receipts refuse to read configuration outside the admitted owner
+root. No credentials or raw settings are returned.
+
+Config precedence remains `TYPEAGENT_PLUGIN_DATA`, `CLAUDE_PLUGIN_DATA`, then
+the home fallback; valid `TYPEAGENT_MODE` overrides the file mode. A requested
+overlay or a status viewport alone is not proof that all actors use it.
+Hook getter metadata is not a native user-prompt invocation, route attribution
+or terminal evidence. MCP startup snapshots do not prove subsequent transitions.
+An optional admitted `expectedMode` binds each guarded user-prompt request.
+The compiled router rereads the same authoritative mode getter after parsing
+input and rejects config-path/mode disagreement before any service translation.
+The status getter remains read-only and reports disagreement instead of hiding
+it. Without admission, existing routing and permission behavior are unchanged.
+
+The native extension registers `onPreToolUse`; the plugin's `hooks.json` registers
+the separate compiled router for `userPromptSubmitted`. That router reads mode
+per request, bypasses ordinary Copilot requests, and claims selected recordings
+before MCP/dev/Direct dispatch. No stale native callback mode bug has been
+demonstrated. Actual native per-invocation receipts are still required.
+
+An owned diagnostic admission can set `diagnosticTransitions: true` to exercise
+only registered local mode/status commands through the native SDK. Actual MCP
+actors then watch the owned config and republish public mode/routing receipts.
+Normal sessions do not watch or run diagnostics. The fixed bypass/delegate →
+MCP/mixed → Direct/mixed sequence checks the exact synthetic tool metadata and
+canonical Node status child without submitting prompts or executing tools.
+Normal parsed hook input projects `source.request: {sessionId,timestamp,cwd}`;
+startup/status metadata has a null request and never proves a native callback.
+
+Owned diagnostics guard the exact current config/data root before any setter,
+verify the initial registered status getter, then restore bypass after the
+bypass/MCP mixed/Direct sequence. The status getter records its actual public
+`spawnSync` PID and compiled script hash; this is read-only getter provenance,
+not normal-hook authentication. Safe tool schema projections are retained before
+validation; missing model-visible task availability never substitutes for or
+disproves the separate authenticated host task API.
+
+One actual CLI 1.0.95 metadata-only diagnostic proved the initial owned Node
+getter and bypass/MCP mixed/Direct/restored-bypass controls. It remained blocked
+because the safe SDK inventory also reported `extensions_reload` and
+`extensions_manage`; diagnostics retain the unexpected names rather than
+silently excluding them. Metadata presence does not establish executability or
+permission. This control-plane evidence is not normal user-prompt callback
+authentication, capture verification or workflow acceptance.
+
 ## Guarded GHCP evaluation harness
 
 The harness, corpus, grading, credit probe, tests, and maintained methodology

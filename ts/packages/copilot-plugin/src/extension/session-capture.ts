@@ -162,7 +162,7 @@ export class SessionCapture {
             message: string,
         ) => Promise<void> = async (message) => logError(message),
     ) {
-        this.assembler = new ExtensionTraceAssembler(sessionId, cwd);
+        this.assembler = new ExtensionTraceAssembler(sessionId, cwd, true);
     }
 
     public enqueue(event: ExtensionSessionEvent & { id?: string }): void {

@@ -12,7 +12,8 @@
   "author": "Microsoft",
   "type": "module",
   "scripts": {
-    "build": "node --check scripts/ghcp-eval.mjs && node --check scripts/ghcp-eval-preflight.mjs && node --check scripts/ghcp-credit-probe.mjs",
+    "build": "node --check scripts/ghcp-eval.mjs && node --check scripts/ghcp-eval-preflight.mjs && node --check scripts/ghcp-credit-probe.mjs && node --check scripts/macro-eval.mjs && node --check scripts/macro-eval-native.mjs && node --check scripts/macro-eval-corpus.mjs && node --check scripts/macro-eval-fixture.mjs && node --check scripts/macro-eval-grade.mjs && node --check scripts/macro-eval-plan.mjs && node --check scripts/macro-eval-report.mjs && node --check scripts/macro-eval-workiq-evidence.mjs",
+    "macro-eval": "node scripts/macro-eval.mjs",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "test": "npm run test:local",

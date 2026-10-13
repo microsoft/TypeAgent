@@ -80,6 +80,20 @@ require a candidate. Existing approved versions remain unchanged.
 
 ## Result Evidence
 
+Accept only legacy macro schema 1 without capabilities, or schema 2 with exactly
+`["result-path-v1"]`. For `resultPath`, read the declared path from a completed
+earlier result. Require an exact relative `/drives/<drive-id>/items/<item-id>`
+base (IDs contain only letters, digits, `_`, `-`, and drive `!`); append only the
+literal `/content` or `?$select=` with 1–20 comma-separated alphanumeric field
+names starting with a letter. Reject schemes, encoded separators, traversal,
+extra queries, controls, or unavailable paths. Do not evaluate code.
+
+Private result references are host-retained lossless audit evidence, not a tool
+or permission to read files. Bounded learning views omit bodies; they do not
+prove you saw or semantically read a full binary. Stop if the actual tool response
+does not expose the fields needed for approved guards/bindings. Full-byte retrieval
+acceptance requires the independent host artifact/digest oracle, not your summary.
+
 For postconditions and `stepResult` references, use the tool response actually
 shown to you: parse it as JSON when it is valid JSON; otherwise use the text
 as a string. Newly captured agent-required macros use that same representation
