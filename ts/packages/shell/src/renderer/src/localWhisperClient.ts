@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { getLocalWhisperTranscription } from "@typeagent/common-utils";
+
 export class WhisperRecognizer {
     private audioContext: AudioContext | null = null;
     private mediaStreamSource: MediaStreamAudioSourceNode | null = null;
@@ -9,6 +11,8 @@ export class WhisperRecognizer {
     private silenceTimeout: any = null;
     private awaitingResult = false;
     private recognizedFired = false;
+    private transcriptionFailed = false;
+    private errorCallback: ((error: Error) => void) | undefined;
     private recognizingCallback:
         | ((result: { text: string }) => void)
         | undefined;
@@ -33,6 +37,9 @@ export class WhisperRecognizer {
 
         this.mediaRecorder = new MediaRecorder(stream);
         this.mediaRecorder.ondataavailable = async (e) => {
+            if (this.transcriptionFailed) {
+                return;
+            }
             this.audioChunks.push(e.data);
 
             if (
@@ -42,16 +49,32 @@ export class WhisperRecognizer {
                 const blob = new Blob(this.audioChunks, {
                     type: "audio/mpeg-3",
                 });
-                const text = await this.getTranscription(blob);
-                if (this.mediaRecorder!.state === "inactive") {
-                    if (this.recognizedCallback && !this.recognizedFired) {
-                        this.recognizedCallback({ text });
-                        this.recognizedFired = true;
+                try {
+                    const text = await this.getTranscription(blob);
+                    if (this.transcriptionFailed) {
+                        return;
                     }
-                } else {
-                    if (this.recognizingCallback) {
-                        this.recognizingCallback({ text });
+                    if (this.mediaRecorder!.state === "inactive") {
+                        if (this.recognizedCallback && !this.recognizedFired) {
+                            this.recognizedCallback({ text });
+                            this.recognizedFired = true;
+                        }
+                    } else {
+                        if (this.recognizingCallback) {
+                            this.recognizingCallback({ text });
+                        }
                     }
+                } catch (error) {
+                    this.transcriptionFailed = true;
+                    if (this.mediaRecorder?.state === "recording") {
+                        this.mediaRecorder.stop();
+                    }
+                    const failure =
+                        error instanceof Error
+                            ? error
+                            : new Error(String(error));
+                    console.error("Local transcription failed:", failure);
+                    this.errorCallback?.(failure);
                 }
             }
         };
@@ -60,6 +83,7 @@ export class WhisperRecognizer {
     startRecording() {
         this.audioChunks = [];
         this.recognizedFired = false;
+        this.transcriptionFailed = false;
         this.mediaRecorder?.start(200);
         this.checkForSilence();
     }
@@ -76,18 +100,17 @@ export class WhisperRecognizer {
         this.recognizedCallback = callback;
     }
 
+    onError(callback: (error: Error) => void) {
+        this.errorCallback = callback;
+    }
+
     private async getTranscription(blob: Blob): Promise<string> {
         this.awaitingResult = true;
-        const formData = new FormData();
-        formData.append("file", blob);
-        const response = await fetch("http://localhost:8001/transcribe", {
-            method: "POST",
-            body: formData,
-        });
-
-        const responseBody = await response.json();
-        this.awaitingResult = false;
-        return responseBody.transcription;
+        try {
+            return await getLocalWhisperTranscription(blob);
+        } finally {
+            this.awaitingResult = false;
+        }
     }
 
     private checkForSilence() {
