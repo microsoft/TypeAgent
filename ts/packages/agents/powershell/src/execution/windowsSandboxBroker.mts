@@ -18,6 +18,9 @@ export interface BrokeredScriptExecutionRequest {
     allowedCommands: string[];
     maxExecutionTime: number;
     abortSignal?: AbortSignal | undefined;
+    approvedLocal?: boolean;
+    workingDirectory?: string;
+    requiredModules?: string[] | undefined;
 }
 
 function findPackageRoot(): string {
@@ -273,13 +276,18 @@ export async function executeBrokeredPowerShell(
         child.stdin.on("error", () => {});
         child.stdin.write(
             JSON.stringify({
-                protocolVersion: BROKER_PROTOCOL_VERSION,
+                protocolVersion: request.approvedLocal
+                    ? 2
+                    : BROKER_PROTOCOL_VERSION,
                 script: request.script,
                 parameters: request.parameters,
                 allowedCommands: request.allowedCommands,
                 timeoutSeconds: request.maxExecutionTime,
                 maxOutputBytes: 256 * 1024,
                 provenance: request.provenance,
+                approvedLocal: request.approvedLocal,
+                workingDirectory: request.workingDirectory,
+                requiredModules: request.requiredModules,
             }) + "\n",
         );
     });

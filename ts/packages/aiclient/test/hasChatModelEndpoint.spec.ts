@@ -18,17 +18,17 @@ describe("hasChatModelEndpoint: named Azure deployment presence", () => {
                 AZURE_OPENAI_API_KEY_GPT_4_1_EASTUS: "identity",
             }),
         );
-        expect(hasChatModelEndpoint("GPT_5_6_LUNA")).toBe(false);
+        expect(hasChatModelEndpoint("GPT_6_LUNA")).toBe(false);
         expect(hasChatModelEndpoint("GPT_4_1")).toBe(true);
     });
 
     test("true once the deployment is present", () => {
         setRuntimeConfig(
             configFromEnvRecord({
-                AZURE_OPENAI_ENDPOINT_GPT_5_6_LUNA_EASTUS: "https://luna",
-                AZURE_OPENAI_API_KEY_GPT_5_6_LUNA_EASTUS: "identity",
+                AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS: "https://luna",
+                AZURE_OPENAI_API_KEY_GPT_6_LUNA_EASTUS: "identity",
             }),
         );
-        expect(hasChatModelEndpoint("GPT_5_6_LUNA")).toBe(true);
+        expect(hasChatModelEndpoint("GPT_6_LUNA")).toBe(true);
     });
 });

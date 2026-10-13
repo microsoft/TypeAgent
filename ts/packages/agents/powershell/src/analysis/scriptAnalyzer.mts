@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { openai } from "@typeagent/aiclient";
-import type { ScriptRecipe } from "../types/scriptRecipe.js";
+import {
+    getRequiredModules,
+    type ScriptRecipe,
+} from "../types/scriptRecipe.js";
+import { validatePowerShellIdentifier } from "@typeagent/agent-flows/powershell/integrity";
 import { basename } from "path";
 import registerDebug from "debug";
 
@@ -17,6 +21,8 @@ export class ScriptAnalyzer {
         filePath: string,
         overrideActionName?: string,
     ): Promise<ScriptRecipe> {
+        if (overrideActionName !== undefined)
+            validatePowerShellIdentifier(overrideActionName);
         if (scriptContent.length > MAX_SCRIPT_SIZE) {
             throw new Error(
                 `Script too large for analysis (${(scriptContent.length / 1024).toFixed(0)}KB, max 100KB)`,
@@ -51,6 +57,7 @@ export class ScriptAnalyzer {
         }
 
         const recipe = JSON.parse(jsonMatch[1]) as ScriptRecipe;
+        validatePowerShellIdentifier(recipe.actionName);
         if (!recipe.actionName || !recipe.script?.body) {
             throw new Error(
                 "Analysis produced invalid recipe: missing actionName or script.body",
@@ -63,11 +70,8 @@ export class ScriptAnalyzer {
         }
 
         recipe.version = 1;
+        recipe.requiredModules = getRequiredModules(recipe);
         recipe.sandbox = {
-            ...recipe.sandbox,
-            allowedPaths: [],
-            allowedModules: [],
-            networkAccess: false,
             maxExecutionTime: Math.min(
                 Math.max(recipe.sandbox?.maxExecutionTime ?? 30, 1),
                 120,
@@ -118,8 +122,11 @@ Analyze this script and generate a recipe JSON object:
    - isAlias: true for terse shell-like forms, false for natural language
    - examples: 2-3 example invocations
    Include at least one natural language pattern and one terse alias if applicable.
-8. **sandbox**: Identify only the cmdlets used by the script. Imported scripts do not
-   receive module, network, executable, or external filesystem capabilities.
+8. **requiredModules**: Installed module names needed by this script, or [].
+   Dependencies are loaded only after user authorization. There is no cmdlet catalogue.
+9. **sandbox.maxExecutionTime**: Operational timeout, between 1 and 120 seconds.
+   After authorization, the script runs with the current user's permissions.
+   It is not sandboxed. Importing or analyzing it does not authorize execution.
 
 Return ONLY a JSON object matching this schema (no markdown fences, no explanation):
 {
@@ -139,13 +146,8 @@ Return ONLY a JSON object matching this schema (no markdown fences, no explanati
     { "pattern": "natural language $(param:wildcard)", "isAlias": false, "examples": ["example"] },
     { "pattern": "short $(param:wildcard)", "isAlias": true, "examples": ["example"] }
   ],
-  "sandbox": {
-    "allowedCmdlets": ["Get-ChildItem", "Select-Object"],
-    "allowedPaths": [],
-    "allowedModules": [],
-    "maxExecutionTime": 30,
-    "networkAccess": false
-  }
+  "requiredModules": [],
+  "sandbox": { "maxExecutionTime": 30 }
 }`;
     }
 }

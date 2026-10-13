@@ -3,7 +3,6 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import type { BrowserAgentInvokeFunctions } from "@typeagent/browser-control-rpc/serviceTypes";
-import type { PersonalHowToService } from "@typeagent/memory-service";
 import {
     getSessionBrowserControl,
     type BrowserActionContext,
@@ -21,9 +20,10 @@ import { createMemoryHubExploreFunctions } from "./memoryHubExplore.mjs";
 import { createMemoryHubKnowledgeFunctions } from "./memoryHubKnowledge.mjs";
 import { createMemoryHubSynthesizer } from "./memoryHubAnswer.mjs";
 import { createMemoryHubCaptureFunctions } from "./memoryHubCapture.mjs";
-import { createMemoryHubRunbookFunctions } from "./memoryHubRunbooks.mjs";
-import { addRunbookInbox } from "./memoryHubRunbookInbox.mjs";
+import { createMemoryHubSourceOriginalFunctions } from "./memoryHubSourceOriginal.mjs";
+import { createMemoryHubViewUsageFunctions } from "./memoryHubViewUsage.mjs";
 import { createMemoryHubRunbookImportFunctions } from "./memoryHubRunbookImports.mjs";
+import { createMemoryViewFunctions } from "./memoryViews.mjs";
 import {
     ensureBrowserViewHost,
     type BrowserViewDomainFunctions,
@@ -39,10 +39,6 @@ export function createViewServiceDomain(
         return memory;
     };
     const hub = createMemoryHubFunctions(handlers);
-    const runbooks = createMemoryHubRunbookFunctions(
-        service,
-        () => context.agentContext.runbookCapabilities,
-    );
     return {
         ...handlers,
         ...hub,
@@ -53,18 +49,9 @@ export function createViewServiceDomain(
         ),
         ...createMemoryHubExploreFunctions(service),
         ...createMemoryHubKnowledgeFunctions(service),
-        ...runbooks,
+        ...createMemoryHubSourceOriginalFunctions(service),
+        ...createMemoryHubViewUsageFunctions(service),
         ...createMemoryHubRunbookImportFunctions(service),
-        async memoryHubSnapshot(request) {
-            const snapshot = await hub.memoryHubSnapshot(request);
-            await addRunbookInbox(
-                snapshot,
-                runbooks,
-                service(),
-                request.corpusId,
-            );
-            return snapshot;
-        },
         ...createMemoryHubCaptureFunctions(
             () => getSessionBrowserControl(context),
             () => context.agentContext.browserMemoryService,
@@ -93,7 +80,7 @@ export function createAgentInvokeHandlers(
         if (!service) {
             throw new Error("Durable memory service is not available");
         }
-        return service as typeof service & PersonalHowToService;
+        return service;
     }
 
     async function knowledgeHandler(method: string, params: any): Promise<any> {
@@ -137,6 +124,8 @@ export function createAgentInvokeHandlers(
         memoryCreateCorpus: ({ name, description }) =>
             getMemoryService().createCorpus(name, description),
         memoryListCorpora: () => getMemoryService().listCorpora(),
+        memoryListEvents: (params) => getMemoryService().listEvents(params),
+        ...createMemoryViewFunctions(getMemoryService),
         memoryGetCorpus: ({ corpusId }) =>
             getMemoryService().getCorpus(corpusId),
         memoryListSources: (params) =>
@@ -238,42 +227,6 @@ export function createAgentInvokeHandlers(
             getMemoryService().reindexSource(corpusId, sourceId),
         memoryListJobs: (params) => getMemoryService().listJobs(params),
         memoryCancelJob: ({ jobId }) => getMemoryService().cancelJob(jobId),
-        memoryGetHowToSettings: ({ corpusId }) =>
-            getMemoryService().getPersonalHowToSettings(corpusId),
-        memoryUpdateHowToSettings: ({
-            corpusId,
-            expectedRevision,
-            enabled,
-            detectCandidates,
-            preferences,
-        }) =>
-            getMemoryService().updatePersonalHowToSettings(corpusId, {
-                expectedRevision,
-                ...(enabled === undefined ? {} : { enabled }),
-                ...(detectCandidates === undefined ? {} : { detectCandidates }),
-                ...(preferences === undefined ? {} : { preferences }),
-            }),
-        memoryCreateProcedureCandidate: (params) =>
-            getMemoryService().createProcedureCandidate(params),
-        memoryListProcedureCandidates: ({ corpusId, states }) =>
-            getMemoryService().listProcedureCandidates(corpusId, states),
-        memoryRejectProcedureCandidate: ({ corpusId, candidateId }) =>
-            getMemoryService().rejectProcedureCandidate(corpusId, candidateId),
-        memorySaveProcedure: (params) =>
-            getMemoryService().saveProcedure(params),
-        memoryListProcedures: (params) =>
-            getMemoryService().listProcedures(params),
-        memoryGetProcedure: ({ corpusId, procedureId, version }) =>
-            getMemoryService().getProcedure(corpusId, procedureId, version),
-        memorySearchProcedures: (params) =>
-            getMemoryService().searchProcedures(params),
-        memoryArchiveProcedure: ({ corpusId, procedureId, expectedVersion }) =>
-            getMemoryService().archiveProcedure(
-                corpusId,
-                procedureId,
-                expectedVersion,
-            ),
-
         memoryListActivity: (params) => {
             const service = context.agentContext.browserMemoryService;
             if (!service) {

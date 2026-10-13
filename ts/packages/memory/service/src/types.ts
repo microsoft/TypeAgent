@@ -3,20 +3,16 @@
 
 import type { AgentEdition } from "./agentEdition.js";
 import type {
-    RevisionAssetDescriptor,
-    RevisionAssetInput,
-    RevisionAssetReadRequest,
-    RevisionAssetRequest,
-} from "./revisionAssetStore.js";
-import type {
     MemoryBatchImport,
     MemoryBatchImportLookup,
     MemoryBatchImportRequest,
 } from "./batchImport.js";
 import type {
-    RunbookJobResult,
-    RunbookSynthesisRequest,
-} from "./runbookPipeline.js";
+    RevisionAssetDescriptor,
+    RevisionAssetInput,
+    RevisionAssetReadRequest,
+    RevisionAssetRequest,
+} from "./revisionAssetStore.js";
 
 export const conversationCorpusName = "typeagent-profile-conversations";
 export const conversationProducerId = "typeagent.dispatcher.conversation";
@@ -207,6 +203,7 @@ export interface SourceContentRequest {
     revisionId?: string;
     offset?: number;
     maxChars?: number;
+    indexedLocator?: string;
 }
 
 export interface SourceContent {
@@ -270,6 +267,7 @@ export interface JobListRequest {
 }
 
 export interface MemorySearchRequest {
+    traceId?: string;
     corpusId: string;
     query: string;
     limit?: number;
@@ -279,6 +277,7 @@ export interface MemorySearchRequest {
     sourceIds?: string[];
     dateFrom?: string;
     dateTo?: string;
+    indexedFragments?: boolean;
 }
 
 export interface MemoryEvidence {
@@ -335,7 +334,6 @@ export type MemoryEventSourceKind =
     | "conversation"
     | "document"
     | "web-activity"
-    | "procedure"
     | "system"
     | "other";
 
@@ -424,6 +422,7 @@ export interface MemoryEventListRequest extends MemoryEventFilter {
 }
 
 export interface MemoryEventSearchRequest extends MemoryEventFilter {
+    traceId?: string;
     corpusId: string;
     query: string;
     limit?: number;
@@ -495,6 +494,20 @@ export interface SourceKnowledgeSuppressionRequest
 }
 
 export interface MemoryServiceCapabilities {
+    derivedViews?: {
+        kinds: Array<
+            "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki"
+        >;
+        drafts: true;
+        history: true;
+        publication: true;
+        search: true;
+        builds?: true;
+        editMerging?: true;
+        maintenance?: true;
+        informationalWiki?: true;
+        informationalProjects?: true;
+    };
     chatProvider?: string;
     embeddingProvider?: string;
     features: {
@@ -508,29 +521,6 @@ export interface MemoryServiceCapabilities {
     };
     warnings: string[];
 }
-
-export interface PersonalHowToSettings {
-    revision: number;
-    updatedAt: string;
-    enabled: boolean;
-    detectCandidates: boolean;
-    preferences?: Record<string, unknown>;
-}
-
-export interface PersonalHowToSettingsUpdate {
-    expectedRevision: number;
-    enabled?: boolean;
-    detectCandidates?: boolean;
-    preferences?: Record<string, unknown>;
-}
-
-export type ProcedureState =
-    | "detected"
-    | "draft"
-    | "saved"
-    | "stale"
-    | "archived"
-    | "rejected";
 
 export interface ProcedureSourceCitation {
     sourceId: string;
@@ -553,20 +543,6 @@ export interface ProcedureDocument {
     agentEdition?: AgentEdition;
 }
 
-export interface ProcedureCandidate extends ProcedureDocument {
-    candidateId: string;
-    corpusId: string;
-    state: "detected" | "draft" | "rejected" | "saved";
-    createdAt: string;
-    updatedAt: string;
-}
-
-export interface ProcedureCandidateCreateRequest extends ProcedureDocument {
-    corpusId: string;
-    candidateId?: string;
-    state?: "detected" | "draft";
-}
-
 export interface ProcedureVersion {
     corpusId: string;
     procedureId: string;
@@ -580,42 +556,6 @@ export interface ProcedureVersion {
     markdownHash: string;
     basedOnCandidateId?: string;
     previousVersion?: number;
-}
-
-export interface ProcedureSummary {
-    corpusId: string;
-    procedureId: string;
-    title: string;
-    state: "saved" | "stale" | "archived";
-    latestVersion: number;
-    updatedAt: string;
-}
-
-export interface ProcedureSaveRequest {
-    corpusId: string;
-    procedureId?: string;
-    candidateId?: string;
-    expectedVersion?: number;
-    document?: ProcedureDocument;
-    markdown?: string;
-    reviewAgentEdition?: boolean;
-    safetyConfirmed?: boolean;
-}
-
-export interface ProcedureListRequest {
-    corpusId: string;
-    states?: Array<"saved" | "stale" | "archived">;
-}
-
-export interface ProcedureSearchRequest extends ProcedureListRequest {
-    query: string;
-    limit?: number;
-}
-
-export interface ProcedureSearchMatch {
-    procedure: ProcedureSummary;
-    version: ProcedureVersion;
-    score: number;
 }
 
 export interface MemoryService {
@@ -644,11 +584,6 @@ export interface MemoryService {
     listBatchImports?(corpusId: string): Promise<MemoryBatchImport[]>;
     retryBatchImport?(batchId: string): Promise<MemoryBatchImport>;
     cancelBatchImport?(batchId: string): Promise<MemoryBatchImport>;
-    listRunbookJobs?(corpusId: string): Promise<RunbookJobResult[]>;
-    getRunbookJob?(jobId: string): Promise<RunbookJobResult | undefined>;
-    requestRunbookSynthesis?(
-        request: RunbookSynthesisRequest,
-    ): Promise<RunbookJobResult>;
     listSources(corpusId: string): Promise<MemorySource[]>;
     listSourcesPage(
         request: SourceListRequest,
@@ -661,6 +596,7 @@ export interface MemoryService {
     getSourceKnowledge(
         corpusId: string,
         sourceId: string,
+        traceId?: string,
     ): Promise<MemoryKnowledgeGraph>;
     listSourceKnowledgeSuppressions?(
         corpusId: string,
@@ -719,44 +655,6 @@ export interface MemoryService {
     getCapabilities(): Promise<MemoryServiceCapabilities>;
 }
 
-export interface PersonalHowToService {
-    getPersonalHowToSettings(corpusId: string): Promise<PersonalHowToSettings>;
-    updatePersonalHowToSettings(
-        corpusId: string,
-        update: PersonalHowToSettingsUpdate,
-    ): Promise<PersonalHowToSettings>;
-    createProcedureCandidate(
-        request: ProcedureCandidateCreateRequest,
-    ): Promise<ProcedureCandidate>;
-    getProcedureCandidate(
-        corpusId: string,
-        candidateId: string,
-    ): Promise<ProcedureCandidate | undefined>;
-    listProcedureCandidates(
-        corpusId: string,
-        states?: ProcedureCandidate["state"][],
-    ): Promise<ProcedureCandidate[]>;
-    rejectProcedureCandidate(
-        corpusId: string,
-        candidateId: string,
-    ): Promise<ProcedureCandidate>;
-    saveProcedure(request: ProcedureSaveRequest): Promise<ProcedureVersion>;
-    listProcedures(request: ProcedureListRequest): Promise<ProcedureSummary[]>;
-    getProcedure(
-        corpusId: string,
-        procedureId: string,
-        version?: number,
-    ): Promise<ProcedureVersion | undefined>;
-    searchProcedures(
-        request: ProcedureSearchRequest,
-    ): Promise<ProcedureSearchMatch[]>;
-    archiveProcedure(
-        corpusId: string,
-        procedureId: string,
-        expectedVersion?: number,
-    ): Promise<ProcedureVersion>;
-}
-
 export interface IndexedDocument {
     source: SourceDocument;
     revision: SourceRevision;
@@ -782,8 +680,54 @@ export interface CorpusIndexAnswer {
     matches: CorpusIndexMatch[];
 }
 
+export interface IndexedSubject {
+    term: string;
+    postingCount: number;
+    sourceIds: string[];
+    initiative?: boolean;
+    identity?: IndexedSubjectIdentity;
+}
+
+export interface IndexedSubjectIdentity {
+    types: string[];
+    scopes: string[];
+    symbols?: string[];
+}
+
+export interface IndexedFragment extends CorpusIndexMatch {
+    locator: string;
+}
+
+export interface IndexedFragmentRequest {
+    terms: string[];
+    query?: string;
+    sourceIds: string[];
+    maxFragments?: number;
+    maxCharsPerFragment?: number;
+    maxReadChars?: number;
+}
+
+export interface IndexedFragmentSelection {
+    fragments: IndexedFragment[];
+    readChars: number;
+    limited: boolean;
+}
+
 export interface CorpusIndex {
     initialize(): Promise<void>;
+    listSubjects?(
+        offset: number,
+        limit: number,
+        sourceIds: ReadonlySet<string>,
+    ): Promise<MemoryPage<IndexedSubject>>;
+    readFragments?(
+        request: IndexedFragmentRequest,
+    ): Promise<IndexedFragmentSelection>;
+    resolveIndexedLocator?(
+        sourceId: string,
+        revisionId: string,
+        locator: string,
+    ): Promise<string>;
     rebuild(
         documents: IndexedDocument[],
         signal: AbortSignal,

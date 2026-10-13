@@ -43,7 +43,6 @@ async function explore(
             entities: 0,
             topics: 0,
             relationships: 0,
-            procedures: 0,
         },
         entities: [],
         topics: [],
@@ -136,28 +135,6 @@ async function explore(
                     result.errors.push({
                         corpusId: corpus.corpusId,
                         operation: "graph",
-                        message:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                    });
-                }
-            })(),
-            (async () => {
-                try {
-                    if (!service.listProcedures)
-                        throw new Error("Procedure counts are unavailable.");
-                    const procedures = await timed(
-                        service.listProcedures({
-                            corpusId: corpus.corpusId,
-                            states: ["saved", "stale"],
-                        }),
-                    );
-                    result.counts.procedures += procedures.length;
-                } catch (error) {
-                    result.errors.push({
-                        corpusId: corpus.corpusId,
-                        operation: "procedures",
                         message:
                             error instanceof Error
                                 ? error.message

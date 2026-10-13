@@ -10,7 +10,7 @@ import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:validation:timeout");
 
-export const DEFAULT_GENERATION_MODEL = "gpt-5.6-sol";
+export const DEFAULT_GENERATION_MODEL = "gpt-6-sol";
 
 /**
  * Default upper bound for a single generation LLM call.

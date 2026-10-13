@@ -21,12 +21,19 @@ import type {
 } from "@typeagent/dispatcher-types";
 
 export type ClientIOInvokeFunctions = {
+    cancelSecurityApproval(approvalId: number): Promise<void>;
     question(
         requestId: RequestId | undefined,
         message: string,
         choices: string[],
         defaultId?: number,
         source?: string,
+    ): Promise<number>;
+    requestSecurityApproval(
+        requestId: RequestId,
+        request: import("@typeagent/agent-sdk").SecurityApprovalRequest,
+        source: string,
+        approvalId: number,
     ): Promise<number>;
     proposeAction(
         requestId: RequestId,

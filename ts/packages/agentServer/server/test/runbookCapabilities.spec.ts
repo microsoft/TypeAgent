@@ -1,10 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
-import path from "node:path";
-import { MacroManager, type CopilotToolMacro } from "@typeagent/copilot-macros";
 import {
     createChannelProviderAdapter,
     type ChannelProviderAdapter,
@@ -13,17 +9,21 @@ import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import { createAgentRpcServer } from "@typeagent/agent-rpc/server";
 import { createAgentServerConnection } from "@typeagent/agent-server-client";
 import type { RunbookHostCapabilities } from "@typeagent/agent-server-protocol";
+import { MacroManager, type CopilotToolMacro } from "@typeagent/copilot-macros";
 import type { RegisteredMcpToolCatalog } from "default-agent-provider";
-import { createLocalSkillServices } from "../src/skillCatalog.js";
+import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
+import path from "node:path";
+import { createAgentServerConnectionHandler } from "../src/connectionHandler.js";
+import type { ConversationManager } from "../src/conversationManager.js";
+import { createRunbookBindingCatalog } from "../src/runbookBindingCatalog.js";
+import { rankRunbookBindings } from "../src/runbookBindingSuggestions.js";
+import { createRunbookBindingValidator } from "../src/runbookBindingValidator.js";
 import {
     createRunbookHostCapabilities,
     withRunbookHostCapabilities,
 } from "../src/runbookCapabilities.js";
-import { createRunbookBindingCatalog } from "../src/runbookBindingCatalog.js";
-import { createAgentServerConnectionHandler } from "../src/connectionHandler.js";
-import type { ConversationManager } from "../src/conversationManager.js";
-import { createRunbookBindingValidator } from "../src/runbookBindingValidator.js";
-import { rankRunbookBindings } from "../src/runbookBindingSuggestions.js";
+import { createLocalSkillServices } from "../src/skillCatalog.js";
 
 const identity = {
     scope: "user" as const,
@@ -92,89 +92,6 @@ describe("runbook host capabilities", () => {
         });
         return { skillCatalog, macroManager, capabilities };
     }
-
-    test("local carrier validates exact revisions, CAS conflicts, real allowed actions and missing artifacts", async () => {
-        const { skillCatalog, capabilities } = await services();
-        const first = await skillCatalog.publish({
-            identity,
-            schemaFingerprint: "schema",
-            files: [{ path: "SKILL.md", content: "first" }],
-        });
-        const second = await skillCatalog.publish({
-            identity,
-            schemaFingerprint: "schema",
-            files: [{ path: "SKILL.md", content: "second" }],
-        });
-        const ref = { identity, revision: first.revision.revision };
-        expect(
-            (await capabilities.getSkillLifecycle(ref)).allowedActions,
-        ).toEqual(["changeState", "validate", "archive"]);
-        const mutation = {
-            ...ref,
-            expectedState: "draft" as const,
-            expectedActive: false,
-            action: "validate" as const,
-        };
-        const outcomes = await Promise.allSettled([
-            capabilities.changeSkillLifecycle(mutation),
-            capabilities.changeSkillLifecycle(mutation),
-        ]);
-        expect(
-            outcomes.filter((result) => result.status === "fulfilled"),
-        ).toHaveLength(1);
-        expect(
-            outcomes.filter((result) => result.status === "rejected"),
-        ).toHaveLength(1);
-        expect(
-            await skillCatalog.get(identity, second.revision.revision),
-        ).toMatchObject({ state: "draft" });
-        await capabilities.changeSkillLifecycle({
-            ...ref,
-            expectedState: "validated",
-            expectedActive: false,
-            action: "changeState",
-            state: "approved",
-        });
-        await capabilities.changeSkillLifecycle({
-            ...ref,
-            expectedState: "approved",
-            expectedActive: false,
-            action: "activate",
-        });
-        await capabilities.changeSkillLifecycle({
-            ...ref,
-            expectedState: "active",
-            expectedActive: true,
-            action: "disable",
-        });
-        await capabilities.changeSkillLifecycle({
-            ...ref,
-            expectedState: "disabled",
-            expectedActive: false,
-            action: "rollback",
-        });
-        await capabilities.changeSkillLifecycle({
-            ...ref,
-            expectedState: "active",
-            expectedActive: true,
-            action: "archive",
-        });
-        expect(
-            (await capabilities.getSkillLifecycle(ref)).allowedActions,
-        ).toEqual([]);
-        await expect(
-            capabilities.promoteProcedureArtifact({
-                kind: "skill",
-                corpusId: "c",
-                procedureId: "p",
-                version: 1,
-                skill: { identity },
-            }),
-        ).rejects.toThrow("unavailable");
-        await expect(capabilities.listSkills({ limit: 201 })).rejects.toThrow(
-            "pagination",
-        );
-    });
 
     test.each(["websocket-json", "in-process-loopback"])(
         "%s host handler delegates named catalog and lifecycle RPCs",

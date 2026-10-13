@@ -17,12 +17,14 @@ import type {
     IngestionJobStatus,
     JobListRequest,
     JobProgress,
-    MemoryCorpus,
-    MemoryCorpusStatus,
+    MemoryAnswerRequest,
+    MemoryAnswerResult,
+    MemoryBatchImportLookup,
+    MemoryBatchImportRequest,
     MemoryChangeListRequest,
     MemoryChangeReceipt,
-    MemoryBatchImportRequest,
-    MemoryBatchImportLookup,
+    MemoryCorpus,
+    MemoryCorpusStatus,
     MemoryEvent,
     MemoryEventAppendRequest,
     MemoryEventAppendResult,
@@ -31,8 +33,6 @@ import type {
     MemoryEventListRequest,
     MemoryEventSearchRequest,
     MemoryEventSearchResult,
-    MemoryAnswerRequest,
-    MemoryAnswerResult,
     MemoryKnowledgeGraph,
     MemoryPage,
     MemorySearchRequest,
@@ -40,18 +40,10 @@ import type {
     MemoryService,
     MemoryServiceCapabilities,
     MemorySource,
-    PersonalHowToService,
-    PersonalHowToSettings,
-    PersonalHowToSettingsUpdate,
-    ProcedureCandidate,
-    ProcedureCandidateCreateRequest,
-    ProcedureListRequest,
-    ProcedureSaveRequest,
-    ProcedureSearchMatch,
-    ProcedureSearchRequest,
-    ProcedureSummary,
-    ProcedureVersion,
+    MemoryViewService,
     ReindexResult,
+    RevisionAssetReadRequest,
+    RevisionAssetRequest,
     SourceContent,
     SourceContentRequest,
     SourceForgetPreview,
@@ -59,18 +51,39 @@ import type {
     SourceForgetResult,
     SourceListRequest,
     SourceReplaceRequest,
-    RevisionAssetRequest,
-    RevisionAssetReadRequest,
-    RunbookJobResult,
-    RunbookSynthesisRequest,
+    ViewArchiveRequest,
+    ViewBuildJob,
+    ViewBuildJobRequest,
+    ViewBuildRequest,
+    ViewConflictReadRequest,
+    ViewConflictResolution,
+    ViewHistoryEntry,
+    ViewMaintenancePlan,
+    ViewMaintenancePlanRequest,
+    ViewMaintenanceRead,
+    ViewMaintenanceRequest,
+    ViewMaintenanceResult,
+    ViewMaintenanceUpdate,
+    ViewMergeConflict,
+    ViewPublicationPolicy,
+    ViewPublicationPolicyUpdate,
+    ViewPublicationStatus,
+    ViewPublishRequest,
+    ViewReadRequest,
+    ViewSaveRequest,
+    ViewSearchMatch,
+    ViewSearchRequest,
+    ViewSnapshot,
+    ViewSourceUsageRequest,
+    ViewSourceUsagePage,
+    ViewVersion,
 } from "@typeagent/memory-service";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
-import { validateProcedureSaveRequest } from "@typeagent/memory-service/agent-edition-validation";
 import type { z } from "zod";
 import {
+    answerResultSchema,
     capabilitiesSchema,
     changePageSchema,
-    answerResultSchema,
     clearedCountSchema,
     corpusSchema,
     eventAppendResultSchema,
@@ -78,30 +91,36 @@ import {
     eventPageSchema,
     eventSearchResultSchema,
     ingestResultSchema,
-    jobStatusSchema,
     jobPageSchema,
+    jobStatusSchema,
     knowledgeGraphSchema,
     memoryToolNames,
-    optionalJobStatusSchema,
     optionalCorpusStatusSchema,
     optionalEventSchema,
+    optionalJobStatusSchema,
     optionalSourceSchema,
-    optionalProcedureCandidateSchema,
-    optionalProcedureVersionSchema,
-    personalHowToSettingsSchema,
-    procedureCandidateSchema,
-    procedureSearchMatchSchema,
-    procedureSummarySchema,
-    procedureVersionSchema,
+    reindexResultSchema,
     searchResultSchema,
-    sourceSchema,
     sourceContentSchema,
     sourceForgetPreviewSchema,
     sourceForgetResultSchema,
     sourcePageSchema,
-    reindexResultSchema,
-    runbookJobResultSchema,
+    sourceSchema,
 } from "./protocol.js";
+import {
+    viewBuildJobSchema,
+    viewConflictSchema,
+    viewHistoryEntrySchema,
+    viewMaintenancePlanSchema,
+    viewMaintenanceResultSchema,
+    viewPublicationPolicySchema,
+    viewPublicationStatusSchema,
+    viewSearchMatchSchema,
+    viewSnapshotSchema,
+    viewSourceUsagePageSchema,
+    viewToolNames,
+    viewVersionSchema,
+} from "./viewProtocol.js";
 
 function unsupportedCapability(operation: string): Promise<never> {
     return Promise.reject(new Error(`Memory ${operation} are not supported`));
@@ -112,9 +131,7 @@ export interface MemoryClientCallOptions {
     onProgress?: (progress: JobProgress) => void;
 }
 
-export interface MemoryServiceClient
-    extends MemoryService,
-        PersonalHowToService {
+export interface MemoryServiceClient extends MemoryService, MemoryViewService {
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
@@ -127,9 +144,150 @@ export interface MemoryServiceClient
 }
 
 export class InProcessMemoryServiceClient implements MemoryServiceClient {
+    public getSourceViewUsage(
+        request: ViewSourceUsageRequest,
+    ): Promise<ViewSourceUsagePage> {
+        return (
+            this.service.getSourceViewUsage?.(request) ??
+            unsupportedCapability("source View usage")
+        );
+    }
     public constructor(
-        private readonly service: MemoryService & PersonalHowToService,
+        private readonly service: MemoryService & Partial<MemoryViewService>,
     ) {}
+
+    public listViews(corpusId: string) {
+        return (
+            this.service.listViews?.(corpusId) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public getView(request: ViewReadRequest) {
+        return (
+            this.service.getView?.(request) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public saveViewDraft(request: ViewSaveRequest) {
+        return (
+            this.service.saveViewDraft?.(request) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public archiveView(request: ViewArchiveRequest) {
+        return (
+            this.service.archiveView?.(request) ??
+            unsupportedCapability("view drafts")
+        );
+    }
+    public getViewHistory(request: ViewReadRequest) {
+        return (
+            this.service.getViewHistory?.(request) ??
+            unsupportedCapability("view history")
+        );
+    }
+    public getViewPublicationPolicy(corpusId: string) {
+        return (
+            this.service.getViewPublicationPolicy?.(corpusId) ??
+            unsupportedCapability("view publication policy")
+        );
+    }
+    public updateViewPublicationPolicy(request: ViewPublicationPolicyUpdate) {
+        return (
+            this.service.updateViewPublicationPolicy?.(request) ??
+            unsupportedCapability("view publication policy")
+        );
+    }
+    public getViewPublication(request: ViewReadRequest) {
+        return (
+            this.service.getViewPublication?.(request) ??
+            unsupportedCapability("view publication")
+        );
+    }
+    public retryViewIndex(request: ViewPublishRequest) {
+        return (
+            this.service.retryViewIndex?.(request) ??
+            unsupportedCapability("view index retry")
+        );
+    }
+    public searchViews(request: ViewSearchRequest) {
+        return (
+            this.service.searchViews?.(request) ??
+            unsupportedCapability("published view search")
+        );
+    }
+    public publishView(request: ViewPublishRequest) {
+        return (
+            this.service.publishView?.(request) ??
+            unsupportedCapability("view publication")
+        );
+    }
+    public buildViews(request: ViewBuildRequest) {
+        return (
+            this.service.buildViews?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public planViewMaintenance(request: ViewMaintenancePlanRequest) {
+        return (
+            this.service.planViewMaintenance?.(request) ??
+            unsupportedCapability("view maintenance planning")
+        );
+    }
+    public maintainViews(request: ViewMaintenanceRequest) {
+        return (
+            this.service.maintainViews?.(request) ??
+            unsupportedCapability("view maintenance")
+        );
+    }
+    public updateViewMaintenance(request: ViewMaintenanceUpdate) {
+        return (
+            this.service.updateViewMaintenance?.(request) ??
+            unsupportedCapability("view maintenance definitions")
+        );
+    }
+    public getViewMaintenance(request: ViewMaintenanceRead) {
+        return (
+            this.service.getViewMaintenance?.(request) ??
+            unsupportedCapability("view maintenance receipts")
+        );
+    }
+    public getViewBuild(request: ViewBuildJobRequest) {
+        return (
+            this.service.getViewBuild?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public listViewBuilds(corpusId: string) {
+        return (
+            this.service.listViewBuilds?.(corpusId) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public cancelViewBuild(request: ViewBuildJobRequest) {
+        return (
+            this.service.cancelViewBuild?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public retryViewBuild(request: ViewBuildJobRequest) {
+        return (
+            this.service.retryViewBuild?.(request) ??
+            unsupportedCapability("view builds")
+        );
+    }
+    public getViewConflict(request: ViewConflictReadRequest) {
+        return (
+            this.service.getViewConflict?.(request) ??
+            unsupportedCapability("view conflicts")
+        );
+    }
+    public resolveViewConflict(request: ViewConflictResolution) {
+        return (
+            this.service.resolveViewConflict?.(request) ??
+            unsupportedCapability("view conflicts")
+        );
+    }
 
     public createCorpus(name: string, description?: string) {
         return this.service.createCorpus(name, description);
@@ -212,27 +370,6 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         );
     }
 
-    public listRunbookJobs(corpusId: string) {
-        return (
-            this.service.listRunbookJobs?.(corpusId) ??
-            unsupportedCapability("runbook jobs")
-        );
-    }
-
-    public getRunbookJob(jobId: string) {
-        return (
-            this.service.getRunbookJob?.(jobId) ??
-            unsupportedCapability("runbook jobs")
-        );
-    }
-
-    public requestRunbookSynthesis(request: RunbookSynthesisRequest) {
-        return (
-            this.service.requestRunbookSynthesis?.(request) ??
-            unsupportedCapability("runbook synthesis")
-        );
-    }
-
     public listSources(corpusId: string) {
         return this.service.listSources(corpusId);
     }
@@ -249,8 +386,14 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.getSourceContent(request);
     }
 
-    public getSourceKnowledge(corpusId: string, sourceId: string) {
-        return this.service.getSourceKnowledge(corpusId, sourceId);
+    public getSourceKnowledge(
+        corpusId: string,
+        sourceId: string,
+        traceId?: string,
+    ) {
+        return traceId === undefined
+            ? this.service.getSourceKnowledge(corpusId, sourceId)
+            : this.service.getSourceKnowledge(corpusId, sourceId, traceId);
     }
 
     public ingestDocument(
@@ -332,69 +475,6 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.getCapabilities();
     }
 
-    public getPersonalHowToSettings(corpusId: string) {
-        return this.service.getPersonalHowToSettings(corpusId);
-    }
-
-    public updatePersonalHowToSettings(
-        corpusId: string,
-        update: PersonalHowToSettingsUpdate,
-    ) {
-        return this.service.updatePersonalHowToSettings(corpusId, update);
-    }
-
-    public createProcedureCandidate(request: ProcedureCandidateCreateRequest) {
-        return this.service.createProcedureCandidate(request);
-    }
-
-    public getProcedureCandidate(corpusId: string, candidateId: string) {
-        return this.service.getProcedureCandidate(corpusId, candidateId);
-    }
-
-    public listProcedureCandidates(
-        corpusId: string,
-        states?: ProcedureCandidate["state"][],
-    ) {
-        return this.service.listProcedureCandidates(corpusId, states);
-    }
-
-    public rejectProcedureCandidate(corpusId: string, candidateId: string) {
-        return this.service.rejectProcedureCandidate(corpusId, candidateId);
-    }
-
-    public saveProcedure(request: ProcedureSaveRequest) {
-        validateProcedureSaveRequest(request);
-        return this.service.saveProcedure(request);
-    }
-
-    public listProcedures(request: ProcedureListRequest) {
-        return this.service.listProcedures(request);
-    }
-
-    public getProcedure(
-        corpusId: string,
-        procedureId: string,
-        version?: number,
-    ) {
-        return this.service.getProcedure(corpusId, procedureId, version);
-    }
-
-    public searchProcedures(request: ProcedureSearchRequest) {
-        return this.service.searchProcedures(request);
-    }
-
-    public archiveProcedure(
-        corpusId: string,
-        procedureId: string,
-        expectedVersion?: number,
-    ) {
-        return this.service.archiveProcedure(
-            corpusId,
-            procedureId,
-            expectedVersion,
-        );
-    }
-
     public waitForJob(
         jobId: string,
         options: MemoryClientCallOptions & { pollIntervalMs?: number } = {},
@@ -423,6 +503,197 @@ export type MemoryMcpTransportConfig =
 type MemoryMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
 
 export class McpMemoryServiceClient implements MemoryServiceClient {
+    public getSourceViewUsage(
+        request: ViewSourceUsageRequest,
+    ): Promise<ViewSourceUsagePage> {
+        return this.invoke(
+            viewToolNames.getSourceViewUsage,
+            request,
+            viewSourceUsagePageSchema,
+        );
+    }
+    public listViews(corpusId: string): Promise<ViewSnapshot> {
+        return this.invoke(
+            viewToolNames.listViews,
+            { corpusId },
+            viewSnapshotSchema,
+        );
+    }
+    public getView(request: ViewReadRequest): Promise<ViewVersion | undefined> {
+        return this.invoke<ViewVersion | null>(
+            viewToolNames.getView,
+            request,
+            viewVersionSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public saveViewDraft(request: ViewSaveRequest): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.saveViewDraft,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
+    public archiveView(request: ViewArchiveRequest): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.archiveView,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
+    public getViewHistory(
+        request: ViewReadRequest,
+    ): Promise<ViewHistoryEntry[]> {
+        return this.invoke(
+            viewToolNames.getViewHistory,
+            request,
+            viewHistoryEntrySchema.array(),
+        );
+    }
+    public getViewPublicationPolicy(
+        corpusId: string,
+    ): Promise<ViewPublicationPolicy> {
+        return this.invoke(
+            viewToolNames.getViewPublicationPolicy,
+            { corpusId },
+            viewPublicationPolicySchema,
+        );
+    }
+    public updateViewPublicationPolicy(
+        request: ViewPublicationPolicyUpdate,
+    ): Promise<ViewPublicationPolicy> {
+        return this.invoke(
+            viewToolNames.updateViewPublicationPolicy,
+            request,
+            viewPublicationPolicySchema,
+        );
+    }
+    public getViewPublication(
+        request: ViewReadRequest,
+    ): Promise<ViewPublicationStatus> {
+        return this.invoke(
+            viewToolNames.getViewPublication,
+            request,
+            viewPublicationStatusSchema,
+        );
+    }
+    public retryViewIndex(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
+        return this.invoke(
+            viewToolNames.retryViewIndex,
+            request,
+            viewPublicationStatusSchema,
+        );
+    }
+    public searchViews(request: ViewSearchRequest): Promise<ViewSearchMatch[]> {
+        return this.invoke(
+            viewToolNames.searchViews,
+            request,
+            viewSearchMatchSchema.array(),
+        );
+    }
+    public publishView(
+        request: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus> {
+        return this.invoke(
+            viewToolNames.publishView,
+            request,
+            viewPublicationStatusSchema,
+        );
+    }
+    public buildViews(request: ViewBuildRequest): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.buildViews,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public planViewMaintenance(
+        request: ViewMaintenancePlanRequest,
+    ): Promise<ViewMaintenancePlan> {
+        return this.invoke(
+            viewToolNames.planViewMaintenance,
+            request,
+            viewMaintenancePlanSchema,
+        );
+    }
+    public maintainViews(
+        request: ViewMaintenanceRequest,
+    ): Promise<ViewMaintenanceResult> {
+        return this.invoke(
+            viewToolNames.maintainViews,
+            request,
+            viewMaintenanceResultSchema,
+        );
+    }
+    public updateViewMaintenance(
+        request: ViewMaintenanceUpdate,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.updateViewMaintenance,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
+    public getViewMaintenance(
+        request: ViewMaintenanceRead,
+    ): Promise<ViewMaintenanceResult | undefined> {
+        return this.invoke<ViewMaintenanceResult | null>(
+            viewToolNames.getViewMaintenance,
+            request,
+            viewMaintenanceResultSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public getViewBuild(
+        request: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob | undefined> {
+        return this.invoke<ViewBuildJob | null>(
+            viewToolNames.getViewBuild,
+            request,
+            viewBuildJobSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public listViewBuilds(corpusId: string): Promise<ViewBuildJob[]> {
+        return this.invoke(
+            viewToolNames.listViewBuilds,
+            { corpusId },
+            viewBuildJobSchema.array(),
+        );
+    }
+    public cancelViewBuild(
+        request: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.cancelViewBuild,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public retryViewBuild(request: ViewBuildJobRequest): Promise<ViewBuildJob> {
+        return this.invoke(
+            viewToolNames.retryViewBuild,
+            request,
+            viewBuildJobSchema,
+        );
+    }
+    public getViewConflict(
+        request: ViewConflictReadRequest,
+    ): Promise<ViewMergeConflict | undefined> {
+        return this.invoke<ViewMergeConflict | null>(
+            viewToolNames.getViewConflict,
+            request,
+            viewConflictSchema.nullable(),
+        ).then((value) => value ?? undefined);
+    }
+    public resolveViewConflict(
+        request: ViewConflictResolution,
+    ): Promise<ViewHistoryEntry> {
+        return this.invoke(
+            viewToolNames.resolveViewConflict,
+            request,
+            viewHistoryEntrySchema,
+        );
+    }
     private constructor(
         private readonly client: Client,
         private readonly timeoutMs: number | undefined,
@@ -542,6 +813,7 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
     public getSourceKnowledge(
         corpusId: string,
         sourceId: string,
+        _traceId?: string,
     ): Promise<MemoryKnowledgeGraph> {
         return this.invoke(
             memoryToolNames.sourceKnowledgeGet,
@@ -672,9 +944,10 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
     public searchEvents(
         request: MemoryEventSearchRequest,
     ): Promise<MemoryEventSearchResult> {
+        const { traceId: _traceId, ...mcpRequest } = request;
         return this.invoke(
             memoryToolNames.eventSearch,
-            request,
+            mcpRequest,
             eventSearchResultSchema,
         );
     }
@@ -690,7 +963,12 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
     }
 
     public search(request: MemorySearchRequest): Promise<MemorySearchResult> {
-        return this.invoke(memoryToolNames.search, request, searchResultSchema);
+        const { traceId: _traceId, ...mcpRequest } = request;
+        return this.invoke(
+            memoryToolNames.search,
+            mcpRequest,
+            searchResultSchema,
+        );
     }
 
     public answer(request: MemoryAnswerRequest): Promise<MemoryAnswerResult> {
@@ -710,159 +988,6 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             memoryToolNames.capabilities,
             {},
             capabilitiesSchema,
-        );
-    }
-
-    public requestRunbookSynthesis(
-        request: RunbookSynthesisRequest,
-    ): Promise<RunbookJobResult> {
-        return this.invoke(
-            memoryToolNames.runbookSynthesisRequest,
-            request,
-            runbookJobResultSchema,
-        );
-    }
-
-    public getRunbookJob(jobId: string): Promise<RunbookJobResult | undefined> {
-        return this.invoke<RunbookJobResult | null>(
-            memoryToolNames.runbookJobGet,
-            { jobId },
-            runbookJobResultSchema.nullable(),
-        ).then((job) => job ?? undefined);
-    }
-
-    public listRunbookJobs(corpusId: string): Promise<RunbookJobResult[]> {
-        return this.invoke(
-            memoryToolNames.runbookJobsList,
-            { corpusId },
-            runbookJobResultSchema.array().max(100),
-        );
-    }
-
-    public getPersonalHowToSettings(
-        corpusId: string,
-    ): Promise<PersonalHowToSettings> {
-        return this.invoke(
-            memoryToolNames.howToSettingsGet,
-            { corpusId },
-            personalHowToSettingsSchema,
-        );
-    }
-
-    public updatePersonalHowToSettings(
-        corpusId: string,
-        update: PersonalHowToSettingsUpdate,
-    ): Promise<PersonalHowToSettings> {
-        return this.invoke(
-            memoryToolNames.howToSettingsUpdate,
-            { corpusId, ...update },
-            personalHowToSettingsSchema,
-        );
-    }
-
-    public createProcedureCandidate(
-        request: ProcedureCandidateCreateRequest,
-    ): Promise<ProcedureCandidate> {
-        return this.invoke(
-            memoryToolNames.procedureCandidateCreate,
-            request,
-            procedureCandidateSchema,
-        );
-    }
-
-    public getProcedureCandidate(
-        corpusId: string,
-        candidateId: string,
-    ): Promise<ProcedureCandidate | undefined> {
-        return this.invoke<ProcedureCandidate | null>(
-            memoryToolNames.procedureCandidateGet,
-            { corpusId, candidateId },
-            optionalProcedureCandidateSchema,
-        ).then((candidate) => candidate ?? undefined);
-    }
-
-    public listProcedureCandidates(
-        corpusId: string,
-        states?: ProcedureCandidate["state"][],
-    ): Promise<ProcedureCandidate[]> {
-        return this.invoke(
-            memoryToolNames.procedureCandidateList,
-            { corpusId, ...(states === undefined ? {} : { states }) },
-            procedureCandidateSchema.array(),
-        );
-    }
-
-    public rejectProcedureCandidate(
-        corpusId: string,
-        candidateId: string,
-    ): Promise<ProcedureCandidate> {
-        return this.invoke(
-            memoryToolNames.procedureCandidateReject,
-            { corpusId, candidateId },
-            procedureCandidateSchema,
-        );
-    }
-
-    public saveProcedure(
-        request: ProcedureSaveRequest,
-    ): Promise<ProcedureVersion> {
-        validateProcedureSaveRequest(request);
-        return this.invoke(
-            memoryToolNames.procedureSave,
-            request,
-            procedureVersionSchema,
-        );
-    }
-
-    public listProcedures(
-        request: ProcedureListRequest,
-    ): Promise<ProcedureSummary[]> {
-        return this.invoke(
-            memoryToolNames.procedureList,
-            request,
-            procedureSummarySchema.array(),
-        );
-    }
-
-    public getProcedure(
-        corpusId: string,
-        procedureId: string,
-        version?: number,
-    ): Promise<ProcedureVersion | undefined> {
-        return this.invoke<ProcedureVersion | null>(
-            memoryToolNames.procedureGet,
-            {
-                corpusId,
-                procedureId,
-                ...(version === undefined ? {} : { version }),
-            },
-            optionalProcedureVersionSchema,
-        ).then((procedure) => procedure ?? undefined);
-    }
-
-    public searchProcedures(
-        request: ProcedureSearchRequest,
-    ): Promise<ProcedureSearchMatch[]> {
-        return this.invoke(
-            memoryToolNames.procedureSearch,
-            request,
-            procedureSearchMatchSchema.array(),
-        );
-    }
-
-    public archiveProcedure(
-        corpusId: string,
-        procedureId: string,
-        expectedVersion?: number,
-    ): Promise<ProcedureVersion> {
-        return this.invoke(
-            memoryToolNames.procedureArchive,
-            {
-                corpusId,
-                procedureId,
-                ...(expectedVersion === undefined ? {} : { expectedVersion }),
-            },
-            procedureVersionSchema,
         );
     }
 

@@ -1,20 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-    ProcedureDocument,
-    ProcedureSaveRequest,
-    ProcedureSourceCitation,
-} from "./types.js";
-import { redactRunbookText, redactRunbookValue } from "./runbookRedaction.js";
 import {
     normalizeRunbookBindingArguments,
-    validateRunbookBindingArguments,
     validateRunbookArgumentReadiness,
+    validateRunbookBindingArguments,
     type RunbookBindingArguments,
 } from "./runbookArguments.js";
-export { redactRunbookText, redactRunbookValue } from "./runbookRedaction.js";
+import { redactRunbookText, redactRunbookValue } from "./runbookRedaction.js";
+import type { ProcedureDocument, ProcedureSourceCitation } from "./types.js";
 export * from "./runbookArguments.js";
+export { redactRunbookText, redactRunbookValue } from "./runbookRedaction.js";
 
 export interface RunbookAssetReference {
     sourceId: string;
@@ -160,7 +156,7 @@ export function canonicalizeProcedure(value: unknown): string {
 }
 
 export function getProcedureEvidenceReferences(
-    document: ProcedureDocument,
+    document: Pick<ProcedureDocument, "citations" | "agentEdition">,
 ): ProcedureEvidenceReferences {
     const edition = document.agentEdition;
     const citations = [
@@ -579,27 +575,18 @@ export function validateAgentEdition(
     validateReview(edition.review);
 }
 
+export interface AgentEditionReviewIntent {
+    reviewAgentEdition?: boolean;
+    safetyConfirmed?: boolean;
+}
+
 export function validateAgentEditionReviewIntent(
-    request: Pick<
-        ProcedureSaveRequest,
-        "reviewAgentEdition" | "safetyConfirmed"
-    >,
+    request: AgentEditionReviewIntent,
 ): void {
     if (request.reviewAgentEdition !== undefined)
         boolean(request.reviewAgentEdition, "reviewAgentEdition");
     if (request.safetyConfirmed !== undefined)
         boolean(request.safetyConfirmed, "safetyConfirmed");
-}
-
-export function validateProcedureSaveRequest(
-    request: ProcedureSaveRequest,
-): void {
-    validateAgentEditionReviewIntent(request);
-    if (request.document !== undefined && request.markdown !== undefined) {
-        throw new Error("Supply either procedure JSON or Markdown, not both");
-    }
-    if (request.document?.agentEdition !== undefined)
-        validateAgentEdition(request.document.agentEdition);
 }
 
 export function draftAgentEdition(

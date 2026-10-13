@@ -7,6 +7,13 @@ import {
     runQueryWithTimeout,
 } from "../validation/queryWithTimeout.mjs";
 import registerDebug from "debug";
+import type { ScriptRecipe } from "@typeagent/agent-flows/powershell/recipe";
+export type {
+    ScriptRecipe,
+    ScriptParameter,
+    GrammarPattern,
+    SandboxPolicy,
+} from "@typeagent/agent-flows/powershell/recipe";
 
 const debug = registerDebug(
     "typeagent:dispatcher:reasoning:scriptRecipeGenerator",
@@ -26,49 +33,6 @@ export interface ScriptCapture {
     output: string;
     exitCode: number;
     originalRequest: string;
-}
-
-export interface ScriptRecipe {
-    version: 1;
-    actionName: string;
-    description: string;
-    displayName: string;
-    parameters: ScriptParameter[];
-    script: {
-        language: "powershell";
-        body: string;
-        expectedOutputFormat: "text" | "json" | "objects" | "table";
-    };
-    grammarPatterns: GrammarPattern[];
-    sandbox: SandboxPolicy;
-    source?: {
-        type: "reasoning" | "manual";
-        requestId?: string;
-        timestamp: string;
-        originalRequest?: string;
-    };
-}
-
-export interface ScriptParameter {
-    name: string;
-    type: "string" | "number" | "boolean" | "path" | "executable";
-    required: boolean;
-    description: string;
-    default?: unknown;
-}
-
-export interface GrammarPattern {
-    pattern: string;
-    isAlias: boolean;
-    examples: string[];
-}
-
-export interface SandboxPolicy {
-    allowedCmdlets: string[];
-    allowedPaths: string[];
-    allowedModules: string[];
-    maxExecutionTime: number;
-    networkAccess: boolean;
 }
 
 const PS_DETECTION_PATTERN =
@@ -256,12 +220,10 @@ Generate a script recipe JSON object that:
    - isAlias: true for terse shell-like forms (e.g. "ls"), false for natural language
    - examples: 2-3 example invocations
    Include at least one natural language pattern and one terse alias if applicable
-7. Includes a sandbox policy with:
-   - allowedCmdlets: only the cmdlets this script actually needs plus pipeline utilities (Select-Object, Where-Object, ForEach-Object, Format-Table, Out-String, Sort-Object)
-   - allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"] unless broader access needed
-   - allowedModules: PowerShell modules needed
-   - maxExecutionTime: reasonable timeout in seconds (15-60)
-   - networkAccess: false unless the script uses network cmdlets
+7. Includes requiredModules: installed PowerShell module names or paths needed by the script.
+   Include sandbox.maxExecutionTime: an operational timeout in seconds (15-60).
+   There is no cmdlet catalogue or arbitrary-code sandbox. Saving the recipe does not
+   authorize execution; user approval is required before code or modules run.
 8. expectedOutputFormat: "text", "json", "objects", or "table"
 
 Return ONLY a JSON object matching this schema (no markdown fences, no explanation):
@@ -282,13 +244,8 @@ Return ONLY a JSON object matching this schema (no markdown fences, no explanati
     { "pattern": "list files in $(path:wildcard)", "isAlias": false, "examples": ["list files in downloads"] },
     { "pattern": "ls $(path:wildcard)", "isAlias": true, "examples": ["ls downloads"] }
   ],
-  "sandbox": {
-    "allowedCmdlets": ["Get-ChildItem", "Select-Object"],
-    "allowedPaths": ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
-    "allowedModules": ["Microsoft.PowerShell.Management"],
-    "maxExecutionTime": 30,
-    "networkAccess": false
-  }
+  "requiredModules": ["Microsoft.PowerShell.Management"],
+  "sandbox": { "maxExecutionTime": 30 }
 }`;
     }
 }

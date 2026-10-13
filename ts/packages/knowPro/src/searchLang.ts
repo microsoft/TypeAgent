@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { PromptSection, Result, success } from "typechat";
+import { timeSearchStage } from "./searchTiming.js";
 import {
     IConversation,
     KnowledgeType,
@@ -223,11 +224,15 @@ export async function searchQueryExprFromLanguage(
     languageSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<LanguageQueryExpr>> {
-    const queryResult = await searchQueryFromLanguage(
-        conversation,
-        translator,
-        queryText,
-        options?.modelInstructions,
+    const queryResult = await timeSearchStage(
+        "knowpro.language.translation",
+        () =>
+            searchQueryFromLanguage(
+                conversation,
+                translator,
+                queryText,
+                options?.modelInstructions,
+            ),
     );
     if (queryResult.success) {
         const query = queryResult.data;
@@ -1064,11 +1069,15 @@ export async function searchQueryExprFromLanguage2(
     languageSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<LanguageQueryExpr>> {
-    const queryResult = await searchQueryFromLanguage2(
-        conversation,
-        translator,
-        queryText,
-        options?.modelInstructions,
+    const queryResult = await timeSearchStage(
+        "knowpro.language.translation",
+        () =>
+            searchQueryFromLanguage2(
+                conversation,
+                translator,
+                queryText,
+                options?.modelInstructions,
+            ),
     );
     if (queryResult.success) {
         const query = queryResult.data;
@@ -1116,6 +1125,26 @@ export async function searchConversationWithLanguage2(
     langSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
+    return timeSearchStage("knowpro.language.total", () =>
+        searchConversationWithLanguage2Core(
+            conversation,
+            searchText,
+            queryTranslator,
+            options,
+            langSearchFilter,
+            debugContext,
+        ),
+    );
+}
+
+async function searchConversationWithLanguage2Core(
+    conversation: IConversation,
+    searchText: string,
+    queryTranslator: SearchQueryTranslator,
+    options?: LanguageSearchOptions,
+    langSearchFilter?: LanguageSearchFilter,
+    debugContext?: LanguageSearchDebugContext,
+): Promise<Result<ConversationSearchResult[]>> {
     options ??= createLanguageSearchOptions();
     const langQueryResult = await searchQueryExprFromLanguage2(
         conversation,
@@ -1142,50 +1171,54 @@ export async function searchConversationWithLanguage2(
         langSearchFilter,
     );
 
-    const searchResults: ConversationSearchResult[] = [];
-    for (let i = 0; i < searchQueryExprs.length; ++i) {
-        const searchQuery = searchQueryExprs[i];
-        const fallbackQuery = fallbackQueryExpr
-            ? fallbackQueryExpr[i]
-            : undefined;
-        let queryResult = await runSearchQuery(
-            conversation,
-            searchQuery,
-            options,
-        );
-        if (!hasConversationResults(queryResult) && fallbackQuery) {
-            // Rerun the query but with verb matching turned off for scopes
-            queryResult = await runSearchQuery(
-                conversation,
-                fallbackQuery,
-                options,
+    return timeSearchStage("knowpro.language.execution", async () => {
+        const searchResults: ConversationSearchResult[] = [];
+        for (let i = 0; i < searchQueryExprs.length; ++i) {
+            const searchQuery = searchQueryExprs[i];
+            const fallbackQuery = fallbackQueryExpr
+                ? fallbackQueryExpr[i]
+                : undefined;
+            let queryResult = await timeSearchStage(
+                "knowpro.language.structured",
+                () => runSearchQuery(conversation, searchQuery, options),
             );
-        }
-        //
-        // If no matches and fallback enabled... run the raw query
-        //
-        if (
-            !hasConversationResults(queryResult) &&
-            searchQuery.rawQuery &&
-            options.fallbackRagOptions
-        ) {
-            const textSearchOptions = createTextQueryOptions(options);
-            const ragMatches = await runSearchQueryTextSimilarity(
-                conversation,
-                fallbackQuery ?? searchQuery,
-                textSearchOptions,
-            );
-            if (ragMatches) {
-                searchResults.push(...ragMatches);
-                if (debugContext?.usedSimilarityFallback) {
-                    debugContext.usedSimilarityFallback![i] = true;
-                }
+            if (!hasConversationResults(queryResult) && fallbackQuery) {
+                // Rerun the query but with verb matching turned off for scopes
+                queryResult = await timeSearchStage(
+                    "knowpro.language.scopeFallback",
+                    () => runSearchQuery(conversation, fallbackQuery, options),
+                );
             }
-        } else {
-            searchResults.push(...queryResult);
+            //
+            // If no matches and fallback enabled... run the raw query
+            //
+            if (
+                !hasConversationResults(queryResult) &&
+                searchQuery.rawQuery &&
+                options.fallbackRagOptions
+            ) {
+                const textSearchOptions = createTextQueryOptions(options);
+                const ragMatches = await timeSearchStage(
+                    "knowpro.language.similarityFallback",
+                    () =>
+                        runSearchQueryTextSimilarity(
+                            conversation,
+                            fallbackQuery ?? searchQuery,
+                            textSearchOptions,
+                        ),
+                );
+                if (ragMatches) {
+                    searchResults.push(...ragMatches);
+                    if (debugContext?.usedSimilarityFallback) {
+                        debugContext.usedSimilarityFallback![i] = true;
+                    }
+                }
+            } else {
+                searchResults.push(...queryResult);
+            }
         }
-    }
-    return success(searchResults);
+        return success(searchResults);
+    });
 
     //
     // Scoping queries can be precise. However, there may be random variations in how LLMs

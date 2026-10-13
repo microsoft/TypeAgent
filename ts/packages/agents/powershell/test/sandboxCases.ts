@@ -1,13 +1,56 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-    executeScript,
-    type ScriptExecutionResult,
+import { fileURLToPath } from "node:url";
+import type {
+    ScriptExecutionRequest,
+    ScriptExecutionResult,
 } from "../src/execution/powershellRunner.mjs";
+import { executeBrokeredPowerShell } from "../src/execution/windowsSandboxBroker.mjs";
+
+export async function copyBrokerWithTestHost(
+    directory: string,
+    hostScript: string,
+): Promise<string> {
+    const architecture = process.arch === "arm64" ? "win-arm64" : "win-x64";
+    const brokerName = "PowerShellSandboxBroker.exe";
+    const broker = join(directory, brokerName);
+    await copyFile(
+        fileURLToPath(
+            new URL(
+                `../../broker/${architecture}/${brokerName}`,
+                import.meta.url,
+            ),
+        ),
+        broker,
+    );
+    await writeFile(join(directory, "scriptHost.ps1"), hostScript);
+    return broker;
+}
+
+export function executeRestrictedScript(
+    request: ScriptExecutionRequest,
+): Promise<ScriptExecutionResult> {
+    if (
+        request.provenance === undefined ||
+        request.provenance === "reviewed-static"
+    ) {
+        throw new Error(
+            "Expected dynamic provenance in a legacy protocol test.",
+        );
+    }
+    return executeBrokeredPowerShell({
+        script: request.script,
+        parameters: request.parameters,
+        provenance: request.provenance,
+        allowedCommands: request.sandbox.allowedCmdlets ?? [],
+        maxExecutionTime: request.sandbox.maxExecutionTime,
+        abortSignal: request.abortSignal,
+    });
+}
 
 export async function runDeniedFileReadCase(): Promise<ScriptExecutionResult> {
     const directory = await mkdtemp(
@@ -21,7 +64,7 @@ export async function runDeniedFileReadCase(): Promise<ScriptExecutionResult> {
         await mkdir(deniedDirectory);
         await writeFile(deniedPath, "outside-marker");
 
-        return await executeScript({
+        return await executeRestrictedScript({
             script: String.raw`param([string]$AllowedRoot)
 $deniedPath = [System.IO.Path]::GetFullPath(
     [System.IO.Path]::Combine($AllowedRoot, "..\denied\marker.txt")

@@ -41,17 +41,14 @@
     }
   ],
   "sandbox": {
-    "allowedCmdlets": ["Push-Location", "Pop-Location", "Write-Output"],
-    "allowedPaths": ["$PWD", "$env:USERPROFILE"],
-    "allowedModules": [
-      "Microsoft.PowerShell.Management",
-      "Microsoft.PowerShell.Utility"
-    ],
-    "maxExecutionTime": 30,
-    "networkAccess": false
+    "maxExecutionTime": 30
   },
   "source": {
     "type": "manual",
     "timestamp": "2026-04-23T00:00:00Z"
-  }
+  },
+  "requiredModules": [
+    "Microsoft.PowerShell.Management",
+    "Microsoft.PowerShell.Utility"
+  ]
 }

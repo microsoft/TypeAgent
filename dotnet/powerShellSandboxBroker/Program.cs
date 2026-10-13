@@ -49,18 +49,23 @@ internal static class Program
                     "TYPEAGENT_POWERSHELL_BROKER_DIAGNOSTICS") == "1";
             var hostRequestJson = JsonSerializer.Serialize(
                 new HostRequest(
-                    BrokerProtocol.CurrentVersion,
+                    request.ProtocolVersion,
                     request.Script,
                     request.Parameters.GetRawText(),
                     request.AllowedCommands,
                     request.TimeoutSeconds,
-                    diagnostics),
+                    diagnostics,
+                    request.ApprovedLocal,
+                    request.WorkingDirectory,
+                    request.RequiredModules),
                 BrokerJsonContext.Default.HostRequest);
 
-            var (process, _) = AppContainerProcess.Start(
+            var (process, _) = PowerShellProcess.Start(
                 scriptHostPath,
                 hostRequestJson,
-                diagnostics);
+                diagnostics,
+                request.ApprovedLocal,
+                request.WorkingDirectory);
             BrokerResponse response;
             using (process)
             {

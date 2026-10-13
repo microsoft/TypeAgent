@@ -18,7 +18,7 @@ function item(
     return {
         id,
         fingerprint: `${id}:v1`,
-        kind: "candidate",
+        kind: "job",
         corpusId: "a",
         corpusName: "A",
         objectId: id,
@@ -38,7 +38,7 @@ test("deep links round-trip reserved characters without losing identity", () => 
         objectId: "source:# ?/1",
     };
     expect(parseRoute(routeHash(source))).toEqual(source);
-    const inbox = { page: "inbox" as const, objectId: "candidate:c/a" };
+    const inbox = { page: "inbox" as const, objectId: "job:c/a" };
     expect(parseRoute(routeHash(inbox))).toEqual(inbox);
     expect(parseRoute("#/unknown")).toEqual({
         page: "inbox",
@@ -72,6 +72,24 @@ test("dismiss and snooze are fingerprint-specific, reversible and expire", () =>
     expect(isHidden(first, hidden)).toBe(false);
 });
 
+test("view and build links preserve exact revision and operation identities", () => {
+    for (const route of [
+        {
+            page: "views" as const,
+            corpusId: "corpus/a",
+            objectId: "wiki:#1",
+            viewRevisionId: "revision/old",
+        },
+        {
+            page: "activity" as const,
+            corpusId: "corpus/a",
+            objectId: "job/1",
+            activityKind: "view-build" as const,
+        },
+    ])
+        expect(parseRoute(routeHash(route))).toEqual(route);
+});
+
 test("browser-only exploration routes retain exact graph selections without pretending to select a corpus", () => {
     for (const route of [
         { page: "explore" as const, webView: "analytics" as const },
@@ -90,39 +108,6 @@ test("browser-only exploration routes retain exact graph selections without pret
         expect(parsed).toEqual(route);
         expect(parsed.corpusId).toBeUndefined();
     }
-});
-
-test("Runbook deep links preserve candidate kind, exact history version and skill revision", () => {
-    for (const route of [
-        {
-            page: "runbooks" as const,
-            corpusId: "corpus/a",
-            objectId: "candidate/id",
-            runbookKind: "candidate" as const,
-        },
-        {
-            page: "runbooks" as const,
-            corpusId: "a",
-            objectId: "p",
-            runbookKind: "procedure" as const,
-            procedureVersion: 4,
-        },
-        {
-            page: "runbooks" as const,
-            corpusId: "a",
-            objectId: "p",
-            runbookKind: "procedure" as const,
-            skillRevisionId: "revision:old/1",
-        },
-    ])
-        expect(parseRoute(routeHash(route))).toEqual(route);
-    expect(
-        parseRoute("#/runbooks/a/p/procedure/0").procedureVersion,
-    ).toBeUndefined();
-    expect(
-        parseRoute("#/runbooks/a/p/procedure/9007199254740992")
-            .procedureVersion,
-    ).toBeUndefined();
 });
 
 test("complete Inbox counts apply hides while Activity counts actual scoped failed jobs independently", () => {
@@ -168,7 +153,7 @@ test("grouping, corpus/kind filters and dismissed view combine deterministically
     const items = [
         item("b", { corpusId: "b", corpusName: "B" }),
         item("a"),
-        item("stale", { kind: "staleProcedure", severity: "attention" }),
+        item("stale", { severity: "attention" }),
     ];
     const hidden = { a: { fingerprint: "a:v1" } };
     expect(
@@ -178,10 +163,10 @@ test("grouping, corpus/kind filters and dismissed view combine deterministically
         inboxItems(items, hidden, { dismissed: true }).map((value) => value.id),
     ).toEqual(["a"]);
     expect(
-        inboxItems(items, {}, { kind: "candidate", group: "corpus" }).map(
+        inboxItems(items, {}, { kind: "job", group: "corpus" }).map(
             (value) => value.id,
         ),
-    ).toEqual(["a", "b"]);
+    ).toEqual(["stale", "a", "b"]);
 });
 
 test("corrupt local preferences cannot hide records", () => {

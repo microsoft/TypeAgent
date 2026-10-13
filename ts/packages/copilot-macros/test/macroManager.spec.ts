@@ -62,7 +62,7 @@ describe("MacroManager recording lifecycle", () => {
         );
 
         expect(armed.status).toBe("armed");
-        expect(manager.getRecordingState("session-1")).toEqual({
+        expect(await manager.getRecordingState("session-1")).toEqual({
             status: "completed",
             trace: summary,
         });
@@ -94,7 +94,9 @@ describe("MacroManager recording lifecycle", () => {
         await expect(
             manager.finalizeRecording({ tokenId: claimed!.id, trace }),
         ).rejects.toThrow("incomplete");
-        expect(manager.getRecordingState("session-1").status).toBe("claimed");
+        expect((await manager.getRecordingState("session-1")).status).toBe(
+            "claimed",
+        );
     });
 
     it("rejects a trace for a different claimed prompt", async () => {
@@ -149,7 +151,7 @@ describe("MacroManager recording lifecycle", () => {
         manager.armRecording({ sessionId: "session-1", ttlMs: 1 });
         await new Promise((resolve) => setTimeout(resolve, 5));
 
-        expect(manager.getRecordingState("session-1")).toEqual({
+        expect(await manager.getRecordingState("session-1")).toEqual({
             status: "idle",
         });
     });

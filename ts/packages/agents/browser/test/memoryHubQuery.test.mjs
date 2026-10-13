@@ -14,9 +14,176 @@ import { citedAnswer } from "../dist/agent/memoryHubAnswer.mjs";
 import {
     conversationCorpusName,
     conversationProducerId,
+    canonicalizeProcedure,
 } from "@typeagent/memory-service";
+import { createHash } from "node:crypto";
 
 const time = "2026-10-02T00:00:00.000Z";
+test("source-plus-informational-view answer preserves derivative lineage through the normal browser workflow", async () => {
+    const { service } = fixture();
+    const text =
+        "Synthetic indexed qualification; local recovery is not overall completion.";
+    const locator = `indexed:0:${"b".repeat(64)}:0-${text.length}`;
+    const citation = {
+        sourceId: "shared",
+        revisionId: "r1",
+        locator,
+        excerpt: text,
+    };
+    service.getCapabilities = async () => ({
+        derivedViews: {
+            informationalWiki: true,
+            search: true,
+            kinds: ["wiki"],
+        },
+    });
+    service.search = async () => ({
+        matches: [
+            {
+                evidenceId: "source",
+                sourceId: "shared",
+                revisionId: "r1",
+                locator,
+                title: "Primary",
+                snippet: text,
+                sourceType: "text",
+                score: 1,
+            },
+        ],
+        warnings: [],
+    });
+    service.searchViews = async () => [
+        {
+            view: {
+                viewId: "page",
+                revisionId: "v1",
+                version: 1,
+                content: { kind: "wiki", title: "Informational page" },
+                createdAt: time,
+                provenance: "generated",
+            },
+            snippet: "Unreviewed derived summary",
+            score: 1,
+            review: "unreviewed",
+            freshness: "current",
+            evidence: [citation],
+        },
+    ];
+    service.getSource = async () => ({ activeRevisionId: "r1" });
+    service.getSourceContent = async () => ({
+        content: text,
+        revisionId: "r1",
+    });
+    const query = createMemoryHubQueryFunctions(
+        () => service,
+        () => undefined,
+        async (_question, evidence) => {
+            const primary = evidence.find((item) => item.kind === "source");
+            const derived = evidence.find((item) => item.kind === "view");
+            assert.ok(primary);
+            assert.ok(derived);
+            assert.equal(derived.review, "unreviewed");
+            assert.deepEqual(derived.evidenceSources, [citation]);
+            return citedAnswer(
+                {
+                    status: "answered",
+                    claims: [
+                        {
+                            text: "Mock combined answer with retained caveat.",
+                            evidenceIds: [primary.id, derived.id],
+                        },
+                    ],
+                    followUps: [],
+                },
+                evidence,
+            );
+        },
+    );
+    const result = await query.memoryHubSearch({
+        corpusId: "a",
+        query: "qualification",
+        generateAnswer: true,
+    });
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.answer.citationIds.length, 2);
+    assert.equal(
+        result.matches.find((item) => item.kind === "view").evidenceSources[0]
+            .locator,
+        locator,
+    );
+});
+test("normal hub answer requests bounded indexed expansion, retains tail context and withholds removed evidence", async () => {
+    const { service, calls } = fixture();
+    const text = `${"context ".repeat(120)}distant qualification`;
+    const locator = `indexed:0:${"a".repeat(64)}:0-${text.length}`;
+    service.getCapabilities = async () => ({
+        derivedViews: {
+            informationalWiki: true,
+            search: false,
+            kinds: ["wiki"],
+        },
+    });
+    service.search = async (request) => {
+        calls.push(["expanded", request]);
+        return {
+            matches: [
+                {
+                    evidenceId: "s:r",
+                    corpusId: "a",
+                    sourceId: "s",
+                    revisionId: "r",
+                    title: "Synthetic",
+                    snippet: text,
+                    locator,
+                    score: 1,
+                    sourceType: "text",
+                },
+            ],
+            warnings: [],
+        };
+    };
+    let removed = false;
+    service.getSource = async () =>
+        removed ? undefined : { activeRevisionId: "r" };
+    service.getSourceContent = async () => ({ content: text, revisionId: "r" });
+    const query = createMemoryHubQueryFunctions(
+        () => service,
+        () => undefined,
+        async (_question, evidence) => {
+            assert.ok(evidence[0].snippet.endsWith("distant qualification"));
+            return {
+                status: "answered",
+                text: "Mock qualified answer",
+                mode: "synthesized",
+                citationIds: [evidence[0].id],
+                followUps: [],
+            };
+        },
+    );
+    const result = await query.memoryHubSearch({
+        corpusId: "a",
+        query: "qualification",
+        generateAnswer: true,
+    });
+    assert.equal(result.answer.status, "answered");
+    assert.equal(
+        calls.find(([name]) => name === "expanded")[1].indexedFragments,
+        true,
+    );
+    removed = true;
+    const withheld = await query.memoryHubSearch({
+        corpusId: "a",
+        query: "qualification",
+        generateAnswer: true,
+    });
+    assert.equal(withheld.answer, undefined);
+    assert.ok(
+        withheld.errors.some(
+            (error) =>
+                error.operation === "answer" && /removed/.test(error.message),
+        ),
+    );
+});
 const corpora = [
     { corpusId: "a", name: "Documents" },
     { corpusId: "b", name: "Web" },
@@ -37,6 +204,94 @@ const event = {
     turnId: "turn-7",
     metadata: { authority: "explicit" },
 };
+
+test("timeline evidence opens exact canonical records and retained source ranges with owning-corpus and revision guards", async () => {
+    const { service, calls } = fixture();
+    const canonical = {
+        ...event,
+        corpusId: "a",
+        sourceKind: "system",
+        eventId: "configuration",
+        observedAt: "2026-10-06T08:05:00Z",
+        eventTime: "2026-10-05T08:45:00Z",
+        createdAt: "2026-10-08T11:00:00Z",
+    };
+    service.getCapabilities = async () => ({
+        derivedViews: { kinds: ["timeline"], search: true },
+    });
+    service.getEvent = async (corpusId, eventId) =>
+        corpusId === "a" && eventId === "configuration" ? canonical : undefined;
+    const functions = createMemoryHubQueryFunctions(() => service);
+    const revisionId = createHash("sha256")
+        .update(canonicalizeProcedure(canonical))
+        .digest("hex");
+    const exact = await functions.memoryHubEvidence({
+        corpusId: "a",
+        kind: "event",
+        objectId: "configuration",
+        revisionId,
+    });
+    assert.deepEqual(JSON.parse(exact.content), canonical);
+    await assert.rejects(
+        functions.memoryHubEvidence({
+            corpusId: "b",
+            kind: "event",
+            objectId: "configuration",
+            revisionId,
+        }),
+        /no longer available/,
+    );
+    await assert.rejects(
+        functions.memoryHubEvidence({
+            corpusId: "a",
+            kind: "event",
+            objectId: "configuration",
+            revisionId: "f".repeat(64),
+        }),
+        /revision changed/,
+    );
+    service.getSourceContent = async (request) => {
+        calls.push(["exact-range", request]);
+        const text = "beforeKNOWNafter";
+        return {
+            content: text.slice(
+                request.offset,
+                request.offset + request.maxChars,
+            ),
+            offset: request.offset,
+            totalChars: text.length,
+            revisionId: "r1",
+            truncated: false,
+        };
+    };
+    const range = await functions.memoryHubEvidence({
+        corpusId: "a",
+        kind: "source",
+        objectId: "log",
+        revisionId: "r1",
+        locator: "chars:6-11",
+    });
+    assert.equal(range.content, "KNOWN");
+    assert.equal(range.nextOffset, undefined);
+    assert.equal(range.provenance.locator, "chars:6-11");
+    assert.deepEqual(calls.at(-1)[1], {
+        corpusId: "a",
+        sourceId: "log",
+        revisionId: "r1",
+        offset: 6,
+        maxChars: 5,
+    });
+    service.getCapabilities = async () => ({});
+    await assert.rejects(
+        functions.memoryHubEvidence({
+            corpusId: "a",
+            kind: "event",
+            objectId: "configuration",
+            revisionId,
+        }),
+        /disabled/,
+    );
+});
 
 function fixture() {
     const calls = [];
@@ -66,24 +321,7 @@ function fixture() {
                 warnings: ["Fixture warning"],
             };
         },
-        searchProcedures: async (_request) => [
-            {
-                procedure: {
-                    procedureId: "guide",
-                    title: "Guide",
-                    state: "saved",
-                },
-                version: {
-                    version: 3,
-                    createdAt: time,
-                    markdown: "Check first.",
-                    document: {
-                        citations: [{ sourceId: "shared", revisionId: "r1" }],
-                    },
-                },
-                score: 20,
-            },
-        ],
+        getCapabilities: async () => ({}),
         searchEvents: async (request) => {
             calls.push(["events", request]);
             return { matches: [{ event, snippet: event.content, score: 2 }] };
@@ -105,14 +343,6 @@ function fixture() {
                 totalChars: 17,
                 revisionId: request.revisionId ?? "r2",
                 truncated: false,
-            };
-        },
-        getProcedure: async (corpusId, procedureId, version) => {
-            calls.push(["procedure", corpusId, procedureId, version]);
-            return {
-                version: version ?? 3,
-                document: { title: "Guide" },
-                markdown: "Exact saved version",
             };
         },
         getKnowledgeGraph: async () => ({
@@ -137,7 +367,6 @@ function fixture() {
                 },
             ],
         }),
-        listProcedures: async () => [{ procedureId: "guide" }],
         listChanges: async (request) => {
             const records =
                 request.corpusId === "c"
@@ -213,6 +442,74 @@ test("query insights use exact returned-source knowledge and carry real capture 
     assert.match(result.insights.message, /Not corpus-wide statistics/);
 });
 
+test("tracing preserves disabled call shapes and correlates concurrent Hub requests", async () => {
+    const originalFlag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+    const originalWarn = console.warn;
+    const logs = [];
+    try {
+        console.warn = (line) => logs.push(String(line));
+        const { service, query, calls } = fixture();
+        service.getSource = async () => ({ activeRevisionId: "r1" });
+        const reads = [];
+        service.getSourceKnowledge = async (...args) => {
+            reads.push(args);
+            return service.getKnowledgeGraph(args[0]);
+        };
+        delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        await query.memoryHubSearch({ query: "private search" });
+        assert.equal(logs.length, 0);
+        assert.ok(
+            calls.every(([, request]) => !Object.hasOwn(request, "traceId")),
+        );
+        assert.ok(reads.every((args) => args.length === 2));
+        calls.length = 0;
+        reads.length = 0;
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        await Promise.all([
+            query.memoryHubSearch({
+                query: "private search",
+                generateAnswer: true,
+            }),
+            query.memoryHubSearch({
+                query: "another private search",
+                generateAnswer: true,
+            }),
+        ]);
+        const entries = logs.map((line) =>
+            JSON.parse(line.replace("[memory-search-timing] ", "")),
+        );
+        const ids = new Set(entries.map((entry) => entry.traceId));
+        assert.equal(ids.size, 2);
+        assert.ok(calls.every(([, request]) => ids.has(request.traceId)));
+        assert.ok(reads.every((args) => args.length === 3 && ids.has(args[2])));
+        for (const id of ids) {
+            assert.match(id, /^[a-f0-9-]{36}$/);
+            const stages = new Set(
+                entries
+                    .filter((entry) => entry.traceId === id)
+                    .map((entry) => entry.stage),
+            );
+            for (const stage of [
+                "hub.total",
+                "hub.corpusListing",
+                "hub.retrieval",
+                "hub.fusion",
+                "hub.documentRetrieval",
+                "hub.insights",
+                "hub.synthesis",
+            ])
+                assert.ok(stages.has(stage), stage);
+        }
+        assert.ok(!logs.join("\n").includes("private search"));
+        assert.ok(!logs.join("\n").includes("Check the worker"));
+    } finally {
+        console.warn = originalWarn;
+        if (originalFlag === undefined)
+            delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = originalFlag;
+    }
+});
+
 test("historical or unavailable source knowledge is explicit and never substitutes Browser memory insights", async () => {
     const { service, query } = fixture();
     let reads = 0;
@@ -243,13 +540,81 @@ test("historical or unavailable source knowledge is explicit and never substitut
     assert.equal(failed.matches.length > 0, true);
 });
 
+test("All memory retains partial derived-search errors and does not count views as independent answer evidence", async () => {
+    const { service, synthesize } = fixture();
+    const synthesized = [];
+    const query = createMemoryHubQueryFunctions(
+        () => service,
+        () => "conversation-1",
+        async (question, evidence) => {
+            synthesized.push(evidence);
+            return synthesize(question, evidence);
+        },
+    );
+    service.getCapabilities = async () => ({
+        derivedViews: {
+            search: true,
+            kinds: ["troubleshootingGuide", "projectBrief"],
+        },
+    });
+    service.searchViews = async ({ corpusId }) => {
+        if (corpusId === "b") throw new Error("Derived index unavailable");
+        return [
+            {
+                view: {
+                    viewId: "derived",
+                    revisionId: "exact-r",
+                    version: 3,
+                    content: {
+                        kind: "troubleshootingGuide",
+                        title: "Derived guide",
+                    },
+                    createdAt: time,
+                    provenance: "merged",
+                },
+                score: 1,
+                snippet: "New agent paragraph",
+                review: "unreviewed",
+                freshness: "current",
+                evidence: [
+                    {
+                        sourceId: "shared",
+                        revisionId: "r1",
+                        locator: "chars:0-6",
+                        excerpt: "Worker",
+                    },
+                ],
+            },
+        ];
+    };
+    const result = await query.memoryHubSearch({
+        query: "worker",
+        generateAnswer: true,
+    });
+    const view = result.matches.find((evidence) => evidence.kind === "view");
+    assert.equal(view.revisionId, "exact-r");
+    assert.equal(view.viewProvenance, "merged");
+    assert.equal(view.review, "unreviewed");
+    assert.ok(
+        result.errors.some(
+            (error) =>
+                error.corpusId === "b" &&
+                error.operation === "views" &&
+                error.message === "Derived index unavailable",
+        ),
+    );
+    assert.equal(synthesized.length, 1);
+    assert.ok(synthesized[0].every((evidence) => evidence.kind !== "view"));
+});
+
 test("mixed search preserves corpus/version/turn identity and synthesizes once over merged evidence", async () => {
     const { query, calls } = fixture();
     const result = await query.memoryHubSearch({
         query: "worker",
         generateAnswer: true,
     });
-    assert.equal(result.matches.length, 5);
+
+    assert.equal(result.matches.length, 3);
     assert.equal(result.matches.filter((m) => m.kind === "source").length, 2);
     assert.equal(result.ranking, "reciprocal-rank-fusion");
     assert.equal(result.errors.length, 0);
@@ -259,11 +624,6 @@ test("mixed search preserves corpus/version/turn identity and synthesizes once o
                 m.kind === "conversation" &&
                 m.turnId === "turn-7" &&
                 m.authoritative,
-        ),
-    );
-    assert.ok(
-        result.matches.some(
-            (m) => m.kind === "procedure" && m.procedureVersion === 3,
         ),
     );
     assert.ok(result.matches.some((m) => m.revisionId === "r1"));
@@ -392,49 +752,7 @@ test("a corrupt corpus score reports partial failure without hiding other eviden
     );
 });
 
-test("procedure filtering stops starting reads when its whole-operation deadline expires", async (t) => {
-    let now = 0;
-    t.mock.method(Date, "now", () => now);
-    const { query, service } = fixture();
-    service.searchProcedures = async () => [
-        {
-            procedure: { procedureId: "guide", title: "Guide", state: "saved" },
-            version: {
-                version: 3,
-                createdAt: time,
-                markdown: "Check first.",
-                document: {
-                    citations: [
-                        { sourceId: "first", revisionId: "r1" },
-                        { sourceId: "second", revisionId: "r1" },
-                    ],
-                },
-            },
-            score: 1,
-        },
-    ];
-    let reads = 0;
-    service.getSource = async () => {
-        reads++;
-        now = 31_000;
-        return { sourceType: "markdown", tags: [] };
-    };
-    const result = await query.memoryHubSearch({
-        query: "worker",
-        corpusId: "a",
-        tags: ["ops"],
-    });
-    assert.equal(reads, 1);
-    assert.ok(
-        result.errors.some(
-            (error) =>
-                error.operation === "procedures" &&
-                /deadline/.test(error.message),
-        ),
-    );
-});
-
-test("document predicates are forwarded and conversation/procedure predicates precede final ranking", async () => {
+test("document predicates are forwarded and conversation predicates precede final ranking", async () => {
     const { query, calls } = fixture();
     const request = {
         query: "worker",
@@ -451,10 +769,10 @@ test("document predicates are forwarded and conversation/procedure predicates pr
     const passed = calls.find(([kind]) => kind === "search")[1];
     assert.deepEqual(passed.tags, ["ops"]);
     assert.equal(passed.dateFrom, time);
-    assert.ok(result.matches.some((m) => m.kind === "procedure"));
+    assert.ok(result.matches.every((m) => m.kind === "source"));
 });
 
-test("evidence opens exact retained source revision and exact saved procedure version", async () => {
+test("evidence opens the exact retained source revision", async () => {
     const { query, calls } = fixture();
     const source = await query.memoryHubEvidence({
         kind: "source",
@@ -467,18 +785,6 @@ test("evidence opens exact retained source revision and exact saved procedure ve
         calls.find(([kind]) => kind === "content")[1].revisionId,
         "r1",
     );
-    const procedure = await query.memoryHubEvidence({
-        kind: "procedure",
-        corpusId: "a",
-        objectId: "guide",
-        procedureVersion: 2,
-    });
-    assert.equal(procedure.provenance.procedureVersion, 2);
-    assert.deepEqual(calls.find(([kind]) => kind === "procedure").slice(1), [
-        "a",
-        "guide",
-        2,
-    ]);
 });
 
 test("conversation citations resolve actual event/turn structure and reject foreign producers", async () => {

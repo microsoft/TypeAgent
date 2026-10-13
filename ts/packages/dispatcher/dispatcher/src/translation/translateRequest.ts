@@ -106,6 +106,25 @@ function resolveTranslationModel(model: string): string {
     return model;
 }
 
+export function resolveTranslationModelSettings(
+    model: string,
+    reasoningEffort: DispatcherConfig["translation"]["reasoningEffort"],
+): {
+    model: string;
+    reasoningEffort:
+        | DispatcherConfig["translation"]["reasoningEffort"]
+        | undefined;
+} {
+    const resolvedModel = resolveTranslationModel(model);
+    return {
+        model: resolvedModel,
+        // The fallback may not support reasoning parameters (for example,
+        // GPT-4.1 in smoke-test environments). Keep effort only when the
+        // configured model itself is available.
+        reasoningEffort: resolvedModel === model ? reasoningEffort : undefined,
+    };
+}
+
 const debugSemanticSearchInfo = registerDebug(
     "typeagent:translate:semantic:info",
 );
@@ -212,6 +231,10 @@ export function getTranslatorForSchema(
         jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
         jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
     };
+    const modelSettings = resolveTranslationModelSettings(
+        config.model,
+        config.reasoningEffort,
+    );
     const newTranslator = loadAgentJsonTranslator(
         actionConfigs,
         switchActionConfigs,
@@ -221,11 +244,11 @@ export function getTranslatorForSchema(
             multiple: config.multiple,
         },
         generateOptions,
-        resolveTranslationModel(config.model),
+        modelSettings.model,
         context.promptLogger,
         sessionConfig.execution.entityPromptShape,
         sessionConfig.translation.entity.pathNavigation !== "off",
-        config.reasoningEffort,
+        modelSettings.reasoningEffort,
     );
     if (useCache) {
         context.translatorCache.set(translatorName, newTranslator);

@@ -6,26 +6,23 @@ import { createDocMemorySettings } from "@typeagent/conversation-memory";
 import {
     FileMemoryService,
     createKnowProCorpusIndex,
-    type RunbookBindingValidator,
+    getConfiguredMemoryViewOptions,
 } from "@typeagent/memory-service";
-import { getConfiguredRunbookModelOptions } from "./runbookModelOptions.js";
+import { getConfiguredViewModelOptions } from "./viewModelOptions.js";
 
 export function createDurableMemoryService(
     rootDirectory: string,
-    runbookBindingValidator?: RunbookBindingValidator,
 ): FileMemoryService {
     return new FileMemoryService(rootDirectory, {
-        ...getConfiguredRunbookModelOptions(),
-        ...(runbookBindingValidator === undefined
-            ? {}
-            : { runbookBindingValidator }),
+        ...getConfiguredMemoryViewOptions(),
+        ...getConfiguredViewModelOptions(),
         indexFactory: (corpusId, indexDirectory) =>
             createKnowProCorpusIndex(corpusId, indexDirectory, () => {
                 const settings = createDocMemorySettings(
                     64,
                     undefined,
                     openai.createChatModel(
-                        openai.GPT_5_6_LUNA,
+                        openai.GPT_6_LUNA,
                         undefined,
                         undefined,
                         ["website-knowledge", "durable-index"],

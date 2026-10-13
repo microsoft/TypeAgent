@@ -207,6 +207,11 @@ export interface MacroLearningRuntime {
         requests: string[],
         signal: AbortSignal,
     ): Promise<string[]>;
+    // Validate staged rules against the current catalog without generating rules or executing tools.
+    validateGrammar(
+        macro: CopilotToolMacro,
+        approved: CopilotToolMacro[],
+    ): void;
 }
 
 export interface MacroCandidateProvenance {

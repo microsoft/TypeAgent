@@ -7,6 +7,7 @@ import {
     appendFile,
     mkdir,
     readFile,
+    readdir,
     stat,
     rename,
     rm,
@@ -228,12 +229,24 @@ export class MacroManager {
         return token;
     }
 
-    getRecordingState(sessionId: string): RecordingState {
+    async getRecordingState(sessionId: string): Promise<RecordingState> {
         this.removeExpired(sessionId);
         const token = this.recordings.get(sessionId);
         if (token) return { status: token.status, token };
         const trace = this.completed.get(sessionId);
-        if (trace) return { status: "completed", trace };
+        if (trace) {
+            return {
+                status: "completed",
+                trace,
+                ...(trace.learningJobId
+                    ? {
+                          learningJob: await this.learning.getJob(
+                              trace.learningJobId,
+                          ),
+                      }
+                    : {}),
+            };
+        }
         const error = this.failures.get(sessionId);
         return error ? { status: "failed", error } : { status: "idle" };
     }
@@ -380,6 +393,9 @@ export class MacroManager {
         }
         return this.mutateCatalog(async () => {
             if (macro.learning) await this.learning.assertApproval(macro);
+            const latest = (await this.readCatalog()).find(
+                (item) => item.macroId === macro.macroId,
+            );
             const existing = await this.readVersionIfPresent(
                 macro.macroId,
                 macro.version,
@@ -390,21 +406,15 @@ export class MacroManager {
                         `Macro version already exists with different content: ${macro.macroId}@${macro.version}`,
                     );
                 }
-                const summary = (await this.readCatalog()).find(
-                    (item) => item.macroId === macro.macroId,
-                );
                 if (
-                    (summary === undefined ||
-                        summary.version <= existing.version) &&
-                    !this.isPendingLearningAdaptation(existing, summary)
+                    !(existing.learning && existing.candidateProvenance) &&
+                    (latest === undefined || latest.version <= existing.version)
                 ) {
                     await this.upsertSummary(existing);
                 }
                 return this.versionRef(existing);
             }
-            const latest = (await this.readCatalog()).find(
-                (item) => item.macroId === macro.macroId,
-            );
+            this.assertLearningAdaptationSource(macro, latest);
             if (
                 latest &&
                 (await this.inspectMacro(latest)).learning &&
@@ -420,7 +430,7 @@ export class MacroManager {
                 );
             }
             await this.writeVersion(macro);
-            if (!this.isPendingLearningAdaptation(macro, latest)) {
+            if (!this.hasCurrentLearningSource(macro, latest)) {
                 await this.upsertSummary(macro);
             }
             return this.versionRef(macro);
@@ -557,7 +567,9 @@ export class MacroManager {
             const approved: CopilotToolMacro = {
                 ...current,
                 steps,
-                version: current.version + 1,
+                version: current.learning
+                    ? current.version + 1
+                    : await this.nextVersion(current.macroId),
                 state: "approved",
                 createdAt: new Date().toISOString(),
             };
@@ -565,10 +577,11 @@ export class MacroManager {
             if (
                 (latest.version !== current.version ||
                     latest.state !== "draft") &&
-                !this.isPendingLearningAdaptation(current, latest)
+                !this.hasCurrentLearningSource(current, latest)
             ) {
                 throw new Error("Only the current draft can be approved.");
             }
+            this.assertLearningAdaptationSource(current, latest);
             const learningPreference = await this.learning.assertApproval(
                 current,
                 automatic,
@@ -578,6 +591,12 @@ export class MacroManager {
                     ...approved.learning,
                     mode: learningPreference.mode,
                 };
+            }
+            if (approved.learning) {
+                this.learning.validateApprovalGrammar(
+                    approved,
+                    await this.getApprovedMacros(),
+                );
             }
             await this.writeVersion(approved);
             await this.upsertSummary(approved);
@@ -610,19 +629,43 @@ export class MacroManager {
                     "Learning recovery cannot resurrect a superseded or disabled version.",
                 );
             }
+            if (
+                latest?.state !== "approved" ||
+                latest.version !== macro.version
+            ) {
+                this.assertLearningAdaptationSource(macro, latest);
+            }
+            this.learning.validateApprovalGrammar(
+                macro,
+                await this.getApprovedMacros(),
+            );
             await this.upsertSummary(macro);
         });
     }
 
-    private isPendingLearningAdaptation(
+    private assertLearningAdaptationSource(
+        macro: CopilotToolMacro,
+        latest: MacroSummary | undefined,
+    ): void {
+        if (
+            macro.learning &&
+            macro.candidateProvenance &&
+            !this.hasCurrentLearningSource(macro, latest)
+        ) {
+            throw new Error(
+                "Learning adaptation requires its source version to remain approved.",
+            );
+        }
+    }
+
+    private hasCurrentLearningSource(
         macro: CopilotToolMacro,
         latest: MacroSummary | undefined,
     ): boolean {
         return (
             macro.learning !== undefined &&
-            macro.state === "draft" &&
             latest?.state === "approved" &&
-            latest.version + 1 === macro.version &&
+            latest.version < macro.version &&
             macro.candidateProvenance?.sourceMacroId === macro.macroId &&
             macro.candidateProvenance.sourceVersion === latest.version
         );
@@ -638,7 +681,7 @@ export class MacroManager {
             }
             const disabled: CopilotToolMacro = {
                 ...current,
-                version: current.version + 1,
+                version: await this.nextVersion(current.macroId),
                 state: "disabled",
                 createdAt: new Date().toISOString(),
             };
@@ -784,11 +827,10 @@ export class MacroManager {
                 );
             }
             this.validateCandidateEvidence(request, handoff);
-            const latest = await this.getLatestSummary(source.macroId);
             const createdAt = new Date().toISOString();
             const candidate: CopilotToolMacro = {
                 ...source,
-                version: latest.version + 1,
+                version: await this.nextVersion(source.macroId),
                 name: request.name?.trim() || source.name,
                 description: request.description?.trim() || source.description,
                 state: "draft",
@@ -947,7 +989,7 @@ export class MacroManager {
             );
         return {
             macroId: handoff.macroId,
-            version: handoff.version + 1,
+            version: await this.nextVersion(handoff.macroId),
             provenance: {
                 sourceMacroId: handoff.macroId,
                 sourceVersion: handoff.version,
@@ -1289,6 +1331,23 @@ export class MacroManager {
             updatedAt: macro.createdAt,
         });
         await this.writeJsonAtomic(this.catalogPath(), summaries);
+    }
+
+    private async nextVersion(macroId: string): Promise<number> {
+        this.validateMacroId(macroId);
+        let files: string[];
+        try {
+            files = await readdir(path.dirname(this.versionPath(macroId, 1)));
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return 1;
+            throw error;
+        }
+        return (
+            files.reduce((latest, file) => {
+                const match = /^([1-9]\d*)\.json$/.exec(file);
+                return match ? Math.max(latest, Number(match[1])) : latest;
+            }, 0) + 1
+        );
     }
 
     private async writeVersion(macro: CopilotToolMacro): Promise<void> {

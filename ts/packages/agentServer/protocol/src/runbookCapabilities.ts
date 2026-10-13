@@ -1,14 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { CatalogEntry, CatalogState } from "@typeagent/skill-catalog";
 import type { ProcedureArtifactGenerator } from "@typeagent/procedure-artifacts";
+import type { CatalogEntry, CatalogState } from "@typeagent/skill-catalog";
 import type {
     GetSkillRequest,
     ListSkillsRequest,
-    ProcedureArtifactPreview,
-    ProcedureArtifactPromotion,
-    ProcedureArtifactRequest,
     ReadSkillFileRequest,
     ReadSkillFileResponse,
     SelectSkillRevisionRequest,
@@ -122,12 +119,6 @@ export type RunbookHostCapabilities = {
     readSkillFile(
         request: ReadSkillFileRequest,
     ): Promise<ReadSkillFileResponse>;
-    previewProcedureArtifact(
-        request: Extract<ProcedureArtifactRequest, { kind: "skill" }>,
-    ): Promise<ProcedureArtifactPreview>;
-    promoteProcedureArtifact(
-        request: Extract<ProcedureArtifactRequest, { kind: "skill" }>,
-    ): Promise<ProcedureArtifactPromotion>;
     getSkillLifecycle(
         request: SelectSkillRevisionRequest,
     ): Promise<RunbookSkillLifecycle>;

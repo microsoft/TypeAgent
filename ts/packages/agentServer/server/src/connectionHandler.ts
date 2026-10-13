@@ -1,42 +1,40 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
-import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
-import { createRpc } from "@typeagent/agent-rpc/rpc";
-import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
+import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
+import type {
+    RunbookHostCapabilities,
+    SkillAcquisitionRevisionResponse,
+} from "@typeagent/agent-server-protocol";
 import {
-    AgentServerInvokeFunctions,
     AgentServerChannelName,
+    AgentServerInvokeFunctions,
     DiscoveryChannelName,
-    createDiscoveryHandlers,
     DispatcherConnectOptions,
     JoinConversationResult,
     UserIdentity,
-    getDispatcherChannelName,
+    createDiscoveryHandlers,
     getClientIOChannelName,
+    getDispatcherChannelName,
 } from "@typeagent/agent-server-protocol";
 import type { ConfigDrift } from "@typeagent/config";
 import type { MacroManager } from "@typeagent/copilot-macros";
-import type { PersonalHowToService } from "@typeagent/memory-service";
+import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
+import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import type {
     LiveSkillCatalog,
     SkillAcquirer,
     SkillAcquisitionResult,
 } from "@typeagent/skill-catalog";
-import type { SkillAcquisitionRevisionResponse } from "@typeagent/agent-server-protocol";
-import type { Dispatcher } from "agent-dispatcher";
-import type { PortRegistrar } from "agent-dispatcher";
+import type { Dispatcher, PortRegistrar } from "agent-dispatcher";
+import registerDebug from "debug";
 import type { ConversationManager } from "./conversationManager.js";
-import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
+import { createRunbookHostCapabilities } from "./runbookCapabilities.js";
 import { getSpeechToken } from "./speechToken.js";
 import { validateStructuredActionJoin } from "./structuredActionBindings.js";
-import { ProcedureArtifactRpcService } from "./procedureArtifacts.js";
-import { createRunbookHostCapabilities } from "./runbookCapabilities.js";
-import { createRunbookBindingValidator } from "./runbookBindingValidator.js";
-import type { RunbookHostCapabilities } from "@typeagent/agent-server-protocol";
-import registerDebug from "debug";
+import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
 
 // Disconnect cleanup is best effort, so a failure cannot be surfaced to anyone:
 // the socket it would be reported on is already gone. Without a trace, a client
@@ -119,7 +117,6 @@ export type ConnectionHandlerDeps = {
     macroManager: MacroManager;
     skillCatalog: LiveSkillCatalog;
     skillAcquirer?: SkillAcquirer;
-    procedureService?: Pick<PersonalHowToService, "getProcedure">;
     runbookCapabilities?: RunbookHostCapabilities;
     /**
      * Invoked when the dispatcher (or an RPC client) requests a server
@@ -268,23 +265,6 @@ export function createAgentServerConnectionHandler(
     } = deps;
     const runbooks =
         deps.runbookCapabilities ?? createRunbookHostCapabilities(deps);
-    const procedureArtifacts =
-        deps.procedureService === undefined
-            ? undefined
-            : new ProcedureArtifactRpcService(
-                  deps.procedureService,
-                  skillCatalog,
-                  macroManager,
-                  createRunbookBindingValidator(runbooks),
-              );
-    const requireProcedureArtifacts = () => {
-        if (procedureArtifacts === undefined) {
-            throw new Error(
-                "Procedure artifact promotion is not configured on this server.",
-            );
-        }
-        return procedureArtifacts;
-    };
     const requireSkillAcquirer = () => {
         if (deps.skillAcquirer === undefined) {
             throw new Error("Skill acquisition is unavailable on this host.");
@@ -505,10 +485,6 @@ export function createAgentServerConnectionHandler(
                 acquisitionResponse(
                     await requireSkillAcquirer().update(request),
                 ),
-            previewProcedureArtifact: async (request) =>
-                requireProcedureArtifacts().preview(request),
-            promoteProcedureArtifact: async (request) =>
-                requireProcedureArtifacts().promote(request),
 
             joinConversation: async (options?: DispatcherConnectOptions) => {
                 validateStructuredActionJoin(options);

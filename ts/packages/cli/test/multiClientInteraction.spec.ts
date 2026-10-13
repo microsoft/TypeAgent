@@ -163,6 +163,52 @@ afterEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+describe("security approval cancellation", () => {
+    it("releases stdin so a later question receives the next answer", async () => {
+        const clientIO = createEnhancedClientIO();
+        const controller = new AbortController();
+        const approval = clientIO.requestSecurityApproval!(
+            { requestId: "security" },
+            { message: "Run code?", choices: ["Run", "Cancel"], defaultId: 1 },
+            "powershell",
+            controller.signal,
+        );
+        expect(fakeStdin.listenerCount("data")).toBe(1);
+        const rejected = expect(approval).rejects.toThrow("Stopped");
+        controller.abort(new Error("Stopped"));
+        await rejected;
+        expect(fakeStdin.listenerCount("data")).toBe(0);
+        const next = clientIO.question(
+            { requestId: "next" },
+            "Next question",
+            ["Yes", "No"],
+            1,
+        );
+        fakeStdin.typeAnswer("1");
+        await expect(next).resolves.toBe(0);
+        expect(fakeStdin.listenerCount("data")).toBe(0);
+    });
+
+    it("does not read input for an already cancelled approval", async () => {
+        const clientIO = createEnhancedClientIO();
+        const controller = new AbortController();
+        controller.abort(new Error("Stopped"));
+        await expect(
+            clientIO.requestSecurityApproval!(
+                { requestId: "security" },
+                {
+                    message: "Run code?",
+                    choices: ["Run", "Cancel"],
+                    defaultId: 1,
+                },
+                "powershell",
+                controller.signal,
+            ),
+        ).rejects.toThrow("Stopped");
+        expect(fakeStdin.listenerCount("data")).toBe(0);
+    });
+});
+
 describe("requestInteraction — user answers", () => {
     it("does not leak interaction input into the active command prompt", async () => {
         const { dispatcher, calls } = makeDispatcherStub();
@@ -379,7 +425,7 @@ describe("interactionCancelled — dismisses pending prompt", () => {
         await flushAsync();
 
         const combined = stdoutOutput.join("");
-        expect(combined).toContain("Cancelled!");
+        expect(combined).toContain("⚠  Cancelled");
     });
 });
 

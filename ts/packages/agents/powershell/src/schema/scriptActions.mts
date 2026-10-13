@@ -53,12 +53,12 @@ export type CreatePowerShellFlow = {
             pattern: string;
             isAlias: boolean;
         }[];
-        // PowerShell cmdlets the script uses
-        allowedCmdlets: string[];
+        // Installed modules to load before running the script.
+        requiredModules?: string[];
     };
 };
 
-// Create a reusable flow transactionally and execute the requested operation once
+// Create a reusable flow transactionally and execute once, after user authorization.
 export type CreateAndExecutePowerShellFlow = {
     actionName: "createAndExecutePowerShellFlow";
     parameters: {
@@ -83,8 +83,7 @@ export type CreateAndExecutePowerShellFlow = {
             pattern: string;
             isAlias: boolean;
         }[];
-        // PowerShell cmdlets the script uses
-        allowedCmdlets: string[];
+        requiredModules?: string[];
         // JSON string of named parameters for this one execution
         executionParametersJson?: string;
     };
@@ -117,12 +116,12 @@ export type ReportPowerShellCapabilityOutcome = {
     };
 };
 
-// Test a script without registering it
+// Execute a script without registering it. Fresh user authorization is required.
 export type TestPowerShellFlow = {
     actionName: "testPowerShellFlow";
     parameters: {
         script: string;
-        allowedCmdlets: string[];
+        requiredModules?: string[];
         testParameters?: string;
     };
 };
@@ -135,12 +134,12 @@ export type EditPowerShellFlow = {
         flowName: string;
         // New PowerShell script body (should include param() block matching existing parameters)
         script: string;
-        // Updated list of PowerShell cmdlets the script uses
-        allowedCmdlets: string[];
+        // Omit to preserve the existing module dependencies.
+        requiredModules?: string[];
     };
 };
 
-// Repair an existing flow and retry the requested operation once
+// Propose a repair and retry once. Authorize the replacement before execution.
 export type RepairAndExecutePowerShellFlow = {
     actionName: "repairAndExecutePowerShellFlow";
     parameters: {
@@ -148,8 +147,7 @@ export type RepairAndExecutePowerShellFlow = {
         flowName: string;
         // Replacement script body
         script: string;
-        // Updated cmdlet whitelist
-        allowedCmdlets: string[];
+        requiredModules?: string[];
         // JSON string of named parameters for the retry
         executionParametersJson?: string;
     };

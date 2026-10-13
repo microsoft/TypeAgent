@@ -11,6 +11,7 @@ import type {
     MemoryHubSearchRequest,
 } from "@typeagent/browser-control-rpc/viewRpc";
 import { timed } from "./memoryHubQuerySupport.mjs";
+import { currentSearchTraceId, timeSearchStage } from "@typeagent/knowpro";
 
 async function sourceGraph(
     service: MemoryService,
@@ -25,9 +26,15 @@ async function sourceGraph(
             "Query evidence is not the active retained revision; current knowledge is not substituted for historical evidence.",
         );
     }
-    const graph = await service.getSourceKnowledge(
-        evidence.corpusId,
-        evidence.objectId,
+    const traceId = currentSearchTraceId();
+    const graph = await timeSearchStage("hub.sourceKnowledge", () =>
+        traceId === undefined
+            ? service.getSourceKnowledge(evidence.corpusId, evidence.objectId)
+            : service.getSourceKnowledge(
+                  evidence.corpusId,
+                  evidence.objectId,
+                  traceId,
+              ),
     );
     const current = await service.getSource(
         evidence.corpusId,

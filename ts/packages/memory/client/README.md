@@ -16,26 +16,7 @@ Typed in-process and MCP clients plus Zod protocol schemas for the TypeAgent
 memory service. The management surface includes corpus status, paged source and
 job listing, bounded content reads, source-scoped knowledge, revision-guarded
 replacement, preview/confirm source deletion, and source/corpus reindexing.
-It also exposes the personal how-to settings, candidate lifecycle, and
-versioned procedure save, get, list, search, and archive operations through
-both in-process and MCP clients.
-
-Procedure JSON and protocol schemas preserve optional schema-v1 `agentEdition`
-content, stable step IDs, immutable binding targets, source/asset references,
-review stamps, and additional human sections. Both clients validate edition
-input with shared pure service validators. `saveProcedure` forwards explicit
-`reviewAgentEdition?: boolean` and `safetyConfirmed?: boolean` intent unchanged;
-the backend alone stamps review for the resulting exact saved version/hash.
-Supplying a model/client `review.state: "reviewed"` does not review an edition.
-Secret input literals and unsafe asset payloads are rejected. Commands are
-redacted text and never execute through this API.
-
-Catalog binding `arguments` survive both clients and MCP schemas, including
-nested `{"$input":"declared-input-id"}` references and `{"$literal": JSON}`
-escapes. Shared bounded JSON validation rejects malformed mappings and unknown
-input references. Unknown additional-section metadata is retained. Acceptance
-requires actual host target-schema validation and an exact argument echo;
-identity-only catalog checks cannot stamp a reviewed version.
+It exposes explicit derived View builds, revision/history reads, guarded edits, conflicts, publication and search. No settings, candidate detection, saved-procedure CRUD, or synthesis-job API is provided.
 
 Source revision responses retain asset metadata; edition assets are opaque
 references only. Raw `Uint8Array` asset ingestion is a trusted in-process/host
@@ -45,12 +26,11 @@ encoding/upload contract is provided, rather than silently discarding them.
 `InProcessMemoryServiceClient` and the RPC facade also forward optional
 host capabilities without duplicating their domain logic: `getRevisionAssets`,
 `readRevisionAsset`, `startBatchImport`, `getBatchImport`, `listBatchImports`,
-`retryBatchImport`, `cancelBatchImport`, `listRunbookJobs`, and `getRunbookJob`.
+`retryBatchImport`, and `cancelBatchImport`.
 Asset reads return `{ descriptor, bytes: Uint8Array }`. Batch input is
 `{ corpusId, idempotencyKey, documents }`, each document being an ingestion
-request without `corpusId`. Runbook jobs are separate postcommit jobs, not an
-alternate meaning of a completed ingestion job. Unsupported implementations
-reject explicitly. These new raw-asset/batch/job methods are host/in-process
+request without `corpusId`. Unsupported implementations
+reject explicitly. These new raw-asset/batch methods are host/in-process
 capabilities; MCP binary and batch transport require deliberate bounded
 adapters rather than treating `Uint8Array` as JSON.
 
@@ -73,14 +53,6 @@ Batch responses preserve member `clientKey`, `title`,
 authoritative; the adapters do not reacquire documents or discard warnings.
 There is no MCP batch request schema or batch tool: bounded remote acquisition
 and asset byte codecs remain explicit host-adapter work.
-
-`requestRunbookSynthesis({corpusId,sourceId,revisionId})` is forwarded in-process
-and through the narrow `memory_runbook_synthesis_request` MCP tool.
-`memory_runbook_job_get` and `memory_runbook_jobs_list` expose separate durable
-job outcomes and actual candidate IDs, including reused jobs and model failures.
-No call executes bindings, approves drafts, or overwrites human-edited versions.
-Unsupported service implementations reject explicitly. Runbook synthesis is not
-a numerical model-quality acceptance assertion.
 
 Document ingestion uses one model-driven `content` pipeline and KnowPro
 retrieval. The mode can be omitted; chunk sizing remains configurable.

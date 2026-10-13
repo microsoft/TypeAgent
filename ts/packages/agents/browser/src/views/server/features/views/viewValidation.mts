@@ -2,12 +2,23 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import {
-    runbookProcedureDocumentSchema,
-    runbookSaveSchema,
-    runbookViewSchemas,
-} from "./runbookViewSchemas.mjs";
 import { runbookImportViewSchemas } from "./runbookImportSchemas.mjs";
+import {
+    viewReadRequestSchema,
+    viewSaveRequestSchema,
+    viewArchiveRequestSchema,
+    viewBuildRequestSchema,
+    viewBuildJobRequestSchema,
+    viewConflictReadSchema,
+    viewResolutionSchema,
+    viewPublicationPolicyUpdateSchema,
+    viewPublishRequestSchema,
+    viewSearchRequestSchema,
+    viewMaintenancePlanRequestSchema,
+    viewMaintenanceRequestSchema,
+    viewMaintenanceUpdateSchema,
+    viewMaintenanceReadSchema,
+} from "@typeagent/memory-client";
 import type {
     ViewMethod,
     ViewRequest,
@@ -31,10 +42,6 @@ const suppression = {
     kind: z.enum(["entity", "topic"]),
     name: text,
 };
-const procedureStates = z
-    .array(z.enum(["saved", "stale", "archived"]))
-    .optional();
-const document = runbookProcedureDocumentSchema;
 const activity = {
     dateFrom: optionalText,
     dateTo: optionalText,
@@ -54,10 +61,64 @@ const neighborhood = {
 const graph = { maxNodes: optionalCount, includeConnectivity: boolean };
 const importId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
 
+function protocolInput(schema: {
+    safeParse(value: unknown): {
+        success: boolean;
+        error?: { message: string };
+    };
+}): z.ZodType {
+    // Client and browser use different pinned Zod versions; share validation without mixing their internals.
+    return z.unknown().superRefine((value, context) => {
+        const result = schema.safeParse(value);
+        if (!result.success)
+            context.addIssue({
+                code: "custom",
+                message:
+                    result.error?.message ?? "Invalid view protocol request",
+            });
+    });
+}
+
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
-    ...runbookViewSchemas,
+    memoryViewCapabilities: empty,
+    memoryListViews: z.strictObject(corpus),
+    memoryGetView: protocolInput(viewReadRequestSchema),
+    memorySaveViewDraft: protocolInput(viewSaveRequestSchema),
+    memoryArchiveView: protocolInput(viewArchiveRequestSchema),
+    memoryViewHistory: protocolInput(viewReadRequestSchema),
+    memoryGetViewPublicationPolicy: z.strictObject(corpus),
+    memoryUpdateViewPublicationPolicy: protocolInput(
+        viewPublicationPolicyUpdateSchema,
+    ),
+    memoryGetViewPublication: protocolInput(viewReadRequestSchema),
+    memoryPublishView: protocolInput(viewPublishRequestSchema),
+    memoryRetryViewIndex: protocolInput(viewPublishRequestSchema),
+    memorySearchViews: protocolInput(viewSearchRequestSchema),
+    memoryBuildViews: protocolInput(viewBuildRequestSchema),
+    memoryPlanViewMaintenance: protocolInput(viewMaintenancePlanRequestSchema),
+    memoryMaintainViews: protocolInput(viewMaintenanceRequestSchema),
+    memoryUpdateViewMaintenance: protocolInput(viewMaintenanceUpdateSchema),
+    memoryGetViewMaintenance: protocolInput(viewMaintenanceReadSchema),
+    memoryGetViewBuild: protocolInput(viewBuildJobRequestSchema),
+    memoryListViewBuilds: z.strictObject(corpus),
+    memoryCancelViewBuild: protocolInput(viewBuildJobRequestSchema),
+    memoryRetryViewBuild: protocolInput(viewBuildJobRequestSchema),
+    memoryGetViewConflict: protocolInput(viewConflictReadSchema),
+    memoryResolveViewConflict: protocolInput(viewResolutionSchema),
     ...runbookImportViewSchemas,
+    memoryHubViewUsedBy: z.strictObject({ ...source, ...page }),
+    memoryHubSourceOriginal: z.strictObject({
+        ...source,
+        revisionId: text,
+        locator: text.optional(),
+        offset: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(Number.MAX_SAFE_INTEGER)
+            .optional(),
+    }),
     memoryHubSearch: z.strictObject({
         query: text,
         corpusId: optionalText,
@@ -71,25 +132,36 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         dateFrom: z.iso.datetime({ offset: true }).optional(),
         dateTo: z.iso.datetime({ offset: true }).optional(),
         conversationScope: z.enum(["none", "current", "all"]).optional(),
+        viewKinds: z
+            .enum(["troubleshootingGuide", "projectBrief", "timeline", "wiki"])
+            .array()
+            .max(4)
+            .optional(),
     }),
     memoryHubEvidence: z.discriminatedUnion("kind", [
+        z.strictObject({
+            ...corpus,
+            kind: z.literal("event"),
+            objectId: text,
+            revisionId: text,
+            offset: z.number().int().nonnegative().optional(),
+        }),
+        z.strictObject({
+            ...corpus,
+            kind: z.literal("view"),
+            objectId: text,
+            revisionId: text,
+            offset: z.number().int().nonnegative().optional(),
+        }),
         z.strictObject({
             ...corpus,
             kind: z.literal("source"),
             objectId: text,
             revisionId: optionalText,
-            offset: z
-                .number()
-                .int()
-                .nonnegative()
-                .max(Number.MAX_SAFE_INTEGER)
+            locator: z
+                .string()
+                .regex(/^(?:chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/)
                 .optional(),
-        }),
-        z.strictObject({
-            ...corpus,
-            kind: z.literal("procedure"),
-            objectId: text,
-            procedureVersion: z.number().int().positive().optional(),
             offset: z
                 .number()
                 .int()
@@ -151,6 +223,7 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         description: optionalText,
     }),
     memoryListCorpora: empty,
+    memoryListEvents: z.strictObject({ ...corpus, ...page }),
     memoryGetCorpus: z.strictObject(corpus),
     memoryListSources: z.strictObject({
         ...corpus,
@@ -164,6 +237,10 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryGetSourceContent: z.strictObject({
         ...source,
         revisionId: optionalText,
+        indexedLocator: z
+            .string()
+            .regex(/^indexed:\d+:[0-9a-f]{64}:\d+-\d+$/)
+            .optional(),
         offset: optionalCount,
         maxChars: optionalCount,
     }),
@@ -194,50 +271,6 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         ...page,
     }),
     memoryCancelJob: z.strictObject({ jobId: text }),
-    memoryGetHowToSettings: z.strictObject(corpus),
-    memoryUpdateHowToSettings: z.strictObject({
-        ...corpus,
-        expectedRevision: count,
-        enabled: boolean,
-        detectCandidates: boolean,
-        preferences: z.record(z.string(), z.json()).optional(),
-    }),
-    memoryCreateProcedureCandidate: document.extend({
-        ...corpus,
-        candidateId: optionalText,
-        state: z.enum(["detected", "draft"]).optional(),
-    }),
-    memoryListProcedureCandidates: z.strictObject({
-        ...corpus,
-        states: z
-            .array(z.enum(["detected", "draft", "rejected", "saved"]))
-            .optional(),
-    }),
-    memoryRejectProcedureCandidate: z.strictObject({
-        ...corpus,
-        candidateId: text,
-    }),
-    memorySaveProcedure: runbookSaveSchema,
-    memoryListProcedures: z.strictObject({
-        ...corpus,
-        states: procedureStates,
-    }),
-    memoryGetProcedure: z.strictObject({
-        ...corpus,
-        procedureId: text,
-        version: optionalCount,
-    }),
-    memorySearchProcedures: z.strictObject({
-        ...corpus,
-        query: text,
-        states: procedureStates,
-        limit: optionalCount,
-    }),
-    memoryArchiveProcedure: z.strictObject({
-        ...corpus,
-        procedureId: text,
-        expectedVersion: optionalCount,
-    }),
     memoryListActivity: z.strictObject({ ...activity, ...page }),
     memoryForgetActivity: z.strictObject({
         ...activity,

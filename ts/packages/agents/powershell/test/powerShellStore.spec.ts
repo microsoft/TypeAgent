@@ -73,7 +73,12 @@ class MockStorage implements Storage {
     }
 
     async exists(storagePath: string): Promise<boolean> {
-        return this.data.has(storagePath);
+        return (
+            this.data.has(storagePath) ||
+            [...this.data.keys()].some((key) =>
+                key.startsWith(`${storagePath}/`),
+            )
+        );
     }
 
     async delete(storagePath: string): Promise<void> {
@@ -119,6 +124,144 @@ function createRecipe(actionName = "showPorts"): ScriptRecipe {
 }
 
 describe("PowerShellStore capability lifecycle", () => {
+    it("preserves older flows without silently recording or approving their version", async () => {
+        const storage = new MockStorage();
+        const original = new PowerShellStore(storage);
+        await original.initialize();
+        await original.saveFlow(createRecipe());
+        await storage.delete("revisions/showPorts.json");
+        const reloaded = new PowerShellStore(storage);
+        await reloaded.initialize();
+        expect(reloaded.listFlows()).toHaveLength(1);
+        const snapshot = await reloaded.getExecutionSnapshot("showPorts");
+        expect(snapshot?.revisionStatus).toBe("unverified");
+        expect(await storage.exists("revisions/showPorts.json")).toBe(false);
+        await snapshot!.acceptRevision();
+        expect(
+            (await reloaded.getExecutionSnapshot("showPorts"))?.revisionStatus,
+        ).toBe("verified");
+    });
+
+    it.each(["script", "default", "module", "timeout"])(
+        "detects an external %s edit across restarts",
+        async (kind) => {
+            const storage = new MockStorage();
+            const store = new PowerShellStore(storage);
+            await store.initialize();
+            await store.saveFlow(createRecipe());
+            if (kind === "script") {
+                await storage.write(
+                    "scripts/showPorts.ps1",
+                    "Write-Output 'changed'",
+                );
+            } else {
+                const flow = await store.getFlow("showPorts");
+                if (kind === "default")
+                    flow!.parameters = [
+                        {
+                            name: "Name",
+                            type: "string",
+                            required: false,
+                            description: "",
+                            default: "changed",
+                        },
+                    ];
+                if (kind === "module") flow!.requiredModules = ["Changed"];
+                if (kind === "timeout") flow!.sandbox.maxExecutionTime = 60;
+                await storage.write(
+                    "flows/showPorts.flow.json",
+                    JSON.stringify(flow),
+                );
+            }
+            const reloaded = new PowerShellStore(storage);
+            await reloaded.initialize();
+            expect(
+                (await reloaded.getExecutionSnapshot("showPorts"))
+                    ?.revisionStatus,
+            ).toBe("changed");
+        },
+    );
+
+    it("does not baseline a version replaced while being reviewed", async () => {
+        const storage = new MockStorage();
+        const store = new PowerShellStore(storage);
+        await store.initialize();
+        await store.saveFlow(createRecipe());
+        await storage.delete("revisions/showPorts.json");
+        const snapshot = await store.getExecutionSnapshot("showPorts");
+        await storage.write(
+            "scripts/showPorts.ps1",
+            "Write-Output 'replacement'",
+        );
+        await expect(snapshot!.acceptRevision()).rejects.toThrow(
+            "changed while approval was pending",
+        );
+        expect(await storage.exists("revisions/showPorts.json")).toBe(false);
+    });
+
+    it("rejects changed pending code before promotion", async () => {
+        const storage = new MockStorage();
+        const store = new PowerShellStore(storage);
+        await store.initialize();
+        const id = await store.savePending(createRecipe());
+        const replacement = createRecipe();
+        replacement.script.body = "Write-Output 'replacement'";
+        await storage.write(
+            `pending/${id}.recipe.json`,
+            JSON.stringify(replacement),
+        );
+        await expect(store.promotePending(`${id}.recipe.json`)).rejects.toThrow(
+            "Pending recipe changed",
+        );
+        expect(store.listFlows()).toHaveLength(0);
+    });
+
+    it("rejects redirected index paths without replacing the index", async () => {
+        const storage = new MockStorage();
+        const index = JSON.stringify({
+            version: 1,
+            flows: {
+                showPorts: {
+                    actionName: "showPorts",
+                    flowPath: "../outside.json",
+                    scriptPath: "../outside.ps1",
+                },
+            },
+            deletedSamples: [],
+        });
+        await storage.write("index.json", index);
+        await expect(new PowerShellStore(storage).initialize()).rejects.toThrow(
+            "Invalid PowerShell storage destination",
+        );
+        expect(await storage.read("index.json", "utf8")).toBe(index);
+    });
+
+    it.each([
+        "../profile",
+        "..\\profile",
+        "C:\\profile",
+        "",
+        "__proto__",
+        "CON",
+        "name:stream",
+    ])(
+        "rejects unsafe candidate names before writing scripts: %s",
+        async (name) => {
+            const storage = new MockStorage();
+            const store = new PowerShellStore(storage);
+            await store.initialize();
+            await expect(store.saveFlow(createRecipe(name))).rejects.toThrow(
+                "Invalid PowerShell flow name",
+            );
+            await expect(store.savePending(createRecipe(name))).rejects.toThrow(
+                "Invalid PowerShell flow name",
+            );
+            expect(await storage.list("scripts")).toEqual([]);
+            expect(await storage.list("flows")).toEqual([]);
+            expect(await storage.list("pending")).toEqual([]);
+        },
+    );
+
     it("does not overwrite an existing flow", async () => {
         const store = new PowerShellStore(new MockStorage());
         await store.initialize();
@@ -201,18 +344,13 @@ describe("PowerShellStore capability lifecycle", () => {
         );
 
         await expect(
-            store.updateFlowScript("showPorts", "Write-Output 'changed'", [
-                "Write-Output",
-            ]),
+            store.updateFlowScript("showPorts", "Write-Output 'changed'", []),
         ).rejects.toThrow("flow definition write failed");
         await expect(store.getScript("showPorts")).resolves.toBe(
             "Get-NetTCPConnection -State Listen",
         );
         await expect(store.getFlow("showPorts")).resolves.toMatchObject({
-            sandbox: {
-                allowedCmdlets: ["Get-NetTCPConnection"],
-                allowedModules: ["NetTCPIP"],
-            },
+            requiredModules: ["NetTCPIP"],
         });
     });
 
@@ -248,7 +386,6 @@ describe("PowerShellStore capability lifecycle", () => {
         await store.updateFlowScript(
             "showPorts",
             "Write-Output 'edited'",
-            ["Write-Output"],
             [],
             editedSource,
         );
@@ -315,7 +452,6 @@ describe("PowerShellStore capability lifecycle", () => {
         await store.updateFlowScript(
             "showOtherPorts",
             "Get-NetTCPConnection -State Established",
-            ["Get-NetTCPConnection"],
         );
         const afterScript = await store.getActionCacheBinding();
         expect(afterScript.actionFingerprints.showPorts).toBe(

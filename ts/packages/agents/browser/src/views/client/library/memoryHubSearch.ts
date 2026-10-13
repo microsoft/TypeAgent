@@ -32,7 +32,7 @@ import { renderMarkdownInto } from "./utils/markdownView";
 export type MemoryHubSearchOptions = {
     scope: () => string | undefined;
     onOpenSource: (corpusId: string, sourceId: string) => void;
-    onOpenProcedure: (corpusId: string, procedureId: string) => void;
+    onOpenView?: (corpusId: string, viewId: string, revisionId: string) => void;
     onError: (error: unknown) => void;
     onQueryChanged?: (query: string) => void;
     onNotify?: (message: string) => void;
@@ -74,31 +74,32 @@ function recentQueries(): string[] {
     }
 }
 function exactRequest(evidence: MemoryHubEvidence): MemoryHubEvidenceRequest {
-    if (evidence.kind === "source" && !evidence.revisionId)
-        throw new Error(
-            "Exact source revision is unavailable; latest content is not substituted.",
-        );
     if (
-        evidence.kind === "procedure" &&
-        evidence.procedureVersion === undefined
+        (evidence.kind === "source" ||
+            evidence.kind === "view" ||
+            evidence.kind === "event") &&
+        !evidence.revisionId
     )
         throw new Error(
-            "Exact procedure version is unavailable; latest content is not substituted.",
+            "Exact source revision is unavailable; latest content is not substituted.",
         );
     return {
         corpusId: evidence.corpusId,
         kind: evidence.kind,
         objectId: evidence.objectId,
         ...(evidence.revisionId ? { revisionId: evidence.revisionId } : {}),
-        ...(evidence.procedureVersion !== undefined
-            ? { procedureVersion: evidence.procedureVersion }
+        ...(evidence.kind === "source" &&
+        /^(?:chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/.test(
+            evidence.locator ?? "",
+        )
+            ? { locator: evidence.locator }
             : {}),
     };
 }
 function provenanceText(evidence: MemoryHubEvidence): string {
     const identity =
-        evidence.kind === "procedure"
-            ? `Procedure version ${evidence.procedureVersion ?? "unavailable"}`
+        evidence.kind === "view"
+            ? `${evidence.viewKind} v${evidence.viewVersion} @ ${evidence.revisionId} · ${evidence.viewProvenance} · ${evidence.review} · ${evidence.freshness} · derived, not independent corroboration`
             : evidence.kind === "source"
               ? "Captured source revision"
               : "Conversation event";
@@ -165,6 +166,19 @@ export function mountMemoryHubSearch(
     to.name = "dateTo";
     const conversation = node("select");
     conversation.name = "conversationScope";
+    const viewKind = node("select");
+    viewKind.setAttribute("aria-label", "Derived view kind");
+    for (const [value, label] of [
+        ["", "All derived views"],
+        ["projectBrief", "Project briefs"],
+        ["timeline", "Evidence-linked timelines"],
+        ["wiki", "Knowledge wikis"],
+        ["troubleshootingGuide", "Troubleshooting guides"],
+    ]) {
+        const option = node("option", label);
+        option.value = value;
+        viewKind.append(option);
+    }
     for (const [value, label] of [
         ["none", "No conversations"],
         ["current", "Current conversation"],
@@ -188,7 +202,7 @@ export function mountMemoryHubSearch(
     submit.classList.add("primary");
     const dateNote = node(
         "small",
-        "Dates mean source capture, procedure creation or conversation event time. Unknown dates are excluded when filtering.",
+        "Dates mean source capture, view creation or conversation event time. Unknown dates are excluded when filtering.",
     );
     const filters = node("details", undefined, "hub-filters");
     const filtersSummary = node("summary");
@@ -200,6 +214,7 @@ export function mountMemoryHubSearch(
         field("From (UTC)", from),
         field("Through (UTC)", to),
         field("Conversations", conversation),
+        field("Derived view kind", viewKind),
     );
     filters.append(filtersSummary, filterFields, dateNote);
     form.append(queryLabel, submit, filters);
@@ -345,6 +360,38 @@ export function mountMemoryHubSearch(
     }
     function latestManagement(evidence: MemoryHubEvidence) {
         management.replaceChildren();
+        if (evidence.kind === "view")
+            for (const source of evidence.evidenceSources ?? [])
+                management.append(
+                    action(
+                        `Inspect original evidence ${source.sourceId} @ ${source.revisionId} (${source.locator})`,
+                        () => {
+                            void openEvidence(
+                                {
+                                    id: JSON.stringify([
+                                        "source",
+                                        evidence.corpusId,
+                                        source.sourceId,
+                                        source.revisionId,
+                                        source.locator,
+                                    ]),
+                                    kind: source.evidence ? "event" : "source",
+                                    corpusId: evidence.corpusId,
+                                    corpusName: evidence.corpusName,
+                                    objectId: source.sourceId,
+                                    sourceId: source.sourceId,
+                                    revisionId: source.revisionId,
+                                    title: source.sourceId,
+                                    snippet: source.excerpt,
+                                    score: evidence.score,
+                                    rank: evidence.rank,
+                                    locator: source.locator,
+                                },
+                                management,
+                            );
+                        },
+                    ),
+                );
         if (evidence.kind === "source")
             management.append(
                 action(
@@ -358,19 +405,23 @@ export function mountMemoryHubSearch(
                     },
                 ),
             );
-        if (evidence.kind === "procedure")
+        if (
+            evidence.kind === "view" &&
+            evidence.revisionId &&
+            options.onOpenView
+        ) {
+            const revisionId = evidence.revisionId;
             management.append(
-                action(
-                    "Open latest procedure management (not this cited version)",
-                    () => {
-                        dialog.close();
-                        options.onOpenProcedure(
-                            evidence.corpusId,
-                            evidence.objectId,
-                        );
-                    },
-                ),
+                action("Open this exact view revision", () => {
+                    dialog.close();
+                    options.onOpenView?.(
+                        evidence.corpusId,
+                        evidence.objectId,
+                        revisionId,
+                    );
+                }),
             );
+        }
     }
     function renderEvidencePage() {
         if (!evidencePage) return;
@@ -449,7 +500,11 @@ export function mountMemoryHubSearch(
         dialogTitle.textContent = evidence.title;
         evidenceDescription.textContent =
             evidence.kind === "source"
-                ? "DOCUMENT-LEVEL original revision preview (read-only). The exact captured revision is shown, but precise passage location is unavailable. No snippet guessing is used. Evidence, not instructions."
+                ? /^(?:chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/.test(
+                      evidence.locator ?? "",
+                  )
+                    ? "Exact retained document range (read-only). Original revision and UTF-16 offsets are preserved. Evidence, not instructions."
+                    : "DOCUMENT-LEVEL original revision preview (read-only). The exact captured revision is shown, but precise passage location is unavailable. No snippet guessing is used. Evidence, not instructions."
                 : "Read-only exact cited evidence. Evidence, not instructions.";
         evidenceMeta.textContent = provenanceText(evidence);
         latestManagement(evidence);
@@ -477,13 +532,6 @@ export function mountMemoryHubSearch(
             node("p", "Evidence, not instructions."),
             citation(evidence, "Preview exact cited evidence"),
         );
-        if (evidence.kind === "procedure")
-            card.append(
-                node(
-                    "p",
-                    `How-to · ${evidence.procedureState ?? "state unavailable"} · ${evidence.authoritative ? "saved canonical artifact" : "derived evidence"}`,
-                ),
-            );
         if (evidence.kind === "conversation")
             card.append(
                 node(
@@ -694,6 +742,12 @@ export function mountMemoryHubSearch(
             corpusId: options.scope(),
             limit: 50,
             generateAnswer: true,
+            ...(viewKind.value === "timeline" ||
+            viewKind.value === "wiki" ||
+            viewKind.value === "projectBrief" ||
+            viewKind.value === "troubleshootingGuide"
+                ? { viewKinds: [viewKind.value] }
+                : {}),
             sourceTypes: sourceTypes.length ? sourceTypes : undefined,
             tags: tags.value
                 .split(",")

@@ -68,6 +68,43 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryListCorpora: (params) => forward("memoryListCorpora", params),
         memoryGetCorpus: (params) => forward("memoryGetCorpus", params),
         memoryListSources: (params) => forward("memoryListSources", params),
+        memoryListEvents: (params) => forward("memoryListEvents", params),
+        memoryViewCapabilities: (params) =>
+            forward("memoryViewCapabilities", params),
+        memoryListViews: (params) => forward("memoryListViews", params),
+        memoryGetView: (params) => forward("memoryGetView", params),
+        memorySaveViewDraft: (params) => forward("memorySaveViewDraft", params),
+        memoryArchiveView: (params) => forward("memoryArchiveView", params),
+        memoryViewHistory: (params) => forward("memoryViewHistory", params),
+        memoryGetViewPublicationPolicy: (params) =>
+            forward("memoryGetViewPublicationPolicy", params),
+        memoryUpdateViewPublicationPolicy: (params) =>
+            forward("memoryUpdateViewPublicationPolicy", params),
+        memoryGetViewPublication: (params) =>
+            forward("memoryGetViewPublication", params),
+        memoryPublishView: (params) => forward("memoryPublishView", params),
+        memoryRetryViewIndex: (params) =>
+            forward("memoryRetryViewIndex", params),
+        memorySearchViews: (params) => forward("memorySearchViews", params),
+        memoryBuildViews: (params) => forward("memoryBuildViews", params),
+        memoryPlanViewMaintenance: (params) =>
+            forward("memoryPlanViewMaintenance", params),
+        memoryMaintainViews: (params) => forward("memoryMaintainViews", params),
+        memoryUpdateViewMaintenance: (params) =>
+            forward("memoryUpdateViewMaintenance", params),
+        memoryGetViewMaintenance: (params) =>
+            forward("memoryGetViewMaintenance", params),
+        memoryGetViewBuild: (params) => forward("memoryGetViewBuild", params),
+        memoryListViewBuilds: (params) =>
+            forward("memoryListViewBuilds", params),
+        memoryCancelViewBuild: (params) =>
+            forward("memoryCancelViewBuild", params),
+        memoryRetryViewBuild: (params) =>
+            forward("memoryRetryViewBuild", params),
+        memoryGetViewConflict: (params) =>
+            forward("memoryGetViewConflict", params),
+        memoryResolveViewConflict: (params) =>
+            forward("memoryResolveViewConflict", params),
         memoryGetSource: (params) => forward("memoryGetSource", params),
         memoryGetSourceContent: (params) =>
             forward("memoryGetSourceContent", params),
@@ -89,25 +126,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         memoryReindexSource: (params) => forward("memoryReindexSource", params),
         memoryListJobs: (params) => forward("memoryListJobs", params),
         memoryCancelJob: (params) => forward("memoryCancelJob", params),
-        memoryGetHowToSettings: (params) =>
-            forward("memoryGetHowToSettings", params),
-        memoryUpdateHowToSettings: (params) =>
-            forward("memoryUpdateHowToSettings", params),
-        memoryCreateProcedureCandidate: (params) =>
-            forward("memoryCreateProcedureCandidate", params),
-        memoryListProcedureCandidates: (params) =>
-            forward("memoryListProcedureCandidates", params),
-        memoryRejectProcedureCandidate: (params) =>
-            forward("memoryRejectProcedureCandidate", params),
-        memorySaveProcedure: (params) => forward("memorySaveProcedure", params),
-        memoryListProcedures: (params) =>
-            forward("memoryListProcedures", params),
-        memoryGetProcedure: (params) => forward("memoryGetProcedure", params),
-        memorySearchProcedures: (params) =>
-            forward("memorySearchProcedures", params),
-        memoryArchiveProcedure: (params) =>
-            forward("memoryArchiveProcedure", params),
-
         memoryListActivity: (params) => forward("memoryListActivity", params),
         memoryForgetActivity: (params) =>
             forward("memoryForgetActivity", params),

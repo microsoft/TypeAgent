@@ -13,12 +13,16 @@ describe("extension commands", () => {
     const originalDataDir = process.env.TYPEAGENT_PLUGIN_DATA;
     const originalMode = process.env.TYPEAGENT_MODE;
     const originalSelectedSkills = process.env.TYPEAGENT_SELECTED_SKILLS;
+    const originalHost = process.env.TYPEAGENT_HOST;
+    const originalPort = process.env.TYPEAGENT_PORT;
 
     beforeEach(() => {
         dataDir = mkdtempSync(join(tmpdir(), "typeagent-copilot-"));
         process.env.TYPEAGENT_PLUGIN_DATA = dataDir;
         delete process.env.TYPEAGENT_MODE;
         delete process.env.TYPEAGENT_SELECTED_SKILLS;
+        delete process.env.TYPEAGENT_HOST;
+        delete process.env.TYPEAGENT_PORT;
     });
 
     afterEach(() => {
@@ -31,6 +35,10 @@ describe("extension commands", () => {
         if (originalSelectedSkills === undefined)
             delete process.env.TYPEAGENT_SELECTED_SKILLS;
         else process.env.TYPEAGENT_SELECTED_SKILLS = originalSelectedSkills;
+        if (originalHost === undefined) delete process.env.TYPEAGENT_HOST;
+        else process.env.TYPEAGENT_HOST = originalHost;
+        if (originalPort === undefined) delete process.env.TYPEAGENT_PORT;
+        else process.env.TYPEAGENT_PORT = originalPort;
     });
 
     it("reports status using the default configuration", async () => {
@@ -44,6 +52,19 @@ describe("extension commands", () => {
         expect(messages[0]).toContain("Mode: direct");
         expect(messages[0]).toContain("TypeAgent PowerShell: on");
         expect(messages[0]).toContain("Server: ws://localhost:8999");
+    });
+
+    it("reports status using the configured server host and port", async () => {
+        process.env.TYPEAGENT_HOST = "127.0.0.1";
+        process.env.TYPEAGENT_PORT = "9026";
+        const messages: string[] = [];
+        const command = createExtensionCommands(async (message) => {
+            messages.push(message);
+        }).find(({ name }) => name === "typeagent-status");
+
+        await command?.handler({} as never);
+
+        expect(messages[0]).toContain("Server: ws://127.0.0.1:9026");
     });
 
     it("persists a valid mode and rejects an invalid mode", async () => {

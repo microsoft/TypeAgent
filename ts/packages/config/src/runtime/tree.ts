@@ -19,6 +19,10 @@
  */
 
 import type { ConfigTree, FlatEnv } from "../types.js";
+import {
+    modelRequestConstraintsToFlat,
+    modelRequestConstraintsToTree,
+} from "./requestConstraints.js";
 import { simpleConfigMappingsForSection } from "../mappings.js";
 import { regionFromUrl, regionToEnvSuffix } from "./regions.js";
 import { buildConfig } from "./build.js";
@@ -281,6 +285,10 @@ export function configToTree(config: Config): ConfigTree {
         azure.deployments = deployments;
     }
     tree.azureOpenAI = azure;
+    if (config.modelRequestConstraints)
+        tree.modelRequestConstraints = modelRequestConstraintsToTree(
+            config.modelRequestConstraints,
+        );
 
     if (config.openAI) {
         const o = config.openAI;
@@ -540,6 +548,7 @@ const TYPED_SECTION_KEYS = new Set([
     "copilot",
     "modelProvider",
     "embedding",
+    "modelRequestConstraints",
 ]);
 
 export function isTypedSectionKey(key: string): boolean {
@@ -1117,6 +1126,8 @@ export function typedSectionToFlat(
 ): FlatEnv {
     const out: FlatEnv = {};
     switch (key) {
+        case "modelRequestConstraints":
+            return modelRequestConstraintsToFlat(node);
         case "azureOpenAI":
             emitAzureOpenAI(node, out);
             break;

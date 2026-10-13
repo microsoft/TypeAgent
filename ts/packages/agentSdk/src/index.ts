@@ -17,6 +17,7 @@ export {
     AgentMessageKind,
     AgentThreadHandle,
     SessionContext,
+    SecurityApprovalRequest,
     StorageListOptions,
     Storage,
     StorageEncoding,

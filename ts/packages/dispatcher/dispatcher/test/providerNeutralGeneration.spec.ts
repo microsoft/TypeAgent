@@ -39,7 +39,7 @@ function successfulTrace(
 }
 
 describe("provider-neutral generation", () => {
-    it("uses the Copilot GPT-5.6 Sol model by default", async () => {
+    it("uses the Copilot GPT-6 Sol model by default", async () => {
         let requestedModel: string | undefined;
         const model = {
             complete: async () => ({ success: true, data: "generated" }),
@@ -52,7 +52,7 @@ describe("provider-neutral generation", () => {
             }),
         ).resolves.toBe("generated");
         expect(requestedModel).toBe(DEFAULT_GENERATION_MODEL);
-        expect(DEFAULT_GENERATION_MODEL).toBe("gpt-5.6-sol");
+        expect(DEFAULT_GENERATION_MODEL).toBe("gpt-6-sol");
     });
 
     it("maps legacy Claude model options to the Copilot default", async () => {
@@ -121,7 +121,7 @@ describe("provider-neutral generation", () => {
         expect(recipe?.source?.sourceId).toBe("request");
         expect(prompts).toHaveLength(1);
         expect(prompts[0]).toContain("player");
-        expect(prompts[0]).toContain('"gpt-5.6-sol"');
+        expect(prompts[0]).toContain('"gpt-6-sol"');
     });
 
     it("generates a PowerShell recipe with an injected offline model", async () => {

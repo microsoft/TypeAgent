@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=58fd28d7d5b9f231da434e1d322f97c4615ba55077a53e410aabe070b295cf78 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=1ebb9b0b7f8b3afc495dadf7d658a98cd115a300aec9afa95d63f6b6c58ae6b9 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # git-story — AI-generated documentation
@@ -27,15 +27,24 @@ _No public exports declared in `package.json`._
 Workspace:
 
 - [@typeagent/agent-harness-hooks](../../packages/agent-harness-hooks/README.md)
+- [@typeagent/conversation-memory](../../packages/memory/conversation/README.md)
 
-External: `@hono/node-server`, `commander`, `hono`, `tirith`
+External: `@hono/node-server`, `commander`, `hono`, `tirith`, `zod`
 
 ### Files of interest
 
-`./src/server/routes/daemonApiHandler.ts`, `./src/server/routes/storyCommitsApiHandler.ts`, `./src/cli.ts`, …and 13 more under `./src/`.
+`./src/server/routes/daemonApiHandler.ts`, `./src/server/routes/sessionsApiHandler.ts`, `./src/server/routes/storyCommitsApiHandler.ts`, …and 32 more under `./src/`.
+
+### Environment variables
+
+_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+
+- `GIT_STORY_ADAPTER`
+- `GIT_STORY_COPILOT_HOME`
+- `GIT_STORY_STATE_DIR`
 
 ---
 
-_Auto-generated against commit `b705d07577da10f5438b417fd4dedb8a0a58ac9c` on `2026-10-02T02:45:42.886Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter git-story docs:verify-links` to spot-check._
+_Auto-generated against commit `a6feb4ed73292b6ed4bcfa6d7baa42ae3226a1ff` on `2026-10-08T05:34:04.069Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter git-story docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

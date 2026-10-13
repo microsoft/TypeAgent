@@ -93,6 +93,10 @@ flowchart LR
   linked to page sources, with domain, page type, source, and time filters.
 - The browser Memory Center exposes corpus, source, revision, knowledge, job,
   replacement, forgetting, curation, and reindex operations.
+- Forgetting a source rebuilds the corpus index before completing. Memory Hub
+  displays progress, prevents duplicate confirmations, and keeps errors visible
+  inside the confirmation dialog. Successful completion refreshes the source
+  list, closes the deleted source's drawer, and shows a notification.
 
 ### Procedural memory
 

@@ -17,9 +17,9 @@ let host: HTMLElement;
 let mounted: ReturnType<typeof mountMemoryHubSearch>;
 let scope: string | undefined;
 let onSource: jest.Mock;
-let onProcedure: jest.Mock;
 let onError: jest.Mock;
 let onQueryChanged: jest.Mock;
+let onView: jest.Mock;
 
 const source: MemoryHubEvidence = {
     id: "source-citation",
@@ -36,14 +36,19 @@ const source: MemoryHubEvidence = {
     sourceType: "markdown",
     locator: "lines 3–8",
 };
-const procedure: MemoryHubEvidence = {
-    id: "procedure-citation",
-    kind: "procedure",
+const derivedView: MemoryHubEvidence = {
+    id: "derivedView-citation",
+    kind: "view",
     corpusId: "b",
     corpusName: "Beta",
-    objectId: "procedure",
-    procedureVersion: 4,
-    procedureState: "stale",
+    objectId: "derivedView",
+    revisionId: "view-r4",
+    viewKind: "troubleshootingGuide",
+    viewVersion: 4,
+    viewProvenance: "generated",
+    review: "unreviewed",
+    freshness: "stale",
+    sourceRevisionIds: ["r3"],
     title: "Restart worker",
     snippet: "Check the queue",
     score: 0.019,
@@ -64,7 +69,7 @@ const conversation: MemoryHubEvidence = {
     eventTime: "2026-10-01T12:00:00Z",
 };
 function result(
-    matches = [source, procedure, conversation],
+    matches = [source, derivedView, conversation],
 ): MemoryHubSearchResult {
     return {
         query: "worker",
@@ -133,9 +138,9 @@ beforeEach(() => {
     document.body.append(host);
     scope = undefined;
     onSource = jest.fn();
-    onProcedure = jest.fn();
     onError = jest.fn();
     onQueryChanged = jest.fn();
+    onView = jest.fn();
     HTMLDialogElement.prototype.showModal = function () {
         this.open = true;
     };
@@ -146,9 +151,9 @@ beforeEach(() => {
     mounted = mountMemoryHubSearch(host, {
         scope: () => scope,
         onOpenSource: onSource,
-        onOpenProcedure: onProcedure,
         onError,
         onQueryChanged,
+        onOpenView: onView,
     });
     invoke.mockImplementation(
         async (method: string, params: { offset?: number }) =>
@@ -194,6 +199,26 @@ test("healthy bounded retrieval notices are not failed retrieval, and explicit d
     );
 });
 
+test("Search/Ask evidence preserves exact indexed locators", async () => {
+    const locator = `indexed:0:${"a".repeat(64)}:12000-13000`;
+    invoke.mockImplementation(async (method: string) =>
+        method === "memoryHubSearch"
+            ? result([{ ...source, locator }])
+            : { title: "Indexed", content: "Exact excerpt", truncated: false },
+    );
+    await mounted.show("worker");
+    button(source.title).click();
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("memoryHubEvidence", {
+        corpusId: "a",
+        kind: "source",
+        objectId: "source",
+        revisionId: "r3",
+        locator,
+        offset: 0,
+    });
+});
+
 test("mixed evidence is answer-first, safely rendered, and exact citations never guess by excerpt", async () => {
     await mounted.show("worker");
     expect(host.querySelector(".phase2-answer")!.textContent).toContain(
@@ -210,6 +235,7 @@ test("mixed evidence is answer-first, safely rendered, and exact citations never
         revisionId: "r3",
         offset: 0,
     });
+
     expect(host.querySelector("dialog pre")!.textContent).toBe(
         "<script>literal original</script>",
     );
@@ -231,17 +257,17 @@ test("mixed evidence is answer-first, safely rendered, and exact citations never
         expect.objectContaining({ revisionId: "r3", offset: 0 }),
     );
     button("Close evidence").click();
-    button(procedure.title).click();
+    button(derivedView.title).click();
     await settle();
     expect(invoke).toHaveBeenLastCalledWith("memoryHubEvidence", {
         corpusId: "b",
-        kind: "procedure",
-        objectId: "procedure",
-        procedureVersion: 4,
+        kind: "view",
+        objectId: "derivedView",
+        revisionId: "view-r4",
         offset: 0,
     });
-    button("Open latest procedure management (not this cited version)").click();
-    expect(onProcedure).toHaveBeenCalledWith("b", "procedure");
+    button("Open this exact view revision").click();
+    expect(onView).toHaveBeenCalledWith("b", "derivedView", "view-r4");
     expect(host.querySelector("dialog")!.open).toBe(false);
     button(conversation.title).click();
     await settle();
@@ -249,6 +275,66 @@ test("mixed evidence is answer-first, safely rendered, and exact citations never
         corpusId: "conversation",
         kind: "conversation",
         objectId: "event-7",
+        offset: 0,
+    });
+});
+
+test("published derived results disclose their exact revision and drill through to original evidence", async () => {
+    const guide: MemoryHubEvidence = {
+        id: "view-citation",
+        kind: "view",
+        corpusId: "a",
+        corpusName: "Alpha",
+        objectId: "guide",
+        revisionId: "published-r2",
+        title: "Published troubleshooting guide",
+        snippet: "Inspect pressure carefully.",
+        score: 0.02,
+        rank: 1,
+        viewKind: "troubleshootingGuide",
+        viewVersion: 2,
+        viewProvenance: "merged",
+        review: "unreviewed",
+        freshness: "current",
+        evidenceSources: [
+            {
+                sourceId: "source",
+                revisionId: "source-r1",
+                locator: "chars:0-8",
+                excerpt: "Pressure",
+            },
+        ],
+    };
+    invoke.mockResolvedValueOnce(result([guide]));
+    await mounted.show("pressure");
+    expect(host.querySelector(".phase2-results")!.textContent).toContain(
+        "published-r2",
+    );
+    expect(host.querySelector(".phase2-results")!.textContent).toContain(
+        "merged",
+    );
+    expect(host.querySelector(".phase2-results")!.textContent).toContain(
+        "not independent corroboration",
+    );
+    button(guide.title).click();
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("memoryHubEvidence", {
+        corpusId: "a",
+        kind: "view",
+        objectId: "guide",
+        revisionId: "published-r2",
+        offset: 0,
+    });
+    button("Open this exact view revision").click();
+    expect(onView).toHaveBeenCalledWith("a", "guide", "published-r2");
+    button("Inspect original evidence source @ source-r1 (chars:0-8)").click();
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("memoryHubEvidence", {
+        corpusId: "a",
+        kind: "source",
+        objectId: "source",
+        revisionId: "source-r1",
+        locator: "chars:0-8",
         offset: 0,
     });
 });
@@ -434,7 +520,6 @@ test.each(["{bad JSON", '{"not":"an array"}', '["valid",7]'])(
             mounted = mountMemoryHubSearch(host, {
                 scope: () => scope,
                 onOpenSource: onSource,
-                onOpenProcedure: onProcedure,
                 onError,
             });
             expect(warning).toHaveBeenCalled();
@@ -509,7 +594,7 @@ test("web timeline uses real UTC event dates, marks missing dates, and keeps mix
                 title: "Invalid date",
             },
             source,
-            procedure,
+            derivedView,
             conversation,
         ]),
     );
@@ -612,7 +697,6 @@ test("optional success notifications honor preferences without suppressing error
     mounted = mountMemoryHubSearch(host, {
         scope: () => scope,
         onOpenSource: onSource,
-        onOpenProcedure: onProcedure,
         onError,
         onNotify,
     });
@@ -741,7 +825,7 @@ test("available canonical insights visibly retain backend revision bounds throug
     const message =
         "Insights cover at most 20 returned active source revisions, not corpus-wide statistics.";
     invoke.mockResolvedValueOnce({
-        ...result([source, procedure, conversation]),
+        ...result([source, derivedView, conversation]),
         insights: {
             provider: "canonical",
             status: "available",
@@ -771,7 +855,7 @@ test("available canonical insights visibly retain backend revision bounds throug
 
 test("the fixed Browser web insight lens is explicitly labelled and never stands in for All or named memory", async () => {
     const response = {
-        ...result([web, procedure]),
+        ...result([web, derivedView]),
         insights: {
             provider: "fixedBrowserMemory",
             status: "available",
@@ -870,7 +954,7 @@ test("missing or malformed insights are explicit and no snippets become topics",
 test("web insights cannot be shown for a nonweb result even in fixed Browser scope", async () => {
     scope = "fixedBrowserMemory";
     invoke.mockResolvedValueOnce({
-        ...result([procedure]),
+        ...result([derivedView]),
         insights: {
             provider: "fixedBrowserMemory",
             corpusId: scope,

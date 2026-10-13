@@ -1,6 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import {
+    WebStandardStreamableHTTPServerTransport,
+    type WebStandardStreamableHTTPServerTransportOptions,
+} from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type { MemoryService } from "@typeagent/memory-service";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
     createServer,
@@ -8,15 +14,6 @@ import {
     type Server,
     type ServerResponse,
 } from "node:http";
-import {
-    WebStandardStreamableHTTPServerTransport,
-    type WebStandardStreamableHTTPServerTransportOptions,
-} from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type {
-    MemoryService,
-    PersonalHowToService,
-} from "@typeagent/memory-service";
 import { MemoryMcpServer } from "./memoryMcpServer.js";
 
 export interface MemoryServiceHostOptions {
@@ -33,7 +30,7 @@ export class MemoryServiceHost {
     private constructor(
         private readonly httpServer: Server,
         private readonly activeServers: Set<MemoryMcpServer>,
-        private readonly service: MemoryService & PersonalHowToService,
+        private readonly service: MemoryService,
         private readonly beginClosing: () => void,
         public readonly host: string,
         public readonly port: number,
@@ -49,7 +46,7 @@ export class MemoryServiceHost {
     }
 
     public static async start(
-        service: MemoryService & PersonalHowToService,
+        service: MemoryService,
         options: MemoryServiceHostOptions = {},
     ): Promise<MemoryServiceHost> {
         const host = options.host ?? "127.0.0.1";

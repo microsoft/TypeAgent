@@ -172,6 +172,33 @@ function createConsoleClientIO(
         displayContent("");
     }
 
+    async function askChoice(
+        message: string,
+        choices: string[],
+        defaultId?: number,
+        signal?: AbortSignal,
+    ): Promise<number> {
+        signal?.throwIfAborted();
+        const isYesNo =
+            choices.length === 2 && choices[0] === "Yes" && choices[1] === "No";
+        const numbered = choices.map((c, i) => `  ${i + 1}. ${c}`).join("\n");
+        const hint = isYesNo ? "(y/n or 1-2)" : `(1-${choices.length})`;
+        const input = await question(
+            `${message}\n${numbered}\n${hint}> `,
+            rl,
+            undefined,
+            signal,
+        );
+        signal?.throwIfAborted();
+        const trimmed = input.trim().toLowerCase();
+        if (isYesNo) {
+            if (trimmed === "y" || trimmed === "yes") return 0;
+            if (trimmed === "n" || trimmed === "no") return 1;
+        }
+        const idx = parseInt(trimmed, 10) - 1;
+        return idx >= 0 && idx < choices.length ? idx : (defaultId ?? 0);
+    }
+
     return {
         clear(): void {
             console.clear();
@@ -209,6 +236,14 @@ function createConsoleClientIO(
             // REVIEW: Ignored.
         },
 
+        async requestSecurityApproval(
+            _requestId,
+            { message, choices, defaultId },
+            _source,
+            signal,
+        ) {
+            return askChoice(message, choices, defaultId, signal);
+        },
         // Input
         async question(
             _requestId: RequestId | undefined,
@@ -216,25 +251,7 @@ function createConsoleClientIO(
             choices: string[],
             defaultId?: number,
         ): Promise<number> {
-            const isYesNo =
-                choices.length === 2 &&
-                choices[0] === "Yes" &&
-                choices[1] === "No";
-            const numbered = choices
-                .map((c, i) => `  ${i + 1}. ${c}`)
-                .join("\n");
-            const hint = isYesNo ? "(y/n or 1-2)" : `(1-${choices.length})`;
-            const input = await question(
-                `${message}\n${numbered}\n${hint}> `,
-                rl,
-            );
-            const trimmed = input.trim().toLowerCase();
-            if (isYesNo) {
-                if (trimmed === "y" || trimmed === "yes") return 0;
-                if (trimmed === "n" || trimmed === "no") return 1;
-            }
-            const idx = parseInt(trimmed, 10) - 1;
-            return idx >= 0 && idx < choices.length ? idx : (defaultId ?? 0);
+            return askChoice(message, choices, defaultId);
         },
         async proposeAction(
             requestId: RequestId,
@@ -594,6 +611,7 @@ async function question(
     message: string,
     rl?: readline.promises.Interface,
     history?: string[],
+    signal?: AbortSignal,
 ): Promise<string> {
     // readline doesn't account for the right full width for some emojis.
     // Do manual adjustment.
@@ -609,7 +627,7 @@ async function question(
     process.stdin.on("data", adjust);
 
     try {
-        const p = rl!.question(message);
+        const p = rl!.question(message, { signal });
         process.stdout.cursorTo(stringWidth(message));
         return await p;
     } finally {

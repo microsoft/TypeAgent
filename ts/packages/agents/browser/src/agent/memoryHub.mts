@@ -18,11 +18,7 @@ import type {
 
 type MemoryHubSource = Pick<
     MemoryCenterInvokeFunctions,
-    | "memoryListCorpora"
-    | "memoryListProcedureCandidates"
-    | "memoryListProcedures"
-    | "memoryListJobs"
-    | "memoryListSources"
+    "memoryListCorpora" | "memoryListJobs" | "memoryListSources"
 >;
 
 const cursorSchema = z.strictObject({
@@ -131,100 +127,6 @@ export async function loadMemoryHubCorpora(
             (corpus) => corpusId === undefined || corpus.corpusId === corpusId,
         )
         .sort((left, right) => compareText(left.corpusId, right.corpusId));
-}
-
-async function addCorpusItems(
-    source: MemoryHubSource,
-    corpus: MemoryCenterCorpus,
-    snapshot: MemoryHubSnapshot,
-): Promise<void> {
-    await Promise.all([
-        source
-            .memoryListProcedureCandidates({
-                corpusId: corpus.corpusId,
-                states: ["detected", "draft"],
-            })
-            .then(
-                (candidates) => {
-                    for (const candidate of candidates) {
-                        snapshot.inbox.push({
-                            id: itemIdentity(
-                                "candidate",
-                                corpus.corpusId,
-                                candidate.candidateId,
-                            ),
-                            fingerprint: JSON.stringify([
-                                candidate.state,
-                                candidate.updatedAt,
-                            ]),
-                            kind: "candidate",
-                            corpusId: corpus.corpusId,
-                            corpusName: corpus.name,
-                            objectId: candidate.candidateId,
-                            title: candidate.title,
-                            reason: `${candidate.steps.length} steps found in source evidence; review before saving.`,
-                            updatedAt: candidate.updatedAt,
-                            severity: "info",
-                            ...(candidate.citations[0] === undefined
-                                ? {}
-                                : {
-                                      sourceId: candidate.citations[0].sourceId,
-                                  }),
-                        });
-                    }
-                },
-                (error: unknown) => {
-                    snapshot.errors.push({
-                        corpusId: corpus.corpusId,
-                        operation: "candidates",
-                        message: errorMessage(error),
-                    });
-                },
-            ),
-        source
-            .memoryListProcedures({
-                corpusId: corpus.corpusId,
-                states: ["saved", "stale"],
-            })
-            .then(
-                (procedures) => {
-                    for (const procedure of procedures) {
-                        snapshot.procedures.push({
-                            ...procedure,
-                            corpusName: corpus.name,
-                        });
-                        if (procedure.state !== "stale") continue;
-                        snapshot.inbox.push({
-                            id: itemIdentity(
-                                "staleProcedure",
-                                corpus.corpusId,
-                                procedure.procedureId,
-                            ),
-                            fingerprint: JSON.stringify([
-                                procedure.state,
-                                procedure.latestVersion,
-                                procedure.updatedAt,
-                            ]),
-                            kind: "staleProcedure",
-                            corpusId: corpus.corpusId,
-                            corpusName: corpus.name,
-                            objectId: procedure.procedureId,
-                            title: procedure.title,
-                            reason: "Cited source evidence changed or was forgotten. Review this how-to.",
-                            updatedAt: procedure.updatedAt,
-                            severity: "attention",
-                        });
-                    }
-                },
-                (error: unknown) => {
-                    snapshot.errors.push({
-                        corpusId: corpus.corpusId,
-                        operation: "procedures",
-                        message: errorMessage(error),
-                    });
-                },
-            ),
-    ]);
 }
 
 function scopeHash(
@@ -385,14 +287,10 @@ export function createMemoryHubFunctions(
             const snapshot: MemoryHubSnapshot = {
                 corpora,
                 inbox: [],
-                procedures: [],
                 errors: [],
             };
             if (!corpora.length) return snapshot;
             await Promise.all([
-                ...corpora.map((corpus) =>
-                    addCorpusItems(source, corpus, snapshot),
-                ),
                 loadJobs(source, corpusId).then(({ jobs, error }) => {
                     if (error !== undefined) {
                         snapshot.errors.push({
@@ -416,12 +314,6 @@ export function createMemoryHubFunctions(
                 }),
             ]);
             sortInbox(snapshot.inbox);
-            snapshot.procedures.sort(
-                (left, right) =>
-                    compareText(left.title, right.title) ||
-                    compareText(left.corpusId, right.corpusId) ||
-                    compareText(left.procedureId, right.procedureId),
-            );
             snapshot.errors.sort(
                 (left, right) =>
                     compareText(left.corpusId, right.corpusId) ||

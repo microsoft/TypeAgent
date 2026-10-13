@@ -247,7 +247,7 @@ function makeThrottler(maxConcurrency: number): FetchThrottler {
         async (task) => task(),
         maxConcurrency,
     );
-    return (fn: () => Promise<any>) => q.push<any>(fn);
+    return (fn: () => Promise<Response>) => q.pushAsync<Response>(fn);
 }
 
 /**

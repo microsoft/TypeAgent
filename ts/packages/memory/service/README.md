@@ -2,7 +2,51 @@
 
 Transport-independent durable memory corpus service.
 
-## Revision assets, acquired batches, and post-commit runbook jobs
+## Offline regression tests
+
+Batch cancellation tests synchronize at admission and index-entry barriers.
+Source-forget confirmation tests wait for completed commits before refreshing
+stale preview tokens; an index held open until cancellation must not also block
+the write reservation needed to obtain that preview.
+
+The configured-model CLI regression uses a loopback HTTP server, two compiled
+CLI subprocesses for build/status persistence, and the exported CLI for remaining
+commands. Every command opens and closes its own service. This retains real
+structured-output requests and edit/conflict coverage without repeatedly paying
+for cold process startup. Test environment and model runtime configuration are
+restored afterward.
+
+## Indexed reads and search diagnostics
+
+Document indexes are reused in memory while their published
+generation and persisted-file fingerprint remain unchanged. Fingerprints check
+schema, semantic-data, embedding-file and projection/readiness-marker metadata;
+schema validation and recovery still run when these change. A restart loads
+the published generation again. This does not cache queries or model responses.
+
+Prepared document searches, source knowledge, corpus knowledge and
+document answering can share a per-corpus read reservation. Preparation and
+mutations remain exclusive: ingestion, reindexing, forgetting wait for existing readers, and later readers wait behind a queued
+writer. Each async read retains its snapshot until completion. Cold runtime
+loading is single-flight, and shutdown drains the complete preparation/read
+lifetime before releasing storage.
+
+Set `TYPEAGENT_MEMORY_SEARCH_TRACE=1` on the host process to enable correlated
+Memory Hub search diagnostics on stderr. Lines prefixed `[memory-search-timing]` contain
+JSON with a trace ID, scope, stage, elapsed milliseconds, status and non-content
+metadata. The Hub propagates one ID through retrieval, insights and answer
+generation, including service/RPC calls. Spans distinguish corpus fan-out,
+queue waits, index checks/cache hits, validation/loading/rebuilding, KnowPro
+translation/execution/fallback and synthesis. Overlapping spans are not
+additive. The ISO UTC `timestamp` marks completion; subtract `elapsedMs` to
+reconstruct span starts and identify overlaps and the critical path. Disabled
+tracing does not emit logs or collect timing spans.
+
+Queries, source excerpts, prompts, tokens and raw error messages are excluded.
+Tracing does not change retrieval limits, model selection or when the Hub
+returns its evidence and answer.
+
+## Revision assets and acquired batches
 
 `IngestionSource.assets?: RevisionAssetInput[]` accepts already-acquired bytes
 (`Uint8Array`), bounded display `name`, sniffed `mimeType`, optional
@@ -56,8 +100,6 @@ Success is not undone by failed members. Restart reconciles committed jobs and
 marks other in-flight members interrupted; retry affects only failed,
 interrupted or cancelled members. Cancellation actually aborts underlying
 ingest jobs and waits for terminal results; committed members remain complete.
-Already-committed post-commit synthesis jobs are separate Activity work; batch
-cancellation does not pretend to stop them.
 Successful/duplicate acquired content is released from batch storage; failed
 content is retained for retry and purged on source forget/corpus clear.
 Source forgetting cancels only matching batch members; unrelated captures are
@@ -114,245 +156,686 @@ Hosts that intend replacement should supply a stable `source.sourceId` derived
 from the acquired document's identity; `documentKeys` alone are member metadata,
 not replacement source IDs.
 
-Runbook synthesis is opt-in: how-to `enabled` and `detectCandidates`, plus
-`preferences.runbook.buildAgentEdition === true`. The other exact runbook keys
-are `describeImages`, `mcpTools`, `approvedAutomations`; optional
-`preferences.extractionGuidance` is supplied to synthesis. Existing deterministic
-candidate detection remains the seed and old behavior is unchanged when the
-preference is absent. HTML is eligible for synthesis, not the Markdown detector.
-`listRunbookJobs(corpusId)` (latest 100) and `getRunbookJob(jobId)` expose
-separate durable post-commit classification/result jobs for Activity/Inbox:
-state, reason/confidence/classification, candidate IDs, warnings and timestamps.
-Model failure never rolls back captured knowledge and does not silently
-fall back to a claimed synthesized edition.
-Job reasons expose queued, synthesizing, and publishing stages. Job reads,
-writes, and removal are serialized per job to avoid Windows reader/rename
-contention; transient Windows rename retries are bounded to two seconds.
-If a background result cannot be persisted, job reads explicitly reject instead
-of returning a permanently running success-shaped snapshot.
-`requestRunbookSynthesis({ corpusId, sourceId, revisionId })` explicitly requests
-the same pipeline for an already-captured ready active revision, using retained
-original content/assets and current corpus preferences/guidance. Missing,
-historical, or nonready revisions and disabled preferences reject explicitly.
-The result is a durable `RunbookJobResult`; poll its existing job ID for model
-failure/completion. Pending/completed work is reused with its actual candidate
-IDs, not claimed as a new overwritten draft. Failed/interrupted work can retry.
-Existing candidate IDs, human edits, and saved procedures are never overwritten.
-After source comparison, select the active revision to propose its own draft.
+Importing instructions retains source evidence only. Builds are explicit; ingestion does not detect or save procedures.
 
-`FileMemoryServiceOptions.runbookSynthesizer` is a typed injectable
-`RunbookSynthesizer` for offline fixtures. Otherwise a configured aiclient model
-is constructed lazily using optional `runbookModelEndpoint`; no model is touched
-unless synthesis is enabled. Set `runbookMultimodal: true` only when the
-configured endpoint supports image input and that capability is approved.
-Without it, unsupported instruction-bearing images make steps explicitly
-manual. No remote images are fetched. Full documents are limited to
-**120,000 UTF-16 characters**, not silently truncated; one model request runs
-globally with **32 queued jobs / 120-second request deadline**.
-Synthesis outputs are bounded to 1 MiB, with at most 20 warnings of 1,000
-characters and a 2,000-character classification reason. Failure diagnostics are
-bounded with an explicit truncation notice; source evidence is never truncated.
+## Derived memory Views
 
-Synthesis supports multiple section-lineaged candidates, prose/tables,
-preconditions, branches, alternatives and retained links. Source/revision/section
-fingerprints make drafts idempotent. UTF-16 `chars:START-END` citations must
-exactly match retained excerpts; invalid locators are never guessed from snippets.
-Unknown asset references are discarded and unsupported steps become manual.
-Semantic derivation is flagged for source-support review; substring validation
-is not a claim of semantic entailment. Link resolution considers at most 100
-retained source identities, requiring the linked URI in the original document.
-Secret command/example redaction uses canonical pure validators. All imported
-editions are draft, binding proposals are never accepted, and nothing executes.
-Pass `runbookBindingValidator` for explicit later catalog-backed human review.
-`FileMemoryService.saveProcedure` additionally resolves review evidence while
-holding the corpus write queue: cited revisions must be retained and current,
-excerpt offsets must match retained/redacted text, human text must be faithful,
-and referenced asset bytes must pass their stored digest. Historical or missing
-evidence and guessed locations cannot be reviewed as current runbooks.
-Replacement, forget and clear also reject obsolete-source candidates that have
-agent editions, including linked-source and asset dependencies. They remain
-stored as rejected records; original human-only detector candidates retain
-their existing behavior.
-Golden-set quality, live vision parity, safe redacted pixel previews and full
-Phase 4 qualification remain separate work.
+`new FileMemoryService(privateStore)` enables Views **by default**, without
+user action. Hosts can explicitly disable them with `{ viewDrafts: false }`. `getCapabilities()` normally
+advertises `derivedViews: { kinds: ["troubleshootingGuide", "projectBrief", "timeline", "wiki"], drafts: true,
+history: true, builds: true, editMerging: true, publication: true, search: true }`.
+Automatic scheduling remains unsupported.
 
-## Canonical agent editions and version review
+`getSourceViewUsage({ corpusId, sourceId, pageSize?, continuationToken? })`
+returns `{ items, total, nextContinuationToken? }` for current derived View
+revisions that depend on a document source. Items contain only `viewId`,
+`revisionId`, `version`, `kind`, `title`, `state` and `provenance`; archived
+Views retain their explicit state. Document selectors, retained evidence and
+relationship references count, but canonical event identities do not. Results
+are ordered by View ID, with pages of 1–200 items (default 50).
 
-`ProcedureDocument.agentEdition?: AgentEdition` is optional, schema version 1.
-Old human how-tos and unknown `additionalSections` remain unchanged. The
-canonical Markdown appends an `Agent Edition` JSON fence with a
-`typeagent-agent-edition:1` HTML-comment marker (legacy sections with the same
-heading remain human sections unless marked); use
-`procedureToMarkdown` / `procedureFromMarkdown` for lossless edition round trips.
-The human `steps` and edition `humanText` remain separate from derived
-`agentInstruction`. Saving never re-synthesizes or overwrites human edits.
-Atomic version-directory publication uses up to five attempts for transient
-Windows handle locks with bounded backoff; exhausted and non-transient failures retain
-the normal error/cleanup behavior rather than claiming a saved version.
+`listViews(corpusId)` returns `{ head, views }`, including pending drafts and
+explicit lifecycle state. `getView({ corpusId, viewId, revisionId? })` reads an
+exact per-view revision. `saveViewDraft` creates at `expectedVersion: 0` or edits
+an existing draft with both `expectedVersion` and the exact corpus `expectedHead`.
+`archiveView` uses the same concurrency boundary. `getViewHistory` returns
+`{ commitId, version }` entries; per-view `revisionId` is distinct from the
+corpus commit ID. `publishView` requires an exact validated revision and optimistic guards. Only exact eligible published revisions enter derived View search.
 
-An edition contains `goal`, `applicability`, `inputs`, `preconditions`, stable-ID
-`steps`, `verification`, `rollback`, `synthesis`, and `review`. Inputs have
-`id`, `description`, `type` (`string | number | boolean | enum`), `required`,
-`secret`, and optional nonsecret `enumValues`, `defaultValue`, `examples`.
-Secret inputs cannot persist literal examples/defaults/enum values. Steps have
-`id`, `title`, `humanText`, `agentInstruction`, `safety`
-(`readOnly | changesData | unknown`), `citations`, optional `binding`,
-`condition`, `alternatives: { condition, stepId }[]`, `verification`, `rollback`,
-`needsAttention`, `attentionReasons`, `manualReason`, and `assets`.
-Assets are only `{ sourceId, revisionId, assetId, description? }`, never bytes,
-URLs, or paths. Synthesis records `sourceReferences`, optional `linkedDocuments`,
-`model`, `promptVersion`, and `synthesizedAt`.
+Definitions select explicit source IDs and exact active revision IDs. Content
+has stable typed section IDs and roles, not a generic procedure-step array.
+Directed relationships have stable IDs, versioned schema/families, predicates,
+typed endpoints and exact revision-aware supporting citations. Human
+`supportedBy` and `dependsOn` assertions are directed from sections to source
+revisions and remain explicitly unreviewed. System-owned `generatedFrom` lineage
+connects the exact view revision to its immutable definition revision; selector
+membership creates source-version `dependsOn` edges, not fabricated evidence
+assertions. Definition revisions remain stable for content-only edits.
+Saves validate endpoint existence, source
+membership/current revisions and UTF-16 excerpts under the corpus write queue.
+Actor attribution comes from the local service owner's OS identity, never a
+request-supplied actor. Each edit records its exact base revision. Explicit builds retain the generated content and fingerprint separately from human edits for later merging.
+Manual drafts have no invented generated base.
 
-Review is **per procedure version**, not per step. `ProcedureSaveRequest` accepts
-`reviewAgentEdition?: boolean` and `safetyConfirmed?: boolean` as explicit review
-intent. Client/model `review.state` never confers review. The store stamps
-`{ state: "reviewed", procedureVersion, contentHash, reviewedAt,
-safetyConfirmed: true, bindingValidation: "accepted",
-argumentsValidation: "accepted" }` only after validating
-explicit safety confirmation, cited steps, known safety, and accepted bindings.
-`agentEditionContentHash(document)` hashes the entire document with its review
-stamp excluded. Changing even human text or owner notes invalidates review.
-An unchanged trusted saved version may retain review when saved again, with the
-new exact version stamp. Source-stale and archive transitions reset review to
-`{ state: "draft", reason? }`; step attention flags remain. Linked documents,
-step citations, and assets are source dependencies too.
+### Cross-source Build views
 
-`RunbookBinding` is a discriminated union:
+The configured constructor and independent evidence audit use strict structured
+model-output schemas. Providers without schema support fail explicitly; there is
+no JSON-only fallback, fabricated result or citation repair. Schema compliance
+does not replace exact-character, relationship coverage or semantic/context checks.
+The `evidence-first-v5` adapter extracts a typed source-only fact/context inventory
+**before any view prose is generated or shown**. A second model call checks every
+item and source disposition against all complete frozen inputs. Measurements retain
+quantity/unit/comparison context; hypotheses and decisions retain observed/proposed/
+attempted/rejected/deferred/confirmed/unknown/blocked state. Authority, prerequisites,
+recovery limits, unresolved owner review, reuse warnings and occurrence/learned time
+remain explicit. Every retained paragraph has an inspectable source disposition;
+metadata, duplication and background/outside-scope decisions require specific
+witnesses and independent checking, not blanket irrelevance.
 
-- `mcp`: `{ kind, accepted, serverId, targetId, version: string, fingerprint, arguments? }`
-- `macro`: `{ kind, accepted, targetId, version: number, fingerprint, arguments? }`
-- `flow`: `{ kind, accepted, targetId, version: string, fingerprint, arguments? }`
-- `command`: `{ kind, accepted, text }` (redacted guidance only)
-- `manual`: `{ kind, accepted, reason }`
+Construction selects stable inventory identities and writes connective prose.
+The host renders explicitly selected inventory statements and their typed fields
+as actual section passages. This is the new construction contract, not heuristic
+concatenation of raw sources or repair of an invalid legacy relationship payload.
+The host derives `supportedBy` edges grouped by section and exact source revision,
+with immutable source/revision/UTF-16 locator/excerpt provenance.
+Assertion IDs hash the view, stable section and exact source/revision tuple.
+Edit/tombstone matching remains semantic, so a revision-specific new assertion ID
+cannot undo an explicit human removal.
+All required inventory passages must occur in the **final merged artifact**.
+Exact duplicate exclusions require a covered equal witness; outside-scope exclusions
+are limited to independently checked background and are audited again.
+Coverage metadata alone cannot pass the gate. Narrative edits remain editable;
+removing/changing protected fact passages blocks saving rather than silently
+overwriting human work. Rebuild with changed evidence to revise facts.
+Source-decision witnesses cite every selected exact passage. Metadata exclusions
+are limited to exact source identity/title passages, not substantive paragraphs.
+Verified recovery requires both checked confirmed recovery and observed-outcome
+items; incident closure alone cannot authorize recovery or project completion.
 
-Canonical catalog target IDs and MCP server IDs use the stable identifier
-contract (1-200 characters). For MCP, persist `serverId` as the actual server
-configuration ID and `targetId` as the actual SDK tool name, never a display
-label or fabricated alias. The host adapter reconstructs the real native
-`JSON.stringify([serverId,targetId])` catalog identity and verifies exact server,
-name, version and fingerprint. A selected compound catalog ID must be decoded
-and server-checked before storing its canonical components. Unsupported native
-names remain explicitly unavailable; local step/input identifiers stay unchanged.
+Receipts and generated/history/conflict versions retain `inventory`, `inventoryAudit`
+and `coverage`, including precise final artifact locators and diagnostic-only versus
+fresh-evidence-required reuse eligibility. CLI status/inspection, MCP and the Hub's
+inventory inspection disclose these artifacts. Forget removes the entire dependent
+job/view/conflict/history payload, including inventory and coverage.
+The bounded evidence-first target timeout is 300 seconds for the additional stages.
+Source-to-inventory checking is model-based and can still omit/misinterpret evidence:
+deterministic provenance/coverage is not deterministic semantic completeness.
+A saved draft or positive audit is not a live-quality qualification.
+An unresolved checkpoint may produce `diagnosticOnly` with explicit missing
+evidence and cited recovery/escalation limits; it never invents a confirmed fix.
 
-Catalog `arguments?: RunbookBindingArguments` is a parameter-name map of JSON
-literals, arrays/objects and exact `{"$input":"declared-input-id"}` references.
-Use an exact `{"$literal": JSON}` escape when literal data resembles a reference;
-its entire value is literal, including nested marker objects. No interpolation,
-script evaluation or input resolution occurs. Input references can represent
-secret inputs without storing their values. Secret literals are redacted and
-make the binding unaccepted, attention-required and draft; redacted placeholders
-cannot be reviewed as resolved arguments.
+`buildViews({ corpusId, expectedHead, targets, bounds?, publication?: boolean })`
+admits a durable manual job. Each target supplies `expectedVersion` and a
+`definition` with a stable view ID, `kind: "troubleshootingGuide"`, `"projectBrief"`, `"timeline"` or `"wiki"` and an explicit
+revision-aware source selector. Admission freezes complete retained input text,
+source membership, current exact revisions, content hashes, target and definition
+revisions, authenticated OS actor, temporal bounds and configured pipeline/model
+identity. Their fingerprint is persisted with every per-target receipt.
+There is no browser-owned job store or duplicate canonical view store.
 
-The root is always a parameter-name map, not a reference or literal wrapper.
-Interpret markers only within each parameter value. For example,
-`{ "payload": { "$literal": { "$input": "literal-data" } } }` supplies literal
-marker-shaped data to `payload`; a root `$literal` key is just a parameter
-named `$literal`, not an escape for the whole argument map. Nested wrappers
-must have exactly one marker field; malformed markers fail unless they are
-literal data inside an explicit escape. Classification guards must be used
-after bounded JSON validation, not as replacements for validation.
+### Bounded knowledge wikis
 
-`validateRunbookBindingArguments(value, inputs?)` enforces plain finite JSON,
-declared references when inputs are supplied, depth 16, 10,000 nodes, 65,536
-UTF-16 units per string, and 131,072 encoded UTF-8 bytes per mapping. Object
-keys are at most 200 characters; prototype-related keys, accessors, hidden
-fields, sparse/extended arrays and cycles are rejected, not silently dropped.
-`getRunbookArgumentReferences`, `isRunbookInputReference`,
-`isRunbookLiteralArgument`, `normalizeRunbookBindingArguments` and
-`validateRunbookArgumentReadiness` are browser-safe public helpers.
+Choose a named corpus, exact retained revisions, **Knowledge wiki**, a stable
+view ID and **Build views** in Memory Hub. The CLI uses the same `build` request
+with `kind: "wiki"` and a `sources` selector. HTTP/parent IPC, browser extension,
+client/RPC and MCP carry the same discriminated content and relationships.
+Ordinary installations remain default-off; no provider or release switch is
+enabled by adding a kind.
 
-The host must provide real catalog resolution. The third optional
-`PersonalHowToStore(rootDirectory, publishIndex, runbookBindingValidator?)`
-constructor argument has this contract:
+`WikiContent` contains 1 to 32 stable `WikiPage` sections and a typed `index`
+of exact page IDs, current titles and fixed `concept`, `system`, `project`
+taxonomy. Index entries are derived by the host, not model-authored links.
+Each page has checked inventory identities, source-grounded narrative and
+exact section-to-source `supportedBy` proof. Competing explanations, rejected
+hypotheses, unresolved contradictions, scope and unknowns stay in that narrative
+and the immutable rendered facts. Raw `[[wikilinks]]` have no relationship or
+publication authority.
 
-```ts
-type RunbookBindingValidator = (
-  bindings: readonly CatalogRunbookBinding[],
-  context: RunbookBindingValidationContext, // { inputs: readonly AgentEditionInput[] }
-) => Promise<readonly RunbookBindingValidation[]>;
-// Each result: { binding, status: "accepted" | "unavailable" | "rejected" |
-// "drifted", reason?, argumentsValidated? }.
-// Echo the exact binding INCLUDING arguments; acceptance requires argumentsValidated: true.
+`relatedTo` and `contradicts` are explicit directed page-to-page assertions
+within one wiki revision. Both endpoints must exist and be distinct, and each
+assertion must cite exact retained evidence from both endpoint pages. This is
+structural proof, not semantic truth: the independent final-artifact audit
+must additionally support every assertion and page. Generated proof never
+turns a human-added assertion into independent corroboration.
+
+The fixed reader starts with a named index and readable page, typed navigation
+and exact original-evidence controls. **Edit selected wiki page** exposes named
+title/summary/narrative inputs, supported relationship addition/removal, omission
+and merge controls. Navigation moves focus to the selected page heading; editor
+opening focuses a named input. Controls wrap on narrow screens. DOM tests cover
+names, identities, focus, navigation, evidence and transport behavior; they are
+not screen-reader or visual accessibility qualification.
+
+A rename changes the display title, never the page ID or edge endpoints.
+A merge keeps the chosen target ID, records unique retired IDs in
+`mergedPageIds`, retains both narratives and checked facts, remaps supported
+edges and unions their exact citations, and removes self-links. Contradictory
+source context is retained, not resolved by merging pages. Omitted pages and
+removed relationships become explicit edit tombstones. The generated base,
+authenticated human attribution, stable-item/field merge, bounded prose merge,
+conflicts and exact-final-artifact validation use the existing owning store.
+An unchanged rebuild reapplies removals; changed deleted pages or incompatible
+evidence/edits conflict or fail validation rather than silently discarding edits.
+Unknown bases cannot be overwritten. Invalid omissions cannot hide required facts.
+
+The Library **Used by** surfaces include all four derived kinds:
+current/historical exact revisions, affected section/page IDs, selected membership,
+and pending/completed/conflicted build receipts. Derived dependencies page
+separately from skill dependencies. Historical inspection
+opens the requested revision only; it is not current publication.
+
+Publication precedence remains build > view > corpus, with explicit false
+distinct from inheritance. Publication is neither human review nor skill
+approval/activation. Default retrieval requires the eligible exact published and
+indexed revision; drafts, conflicts, stale, archived and forgotten artifacts
+are excluded. Index retries do not rebuild or republish. Source replace/forget,
+event forget, clear and restart reuse managed history/index/privacy cleanup.
+Canonical-event forget removes dependent timelines even when
+`forgetLinkedSources: false`; disabled reopen preserves stored data/history.
+Unrelated sources, views and skills retain their existing flows.
+External backups/exports and secure media erasure remain outside cleanup guarantees.
+
+Offline configured-model/transport fixtures establish lifecycle readiness only.
+The configured `gpt-4o-2024-11-20` evidence-first v5 run produced only five charter
+facts and left 185 selected passages unwitnessed; the strict source-first gate
+blocked before construction, final audit or save. No live provider calls, model
+swaps, weakened gates, corpus reset/migration or release enablement are authorized.
+Live per-kind quality/latency budgets and qualification remain unresolved blockers.
+Revalidation after integrating build/edit review fixes is also required.
+
+### Evidence-linked timelines
+
+Choose **Evidence-linked timeline** in Memory Hub, select canonical events and/or
+exact document revisions, set a stable view ID, and optionally enter explicit-timezone
+knowledge and occurrence bounds. The fixed reader shows record identity, type,
+state/outcome, occurrence, knowledge, capture, and separate generation time.
+Narrative is editable; source-owned identity/time/classification fields are read-only.
+Changes to those fields need new retained evidence and a rebuild, not a human-review
+override. Correction removals are explicit typed edge tombstones. Build progress,
+history, conflicts, publication settings, exact publication, index retry and
+published-only search use the existing view controls.
+
+```json
+{
+  "corpusId": "incident-history",
+  "expectedHead": null,
+  "publication": false,
+  "bounds": { "learnedBefore": "2026-10-05T12:00:00Z" },
+  "targets": [
+    {
+      "expectedVersion": 0,
+      "definition": {
+        "viewId": "incident-timeline",
+        "kind": "timeline",
+        "selector": {
+          "kind": "timelineEvidence",
+          "sources": [
+            {
+              "sourceId": "investigation-log",
+              "revisionId": "exact-current-revision"
+            }
+          ],
+          "events": [{ "eventId": "canonical-event-id" }]
+        }
+      }
+    }
+  ]
+}
 ```
 
-The context contains current input definitions with default/example literals
-removed; they must never be used as substitute schema-validation values.
-Resolve the real target input schema, validate literal arguments and symbolic
-declared-type/enum fit, and explicitly report unsupported schema fit as
-unavailable. Omitted arguments mean `{}` and still require required-parameter
-validation. Actual runtime input values must later validate against the target
-schema; template acceptance does not resolve them or grant execution permission.
-Older identity-only catalog review stamps remain readable but cannot publish or
-retain reviewed eligibility until explicitly re-reviewed with argument-schema
-validation. Old human guides without an edition remain eligible.
+Use the actual corpus/head/revision/event IDs, not the illustrative values above.
+From the service package:
 
-**Integration hook:** the `FileMemoryService` options/constructor and owning host
-must forward `runbookBindingValidator` to the store. Resolve actual MCP schema
-identity, approved macro versions, and approved flow versions; do not accept
-guessed names, missing targets, or stale fingerprints. With no callback,
-catalog-bound editions fail review explicitly as unavailable. Command/manual
-bindings require author acceptance but no external catalog. No code here
-executes commands, tools, macros, or flows; review grants no runtime permission.
+```powershell
+node dist\memoryViewsCli.js --store C:\Temp\memory-views events <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views events <corpusId> <nextContinuationToken>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views event <corpusId> <eventId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views build timeline-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views read <corpusId> incident-timeline
+```
 
-Public pure validators/renderers, types, canonicalization, draft normalization,
-and bounded redaction are available through the browser-safe
-`@typeagent/memory-service/agent-edition-validation` subpath (no Node imports).
-Server-side SHA-256/review helpers are also exported from the package root.
-Browser editors can import `procedureToMarkdown`, `procedureFromMarkdown`, and
-`validateProcedureDocument` from
-`@typeagent/memory-service/procedure-markdown` without filesystem/crypto imports.
-The compatibility subpath `@typeagent/memory-service/procedureMarkdown` exports
-the same pure module.
-`procedureFromMarkdown(markdown, previousDocument?)` preserves opaque canonical
-JSON extension fields from the optional prior document while replacing all
-recognized Markdown fields, including honoring removed summary/edition/
-additional sections. Server Markdown saves also use the previous saved document
-for this preservation. Structured editors should clone the full document,
-regenerate canonical Markdown, and send only `document`; Markdown editors can
-parse against the current document and send the resulting `document`, never
-both `document` and `markdown`. Mark local edits draft with `draftAgentEdition`;
-the backend independently verifies and invalidates whole-version review.
-Multiline human steps use three-space-indented continuations; embedded original
-headings, numbered text, and tables remain part of the same step. Single-line
-legacy Markdown output is unchanged.
-Consumers should use `validateAgentEdition`, `validateRunbookBinding`,
-`validateProcedureSaveRequest`, `validateAgentEditionReadiness`, and
-`validateRunbookCatalogBindings` rather than accepting unchecked JSON.
-`getProcedureEvidenceReferences(document)` returns deduplicated root/step/
-synthesis/linked-document citations and reference-only assets. The host must
-resolve these against retained source revisions/assets before accepting review
-or publication, and flag missing/unsupported evidence. Pure shape/provenance
-validation cannot establish that a passage exists, an excerpt is faithful,
-or a cited revision is still current.
+The `events` command returns up to 200 records per page. Pass its
+`nextContinuationToken` as the optional last argument to discover subsequent
+records; repeat until the response has no continuation token.
+Forgetting multiple events aborts affected builds per event but performs one
+managed view-history purge and affected View-index cleanup for the batch. The
+persisted batch selection is also used for interrupted-purge recovery.
 
-The optional `MemoryService` host capabilities `getRevisionAssets`,
-`readRevisionAsset`, `startBatchImport`, `getBatchImport`, `listBatchImports`,
-`retryBatchImport`, `cancelBatchImport`, `listRunbookJobs`, and `getRunbookJob`
-use the asset/batch/runbook modules' public request/result types. The facade
-forwards them without adding storage semantics and rejects unsupported
-implementations explicitly. Raw asset reads are trusted-host operations;
-controlled byte/base64/HTTP transport is the host's responsibility.
+The same `buildViews` request is supported by in-process/RPC clients,
+`memory_views_build` over MCP, host IPC and authenticated browser transports.
+Existing document-only `sources` selectors and citations remain unchanged.
+Canonical citations carry `evidence: { kind: "event", eventId }`, with a frozen
+record hash as revision and exact UTF-16 offsets into `JSON.stringify(event)`.
+Evidence controls open that exact event, not a synthetic missing document.
+For document citations, offsets always refer to the original unchanged revision.
 
-Optional `findBatchImport({corpusId,idempotencyKey})` returns an admitted batch
-or `undefined`; an unsupported lookup rejects explicitly. The facade and
-in-process client forward this lookup. Acquisition adapters should look up an
-existing key before refetching URLs and compare its `acquisitionFingerprint`.
-`documentKeys` link acquired documents to opaque response `clientKey` values;
-`rejectedMembers`/`acquisitionIssues` persist acquisition failures. Empty
-`documents` are valid when there is at least one rejected member; completely
-empty batches are not. Selection fingerprints alone do not freeze content
-before admission: durable pre-admission acquisition snapshots remain the
-acquisition adapter's responsibility.
+`TimelineContent` has `kind: "timeline"`, `generatedAt`, and stable structured
+event sections (`role: "event"`). Each section's `details` contains
+`identity` (`canonicalEvent/eventId` or `documentRecord/sourceId/sourceRecordId`),
+`eventType`, source-grounded `state`, `outcome`, nullable `occurredAt`,
+`learnedAt`, `capturedAt`, and checked `inventoryIds`. Canonical record IDs and
+`eventTime`, `observedAt`, `createdAt` are copied from the canonical event and
+normalized to UTC; the existing append-event defaults are unchanged.
+Document-record section IDs are explicitly host-derived from source ID and
+record ID, never presented as canonical events.
 
-Optional `requestRunbookSynthesis({corpusId,sourceId,revisionId})` explicitly
-requests the existing durable postcommit draft pipeline for an exact retained
-revision. It returns `RunbookJobResult`, including real `candidateIds`, and may
-reuse an existing pending/completed job rather than claiming a new draft.
-Current settings/guidance/model capabilities apply. It does not overwrite edited
-candidates or saved procedures, approve content, or execute bindings. The facade
-and in-process client forward the request and reject unsupported implementations.
-Use separate `getRunbookJob`/`listRunbookJobs` for durable outcomes; model failures
-remain explicit failed jobs without rolling back committed source ingestion.
+Supported document/log input uses explicit Markdown record boundaries:
+
+```markdown
+## Record configuration-change
+
+Classification: observation
+State: confirmed
+Occurred at: 2026-10-05T08:45:00Z
+Recorded / known at: 2026-10-06T08:05:00Z
+Outcome: configuration observed
+
+Retained evidence narrative and measurements.
+```
+
+Missing occurrence or knowledge fields stay `null`; capture/modified times never
+replace them. Unsupported/no-timezone/invalid dates and duplicate IDs fail
+explicitly. A bounded checkpoint excludes unknown required record times.
+Unstructured sources without grounded record boundaries fail with an unsupported
+projection explanation rather than unsafe full-file inclusion.
+`learnedBefore`, `occurredFrom`, and `occurredTo` are inclusive host-enforced record
+bounds. Only eligible passages reach inventory, independent source checking,
+construction and final audit; excluded future facts are not treated as background.
+The snapshot fingerprints exact source revisions, canonical records, membership
+and bounds, and rechecks them before materialization/publication. Empty eligible
+checkpoints report `skipped` and create no artifact or new publication.
+
+`corrects` and `supersedes` edges connect distinct existing event sections.
+Document evidence must explicitly declare `Corrects: <record-id>` or
+`Supersedes: <record-id>`; canonical evidence uses `metadata.corrects` or
+`metadata.supersedes` with its canonical target ID. Targets must belong to the
+same evidence identity kind, remain eligible, and have non-reversed knowledge
+ordering. Bare document record references resolve only within their own source;
+fenced examples are neither record boundaries nor metadata fields.
+The original hypothesis/action remains a separate record; correction
+never silently rewrites its history. Independent support audits and actual
+artifact coverage still apply, including human-edited final records. Positive
+audits cannot bypass incompatible provenance, structured timestamps or state.
+
+Canonical event forget purges dependent views, jobs, conflict bases, receipts,
+managed Git history and indexes even with `forgetLinkedSources: false`.
+Document replacement/forget, archive, clear and restart retain their existing
+guards; unrelated views/events/sources are preserved. Cleanup remains quarantined
+until managed derived-data removal completes. External backups and secure media
+erasure remain outside the service's guarantees.
+
+This is a default-enabled, offline-tested capability, not release qualification.
+No event execution, skill activation, scheduler, separate wiki store or migration is added.
+Configured `gpt-4o-2024-11-20` synthesis remains live-unqualified; source inventories
+and independent semantic audits are model-based and may still omit or misinterpret
+evidence. Passing structured offline stubs does not establish live quality.
+
+### Project briefs
+
+`ProjectBriefContent` is discriminated by `kind: "projectBrief"`, not an executable
+guide or retagged procedure. Its fixed seven-section template has stable section
+IDs, headings, editable narrative, exact citations and typed `details`:
+
+- `goalsScope`: goal/scope inventory references.
+- `owners`: assignments with responsibility, inventory identity, `known`,
+  `unknown` or `unassigned` state, and a recorded owner name or explicit `null`.
+- `status`: separate project (`unknown`, `active`, `blocked`, `complete`),
+  incident (`unknown`, `open`, `closed`, `notApplicable`) and capacity
+  (`unknown`, `pendingOwnerReview`, `validated`, `notApplicable`) states.
+- `milestones`: inventory identity, source-grounded commitment state and date
+  (`null` when unknown). Proposed milestones are not accepted commitments.
+- `decisions`: inventory identity and observed/proposed/attempted/rejected/
+  deferred/confirmed/unknown/blocked/not-applicable fact state.
+- `risks`: inventory identity and open/blocked/resolved/unknown state, including
+  workload-memory warnings, headroom constraints, blockers and open questions.
+- `context`: source-grounded project knowledge `asOf`, evidence basis and
+  inventory references. Unknown is `{ asOf: null, basis: "unknown" }`.
+
+Structured fields refer to checked facts that must appear in the **actual section
+body**. Runtime validation rejects mismatched roles, missing context, invented
+names/dates, completion inferred from incident closure, and validated capacity
+while evidence says blocked pending owner review. Known project knowledge time
+requires a confirmed `projectAsOf` record assertion; source capture/modified times
+and generation timestamps alone never establish it. This is not record-level
+timeline/cutoff support.
+
+The source inventory and independent source check precede construction. The
+configured adapter requests a strict project-specific construction schema, then
+the independent final support audit sees narrative **and typed details**, including
+human-edited final content. Outcome is `projectSummary`; guide-only confirmed
+recovery requirements do not apply. Exact-artifact proof, policy precedence,
+edit attribution, bounded merge/conflicts, history, publication/index retry,
+privacy quarantine and published-only search use the same owning store.
+Independent typed fields merge directly; assignment/milestone/decision/risk items
+are matched by stable inventory identity, retaining explicit removals. Incompatible
+field or removal-versus-change overlap remains a durable conflict, never an LLM
+choice. A clean merge still needs exact final-artifact validation.
+Positive model audits are not semantic-quality guarantees.
+Explicit corpus clear also purges derived revisions, proofs, jobs, conflicts,
+policy overrides and indexes from the recoverable private history; other corpora
+are preserved.
+
+In Memory Hub, choose a **named corpus**, select exact retained revisions, choose
+**Project brief** in **View kind**, set a stable view ID and choose **Build views**.
+All memory does not grant build scope. Open the brief for fixed-template fields,
+explicit edits, publication policy, history and original-evidence drillthrough.
+There are no brief Agent edition, skill activation or execution controls.
+The **Derived view kind** search filter limits derived artifacts while ordinary
+canonical evidence remains available. Older capabilities do not advertise/open
+unsupported kinds.
+
+The CLI, service facade/in-process client, RPC, MCP, parent IPC/HTTP gateway and
+extension use the same typed requests. For example, save this build request with
+real IDs/revisions from `sources` and a current head from `list`:
+
+```json
+{
+  "corpusId": "payments",
+  "expectedHead": null,
+  "publication": false,
+  "targets": [
+    {
+      "expectedVersion": 0,
+      "definition": {
+        "viewId": "payments-reliability-brief",
+        "kind": "projectBrief",
+        "selector": {
+          "kind": "sources",
+          "sources": [
+            { "sourceId": "charter", "revisionId": "current-revision" }
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+From the service package, run
+`node dist/memoryViewsCli.js --store <private-store> capabilities`,
+then `build <request.json>`, `read <corpusId> <viewId>`, `history <corpusId> <viewId>`,
+`save <request.json>`, `publish <request.json>` and `search <corpusId> <query>`.
+Only an eligible exact built/edited revision can publish; an unknown human draft
+does not bypass audits. API `searchViews` accepts optional
+`kinds: ["projectBrief"]` and returns exact published revisions with evidence.
+Do not open a store owned by another running server.
+
+Offline tests use configured-model stubs and synthetic retained sources; no
+expectation files are model input or canonical imports. No live quality
+qualification is claimed. `gpt-4o-2024-11-20` remains unqualified following the
+eight-source inventory coverage failure, and release enablement remains blocked.
+Ordinary installations remain off unless the existing capability is explicitly
+enabled. Disabling it preserves stored data/history and excludes derived retrieval.
+
+### Source-level build bounds
+
+Bounds are `learnedBefore`, `occurredFrom` and `occurredTo`, all ISO timestamps.
+Learned time uses source `capturedAt`; occurrence bounds use `sourceModifiedAt`.
+A source outside a bound, or lacking its required timestamp, is rejected, not
+silently truncated. Record-level occurrence/knowledge distinctions remain in
+the complete labeled source text. A later replacement cannot masquerade as an
+earlier available revision. Select only the early documents for an early
+checkpoint; do not import review gold or authoring expectations as memory.
+
+The configured synthesis adapter follows the established runbook model path.
+It receives complete inputs and exact paragraph locators, constructs a
+conditional guide with goal/applicability, prerequisites, diagnostic trajectory,
+guards, verification, recovery/escalation and reuse context, and distinguishes
+diagnostic-only from verified recovery. Structural and exact UTF-16 citation
+validation is followed by a separate model-based semantic/context audit covering
+every section and relationship. Matching offsets alone cannot pass that audit.
+Merged or explicitly resolved prose is audited again. This audit is not a
+formal proof or live-quality qualification; controlled offline responses test
+the protocol and lifecycle separately from configured-model quality.
+
+Model generation runs outside corpus writes. Before materialization, the service
+rechecks source/access/target/definition fingerprints under its write queue.
+Concurrent saves, replaced/forgotten evidence, cancellation and archived targets
+cannot overwrite the current draft. Receipts expose `draft`, `merged`,
+`conflicted`, `blocked`, `stale`, `failed`, `cancelled` and `interrupted` per target;
+partial batches are not all-success. The saved draft and result revision enter
+the same history commit. A restart reconciles pending/running targets as
+interrupted, without undoing already materialized targets or pretending success.
+
+`getViewBuild({ corpusId, jobId })`, `listViewBuilds(corpusId)`,
+`cancelViewBuild` and `retryViewBuild` inspect/control jobs. Exact repeated
+admissions return the original durable receipt; an explicit retry uses current
+head/target guards and retries only unsuccessful targets. Changed source
+selectors require a new build. Cancellation stops future materialization even
+if a provider is still unwinding its request; already saved drafts remain.
+Limits are 32 targets, 32 exact sources per target, 120000 complete input
+characters and a 300-second per-target inventory/construction/validation deadline; there is
+no silent truncation or heuristic generation fallback.
+
+### Explicit edits and conflicts
+
+Saving a draft captures stable edit IDs, stable section/semantic-edge targets,
+OS actor/time, exact generated base identity/fingerprint, old values/hashes,
+new values or deletion, and persistent status. Review alone is not an edit.
+Unknown/baseless human content is never classified as unedited. Generated,
+unedited content can be replaced without fabricated human-review stamps.
+
+Pinned `node-diff3` merges exact old generated base/current human/new candidate
+line arrays, retaining CRLF, whitespace and fenced code. Independent changes
+and paragraph append merge; identical changes converge; overlap,
+deletion/modification and ambiguous insertion positions conflict. The bound is
+120000 characters and 4000 lines per prose field. No LLM chooses a merge winner.
+Relationships merge separately by predicate and semantic endpoint identity,
+not rendered JSON: human additions retain human provenance and removals persist
+as tombstones even if the generator re-identifies edge IDs. Retained edits are
+rebased to the new generated base without losing their original attribution.
+
+A `viewMergeConflict` event records metadata-only evidence/edit references and
+a deduplicated identity. Its authorized comparison retains exact base/human/new
+content in the same private history. Current content stays untouched.
+`getViewConflict({ corpusId, conflictId })` inspects it.
+`resolveViewConflict` requires the expected current revision/version, history
+head, input fingerprint and explicit `human`, `generated` or `combined` choice.
+Combined supplies a complete `ViewSynthesisOutput`; every choice is evidence-
+and context-validated before saving. Resolution and overlays are durable and
+later builds preserve retained edits. Unchanged resolved edits keep their IDs,
+actors and original timestamps; newly selected or changed values receive explicit
+resolver-attributed operations, while superseded operations remain cleared.
+Untracked section or relationship changes cannot hide behind another tracked edit.
+Forgotten sources purge dependent builds,
+conflicts, edit payloads, generations and history objects, not just visible refs.
+Build receipts retain their original outcomes after resolution. The Hub identifies
+the separate saved draft revision and keeps resolved or superseded-target conflict
+comparisons read-only rather than offering an invalid repeat resolution.
+
+### Publication policy and revision-matched search
+
+Pending merge conflicts block publication, index retry, default derived search
+and the exact derived-evidence reader without erasing the previous durable
+publication/index pointers. Resolve and validate the conflict first.
+Archive receipts identify the archive history entry; read `listViews` for the
+current concurrency head after durable index cleanup.
+
+Within the explicit capability, corpus auto-publish defaults **on**. Ordinary
+installations remain off: enabling this capability is not live-quality
+qualification. `getViewPublicationPolicy(corpusId)` returns
+`{ revision, autoPublish, views: { [viewId]: { revision, autoPublish } } }`.
+`updateViewPublicationPolicy` accepts corpus ID, expected history head,
+expected policy revision, optional view ID and `autoPublish`. A view's `null`
+means Inherit; corpus settings cannot inherit. The service assigns the actor.
+Resolution is build boolean override > saved view boolean override > corpus
+boolean. False is never inheritance. Overrides appear with their origin and
+configuration revisions in frozen build snapshots and receipts. Changing policy
+during synthesis rejects the old snapshot. A one-build override does not mutate
+saved policy. Turning off does not unpublish an existing version.
+
+Publication requires the exact final artifact's source-first inventory,
+independent source check, actual artifact coverage and independent semantic
+support audit. These are revision-bound proofs, not human-review stamps. A
+manual unsourced draft cannot acquire publication authority by saving or
+reviewing. Build from the selected retained revisions first, then use **Save
+explicit edits** to independently validate supported narrative changes and
+**Publish exact revision** when auto-publish is off. Missing facts, unsupported
+claims, unknown generated bases, conflicts and stale/forgotten sources block
+publication with actionable reasons. No source, skill or resource is changed.
+
+`getViewPublication({ corpusId, viewId })` returns distinct latest built,
+published and indexed revision IDs, durable publication intent, index state and
+reason. The single history-ref commit publishes the intent and revision before
+any index side effect. Index failure returns Published with failed indexing;
+pending/failed is never searchable. `retryViewIndex` requires exact published
+revision, current target version and history head, and indexes that revision
+without another synthesis or publication. Restart preserves pending work for
+explicit retry, including an interruption after the index files were written.
+
+`searchViews({ corpusId, query, freshness: "current", limit? })` uses the existing
+corpus-index abstraction and KnowPro's structured/embedding-backed path. Only an
+eligible published revision with the same indexed revision and exact readiness
+marker is returned. Current-source freshness is mandatory; retained stale views
+are inspectable in history, not substituted into default retrieval. Results expose
+kind, version, generated/human-merged provenance, unreviewed state, freshness and
+original citations. Named corpus and All memory searches include derived results
+and preserve per-corpus failures. Derived results are not independent corroboration:
+answer synthesis uses original/source evidence rather than counting a guide again.
+The evidence reader opens the exact published version and original retained
+source revisions, never a newer label over old indexed text.
+
+Archived indexes have durable cleanup work retried on reopen. Source forget
+rotates history and removes affected view index directories before the privacy
+quarantine clears; unrelated views/indexes and ordinary runbook semantics remain
+intact. Corpus clear removes the service-owned view history and indexes. Local
+deletion is not secure erasure of SSD blocks, external backups or exported copies;
+those require the deployment owner's separate retention/erasure policy.
+
+CLI commands include `policy`, `set-policy request.json`,
+`publication <corpusId> <viewId>`, `publish request.json`,
+`retry-index request.json` and `search <corpusId> <query>`. The Hub exposes corpus
+settings, view Inherit/On/Off and one-build Inherit/On/Off controls, effective
+policy, per-target progress, Publish and Retry index.
+
+The configured `gpt-4o-2024-11-20` model remains **live-unqualified**: the frozen
+source run failed inventory witness coverage before prose or saving. Publication
+does not weaken that gate or make human review a validation override. Offline
+configured-adapter/embedding tests demonstrate runtime contracts only, not live
+distillation quality.
+
+### Real consuming surfaces
+
+The agent server and standalone memory MCP owner enable Views when
+`TYPEAGENT_MEMORY_VIEW_DRAFTS` is unset or `true`; only explicit `false` disables
+them, and invalid values fail. Model/provider failures remain explicit build
+errors; default enablement never bypasses evidence, publication or review gates.
+Use a fresh task-owned profile/store and alternate port.
+Building this worktree does not alter an already running server.
+The Memory Hub Views page exposes derived Views when
+capabilities advertise builds. Choose a named corpus, select exact current
+evidence, choose a stable view ID, then **Build views**. Inspect durable
+progress/receipts, edit stable structured sections and typed relationships,
+inspect history, or open the three-input conflict comparison and resolve
+explicitly. Polling does not replace an active editor.
+
+Browser host validation, agent-side handlers, extension forwarding, RPC facade,
+in-process client and real MCP tools route to the owning memory service.
+The MCP surface includes `memory_views_build`, `memory_view_build_get`,
+`memory_view_builds_list`, cancellation/retry, draft CRUD/history and conflict
+inspection/resolution, publication policy, exact publication, index retry and derived search.
+
+The compiled CLI loads existing configured models (never fetches keys) and uses
+the same service methods:
+
+```powershell
+node dist\memoryViewsCli.js --store C:\Temp\memory-views build build-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views builds <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views status <corpusId> <jobId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views inspect <corpusId> <conflictId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views resolve resolution-request.json
+```
+
+`build` and `retry` wait for the terminal receipt before releasing their private
+store. `cancel` and `retry` also take `<corpusId> <jobId>`. Do not point this
+exclusive CLI owner at a running server's store. Use MCP/Hub to control live
+jobs in the actual owning service.
+
+### Manual view maintenance
+
+Opt-in dynamic definitions can advance a fixed set of source IDs or enumerate
+bounded source-type/tag/project scope. `planViewMaintenance` previews affected,
+unchanged, pinned and blocked targets; `maintainViews` rebuilds only affected
+whole views through the existing exact-input pipeline. Accepted manifests and a
+stable explicit-subject wiki registry share the artifact's Git commit boundary.
+New subjects can create pages even when introduced by revisions of old sources.
+Titles and normalized names are not identities.
+
+`updateViewMaintenance` applies explicit head/version-guarded intent.
+`getViewMaintenance` reads durable receipts and current build outcomes. The CLI
+adds `set-maintenance`, `plan-maintenance`, `maintain` and `maintenance-status`;
+MCP exposes `memory_view_maintenance_update`, `memory_views_maintenance_plan`,
+`memory_views_maintain` and `memory_view_maintenance_get`. The Hub exposes
+configuration, preview, manual run and dependency inspection when the service
+advertises maintenance support.
+
+No-op detection uses logical evidence/rule/model fingerprints, not index time.
+Acceptance rechecks dynamic membership as well as exact revisions and human edits.
+Discovery identity gaps, empty scope, pending ingestion, unsupported retirement
+and bounds block visibly. Forgetting includes registry provenance, manifests,
+receipts and pending/conflict snapshots in the existing history purge. Scheduling,
+selective page synthesis and physical-index Git storage are not implemented.
+
+See [the maintenance contract and qualification recipe](../../../docs/architecture/memory/view-maintenance.md)
+for schemas, explicit subject metadata, compatibility and release limits.
+Configured-model quality remains separately gated.
+
+`TypedViewStore` persists only derived Views under each corpus's `views` directory. The authoritative snapshot is `state.json` in the private bare `views/view-history.git` tree referenced by `refs/heads/typeagent-history`. Per-view tree entries use `view-<encoded-id>.json`; builds, conflicts, publication policy/status and maintenance receipts share the snapshot. Per-revision indexes are under `views/view-search-index/<view-id-hash>/<revision-id-hash>`.
+
+Source replacement marks dependent drafts stale without modifying historical revisions. Forget/clear quarantines history, creates a sanitized baseline, replaces the entire old Git object database (including unreachable blobs), and removes affected View search indexes before reopening reads. Interrupted privacy cleanup rejects reads until restart recovery finishes. No procedure state, settings or index is persisted or migrated by this service.
+
+### Runnable local CLI
+
+Build from `ts` with `pnpm exec fluid-build packages\memory\service -t build`
+(the root `build` script also passes `.`, which can build unrelated packages).
+From `ts\packages\memory\service`:
+
+```powershell
+node dist\memoryViewsCli.js --store C:\Temp\memory-views create-corpus "Draft views"
+node dist\memoryViewsCli.js --store C:\Temp\memory-views corpora
+node dist\memoryViewsCli.js --store C:\Temp\memory-views list <corpusId>
+node dist\memoryViewsCli.js --store C:\Temp\memory-views save draft-request.json
+node dist\memoryViewsCli.js --store C:\Temp\memory-views history <corpusId> pressure-guide
+```
+
+Use the returned corpus ID and `list.head` in the following request (a new
+empty corpus has `head: null`). An imported source can be selected via the
+`sources` and `source` commands; citations must refer to the exact returned
+revision and source character ranges. A manual unsourced draft is also valid:
+
+```json
+{
+  "corpusId": "<returned corpusId>",
+  "viewId": "pressure-guide",
+  "expectedVersion": 0,
+  "expectedHead": "<head returned by list>",
+  "definition": {
+    "viewId": "pressure-guide",
+    "kind": "troubleshootingGuide",
+    "selector": { "kind": "sources", "sources": [] }
+  },
+  "content": {
+    "kind": "troubleshootingGuide",
+    "title": "Pressure diagnosis",
+    "sections": [
+      {
+        "id": "inspect",
+        "role": "diagnostic",
+        "heading": "Inspect pressure",
+        "body": "Correlate pressure with affected requests before choosing a mitigation."
+      }
+    ],
+    "citations": []
+  },
+  "relationships": []
+}
+```
+
+Change `body`/typed relationships, use `expectedVersion: 1` and the returned
+`commitId` as `expectedHead`, then `save` again. Each CLI invocation closes its
+service: the next `read` or `history` invocation demonstrates restart consistency.
+Archive with `archive request.json` containing corpus/view IDs, expected version
+and expected head. `publish request.json` requires corpus/view/revision IDs,
+expected version and expected head; unsourced manual drafts are not publishable.
+The store must not be owned by a running server; the service storage lock enforces
+this. The CLI never resets data. CLI, service/RPC, MCP and browser consumers use
+the same default-enabled derived-view capability.
+The existing browser Runbook deep links remain intact: Guide is the primary
+human-readable document, its editor explicitly leaves original sources unchanged,
+and Agent edition is an optional executable adaptation, not a peer source.
+
+## Shared instruction-document helpers
+
+Canonical instruction-document Markdown, AgentEdition validation/redaction, source citations, and exact reviewed artifact helpers remain available for independent artifact consumers. These helpers do not provide saved-procedure storage, CRUD, detection, synthesis jobs, publication, or execution. Derived Views remain unreviewed and cannot acquire execution permission through build or publication.
+
+There is no View-to-skill or View-to-macro promotion contract. The retired host
+export path required a saved procedure and its exact reviewed AgentEdition;
+derived Views do not satisfy that authority boundary. Independent skill catalog
+and binding capabilities remain available, but exporting a View would require a
+separate explicit review and artifact-authority design.
+
+Revision assets and batch acquisition remain host/in-process capabilities; unsupported operations fail explicitly. Binary upload and bounded transport remain host responsibilities.
 
 ## Changes receipts
 
@@ -411,10 +894,10 @@ ordinary document indexes, so its `document-projection.json` marker triggers a
 document-only derived-index reset on the next search or ingestion. Marker
 presence is sufficient, including a malformed obsolete marker. The replacement
 generation is rebuilt from retained content with normal ingestion and has no
-projection marker. Raw revisions, histories, metadata, event ledgers, and
-procedure versions are not rewritten by this reset. The existing checks for
+projection marker. Raw revisions, histories, metadata and event ledgers
+are not rewritten by this reset. The existing checks for
 malformed, incompatible, or future `index-schema.json` descriptors still fail
-explicitly before reset. Event and procedure indexes ignore the retired document
+explicitly before reset. Event and View indexes ignore the retired document
 marker.
 
 Phase 0 management APIs provide corpus status and revision/job counts,
@@ -436,12 +919,12 @@ failed with an explicit interruption reason so they are never left permanently
 active. The separate website-memory HTML/content-capture extraction modes are
 not part of this service ingestion pipeline.
 
-Each derived document, conversation-event, and procedure index generation
+Each derived document, conversation-event, and View index generation
 records `index-schema.json` with schema version 1, engine `knowpro`, and its
 index kind. The descriptor is written after the semantic index persists and
 before publication. Missing or older descriptors, and current generations
 whose required semantic data is missing, trigger a scoped reset and rebuild
-from retained revisions, events, or procedure versions. Malformed or
+from retained source revisions, events, or exact published View revisions. Malformed or
 unreadable descriptors and future versions fail explicitly rather than
 deleting an index the service cannot interpret. Canonical raw content,
 histories, event ledgers, and forget tombstones are not migrated or removed
@@ -495,8 +978,8 @@ unsupported labels are rejected. A failed action result retains its
 `verified-observation` provenance alongside `metadata.outcome: "failed"`:
 authority does not assert success. `eventIndexFactory` can
 inject a deterministic
-`CorpusIndexFactory` for offline tests; by default it uses the procedure
-index factory (which defaults to the corpus KnowPro factory). Events can be
+`CorpusIndexFactory` for offline tests; by default it uses the corpus
+KnowPro factory. Events can be
 listed or forgotten independently of documents. Forgetting purges event index
 generations before a later search can access them; linked sources are deleted
 only when explicitly requested and when no retained event still links to them.
@@ -513,42 +996,6 @@ explicitly suppress a turn (optionally scoped by `conversationIds` and
 event. Tombstones survive restart and are excluded from listing and indexing.
 Clearing a corpus retains tombstones and suppresses its previously indexed
 conversations so retained upstream transcripts cannot backfill them.
-
-Personal how-to storage is corpus-owned but persisted independently from the
-source manifest, so importing, replacing, reindexing, or forgetting sources
-cannot reset its settings. `getPersonalHowToSettings` and
-`updatePersonalHowToSettings` use an optimistic settings revision. Procedure
-candidates can be detected, drafted, rejected, or saved. Saved procedures are
-immutable versions with canonical JSON, a deterministic Markdown projection,
-content hashes, source-revision citations, and version lineage. Markdown saves
-are parsed and validated while retaining additional free-form sections.
-
-`listProcedures`, `getProcedure`, `searchProcedures`, `saveProcedure`, and
-`archiveProcedure` provide the procedure lifecycle. Replacing or forgetting a
-cited source creates a new `stale` procedure version while leaving every older
-version unchanged. The transport-independent personal how-to API is also
-available through the RPC facade.
-
-`searchProcedures` searches the latest version of each procedure independently
-of the source-revision index, using a separate KnowPro index within the same
-corpus. Procedure Markdown is indexed in content mode, so natural-language
-queries use the same structured-knowledge search and message reranking as
-indexed documents. Saved, stale, and archived states are indexed as message
-tags; requested states constrain KnowPro search before ranking and limiting.
-Each commit publishes a new index generation containing only the latest
-version of every procedure. Older versions remain available through
-`getProcedure`, and a missing index generation is rebuilt from the committed
-versions on search. Searches remain corpus-scoped and honor the requested
-states and result limit; omitted states include all three states as before.
-Procedure indexing requires the configured KnowPro extraction and search
-models; it no longer has a separate embedding or lexical fallback.
-
-When both personal how-to settings are enabled, successful Markdown and text
-ingestion detects procedural sections containing ordered or checklist steps.
-Detected candidates use deterministic source-revision identities and citations,
-so unchanged imports and restarts do not create duplicates. Detection runs only
-after the source commit; failures are reported in ingestion job warnings without
-rolling back the committed source or changing authored procedures.
 
 ## Trademarks
 

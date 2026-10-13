@@ -99,7 +99,6 @@ export function createMemoryHubCaptureFunctions(
                     activityType: "captured",
                 },
                 "content",
-                { reportHowToStatus: true },
             );
             return {
                 corpusId: result.source.corpusId,

@@ -1002,6 +1002,46 @@ export function createEnhancedClientIO(
         }
     }
 
+    async function askChoice(
+        message: string,
+        choices: string[],
+        defaultId?: number,
+        signal?: AbortSignal,
+    ): Promise<number> {
+        signal?.throwIfAborted();
+        const wasSpinning = currentSpinner?.isActive();
+        if (wasSpinning) currentSpinner!.stop();
+
+        const width = process.stdout.columns || 80;
+        const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
+        process.stdout.write(`\n${line}\n${message}\n${line}\n\n`);
+        choices.forEach((choice, index) => {
+            const isDefault = index === defaultId;
+            const prefix = isDefault
+                ? chalk.cyan(`▶ ${index + 1}.`)
+                : chalk.dim(`  ${index + 1}.`);
+            const suffix = isDefault ? chalk.dim(" (default)") : "";
+            process.stdout.write(`${prefix} ${choice}${suffix}\n`);
+        });
+        process.stdout.write("\n");
+        const prompt = chalk.dim(
+            isYesNoChoices(choices)
+                ? "Enter y/n or number (1-2): "
+                : `Enter number (1-${choices.length}): `,
+        );
+        try {
+            const input = await question_internal(prompt, rl, signal);
+            signal?.throwIfAborted();
+            return parseChoiceInput(input, choices, defaultId);
+        } finally {
+            process.stdout.write(line + "\n");
+            if (wasSpinning && !signal?.aborted) {
+                currentSpinner = new EnhancedSpinner({ text: "Processing..." });
+                currentSpinner.start();
+            }
+        }
+    }
+
     function completeCommandNotification(
         requestId: RequestId,
         data: any,
@@ -1106,6 +1146,14 @@ export function createEnhancedClientIO(
             // REVIEW: Ignored.
         },
 
+        async requestSecurityApproval(
+            _requestId,
+            { message, choices, defaultId },
+            _source,
+            signal,
+        ) {
+            return askChoice(message, choices, defaultId, signal);
+        },
         // Input — unified question prompt (handles both yes/no and multi-choice)
         async question(
             _requestId: RequestId | undefined,
@@ -1113,47 +1161,7 @@ export function createEnhancedClientIO(
             choices: string[],
             defaultId?: number,
         ): Promise<number> {
-            // Pause spinner during input
-            const wasSpinning = currentSpinner?.isActive();
-            if (wasSpinning) {
-                currentSpinner!.stop();
-            }
-
-            const width = process.stdout.columns || 80;
-            const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
-
-            process.stdout.write("\n");
-            process.stdout.write(line + "\n");
-            process.stdout.write(`${message}\n`);
-            process.stdout.write(line + "\n\n");
-
-            // Display choices with numbers
-            choices.forEach((choice, index) => {
-                const isDefault = index === defaultId;
-                const prefix = isDefault
-                    ? chalk.cyan(`▶ ${index + 1}.`)
-                    : chalk.dim(`  ${index + 1}.`);
-                const suffix = isDefault ? chalk.dim(" (default)") : "";
-                process.stdout.write(`${prefix} ${choice}${suffix}\n`);
-            });
-
-            process.stdout.write("\n");
-            const prompt = chalk.dim(
-                isYesNoChoices(choices)
-                    ? "Enter y/n or number (1-2): "
-                    : `Enter number (1-${choices.length}): `,
-            );
-            const input = await question_internal(prompt, rl);
-
-            process.stdout.write(line + "\n");
-
-            // Resume spinner if it was active
-            if (wasSpinning) {
-                currentSpinner = new EnhancedSpinner({ text: "Processing..." });
-                currentSpinner.start();
-            }
-
-            return parseChoiceInput(input, choices, defaultId);
+            return askChoice(message, choices, defaultId);
         },
 
         async proposeAction(

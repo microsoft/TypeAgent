@@ -366,27 +366,35 @@ test(
     "Windows cleanup terminates the owned descendant as well",
     { skip: process.platform !== "win32" },
     async () => {
-        const owned = startProcess(
-            process.execPath,
-            [
-                "-e",
-                `
+        for (const forceColor of ["0", "1"]) {
+            const owned = startProcess(
+                process.execPath,
+                [
+                    "-e",
+                    `
         const { spawn } = require("node:child_process");
         const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
-        child.once("spawn", () => console.log(child.pid));
+        child.once("spawn", () => process.send(child.pid));
         setInterval(() => {}, 1000);
     `,
-            ],
-            { stdio: ["ignore", "pipe", "inherit"] },
-        );
-        try {
-            const [chunk] = await once(owned.child.stdout, "data");
-            const descendant = Number(chunk.toString().trim());
-            assert.ok(Number.isInteger(descendant) && descendant > 0);
-            await stopProcess(owned);
-            assert.throws(() => process.kill(descendant, 0), { code: "ESRCH" });
-        } finally {
-            await stopProcess(owned);
+                ],
+                {
+                    env: { ...process.env, FORCE_COLOR: forceColor },
+                    stdio: ["ignore", "ignore", "inherit", "ipc"],
+                },
+            );
+            try {
+                const [descendant] = await once(owned.child, "message", {
+                    signal: AbortSignal.timeout(10000),
+                });
+                assert.ok(Number.isInteger(descendant) && descendant > 0);
+                await stopProcess(owned);
+                assert.throws(() => process.kill(descendant, 0), {
+                    code: "ESRCH",
+                });
+            } finally {
+                await stopProcess(owned);
+            }
         }
     },
 );

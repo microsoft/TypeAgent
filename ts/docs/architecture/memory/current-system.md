@@ -68,6 +68,17 @@ loopback MCP host, and injects an in-process RPC facade into the browser and
 memory agents. The native agent and MCP endpoint are two interfaces to the
 same service.
 
+Document and procedure searches reuse prepared published index generations.
+Per-corpus shared read reservations allow these searches and document knowledge
+reads to overlap, while index preparation and mutations are exclusive. A queued
+writer blocks later readers, and active reads retain their snapshot through
+their async work. Generation and file-metadata changes invalidate the prepared
+index; schema recovery remains exclusive. Event search keeps its existing
+exclusive access. Queries and model responses are not cached.
+
+For opt-in correlated search timings and the cache/shutdown guarantees, see
+[the memory service diagnostics guide](../../../packages/memory/service/README.md#indexed-reads-and-search-diagnostics).
+
 ## Conversation memory
 
 When a durable service is injected, conversation memory is the **event

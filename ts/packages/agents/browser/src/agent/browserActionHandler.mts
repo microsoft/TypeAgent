@@ -525,7 +525,6 @@ async function initializeBrowserContext(
         browserControl: clientBrowserControl,
         memoryServiceClient,
         automations,
-        runbookCapabilities,
     } = normalizeBrowserAgentInitOptions(settings?.options);
 
     const localHostPort = settings?.localHostPort;
@@ -539,7 +538,6 @@ async function initializeBrowserContext(
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
         ...(memoryServiceClient === undefined ? {} : { memoryServiceClient }),
-        ...(runbookCapabilities === undefined ? {} : { runbookCapabilities }),
         ...(automations === undefined
             ? {}
             : {

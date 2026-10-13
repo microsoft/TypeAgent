@@ -284,6 +284,7 @@ export async function createAgentRpcClient(
                 actionContextId: actionContextMap.getId(actionContext),
                 activityContext: actionContext.activityContext,
                 isFromReasoningLoop: actionContext.isFromReasoningLoop,
+                executionOrigin: actionContext.executionOrigin,
                 workingDirectory: actionContext.workingDirectory,
                 ...getContextParam(actionContext.sessionContext),
             });
@@ -300,6 +301,7 @@ export async function createAgentRpcClient(
                 actionContextId: actionContextMap.getId(actionContext),
                 activityContext: actionContext.activityContext,
                 isFromReasoningLoop: actionContext.isFromReasoningLoop,
+                executionOrigin: actionContext.executionOrigin,
                 workingDirectory: actionContext.workingDirectory,
                 ...getContextParam(actionContext.sessionContext),
             });
@@ -539,6 +541,15 @@ export async function createAgentRpcClient(
                 param.choices,
                 param.defaultId,
             );
+        },
+        requestSecurityApproval: async ({ contextId, request }) => {
+            const context = contextMap.get(contextId);
+            if (!context.requestSecurityApproval) {
+                throw new Error(
+                    "The host does not support trusted security approval.",
+                );
+            }
+            return context.requestSecurityApproval(request);
         },
         queueToggleTransientAgent: async (
             contextId: number,

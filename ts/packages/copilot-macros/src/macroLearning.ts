@@ -122,7 +122,8 @@ export class MacroLearningEngine {
             !runtime ||
             typeof runtime.extract !== "function" ||
             typeof runtime.build !== "function" ||
-            typeof runtime.generateGrammar !== "function"
+            typeof runtime.generateGrammar !== "function" ||
+            typeof runtime.validateGrammar !== "function"
         ) {
             throw new Error("A complete learning runtime is required.");
         }
@@ -287,6 +288,18 @@ export class MacroLearningEngine {
                 );
             }
             const now = new Date().toISOString();
+            if (target) {
+                target = {
+                    ...target,
+                    version: this.state!.jobs.reduce(
+                        (version, existing) =>
+                            existing.target?.macroId === target!.macroId
+                                ? Math.max(version, existing.target.version + 2)
+                                : version,
+                        target.version,
+                    ),
+                };
+            }
             job = {
                 jobId: digest({ traceId, cwd }),
                 traceId,
@@ -418,6 +431,19 @@ export class MacroLearningEngine {
             }
         }
         return structuredClone(this.preference(job.cwd));
+    }
+
+    validateApprovalGrammar(
+        macro: CopilotToolMacro,
+        approved: CopilotToolMacro[],
+    ): void {
+        if (!macro.learning) return;
+        if (!this.runtime) {
+            throw new Error(
+                "A learning runtime is required to validate staged grammar.",
+            );
+        }
+        this.runtime.validateGrammar(macro, approved);
     }
 
     async approved(macro: CopilotToolMacro): Promise<void> {
@@ -620,7 +646,14 @@ export class MacroLearningEngine {
             const baseline = await this.stage(job, "build", async (signal) => {
                 const macro = await induceMacroFromTrace(
                     job.traceId,
-                    trace,
+                    {
+                        ...trace,
+                        toolCalls: trace.toolCalls.map((call) =>
+                            call.modelResult !== undefined
+                                ? { ...call, result: call.modelResult }
+                                : call,
+                        ),
+                    },
                     macroId,
                     "Learning draft",
                     trace.prompt,

@@ -2,12 +2,33 @@
 // Licensed under the MIT License.
 
 import type {
-    ProcedureCandidate,
-    ProcedureDocument,
-    ProcedureSaveRequest,
-    ProcedureSourceCitation,
-    ProcedureSummary,
-    ProcedureVersion,
+    MemoryServiceCapabilities,
+    ViewBuildRequest,
+    ViewBuildJobRequest,
+    ViewBuildJob,
+    ViewMaintenancePlanRequest,
+    ViewMaintenancePlan,
+    ViewMaintenanceRequest,
+    ViewMaintenanceResult,
+    ViewMaintenanceUpdate,
+    ViewMaintenanceRead,
+    ViewReadRequest,
+    ViewSaveRequest,
+    ViewArchiveRequest,
+    ViewConflictReadRequest,
+    ViewConflictResolution,
+    ViewSnapshot,
+    ViewVersion,
+    ViewHistoryEntry,
+    ViewMergeConflict,
+    ViewPublishRequest,
+    ViewPublicationStatus,
+    ViewPublicationPolicy,
+    ViewPublicationPolicyUpdate,
+    ViewSearchRequest,
+    ViewSearchMatch,
+    MemoryEvent,
+    MemoryEventListRequest,
 } from "@typeagent/memory-service";
 
 // =============================================
@@ -153,26 +174,6 @@ export type MemoryCenterIngestResult = {
     statusUri: string;
 };
 
-export type MemoryCenterHowToSettings = {
-    revision: number;
-    updatedAt: string;
-    enabled: boolean;
-    detectCandidates: boolean;
-    preferences?: Record<string, unknown>;
-};
-
-export type MemoryCenterProcedureCitation = ProcedureSourceCitation;
-export type MemoryCenterProcedureDocument = ProcedureDocument;
-export type MemoryCenterProcedureCandidate = ProcedureCandidate;
-export type MemoryCenterProcedureSummary = ProcedureSummary;
-export type MemoryCenterProcedureVersion = ProcedureVersion;
-
-export type MemoryCenterProcedureSearchMatch = {
-    procedure: MemoryCenterProcedureSummary;
-    version: MemoryCenterProcedureVersion;
-    score: number;
-};
-
 export type MemoryCenterReindexResult = {
     corpusId: string;
     sourceId?: string;
@@ -215,11 +216,61 @@ export type MemoryCenterActivityFilter = {
 };
 
 export type MemoryCenterInvokeFunctions = {
+    memoryGetViewPublicationPolicy(params: {
+        corpusId: string;
+    }): Promise<ViewPublicationPolicy>;
+    memoryUpdateViewPublicationPolicy(
+        params: ViewPublicationPolicyUpdate,
+    ): Promise<ViewPublicationPolicy>;
+    memoryGetViewPublication(
+        params: ViewReadRequest,
+    ): Promise<ViewPublicationStatus>;
+    memoryPublishView(
+        params: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus>;
+    memoryRetryViewIndex(
+        params: ViewPublishRequest,
+    ): Promise<ViewPublicationStatus>;
+    memorySearchViews(params: ViewSearchRequest): Promise<ViewSearchMatch[]>;
+    memoryViewCapabilities(params: {}): Promise<MemoryServiceCapabilities>;
+    memoryListViews(params: { corpusId: string }): Promise<ViewSnapshot>;
+    memoryGetView(params: ViewReadRequest): Promise<ViewVersion | undefined>;
+    memorySaveViewDraft(params: ViewSaveRequest): Promise<ViewHistoryEntry>;
+    memoryArchiveView(params: ViewArchiveRequest): Promise<ViewHistoryEntry>;
+    memoryViewHistory(params: ViewReadRequest): Promise<ViewHistoryEntry[]>;
+    memoryBuildViews(params: ViewBuildRequest): Promise<ViewBuildJob>;
+    memoryPlanViewMaintenance(
+        params: ViewMaintenancePlanRequest,
+    ): Promise<ViewMaintenancePlan>;
+    memoryMaintainViews(
+        params: ViewMaintenanceRequest,
+    ): Promise<ViewMaintenanceResult>;
+    memoryUpdateViewMaintenance(
+        params: ViewMaintenanceUpdate,
+    ): Promise<ViewHistoryEntry>;
+    memoryGetViewMaintenance(
+        params: ViewMaintenanceRead,
+    ): Promise<ViewMaintenanceResult | undefined>;
+    memoryGetViewBuild(
+        params: ViewBuildJobRequest,
+    ): Promise<ViewBuildJob | undefined>;
+    memoryListViewBuilds(params: { corpusId: string }): Promise<ViewBuildJob[]>;
+    memoryCancelViewBuild(params: ViewBuildJobRequest): Promise<ViewBuildJob>;
+    memoryRetryViewBuild(params: ViewBuildJobRequest): Promise<ViewBuildJob>;
+    memoryGetViewConflict(
+        params: ViewConflictReadRequest,
+    ): Promise<ViewMergeConflict | undefined>;
+    memoryResolveViewConflict(
+        params: ViewConflictResolution,
+    ): Promise<ViewHistoryEntry>;
     memoryCreateCorpus(params: {
         name: string;
         description?: string;
     }): Promise<MemoryCenterCorpus>;
     memoryListCorpora(params: {}): Promise<MemoryCenterCorpus[]>;
+    memoryListEvents(
+        params: MemoryEventListRequest,
+    ): Promise<MemoryCenterPage<MemoryEvent>>;
     memoryGetCorpus(params: {
         corpusId: string;
     }): Promise<MemoryCenterCorpusStatus | undefined>;
@@ -240,6 +291,7 @@ export type MemoryCenterInvokeFunctions = {
         revisionId?: string;
         offset?: number;
         maxChars?: number;
+        indexedLocator?: string;
     }): Promise<MemoryCenterContent>;
     memoryGetSourceKnowledge(params: {
         corpusId: string;
@@ -305,55 +357,6 @@ export type MemoryCenterInvokeFunctions = {
     memoryCancelJob(params: {
         jobId: string;
     }): Promise<MemoryCenterJob | undefined>;
-    memoryGetHowToSettings(params: {
-        corpusId: string;
-    }): Promise<MemoryCenterHowToSettings>;
-    memoryUpdateHowToSettings(params: {
-        corpusId: string;
-        expectedRevision: number;
-        enabled?: boolean;
-        detectCandidates?: boolean;
-        preferences?: Record<string, unknown>;
-    }): Promise<MemoryCenterHowToSettings>;
-    memoryCreateProcedureCandidate(
-        params: MemoryCenterProcedureDocument & {
-            corpusId: string;
-            candidateId?: string;
-            state?: "detected" | "draft";
-        },
-    ): Promise<MemoryCenterProcedureCandidate>;
-    memoryListProcedureCandidates(params: {
-        corpusId: string;
-        states?: MemoryCenterProcedureCandidate["state"][];
-    }): Promise<MemoryCenterProcedureCandidate[]>;
-    memoryRejectProcedureCandidate(params: {
-        corpusId: string;
-        candidateId: string;
-    }): Promise<MemoryCenterProcedureCandidate>;
-    memorySaveProcedure(
-        params: ProcedureSaveRequest,
-    ): Promise<MemoryCenterProcedureVersion>;
-    memoryListProcedures(params: {
-        corpusId: string;
-        states?: MemoryCenterProcedureSummary["state"][];
-    }): Promise<MemoryCenterProcedureSummary[]>;
-    memoryGetProcedure(params: {
-        corpusId: string;
-        procedureId: string;
-        version?: number;
-    }): Promise<MemoryCenterProcedureVersion | undefined>;
-    memorySearchProcedures(params: {
-        corpusId: string;
-        query: string;
-        states?: MemoryCenterProcedureSummary["state"][];
-        limit?: number;
-    }): Promise<MemoryCenterProcedureSearchMatch[]>;
-    memoryArchiveProcedure(params: {
-        corpusId: string;
-        procedureId: string;
-        expectedVersion?: number;
-    }): Promise<MemoryCenterProcedureVersion>;
-
     memoryListActivity(
         params: MemoryCenterActivityFilter,
     ): Promise<MemoryCenterPage<MemoryCenterActivity>>;
@@ -507,13 +510,11 @@ export type BrowserAgentInvokeFunctions = {
         mode?: string;
         extractedKnowledge?: any;
         activityType?: "visited" | "captured";
-        reportHowToStatus?: boolean;
     }): Promise<{
         indexed: boolean;
         knowledgeExtracted: boolean;
         entityCount: number;
         warnings?: string[];
-        howTo?: { enabled: boolean; candidateCount: number };
         error?: string;
     }>;
 

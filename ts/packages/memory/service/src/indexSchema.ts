@@ -4,7 +4,7 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export type IndexKind = "documents" | "conversation-events" | "procedures";
+export type IndexKind = "documents" | "conversation-events" | "views";
 
 export interface IndexSchema {
     indexSchemaVersion: 1;
@@ -14,6 +14,39 @@ export interface IndexSchema {
 
 const schemaFileName = "index-schema.json";
 const semanticFileName = "corpus_data.json";
+
+export async function indexFingerprint(
+    directory: string,
+    indexKind: IndexKind,
+): Promise<string> {
+    const files = [
+        schemaFileName,
+        semanticFileName,
+        "corpus_embeddings.bin",
+        ...(indexKind === "documents"
+            ? ["document-projection.json"]
+            : ["ready"]),
+    ];
+    const stamps = await Promise.all(
+        files.map(async (file) => {
+            try {
+                const metadata = await stat(path.join(directory, file));
+                return [
+                    metadata.dev,
+                    metadata.ino,
+                    metadata.size,
+                    metadata.mtimeMs,
+                    metadata.ctimeMs,
+                ];
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === "ENOENT")
+                    return null;
+                throw error;
+            }
+        }),
+    );
+    return JSON.stringify(stamps);
+}
 
 async function hasSemanticData(directory: string): Promise<boolean> {
     const filePath = path.join(directory, semanticFileName);

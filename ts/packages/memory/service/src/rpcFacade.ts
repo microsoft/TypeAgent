@@ -5,9 +5,8 @@ import type {
     IngestionJobStatus,
     JobProgress,
     MemoryService,
-    PersonalHowToService,
 } from "./types.js";
-import { validateProcedureSaveRequest } from "./agentEdition.js";
+import type { MemoryViewService } from "./viewTypes.js";
 
 export interface MemoryJobWaitOptions {
     signal?: AbortSignal;
@@ -20,15 +19,77 @@ function unsupportedCapability(operation: string): Promise<never> {
 }
 
 export function createMemoryServiceRpcFacade(
-    service: MemoryService & PersonalHowToService,
-): MemoryService & PersonalHowToService;
-export function createMemoryServiceRpcFacade(
-    service: MemoryService,
-): MemoryService;
-export function createMemoryServiceRpcFacade(
-    service: MemoryService & Partial<PersonalHowToService>,
-): MemoryService & PersonalHowToService {
+    service: MemoryService & Partial<MemoryViewService>,
+): MemoryService & MemoryViewService {
     return {
+        planViewMaintenance: (...args) =>
+            service.planViewMaintenance?.(...args) ??
+            unsupportedCapability("view maintenance planning"),
+        maintainViews: (...args) =>
+            service.maintainViews?.(...args) ??
+            unsupportedCapability("view maintenance"),
+        updateViewMaintenance: (...args) =>
+            service.updateViewMaintenance?.(...args) ??
+            unsupportedCapability("view maintenance definitions"),
+        getViewMaintenance: (...args) =>
+            service.getViewMaintenance?.(...args) ??
+            unsupportedCapability("view maintenance receipts"),
+        getViewPublicationPolicy: (...args) =>
+            service.getViewPublicationPolicy?.(...args) ??
+            unsupportedCapability("view publication policy"),
+        updateViewPublicationPolicy: (...args) =>
+            service.updateViewPublicationPolicy?.(...args) ??
+            unsupportedCapability("view publication policy"),
+        getViewPublication: (...args) =>
+            service.getViewPublication?.(...args) ??
+            unsupportedCapability("view publication"),
+        retryViewIndex: (...args) =>
+            service.retryViewIndex?.(...args) ??
+            unsupportedCapability("view index retry"),
+        searchViews: (...args) =>
+            service.searchViews?.(...args) ??
+            unsupportedCapability("published view search"),
+        buildViews: (...args) =>
+            service.buildViews?.(...args) ??
+            unsupportedCapability("view builds"),
+        getViewBuild: (...args) =>
+            service.getViewBuild?.(...args) ??
+            unsupportedCapability("view builds"),
+        listViewBuilds: (...args) =>
+            service.listViewBuilds?.(...args) ??
+            unsupportedCapability("view builds"),
+        cancelViewBuild: (...args) =>
+            service.cancelViewBuild?.(...args) ??
+            unsupportedCapability("view build cancellation"),
+        retryViewBuild: (...args) =>
+            service.retryViewBuild?.(...args) ??
+            unsupportedCapability("view build retry"),
+        getViewConflict: (...args) =>
+            service.getViewConflict?.(...args) ??
+            unsupportedCapability("view conflicts"),
+        resolveViewConflict: (...args) =>
+            service.resolveViewConflict?.(...args) ??
+            unsupportedCapability("view conflict resolution"),
+        listViews: (...args) =>
+            service.listViews?.(...args) ??
+            unsupportedCapability("view drafts"),
+        getSourceViewUsage: (...args) =>
+            service.getSourceViewUsage?.(...args) ??
+            unsupportedCapability("source View usage"),
+        getView: (...args) =>
+            service.getView?.(...args) ?? unsupportedCapability("view drafts"),
+        saveViewDraft: (...args) =>
+            service.saveViewDraft?.(...args) ??
+            unsupportedCapability("view drafts"),
+        archiveView: (...args) =>
+            service.archiveView?.(...args) ??
+            unsupportedCapability("view drafts"),
+        getViewHistory: (...args) =>
+            service.getViewHistory?.(...args) ??
+            unsupportedCapability("view history"),
+        publishView: (...args) =>
+            service.publishView?.(...args) ??
+            unsupportedCapability("view publication"),
         createCorpus: (...args) => service.createCorpus(...args),
         listCorpora: (...args) => service.listCorpora(...args),
         getCorpus: (...args) => service.getCorpus(...args),
@@ -65,15 +126,6 @@ export function createMemoryServiceRpcFacade(
         cancelBatchImport: (batchId) =>
             service.cancelBatchImport?.(batchId) ??
             unsupportedCapability("batch imports"),
-        listRunbookJobs: (corpusId) =>
-            service.listRunbookJobs?.(corpusId) ??
-            unsupportedCapability("runbook jobs"),
-        getRunbookJob: (jobId) =>
-            service.getRunbookJob?.(jobId) ??
-            unsupportedCapability("runbook jobs"),
-        requestRunbookSynthesis: (request) =>
-            service.requestRunbookSynthesis?.(request) ??
-            unsupportedCapability("runbook synthesis"),
         listSources: (...args) => service.listSources(...args),
         listSourcesPage: (...args) => service.listSourcesPage(...args),
         getSource: (...args) => service.getSource(...args),
@@ -103,26 +155,6 @@ export function createMemoryServiceRpcFacade(
         answer: (...args) => service.answer(...args),
         getKnowledgeGraph: (...args) => service.getKnowledgeGraph(...args),
         getCapabilities: (...args) => service.getCapabilities(...args),
-        getPersonalHowToSettings: (...args) =>
-            service.getPersonalHowToSettings!(...args),
-        updatePersonalHowToSettings: (...args) =>
-            service.updatePersonalHowToSettings!(...args),
-        createProcedureCandidate: (...args) =>
-            service.createProcedureCandidate!(...args),
-        getProcedureCandidate: (...args) =>
-            service.getProcedureCandidate!(...args),
-        listProcedureCandidates: (...args) =>
-            service.listProcedureCandidates!(...args),
-        rejectProcedureCandidate: (...args) =>
-            service.rejectProcedureCandidate!(...args),
-        saveProcedure: async (request) => {
-            validateProcedureSaveRequest(request);
-            return service.saveProcedure!(request);
-        },
-        listProcedures: (...args) => service.listProcedures!(...args),
-        getProcedure: (...args) => service.getProcedure!(...args),
-        searchProcedures: (...args) => service.searchProcedures!(...args),
-        archiveProcedure: (...args) => service.archiveProcedure!(...args),
     };
 }
 

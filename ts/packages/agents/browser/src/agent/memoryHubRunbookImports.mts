@@ -9,8 +9,6 @@ import {
 import type {
     MemoryService,
     MemoryBatchImportRequest,
-    RunbookJobResult,
-    RunbookSynthesisRequest,
 } from "@typeagent/memory-service";
 import {
     runbookImportLimits,
@@ -44,10 +42,6 @@ export interface RunbookImportService {
     listBatchImports(corpusId: string): Promise<RunbookImportBatch[]>;
     retryBatchImport(batchId: string): Promise<RunbookImportBatch>;
     cancelBatchImport(batchId: string): Promise<RunbookImportBatch>;
-    listRunbookJobs(corpusId: string): Promise<RunbookJobResult[]>;
-    requestRunbookSynthesis?(
-        request: RunbookSynthesisRequest,
-    ): Promise<RunbookJobResult>;
 }
 type ServiceProvider = () => Pick<MemoryService, "getCorpus"> &
     Partial<RunbookImportService>;
@@ -73,7 +67,6 @@ function serviceMethods(
         "listBatchImports",
         "retryBatchImport",
         "cancelBatchImport",
-        "listRunbookJobs",
     ].every((method) => typeof Reflect.get(value, method) === "function");
 }
 
@@ -530,9 +523,7 @@ export function createMemoryHubRunbookImportFunctions(
         return {
             batch: acquiredMemberNames(batch, acquisition),
             acquisition: acquisition.issues,
-            warnings: [
-                "Classification and synthesis run as separate post-commit jobs. Imports never execute Runbooks, tools or automations.",
-            ],
+            warnings: [],
         };
     }
 
@@ -579,33 +570,6 @@ export function createMemoryHubRunbookImportFunctions(
                 request,
                 await service.cancelBatchImport(request.batchId),
             );
-        },
-        async memoryHubRunbookJobs({ corpusId }) {
-            const jobs = await (
-                await corpusService(corpusId)
-            ).listRunbookJobs(corpusId);
-            if (jobs.some((job) => job.corpusId !== corpusId))
-                throw new Error("Runbook jobs returned an unexpected corpus.");
-            return jobs;
-        },
-        async memoryHubRetryRunbookSynthesis(request) {
-            const service = await corpusService(request.corpusId);
-            if (!service.requestRunbookSynthesis)
-                throw new Error(
-                    "Post-commit Runbook synthesis retry is unavailable in this Memory service.",
-                );
-            if (!request.sourceId.trim() || !request.revisionId.trim())
-                throw new Error("Select an exact retained source revision.");
-            const result = await service.requestRunbookSynthesis(request);
-            if (
-                result.corpusId !== request.corpusId ||
-                result.sourceId !== request.sourceId ||
-                result.revisionId !== request.revisionId
-            )
-                throw new Error(
-                    "Synthesis retry returned another target or source revision.",
-                );
-            return result;
         },
     };
 }

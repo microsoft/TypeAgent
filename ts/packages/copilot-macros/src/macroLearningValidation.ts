@@ -155,7 +155,7 @@ export function assertLearningRecipe(
     }
     if (recipe.uncertainties.length !== 0) {
         throw new Error(
-            "Recipe contains unresolved execution or output uncertainties.",
+            `Recipe contains unresolved execution or output uncertainties: ${recipe.uncertainties.join("; ")}`,
         );
     }
 }
