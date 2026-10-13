@@ -9,13 +9,34 @@ import {
 } from "../dist/memoryClient.js";
 import { memoryToolNames } from "../dist/protocol.js";
 
+test("clients and tool names expose no legacy saved-procedure surface", () => {
+    const clients = [
+        new InProcessMemoryServiceClient({}),
+        new McpMemoryServiceClient({}),
+    ];
+    for (const client of clients) {
+        for (const name of [
+            "getPersonalHowToSettings",
+            "createProcedureCandidate",
+            "saveProcedure",
+            "searchProcedures",
+            "requestRunbookSynthesis",
+        ])
+            assert.equal(name in client, false);
+    }
+    assert.equal(
+        Object.values(memoryToolNames).some((name) =>
+            /memory_(?:procedure_|how_to_|runbook_)/.test(name),
+        ),
+        false,
+    );
+});
+
 test("in-process search forwarding preserves trace IDs and disabled knowledge-read arity", async () => {
     const calls = [];
     const service = {
         search: async (request) => calls.push(["search", request]),
         searchEvents: async (request) => calls.push(["events", request]),
-        searchProcedures: async (request) =>
-            calls.push(["procedures", request]),
         getSourceKnowledge: async (...args) =>
             calls.push(["knowledge", ...args]),
     };
@@ -23,18 +44,16 @@ test("in-process search forwarding preserves trace IDs and disabled knowledge-re
     const request = { corpusId: "corpus", query: "query", traceId: "trace" };
     await client.search(request);
     await client.searchEvents(request);
-    await client.searchProcedures(request);
     await client.getSourceKnowledge("corpus", "source");
     await client.getSourceKnowledge("corpus", "source", "trace");
     assert.deepEqual(calls, [
         ["search", request],
         ["events", request],
-        ["procedures", request],
         ["knowledge", "corpus", "source"],
         ["knowledge", "corpus", "source", "trace"],
     ]);
     assert.ok(
-        calls.slice(0, 3).every(([, forwarded]) => forwarded === request),
+        calls.slice(0, 2).every(([, forwarded]) => forwarded === request),
     );
 });
 
@@ -55,21 +74,17 @@ test("MCP forwarding does not add trace IDs to the tool contract", async () => {
                     ? search
                     : call.name === memoryToolNames.eventSearch
                       ? { query: "query", matches: [] }
-                      : call.name === memoryToolNames.procedureSearch
-                        ? []
-                        : { entities: [], topics: [], relationships: [] };
+                      : { entities: [], topics: [], relationships: [] };
             return { content: [], structuredContent: { result } };
         },
     });
     const request = { corpusId: "corpus", query: "query", traceId: "trace" };
     await client.search(request);
     await client.searchEvents(request);
-    await client.searchProcedures(request);
     await client.getSourceKnowledge("corpus", "source", "trace");
     assert.deepEqual(
         calls.map((call) => call.arguments),
         [
-            { corpusId: "corpus", query: "query" },
             { corpusId: "corpus", query: "query" },
             { corpusId: "corpus", query: "query" },
             { corpusId: "corpus", sourceId: "source" },

@@ -1,17 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
-import type { RunbookHostCapabilities } from "./runbookCapabilities.js";
-import type { QueueSnapshot } from "@typeagent/dispatcher-types";
-import type { AppAgentManifest } from "@typeagent/agent-sdk";
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
+import type { AppAgentManifest } from "@typeagent/agent-sdk";
 import type {
     ApproveMacroRequest,
     ArmRecordingRequest,
-    MacroLearningMode,
-    MacroLearningPreference,
-    MacroLearningJob,
     ClaimRecordingRequest,
     CopilotToolMacro,
     CreateMacroFromTraceRequest,
@@ -20,6 +14,9 @@ import type {
     FinalizeRecordingRequest,
     InspectMacroRequest,
     ListMacrosRequest,
+    MacroLearningJob,
+    MacroLearningMode,
+    MacroLearningPreference,
     MacroMatch,
     MacroRequirements,
     MacroRunRecord,
@@ -36,32 +33,27 @@ import type {
     ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
 import type {
+    PendingInteractionRequest,
+    QueueSnapshot,
+} from "@typeagent/dispatcher-types";
+import type {
     CatalogEntry,
     CatalogSearchResult,
     CatalogState,
-    SkillIdentity,
-    SkillGrammarRoutingResult,
-    SkillScope,
     SkillAcquisitionPreview,
     SkillAcquisitionRequest,
+    SkillGrammarRoutingResult,
+    SkillIdentity,
+    SkillScope,
     SkillUpdateCheck,
 } from "@typeagent/skill-catalog";
-import type {
-    MacroDraftResult,
-    ProcedureLineage,
-} from "@typeagent/procedure-artifacts";
+import type { RunbookHostCapabilities } from "./runbookCapabilities.js";
 
-export type {
-    MacroDraftResult,
-    ProcedureLineage,
-} from "@typeagent/procedure-artifacts";
+export type { MacroDraftResult } from "@typeagent/procedure-artifacts";
 
 export type {
     ApproveMacroRequest,
     ArmRecordingRequest,
-    MacroLearningMode,
-    MacroLearningPreference,
-    MacroLearningJob,
     ClaimRecordingRequest,
     CopilotToolMacro,
     CreateMacroFromTraceRequest,
@@ -70,6 +62,9 @@ export type {
     FinalizeRecordingRequest,
     InspectMacroRequest,
     ListMacrosRequest,
+    MacroLearningJob,
+    MacroLearningMode,
+    MacroLearningPreference,
     MacroMatch,
     MacroRequirements,
     MacroRunRecord,
@@ -291,53 +286,6 @@ export type SkillAcquisitionRevisionResponse = {
     manifestDigest: string;
 };
 
-export type ProcedureVersionReference = {
-    corpusId: string;
-    procedureId: string;
-    version: number;
-};
-
-export type ProcedureSkillArtifact = {
-    path?: string;
-    content: string;
-    encoding?: "utf8" | "base64";
-};
-
-export type ProcedureArtifactRequest =
-    | (ProcedureVersionReference & {
-          kind: "skill";
-          skill: {
-              identity: SkillIdentity;
-              description?: string;
-              schema?: ProcedureSkillArtifact;
-              grammar?: ProcedureSkillArtifact;
-          };
-      })
-    | (ProcedureVersionReference & { kind: "macro" });
-
-export type ProcedureArtifactPreview =
-    | {
-          kind: "skill";
-          lineage: ProcedureLineage;
-          skill: PublishSkillRequest;
-      }
-    | {
-          kind: "macro";
-          result: MacroDraftResult;
-      };
-
-export type ProcedureArtifactPromotion =
-    | {
-          kind: "skill";
-          lineage: ProcedureLineage;
-          entry: CatalogEntry;
-      }
-    | {
-          kind: "macro";
-          lineage: ProcedureLineage;
-          macro: MacroVersionRef;
-      };
-
 export type AgentServerInvokeFunctions = {
     getSkillLifecycle: RunbookHostCapabilities["getSkillLifecycle"];
     changeSkillLifecycle: RunbookHostCapabilities["changeSkillLifecycle"];
@@ -426,12 +374,6 @@ export type AgentServerInvokeFunctions = {
     updateSkill: (
         request: SkillAcquisitionRequest,
     ) => Promise<SkillAcquisitionRevisionResponse>;
-    previewProcedureArtifact: (
-        request: ProcedureArtifactRequest,
-    ) => Promise<ProcedureArtifactPreview>;
-    promoteProcedureArtifact: (
-        request: ProcedureArtifactRequest,
-    ) => Promise<ProcedureArtifactPromotion>;
 
     joinConversation: (
         options?: DispatcherConnectOptions,

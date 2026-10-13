@@ -9,17 +9,6 @@ const head = z
     .string()
     .regex(/^[0-9a-f]{40}$/)
     .nullable();
-const subject = z.strictObject({
-    key: id,
-    title: z.string().trim().min(1).max(1000),
-    taxonomy: z.enum(["concept", "system", "project"]),
-    pageId: id.optional(),
-});
-const identity = subject.extend({
-    pageId: id,
-    state: z.enum(["active", "omitted", "merged"]),
-    mergedInto: id.optional(),
-});
 const dependency = z.strictObject({
     sourceId: id,
     revisionId: id,
@@ -56,42 +45,23 @@ export const viewMaintenanceDefinitionSchema = z.strictObject({
             project: z.string().trim().min(1).max(200).optional(),
         }),
     ]),
-    wikiDiscovery: z
-        .strictObject({
-            rules: z.literal("explicit-subjects-v1"),
-            createDraftPages: z.boolean(),
-            subjects: subject.array().max(32),
-        })
-        .optional(),
 });
 export const viewMaintenanceSnapshotSchema = z.object({
     schemaVersion: z.literal(1),
     fingerprint: hash,
     dependencies: dependency.array().max(32),
-    subjects: identity.array().max(32),
-    registry: identity.array().max(128),
     privacySources: id.array().max(128),
 });
 export const viewMaintenanceManifestSchema =
     viewMaintenanceSnapshotSchema.extend({
         acceptedRevisionId: id,
         acceptedAt: z.string(),
-        pages: z
-            .object({
-                pageId: id,
-                subjectKeys: id.array().max(128),
-                contributing: dependency.array().max(32),
-                context: dependency.array().max(32),
-                inventoryIds: id.array().max(128),
-            })
-            .array()
-            .max(32),
     });
 export const viewMaintenancePlanRequestSchema = z.strictObject({
     corpusId: id,
     viewIds: id.array().min(1).max(32),
 });
-export const viewMaintenanceRequestSchema = z.strictObject({
+const explicitMaintenanceRequestSchema = z.strictObject({
     corpusId: id,
     expectedHead: head,
     targets: z
@@ -103,6 +73,15 @@ export const viewMaintenanceRequestSchema = z.strictObject({
         .min(1)
         .max(32),
 });
+export const viewMaintenanceRequestSchema = z.union([
+    explicitMaintenanceRequestSchema,
+    z.strictObject({
+        corpusId: id,
+        expectedHead: head,
+        family: z.enum(["wiki", "projects"]),
+        operation: z.enum(["update", "rebuild", "pause", "resume"]),
+    }),
+]);
 export const viewMaintenanceUpdateSchema = z.strictObject({
     corpusId: id,
     viewId: id,

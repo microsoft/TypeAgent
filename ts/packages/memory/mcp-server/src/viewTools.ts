@@ -2,65 +2,80 @@
 // Licensed under the MIT License.
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type {
-    MemoryService,
-    PersonalHowToService,
-    MemoryViewService,
-    ViewReadRequest,
-    ViewSaveRequest,
-    ViewBuildRequest,
-    ViewConflictResolution,
-    ViewPublishRequest,
-    ViewPublicationPolicyUpdate,
-    ViewSearchRequest,
-    ViewMaintenancePlanRequest,
-    ViewMaintenanceRequest,
-    ViewMaintenanceUpdate,
-    ViewMaintenanceRead,
-} from "@typeagent/memory-service";
-import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
-    viewToolNames,
-    viewSnapshotSchema,
-    viewReadRequestSchema,
-    viewVersionSchema,
-    viewSaveRequestSchema,
     viewArchiveRequestSchema,
-    viewHistoryEntrySchema,
-    viewBuildRequestSchema,
     viewBuildJobRequestSchema,
     viewBuildJobSchema,
+    viewBuildRequestSchema,
     viewConflictReadSchema,
     viewConflictSchema,
-    viewResolutionSchema,
+    viewHistoryEntrySchema,
+    viewMaintenancePlanRequestSchema,
+    viewMaintenancePlanSchema,
+    viewMaintenanceReadSchema,
+    viewMaintenanceRequestSchema,
+    viewMaintenanceResultSchema,
+    viewMaintenanceUpdateSchema,
     viewPublicationPolicySchema,
     viewPublicationPolicyUpdateSchema,
     viewPublicationStatusSchema,
     viewPublishRequestSchema,
-    viewSearchRequestSchema,
+    viewReadRequestSchema,
+    viewResolutionSchema,
+    viewSaveRequestSchema,
     viewSearchMatchSchema,
-    viewMaintenancePlanSchema,
-    viewMaintenancePlanRequestSchema,
-    viewMaintenanceRequestSchema,
-    viewMaintenanceResultSchema,
-    viewMaintenanceUpdateSchema,
-    viewMaintenanceReadSchema,
+    viewSearchRequestSchema,
+    viewSnapshotSchema,
+    viewSourceUsageRequestSchema,
+    viewSourceUsagePageSchema,
+    viewToolNames,
+    viewVersionSchema,
 } from "@typeagent/memory-client";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+    MemoryService,
+    MemoryViewService,
+    ViewBuildRequest,
+    ViewConflictResolution,
+    ViewMaintenancePlanRequest,
+    ViewMaintenanceRead,
+    ViewMaintenanceRequest,
+    ViewMaintenanceUpdate,
+    ViewPublicationPolicyUpdate,
+    ViewPublishRequest,
+    ViewReadRequest,
+    ViewSaveRequest,
+    ViewSearchRequest,
+    ViewSourceUsageRequest,
+} from "@typeagent/memory-service";
+import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 import { z } from "zod";
 
 export function registerViewTools(
     server: McpServer,
-    service: MemoryService & PersonalHowToService & Partial<MemoryViewService>,
+    service: MemoryService & Partial<MemoryViewService>,
     run: (operation: () => Promise<unknown>) => Promise<CallToolResult>,
 ): void {
     const views = createMemoryServiceRpcFacade(service);
     const corpus = z.strictObject({ corpusId: z.string().min(1).max(200) });
     server.registerTool(
+        viewToolNames.getSourceViewUsage,
+        {
+            description:
+                "List current derived Views that depend on a document source, without synthesis or execution.",
+            inputSchema: viewSourceUsageRequestSchema,
+            outputSchema: z.object({ result: viewSourceUsagePageSchema }),
+        },
+        (request) =>
+            run(() =>
+                views.getSourceViewUsage(request as ViewSourceUsageRequest),
+            ),
+    );
+    server.registerTool(
         viewToolNames.planViewMaintenance,
         {
             description:
-                "Inspect dynamic membership, discovery identities, no-ops and blockers without synthesis or writes.",
+                "Inspect explicit timeline/troubleshooting membership, no-ops and blockers without synthesis or writes.",
             inputSchema: viewMaintenancePlanRequestSchema,
             outputSchema: z.object({ result: viewMaintenancePlanSchema }),
         },
@@ -75,7 +90,7 @@ export function registerViewTools(
         viewToolNames.maintainViews,
         {
             description:
-                "Manually reconcile exact configured view versions. Rebuild affected full views; preserve explicit edits and record durable receipts. No scheduler or execution authority.",
+                "Control automatic indexed Wiki or Projects family updates, rebuilds, pause and resume without choosing sources, or reconcile explicit timeline/troubleshooting versions. Preserve edits and durable receipts; no execution authority.",
             inputSchema: viewMaintenanceRequestSchema,
             outputSchema: z.object({ result: viewMaintenanceResultSchema }),
         },
@@ -86,7 +101,7 @@ export function registerViewTools(
         viewToolNames.updateViewMaintenance,
         {
             description:
-                "Opt an existing derived view into bounded dynamic scope and explicit wiki subject discovery using exact head/version guards.",
+                "Opt an existing timeline or troubleshooting view into bounded dynamic scope using exact head/version guards. Indexed Wiki uses family maintenance, not subject registries.",
             inputSchema: viewMaintenanceUpdateSchema,
             outputSchema: z.object({ result: viewHistoryEntrySchema }),
         },

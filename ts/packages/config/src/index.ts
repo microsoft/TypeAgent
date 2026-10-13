@@ -112,6 +112,7 @@ export {
     type WikipediaConfig,
 } from "./runtime/types.js";
 export { buildConfig, parseSuffix } from "./runtime/build.js";
+export { type ModelRequestConstraints } from "./runtime/requestConstraints.js";
 export {
     configToEnv,
     applyToProcessEnv,

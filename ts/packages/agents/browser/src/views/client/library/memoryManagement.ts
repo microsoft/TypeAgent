@@ -12,10 +12,6 @@ import type {
     MemoryCenterKnowledge,
     MemoryCenterKnowledgeSuppression,
     MemoryCenterPage,
-    MemoryCenterHowToSettings,
-    MemoryCenterProcedureCandidate,
-    MemoryCenterProcedureSummary,
-    MemoryCenterProcedureVersion,
     MemoryCenterSource,
 } from "@typeagent/browser-control-rpc/serviceTypes";
 import { invokeMemory } from "./viewClient";
@@ -43,37 +39,34 @@ export interface MemoryManagementHost {
         pageSize: number;
         continuationToken?: string;
     }): Promise<MemoryCenterPage<MemoryCenterSource>>;
-    procedures(query: string): MemoryCenterProcedureSummary[];
+
     corpusName?(corpusId: string): string;
     error?(message: string, offline: boolean): void;
     status?(indexing: boolean): void;
     changed(): Promise<void>;
     openSource(corpusId: string, sourceId: string): void;
-    openProcedure(corpusId: string, procedureId: string): void;
+
     sourceForgotten?(corpusId: string, sourceId: string, title: string): void;
+    buildViews?(
+        corpusId: string,
+        sources: Array<{ sourceId: string; revisionId: string }>,
+    ): void | Promise<void>;
 }
 
 export function mountMemoryManagement(host: MemoryManagementHost) {
     let requestVersion = 0;
-    let originalProcedureContent = "";
-    let originalSettingsContent = "";
+
     let sourceLoadVersion = 0;
     let activityLoadVersion = 0;
     let jobLoadVersion = 0;
     let contentLoadVersion = 0;
-    let howToLoadVersion = 0;
-    let candidateId: string | undefined;
 
     async function invoke<M extends MethodName>(
         method: M,
         params: MethodParams<M>,
     ): Promise<MethodResult<M>> {
         if (
-            [
-                "memoryImportDocument",
-                "memoryUpdateHowToSettings",
-                "memoryReindexCorpus",
-            ].includes(method) &&
+            ["memoryImportDocument", "memoryReindexCorpus"].includes(method) &&
             (!host.scope() ||
                 (params as { corpusId?: string }).corpusId !== host.scope())
         ) {
@@ -106,6 +99,37 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     const corpusStatus = element<HTMLDivElement>("corpusStatus");
     const sourceList = element<HTMLDivElement>("sourceList");
     const sourceCount = element<HTMLSpanElement>("sourceCount");
+    const buildSelection = new Map<string, MemoryCenterSource>();
+    const selectionBar = document.createElement("div");
+    selectionBar.className = "hub-source-selection";
+    selectionBar.hidden = true;
+    const selectionCount = document.createElement("span");
+    const buildSelected = document.createElement("button");
+    buildSelected.type = "button";
+    buildSelected.className = "primary";
+    buildSelected.textContent = "Build views from selection";
+    buildSelected.onclick = () => {
+        void run(async () => {
+            const selected = [...buildSelection.values()];
+            if (!selected.length || !host.buildViews) return;
+            await host.buildViews(
+                selected[0].corpusId,
+                selected.map((source) => ({
+                    sourceId: source.sourceId,
+                    revisionId: source.activeRevisionId,
+                })),
+            );
+        });
+    };
+    const clearSelected = document.createElement("button");
+    clearSelected.type = "button";
+    clearSelected.textContent = "Clear selection";
+    clearSelected.onclick = () => {
+        buildSelection.clear();
+        renderSources();
+    };
+    selectionBar.append(selectionCount, buildSelected, clearSelected);
+    if (host.buildViews) sourceList.before(selectionBar);
     const sourceTitle = element<HTMLHeadingElement>("sourceTitle");
     const sourceMetadata = element<HTMLDListElement>("sourceMetadata");
     const revisionList = element<HTMLDivElement>("revisionList");
@@ -124,10 +148,6 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     const activityList = element<HTMLDivElement>("activityList");
     const errorBanner = element<HTMLDivElement>("errorBanner");
     const connectionState = element<HTMLDivElement>("connectionState");
-    const candidateList = element<HTMLDivElement>("candidateList");
-    const procedureList = element<HTMLDivElement>("procedureList");
-    const procedureEditor = element<HTMLTextAreaElement>("procedureEditor");
-    const procedureSearch = element<HTMLInputElement>("procedureSearch");
 
     let activeCorpus: MemoryCenterCorpusStatus | undefined;
     let selectedSource: MemoryCenterSource | undefined;
@@ -154,11 +174,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     let activityTokens: Array<string | undefined> = [undefined];
     let activityPageIndex = 0;
     let activityLinkedSourceId: string | undefined;
-    let howToSettings: MemoryCenterHowToSettings | undefined;
-    let procedureCandidates: MemoryCenterProcedureCandidate[] = [];
-    let procedures: MemoryCenterProcedureSummary[] = [];
-    let selectedProcedure: MemoryCenterProcedureVersion | undefined;
-    let isNewProcedure = false;
+
     let knowledgeSuppressions: MemoryCenterKnowledgeSuppression[] = [];
     let knowledgeCurationAvailable = true;
 
@@ -270,6 +286,29 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
 
     function renderSources(): void {
         sourceList.replaceChildren();
+        let removedSelection = false;
+        for (const source of sourcePage.items) {
+            const key = JSON.stringify([source.corpusId, source.sourceId]);
+            const previous = buildSelection.get(key);
+            if (!previous) continue;
+            const ready = source.revisions.some(
+                (revision) =>
+                    revision.revisionId === source.activeRevisionId &&
+                    revision.state === "ready",
+            );
+            if (
+                !ready ||
+                previous.activeRevisionId !== source.activeRevisionId
+            ) {
+                buildSelection.delete(key);
+                removedSelection = true;
+            } else buildSelection.set(key, source);
+        }
+        if (removedSelection) {
+            errorBanner.textContent =
+                "A selected source changed or is no longer ready. Review the selection before building views.";
+            errorBanner.hidden = false;
+        }
         for (const source of sourcePage.items) {
             const button = document.createElement("button");
             button.type = "button";
@@ -292,7 +331,43 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
             button.addEventListener("click", () => {
                 host.openSource(source.corpusId, source.sourceId);
             });
-            sourceList.appendChild(button);
+            if (host.buildViews) {
+                const row = document.createElement("div");
+                row.className = "hub-selectable-source";
+                const selection = document.createElement("input");
+                selection.type = "checkbox";
+                selection.setAttribute(
+                    "aria-label",
+                    `Select ${source.title} for a view build`,
+                );
+                const key = JSON.stringify([source.corpusId, source.sourceId]);
+                selection.checked = buildSelection.has(key);
+                const ready =
+                    source.revisions.find(
+                        (revision) =>
+                            revision.revisionId === source.activeRevisionId,
+                    )?.state === "ready";
+                const selectedCorpus = [...buildSelection.values()][0]
+                    ?.corpusId;
+                selection.disabled =
+                    !ready ||
+                    (selectedCorpus !== undefined &&
+                        selectedCorpus !== source.corpusId) ||
+                    (!selection.checked && buildSelection.size >= 32);
+                selection.onchange = () => {
+                    if (selection.checked) buildSelection.set(key, source);
+                    else buildSelection.delete(key);
+                    renderSources();
+                    sourceList
+                        .querySelector<HTMLInputElement>(
+                            `[data-selection-key="${encodeURIComponent(key)}"]`,
+                        )
+                        ?.focus();
+                };
+                selection.dataset.selectionKey = encodeURIComponent(key);
+                row.append(selection, button);
+                sourceList.append(row);
+            } else sourceList.appendChild(button);
         }
         if (sourcePage.items.length === 0) {
             setEmpty(sourceList, "No sources in this corpus.");
@@ -300,6 +375,8 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
             sourceList.classList.remove("empty");
         }
         sourceCount.textContent = `${sourcePage.total} total`;
+        selectionBar.hidden = buildSelection.size === 0;
+        selectionCount.textContent = `${buildSelection.size} of 32 sources selected · one collection per build`;
         element<HTMLSpanElement>("sourcePageLabel").textContent =
             `Page ${sourcePageIndex + 1}`;
         element<HTMLButtonElement>("sourcePrevious").disabled =
@@ -809,250 +886,21 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         );
     }
 
-    function renderHowToSettings(): void {
-        const enabled = activeCorpus !== undefined;
-        element<HTMLInputElement>("howToEnabled").disabled = !enabled;
-        element<HTMLInputElement>("detectCandidates").disabled = !enabled;
-        element<HTMLTextAreaElement>("howToInstructions").disabled = !enabled;
-        element<HTMLButtonElement>("saveHowToSettings").disabled = !enabled;
-        element<HTMLButtonElement>("newProcedureButton").disabled = !enabled;
-        element<HTMLButtonElement>("importDocumentButton").disabled = !enabled;
-        if (!howToSettings) {
-            element<HTMLInputElement>("howToEnabled").checked = false;
-            element<HTMLInputElement>("detectCandidates").checked = false;
-            element<HTMLTextAreaElement>("howToInstructions").value = "";
-            originalSettingsContent = settingsContent();
-            return;
-        }
-        element<HTMLInputElement>("howToEnabled").checked =
-            howToSettings.enabled;
-        element<HTMLInputElement>("detectCandidates").checked =
-            howToSettings.detectCandidates;
-        const instructions = howToSettings.preferences?.instructions;
-        element<HTMLTextAreaElement>("howToInstructions").value =
-            typeof instructions === "string" ? instructions : "";
-        originalSettingsContent = settingsContent();
-    }
-
-    function renderProcedureCandidates(): void {
-        candidateList.replaceChildren();
-        for (const candidate of procedureCandidates) {
-            const item = document.createElement("div");
-            item.className = "list-item";
-            const title = document.createElement("div");
-            title.className = "item-title";
-            title.textContent = candidate.title;
-            const subtitle = document.createElement("div");
-            subtitle.className = "item-subtitle";
-            subtitle.textContent = `${candidate.state} · ${candidate.steps.length} step(s)`;
-            const actions = document.createElement("div");
-            actions.className = "item-actions";
-            const save = document.createElement("button");
-            save.type = "button";
-            save.textContent = "Save";
-            const errorMessage = document.createElement("div");
-            errorMessage.className = "job-error";
-            errorMessage.setAttribute("role", "alert");
-            save.addEventListener("click", () => {
-                void run(async () => {
-                    save.disabled = true;
-                    errorMessage.textContent = "";
-                    try {
-                        const version = await invoke("memorySaveProcedure", {
-                            corpusId: candidate.corpusId,
-                            candidateId: candidate.candidateId,
-                        });
-                        selectedProcedure = version;
-                        isNewProcedure = false;
-                        await loadHowTos();
-                        procedureList
-                            .querySelector<HTMLButtonElement>("button.selected")
-                            ?.focus();
-                    } catch (error) {
-                        errorMessage.textContent =
-                            error instanceof Error
-                                ? error.message
-                                : String(error);
-                        throw error;
-                    } finally {
-                        save.disabled = false;
-                    }
-                });
-            });
-            const reject = document.createElement("button");
-            reject.type = "button";
-            reject.textContent = "Reject";
-            reject.addEventListener("click", () => {
-                void run(async () => {
-                    await invoke("memoryRejectProcedureCandidate", {
-                        corpusId: candidate.corpusId,
-                        candidateId: candidate.candidateId,
-                    });
-                    await loadHowTos();
-                });
-            });
-            actions.append(save, reject);
-            item.append(title, subtitle, actions, errorMessage);
-            candidateList.appendChild(item);
-        }
-        element<HTMLSpanElement>("candidateCount").textContent =
-            `${procedureCandidates.length} pending`;
-        if (procedureCandidates.length === 0) {
-            setEmpty(candidateList, "No procedure candidates.");
-        } else {
-            candidateList.classList.remove("empty");
-        }
-    }
-
-    function renderProcedures(): void {
-        procedureList.replaceChildren();
-        for (const procedure of procedures) {
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "list-item";
-            if (procedure.procedureId === selectedProcedure?.procedureId) {
-                button.classList.add("selected");
-            }
-            const title = document.createElement("div");
-            title.className = "item-title";
-            title.textContent = procedure.title;
-            const subtitle = document.createElement("div");
-            subtitle.className = "item-subtitle";
-            subtitle.textContent = `How-to · ${procedure.state} · version ${procedure.latestVersion} · ${host.corpusName?.(procedure.corpusId) ?? procedure.corpusId}`;
-            button.append(title, subtitle);
-            button.addEventListener("click", () => {
-                host.openProcedure(procedure.corpusId, procedure.procedureId);
-            });
-            procedureList.appendChild(button);
-        }
-        element<HTMLSpanElement>("procedureCount").textContent =
-            `${procedures.length} result(s)`;
-        if (procedures.length === 0) {
-            setEmpty(procedureList, "No saved procedures.");
-        } else {
-            procedureList.classList.remove("empty");
-        }
-    }
-
-    function renderProcedureEditor(): void {
-        const hasEditor = selectedProcedure !== undefined || isNewProcedure;
-        procedureEditor.disabled = !hasEditor;
-        element<HTMLButtonElement>("saveProcedureButton").disabled = !hasEditor;
-        element<HTMLButtonElement>("archiveProcedureButton").disabled =
-            selectedProcedure === undefined ||
-            selectedProcedure.state === "archived";
-        if (selectedProcedure) {
-            element<HTMLHeadingElement>("procedureTitle").textContent =
-                selectedProcedure.document.title;
-            element<HTMLDivElement>("procedureMetadata").textContent =
-                `${selectedProcedure.state} · version ${selectedProcedure.version} · ${selectedProcedure.document.citations.length} source citation(s)`;
-            procedureEditor.value = selectedProcedure.markdown;
-        } else if (!isNewProcedure) {
-            element<HTMLHeadingElement>("procedureTitle").textContent =
-                "Select a procedure";
-            element<HTMLDivElement>("procedureMetadata").textContent = "";
-            procedureEditor.value = "";
-        }
-        originalProcedureContent = procedureEditor.value;
-    }
-
-    async function loadHowTos(): Promise<void> {
-        const version = ++howToLoadVersion;
-        if (!activeCorpus) {
-            howToSettings = undefined;
-            procedureCandidates = [];
-            procedures = host.procedures(procedureSearch.value.trim());
-            selectedProcedure = undefined;
-            isNewProcedure = false;
-            renderHowToSettings();
-            renderProcedureCandidates();
-            renderProcedures();
-            renderProcedureEditor();
-            return;
-        }
-        const corpusId = activeCorpus.corpusId;
-        const query = procedureSearch.value.trim();
-        const [settings, candidates, procedureResults] = await Promise.all([
-            invoke("memoryGetHowToSettings", { corpusId }),
-            invoke("memoryListProcedureCandidates", {
-                corpusId,
-                states: ["detected", "draft"],
-            }),
-            query
-                ? invoke("memorySearchProcedures", {
-                      corpusId,
-                      query,
-                      states: ["saved", "stale"],
-                      limit: 50,
-                  }).then((matches) => matches.map((match) => match.procedure))
-                : invoke("memoryListProcedures", {
-                      corpusId,
-                      states: ["saved", "stale"],
-                  }),
-        ]);
-        if (version !== howToLoadVersion) return;
-        howToSettings = settings;
-        procedureCandidates = candidates;
-        procedures = procedureResults;
-        if (
-            selectedProcedure &&
-            selectedProcedure.corpusId === corpusId &&
-            procedures.some(
-                (item) => item.procedureId === selectedProcedure?.procedureId,
-            )
-        ) {
-            selectedProcedure = await invoke("memoryGetProcedure", {
-                corpusId,
-                procedureId: selectedProcedure.procedureId,
-            });
-        } else if (!isNewProcedure) {
-            selectedProcedure = undefined;
-        }
-        renderHowToSettings();
-        renderProcedureCandidates();
-        renderProcedures();
-        renderProcedureEditor();
-    }
-
-    async function selectProcedure(procedureId: string): Promise<void> {
-        if (!activeCorpus) return;
-        if (!discardChanges()) return;
-        requestVersion++;
-        candidateId = undefined;
-        selectedProcedure = undefined;
-        isNewProcedure = false;
-        renderProcedureEditor();
-        selectedProcedure = await invoke("memoryGetProcedure", {
-            corpusId: activeCorpus.corpusId,
-            procedureId,
-        });
-        if (!selectedProcedure) {
-            throw new Error(`Procedure '${procedureId}' no longer exists`);
-        }
-        isNewProcedure = false;
-        renderProcedures();
-        renderProcedureEditor();
-    }
-
     async function selectCorpus(corpusId: string): Promise<void> {
         if (!discardChanges()) return;
         requestVersion++;
         activeCorpus = undefined;
         selectedSource = undefined;
-        selectedProcedure = undefined;
+
         contentPage = undefined;
-        howToSettings = undefined;
-        isNewProcedure = false;
+
         renderSource();
         renderContent();
-        renderProcedureEditor();
-        renderHowToSettings();
+
         activeCorpus = corpusId
             ? await invoke("memoryGetCorpus", { corpusId })
             : undefined;
-        selectedProcedure = undefined;
-        candidateId = undefined;
-        isNewProcedure = false;
+
         selectedSource = undefined;
         contentPage = undefined;
         resetSourcePaging();
@@ -1063,12 +911,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         renderSource();
         renderContent();
         renderKnowledge();
-        await Promise.all([
-            loadSources(),
-            loadJobs(),
-            loadActivity(),
-            loadHowTos(),
-        ]);
+        await Promise.all([loadSources(), loadJobs(), loadActivity()]);
     }
 
     async function loadSources(): Promise<void> {
@@ -1188,12 +1031,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     async function refreshActiveCorpus(): Promise<void> {
         if (!discardChanges()) return;
         if (!activeCorpus) {
-            await Promise.all([
-                loadSources(),
-                loadJobs(),
-                loadActivity(),
-                loadHowTos(),
-            ]);
+            await Promise.all([loadSources(), loadJobs(), loadActivity()]);
             return;
         }
         const corpusId = activeCorpus.corpusId;
@@ -1203,12 +1041,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         resetSourcePaging();
         resetJobPaging();
         resetActivityPaging();
-        await Promise.all([
-            loadSources(),
-            loadJobs(),
-            loadActivity(),
-            loadHowTos(),
-        ]);
+        await Promise.all([loadSources(), loadJobs(), loadActivity()]);
         if (sourceId) {
             await selectSource(sourceId);
         }
@@ -1314,110 +1147,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
             });
         },
     );
-    element<HTMLButtonElement>("saveHowToSettings").addEventListener(
-        "click",
-        () => {
-            void run(async () => {
-                if (!activeCorpus || !howToSettings) return;
-                const instructions =
-                    element<HTMLTextAreaElement>(
-                        "howToInstructions",
-                    ).value.trim();
-                const preferences = {
-                    ...howToSettings.preferences,
-                    instructions,
-                };
-                howToSettings = await invoke("memoryUpdateHowToSettings", {
-                    corpusId: activeCorpus.corpusId,
-                    expectedRevision: howToSettings.revision,
-                    enabled: element<HTMLInputElement>("howToEnabled").checked,
-                    detectCandidates:
-                        element<HTMLInputElement>("detectCandidates").checked,
-                    preferences,
-                });
-                renderHowToSettings();
-            });
-        },
-    );
-    element<HTMLButtonElement>("searchProceduresButton").addEventListener(
-        "click",
-        () => {
-            void run(loadHowTos);
-        },
-    );
-    procedureSearch.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-            event.preventDefault();
-            void run(loadHowTos);
-        }
-    });
-    element<HTMLButtonElement>("newProcedureButton").addEventListener(
-        "click",
-        () => {
-            if (!discardChanges()) return;
-            candidateId = undefined;
-            selectedProcedure = undefined;
-            isNewProcedure = true;
-            element<HTMLHeadingElement>("procedureTitle").textContent =
-                "New procedure";
-            element<HTMLDivElement>("procedureMetadata").textContent =
-                "Unsaved private draft";
-            procedureEditor.value =
-                "# New procedure\n\nDescribe when to use this procedure.\n\n## Steps\n\n1. Add the first step.\n\n## Sources\n\n_None_\n";
-            renderProcedures();
-            renderProcedureEditor();
-            originalProcedureContent = "";
-        },
-    );
-    element<HTMLButtonElement>("saveProcedureButton").addEventListener(
-        "click",
-        () => {
-            void run(async () => {
-                if (!activeCorpus) return;
-                selectedProcedure = await invoke("memorySaveProcedure", {
-                    corpusId: activeCorpus.corpusId,
-                    markdown: procedureEditor.value,
-                    ...(candidateId ? { candidateId } : {}),
-                    ...(selectedProcedure === undefined
-                        ? {}
-                        : {
-                              procedureId: selectedProcedure.procedureId,
-                              expectedVersion: selectedProcedure.version,
-                          }),
-                });
-                isNewProcedure = false;
-                candidateId = undefined;
-                renderProcedureEditor();
-                procedureSearch.value = "";
-                await loadHowTos();
-                if (selectedProcedure)
-                    host.openProcedure(
-                        selectedProcedure.corpusId,
-                        selectedProcedure.procedureId,
-                    );
-            });
-        },
-    );
-    element<HTMLButtonElement>("archiveProcedureButton").addEventListener(
-        "click",
-        () => {
-            void run(async () => {
-                if (!selectedProcedure) return;
-                if (
-                    !confirm(
-                        `Archive "${selectedProcedure.document.title}" in ${activeCorpus?.name ?? selectedProcedure.corpusId}?`,
-                    )
-                )
-                    return;
-                selectedProcedure = await invoke("memoryArchiveProcedure", {
-                    corpusId: selectedProcedure.corpusId,
-                    procedureId: selectedProcedure.procedureId,
-                    expectedVersion: selectedProcedure.version,
-                });
-                await loadHowTos();
-            });
-        },
-    );
+
     document
         .querySelectorAll<HTMLElement>("[data-close-dialog]")
         .forEach((button) => {
@@ -1596,7 +1326,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
                 preview.replaceChildren();
                 appendTextItem(
                     preview,
-                    `Corpus: ${activeCorpus.name}. Procedure and skill dependency lookup is unavailable in this release.`,
+                    `Collection: ${activeCorpus.name}. Source revisions and derived knowledge will be removed.`,
                     "",
                 );
                 appendTextItem(
@@ -1715,29 +1445,17 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
 
     function hasUnsavedChanges(): boolean {
         return (
-            (!contentEditor.disabled &&
-                contentEditor.value !== originalPageContent) ||
-            (!procedureEditor.disabled &&
-                procedureEditor.value !== originalProcedureContent) ||
-            (howToSettings !== undefined &&
-                settingsContent() !== originalSettingsContent)
+            !contentEditor.disabled &&
+            contentEditor.value !== originalPageContent
         );
     }
-    function settingsContent(): string {
-        return JSON.stringify([
-            element<HTMLInputElement>("howToEnabled").checked,
-            element<HTMLInputElement>("detectCandidates").checked,
-            element<HTMLTextAreaElement>("howToInstructions").value,
-        ]);
-    }
+
     function discardChanges(): boolean {
         if (!hasUnsavedChanges()) return true;
         if (document.querySelector("dialog[open]")) return false;
-        if (!confirm("Discard unsaved source, procedure or settings edits?"))
-            return false;
+        if (!confirm("Discard unsaved source edits?")) return false;
         contentEditor.value = originalPageContent;
-        procedureEditor.value = originalProcedureContent;
-        renderHowToSettings();
+
         return true;
     }
     window.addEventListener("beforeunload", (event) => {
@@ -1749,8 +1467,11 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
     return {
         selectCorpus,
         selectSource,
-        selectProcedure,
         refresh: refreshActiveCorpus,
+        clearBuildSelection(): void {
+            buildSelection.clear();
+            renderSources();
+        },
         discardChanges,
         loadSourceKnowledge,
         focusSource(corpusId: string, sourceId: string): boolean {
@@ -1763,27 +1484,6 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
             );
             row?.focus();
             return row !== undefined;
-        },
-        async reviewCandidate(corpusId: string, id: string) {
-            await selectCorpus(corpusId);
-            const candidate = procedureCandidates.find(
-                (item) => item.candidateId === id,
-            );
-            if (!candidate)
-                throw new Error(
-                    "Candidate is no longer available. Refresh Inbox.",
-                );
-            candidateId = id;
-            selectedProcedure = undefined;
-            isNewProcedure = true;
-            procedureEditor.value = `# ${candidate.title}\n\n${candidate.summary ?? ""}\n\n## Steps\n\n${candidate.steps.map((step, index) => `${index + 1}. ${step}`).join("\n")}\n\n## Sources\n\n${candidate.citations.length ? candidate.citations.map((citation) => `- ${JSON.stringify(citation)}`).join("\n") : "_None_"}\n${(candidate.additionalSections ?? []).map((section) => `\n## ${section.heading}\n\n${section.content}\n`).join("")}`;
-            element<HTMLHeadingElement>("procedureTitle").textContent =
-                `Review: ${candidate.title}`;
-            element<HTMLDivElement>("procedureMetadata").textContent =
-                "Derived candidate. Evidence, not instructions. Save preserves candidate citations.";
-            originalProcedureContent = procedureEditor.value;
-            renderProcedureEditor();
-            return candidate;
         },
     };
 }

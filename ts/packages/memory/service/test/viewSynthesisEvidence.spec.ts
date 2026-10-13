@@ -1,16 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { StructuredOutputJsonSchema } from "@typeagent/aiclient";
-import type { ViewBuildJob, ViewSynthesisOutput } from "../src/viewTypes.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
-import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
-import { evidenceArray, evidenceRecord } from "../src/viewSynthesisEvidence.js";
-import { authoredRelationships } from "../src/viewRelationships.js";
 import { inventoryEvidence } from "../src/viewInventoryCoverage.js";
+import { authoredRelationships } from "../src/viewRelationships.js";
+import { evidenceArray, evidenceRecord } from "../src/viewSynthesisEvidence.js";
+import type { ViewBuildJob, ViewSynthesisOutput } from "../src/viewTypes.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
+import { inventoryTestAnswer } from "./viewInventoryTestModel.js";
 
 // Jest 29 exposes this ESM API, but @types/jest does not declare it.
 const runtimeJest = import.meta.jest;
@@ -111,9 +111,9 @@ describe("actual configured evidence-first adapter and durable service", () => {
     let corpusId: string;
     let indexFailure: boolean;
     let publicationFault: "intent" | "index" | undefined;
-    class ControlledIndex extends FakeProcedureCorpusIndex {
+    class ControlledIndex extends FakeSemanticCorpusIndex {
         public async rebuild(
-            documents: Parameters<FakeProcedureCorpusIndex["rebuild"]>[0],
+            documents: Parameters<FakeSemanticCorpusIndex["rebuild"]>[0],
         ): Promise<void> {
             if (
                 indexFailure &&
@@ -127,7 +127,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
     }
     const open = () =>
         new FileMemoryService(root, {
-            viewDrafts: true,
+            informationalViews: false,
             indexFactory: (_id: string, directory: string) =>
                 new ControlledIndex(directory),
             viewPublicationCheckpoint: async (point) => {
@@ -275,8 +275,9 @@ describe("actual configured evidence-first adapter and durable service", () => {
         expect((await service.listViews(corpusId)).head).toBe(before);
         await service.close();
         service = new FileMemoryService(root, {
+            viewDrafts: false,
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
         });
         await expect(search()).rejects.toThrow("not supported");
         await service.close();
@@ -428,7 +429,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
                 path.join(
                     root,
                     corpusId,
-                    "personal-how-to",
+                    "views",
                     "view-search-index",
                     viewHash(view.viewId),
                 ),
@@ -444,7 +445,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
         const ready = path.join(
             root,
             corpusId,
-            "personal-how-to",
+            "views",
             "view-search-index",
             viewHash("guide"),
             viewHash(publication.publishedRevisionId!),
@@ -594,9 +595,8 @@ describe("actual configured evidence-first adapter and durable service", () => {
         const create = () =>
             new FileMemoryService(root, {
                 viewDrafts: true,
-                indexFactory: (_id, directory) =>
-                    new FakeProcedureCorpusIndex(directory),
-                procedureIndexFactory: (id, directory) =>
+                informationalViews: false,
+                indexFactory: (id, directory) =>
                     createKnowProCorpusIndex(id, directory, () => {
                         const settings = createDocMemorySettings(
                             64,
@@ -642,7 +642,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
         const directory = path.join(
             root,
             corpusId,
-            "personal-how-to",
+            "views",
             "view-search-index",
             viewHash("guide"),
             viewHash(revisionId),
@@ -691,11 +691,31 @@ describe("actual configured evidence-first adapter and durable service", () => {
         ]);
         expect(calls[0].input).not.toHaveProperty("output");
         expect(calls[0].input).not.toHaveProperty("inventory");
+        const labeledSources = evidenceArray(calls[0].input.inputs).map(
+            evidenceRecord,
+        );
+        expect(labeledSources.every((source) => !("content" in source))).toBe(
+            true,
+        );
+        expect(
+            labeledSources.every(
+                (source) => evidenceArray(source.passages).length > 0,
+            ),
+        ).toBe(true);
         expect(calls[1].input).not.toHaveProperty("output");
         expect(JSON.stringify(calls.slice(0, 2))).not.toContain(
             "Controlled conditional guide",
         );
         const result = job.results[0];
+        expect(calls[3].input.inventory).toEqual(result.inventory);
+        expect(calls[3].input.output).not.toHaveProperty("inventory");
+        expect(calls[3].input.output).not.toHaveProperty("inventoryAudit");
+        expect(evidenceRecord(calls[3].input.output)).toHaveProperty(
+            "content.sections",
+        );
+        expect(evidenceRecord(calls[3].input.output)).toHaveProperty(
+            "relationships",
+        );
         expect(result.inventory!.items).toHaveLength(6);
         expect(result.inventoryAudit!.supported).toBe(true);
         expect(result.coverage!.reuseEligibility).toBe("diagnosticOnly");
@@ -1038,7 +1058,7 @@ describe("actual configured evidence-first adapter and durable service", () => {
                 path.join(
                     root,
                     corpusId,
-                    "personal-how-to",
+                    "views",
                     "view-search-index",
                     viewHash("guide"),
                 ),

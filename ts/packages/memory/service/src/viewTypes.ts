@@ -1,18 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { ProcedureSourceCitation } from "./types.js";
 import type { AgentEdition } from "./agentEdition.js";
+import type { ProcedureSourceCitation } from "./types.js";
 import type {
     ViewMaintenanceDefinition,
     ViewMaintenanceManifest,
-    ViewMaintenanceSnapshot,
     ViewMaintenancePlan,
     ViewMaintenancePlanRequest,
+    ViewMaintenanceRead,
     ViewMaintenanceRequest,
     ViewMaintenanceResult,
+    ViewMaintenanceSnapshot,
     ViewMaintenanceUpdate,
-    ViewMaintenanceRead,
 } from "./viewMaintenanceTypes.js";
 export type * from "./viewMaintenanceTypes.js";
 
@@ -62,12 +62,14 @@ export interface ViewSection {
     body: string;
     details?: ProjectBriefDetails | TimelineRecordDetails | WikiPageDetails;
 }
-export interface WikiPageDetails {
+export interface InformationalWikiPageDetails {
     kind: "page";
+    construction: "informational-wiki-v1";
     taxonomy: "concept" | "system" | "project";
-    inventoryIds: string[];
+    note: string;
     mergedPageIds: string[];
 }
+export type WikiPageDetails = InformationalWikiPageDetails;
 export type WikiPage = Omit<ViewSection, "role" | "details"> & {
     role: "page";
     details: WikiPageDetails;
@@ -79,13 +81,13 @@ export interface WikiIndexEntry {
 }
 export interface WikiContent {
     kind: "wiki";
+    construction: "informational-wiki-v1";
     title: string;
     summary?: string;
     index: WikiIndexEntry[];
     sections: WikiPage[];
     citations: ViewCitation[];
     agentEdition?: never;
-    compatibilityFields?: never;
 }
 export interface TimelineRecordDetails {
     kind: "event";
@@ -112,7 +114,6 @@ export interface TimelineContent {
     sections: TimelineRecord[];
     citations: ViewCitation[];
     agentEdition?: never;
-    compatibilityFields?: never;
 }
 export interface TimelineEvidenceRecord {
     id: string;
@@ -120,11 +121,11 @@ export interface TimelineEvidenceRecord {
     citation: ViewCitation;
 }
 export type ProjectBriefDetails =
-    | { kind: "goalsScope"; inventoryIds: string[] }
+    | { kind: "goalsScope" }
     | {
           kind: "owners";
           assignments: Array<{
-              inventoryId: string;
+              id: string;
               responsibility: string;
               state: "known" | "unknown" | "unassigned";
               owner: string | null;
@@ -139,12 +140,11 @@ export type ProjectBriefDetails =
               | "pendingOwnerReview"
               | "validated"
               | "notApplicable";
-          inventoryIds: string[];
       }
     | {
           kind: "milestones";
           items: Array<{
-              inventoryId: string;
+              id: string;
               status:
                   | "proposed"
                   | "confirmed"
@@ -157,14 +157,14 @@ export type ProjectBriefDetails =
     | {
           kind: "decisions";
           items: Array<{
-              inventoryId: string;
+              id: string;
               status: ViewFactStatus;
           }>;
       }
     | {
           kind: "risks";
           items: Array<{
-              inventoryId: string;
+              id: string;
               status: "open" | "blocked" | "resolved" | "unknown";
           }>;
       }
@@ -172,7 +172,6 @@ export type ProjectBriefDetails =
           kind: "context";
           asOf: string | null;
           basis: "recordEvidence" | "unknown";
-          inventoryIds: string[];
       };
 export type ProjectBriefSection = Omit<ViewSection, "role" | "details"> & {
     role: ProjectBriefDetails["kind"];
@@ -180,12 +179,12 @@ export type ProjectBriefSection = Omit<ViewSection, "role" | "details"> & {
 };
 export interface ProjectBriefContent {
     kind: "projectBrief";
+    construction: "informational-project-summary-v1";
     title: string;
     summary?: string;
     sections: ProjectBriefSection[];
     citations: ViewCitation[];
     agentEdition?: never;
-    compatibilityFields?: never;
 }
 export type DerivedViewContent =
     | TroubleshootingGuideContent
@@ -214,21 +213,13 @@ export interface TimelineCorrectionRelationshipInput {
     to: Extract<ViewEndpoint, { kind: "section" }>;
     citations: ViewCitation[];
 }
-export interface WikiPageRelationshipInput {
-    id: string;
-    predicate: "relatedTo" | "contradicts";
-    from: Extract<ViewEndpoint, { kind: "section" }>;
-    to: Extract<ViewEndpoint, { kind: "section" }>;
-    citations: ViewCitation[];
-}
 export type ViewRelationshipInput =
     | ViewEvidenceRelationshipInput
-    | TimelineCorrectionRelationshipInput
-    | WikiPageRelationshipInput;
+    | TimelineCorrectionRelationshipInput;
 export type ViewRelationship =
     | (ViewRelationshipInput & {
           schemaVersion: 1;
-          family: "evidence" | "dependency" | "knowledge";
+          family: "evidence" | "dependency";
           origin: "human" | "generator";
           reviewState: "unreviewed";
       })
@@ -248,28 +239,37 @@ interface GuideFields {
     summary?: string;
     sections: ViewSection[];
     agentEdition?: AgentEdition;
-    compatibilityFields?: Record<string, unknown>;
 }
 export interface TroubleshootingGuideContent extends GuideFields {
     kind: "troubleshootingGuide";
     citations: ViewCitation[];
-}
-export interface ProcedureViewContent extends GuideFields {
-    kind: "procedure";
-    citations: ProcedureSourceCitation[];
 }
 export interface ViewDefinitionInput {
     viewId: string;
     kind: ViewKind;
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
+    wiki?: {
+        construction: "informational-wiki-v1";
+        query: string;
+        aliases: string[];
+        excludedSourceIds: string[];
+    };
+    projectSummary?: {
+        construction: "informational-project-summary-v1";
+        query: string;
+        aliases: string[];
+        excludedSourceIds: string[];
+    };
 }
 export interface ViewDefinition {
     viewId: string;
     revisionId: string;
-    kind: ViewKind | "procedure";
+    kind: ViewKind;
     selector: ViewSourceSelector;
     maintenance?: ViewMaintenanceDefinition;
+    wiki?: NonNullable<ViewDefinitionInput["wiki"]>;
+    projectSummary?: NonNullable<ViewDefinitionInput["projectSummary"]>;
 }
 export interface ViewVersion {
     corpusId: string;
@@ -282,7 +282,7 @@ export interface ViewVersion {
     baseRevisionId?: string;
     generation?: {
         candidateId: string;
-        content: DerivedViewContent | ProcedureViewContent;
+        content: DerivedViewContent;
         fingerprint: string;
         relationships?: ViewRelationshipInput[];
         input?: ViewBuildSnapshot;
@@ -294,20 +294,45 @@ export interface ViewVersion {
     };
     edits?: ViewEditOperation[];
     definition: ViewDefinition;
-    content: DerivedViewContent | ProcedureViewContent;
+    content: DerivedViewContent;
     relationships: ViewRelationship[];
-    provenance: "human" | "procedure" | "generated" | "merged";
+    provenance: "human" | "generated" | "merged";
     validation?: ViewPublicationProof;
     maintenance?: ViewMaintenanceManifest;
-    compatibility?: {
-        state: "saved" | "stale" | "archived";
-        basedOnCandidateId?: string;
-        previousVersion?: number;
-    };
 }
 export interface ViewSnapshot {
     head: string | null;
     views: ViewVersion[];
+    wikiFamily?: {
+        enabled: boolean;
+        pending: boolean;
+        error?: string;
+    };
+    projectFamily?: {
+        enabled: boolean;
+        pending: boolean;
+        error?: string;
+    };
+}
+export interface ViewSourceUsageRequest {
+    corpusId: string;
+    sourceId: string;
+    pageSize?: number;
+    continuationToken?: string;
+}
+export interface ViewSourceUsage {
+    viewId: string;
+    revisionId: string;
+    version: number;
+    kind: ViewKind;
+    title: string;
+    state: ViewState;
+    provenance: ViewVersion["provenance"];
+}
+export interface ViewSourceUsagePage {
+    items: ViewSourceUsage[];
+    total: number;
+    nextContinuationToken?: string;
 }
 export interface ViewSaveRequest {
     corpusId: string;
@@ -347,6 +372,9 @@ export interface MemoryViewService {
         request: ViewMaintenanceRequest,
     ): Promise<ViewMaintenanceResult>;
     listViews(corpusId: string): Promise<ViewSnapshot>;
+    getSourceViewUsage(
+        request: ViewSourceUsageRequest,
+    ): Promise<ViewSourceUsagePage>;
     getView(request: ViewReadRequest): Promise<ViewVersion | undefined>;
     saveViewDraft(request: ViewSaveRequest): Promise<ViewHistoryEntry>;
     archiveView(request: ViewArchiveRequest): Promise<ViewHistoryEntry>;
@@ -416,13 +444,19 @@ export interface ViewBuildSnapshot {
     selectionFingerprint?: string;
     pipeline:
         | "troubleshooting-v1"
-        | "project-brief-v1"
         | "timeline-v1"
-        | "wiki-v1";
+        | "informational-wiki-v1"
+        | "informational-project-summary-v1";
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
     maintenance?: ViewMaintenanceSnapshot;
+    wikiContribution?: {
+        candidateViewId: string;
+        query: string;
+        purpose: string;
+        essentialDistinctions: WikiSubjectAssessment["essentialDistinctions"];
+    };
 }
 export interface ViewSynthesisOutput {
     content: DerivedViewContent;
@@ -537,6 +571,11 @@ export interface ViewSupportReport {
 }
 export interface ViewSynthesisAdapter {
     identity: string;
+    assessWikiSubject?(
+        input: ViewBuildSnapshot,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<WikiSubjectAssessment>;
     inventory?(
         input: ViewBuildSnapshot,
         signal: AbortSignal,
@@ -556,6 +595,35 @@ export interface ViewSynthesisAdapter {
         output: ViewSynthesisOutput,
         signal: AbortSignal,
     ): Promise<ViewSupportReport>;
+}
+export interface WikiPagePurposeContext {
+    viewId: string;
+    revisionId: string;
+    query: string;
+    aliases: string[];
+    identity?: import("./types.js").IndexedSubjectIdentity;
+    candidateIdentity?: import("./types.js").IndexedSubjectIdentity;
+    title: string;
+    prose: string;
+    proseTruncated: boolean;
+    sharedFragmentIds: string[];
+    candidateFragmentIds: string[];
+    contributingSources: Array<{ sourceId: string; revisionId: string }>;
+    sourceOverlap: { shared: number; union: number; subset: boolean };
+}
+export interface WikiSubjectAssessment {
+    disposition: "distinct" | "covered" | "contribute" | "ambiguous";
+    purpose: string;
+    reason: string;
+    /** Empty for distinct/ambiguous; covered/contribute name a supplied current page. */
+    canonicalViewId: string;
+    sharedFragmentIds: string[];
+    ambiguousViewIds: string[];
+    essentialDistinctions: Array<{
+        fragmentId: string;
+        statement: string;
+        canonicalExcerpt: string;
+    }>;
 }
 export type ViewBuildResultState =
     | "pending"
@@ -586,6 +654,13 @@ export interface ViewBuildTargetResult {
     inventoryAudit?: ViewInventoryAudit;
     coverage?: ViewInventoryCoverage;
     publication?: ViewPublicationStatus;
+    wikiAssessment?: WikiSubjectAssessment & { canonicalRevisionId?: string };
+    wikiContribution?: {
+        input: ViewBuildSnapshot;
+        revisionId: string;
+        state: "committed" | "bound";
+        verification: WikiSubjectAssessment;
+    };
 }
 export interface ViewBuildJob {
     jobId: string;

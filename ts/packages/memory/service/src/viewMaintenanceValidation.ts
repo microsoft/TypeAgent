@@ -11,6 +11,27 @@ import type { ViewMaintenanceTargetPlan } from "./viewMaintenanceTypes.js";
 import { viewHash } from "./viewMerge.js";
 import { ViewBuildStaleError } from "./viewBuilds.js";
 
+function validateWikiFamilyRequest(
+    request: Extract<ViewMaintenanceRequest, { family: "wiki" | "projects" }>,
+    writing: boolean,
+): void {
+    if (
+        !writing ||
+        !["wiki", "projects"].includes(request.family) ||
+        !["update", "rebuild", "pause", "resume"].includes(request.operation) ||
+        Object.keys(request).some(
+            (key) =>
+                !["corpusId", "expectedHead", "family", "operation"].includes(
+                    key,
+                ),
+        ) ||
+        (request.expectedHead !== null &&
+            !/^[0-9a-f]{40}$/.test(request.expectedHead))
+    )
+        throw new Error("Invalid informational-family maintenance request");
+    assertViewIdentifier("corpus ID", request.corpusId);
+}
+
 export function assertMaintenanceMembership(
     target: ViewBuildTarget,
     current: ViewVersion | undefined,
@@ -37,6 +58,10 @@ export function validateMaintenanceRequest(
     request: ViewMaintenancePlanRequest | ViewMaintenanceRequest,
     writing: boolean,
 ): void {
+    if (request && "family" in request) {
+        validateWikiFamilyRequest(request, writing);
+        return;
+    }
     const allowed = writing
         ? ["corpusId", "expectedHead", "targets"]
         : ["corpusId", "viewIds"];

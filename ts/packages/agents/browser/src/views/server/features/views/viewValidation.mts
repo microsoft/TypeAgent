@@ -2,11 +2,6 @@
 // Licensed under the MIT License.
 
 import { z } from "zod";
-import {
-    runbookProcedureDocumentSchema,
-    runbookSaveSchema,
-    runbookViewSchemas,
-} from "./runbookViewSchemas.mjs";
 import { runbookImportViewSchemas } from "./runbookImportSchemas.mjs";
 import {
     viewReadRequestSchema,
@@ -47,10 +42,6 @@ const suppression = {
     kind: z.enum(["entity", "topic"]),
     name: text,
 };
-const procedureStates = z
-    .array(z.enum(["saved", "stale", "archived"]))
-    .optional();
-const document = runbookProcedureDocumentSchema;
 const activity = {
     dateFrom: optionalText,
     dateTo: optionalText,
@@ -115,8 +106,19 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryRetryViewBuild: protocolInput(viewBuildJobRequestSchema),
     memoryGetViewConflict: protocolInput(viewConflictReadSchema),
     memoryResolveViewConflict: protocolInput(viewResolutionSchema),
-    ...runbookViewSchemas,
     ...runbookImportViewSchemas,
+    memoryHubViewUsedBy: z.strictObject({ ...source, ...page }),
+    memoryHubSourceOriginal: z.strictObject({
+        ...source,
+        revisionId: text,
+        locator: text.optional(),
+        offset: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(Number.MAX_SAFE_INTEGER)
+            .optional(),
+    }),
     memoryHubSearch: z.strictObject({
         query: text,
         corpusId: optionalText,
@@ -158,20 +160,8 @@ const schemas: Record<ViewMethod, z.ZodType> = {
             revisionId: optionalText,
             locator: z
                 .string()
-                .regex(/^chars:\d+-\d+$/)
+                .regex(/^(?:chars:\d+-\d+|indexed:\d+:[0-9a-f]{64}:\d+-\d+)$/)
                 .optional(),
-            offset: z
-                .number()
-                .int()
-                .nonnegative()
-                .max(Number.MAX_SAFE_INTEGER)
-                .optional(),
-        }),
-        z.strictObject({
-            ...corpus,
-            kind: z.literal("procedure"),
-            objectId: text,
-            procedureVersion: z.number().int().positive().optional(),
             offset: z
                 .number()
                 .int()
@@ -247,6 +237,10 @@ const schemas: Record<ViewMethod, z.ZodType> = {
     memoryGetSourceContent: z.strictObject({
         ...source,
         revisionId: optionalText,
+        indexedLocator: z
+            .string()
+            .regex(/^indexed:\d+:[0-9a-f]{64}:\d+-\d+$/)
+            .optional(),
         offset: optionalCount,
         maxChars: optionalCount,
     }),
@@ -277,50 +271,6 @@ const schemas: Record<ViewMethod, z.ZodType> = {
         ...page,
     }),
     memoryCancelJob: z.strictObject({ jobId: text }),
-    memoryGetHowToSettings: z.strictObject(corpus),
-    memoryUpdateHowToSettings: z.strictObject({
-        ...corpus,
-        expectedRevision: count,
-        enabled: boolean,
-        detectCandidates: boolean,
-        preferences: z.record(z.string(), z.json()).optional(),
-    }),
-    memoryCreateProcedureCandidate: document.extend({
-        ...corpus,
-        candidateId: optionalText,
-        state: z.enum(["detected", "draft"]).optional(),
-    }),
-    memoryListProcedureCandidates: z.strictObject({
-        ...corpus,
-        states: z
-            .array(z.enum(["detected", "draft", "rejected", "saved"]))
-            .optional(),
-    }),
-    memoryRejectProcedureCandidate: z.strictObject({
-        ...corpus,
-        candidateId: text,
-    }),
-    memorySaveProcedure: runbookSaveSchema,
-    memoryListProcedures: z.strictObject({
-        ...corpus,
-        states: procedureStates,
-    }),
-    memoryGetProcedure: z.strictObject({
-        ...corpus,
-        procedureId: text,
-        version: optionalCount,
-    }),
-    memorySearchProcedures: z.strictObject({
-        ...corpus,
-        query: text,
-        states: procedureStates,
-        limit: optionalCount,
-    }),
-    memoryArchiveProcedure: z.strictObject({
-        ...corpus,
-        procedureId: text,
-        expectedVersion: optionalCount,
-    }),
     memoryListActivity: z.strictObject({ ...activity, ...page }),
     memoryForgetActivity: z.strictObject({
         ...activity,

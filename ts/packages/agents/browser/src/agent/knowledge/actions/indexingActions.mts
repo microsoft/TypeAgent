@@ -19,7 +19,6 @@ export async function indexWebPageContent(
         mode?: "content";
         extractedKnowledge?: any;
         activityType?: "visited" | "captured";
-        reportHowToStatus?: boolean;
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -27,7 +26,6 @@ export async function indexWebPageContent(
     knowledgeExtracted: boolean;
     entityCount: number;
     warnings?: string[];
-    howTo?: { enabled: boolean; candidateCount: number };
     error?: string;
 }> {
     try {
@@ -72,9 +70,6 @@ export async function indexWebPageContent(
                 activityType: parameters.activityType ?? "captured",
             },
             parameters.mode ?? "content",
-            parameters.reportHowToStatus === undefined
-                ? {}
-                : { reportHowToStatus: parameters.reportHowToStatus },
         );
         debug(`Stored current page in durable memory: ${parameters.url}`);
 
@@ -82,9 +77,7 @@ export async function indexWebPageContent(
             indexed: true,
             knowledgeExtracted: parameters.extractKnowledge,
             entityCount: knowledge.entities.length,
-            ...(parameters.reportHowToStatus
-                ? { warnings: knowledge.warnings, howTo: knowledge.howTo }
-                : {}),
+            warnings: knowledge.warnings,
         };
     } catch (error) {
         console.error("Error indexing page content:", error);

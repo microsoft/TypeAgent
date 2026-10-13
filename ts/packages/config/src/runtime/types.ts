@@ -20,6 +20,7 @@
  */
 
 import type { Region } from "./regions.js";
+import type { ModelRequestConstraints } from "./requestConstraints.js";
 
 /** Authentication mode for an Azure resource. */
 export type AuthMode =
@@ -367,6 +368,9 @@ export interface CopilotConfig {
 
 /** Root typed configuration. */
 export interface Config {
+    readonly modelRequestConstraints?:
+        | ReadonlyMap<string, ModelRequestConstraints>
+        | undefined;
     readonly azureOpenAI: AzureOpenAIConfig;
     readonly openAI?: OpenAIConfig | undefined;
     readonly speech?: SpeechConfig | undefined;

@@ -9,7 +9,7 @@ import {
     createMemoryServiceRpcFacade,
     waitForMemoryJob,
 } from "../src/rpcFacade.js";
-import { FakeProcedureCorpusIndex } from "./fakeProcedureCorpusIndex.js";
+import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 
 describe("capture-date search predicates", () => {
     let root: string;
@@ -21,7 +21,7 @@ describe("capture-date search predicates", () => {
         await mkdir(root, { recursive: true });
         service = new FileMemoryService(root, {
             indexFactory: (_id, directory) =>
-                new FakeProcedureCorpusIndex(directory),
+                new FakeSemanticCorpusIndex(directory),
         });
         corpusId = (await service.createCorpus("Capture date search")).corpusId;
     });

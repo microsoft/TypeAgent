@@ -55,7 +55,7 @@ export function labelViewInput(
                   },
               }
             : {}),
-        inputs: input.inputs.map((source) => ({
+        inputs: input.inputs.map(({ content: _content, ...source }) => ({
             ...source,
             passages: passages.filter(
                 (passage) =>

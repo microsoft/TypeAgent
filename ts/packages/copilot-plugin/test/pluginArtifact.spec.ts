@@ -430,8 +430,6 @@ describe("staged plugin artifact", () => {
                 "typeagent-listSkills",
                 "typeagent-searchSkills",
                 "typeagent-getSkill",
-                "typeagent-previewProcedureArtifact",
-                "typeagent-promoteProcedureArtifact",
                 "typeagent-previewSkillAcquisition",
                 "typeagent-checkSkillUpdate",
                 "typeagent-acquireAndPublishSkill",
@@ -439,7 +437,7 @@ describe("staged plugin artifact", () => {
             ]);
             expect(
                 catalog.tools.find(
-                    ({ name }) => name === "typeagent-previewProcedureArtifact",
+                    ({ name }) => name === "typeagent-previewSkillAcquisition",
                 )?.annotations,
             ).toMatchObject({ readOnlyHint: true });
             expect(

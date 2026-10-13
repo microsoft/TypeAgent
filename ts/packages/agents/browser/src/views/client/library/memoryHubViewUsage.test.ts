@@ -48,6 +48,7 @@ test("Used by opens the exact derived revision, reports section impact and never
             citations: [],
         },
     });
+
     usage.querySelector("button")!.click();
     await operations.pop();
     expect(invoke).toHaveBeenCalledWith("memoryGetView", {
@@ -62,4 +63,28 @@ test("Used by opens the exact derived revision, reports section impact and never
     invoke.mockResolvedValue({ revisionId: "latest", content: {} });
     usage.querySelector("button")!.click();
     await expect(operations.pop()).rejects.toThrow("latest is not substituted");
+});
+
+test("Used by can navigate to the preview-first reader with an exact revision", () => {
+    const onOpenView = jest.fn();
+    const usage = renderDerivedViewUsage(
+        [
+            {
+                corpusId: "c",
+                viewId: "wiki",
+                kind: "wiki",
+                title: "Payments",
+                revisionId: "exact",
+                version: 1,
+                state: "historical",
+                sectionIds: [],
+                reason: "Historical",
+            },
+        ],
+        1,
+        jest.fn(),
+        onOpenView,
+    );
+    usage.querySelector<HTMLButtonElement>("button")!.click();
+    expect(onOpenView).toHaveBeenCalledWith("c", "wiki", "exact");
 });
