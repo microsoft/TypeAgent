@@ -1,0 +1,45 @@
+{
+  "lane": "shopping",
+  "status": "passed",
+  "mode": "offline-fixture-selector",
+  "variant": "host",
+  "automation": "playwright",
+  "explicitActModelCalls": 0,
+  "cases": [
+    {
+      "request": "Show only cordless tools",
+      "verified": true,
+      "latencyMs": 63.766599999999926,
+      "explicitActModelCalls": 0,
+      "decision": {
+        "answers": {
+          "target": {
+            "choice": "913c64f7-d03f-4f6c-83c4-d6742f4d8220:3"
+          },
+          "fit": {
+            "noul": 1
+          }
+        }
+      }
+    },
+    {
+      "request": "Open Cordless Drill details",
+      "verified": true,
+      "latencyMs": 48.222099999999955,
+      "explicitActModelCalls": 0,
+      "decision": {
+        "answers": {
+          "target": {
+            "choice": "069cc2ae-9327-497c-a3fe-f415df2496ef:4"
+          },
+          "fit": {
+            "noul": 1
+          }
+        }
+      }
+    }
+  ],
+  "selectorCalls": 2,
+  "decisionModelCalls": 0,
+  "benchmark": false
+}

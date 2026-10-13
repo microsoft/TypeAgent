@@ -156,6 +156,68 @@ latency, and failures separately by region. Test paraphrases and reordered optio
 Set fallback thresholds from that corpus, not from these seven smoke samples.
 No production integration is proposed until this evaluation is complete.
 
+## Experiment Pilots: 2026-10-13
+
+Three parallel implementation workstreams produced seven independently runnable
+pilots. Each defaults to offline execution, owns its fixtures and output, and
+reuses the existing decision client. There is no central runner or production
+integration. Offline heuristics and injected test clients are explicitly labeled;
+they are not decision-model benchmark results.
+
+| Priority | Pilot                                                   | Initial live outcome                                                                                                       |
+| -------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 1        | [MCP eligible routing](mcp/README.md)                   | One labeled request, three variants: all abstained and missed the expected tool.                                           |
+| 2        | [Dispatcher schema routing](dispatcher/README.md)       | One labeled request, three variants: no-fit/clarify, all missed the expected schema.                                       |
+| 3        | [Browser-state verification](verification/README.md)    | One connectivity case completed with matched judgments. Generative baseline not run.                                       |
+| 4        | [Playwright shopping selection](web-shopping/README.md) | PRE-REMOVAL evidence: two attempts safely abstained; no live action dispatched. Current execution is host-only Playwright. |
+| 5        | [Retrieval reranking](retrieval/README.md)              | One connectivity case completed. Embedding and generative baselines not run.                                               |
+| 6        | [Workflow disposition](workflow/README.md)              | One connectivity case selected retry; advisory only, nothing executed.                                                     |
+| 7        | [On-demand crossword](crossword/README.md)              | PRE-REMOVAL evidence: live clue read and supplied-answer fill succeeded with verified CAT readback.                        |
+
+The crossword retains exactly `getClueValue` and `enterText`. Both select a
+current clue element; reading its text and click/type execution are deterministic.
+Stagehand and its multi-provider dependency fanout have been removed. Browser lanes
+directly use the existing Playwright 1.57.0 dependency, isolated temporary persistent
+contexts, and host-validated click/fill/Enter execution. Reports identify
+`automation: "playwright"` and structural `explicitActModelCalls: 0`; there is no
+generative executor or fabricated SDK instrumentation. Host enumeration uses owned
+fixture annotations, not a general arbitrary-site adapter. Native/rerank commands
+explicitly report unavailable, including dry-run. Copilot/TypeAgent chat and
+responses support exists, but a native baseline needs a custom client implementation,
+not new provider secrets. Browser live JSON is unchanged PRE-REMOVAL Stagehand
+evidence. No live calls or external retailer sessions were run during migration.
+
+Run all tests directly from the repository root, without triggering pnpm install:
+
+```powershell
+node --test --test-concurrency=1 ts/examples/decision/decision.spec.mjs 'ts/examples/decision/*/*.spec.mjs'
+node ts/node_modules/prettier/bin/prettier.cjs --check ts/examples/decision
+```
+
+The migrated combined suite passed **66 tests**, with zero failures or skips,
+using normal dependency resolution after a frozen offline install with scripts
+disabled. The affected package build also passes. The browser slice contributes
+9 contract and 14 integration tests. Offline browser reports and all four
+desktop/mobile screenshots were regenerated; no live evidence was overwritten.
+The lockfile adds only the example's reference to existing Playwright 1.57.0;
+package records, snapshots and unrelated importers are unchanged from HEAD.
+No new install-script approvals or secrets were used.
+
+The historical pre-removal combined suite also passed 66 tests. That historical build
+encountered a Stagehand transitive build-script approval gate; Stagehand is no
+longer a dependency, and that blocker no longer affects the package build.
+See each pilot's README for its own command,
+fixtures, variants, and limitations. Small live samples establish connectivity
+or expose failures, not quality, calibration, or speedup. Routing fit/question
+design and shopping abstention need investigation before expanding the samples.
+
+The prior consolidation's repository ratchets were not fully green: lint reported five pre-existing
+`no-console` violations in the original sample runner; circular analysis cannot
+create its baseline worktree because Git LFS is missing. Complexity and debt
+ratchets pass for tracked changes, but exclude the new untracked pilot files.
+The historical 66-test run and pinned formatting check included those files.
+This migration leaves the current full repository gates to the parent.
+
 ## Sources
 
 - [OpenAI Decisions API guide](https://developers.openai.com/api/docs/guides/decisions)

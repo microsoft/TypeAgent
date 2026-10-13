@@ -476,3 +476,4 @@ ts/config.local.yaml.bak
 /ts/.wiki-rehearsal-blocked-20261010
 /ts/packages/memory/service/.wiki-unit-owned
 /ts/.wiki-rehearsal-blocked-final-20261010
+/ts/tmp/decision-pilot-lint

@@ -1,0 +1,49 @@
+{
+  "lane": "crossword",
+  "status": "passed",
+  "mode": "offline-fixture-selector",
+  "automation": "playwright",
+  "explicitActModelCalls": 0,
+  "cases": [
+    {
+      "request": "getClueValue(1, across)",
+      "result": "1. A feline pet",
+      "latencyMs": 14.123100000000022,
+      "explicitActModelCalls": 0,
+      "decision": {
+        "answers": {
+          "target": {
+            "choice": "fd9f7005-2951-4b34-9226-dda4a4374c36:1"
+          },
+          "fit": {
+            "noul": 1
+          }
+        }
+      }
+    },
+    {
+      "request": "enterText(cat, 1, across)",
+      "result": {
+        "supplied": "cat",
+        "normalized": "CAT",
+        "readback": "CAT",
+        "crossingsIntact": true
+      },
+      "latencyMs": 266.08619999999996,
+      "explicitActModelCalls": 0,
+      "decision": {
+        "answers": {
+          "target": {
+            "choice": "b1071cf0-4047-4fc5-8701-b807c2e2627f:1"
+          },
+          "fit": {
+            "noul": 1
+          }
+        }
+      }
+    }
+  ],
+  "selectorCalls": 2,
+  "decisionModelCalls": 0,
+  "benchmark": false
+}

@@ -7,12 +7,13 @@
   "scripts": {
     "build": "node --check decision.mjs && node --check main.mjs",
     "start": "node main.mjs",
-    "test:local": "node --test decision.spec.mjs",
+    "test:local": "node --test --test-concurrency=1 decision.spec.mjs */*.spec.mjs",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore"
   },
   "dependencies": {
     "@typeagent/aiclient": "workspace:*",
-    "@typeagent/config": "workspace:*"
+    "@typeagent/config": "workspace:*",
+    "playwright": "1.57.0"
   },
   "engines": {
     "node": ">=22"

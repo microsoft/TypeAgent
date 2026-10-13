@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Original Mini Crossword</title>
+  <style>
+    :root {
+      font-family: Georgia, serif;
+      color: #202124;
+      background: #f5f7f8;
+    }
+    body {
+      margin: 0;
+    }
+    header {
+      padding: 20px 24px;
+      border-bottom: 3px solid #22776a;
+    }
+    h1 {
+      font-size: 26px;
+      margin: 0;
+    }
+    main {
+      padding: 24px;
+      max-width: 840px;
+      margin: auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px;
+      align-items: start;
+    }
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(3, 64px);
+      width: 192px;
+      border: 2px solid #202124;
+    }
+    .cell {
+      position: relative;
+      width: 64px;
+      height: 64px;
+    }
+    .cell span {
+      position: absolute;
+      top: 4px;
+      left: 5px;
+      font-size: 12px;
+      pointer-events: none;
+    }
+    .cell input {
+      box-sizing: border-box;
+      width: 64px;
+      height: 64px;
+      text-align: center;
+      font:
+        28px Georgia,
+        serif;
+      border: 1px solid #202124;
+      border-radius: 0;
+      padding-top: 12px;
+      background: white;
+    }
+    input:focus {
+      background: #beece2;
+      outline: 2px solid #22776a;
+      outline-offset: -3px;
+    }
+    .clues {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+    h2 {
+      margin-top: 0;
+      font-size: 22px;
+    }
+    button {
+      display: block;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      font:
+        16px Georgia,
+        serif;
+      padding: 10px 0;
+      cursor: pointer;
+    }
+    button:focus {
+      outline: 2px solid #22776a;
+    }
+  </style>
+  <header><h1>Original Mini Crossword</h1></header>
+  <main>
+    <div id="grid" role="group" aria-label="Crossword grid"></div>
+    <div class="clues">
+      <section>
+        <h2>Across</h2>
+        <button
+          data-fixture-id="clue-1-across"
+          data-clue-number="1"
+          data-direction="across"
+          data-cells="0,1,2"
+        >
+          1. A feline pet
+        </button>
+        <button
+          data-fixture-id="clue-4-across"
+          data-clue-number="4"
+          data-direction="across"
+          data-cells="3,4,5"
+        >
+          4. Exist, with plural subject
+        </button>
+        <button
+          data-fixture-id="clue-5-across"
+          data-clue-number="5"
+          data-direction="across"
+          data-cells="6,7,8"
+        >
+          5. Twice five
+        </button>
+      </section>
+      <section>
+        <h2>Down</h2>
+        <button
+          data-fixture-id="clue-1-down"
+          data-clue-number="1"
+          data-direction="down"
+          data-cells="0,3,6"
+        >
+          1. A feline pet
+        </button>
+        <button
+          data-fixture-id="clue-2-down"
+          data-clue-number="2"
+          data-direction="down"
+          data-cells="1,4,7"
+        >
+          2. Exist, with plural subject
+        </button>
+        <button
+          data-fixture-id="clue-3-down"
+          data-clue-number="3"
+          data-direction="down"
+          data-cells="2,5,8"
+        >
+          3. Twice five
+        </button>
+      </section>
+    </div>
+  </main>
+  <script>
+    const grid = document.querySelector("#grid");
+    const numbers = { 0: 1, 1: 2, 2: 3, 3: 4, 6: 5 };
+    for (let index = 0; index < 9; index++) {
+      const container = document.createElement("div");
+      container.className = "cell";
+      const number = document.createElement("span");
+      number.textContent = numbers[index] ?? "";
+      const input = document.createElement("input");
+      input.maxLength = 1;
+      input.autocomplete = "off";
+      input.dataset.cell = index;
+      input.setAttribute(
+        "aria-label",
+        `Row ${Math.floor(index / 3) + 1} column ${(index % 3) + 1}`,
+      );
+      input.oninput = () => {
+        input.value = input.value.toUpperCase();
+        const light = (grid.dataset.activeCells ?? "").split(",");
+        const position = light.indexOf(String(index));
+        if (position >= 0 && position + 1 < light.length) {
+          const next = document.querySelector(
+            `[data-cell="${light[position + 1]}"]`,
+          );
+          next.focus();
+          next.select();
+        }
+      };
+      container.append(number, input);
+      grid.append(container);
+    }
+    for (const clue of document.querySelectorAll("[data-clue-number]"))
+      clue.onclick = () => {
+        grid.dataset.activeNumber = clue.dataset.clueNumber;
+        grid.dataset.activeDirection = clue.dataset.direction;
+        grid.dataset.activeCells = clue.dataset.cells;
+        const first = document.querySelector(
+          `[data-cell="${clue.dataset.cells.split(",")[0]}"]`,
+        );
+        first.focus();
+        first.select();
+      };
+  </script>
+</html>

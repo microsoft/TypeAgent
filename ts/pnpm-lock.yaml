@@ -401,6 +401,9 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
+      playwright:
+        specifier: 1.57.0
+        version: 1.57.0
 
   examples/docuProc:
     dependencies:

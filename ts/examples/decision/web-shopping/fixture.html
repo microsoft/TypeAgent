@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Local Tool Catalog</title>
+  <style>
+    :root {
+      font-family: Georgia, serif;
+      color: #202421;
+      background: #f4f6f3;
+    }
+    body {
+      margin: 0;
+    }
+    header {
+      padding: 20px 24px;
+      background: #244e3f;
+      color: white;
+    }
+    h1 {
+      margin: 0;
+      font-size: 26px;
+    }
+    main {
+      max-width: 960px;
+      margin: auto;
+      padding: 24px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: end;
+      padding-bottom: 24px;
+      border-bottom: 1px solid #bcc9be;
+    }
+    label {
+      display: grid;
+      gap: 6px;
+    }
+    input,
+    button {
+      font: inherit;
+      padding: 10px;
+      border: 1px solid #536a5a;
+      border-radius: 3px;
+    }
+    button {
+      background: white;
+      cursor: pointer;
+    }
+    .filter {
+      display: flex;
+      align-items: center;
+    }
+    .products {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 24px;
+      padding: 24px 0;
+    }
+    article {
+      border-bottom: 1px solid #bcc9be;
+      padding-bottom: 20px;
+    }
+    h2 {
+      font-size: 22px;
+    }
+    .illustration {
+      height: 80px;
+      display: flex;
+      align-items: center;
+      font-size: 54px;
+      color: #244e3f;
+    }
+    dialog {
+      max-width: min(420px, 75vw);
+      border: 1px solid #536a5a;
+      border-radius: 4px;
+    }
+    [hidden] {
+      display: none !important;
+    }
+  </style>
+  <header><h1>Local Tool Catalog</h1></header>
+  <main>
+    <div class="controls">
+      <label
+        >Search tools<input
+          type="search"
+          aria-label="Search tools"
+          data-fixture-id="search"
+          data-shopping-action="fill"
+      /></label>
+      <button data-fixture-id="apply-search" data-shopping-action="click">
+        Search
+      </button>
+      <label class="filter"
+        ><input
+          type="checkbox"
+          data-fixture-id="cordless-filter"
+          data-shopping-action="click"
+        />Cordless only</label
+      >
+    </div>
+    <div class="products">
+      <article data-name="cordless drill" data-cordless="true">
+        <div class="illustration" aria-hidden="true">&#9881;</div>
+        <h2>Cordless Drill</h2>
+        <p>18 V · 2 kg · $79</p>
+        <button data-fixture-id="drill-detail" data-shopping-action="click">
+          View Cordless Drill details
+        </button>
+      </article>
+      <article data-name="corded saw" data-cordless="false">
+        <div class="illustration" aria-hidden="true">&#9881;</div>
+        <h2>Corded Saw</h2>
+        <p>120 V · 4 kg · $99</p>
+        <button data-fixture-id="saw-detail" data-shopping-action="click">
+          View Corded Saw details
+        </button>
+      </article>
+    </div>
+    <p id="result" role="status">2 tools</p>
+    <dialog>
+      <h2 id="detail-title"></h2>
+      <p id="detail-spec"></p>
+      <button data-fixture-id="close-detail" data-shopping-action="click">
+        Close details
+      </button>
+    </dialog>
+  </main>
+  <script>
+    const search = document.querySelector('[data-fixture-id="search"]');
+    const cordless = document.querySelector(
+      '[data-fixture-id="cordless-filter"]',
+    );
+    function filter() {
+      for (const product of document.querySelectorAll("article"))
+        product.hidden =
+          !product.dataset.name.includes(search.value.toLowerCase()) ||
+          (cordless.checked && product.dataset.cordless !== "true");
+      document.querySelector("#result").textContent =
+        `${document.querySelectorAll("article:not([hidden])").length} tools`;
+    }
+    document.querySelector('[data-fixture-id="apply-search"]').onclick = filter;
+    search.onkeydown = (event) => {
+      if (event.key === "Enter") filter();
+    };
+    cordless.onchange = filter;
+    for (const button of document.querySelectorAll("article button"))
+      button.onclick = () => {
+        document.querySelector("#detail-title").textContent = button
+          .closest("article")
+          .querySelector("h2").textContent;
+        document.querySelector("#detail-spec").textContent = button
+          .closest("article")
+          .querySelector("p").textContent;
+        document.querySelector("dialog").showModal();
+      };
+    document.querySelector('[data-fixture-id="close-detail"]').onclick = () =>
+      document.querySelector("dialog").close();
+  </script>
+</html>
