@@ -9,8 +9,9 @@ Use the `typeagent-macros` MCP server for macro catalog and lifecycle work.
 
 ## Run A Macro
 
-1. Use `search_macros` or `list_macros` to find the macro.
-2. Use `inspect_macro` and `get_macro_requirements` before execution. Collect
+1. If the macro reference is not already known, use `search_macros` or
+   `list_macros` to find it.
+2. If required inputs are not known, use `get_macro_requirements`. Collect
    all required inputs without exposing secret values in chat.
    Inputs may fill nested argument-template fields, and later steps may bind
    values from earlier results.
@@ -21,7 +22,8 @@ Use the `typeagent-macros` MCP server for macro catalog and lifecycle work.
    shape captured by the approved procedure.
 5. For `agentRequired`, invoke the `TypeAgent Macro Runner` agent with the
    complete returned `launch` object. Do not manually paraphrase or reconstruct
-   the launch payload.
+   the launch payload. The server has already validated it; neither the caller
+   nor the runner should call `inspect_macro` as an execution prerequisite.
 
 Deterministic replay and agent-guided execution are whole-macro choices. Never
 replay a prefix before handing the remaining steps to the runner.
@@ -35,6 +37,8 @@ cancellation, and timeout are terminal outcomes, not adaptation signals.
 
 ## Lifecycle
 
+- Use `inspect_macro` for explicit catalog inspection and draft review, not
+  as a prerequisite for running an approved macro.
 - For inspection-only requests, inspect an existing candidate; do not create one
   when the catalog is empty. Report that no candidate is available and obtain
   the recording/learning status before proposing another operation.

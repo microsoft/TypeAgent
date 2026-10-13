@@ -477,10 +477,16 @@ export class MacroManager {
         const version =
             request.version ??
             (await this.getLatestSummary(request.macroId)).version;
-        return this.readJson<CopilotToolMacro>(
+        const macro = await this.readJson<CopilotToolMacro>(
             this.versionPath(request.macroId, version),
             `Macro version not found: ${request.macroId}@${version}`,
         );
+        if (request.requireRunnable) {
+            await this.validateRunRoute(macro, {
+                requireLatestApproved: true,
+            });
+        }
+        return macro;
     }
 
     async getMacroRequirements(

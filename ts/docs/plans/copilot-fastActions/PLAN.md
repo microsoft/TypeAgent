@@ -93,12 +93,44 @@ replaced actions are suspended through ordinary schema reconciliation.
 Execution also rechecks the current approved version, preventing a stale action
 from running an older version. Replay still preflights every step.
 
-Agent-required actions return a structured whole-macro handoff. The Direct hook
-continues Copilot with the complete launch payload; MCP delegation returns it to
-Copilot. The existing runner uses live permissions. No replay prefix executes,
+Agent-required actions return a structured whole-macro handoff. MCP delegation
+returns it to Copilot. The Direct hook always sends the complete launch
+through authenticated session-local IPC to the
+native extension, which invokes one synchronous named runner through
+`session.rpc.tools.execute`. This bypasses root-model task-generation and
+final-answer turns, not Copilot's native invocation or permission pipeline.
+The hook returns the actual child answer after correlated completion. The
+existing runner uses live permissions. No replay prefix executes,
 and accepted macro failures remain handled in Direct mode to prevent duplicate
 execution. Handoffs must be standalone actions: queued trailing actions stop
 with an explicit error and are not resumed automatically.
+
+The packaged runner selects `gpt-6-luna` for execution rather than inheriting
+the caller's reasoning model; extraction/building model configuration is
+independent. Its immutable-version `inspect_macro` tool declares read-only,
+non-destructive, idempotent, local-catalog MCP annotations. This removes the
+unnecessary mutating-tool consent prompt on the tested CLI without granting
+execution permissions for the recorded steps. Before a host-controlled launch,
+the extension deterministically inspects the exact version with
+`requireRunnable: true`, checks the current approved unsuppressed route, and
+compares the complete catalog macro with the handoff. A verified host launch
+selects the host-only `typeagent-macro-runner-host` profile, skipping the
+redundant inspection model turn. The live pre-tool hook denies this profile
+unless its child is correlated to actual host verification; a prompt claim
+cannot authorize it. Caller/MCP handoffs execute the complete macro already
+validated by the server without another inspection call. The read-only
+`inspect_macro` tool remains for explicit catalog inspection and draft review,
+not as an execution prerequisite. Execution/backend checks remain.
+
+A grammar hit avoids translation, not the live runner's model turns. The
+Direct host path removes root-model handoff/answer overhead, while child
+startup, deterministic catalog validation and dependent-step/guard resolution
+remain. Native runner
+session markers prevent the structured launch from being routed as a new
+user request. A live pre-tool hook denies nested runner delegation and makes
+such attempts terminal. Host phase records contain timings, not launch
+payloads or tool results. Native correctness repeats pass, but matched-query
+speed benchmarks remain necessary before claiming speedup.
 
 Replay and handoff feature flags apply to the routed catalog and execution.
 Set them consistently in agent-server and plugin processes. Macros with secret

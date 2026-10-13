@@ -38,6 +38,13 @@ trace is redacted before it is persisted.
 cannot run. `approveMacro()` validates the draft and writes a new immutable
 approved version rather than changing the draft in place.
 
+`inspectMacro()` normally reads an immutable version, including historical
+draft or disabled versions. With `requireRunnable: true`, it also applies the
+execution-route checks: the requested version must be approved, unsuppressed,
+and the current approved version. Native host-controlled execution uses this
+read-only preflight immediately before launching its runner. Ordinary catalog
+inspection is unchanged; this does not grant tool or backend permissions.
+
 ## Core model
 
 The public contracts in `src/contracts.ts` include:

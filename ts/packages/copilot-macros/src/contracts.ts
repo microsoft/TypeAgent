@@ -253,6 +253,8 @@ export interface MacroVersionRef {
 export interface InspectMacroRequest {
     macroId: string;
     version?: number;
+    /** Also require the current approved, unsuppressed execution route. */
+    requireRunnable?: boolean;
 }
 
 export interface ValidateMacroRequest extends InspectMacroRequest {}
