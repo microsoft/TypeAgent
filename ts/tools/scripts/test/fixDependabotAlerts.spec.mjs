@@ -7,6 +7,7 @@ import {
     mkdirSync,
     mkdtempSync,
     readFileSync,
+    renameSync,
     rmSync,
     writeFileSync,
 } from "node:fs";
@@ -28,11 +29,15 @@ function readWorkflow() {
     return readFileSync(WORKFLOW_PATH, "utf-8");
 }
 
-function run(command, args, options = {}) {
-    const result = spawnSync(command, args, {
+function runResult(command, args, options = {}) {
+    return spawnSync(command, args, {
         encoding: "utf-8",
         ...options,
     });
+}
+
+function run(command, args, options = {}) {
+    const result = runResult(command, args, options);
     assert.equal(
         result.status,
         0,
@@ -113,17 +118,59 @@ test("workflow rolls back dirty nonzero package attempts before verification", (
     assert.match(failureBlock, /restore_dependencies/);
     assert.match(failureBlock, /continue/);
     assert.doesNotMatch(failureBlock, /if attempt_has_changes/);
-    assert.match(workflow, /ATTEMPT_CHECKPOINT=.*write-tree/);
-    assert.match(workflow, /read-tree --reset -u "\$ATTEMPT_CHECKPOINT"/);
+    const checkpointStart = workflow.indexOf("checkpoint_attempt() {");
+    const acceptStart = workflow.indexOf("accept_attempt() {");
+    const rollbackStart = workflow.indexOf("rollback_attempt() {");
+    assert.notEqual(checkpointStart, -1);
+    assert.ok(acceptStart > checkpointStart);
+    assert.ok(rollbackStart > acceptStart);
+    assert.doesNotMatch(
+        workflow.slice(checkpointStart, acceptStart),
+        /git .* add -A/,
+    );
+    assert.match(
+        workflow.slice(checkpointStart, acceptStart),
+        /ATTEMPT_CHECKPOINT="\$ACCEPTED_CHECKPOINT"/,
+    );
+    assert.match(workflow.slice(acceptStart, rollbackStart), /git .* add -A/);
+    assert.match(
+        workflow.slice(acceptStart, rollbackStart),
+        /ACCEPTED_CHECKPOINT=.*write-tree/,
+    );
+    assert.match(
+        workflow,
+        /restore \\\n\s+--source="\$ATTEMPT_CHECKPOINT" --staged --worktree -- \./,
+    );
+    assert.match(workflow, /mv "\$modules_dir" "\$backup_dir\/node_modules"/);
+    assert.match(workflow, /pnpm install --no-frozen-lockfile --lockfile-only/);
     assert.match(workflow, /pnpm install --frozen-lockfile --lockfile-only/);
+    const normalizeCheck = workflow.indexOf(
+        "normalize_checkpoint_lockfile 2>&1",
+    );
+    const normalizeFailure = workflow.indexOf(
+        'if [ "$normalize_exit" -ne 0 ]; then',
+        normalizeCheck,
+    );
+    const reinstallStart = workflow.indexOf(
+        'echo "Reinstalling and verifying build..."',
+        normalizeFailure,
+    );
+    assert.notEqual(normalizeFailure, -1);
+    assert.ok(reinstallStart > normalizeFailure);
+    const normalizeFailureBlock = workflow.slice(
+        normalizeFailure,
+        reinstallStart,
+    );
+    assert.match(normalizeFailureBlock, /rollback_attempt/);
+    assert.match(normalizeFailureBlock, /restore_dependencies/);
+    assert.match(normalizeFailureBlock, /continue/);
     const consistencyCheck = workflow.indexOf(
         "verify_checkpoint_consistency 2>&1",
     );
-    const acceptedStage = workflow.indexOf(
-        'git -C "$GITHUB_WORKSPACE" add -A',
-        consistencyCheck,
-    );
+    const acceptedStage = workflow.indexOf("accept_attempt", consistencyCheck);
+    assert.notEqual(normalizeCheck, -1);
     assert.notEqual(consistencyCheck, -1);
+    assert.ok(consistencyCheck > normalizeCheck);
     assert.ok(acceptedStage > consistencyCheck);
     assert.match(workflow, /filtered_args\+=\("--package=\$PKG"\)/);
 });
@@ -205,7 +252,7 @@ test("workflow replaces caller package selectors with the attempt target", () =>
     );
 });
 
-test("checkpoint rollback restores a staged manifest and lockfile pair", () => {
+test("checkpoint rollback restores the last verified manifest and lockfile pair", () => {
     const directory = mkdtempSync(join(tmpdir(), "dependabot-checkpoint-"));
     const appDir = join(directory, "packages", "app");
     const libraryDir = join(directory, "packages", "checkpoint-library");
@@ -231,6 +278,33 @@ test("checkpoint rollback restores a staged manifest and lockfile pair", () => {
             "install",
             ...args,
         ]);
+    const pnpmInstallResult = (...args) =>
+        runResult(pnpmCommand, [
+            ...pnpmPrefix,
+            "--dir",
+            directory,
+            "install",
+            ...args,
+        ]);
+    const nodeModulesDir = join(directory, "node_modules");
+    const hiddenNodeModulesDir = join(directory, "node_modules.hidden");
+    const runWithFreshModules = (...args) => {
+        renameSync(nodeModulesDir, hiddenNodeModulesDir);
+        try {
+            return pnpmInstallResult(...args);
+        } finally {
+            rmSync(nodeModulesDir, { recursive: true, force: true });
+            renameSync(hiddenNodeModulesDir, nodeModulesDir);
+        }
+    };
+    const verifyWithFreshModules = () =>
+        runWithFreshModules("--frozen-lockfile", "--lockfile-only");
+    const replaceLockSpecifier = (path, from, to) => {
+        const content = readFileSync(path, "utf-8");
+        const oldLine = `specifier: ${from}`;
+        assert.ok(content.includes(oldLine));
+        writeFileSync(path, content.replace(oldLine, `specifier: ${to}`));
+    };
     const git = (...args) => run("git", ["-C", directory, ...args]);
 
     try {
@@ -248,7 +322,7 @@ test("checkpoint rollback restores a staged manifest and lockfile pair", () => {
         );
         writeFileSync(
             join(directory, "pnpm-workspace.yaml"),
-            "packages:\n  - packages/*\n",
+            "packages:\n  - packages/*\noverrides:\n  checkpoint-library: workspace:>=1.0.0 <1.1.0\n",
         );
         writeFileSync(
             join(directory, ".gitignore"),
@@ -279,7 +353,7 @@ test("checkpoint rollback restores a staged manifest and lockfile pair", () => {
             ),
         );
 
-        pnpmInstall("--lockfile-only");
+        pnpmInstall("--ignore-scripts");
         git("init", "--quiet");
         git("config", "user.name", "checkpoint-test");
         git("config", "user.email", "checkpoint@example.com");
@@ -308,10 +382,52 @@ test("checkpoint rollback restores a staged manifest and lockfile pair", () => {
                 2,
             ),
         );
-        pnpmInstall("--lockfile-only");
-        pnpmInstall("--frozen-lockfile", "--lockfile-only");
+        writeFileSync(
+            join(directory, "pnpm-workspace.yaml"),
+            "packages:\n  - packages/*\noverrides:\n  checkpoint-library: workspace:>=1.1.0 <2.0.0\n",
+        );
+        pnpmInstall("--ignore-scripts");
+
+        const effectiveSpecifier = "workspace:>=1.1.0 <2.0.0";
+        const updateSpecifier = "workspace:^1.1.0";
+        const rootLock = join(directory, "pnpm-lock.yaml");
+        const virtualLock = join(
+            directory,
+            "node_modules",
+            ".pnpm",
+            "lock.yaml",
+        );
+        replaceLockSpecifier(rootLock, effectiveSpecifier, updateSpecifier);
+        replaceLockSpecifier(virtualLock, effectiveSpecifier, updateSpecifier);
+
+        const warmVerification = pnpmInstallResult(
+            "--frozen-lockfile",
+            "--lockfile-only",
+        );
+        assert.equal(
+            warmVerification.status,
+            0,
+            "The regression requires pnpm's warm node_modules fast path",
+        );
+        const staleCheckpoint = verifyWithFreshModules();
+        assert.equal(staleCheckpoint.status, 1);
+        assert.match(
+            `${staleCheckpoint.stdout}\n${staleCheckpoint.stderr}`,
+            /ERR_PNPM_OUTDATED_LOCKFILE/,
+        );
+
+        const normalizedCheckpoint = runWithFreshModules(
+            "--no-frozen-lockfile",
+            "--lockfile-only",
+        );
+        assert.equal(normalizedCheckpoint.status, 0);
+        assert.match(
+            readFileSync(rootLock, "utf-8"),
+            /specifier: workspace:>=1\.1\.0 <2\.0\.0/,
+        );
+        assert.equal(verifyWithFreshModules().status, 0);
         git("add", "-A");
-        const checkpoint = git("write-tree");
+        const acceptedCheckpoint = git("write-tree");
 
         writeFileSync(
             join(appDir, "package.json"),
@@ -330,8 +446,20 @@ test("checkpoint rollback restores a staged manifest and lockfile pair", () => {
         writeFileSync(join(directory, "failed-attempt.tmp"), "dirty");
 
         rmSync(join(directory, "failed-attempt.tmp"));
-        git("read-tree", "--reset", "-u", checkpoint);
-        pnpmInstall("--frozen-lockfile", "--lockfile-only");
+        git(
+            "restore",
+            `--source=${acceptedCheckpoint}`,
+            "--staged",
+            "--worktree",
+            "--",
+            ".",
+        );
+        assert.equal(git("diff", acceptedCheckpoint, "--name-only"), "");
+        assert.equal(
+            git("diff", "--cached", acceptedCheckpoint, "--name-only"),
+            "",
+        );
+        assert.equal(verifyWithFreshModules().status, 0);
 
         const restoredApp = JSON.parse(
             readFileSync(join(appDir, "package.json"), "utf-8"),

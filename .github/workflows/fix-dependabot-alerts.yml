@@ -161,24 +161,39 @@ jobs:
           NOW_EPOCH=$(date -u +%s)
           COOLDOWN_SECONDS=$((ROLLBACK_COOLDOWN_DAYS * 86400))
 
-          # Successful fixes remain staged for the final commit. Each attempt
-          # also records an immutable Git tree so rollback restores both the
-          # worktree and index to the exact accepted checkpoint.
+          # Successful fixes remain staged for the final commit. Advance the
+          # accepted tree only after verification; failed attempts always
+          # restore both the index and worktree from that immutable tree.
+          ACCEPTED_CHECKPOINT=$(git -C "$GITHUB_WORKSPACE" write-tree)
+
           attempt_has_changes() {
             ! git -C "$GITHUB_WORKSPACE" diff --quiet ||
               [ -n "$(git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard)" ]
           }
 
           checkpoint_attempt() {
+            ATTEMPT_CHECKPOINT="$ACCEPTED_CHECKPOINT"
+            echo "Attempt checkpoint: $ATTEMPT_CHECKPOINT"
+          }
+
+          accept_attempt() {
             git -C "$GITHUB_WORKSPACE" add -A
-            ATTEMPT_CHECKPOINT=$(git -C "$GITHUB_WORKSPACE" write-tree)
+            ACCEPTED_CHECKPOINT=$(git -C "$GITHUB_WORKSPACE" write-tree)
+            echo "Accepted checkpoint: $ACCEPTED_CHECKPOINT"
           }
 
           rollback_attempt() {
             while IFS= read -r -d '' path; do
               rm -rf -- "$GITHUB_WORKSPACE/$path"
             done < <(git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard -z)
-            git -C "$GITHUB_WORKSPACE" read-tree --reset -u "$ATTEMPT_CHECKPOINT"
+            git -C "$GITHUB_WORKSPACE" restore \
+              --source="$ATTEMPT_CHECKPOINT" --staged --worktree -- .
+            if ! git -C "$GITHUB_WORKSPACE" diff --quiet "$ATTEMPT_CHECKPOINT" -- ||
+               ! git -C "$GITHUB_WORKSPACE" diff --cached --quiet "$ATTEMPT_CHECKPOINT" --; then
+              echo "::error::Rollback did not restore checkpoint $ATTEMPT_CHECKPOINT exactly"
+              git -C "$GITHUB_WORKSPACE" status --short
+              return 1
+            fi
           }
 
           restore_dependencies() {
@@ -189,11 +204,52 @@ jobs:
             fi
           }
 
+          run_without_node_modules() {
+            # pnpm can reuse node_modules state after `pnpm update -r` and
+            # report "Already up to date" even when a workspace override makes
+            # an importer specifier stale. Hide node_modules so lockfile-only
+            # commands must re-evaluate every manifest.
+            local modules_dir="$PWD/node_modules"
+            local backup_dir
+            local moved_modules=false
+            local command_exit
+            backup_dir=$(mktemp -d "$RUNNER_TEMP/dependabot-checkpoint-verify.XXXXXX")
+            if [ -e "$modules_dir" ]; then
+              mv "$modules_dir" "$backup_dir/node_modules"
+              moved_modules=true
+            fi
+
+            if "$@"; then
+              command_exit=0
+            else
+              command_exit=$?
+            fi
+
+            rm -rf -- "$modules_dir"
+            if [ "$moved_modules" = true ]; then
+              mv "$backup_dir/node_modules" "$modules_dir"
+            fi
+            rmdir "$backup_dir"
+            return "$command_exit"
+          }
+
+          normalize_checkpoint_lockfile() {
+            if [ "$WS_DIR" = "ts" ]; then
+              run_without_node_modules \
+                pnpm install --no-frozen-lockfile --lockfile-only --strict-peer-dependencies
+            else
+              run_without_node_modules \
+                pnpm install --no-frozen-lockfile --lockfile-only
+            fi
+          }
+
           verify_checkpoint_consistency() {
             if [ "$WS_DIR" = "ts" ]; then
-              pnpm install --frozen-lockfile --lockfile-only --strict-peer-dependencies
+              run_without_node_modules \
+                pnpm install --frozen-lockfile --lockfile-only --strict-peer-dependencies
             else
-              pnpm install --frozen-lockfile --lockfile-only
+              run_without_node_modules \
+                pnpm install --frozen-lockfile --lockfile-only
             fi
           }
 
@@ -393,7 +449,27 @@ jobs:
               fi
 
               if attempt_has_changes; then
-                echo "Changes detected, reinstalling and verifying build..."
+                echo "Changes detected, normalizing the lockfile before verification..."
+                set +e
+                normalize_checkpoint_lockfile 2>&1
+                normalize_exit=$?
+                set -e
+
+                if [ "$normalize_exit" -ne 0 ]; then
+                  echo "::warning::Lockfile normalization failed after fixing $PKG in $WS_DIR — rolling back"
+                  rollback_attempt
+                  restore_dependencies
+                  ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
+                  TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                  jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
+                     --argjson ts "$NOW_EPOCH" --arg reason "lockfile normalization failed" \
+                     '.rollbacks[$k] = {lockSha:$sha,timestamp:$ts,reason:$reason}' \
+                     "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
+                  echo "::endgroup::"
+                  continue
+                fi
+
+                echo "Reinstalling and verifying build..."
                 set +e
                 if [ "$WS_DIR" = "ts" ]; then
                   pnpm install --frozen-lockfile --strict-peer-dependencies 2>&1
@@ -464,7 +540,7 @@ jobs:
                        "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
                   else
                     echo "✅ $PKG fixed, build passed, and checkpoint is lockfile-consistent"
-                    git -C "$GITHUB_WORKSPACE" add -A
+                    accept_attempt
                     ALL_APPLIED="$ALL_APPLIED $PKG"
                     TOTAL_RESOLVED=$((TOTAL_RESOLVED + 1))
                     # Successful upgrade — clear any stale rollback record.
