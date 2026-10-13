@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
+import type { Stats } from "node:fs";
 import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { PrivateResultReference, RecordedToolCall } from "./contracts.js";
@@ -23,6 +24,46 @@ export class ResultEvidenceError extends Error {
 
 function digest(value: string | Buffer): string {
     return createHash("sha256").update(value).digest("hex");
+}
+
+async function readStableEvidenceFile(
+    filename: string,
+    info: Stats,
+    sizeBytes: number,
+): Promise<Buffer> {
+    const handle = await open(filename, "r");
+    try {
+        const opened = await handle.stat();
+        if (
+            opened.ino !== info.ino ||
+            opened.dev !== info.dev ||
+            opened.size !== sizeBytes
+        )
+            throw new ResultEvidenceError(
+                "evidenceIntegrity",
+                "Private evidence file identity or size changed.",
+            );
+        const bytes = Buffer.alloc(sizeBytes);
+        let offset = 0;
+        while (offset < bytes.length) {
+            const read = await handle.read(
+                bytes,
+                offset,
+                bytes.length - offset,
+                offset,
+            );
+            if (!read.bytesRead) break;
+            offset += read.bytesRead;
+        }
+        if (offset !== bytes.length || (await handle.stat()).size !== sizeBytes)
+            throw new ResultEvidenceError(
+                "evidenceIntegrity",
+                "Private evidence changed during read.",
+            );
+        return bytes;
+    } finally {
+        await handle.close();
+    }
 }
 
 function project(value: unknown) {
@@ -300,42 +341,11 @@ export class PrivateResultStore {
                     "unsafeEvidencePath",
                     "Unsafe private evidence file.",
                 );
-            const handle = await open(filename, "r");
-            let bytes: Buffer;
-            try {
-                const opened = await handle.stat();
-                if (
-                    opened.ino !== info.ino ||
-                    opened.dev !== info.dev ||
-                    opened.size !== ref.sizeBytes
-                )
-                    throw new ResultEvidenceError(
-                        "evidenceIntegrity",
-                        "Private evidence file identity or size changed.",
-                    );
-                bytes = Buffer.alloc(ref.sizeBytes);
-                let offset = 0;
-                while (offset < bytes.length) {
-                    const read = await handle.read(
-                        bytes,
-                        offset,
-                        bytes.length - offset,
-                        offset,
-                    );
-                    if (!read.bytesRead) break;
-                    offset += read.bytesRead;
-                }
-                if (
-                    offset !== bytes.length ||
-                    (await handle.stat()).size !== ref.sizeBytes
-                )
-                    throw new ResultEvidenceError(
-                        "evidenceIntegrity",
-                        "Private evidence changed during read.",
-                    );
-            } finally {
-                await handle.close();
-            }
+            const bytes = await readStableEvidenceFile(
+                filename,
+                info,
+                ref.sizeBytes,
+            );
             await this.directory(owner, ownerId, false);
             const after = await lstat(filename);
             if (

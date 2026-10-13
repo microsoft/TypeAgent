@@ -24,6 +24,7 @@ import {
     SessionMcpCredentialStore,
     createMacroAppAgentProvider,
     createMacroLearningRuntime,
+    createSyntheticMacroLearningDiagnostics,
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
@@ -433,8 +434,10 @@ async function main() {
     });
     bindingValidator = createRunbookBindingValidator(runbookCapabilities);
     await macroManager.configureLearning(
-        createMacroLearningRuntime(undefined, () =>
-            macroManager.getApprovedMacros(),
+        createMacroLearningRuntime(
+            undefined,
+            () => macroManager.getApprovedMacros(),
+            createSyntheticMacroLearningDiagnostics(instanceDir),
         ),
     );
 

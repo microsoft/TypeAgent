@@ -22,7 +22,11 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createExtensionCommands } from "../src/extension/commands.js";
 import { jest } from "@jest/globals";
-import { runControlDiagnostic } from "../src/extension/control-diagnostic.js";
+import {
+    runControlDiagnostic,
+    observeSyntheticToolOriginals,
+} from "../src/extension/control-diagnostic.js";
+import type { SessionEvent, SessionEventHandler } from "@github/copilot-sdk";
 
 describe("owned control metadata", () => {
     let root: string;
@@ -55,6 +59,109 @@ describe("owned control metadata", () => {
         unwatchFile(join(root, "plugin-data", "config.json"));
         process.env = saved;
         rmSync(root, { recursive: true, force: true });
+    });
+    it("observes complete original synthetic SDK events only through the public session subscription", () => {
+        writeFileSync(
+            join(root, "plugin-data", "config.json"),
+            JSON.stringify({ mode: "bypass" }),
+        );
+        const admissionFile = join(
+            root,
+            "data",
+            "native-control-admission.json",
+        );
+        writeFileSync(
+            admissionFile,
+            JSON.stringify({
+                ...JSON.parse(readFileSync(admissionFile, "utf8")),
+                nativeSyntheticOriginals: true,
+            }),
+        );
+        const control = publishControlMetadata("unit-originals")!;
+        let handler: SessionEventHandler | undefined;
+        const installed = observeSyntheticToolOriginals(
+            control,
+            "unit-source-session",
+            (callback) => {
+                handler = callback;
+                return () => {
+                    handler = undefined;
+                };
+            },
+        )!;
+        const emit = (event: Record<string, unknown>) =>
+            handler?.(event as unknown as SessionEvent);
+        const start = {
+            id: "unit-start",
+            parentId: null,
+            timestamp: new Date().toISOString(),
+            type: "tool.execution_start",
+            data: {
+                toolCallId: "unit-call",
+                toolName: "macro-eval-docs-lookup_document",
+                mcpServerName: "macro-eval-docs",
+                arguments: { title: "Synthetic only" },
+            },
+        };
+        const completion = {
+            id: "unit-end",
+            parentId: start.id,
+            timestamp: new Date().toISOString(),
+            type: "tool.execution_complete",
+            data: {
+                toolCallId: "unit-call",
+                success: true,
+                result: {
+                    content: '{"id":"synthetic-only"}',
+                    detailedContent: '{"id":"synthetic-only"}',
+                    contents: [
+                        { type: "text", text: '{"id":"synthetic-only"}' },
+                    ],
+                },
+            },
+        };
+        emit({ ...start, agentId: "child" });
+        emit({
+            ...start,
+            data: {
+                ...start.data,
+                mcpServerName: "foreign",
+                toolCallId: "foreign",
+            },
+        });
+        emit({
+            type: "model.message",
+            data: { content: "NOT A TOOL ORIGINAL" },
+        });
+        emit(start);
+        emit(completion);
+        const rows = readFileSync(installed.file, "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
+        expect(rows).toHaveLength(2);
+        expect(rows[1].event).toEqual(completion);
+        expect(rows[1].event.data.result.contents).toEqual(
+            completion.data.result.contents,
+        );
+        expect(rows[1].source.pid).toBe(process.pid);
+        expect(rows[1].owner).toBe("test-owner");
+        expect(rows[1].sessionId).toBe("unit-source-session");
+    });
+    it("never installs a synthetic original observer without the owned explicit opt-in", () => {
+        writeFileSync(
+            join(root, "plugin-data", "config.json"),
+            JSON.stringify({ mode: "bypass" }),
+        );
+        const subscribe = jest.fn(() => () => {});
+        expect(
+            observeSyntheticToolOriginals(
+                publishControlMetadata("unit-originals-off")!,
+                "unit-source-session",
+                subscribe,
+            ),
+        ).toBeUndefined();
+        expect(subscribe).not.toHaveBeenCalled();
     });
     it("reports public effective mode, exact path, root and digest without copying settings/secrets", () => {
         const file = join(root, "plugin-data", "config.json");
@@ -348,6 +455,7 @@ describe("owned control metadata", () => {
         "exact-docs",
         "pending-workflow-catalog",
         "actual-cli-extension-management-catalog",
+        "native-restriction-warning-capture",
         "duplicate-current-actor",
     ])(
         "uses initial guarded Node getter and four metadata-only transitions for %s without send or tool execution",
@@ -392,6 +500,7 @@ describe("owned control metadata", () => {
                     },
                 },
                 tools: {
+                    initializeAndValidate: jest.fn(async () => ({})),
                     getCurrentMetadata: async () => ({
                         tools: [
                             ...["lookup_document", "fetch_document"].map(
@@ -441,6 +550,10 @@ describe("owned control metadata", () => {
             );
             const admission = JSON.parse(readFileSync(admissionFile, "utf8"));
             admission.expectedMode = "bypass";
+            if (inventory === "native-restriction-warning-capture")
+                admission.diagnosticRestrictionWarnings = [
+                    { list: "excludedlist", selector: "extensions_manage" },
+                ];
             admission.diagnosticActorIdentities = [
                 {
                     ProcessId: process.pid,
@@ -503,6 +616,12 @@ describe("owned control metadata", () => {
                     "utf8",
                 ),
             );
+            expect(rpc.tools.initializeAndValidate).toHaveBeenCalledTimes(1);
+            expect(result.toolInitialization).toMatchObject({
+                method: "session.tools.initializeAndValidate",
+                sessionId: "metadata-session",
+                returnedKeys: [],
+            });
             if (inventory === "duplicate-current-actor") {
                 expect(result.status).toBe("blocked");
                 expect(result.transitions).toEqual([]);
@@ -553,6 +672,16 @@ describe("owned control metadata", () => {
                     result.tools.map((tool: { name: string }) => tool.name),
                 ).toContain("extensions_manage");
             }
+            if (inventory === "native-restriction-warning-capture") {
+                expect(result.error).toMatch(
+                    /restriction warnings remain unresolved/,
+                );
+                expect(
+                    result.workflowGates.every(
+                        (gate: { passed: boolean }) => gate.passed,
+                    ),
+                ).toBe(true);
+            }
         },
     );
     it.each([
@@ -562,6 +691,7 @@ describe("owned control metadata", () => {
         "agent-prompt",
         "wrong-session",
         "wrong-root",
+        "tool-initialization",
     ])(
         "blocks %s without submitting a prompt or executing a tool",
         async (failure) => {
@@ -589,6 +719,13 @@ describe("owned control metadata", () => {
                     invoke,
                 },
                 tools: {
+                    initializeAndValidate: async () => {
+                        if (failure === "tool-initialization")
+                            throw new Error(
+                                "Actual tool initialization unavailable",
+                            );
+                        return {};
+                    },
                     getCurrentMetadata: async () => ({
                         tools:
                             failure === "unrelated-tool"
@@ -631,9 +768,12 @@ describe("owned control metadata", () => {
             expect(result.status).toBe("blocked");
             expect(result.transitions).toEqual([]);
             expect(invoke).toHaveBeenCalledTimes(
-                ["missing-command", "wrong-session", "wrong-root"].includes(
-                    failure,
-                )
+                [
+                    "missing-command",
+                    "wrong-session",
+                    "wrong-root",
+                    "tool-initialization",
+                ].includes(failure)
                     ? 0
                     : 1,
             );

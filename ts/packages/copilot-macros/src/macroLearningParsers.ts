@@ -16,18 +16,115 @@ import {
     assertLearningValue,
 } from "./macroLearningValidation.js";
 import { validateResultSuffix } from "./resultPath.js";
+import { createHash } from "node:crypto";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function record(value: unknown, keys: string[]): Record<string, unknown> {
+const diagnosticKeys = new Set([
+    "schemaVersion",
+    "traceId",
+    "request",
+    "toolCallIds",
+    "description",
+    "uncertainties",
+    "name",
+    "inputs",
+    "steps",
+    "exampleInputs",
+    "requests",
+    "unsupportedOutputs",
+    "required",
+    "secret",
+    "valueType",
+    "id",
+    "toolName",
+    "mcpServerName",
+    "arguments",
+    "executionClass",
+    "sourceToolCallId",
+    "schemaFingerprint",
+    "postconditions",
+    "kind",
+    "value",
+    "stepId",
+    "path",
+    "suffix",
+    "bindings",
+    "expression",
+    "macroId",
+    "version",
+    "state",
+    "createdAt",
+    "sourceTraceId",
+    "sourceSessionId",
+    "capabilities",
+    "warnings",
+    "parameters",
+    "args",
+    "type",
+    "tool",
+    "output",
+    "outputs",
+    "outputPlan",
+    "result",
+    "toolCallId",
+    "responseEvidence",
+    "resultEvidence",
+    "modelResultEvidence",
+]);
+function diagnosticType(value: unknown): string {
+    return value === null
+        ? "null"
+        : Array.isArray(value)
+          ? "array"
+          : typeof value;
+}
+function diagnosticKey(key: string): string {
+    return diagnosticKeys.has(key)
+        ? key
+        : `key#${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
+}
+
+export class LearningObjectValidationError extends Error {
+    constructor(
+        public readonly validationPath: string,
+        public readonly receivedType: string,
+        public readonly unexpectedKeys: { name: string; valueType: string }[],
+    ) {
+        super(
+            `Expected a learning JSON object with supported fields. At ${validationPath}; received ${receivedType}` +
+                (unexpectedKeys.length
+                    ? `; unexpected ${unexpectedKeys.map((key) => `${key.name}:${key.valueType}`).join(", ")}`
+                    : "") +
+                ".",
+        );
+        this.name = "LearningObjectValidationError";
+    }
+}
+
+function record(
+    value: unknown,
+    keys: string[],
+    location: string,
+): Record<string, unknown> {
     if (
         !isRecord(value) ||
         Object.keys(value).some((key) => !keys.includes(key))
     ) {
-        throw new Error(
-            "Expected a learning JSON object with supported fields.",
+        throw new LearningObjectValidationError(
+            location,
+            diagnosticType(value),
+            isRecord(value)
+                ? Object.keys(value)
+                      .filter((key) => !keys.includes(key))
+                      .slice(0, 20)
+                      .map((key) => ({
+                          name: diagnosticKey(key),
+                          valueType: diagnosticType(value[key]),
+                      }))
+                : [],
         );
     }
     return value;
@@ -69,14 +166,12 @@ function valueType(value: unknown): MacroValueType {
     }
 }
 
-function parseInput(value: unknown): MacroInput {
-    const input = record(value, [
-        "name",
-        "description",
-        "required",
-        "secret",
-        "valueType",
-    ]);
+function parseInput(value: unknown, location: string): MacroInput {
+    const input = record(
+        value,
+        ["name", "description", "required", "secret", "valueType"],
+        location,
+    );
     const name = text(input.name, "input name", 2_000);
     if (
         !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) ||
@@ -111,28 +206,28 @@ function parsePath(value: unknown, allowEmpty: boolean): string[] {
 
 type BoundExpression = Exclude<ValueExpression, { kind: "template" }>;
 
-function parseBoundExpression(value: unknown): BoundExpression {
-    const expression = record(value, [
-        "kind",
-        "value",
-        "name",
-        "stepId",
-        "path",
-        "suffix",
-    ]);
+function parseBoundExpression(
+    value: unknown,
+    location: string,
+): BoundExpression {
+    const expression = record(
+        value,
+        ["kind", "value", "name", "stepId", "path", "suffix"],
+        location,
+    );
     switch (expression.kind) {
         case "literal":
-            record(value, ["kind", "value"]);
+            record(value, ["kind", "value"], location);
             assertLearningValue(expression.value);
             return { kind: "literal", value: expression.value };
         case "input":
-            record(value, ["kind", "name"]);
+            record(value, ["kind", "name"], location);
             return {
                 kind: "input",
                 name: text(expression.name, "input reference", 2_000),
             };
         case "stepResult":
-            record(value, ["kind", "stepId", "path"]);
+            record(value, ["kind", "stepId", "path"], location);
             return {
                 kind: "stepResult",
                 stepId: text(expression.stepId, "result reference", 2_000),
@@ -141,7 +236,7 @@ function parseBoundExpression(value: unknown): BoundExpression {
                     : { path: parsePath(expression.path, true) }),
             };
         case "resultPath":
-            record(value, ["kind", "stepId", "path", "suffix"]);
+            record(value, ["kind", "stepId", "path", "suffix"], location);
             validateResultSuffix(expression.suffix);
             return {
                 kind: "resultPath",
@@ -154,38 +249,49 @@ function parseBoundExpression(value: unknown): BoundExpression {
     }
 }
 
-function parseExpression(value: unknown): ValueExpression {
+function parseExpression(value: unknown, location: string): ValueExpression {
     if (!isRecord(value) || value.kind !== "template") {
-        return parseBoundExpression(value);
+        return parseBoundExpression(value, location);
     }
-    const expression = record(value, ["kind", "value", "bindings"]);
+    const expression = record(value, ["kind", "value", "bindings"], location);
     assertLearningValue(expression.value);
     return {
         kind: "template",
         value: expression.value,
         bindings: list(expression.bindings, "template bindings", 1, 100).map(
-            (value) => {
-                const binding = record(value, ["path", "expression"]);
+            (value, index) => {
+                const bindingLocation = `${location}.bindings[${index}]`;
+                const binding = record(
+                    value,
+                    ["path", "expression"],
+                    bindingLocation,
+                );
                 return {
                     path: parsePath(binding.path, false),
-                    expression: parseBoundExpression(binding.expression),
+                    expression: parseBoundExpression(
+                        binding.expression,
+                        `${bindingLocation}.expression`,
+                    ),
                 };
             },
         ),
     };
 }
 
-function parsePostcondition(value: unknown): MacroPostcondition {
-    const condition = record(value, ["kind", "valueType", "path"]);
+function parsePostcondition(
+    value: unknown,
+    location: string,
+): MacroPostcondition {
+    const condition = record(value, ["kind", "valueType", "path"], location);
     if (condition.kind === "resultType") {
-        record(value, ["kind", "valueType"]);
+        record(value, ["kind", "valueType"], location);
         return {
             kind: "resultType",
             valueType: valueType(condition.valueType),
         };
     }
     if (condition.kind === "resultPathExists") {
-        record(value, ["kind", "path"]);
+        record(value, ["kind", "path"], location);
         return {
             kind: "resultPathExists",
             path: parsePath(condition.path, false),
@@ -194,17 +300,21 @@ function parsePostcondition(value: unknown): MacroPostcondition {
     throw new Error("Unsupported learning result guard.");
 }
 
-function parseStep(value: unknown): MacroStep {
-    const step = record(value, [
-        "id",
-        "toolName",
-        "mcpServerName",
-        "arguments",
-        "executionClass",
-        "sourceToolCallId",
-        "schemaFingerprint",
-        "postconditions",
-    ]);
+function parseStep(value: unknown, location: string): MacroStep {
+    const step = record(
+        value,
+        [
+            "id",
+            "toolName",
+            "mcpServerName",
+            "arguments",
+            "executionClass",
+            "sourceToolCallId",
+            "schemaFingerprint",
+            "postconditions",
+        ],
+        location,
+    );
     const id = text(step.id, "step ID", 2_000);
     if (
         !/^[a-zA-Z0-9_-]+$/.test(id) ||
@@ -218,7 +328,9 @@ function parseStep(value: unknown): MacroStep {
         "result guards",
         1,
         51,
-    ).map(parsePostcondition);
+    ).map((value, index) =>
+        parsePostcondition(value, `${location}.postconditions[${index}]`),
+    );
     if (!postconditions.some((condition) => condition.kind === "resultType")) {
         throw new Error("Learning steps require a recorded result type guard.");
     }
@@ -234,7 +346,7 @@ function parseStep(value: unknown): MacroStep {
                       2_000,
                   ),
               }),
-        arguments: parseExpression(step.arguments),
+        arguments: parseExpression(step.arguments, `${location}.arguments`),
         executionClass: step.executionClass,
         sourceToolCallId: text(
             step.sourceToolCallId,
@@ -258,14 +370,18 @@ export function parseMacroExecutionRecipe(
     value: unknown,
 ): MacroExecutionRecipe {
     assertLearningValue(value);
-    const recipe = record(value, [
-        "schemaVersion",
-        "traceId",
-        "request",
-        "toolCallIds",
-        "description",
-        "uncertainties",
-    ]);
+    const recipe = record(
+        value,
+        [
+            "schemaVersion",
+            "traceId",
+            "request",
+            "toolCallIds",
+            "description",
+            "uncertainties",
+        ],
+        "recipe",
+    );
     if (recipe.schemaVersion !== 1)
         throw new Error("Unsupported execution recipe schema version.");
     const toolCallIds = list(
@@ -295,16 +411,22 @@ export function parseMacroExecutionRecipe(
 export function parseMacroLearningBuild(value: unknown): MacroLearningBuild {
     // Input-schema secret:false is metadata, not a secret-bearing argument.
     assertLearningJson(value);
-    const build = record(value, [
-        "name",
-        "description",
-        "inputs",
-        "steps",
-        "exampleInputs",
-        "requests",
-        "unsupportedOutputs",
-    ]);
-    const inputs = list(build.inputs, "inputs", 0, 100).map(parseInput);
+    const build = record(
+        value,
+        [
+            "name",
+            "description",
+            "inputs",
+            "steps",
+            "exampleInputs",
+            "requests",
+            "unsupportedOutputs",
+        ],
+        "build",
+    );
+    const inputs = list(build.inputs, "inputs", 0, 100).map((value, index) =>
+        parseInput(value, `build.inputs[${index}]`),
+    );
     if (new Set(inputs.map((input) => input.name)).size !== inputs.length) {
         throw new Error("Learning build repeats input names.");
     }
@@ -321,7 +443,9 @@ export function parseMacroLearningBuild(value: unknown): MacroLearningBuild {
         name: text(build.name, "macro name", 2_000),
         description: text(build.description, "macro description"),
         inputs,
-        steps: list(build.steps, "source steps", 1, 100).map(parseStep),
+        steps: list(build.steps, "source steps", 1, 100).map((value, index) =>
+            parseStep(value, `build.steps[${index}]`),
+        ),
         exampleInputs: build.exampleInputs,
         requests,
         ...(build.unsupportedOutputs === undefined

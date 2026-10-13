@@ -160,7 +160,11 @@ export async function main(argv = process.argv.slice(2)) {
                     status: result.status,
                 }) + "\n",
             );
-            if (!["passed", "unexecuted"].includes(result.status))
+            if (
+                !["passed", "passed-attribution-only", "unexecuted"].includes(
+                    result.status,
+                )
+            )
                 process.exitCode = 1;
         } finally {
             process.removeListener("SIGINT", cancel);

@@ -10,6 +10,7 @@ import {
 import {
     createMacroLearningRuntime,
     validateMacroGrammar,
+    replayMacroGrammarDiagnostic,
     type MacroLearningQuery,
 } from "../src/macroLearningRuntime.js";
 
@@ -92,6 +93,75 @@ async function buildFixture(
 }
 
 describe("macro learning runtime", () => {
+    it.each([
+        { pattern: "different words", count: 0, expected: 0 },
+        { pattern: "read $(path:string) now", count: 1, expected: 0 },
+    ])(
+        "reports body-free counterexample counts with strict replay",
+        ({ pattern, count, expected }) => {
+            const tuple = {
+                rules: [
+                    `<Start> = ${pattern} -> { actionName: "lookup", parameters: { path: "PRIVATE-WRONG" } };`,
+                ],
+                requests: ["read PRIVATE-REQUEST now"],
+                actionName: "lookup",
+                exampleInputs: { path: "PRIVATE-REQUEST" },
+            };
+            try {
+                replayMacroGrammarDiagnostic(tuple);
+                throw new Error("Expected rejection");
+            } catch (error) {
+                expect(String(error)).toContain(`"matchCount":${count}`);
+                expect(String(error)).toContain(
+                    `"expectedMatchCount":${expected}`,
+                );
+                expect(String(error)).toContain("keySha256");
+                expect(String(error)).not.toContain("PRIVATE-REQUEST");
+                expect(String(error)).not.toContain("PRIVATE-WRONG");
+                expect(String(error)).not.toContain('"path"');
+            }
+        },
+    );
+    it("rejects the selected wrong-input match even when a less specific correct alternative exists", () => {
+        const tuple = {
+            rules: [
+                `<Start> = <bad> | <good>;
+<good> = read $(path:string) now -> { actionName: "lookup", parameters: { path } };
+<bad> = read package.json now -> { actionName: "lookup", parameters: { path: "wrong" } };`,
+            ],
+            requests: [trace.prompt],
+            actionName: "lookup",
+            exampleInputs: { path: "package.json" },
+        };
+        expect(() => replayMacroGrammarDiagnostic(tuple)).toThrow(
+            '"matchCount":1',
+        );
+        expect(() => replayMacroGrammarDiagnostic(tuple)).toThrow(
+            '"expectedMatchCount":0',
+        );
+    });
+    it.each([
+        null,
+        {},
+        { rules: [], requests: [], actionName: "x", exampleInputs: {} },
+        {
+            rules: ["x"],
+            requests: ["x"],
+            actionName: "x",
+            exampleInputs: {},
+            extra: true,
+        },
+        {
+            rules: ["x".repeat(262145)],
+            requests: ["x"],
+            actionName: "x",
+            exampleInputs: {},
+        },
+    ])("rejects unsupported/unbounded replay tuple %p", (tuple) => {
+        expect(() => replayMacroGrammarDiagnostic(tuple)).toThrow(
+            "bounded grammar replay tuple",
+        );
+    });
     it("accepts grounded request variants without a correction query", async () => {
         const { recording, baseline, recipe, build } = await buildFixture();
         const query = jest.fn<MacroLearningQuery>(async () =>
@@ -218,7 +288,7 @@ describe("macro learning runtime", () => {
                 [request],
                 new AbortController().signal,
             ),
-        ).rejects.toThrow(`request 1/1 ${JSON.stringify(request)}`);
+        ).rejects.toThrow("stage=generation; requestIndex=1/1");
         expect(query).not.toHaveBeenCalled();
     });
 
@@ -331,6 +401,183 @@ describe("macro learning runtime", () => {
         ]);
     });
 
+    it("projects captured response presence for lookup/fetch/show without exposing any answer body", async () => {
+        const recording = structuredClone(trace);
+        recording.prompt =
+            "Find the document titled 'Generated checklist' and show its contents.";
+        recording.response = "private-answer-body";
+        recording.toolCalls = [
+            {
+                ...recording.toolCalls[0],
+                toolCallId: "lookup",
+                name: "lookup_document",
+                arguments: { title: "Generated checklist" },
+                result: { id: "generated-doc" },
+            },
+            {
+                ...recording.toolCalls[0],
+                toolCallId: "fetch",
+                name: "fetch_document",
+                arguments: { id: "generated-doc" },
+                result: { content: "private-body" },
+                modelResult: { content: "private-model-body" },
+            },
+        ];
+        const query = jest.fn<MacroLearningQuery>(async () => {
+            throw new Error(
+                "Extraction input captured; no model answer supplied.",
+            );
+        });
+        await expect(
+            createMacroLearningRuntime(query).extract(
+                recording,
+                "source-1",
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow("Extraction input captured");
+        const prompt = query.mock.calls[0][0];
+        const evidence = JSON.parse(prompt.split("\nEVIDENCE:\n")[1]);
+        expect(evidence.responseEvidence).toEqual({
+            available: true,
+            valueType: "string",
+        });
+        expect(evidence.request).toBe(recording.prompt);
+        expect(
+            evidence.toolCalls.map(
+                (call: { toolCallId: string }) => call.toolCallId,
+            ),
+        ).toEqual(["lookup", "fetch"]);
+        expect(prompt).not.toContain(recording.response);
+        expect(prompt).not.toContain("private-body");
+        expect(prompt).not.toContain("private-model-body");
+        expect(prompt).toContain("No separate display tool is");
+        expect(prompt).toContain(
+            "It does not prove physical display or content correctness.",
+        );
+        expect(prompt).toContain("unsupported");
+        expect(evidence.argumentDependencies).toEqual([
+            { toolCallId: "lookup", dependencies: [] },
+            {
+                toolCallId: "fetch",
+                dependencies: [
+                    {
+                        argumentPath: ["id"],
+                        sourceToolCallId: "lookup",
+                        expressionKind: "stepResult",
+                    },
+                ],
+            },
+        ]);
+        expect(prompt).toContain("Do not introduce unrequested uniqueness");
+        expect(prompt).toContain("Actual ambiguity,");
+    });
+    it.each([
+        "unique matching document",
+        "latest version",
+        "ranked by relevance",
+    ])(
+        "does not override content-dependent selection uncertainty (%s)",
+        async (requirement) => {
+            const recording = {
+                ...structuredClone(trace),
+                prompt: `Find the ${requirement} and read it.`,
+            };
+            const uncertainties = [
+                `The ${requirement} selection is not established.`,
+            ];
+            const query = jest.fn<MacroLearningQuery>(async () =>
+                JSON.stringify({
+                    schemaVersion: 1,
+                    traceId: "source-1",
+                    request: recording.prompt,
+                    toolCallIds: ["call-1"],
+                    description: "Read the recorded file.",
+                    uncertainties,
+                }),
+            );
+            const recipe = await createMacroLearningRuntime(query).extract(
+                recording,
+                "source-1",
+                new AbortController().signal,
+            );
+            expect(recipe.uncertainties).toEqual(uncertainties);
+        },
+    );
+    it("reports multiple returned array entries without claiming a unique selection", async () => {
+        const recording = structuredClone(trace);
+        recording.toolCalls[0].result = [
+            { id: "first", content: "private-first" },
+            { id: "second", content: "private-second" },
+        ];
+        const query = jest.fn<MacroLearningQuery>(async () => {
+            throw new Error("Projection only.");
+        });
+        await expect(
+            createMacroLearningRuntime(query).extract(
+                recording,
+                "source-1",
+                new AbortController().signal,
+            ),
+        ).rejects.toThrow("Projection only");
+        const prompt = query.mock.calls[0][0],
+            evidence = JSON.parse(prompt.split("\nEVIDENCE:\n")[1]);
+        expect(evidence.toolCalls[0].resultEvidence).toEqual({
+            available: true,
+            valueType: "array",
+            itemCount: 2,
+        });
+        expect(prompt).not.toContain("private-first");
+        expect(prompt).not.toContain("private-second");
+        expect(prompt).toContain("not its");
+        expect(prompt).toContain("unique matches");
+    });
+
+    it.each(["", " \n\t "])(
+        "projects an empty response as unavailable (%j)",
+        async (response) => {
+            const recording = { ...structuredClone(trace), response };
+            const query = jest.fn<MacroLearningQuery>(async () => {
+                throw new Error("Extraction input captured.");
+            });
+            await expect(
+                createMacroLearningRuntime(query).extract(
+                    recording,
+                    "source-1",
+                    new AbortController().signal,
+                ),
+            ).rejects.toThrow("Extraction input captured");
+            const evidence = JSON.parse(
+                query.mock.calls[0][0].split("\nEVIDENCE:\n")[1],
+            );
+            expect(evidence.responseEvidence).toEqual({
+                available: false,
+                valueType: "string",
+            });
+        },
+    );
+
+    it("does not clear output uncertainties even when a response and tool results were captured", async () => {
+        const uncertainties = [
+            "The requested ranking and report are not established.",
+        ];
+        const query = jest.fn<MacroLearningQuery>(async () =>
+            JSON.stringify({
+                schemaVersion: 1,
+                traceId: "source-1",
+                request: trace.prompt,
+                toolCallIds: ["call-1"],
+                description: "Read a file",
+                uncertainties,
+            }),
+        );
+        const recipe = await createMacroLearningRuntime(query).extract(
+            trace,
+            "source-1",
+            new AbortController().signal,
+        );
+        expect(recipe.uncertainties).toEqual(uncertainties);
+    });
+
     it("rejects aborted work before requesting a model", async () => {
         const query = jest.fn(async () => "{}");
         const controller = new AbortController();
@@ -379,7 +626,7 @@ describe("macro learning runtime", () => {
             validateMacroGrammar([rule], [trace.prompt], "lookup", {
                 path: "package.json",
             }),
-        ).toThrow("did not generalize input 'path'");
+        ).toThrow("did not generalize input (stage=changed-input");
     });
 
     it("does not let bounded variants hide an unsafe original request", () => {
@@ -397,15 +644,13 @@ describe("macro learning runtime", () => {
             validateMacroGrammar(rules, [original, ...variants], "lookup", {
                 path: "package.json",
             }),
-        ).toThrow(
-            "Macro grammar accepts an unsupported intent: Read file package.json and delete all data",
-        );
+        ).toThrow("Macro grammar accepts an unsupported intent:");
         rules[0] = `<Start> = read file package.json -> { actionName: "lookup", parameters: { path: "package.json" } };`;
         expect(() =>
             validateMacroGrammar(rules, [original, ...variants], "lookup", {
                 path: "package.json",
             }),
-        ).toThrow("did not generalize input 'path'");
+        ).toThrow("did not generalize input (stage=changed-input");
     });
 
     it("changes captured values without requiring identical fixed keywords to change", () => {

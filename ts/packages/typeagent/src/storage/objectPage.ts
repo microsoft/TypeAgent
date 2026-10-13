@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import { collections } from "../index.js";
+import * as collections from "../lib/index.js";
 import {
     FileSystem,
     fsDefault,

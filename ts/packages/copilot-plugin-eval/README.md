@@ -33,18 +33,454 @@ scope. Weather is removed and calendar is deferred.
 
 ## Native macro evaluation - gated controller and offline tooling
 
+**Current restriction mechanism (CLI 1.0.95):** required supported
+`extensionMode: "load_only"` seeds only the fresh owned home, then confirms the
+public `/extensions mode` dialog before any task. Actual owned settings and
+native caption must agree. Five exact unfiltered SDK inventories contain only
+`task` and the two synthetic document tools, with exact schemas. The registered
+Node getter and six actors across four mode transitions must also agree.
+A fresh bounded metadata diagnostic passed these prerequisites with **no
+selector warnings**. Availability is not an execution-permission grant.
+
+Unsupported redundant management exclusions were removed, not ignored.
+All unresolved selector warnings still fail closed. The earlier warning-bearing
+capture remains blocked historical evidence; its temporary
+`captureRestrictionMetadata` option is removed and is not an admission path.
+
+The owned normal-hook bridge uses public Windows named-pipe peer identity,
+physical wrapper/router process and source bindings, actual stdin and native
+events. Its trusted reader returns an opaque branded object; serialized JSON
+cannot authenticate provenance. Actual PowerShell invocation is exercised
+offline through the staged wrapper, real router child and OS receiver.
+The initial synthetic attempt failed because its quoted Node executable lacked
+PowerShell's call operator; that evidence remains rejected. No positive normal
+route or macro lifecycle acceptance is inferred from its successful document
+tools.
+
+The subsequent call-operator and bare-selector attempts stopped before targets
+on retained document-selector warnings. Those rejected attempts are unchanged.
+Installed SDK 1.0.13 documents bare exact names as supported availability filters;
+the controller now uses the two exact model-facing document names and
+`builtin:task`, with independent exact MCP source/schema checks.
+
+**Current effective-policy readiness:** five connected servers is not tool
+readiness. Before any task, the owned native extension invokes the public
+`session.tools.initializeAndValidate`, then preserves the initial unfiltered
+`getCurrentMetadata` snapshot and all four post-transition snapshots. Exact
+namespaced/server/tool identities, schemas, session and all owned actor/getter
+bindings must pass. A fresh actual read-only diagnostic proved this sequence:
+known document warnings were first observed before successful initialization,
+and the five current inventories were exact afterward. Raw warning-bearing
+diagnostic status/text remains retained, not rewritten as a passed task.
+The SDK notes that initialization may be a no-op for unsupported session classes;
+an empty response alone is never readiness proof.
+
+Only configured document-selector warnings can remain pending during this
+bounded read-only phase. No models or tools may execute while pending. Their
+previously observed text may remain in the viewport after independently proved
+current policy; unrelated/excluded/new selectors and warnings appearing after a
+reload marker still fail. Missing initialization/current inventories or any
+source/schema/control disagreement blocks tasks. No wildcard, metadata filtering
+or execution-permission grant is introduced.
+
+The first policy-proved baseline physically reached the OS-authenticated
+wrapper/router, then correctly failed because native CLI replaced its
+`CLAUDE_PLUGIN_DATA` with an owned home-specific plugin directory. The staged
+owner-bound hashed policy now restores only the explicitly selected child
+configuration root; native working directory, actual stdin, other environment,
+authentication and execution permissions remain unchanged. Normal hook process
+cwd is the exact owned plugin directory; request cwd remains the exact synthetic
+workspace. Earlier failed effects are never regraded as acceptance.
+
 The macro validation campaign is separate from the historical seven-candidate
 evaluation below. Its prospective `macro-native-eval-v1` protocol uses the actual
 interactive CLI, synthetic fixtures and independent event/backend/content
 oracles. The packaged native controller is implemented for a bounded synthetic
-Direct learning/reuse/restart rehearsal. **Packaged live acceptance is pending.**
+Direct learning/reuse/restart rehearsal. **Packaged learning/publication/Direct
+reuse correctness has passed; genuine restart acceptance remains pending.**
 Offline adapter tests are not native acceptance or a measured campaign.
 
-**Current task gate:** ordinary Copilot `bypass` is not a grammar miss. The
-additive ordinary-route grader candidate remains proof-blocked with `callback:
-null`; fresh all-actor mode transitions alone cannot admit a task-bearing launch.
-Offline preflight and an explicitly scheduled metadata-only diagnostic remain
-available. No grader schema is changed by this controller.
+**Fresh ordinary baseline:** the packaged CLI 1.0.95 rehearsal with requested
+root `gpt-5.6-sol` / Direct runner `gpt-6-luna` passed the original branded
+normal-hook attribution and independent synthetic document oracle. It used
+fresh owned roots, exact availability/source/schema proofs and the restored
+owned child configuration. Its successful bypass `hook.end` genuinely omitted
+`output`; the grader admits that shape only with current authenticated callback,
+control and independent native/root/tool/audit evidence. The verdict was
+`passed-attribution-only`, `grammarHit: false`, not macro lifecycle acceptance.
+It observed three assistant turn starts and one model-start/call pair; service
+usage and the role of the recorded auxiliary model remain unknown.
+All 15 independently frozen owned identities, listener and window were absent
+after cleanup. Earlier failed attempts remain failed.
+
+**Current task gate:** `attributionOnly: true` admits one bounded ordinary
+synthetic baseline only after current prerequisites and the branded
+`native-normal-hook-callback-v1` grader interface are available. It requires
+`restart: false`; capture, publication, reuse, restart and WorkIQ are not admitted
+by this mode. Normal execution permissions remain unchanged. Null callbacks,
+JSON copies, missing current root terminal/interaction identity and unsuccessful
+hooks remain non-admitting. A proved ordinary `bypass` is not a grammar miss.
+MCP selected-source/finalized capture and restart receipt integration remain
+separate gates; offline tests are not native acceptance.
+
+The full live task path additionally requires the independent
+`native-finalized-selected-source-v1` grader capability. Its acquisition phase
+uses ordinary MCP mixed source capture, not caller-mode macro execution: native
+Prepare and Record commands are verified through actual owned RPC effects.
+The controller must observe both the actual armed lease and the claimed lease
+before product finalization; a jump directly to completed blocks rather than
+reconstructing a token. Actual subscribed SDK completion finalizes the source;
+no persisted `session.idle` is invented.
+
+The synchronous `readFinalizedSource({sessionId, tokenId})` capability closes
+over the admitted owned service, instance store and observed lease. It checks
+the current physical service identity and a stable, regular, bounded trace
+file, returning actual completed state, trace bytes/digest and store location.
+Neither callers nor public receipts can select an arbitrary root. JSON loses
+the function and callback brand. A separate read-only v1 synthetic source audit
+is explicitly non-admitting; private-artifact v2 is blocked there rather than
+silently treated as inline v1. The grader must independently join the finalized
+source with current native events, full fixture contents and backend audit.
+Until that capability is available, full launches block before any models.
+Capture alone does not authorize publication or prove grammar reuse/restart.
+
+Actual finalized training exposed a native persistence projection: its tool
+completion results omitted SDK `detailedContent` and `contents`, while the
+actual finalized SDK trace retained them. That attempt remains blocked; the
+controller never fills missing originals from the trace or weakens equality.
+The owned native extension now uses the public `session.on` subscription to
+journal only full original root events for the two exact synthetic document
+tools. Model messages, other servers and child tools are not copied. The
+opt-in writer has per-record/total bounds and writes only in the fresh owned
+data root.
+
+Current terminal evidence replaces a whole completion/start event only with
+its independently observed SDK original after exact event identity, timestamp,
+parent, actor, owner, session and native-projection correlation. Only the two
+source-documented rich result omissions (and a false transient flag) can differ
+in that projection; all other contradictions block. The original event itself
+is retained unchanged, not fabricated or assembled from stored trace values.
+The independent grader still compares full raw originals to the finalized
+source and backend audit. This synthetic observer is not WorkIQ/full-wave
+admission or an authorization to collect tenant originals.
+
+The observer's JavaScript observation clock and the SDK event timestamp are
+independent: an actual handler observation preceded its unchanged SDK timestamp
+by 1 ms. Observation times must lie inside the actual observer-installation
+window; emitted timestamps retain their separate exact native-event and trial
+window checks. Neither timestamp is rewritten, offset or given invented slack.
+
+**Fresh selected-source rehearsal:** CLI 1.0.95 passed both the ordinary baseline
+and the original branded MCP selected-source oracle, including actual
+armed/claimed/completed state, full SDK originals, the physical finalized v1
+trace and backend audit. Both tasks were correct with no grammar hit. The
+subsequent Prepare job genuinely failed extraction with an unresolved
+output uncertainty about showing fetched contents; the actual stored response
+contains the full synthetic document. The controller stops on that real failed
+job and retains `learningFailure` rather than retrying, approving a partial
+draft or changing the prompt. No publication, Direct reuse or restart passed.
+This is a correctness rehearsal, not a scored freeze or speedup measurement.
+It used 6 assistant starts and 2 recorded model-start/call pairs in 89.272 s;
+service preparation usage remains unknown. Independent cleanup verified all
+15 frozen owned identities, the listener and the window absent.
+
+A separate fresh run with the validated body-free extraction projection again
+passed all 33 ordinary and 40 selected-source checks. Its actual persisted
+recipe had no uncertainties: extraction passed. Preparation then failed during
+the build attempt with `Expected a learning JSON object with supported fields.`
+The failed job, its recipe and exact error are retained; an unavailable raw
+build response is not reconstructed or treated as a supported draft. This run
+also stopped before publication/reuse/restart, at 109.483 s with 6 assistant
+starts and 2 recorded model-start/call pairs. Independent cleanup verified
+16 frozen owned identities and no surviving process, listener or window.
+
+`retainSyntheticLearningResponses: true` is a separate, explicit diagnostic
+opt-in, limited to a full synthetic rehearsal with at most 20 target turns,
+300000 ms and no restart. The owned service receives only the fixed private
+build-response policy path; inherited diagnostic/approval flags are removed.
+After the actual armed source lease verifies its session and workspace, the
+controller writes a new immutable policy before submitting training. It binds
+the exact selected session, prompt, lookup title and dependent synthetic fetch
+ID. Missing session/source/policy evidence must fail rather than broaden scope.
+The product observer independently verifies the physical owned instance and
+persisted source, then retains at most two original build responses of at most
+256 KiB each in the private owned data root. It is not generic model logging,
+an execution grant, model-facing evidence or a grading/publication receipt.
+Normal runs without this opt-in do not enable response retention.
+
+**Fresh full learning/reuse correctness passed:** the bounded diagnostic run
+passed 33 ordinary baseline checks, 40 selected-source checks and 11 changed-
+document Direct reuse checks. Actual Prepare extraction/build/grammar succeeded,
+the complete two-tool draft was inspected, and the bounded external operator
+approved immutable version 2. Fetch used a recorded `stepResult` dependency on
+the current lookup identifier; reuse returned the complete different document
+with actual grammar attribution and native handled-hook completion. Normal
+execution consent/backend authorization was unchanged. The private initial
+build response was valid (3125 UTF-8 bytes); the historical malformed build
+field remains irrecoverable, not retrospectively diagnosed or accepted.
+The run finished in 157.174 s with 9 assistant starts and 3 recorded model
+start/call pairs. Independent cleanup found 17 owned identities and no remaining
+process/listener/window. This is unrecorded synthetic correctness, not a scored
+freeze, WorkIQ admission or matched speedup measurement.
+
+A separate fresh restart-enabled workflow passed ordinary and selected-source
+checks but stopped before publication/restart on a new extraction uncertainty
+about unique title matching and the intended fetched document. Its actual
+`extract: 1` failed job is retained; no uncertainty was filtered or prompt
+rescued. At 94.047 s/6 assistant starts, all 13 owned identities and its window/
+listener were independently absent. That attempt does not negate the preceding
+accepted learning/reuse sequence or establish restart acceptance.
+
+After the tested body-free dependency projection repair, another fresh
+restart-enabled workflow stopped at the ordinary baseline: the model inserted
+a blank line and Markdown hard-break spaces inside the fetched document.
+Every expected word/line was present, but the approved oracle deliberately
+requires contiguous verbatim document contents and correctly failed
+`full-exact-document-content`. No Record, learning or restart occurred.
+The 80.244 s/3-assistant-start attempt and all 15/0 cleanup evidence are retained.
+The controller does not normalize this failure, change the frozen prompt,
+retry the old session or loosen the exact oracle. A different rendering contract
+would require explicit separate approval and versioning.
+
+**Future synthetic rendered-content contract:** newly generated runs may explicitly
+set `renderingContract` to
+`{"protocolVersion":"synthetic-document-rendering-v2","fixtureShape":"synthetic-prose-lines-v1"}`.
+Their manifest and result declare `macro-native-rehearsal-v2` and the complete
+contract, which is passed to every trial grade. Absence preserves the historical
+contiguous-verbatim v1 oracle; existing results are never regraded.
+
+This output-only contract permits a 1–6 `#` heading prefix followed by one ASCII
+space on the title, strictly empty separator lines, and at least two trailing
+ASCII Markdown hard-break spaces on originally unpadded prose lines. All other
+characters, case, punctuation, interior spacing and line order must remain exact
+in a complete line-bounded region. It does not perform general Markdown, newline,
+word or whitespace normalization. Fixtures must have a `synthetic-doc-*` identity,
+the title as their first line, and at least two nonempty unpadded ASCII prose
+lines matching the grader's explicit whitelist. Raw/code/indented/Markdown/table
+or non-synthetic fixture shapes block, even with a verbatim answer; there is no
+fallback. Source originals, SDK results, permissions, lease, callback brand,
+backend effects and WorkIQ admission remain unchanged.
+
+The first fresh v2 restart-enabled rehearsal correctly failed its ordinary
+baseline: the native answer wrapped the unchanged document in a `text` code
+fence, which is outside this contract. All other 32 ordinary checks passed,
+including current branded callback, exact lookup/dependent fetch and backend
+effects; `taskCorrect` was false and `grammarHit` false. No capture, learning,
+publication, reuse or restart occurred. Its new v2 manifest/result remain failed,
+without prompt rescue or normalization. The run used 3 assistant starts and
+3 recorded model-start/call pairs in 73.352 s; persisted model labels
+`gpt-5.6-luna-utility` and `gpt-4o-mini` do not establish root/runner roles.
+Independent cleanup verified 13 owned identities and no surviving process,
+receipt peer, listener or window. This is a concrete unsupported-output-format
+blocker, not live acceptance, WorkIQ admission or a benchmark.
+
+**Future exact plain-text fence contract:** explicit
+`{"protocolVersion":"synthetic-document-rendering-v3","fixtureShape":"synthetic-prose-lines-v1"}`
+selects `macro-native-rehearsal-v3` in new manifests/results. The pre-model gate
+requires the separate tested `syntheticDocumentFenceRenderingContract` capability;
+the frozen v2 export does not authorize v3. Every trial receives the declared
+contract without inferring a version from its answer.
+
+Without fence markers, v3 retains the narrow v2 prose rules. With markers, it
+requires exactly one column-zero opening ` ```text ` or unlabeled ` ``` `
+and one exact closing ` ``` `. The entire original document, including its
+title, must occur unchanged inside that single fence. Outside prose/heading
+cannot replace missing inside text. Extra, nested, malformed, indented, tilde
+or executable-language fences reject; there is no generic normalization or
+plain-region fallback around unsafe fences. Supported synthetic fixture shapes
+and all original source/permission/effect guards remain unchanged.
+
+Historical v1/v2 semantics and results remain frozen: default v1 already permits
+an exact-body fence through its contiguous-substring oracle; v2 rejects that
+wrapper, and v3 explicitly admits it. V1 still rejects internal blank-line/
+hard-break decoration that interrupts its expected document string. The failed
+v2 run above is never regraded under this new contract.
+
+The native interaction classifier recognizes the exact standalone informational
+notice “Approval of a saved macro does not grant tool permissions.” even when
+the preceding status heading has scrolled out of the viewport. It supplies no
+input for that notice; appended unknown questions and actual consent dialogs
+still fail closed or require their existing exact scoped approval.
+
+The fresh normal v3 recovery rehearsal passed baseline (33 checks), selected
+training (40 checks), finalized capture and bounded review/version-2 publication.
+Changed-document Direct reuse reached the actual grammar route and handled-hook
+terminal, but correctly failed v3 rendering: the runner prefixed each document
+line with a Markdown blockquote (`> `), which neither narrow prose nor the exact
+single-fence contract admits. Restart was not attempted after failed reuse.
+This is not restart acceptance, and no historical result was regraded or
+rendering/permission contract widened.
+
+Future blockquote-aware scoring is a separate explicit opt-in:
+`{"protocolVersion":"synthetic-document-rendering-v4","fixtureShape":"synthetic-prose-lines-v1"}`
+declares `macro-native-rehearsal-v4` in new manifests/results. Native preboot
+requires the separately tested `syntheticDocumentBlockquoteRenderingContract`
+capability; v2/v3 exports cannot admit v4. Every trial receives the configured
+contract without inferring it from the answer.
+
+V4 retains v3's narrow prose/exact single-fence alternatives, or accepts the
+complete original document with exactly one literal `> ` prefix on every line.
+All remaining text, bytes, whitespace and order must match the original; mixed,
+nested, missing/extra or internally decorated quoted lines and quoted fences
+are not normalized. No generic blockquote stripping or content normalization
+is allowed. Historical v1/v2/v3 contracts and results remain frozen; the failed
+v3 reuse above remains failed, not retroactively accepted under v4.
+
+Future experimental answer similarity supersedes further formatting-wrapper
+enumeration for new rehearsals. It is explicit v5, not a change to any prior
+oracle:
+
+```json
+{
+  "protocolVersion": "synthetic-document-similarity-v5",
+  "fixtureShape": "synthetic-prose-lines-v1",
+  "fixtureId": "macro-eval-synthetic-prose-fixture-v1",
+  "algorithm": "ordered-levenshtein-codepoints-v1",
+  "threshold": 0.9,
+  "protectedDocuments": [
+    {
+      "key": "<every trusted corpus document key>",
+      "title": "<exact title>",
+      "expectedId": "<exact current fixture ID>",
+      "contentSha256": "<SHA-256 of untouched source content>",
+      "markers": ["<source line at zero-based index 1>", "<source last line>"]
+    }
+  ]
+}
+```
+
+The declaration requires exact keys, the fixed numeric threshold/algorithm and
+known fixture ID, and complete unique metadata for **all** trusted fixture
+documents. Hashes, IDs, titles and both distinct literal marker roles are checked
+against the source corpus before any target submission. The native manifest and
+result declare `macro-native-rehearsal-v5`; preboot requires the new tested
+`syntheticDocumentSimilarityContract` export, never a v2/v3/v4 capability.
+The full effective contract is snapshotted before each trial, persisted with
+that trial (including an incomplete trial), and passed unchanged to grading.
+Normal native changed-document reuse selects a different document in the same
+immutable corpus; stale metadata for mutated expected IDs/content rejects before
+submission rather than silently adopting a changed digest.
+
+V5 scores only the bounded title-through-last-marker answer region using
+deterministic ordered Unicode-codepoint Levenshtein similarity
+`1 - distance / max(expectedLength, actualLength) >= 0.9`. Exact title and both
+unique fixture markers must occur in their expected order in that same scored
+region, with the first marker immediately following the normalized title line
+and the last marker ending the region; foreign fixture markers reject.
+The answer score is approximate after
+bounded display-only normalization, **not** full-content exact preservation.
+That normalization converts CRLF to LF, trims/collapses ASCII spaces and tabs,
+omits empty lines and code-fence delimiter lines, and makes at most four passes
+peeling explicit heading/quote/list/numbered-list prefixes and whole-line
+bold/inline-code wrappers. It does not change case, words, digits or punctuation,
+or compare unordered sets. The best valid anchored region is selected within
+fixed bounds: 65536 input length, 1024 document/region codepoints, 64 region
+lines, eight candidates and two million dynamic-programming cells with two-row
+memory. Exceeded bounds fail explicitly rather than falling back.
+Numeric metric/threshold, distance/denominator and anchor/region diagnostics
+remain in each trial's `grade.answerScoring`.
+Source originals, SDK originals, document identities, dependencies, audit,
+permissions, grammar attribution and native completion remain strict.
+No WorkIQ oracle or historical v1/v2/v3/v4 result is regraded under v5.
+Negative-intent cases declare the experimental criterion inapplicable; they are
+never accepted by fuzzy document scoring.
+
+The first fresh normal v5 rehearsal passed baseline (38 checks, similarity 1)
+and selected training (45 checks, similarity 1), then finalized capture, bounded
+review and version-2 publication. Direct reuse reached the grammar route and
+handled-hook terminal with exactly one macro invocation and the expected
+lookup/fetch audit, but omitted the entire document body. Its answer instead
+summarized completed steps and claimed an unavailable `submit_macro_candidate`
+was required. No valid protected-anchor region existed, so similarity/distance/
+denominator remained null and all answer-anchor guards failed. The overall run
+remains failed; restart was not attempted. This is real answer content loss,
+not a formatting-wrapper or near-threshold failure. The retained evidence was
+handed to the engine owner for source-grounded diagnosis, without prompt rescue,
+regrading, permission changes or an unobservable same-model retry.
+
+The engine owner's tested completion-policy repair was then consumed by a
+separate fresh normal v5 run. Its baseline/source trials again passed at
+similarity 1, with finalized native SDK/source capture, but Prepare failed on a
+new strict grammar reproduction assertion for a generated Orion paraphrase.
+Publication, repaired RUN behavior and restart were not reached in that run.
+The failed job/trace remain preserved; no archived-job retry, manual draft,
+prompt rescue or scoring relaxation was used. That fresh-learning attempt did
+not reach live RUN acceptance; the separate catalog-only acceptance below does
+not repair or retrospectively accept its Prepare failure.
+Per-example grammar generation accepts any NFA hit, while macro preparation
+requires every combined-rule match to reproduce the exact expected action and
+inputs. That stronger guard may intentionally reject a generated rule; the
+discarded transient grammar tuple prevents distinguishing no-match from
+wrong/extra-match here. No compiler or guard defect was proved.
+
+#### Approved-catalog RUN/restart continuation
+
+To test an updated runner without repeating stochastic learning, the native
+controller supports one narrowly scoped, explicitly admitted
+`approvedCatalog` phase. It consumes the **actual persisted approved version**
+in its existing evaluator-owned store, not a copied catalog, new draft, or
+manual approval. This phase requires normal diagnostics-off v5 scoring,
+`restart: true`, `retainSyntheticLearningResponses: false`, and bounds no
+greater than 20 target turns / 300000ms.
+
+The exact declaration is
+`{artifactRoot, macroId, owner, restartCase, sourceHashes, version}`.
+`sourceHashes` requires SHA-256 pins for `owner`, `manifest`, `result`, `corpus`,
+`reviewedDraft`, `version`, `trace`, and `originals`. Admission verifies the
+recorded successful training/review/publication, immutable approved definition,
+finalized source identity, exact corpus, physical owned paths, prior cleanup,
+and current supported catalog inspection/validation. `restartCase` must name
+a distinct positive document in the same family, different from both learning
+and reuse documents.
+
+Output must be a **fresh direct child of the original owned root**. An exclusive
+phase lock protects the same canonical workspace/store. Only known
+runtime/config/control sidecars are temporarily retained and restored; new
+homes, staged runtime snapshots, manifest, audit, sessions and results remain
+separate phase artifacts. Learning is switched off through its supported RPC,
+then its previous preference is restored. Existing jobs/suppression and all
+pinned historical evidence must remain unchanged; unexpected learning state
+is reported, never erased. Grammar/body-response diagnostics stay off.
+
+The phase must independently pass current Direct reuse, stop its exact owned
+console/service, genuinely restart that service/store, and pass a fresh
+session's different-document reuse with the same approved version. Current
+SDK originals, audit, binding, native terminal, grammar route, permissions and
+experimental similarity/anchor guards are unchanged. Results distinguish old
+learning provenance from current runtime evidence. A passing continuation
+accepts **RUN/restart only**; new-learning/end-to-end reliability remains a
+separate, unexercised acceptance stage.
+
+A bounded current-runtime continuation subsequently **passed both stages**
+using the original actually approved `95717c0e…` version 2 in that same owned
+store. Direct Vega reuse scored 1.0 (distance 0 / denominator 113), and Lyra
+reuse after actual service restart and a distinct native session scored 1.0
+(0 / 104). Both exact titles and both fixture markers passed; both routes were
+grammar/version 2, with one whole-macro invocation and no write effects per
+trial. Current SDK originals, binding/audit and handled native completion
+passed independently. No new learning, publication, diagnostic response
+retention, tenant access, OBS or performance campaign occurred.
+
+Earlier continuation attempts exposed controller-only restart defects: a
+retired session's catalog admission and mixed-routing override survived restart,
+violating the unchanged strict initial bypass/delegate getter contract. The
+controller now archives and resets only those owned boot sidecars after exact
+shutdown, before fresh initialization. A separate preferences-array comparison
+bug was corrected to preserve the real row schema and exact owned workspace;
+jobs/suppression equality remains strict. Earlier results remain unchanged.
+
+The accepted phase used 6 bounded target turns (20 maximum); overall elapsed
+161300ms remained below 300000ms. These are raw observations, not speed or
+service-model-usage claims. All 48 persisted owned identities, exact windows
+and its receiver were independently absent; scoped history and the original
+learning preference were restored, with immutable version/source pins and
+existing jobs/suppression unchanged. The native slot was released.
+
+All trial timings end at the first observed native terminal, before callback
+grading/source-file verification; both ordinary baseline and Direct reuse use
+the same controller-submit boundary. Source finalization/preparation waits and
+cleanup are separately outside that per-trial latency, while the overall
+controller deadline still covers them.
 
 Metadata diagnostics seed an owned bypass config and opt-in control admission.
 They invoke the native SDK registry and existing local mode/status commands (not chat),
@@ -55,7 +491,8 @@ native model-start/call event is reported, including telemetry persisted during
 cleanup; service model usage remains unknown without a complete service contract.
 An empty canonical target-turn counter is never a zero-model claim.
 
-The bounded metadata diagnostic stopped before hook-registration consent with
+**Historical startup diagnostics (superseded, not admission evidence):** an
+earlier bounded metadata diagnostic stopped before hook-registration consent with
 pending fixture tool-name warnings. Four actual MCP startup receipts and the
 native-extension startup receipt agreed on the exact owned root/bypass/digest;
 they did **not** prove a native user-prompt invocation or SDK status runtime.
@@ -66,10 +503,9 @@ the actual native extension executable is `copilot.exe`, not Node.
 Metadata-only startup may defer catalog warnings only during exactly verified
 hook-registration consent, not subsequent general catalog loading. Unknown permissions,
 failed MCP initialization, model telemetry, persistent warnings at complete
-catalog, and any task admission remain strict failures. This correction is
-offline-tested, not reexecuted live. Per-request owned control mismatch now
-fails before service translation; fresh all-actor transitions and the bypass
-grader contract remain blocked.
+catalog, and any task admission remain strict failures. Per-request owned control mismatch fails before service translation.
+Fresh no-warning all-actor transitions now pass; ordinary-route and finalized
+capture acceptance still require their independent current physical evidence.
 
 With `diagnosticOnly: true`, the owned admission enables fixed bypass/delegate,
 MCP/mixed and Direct/mixed transitions using `commands.list/invoke` and
@@ -148,8 +584,8 @@ filter implementation, and the preserved startup log has no exact filter cause.
 Whether these tools are injected after filtering, included only in a wider
 snapshot, or executable despite restrictions remains unresolved.
 
-No launch or predicate was changed on that evidence. A smallest **proposed,
-unexecuted** follow-up is a newly authorized metadata-only run retaining the
+No launch or predicate was changed on that evidence. The then-proposed
+follow-up was a newly authorized metadata-only run retaining the
 existing allowlist and adding exactly
 `--excluded-tools extensions_reload extensions_manage`, then observing the
 initial owned getter and actual safe SDK snapshot. These documented exact
@@ -157,6 +593,34 @@ exclusions are a conservative hypothesis, not a demonstrated CLI fix or a
 permission grant. Remaining extra tools must still block; never invoke them to
 probe denial, silently filter them, or treat controls success as workflow/
 bridge admission.
+
+At the subsequent historical exclusion-test step, the owned launch included
+exact `--excluded-tools extensions_reload extensions_manage` arguments while
+retaining its original source-qualified document/task allowlist and ordinary
+execution permissions. That superseded mechanism is no longer emitted; current tests require Load Only,
+absence of these redundant exclusions and unchanged execution permissions. Public SDK authoring documentation confirms these management
+tools can scaffold/inspect extensions or stop/relaunch them; they are not exempt
+inventory entries.
+
+The single bounded CLI 1.0.95 exclusion attempt reached five connected MCP
+servers, but the actual viewport still warned that both management exclusions
+and both fixture allowlist selectors were unknown. It stopped before SDK
+registry/tool/getter queries; the pending diagnostic marker is not mode,
+inventory or callback proof. The guard now independently rejects excluded-list
+warnings as well as allowlist warnings. The 52.434-second attempt retained zero
+native model/target counters, unknown service usage, no task/capture, and verified
+cleanup of 12 frozen identities, the owned window and listener.
+
+GitHub's [extension documentation](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-cli-extensions)
+defines `/extensions mode` **Load Only** as keeping extensions running without
+agent management; **Load & Augment** is the default. Installed SDK schema uses
+`load_only`, but its persisted-extension discovery is not proof of the active
+launch's mode and provides no session extension-mode setter in the installed
+RPC surface. No unsupported launch flag, guessed owned settings field, silent
+warning exemption or generic management invocation was substituted. A supported
+owned Load Only transition and effective current inventory remain actual gates,
+not a ready configuration or an accepted workflow. Normal-hook attribution and
+synthetic execution remain frozen until those prerequisites genuinely pass.
 
 The offline entrypoint is `scripts/macro-eval.mjs`, with `plan`, `grade` and
 `report` commands. It takes explicit corpus/evidence files and refuses output

@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, collections } from "../index.js";
+import * as asyncArray from "../arrayAsync.js";
+import * as collections from "../lib/index.js";
 import { callWithRetry } from "../async.js";
 import { ScoredItem } from "../memory.js";
 import {

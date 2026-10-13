@@ -94,6 +94,7 @@ if (initialControl && controlDiagnosticEnabled(initialControl)) {
         session.rpc,
         initialControl,
         session.sessionId,
+        (handler) => session.on(handler),
     ).catch((error) =>
         console.error(
             `[control] ${error instanceof Error ? error.message : "Diagnostic failed"}`,

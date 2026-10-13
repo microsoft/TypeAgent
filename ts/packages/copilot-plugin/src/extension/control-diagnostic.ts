@@ -1,8 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { CopilotSession } from "@github/copilot-sdk";
-import { readFileSync, readdirSync, writeFileSync, renameSync } from "node:fs";
+import type { CopilotSession, SessionEventHandler } from "@github/copilot-sdk";
+import {
+    readFileSync,
+    readdirSync,
+    writeFileSync,
+    renameSync,
+    mkdirSync,
+    appendFileSync,
+    statSync,
+} from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { ControlMetadata } from "../shared/control-metadata.js";
@@ -14,7 +22,10 @@ import { createHash } from "node:crypto";
 
 type ControlRpc = {
     commands: Pick<CopilotSession["rpc"]["commands"], "list" | "invoke">;
-    tools: Pick<CopilotSession["rpc"]["tools"], "getCurrentMetadata">;
+    tools: Pick<
+        CopilotSession["rpc"]["tools"],
+        "getCurrentMetadata" | "initializeAndValidate"
+    >;
 };
 const mcpComponents = [
     "mcp-agent",
@@ -22,6 +33,70 @@ const mcpComponents = [
     "mcp-macros",
     "mcp-skills",
 ];
+
+export function observeSyntheticToolOriginals(
+    control: ControlMetadata,
+    sessionId: string,
+    subscribe: (handler: SessionEventHandler) => () => void,
+): { file: string; source: object; startedAt: string } | undefined {
+    const admission = JSON.parse(
+        readFileSync(
+            join(control.dataRoot, "native-control-admission.json"),
+            "utf8",
+        ),
+    );
+    if (admission.nativeSyntheticOriginals !== true) return undefined;
+    if (!/^[a-z0-9-]{1,128}$/iu.test(sessionId))
+        throw new Error("Unsafe native synthetic original session identity");
+    const directory = join(control.dataRoot, "native-sdk-originals");
+    mkdirSync(directory, { recursive: true });
+    const file = join(directory, `${sessionId}.jsonl`);
+    writeFileSync(file, "", { flag: "wx", mode: 0o600 });
+    const source = {
+        component: "native-sdk-synthetic-tool-originals",
+        pid: process.pid,
+        parentPid: process.ppid,
+        executable: process.execPath,
+        cwd: process.cwd(),
+    };
+    const selected = new Set<string>();
+    const startedAt = new Date().toISOString();
+    subscribe((event) => {
+        if (event.agentId) return;
+        if (event.type === "tool.execution_start") {
+            if (
+                event.data.mcpServerName !== "macro-eval-docs" ||
+                ![
+                    "macro-eval-docs-lookup_document",
+                    "macro-eval-docs-fetch_document",
+                ].includes(event.data.toolName)
+            )
+                return;
+            selected.add(event.data.toolCallId);
+        } else if (event.type === "tool.execution_complete") {
+            if (!selected.delete(event.data.toolCallId)) return;
+        } else return;
+        const row = JSON.stringify({
+            schemaVersion: 1,
+            owner: control.source.owner,
+            sessionId,
+            source,
+            observedAt: new Date().toISOString(),
+            event,
+        });
+        if (
+            Buffer.byteLength(row) > 64 * 1024 ||
+            statSync(file).size + Buffer.byteLength(row) > 2 * 1024 * 1024
+        ) {
+            store(`${file}.failed.json`, {
+                error: "Bounded synthetic SDK original journal exceeded",
+            });
+            return;
+        }
+        appendFileSync(file, `${row}\n`, { encoding: "utf8", mode: 0o600 });
+    });
+    return { file, source, startedAt };
+}
 
 function store(file: string, value: unknown): void {
     const pending = `${file}.pending`;
@@ -338,6 +413,7 @@ export async function runControlDiagnostic(
     rpc: ControlRpc,
     control: ControlMetadata,
     sessionId: string,
+    subscribe?: (handler: SessionEventHandler) => () => void,
 ): Promise<void> {
     const file = join(
         control.dataRoot,
@@ -350,9 +426,12 @@ export async function runControlDiagnostic(
         commandNames?: string[];
         registryNames?: string[];
         tools?: unknown;
+        initialTools?: unknown;
         initialControl?: unknown;
         catalogAdmission?: unknown;
         workflowGates?: unknown[];
+        toolInitialization?: unknown;
+        toolOriginals?: unknown;
         error?: string;
         callback: null;
         capture: null;
@@ -369,6 +448,12 @@ export async function runControlDiagnostic(
             result.catalogAdmission = admission;
             store(file, result);
         });
+        if (subscribe)
+            result.toolOriginals = observeSyntheticToolOriginals(
+                control,
+                sessionId,
+                subscribe,
+            );
         const registry = await rpc.commands.list();
         result.registryNames = registry.commands
             .map((command) => command.name)
@@ -386,10 +471,21 @@ export async function runControlDiagnostic(
         const status = select("typeagent-status");
         const modeCommand = select("typeagent-mode");
         result.commandNames = [status, modeCommand];
+        const initializationStartedAt = new Date().toISOString();
+        const initialization = await rpc.tools.initializeAndValidate();
+        result.toolInitialization = {
+            method: "session.tools.initializeAndValidate",
+            sessionId,
+            startedAt: initializationStartedAt,
+            completedAt: new Date().toISOString(),
+            returnedKeys: Object.keys(initialization),
+        };
+        store(file, result);
         result.tools = await toolCatalog(rpc, (projection) => {
             result.tools = projection;
             store(file, result);
         });
+        result.initialTools = result.tools;
         const initial = publishControlMetadata("native-extension-status");
         assertControlBinding(initial);
         if (
@@ -452,8 +548,16 @@ export async function runControlDiagnostic(
         )
             ? "passed-metadata-only"
             : "blocked";
-        if (result.status === "blocked")
+        const warnings =
+            JSON.parse(readFileSync(admissionFile, "utf8"))
+                .diagnosticRestrictionWarnings ?? [];
+        if (warnings.length) {
+            result.status = "blocked";
             result.error =
+                "Read-only SDK inventory and pure controls collected; native restriction warnings remain unresolved";
+        }
+        if (result.status === "blocked")
+            result.error ??=
                 "Pure mode/getter transitions proved; exact SDK workflow catalog/schema remains blocked";
     } catch (error) {
         result.status = "blocked";

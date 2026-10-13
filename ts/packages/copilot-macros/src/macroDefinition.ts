@@ -84,7 +84,7 @@ type BoundValueExpression = Exclude<ValueExpression, { kind: "template" }>;
 
 function findPriorResultExpression(
     leaf: unknown,
-    priorSteps: MacroStep[],
+    priorSteps: Pick<MacroStep, "id">[],
     priorCalls: RecordedInteractionTrace["toolCalls"],
 ): BoundValueExpression | undefined {
     if (typeof leaf !== "string" || leaf === "[REDACTED]" || leaf.length < 3) {
@@ -199,6 +199,44 @@ function convertArguments(
         : { kind: "template", value, bindings };
 }
 
+export function getRecordedArgumentDependencies(
+    trace: RecordedInteractionTrace,
+) {
+    return trace.toolCalls.map((call, index) => {
+        const priorCalls = trace.toolCalls
+            .slice(0, index)
+            .filter((prior) => prior.status === "completed")
+            .map((prior) => ({ ...prior, result: learningToolResult(prior) }));
+        const priorSteps = priorCalls.map((prior) => ({
+            id: prior.toolCallId,
+        }));
+        const dependencies =
+            call.status !== "completed"
+                ? []
+                : collectLeafPaths(call.arguments).flatMap((argumentPath) => {
+                      let leaf: unknown = call.arguments;
+                      for (const segment of argumentPath)
+                          leaf = (leaf as Record<string, unknown>)[segment];
+                      const expression = findPriorResultExpression(
+                          leaf,
+                          priorSteps,
+                          priorCalls,
+                      );
+                      return expression?.kind === "stepResult" ||
+                          expression?.kind === "resultPath"
+                          ? [
+                                {
+                                    argumentPath,
+                                    sourceToolCallId: expression.stepId,
+                                    expressionKind: expression.kind,
+                                },
+                            ]
+                          : [];
+                  });
+        return { toolCallId: call.toolCallId, dependencies };
+    });
+}
+
 export async function induceMacroFromTrace(
     traceId: string,
     trace: RecordedInteractionTrace,
@@ -303,39 +341,42 @@ export async function induceMacroFromTrace(
     return macro;
 }
 
+function validateTemplateExpression(
+    expression: Extract<ValueExpression, { kind: "template" }>,
+    macro: CopilotToolMacro,
+    stepIndex: number,
+): string | undefined {
+    if (expression.bindings.length === 0) {
+        return "A template expression requires at least one binding.";
+    }
+    for (const binding of expression.bindings) {
+        if (binding.path.length === 0) {
+            return "A template binding requires a non-empty path.";
+        }
+        let target = expression.value;
+        for (const segment of binding.path) {
+            if (
+                target === null ||
+                typeof target !== "object" ||
+                !Object.prototype.hasOwnProperty.call(target, segment)
+            ) {
+                return `Template binding path is unavailable: ${binding.path.join(".")}`;
+            }
+            target = (target as Record<string, unknown>)[segment];
+        }
+        const error = validateExpression(binding.expression, macro, stepIndex);
+        if (error) return error;
+    }
+    return undefined;
+}
+
 function validateExpression(
     expression: ValueExpression,
     macro: CopilotToolMacro,
     stepIndex: number,
 ): string | undefined {
-    if (expression.kind === "template") {
-        if (expression.bindings.length === 0) {
-            return "A template expression requires at least one binding.";
-        }
-        for (const binding of expression.bindings) {
-            if (binding.path.length === 0) {
-                return "A template binding requires a non-empty path.";
-            }
-            let target = expression.value;
-            for (const segment of binding.path) {
-                if (
-                    target === null ||
-                    typeof target !== "object" ||
-                    !Object.prototype.hasOwnProperty.call(target, segment)
-                ) {
-                    return `Template binding path is unavailable: ${binding.path.join(".")}`;
-                }
-                target = (target as Record<string, unknown>)[segment];
-            }
-            const error = validateExpression(
-                binding.expression,
-                macro,
-                stepIndex,
-            );
-            if (error) return error;
-        }
-        return undefined;
-    }
+    if (expression.kind === "template")
+        return validateTemplateExpression(expression, macro, stepIndex);
     if (expression.kind === "input") {
         return macro.inputs.some((input) => input.name === expression.name)
             ? undefined

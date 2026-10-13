@@ -4,12 +4,24 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { execFileSync } from "node:child_process";
 import { createRequire, isBuiltin } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { documentFamilyId, getScenarioCases } from "./macro-eval-corpus.mjs";
 import { gradeDocumentTrial } from "./macro-eval-grade.mjs";
+import * as macroGradeContract from "./macro-eval-grade.mjs";
+import {
+    stageNativeNormalHook,
+    startNativeNormalHookReader,
+} from "./macro-eval-native-bridge.mjs";
+import {
+    validateApprovedCatalogConfig,
+    verifyApprovedCatalogSource,
+    ownApprovedCatalogPhase,
+    verifyApprovedVersionUnchanged,
+} from "./macro-eval-native-approved.mjs";
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const tsRoot = path.resolve(scripts, "..", "..", "..");
@@ -30,6 +42,68 @@ export class NativeStop extends Error {
     }
 }
 
+export function completeNativeRestrictionReadiness(
+    state,
+    diagnostic,
+    controlProofs,
+    sessionId,
+) {
+    const initialization = diagnostic.toolInitialization;
+    if (
+        !state ||
+        state.phase !== "initializing" ||
+        diagnostic.sessionId !== sessionId ||
+        initialization?.method !== "session.tools.initializeAndValidate" ||
+        initialization.sessionId !== sessionId ||
+        !Array.isArray(initialization.returnedKeys) ||
+        initialization.returnedKeys.length !== 0 ||
+        !Number.isFinite(Date.parse(initialization.startedAt)) ||
+        Date.parse(initialization.startedAt) < Date.parse(state.startedAt) ||
+        Date.parse(initialization.completedAt) <
+            Date.parse(initialization.startedAt) ||
+        !Number.isFinite(Date.parse(initialization.completedAt)) ||
+        Date.parse(initialization.completedAt) > Date.now() ||
+        state.warnings.some(
+            (warning) =>
+                !Number.isFinite(Date.parse(warning.firstObservedAt)) ||
+                Date.parse(warning.firstObservedAt) >
+                    Date.parse(initialization.startedAt),
+        ) ||
+        controlProofs.length !== 4 ||
+        !controlProofs.every((proof) => proof.passed === true)
+    )
+        throw new NativeStop(
+            "Current runtime initialization/session/owned controls are unproved",
+            "blocked",
+        );
+    if (
+        diagnostic.status !== "passed-metadata-only" &&
+        !(
+            state.warnings.length > 0 &&
+            diagnostic.status === "blocked" &&
+            diagnostic.error ===
+                "Read-only SDK inventory and pure controls collected; native restriction warnings remain unresolved"
+        )
+    )
+        throw new NativeStop(
+            "Native metadata diagnostic failed beyond retained startup warnings",
+            "blocked",
+        );
+    const catalog = verifyNativeFixtureCatalogs(diagnostic);
+    state.phase = "verified";
+    state.proof = {
+        kind: "native-effective-tools-readiness-v1",
+        sessionId,
+        observedAt: new Date().toISOString(),
+        initialization,
+        catalog,
+        retainedStartupWarnings: state.warnings,
+        semantics:
+            "Current runtime list initialized/validated and five unfiltered source/schema inventories proved after startup. Retained earlier warning strings are not a current-policy oracle; other/new selector warnings still reject. Availability is not execution permission.",
+    };
+    return state.proof;
+}
+
 export function validateNativeConfig(config, corpus) {
     const allowed = new Set([
         "cliExecutable",
@@ -47,6 +121,11 @@ export function validateNativeConfig(config, corpus) {
         "reviewSyntheticDraft",
         "executionPath",
         "diagnosticOnly",
+        "extensionMode",
+        "attributionOnly",
+        "retainSyntheticLearningResponses",
+        "renderingContract",
+        "approvedCatalog",
     ]);
     if (!config || typeof config !== "object" || Array.isArray(config))
         throw new Error("Native configuration must be an object");
@@ -96,6 +175,9 @@ export function validateNativeConfig(config, corpus) {
                 `${name} must be an integer between 1 and ${maximum}`,
             );
     validateDiagnosticBounds(config);
+    validateLearningDiagnosticBounds(config);
+    validateNativeScoringConfig(config, corpus);
+    validateNativeApprovedPhaseConfig(config);
     for (const name of [
         "restart",
         "approveSyntheticReadsOnce",
@@ -106,7 +188,109 @@ export function validateNativeConfig(config, corpus) {
     return selectNativeCases(config, corpus);
 }
 
+function validateNativeScoringConfig(config, corpus) {
+    nativeScoringDeclaration(config);
+    if (
+        config.renderingContract?.protocolVersion ===
+        "synthetic-document-similarity-v5"
+    )
+        macroGradeContract.validateSyntheticDocumentScoringContract(
+            config.renderingContract,
+            corpus,
+        );
+}
+
+function validateNativeApprovedPhaseConfig(config) {
+    if (config.approvedCatalog === undefined) return;
+    validateApprovedCatalogConfig(config.approvedCatalog);
+    if (
+        config.restart !== true ||
+        config.diagnosticOnly ||
+        config.attributionOnly ||
+        config.retainSyntheticLearningResponses !== false ||
+        config.renderingContract?.protocolVersion !==
+            "synthetic-document-similarity-v5" ||
+        config.maxTargetModelTurns > 20 ||
+        config.maxDurationMs > 300000
+    )
+        throw new NativeStop(
+            "Approved catalog phase requires normal diagnostics-off bounded v5 reuse and restart",
+            "blocked",
+        );
+}
+
+export function nativeScoringDeclaration(config) {
+    const contract = config.renderingContract;
+    if (contract === undefined)
+        return { protocol: "macro-native-rehearsal-v1" };
+    if (contract?.protocolVersion === "synthetic-document-similarity-v5") {
+        macroGradeContract.validateSyntheticRenderingContract(contract);
+        return {
+            protocol: "macro-native-rehearsal-v5",
+            renderingContract: structuredClone(contract),
+        };
+    }
+    if (
+        !contract ||
+        typeof contract !== "object" ||
+        Array.isArray(contract) ||
+        !isDeepStrictEqual(Object.keys(contract).sort(), [
+            "fixtureShape",
+            "protocolVersion",
+        ]) ||
+        ![
+            "synthetic-document-rendering-v2",
+            "synthetic-document-rendering-v3",
+            "synthetic-document-rendering-v4",
+        ].includes(contract.protocolVersion) ||
+        contract.fixtureShape !== "synthetic-prose-lines-v1"
+    )
+        throw new Error(
+            "Explicit exact synthetic-document-rendering-v2, synthetic-document-rendering-v3 or synthetic-document-rendering-v4 contract and synthetic-prose-lines-v1 fixtureShape required",
+        );
+    return {
+        protocol: {
+            "synthetic-document-rendering-v2": "macro-native-rehearsal-v2",
+            "synthetic-document-rendering-v3": "macro-native-rehearsal-v3",
+            "synthetic-document-rendering-v4": "macro-native-rehearsal-v4",
+        }[contract.protocolVersion],
+        renderingContract: { ...contract },
+    };
+}
+
+function validateLearningDiagnosticBounds(config) {
+    if (
+        config.retainSyntheticLearningResponses !== undefined &&
+        typeof config.retainSyntheticLearningResponses !== "boolean"
+    )
+        throw new Error("retainSyntheticLearningResponses must be boolean");
+    if (
+        config.retainSyntheticLearningResponses &&
+        (config.diagnosticOnly ||
+            config.attributionOnly ||
+            config.restart ||
+            config.maxTargetModelTurns > 20 ||
+            config.maxDurationMs > 300000)
+    )
+        throw new Error(
+            "Private synthetic learning diagnostics require a full max20/300000ms rehearsal without restart",
+        );
+}
+
 function validateDiagnosticBounds(config) {
+    if (
+        config.attributionOnly !== undefined &&
+        (config.attributionOnly !== true ||
+            config.diagnosticOnly ||
+            config.restart ||
+            config.maxTargetModelTurns > 20 ||
+            config.maxDurationMs > 300000)
+    )
+        throw new Error(
+            "Attribution rehearsal requires explicit max20/300000ms, no diagnostic or restart",
+        );
+    if (config.extensionMode !== "load_only")
+        throw new Error("Only explicit extensionMode load_only is supported");
     if (
         config.diagnosticOnly !== undefined &&
         typeof config.diagnosticOnly !== "boolean"
@@ -161,6 +345,408 @@ export function readNativeJsonl(file) {
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line));
+}
+
+function requireCapture(condition, message) {
+    if (!condition)
+        throw new NativeStop(
+            `Finalized selected source: ${message}`,
+            "blocked",
+        );
+}
+
+function selectedTraceFile(layout, summary) {
+    requireCapture(
+        /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/iu.test(
+            summary?.traceId ?? "",
+        ),
+        "missing exact finalized trace identity",
+    );
+    requireCapture(
+        readJson(path.join(layout.run, "evaluation-owner.json")).owner ===
+            layout.owner,
+        "owned root identity mismatch",
+    );
+    const file = path.join(
+        layout.data,
+        "profiles",
+        layout.instance,
+        "copilot-macros",
+        "traces",
+        `${summary.traceId}.json`,
+    );
+    requireCapture(
+        fs.existsSync(file) &&
+            !fs.lstatSync(file).isSymbolicLink() &&
+            fs.realpathSync(file) === file &&
+            fs.statSync(file).size <= 1024 * 1024,
+        "trace is missing, linked, relocated or exceeds the product bound",
+    );
+    return file;
+}
+
+function selectedTraceNative(events, prompt) {
+    const users = events.filter(
+        (event) =>
+            rootEvent(event) &&
+            event.type === "user.message" &&
+            event.data?.content === prompt,
+    );
+    const answers = events.filter(
+        (event) =>
+            rootEvent(event) &&
+            event.type === "assistant.message" &&
+            typeof event.data?.content === "string" &&
+            !event.data?.toolRequests?.length,
+    );
+    requireCapture(
+        users.length === 1 && answers.length === 1,
+        "current root prompt/answer missing or ambiguous",
+    );
+    const terminals = events.filter(
+        (event) =>
+            rootEvent(event) &&
+            event.type === "assistant.turn_end" &&
+            answers[0].data.turnId !== undefined &&
+            event.data?.turnId === answers[0].data.turnId,
+    );
+    requireCapture(terminals.length === 1, "current root terminal missing");
+    const index = (event) => events.indexOf(event);
+    requireCapture(
+        linked(events, index(users[0]), index(answers[0])) &&
+            linked(events, index(answers[0]), index(terminals[0])),
+        "root completion is not causally linked",
+    );
+    return { user: users[0], answer: answers[0], terminal: terminals[0] };
+}
+
+function projectedSdkEvent(original, persisted) {
+    const projected = structuredClone(original);
+    if (projected.ephemeral === false && persisted.ephemeral === undefined)
+        delete projected.ephemeral;
+    if (projected.type === "tool.execution_complete") {
+        for (const field of ["detailedContent", "contents"])
+            if (!Object.hasOwn(persisted.data.result ?? {}, field))
+                delete projected.data.result?.[field];
+    }
+    return projected;
+}
+
+export function mergeNativeSyntheticOriginals(events, rows, binding) {
+    const calls = new Set(
+        events
+            .filter(
+                (event) =>
+                    event.type === "tool.execution_start" &&
+                    rootEvent(event) &&
+                    event.data?.mcpServerName === "macro-eval-docs",
+            )
+            .map((event) => event.data.toolCallId),
+    );
+    const selected = events.filter(
+        (event) =>
+            ["tool.execution_start", "tool.execution_complete"].includes(
+                event.type,
+            ) &&
+            rootEvent(event) &&
+            calls.has(event.data?.toolCallId),
+    );
+    const replacements = new Map();
+    for (const persisted of selected) {
+        const candidates = rows.filter((row) => row.event?.id === persisted.id);
+        requireCapture(
+            candidates.length === 1,
+            "actual SDK original event missing/duplicated",
+        );
+        const original = candidates[0];
+        requireCapture(
+            original.schemaVersion === 1 &&
+                original.owner === binding.owner &&
+                original.sessionId === binding.sessionId &&
+                isDeepStrictEqual(original.source, binding.source) &&
+                Date.parse(original.observedAt) >=
+                    Date.parse(binding.startedAt) &&
+                Date.parse(original.observedAt) <= Date.now() &&
+                isDeepStrictEqual(
+                    projectedSdkEvent(original.event, persisted),
+                    persisted,
+                ),
+            "SDK original actor/session/current native projection disagreement",
+        );
+        replacements.set(persisted.id, original.event);
+    }
+    return events.map((event) => replacements.get(event.id) ?? event);
+}
+
+function nativeSdkOriginalEvents(context, sessionId, events) {
+    if (!context.sdkOriginalsBinding) return events;
+    const file = path.join(
+        context.data,
+        "native-sdk-originals",
+        `${sessionId}.jsonl`,
+    );
+    requireCapture(
+        context.sdkOriginalsBinding.file === file &&
+            !fs.existsSync(`${file}.failed.json`) &&
+            fs.existsSync(file) &&
+            fs.realpathSync(file) === file &&
+            fs.lstatSync(file).isFile() &&
+            fs.statSync(file).nlink === 1 &&
+            fs.statSync(file).size <= 2 * 1024 * 1024,
+        "owned SDK original journal unavailable/linked/failed",
+    );
+    return mergeNativeSyntheticOriginals(events, readNativeJsonl(file), {
+        ...context.sdkOriginalsBinding,
+        owner: context.owner,
+        sessionId,
+    });
+}
+
+function verifySelectedTraceCall(call, events, redactTraceValue) {
+    const starts = events.filter(
+        (event) =>
+            event.type === "tool.execution_start" &&
+            event.data?.toolCallId === call.toolCallId,
+    );
+    const ends = events.filter(
+        (event) =>
+            event.type === "tool.execution_complete" &&
+            event.data?.toolCallId === call.toolCallId,
+    );
+    requireCapture(
+        starts.length === 1 &&
+            ends.length === 1 &&
+            rootEvent(starts[0]) &&
+            rootEvent(ends[0]) &&
+            ends[0].data.success === true &&
+            linked(events, events.indexOf(starts[0]), events.indexOf(ends[0])),
+        "exact successful root tool pair missing",
+    );
+    const start = starts[0].data;
+    requireCapture(
+        call.status === "completed" &&
+            call.name === start.toolName &&
+            call.mcpServerName === "macro-eval-docs" &&
+            start.mcpServerName === "macro-eval-docs" &&
+            isDeepStrictEqual(
+                call.arguments,
+                redactTraceValue(start.arguments),
+            ) &&
+            isDeepStrictEqual(
+                call.result,
+                redactTraceValue(ends[0].data.result),
+            ) &&
+            call.resultArtifact === undefined &&
+            call.modelResultArtifact === undefined,
+        "tool source, arguments or full original result disagree",
+    );
+}
+
+function selectedTraceIdentity(trace, summary, layout, sessionId) {
+    return (
+        trace.schemaVersion === 1 &&
+        trace.capabilities === undefined &&
+        trace.handoffRunId === undefined &&
+        trace.traceId === summary.traceId &&
+        trace.sessionId === sessionId &&
+        summary.sessionId === sessionId &&
+        trace.cwd === layout.workspace &&
+        trace.createdAt === summary.createdAt
+    );
+}
+
+function selectedTraceTiming(trace, native) {
+    return (
+        trace.startedAt === native.user.timestamp &&
+        Date.parse(trace.completedAt) >= Date.parse(trace.startedAt) &&
+        Date.parse(trace.completedAt) <=
+            Date.parse(native.terminal.timestamp) &&
+        Date.parse(trace.createdAt) >= Date.parse(trace.completedAt) &&
+        Date.parse(trace.createdAt) <= Date.now()
+    );
+}
+
+function stableSelectedTrace(layout, snapshot, service) {
+    requireCapture(
+        snapshot?.state?.status === "completed",
+        "actual completed RPC snapshot missing",
+    );
+    const file = selectedTraceFile(layout, snapshot.state.trace);
+    const handle = fs.openSync(file, "r");
+    let bytes, before, after;
+    try {
+        before = fs.fstatSync(handle);
+        bytes = fs.readFileSync(handle);
+        after = fs.fstatSync(handle);
+    } finally {
+        fs.closeSync(handle);
+    }
+    const current = fs.statSync(file);
+    requireCapture(
+        ["ino", "dev", "size", "mtimeMs", "ctimeMs"].every(
+            (key) => before[key] === after[key] && after[key] === current[key],
+        ) && bytes.length === before.size,
+        "trace file changed during read",
+    );
+    return {
+        state: snapshot.state,
+        stateObservedAt: snapshot.observedAt,
+        observedAt: new Date().toISOString(),
+        file: {
+            path: file,
+            sha256: hash(bytes),
+            sizeBytes: before.size,
+            mtimeMs: before.mtimeMs,
+            ctimeMs: before.ctimeMs,
+            ino: before.ino,
+            dev: before.dev,
+        },
+        trace: JSON.parse(bytes.toString("utf8")),
+        source: {
+            owner: layout.owner,
+            instanceDir: path.join(layout.data, "profiles", layout.instance),
+            dataRoot: layout.data,
+            service,
+        },
+    };
+}
+
+export function bindNativeFinalizedSourceReader({ sessionId, tokenId, load }) {
+    requireCapture(
+        typeof sessionId === "string" &&
+            sessionId.length > 0 &&
+            typeof tokenId === "string" &&
+            tokenId.length > 0 &&
+            typeof load === "function",
+        "bound current lease and loader required",
+    );
+    const verified = load();
+    return (target) => {
+        requireCapture(
+            target?.sessionId === sessionId &&
+                target.tokenId === tokenId &&
+                Object.keys(target).length === 2,
+            "loader target differs from its actual selected lease",
+        );
+        const current = load();
+        requireCapture(
+            isDeepStrictEqual(current.file, verified.file) &&
+                isDeepStrictEqual(current.state.trace, verified.state.trace),
+            "finalized source changed after verification",
+        );
+        return {
+            observedAt: verified.observedAt,
+            state: verified.state,
+            trace: verified.trace,
+            storeRoot: path.join(verified.source.instanceDir, "copilot-macros"),
+            file: {
+                path: verified.file.path,
+                sha256: verified.file.sha256,
+            },
+        };
+    };
+}
+
+// A local source audit, not a grading receipt or a substitute for its branded callback.
+export async function verifyNativeFinalizedCapture({
+    layout,
+    state,
+    events,
+    scenario,
+    sessionId,
+}) {
+    requireCapture(state?.status === "completed", "recording is not finalized");
+    const file = selectedTraceFile(layout, state.trace);
+    const bytes = fs.readFileSync(file);
+    const trace = JSON.parse(bytes.toString("utf8"));
+    const { redactTraceValue } = await import(
+        pathToFileURL(
+            path.join(
+                tsRoot,
+                "packages",
+                "copilot-macros",
+                "dist",
+                "redaction.js",
+            ),
+        )
+    );
+    const { ExtensionTraceAssembler } = await import(
+        pathToFileURL(
+            path.join(
+                tsRoot,
+                "packages",
+                "copilot-plugin",
+                "dist",
+                "extension",
+                "trace-assembler.js",
+            ),
+        )
+    );
+    const assembler = new ExtensionTraceAssembler(
+        sessionId,
+        layout.workspace,
+        true,
+    );
+    for (const event of events) assembler.record(event);
+    const assembled = assembler.finish(hash(redactTraceValue(scenario.prompt)));
+    const { traceId: _traceId, createdAt: _createdAt, ...storedTrace } = trace;
+    requireCapture(
+        assembled !== undefined &&
+            isDeepStrictEqual(storedTrace, redactTraceValue(assembled)),
+        "stored source differs from the product assembler's actual current events",
+    );
+    const native = selectedTraceNative(events, scenario.prompt);
+    requireCapture(
+        selectedTraceIdentity(trace, state.trace, layout, sessionId) &&
+            selectedTraceTiming(trace, native) &&
+            trace.prompt === redactTraceValue(scenario.prompt) &&
+            trace.response ===
+                redactTraceValue(
+                    events
+                        .filter(
+                            (event) =>
+                                rootEvent(event) &&
+                                event.type === "assistant.message" &&
+                                typeof event.data?.content === "string",
+                        )
+                        .map((event) => event.data.content)
+                        .join(""),
+                ),
+        "trace identity, workspace, full response or current timing mismatch",
+    );
+    requireCapture(
+        Array.isArray(trace.toolCalls) &&
+            trace.toolCalls.length === 2 &&
+            state.trace.toolCallCount === 2 &&
+            events.filter((event) => event.type === "tool.execution_start")
+                .length === 2 &&
+            new Set(trace.toolCalls.map((call) => call.toolCallId)).size ===
+                2 &&
+            isDeepStrictEqual(
+                trace.toolCalls.map((call) => call.name),
+                [
+                    "macro-eval-docs-lookup_document",
+                    "macro-eval-docs-fetch_document",
+                ],
+            ),
+        "exact two-call selected source required",
+    );
+    for (const call of trace.toolCalls)
+        verifySelectedTraceCall(call, events, redactTraceValue);
+    return {
+        kind: "native-finalized-synthetic-source-audit-v1",
+        admission: false,
+        traceFile: file,
+        sha256: hash(bytes),
+        summary: state.trace,
+        native: {
+            rootUserEventId: native.user.id,
+            answerEventId: native.answer.id,
+            terminalEventId: native.terminal.id,
+            toolCallIds: trace.toolCalls.map((call) => call.toolCallId),
+        },
+        trace,
+    };
 }
 
 function linked(events, from, to) {
@@ -320,7 +906,8 @@ function nativeTerminalProof(events, answerIndex, answer) {
             index > answerIndex &&
             rootEvent(event) &&
             event.type === "assistant.turn_end" &&
-            answerEvent?.data.turnId &&
+            answerEvent?.data.turnId !== undefined &&
+            answerEvent?.data.turnId !== null &&
             event.data?.turnId === answerEvent.data.turnId &&
             linked(events, answerIndex, index),
     );
@@ -425,9 +1012,27 @@ export function classifyNativeScreen(screen, workspace, consent) {
             "blocked",
         );
     }
+    // The status heading can scroll away while its exact informational notice
+    // remains. Remove only a complete notice line, never surrounding prompts.
+    let interactionText = screen
+        .replace(/[┃│]/gu, " ")
+        .replace(
+            /^[ \t]*Approval\s+of a saved macro does not grant tool permissions\.[ \t]*$/gmu,
+            "",
+        )
+        .replace(/\s+/gu, " ");
+    if (
+        /Macro learning: (?:off|prepare|read-only|all) \(/u.test(
+            interactionText,
+        )
+    )
+        interactionText = interactionText.replaceAll(
+            "Approval of a saved macro does not grant tool permissions.",
+            "",
+        );
     if (
         /sign in|authenticate|choose.*model|select.*model|allow all|permission|do you want|would you like|confirm|trust this|1\.\s+Yes/iu.test(
-            screen,
+            interactionText,
         )
     )
         throw new NativeStop(
@@ -437,10 +1042,10 @@ export function classifyNativeScreen(screen, workspace, consent) {
     return undefined;
 }
 
-export function reviewNativeDraft(draft, validation) {
+function reviewNativeDocumentMacro(draft, validation, expectedState) {
     if (
         !validation?.valid ||
-        draft?.state !== "draft" ||
+        draft?.state !== expectedState ||
         draft.inputs?.length !== 1 ||
         draft.steps?.length !== 2 ||
         !draft.learning?.requiresLivePermissions ||
@@ -455,6 +1060,53 @@ export function reviewNativeDraft(draft, validation) {
         throw new NativeStop("Unsafe learned title input", "blocked");
     const [lookup, fetch] = draft.steps;
     reviewProcedure(lookup, fetch, input);
+}
+
+export function reviewNativeDraft(draft, validation) {
+    reviewNativeDocumentMacro(draft, validation, "draft");
+}
+
+export function reviewNativeApprovedMacro(macro, validation, source) {
+    reviewNativeDocumentMacro(macro, validation, "approved");
+    if (!isDeepStrictEqual(macro, source.macro))
+        throw new NativeStop(
+            "Current approved catalog version differs from pinned historical approval",
+            "blocked",
+        );
+    verifyApprovedVersionUnchanged(source);
+}
+
+export function reviewNativePublicationBinding(
+    draft,
+    recording,
+    sourceAudit,
+    workspace,
+) {
+    const summary = sourceAudit.summary;
+    const job = recording.learningJob;
+    const reference = job?.macro;
+    requireCapture(
+        recording.status === "completed" &&
+            recording.trace?.traceId === summary.traceId &&
+            recording.trace.sessionId === summary.sessionId &&
+            job?.status === "needsReview" &&
+            job.traceId === summary.traceId &&
+            job.sessionId === summary.sessionId &&
+            job.mode === "prepare" &&
+            job.cwd === path.resolve(workspace).toLowerCase() &&
+            recording.trace.learningJobId === job.jobId &&
+            draft.sourceTraceId === summary.traceId &&
+            draft.macroId === reference?.macroId &&
+            draft.version === reference?.version &&
+            draft.learning?.jobId === job.jobId &&
+            draft.learning.mode === "prepare" &&
+            draft.learning.cwd === job.cwd &&
+            isDeepStrictEqual(
+                draft.steps.map((step) => step.sourceToolCallId),
+                sourceAudit.native.toolCallIds,
+            ),
+        "reviewed draft is not the current selected source/job/immutable version",
+    );
 }
 
 function reviewProcedure(lookup, fetch, input) {
@@ -493,8 +1145,19 @@ export function createNativeBudget(config, signal, clock = Date.now) {
     const deadline = clock() + config.maxDurationMs;
     let turns = 0;
     const seen = new Set();
+    const observe = (events) => {
+        for (const event of events)
+            if (event.type === "assistant.turn_start" && !seen.has(event.id)) {
+                if (!event.id)
+                    throw new NativeStop("Model turn lacks native identity");
+                seen.add(event.id);
+                turns++;
+            }
+    };
     return {
+        observe,
         check(events = []) {
+            observe(events);
             if (signal?.aborted)
                 throw new NativeStop("Native evaluation cancelled", "blocked");
             if (clock() >= deadline)
@@ -502,18 +1165,14 @@ export function createNativeBudget(config, signal, clock = Date.now) {
                     "Native evaluation deadline exceeded",
                     "blocked",
                 );
-            for (const event of events)
-                if (
-                    event.type === "assistant.turn_start" &&
-                    !seen.has(event.id)
-                ) {
-                    if (!event.id)
-                        throw new NativeStop(
-                            "Model turn lacks native identity",
-                        );
-                    seen.add(event.id);
-                    turns++;
-                }
+            if (
+                this.restrictionReadiness?.phase === "initializing" &&
+                clock() >= this.restrictionReadiness.deadlineMs
+            )
+                throw new NativeStop(
+                    "Native read-only tool initialization deadline exceeded",
+                    "blocked",
+                );
             if (turns > config.maxTargetModelTurns)
                 throw new NativeStop(
                     "Native target model turn bound exceeded",
@@ -550,6 +1209,14 @@ function ownLayout(output, config) {
         fs.mkdirSync(dir);
     fs.writeFileSync(layout.audit, "", { flag: "wx", mode: 0o600 });
     return layout;
+}
+
+function artifactDirectory(layout) {
+    return layout.approvedPhase?.artifacts ?? layout.run;
+}
+
+function nativeManifestFile(layout) {
+    return path.join(artifactDirectory(layout), "manifest.json");
 }
 
 function inventory(directory) {
@@ -707,7 +1374,7 @@ export function verifyNativeStagedManifest(plugin, extensionSource) {
 
 export function validateNativeObservation(
     observation,
-    { allowMetadataCatalogPending = false } = {},
+    { allowMetadataCatalogPending = false, restrictionReadiness } = {},
 ) {
     if (
         /Failed to connect to MCP server|MCP Servers reloaded:.*\bfailed\b/u.test(
@@ -719,7 +1386,10 @@ export function validateNativeObservation(
             "blocked",
         );
     if (
-        /Unknown tool name in the tool allowlist:/u.test(observation.screen) &&
+        /Unknown tool name in the tool (?:allowlist|excludedlist):/u.test(
+            observation.screen,
+        ) &&
+        !retainReadinessWarnings(observation, restrictionReadiness) &&
         (!allowMetadataCatalogPending ||
             nativeCatalogReady(
                 observation.screen,
@@ -727,7 +1397,7 @@ export function validateNativeObservation(
             ))
     )
         throw new NativeStop(
-            "Native CLI reports unresolved tool allowlist names; exact tool restriction readiness is unproved",
+            "Native CLI reports unresolved tool restriction names; exact tool restriction readiness is unproved",
             "blocked",
         );
     const failed = observation.events.find(
@@ -738,6 +1408,281 @@ export function validateNativeObservation(
             `Native hook failed: ${failed.data.error?.message ?? "unknown hook error"}`,
             "failed",
         );
+}
+
+function retainReadinessWarnings(observation, state) {
+    if (!state || !["initializing", "verified"].includes(state.phase))
+        return false;
+    if (
+        state.phase === "initializing" &&
+        observation.events.some((event) =>
+            [
+                "assistant.turn_start",
+                "model.turn_started",
+                "model.model_call_started",
+            ].includes(event.type),
+        )
+    )
+        throw new NativeStop(
+            "Tool readiness observed model generation before admission",
+            "blocked",
+        );
+    const warnings = [
+        ...observation.screen.matchAll(
+            /Unknown tool name in the tool (allowlist|excludedlist):\s*"([^"]+)"/gu,
+        ),
+    ].map((match) => ({ list: match[1], selector: match[2] }));
+    if (
+        !warnings.length ||
+        warnings.some(
+            (warning) =>
+                warning.list !== "allowlist" ||
+                !state.selectors.includes(warning.selector),
+        )
+    )
+        return false;
+    if (
+        state.phase === "verified" &&
+        observation.screen.lastIndexOf("Unknown tool name") >
+            observation.screen.lastIndexOf("MCP Servers reloaded:")
+    )
+        return false;
+    for (const warning of warnings) {
+        const prior = state.warnings.find(
+            (entry) =>
+                entry.list === warning.list &&
+                entry.selector === warning.selector,
+        );
+        if (!prior) {
+            if (state.phase === "verified") return false;
+            state.warnings.push({
+                ...warning,
+                firstObservedAt: new Date().toISOString(),
+            });
+        }
+    }
+    return true;
+}
+
+export function nativeLoadOnlySelection(screen) {
+    const choices = [
+        ...screen.matchAll(
+            /^\s*(?:❯\s*)?([1-3])\.\s*(Load & Augment|Load Only|Disabled)\b/gmu,
+        ),
+    ];
+    if (
+        choices.length !== 3 ||
+        new Set(choices.map((choice) => choice[1])).size !== 3 ||
+        new Set(choices.map((choice) => choice[2])).size !== 3
+    )
+        throw new NativeStop(
+            "Unsupported extension mode dialog; no selection submitted",
+            "blocked",
+        );
+    return choices.find((choice) => choice[2] === "Load Only")[1];
+}
+
+export function nativeLoadOnlyControl(screen, navigated = false) {
+    const rows = screen
+        .split(/\r?\n/u)
+        .map((line) => line.replace(/^\s*│\s*/u, "").replace(/\s*│\s*$/u, ""));
+    const choices = rows.flatMap((line) => {
+        const match = line.match(
+            /^\s*(❯\s*)?([●○])\s*(Load & Augment|Load Only|Disabled)\s*$/u,
+        );
+        return match ? [match] : [];
+    });
+    if (!choices.length)
+        return {
+            kind: "text",
+            value: nativeLoadOnlySelection(screen),
+            complete: true,
+        };
+    const active = choices.filter((choice) => choice[1]);
+    if (
+        choices.length !== 3 ||
+        new Set(choices.map((choice) => choice[3])).size !== 3 ||
+        choices.filter((choice) => choice[2] === "●").length !== 1 ||
+        active.length !== 1 ||
+        !/Extensions Mode/u.test(screen)
+    )
+        throw new NativeStop(
+            "Ambiguous extension radio mode dialog",
+            "blocked",
+        );
+    if (active[0][3] === "Load Only")
+        return { kind: "key", value: "Enter", complete: true };
+    if (active[0][3] !== "Load & Augment" || navigated)
+        throw new NativeStop(
+            "Unexpected extension radio mode focus",
+            "blocked",
+        );
+    return { kind: "key", value: "Down", complete: false };
+}
+
+function applyNativeLoadOnlyControl(adapter, context, screen, navigated) {
+    const action = nativeLoadOnlyControl(screen, navigated);
+    context.decisions.push({
+        at: new Date().toISOString(),
+        ...(action.kind === "key"
+            ? { key: action.value }
+            : { text: action.value }),
+        reason: "exact observed Load Only choice; no management invocation/grant",
+    });
+    if (action.kind === "key") {
+        if (typeof adapter.pressKey !== "function")
+            throw new NativeStop(
+                "Owned console key transport unavailable",
+                "blocked",
+            );
+        adapter.pressKey(action.value);
+    } else adapter.submit(action.value);
+    return action.complete;
+}
+
+export async function configureNativeLoadOnly(
+    adapter,
+    budget,
+    config,
+    context,
+) {
+    if (config.extensionMode !== "load_only") return;
+    const admitted = new Set();
+    let submitted = false;
+    let selected = false;
+    let navigated = false;
+    for (;;) {
+        budget.check();
+        const observation = adapter.read();
+        if (
+            observation.events.some((event) =>
+                [
+                    "model.turn_started",
+                    "model.model_call_started",
+                    "assistant.turn_start",
+                ].includes(event.type),
+            )
+        )
+            throw new NativeStop(
+                "Extension mode control observed model-start telemetry",
+                "blocked",
+            );
+        const decision = classifyNativeScreen(
+            observation.screen,
+            context.workspace,
+        );
+        validateNativeObservation(observation, {
+            restrictionReadiness: budget.restrictionReadiness,
+            allowMetadataCatalogPending:
+                decision?.reason === "register hooks once",
+        });
+        budget.check(observation.events);
+        if (decision) {
+            if (admitted.has(decision.reason))
+                throw new NativeStop(
+                    "Repeated extension mode consent",
+                    "blocked",
+                );
+            admitted.add(decision.reason);
+            context.decisions.push({
+                at: new Date().toISOString(),
+                ...decision,
+            });
+            adapter.submit(decision.text);
+        } else if (!submitted && nativeReadyObservation(observation)) {
+            context.decisions.push({
+                at: new Date().toISOString(),
+                text: "/extensions mode",
+                reason: "documented owned CLI Load Only control; not a model tool",
+            });
+            adapter.submit("/extensions mode");
+            submitted = true;
+        } else if (submitted && !selected) {
+            if (!/Load Only/u.test(observation.screen)) {
+                if (/Unknown command|Invalid command/u.test(observation.screen))
+                    throw new NativeStop(
+                        "CLI extension mode command unsupported",
+                        "blocked",
+                    );
+            } else {
+                selected = applyNativeLoadOnlyControl(
+                    adapter,
+                    context,
+                    observation.screen,
+                    navigated,
+                );
+                navigated = true;
+            }
+        } else if (
+            selected &&
+            !/^\s*(?:❯\s*)?[1-3]\.\s*(?:Load Only|Load & Augment|Disabled)\b/mu.test(
+                observation.screen,
+            ) &&
+            !/Extensions Mode/u.test(observation.screen) &&
+            nativeReadyObservation(observation)
+        ) {
+            return observation;
+        }
+        await delay(250);
+    }
+}
+
+export function verifyNativeLoadOnlyEvidence(
+    layout,
+    home,
+    observation,
+    restrictionReadiness,
+) {
+    const relative = path.relative(layout.run, home);
+    if (!/^home-\d+$/u.test(relative))
+        throw new NativeStop(
+            "Load Only profile is not the exact owned home",
+            "blocked",
+        );
+    const file = path.join(home, "settings.json");
+    if (fs.realpathSync(file) !== path.resolve(file))
+        throw new NativeStop(
+            "Load Only settings changed physical root",
+            "blocked",
+        );
+    const ts = createRequire(
+        path.join(tsRoot, "packages", "copilot-plugin", "package.json"),
+    )("typescript");
+    const settings = ts.parseConfigFileTextToJson(
+        file,
+        fs.readFileSync(file, "utf8"),
+    );
+    if (settings.error || settings.config?.extensions?.mode !== "load_only")
+        throw new NativeStop(
+            "Actual owned CLI settings are not Load Only",
+            "blocked",
+        );
+    if (
+        !/Extensions mode changed to Load Only\b/u.test(
+            observation?.screen ?? "",
+        )
+    )
+        throw new NativeStop(
+            "Load Only lacks actual owned native confirmation",
+            "blocked",
+        );
+    if (!nativeReadyObservation(observation))
+        throw new NativeStop(
+            "Load Only lacks exact native session/catalog",
+            "blocked",
+        );
+    validateNativeObservation(observation, { restrictionReadiness });
+    return {
+        home,
+        file,
+        mode: "load_only",
+        settingsHash: hash(fs.readFileSync(file)),
+        sessionId: observation.sessionId,
+        observedAt: new Date().toISOString(),
+        confirmation: "Extensions mode changed to Load Only",
+        restrictionMechanism:
+            "documented Load Only disables extension management; unfiltered current inventory independently checked",
+    };
 }
 
 export function nativeCatalogReady(screen, expectedServers) {
@@ -782,42 +1727,51 @@ function admitDiagnosticCatalog(layout, observation, adapter) {
         diagnosticCatalogReady: true,
         diagnosticCatalogSessionId: observation.sessionId,
         diagnosticActorIdentities: adapter.controlIdentities?.() ?? [],
+        diagnosticRestrictionWarnings: [
+            ...observation.screen.matchAll(
+                /Unknown tool name in the tool (allowlist|excludedlist):\s*"([^"]+)"/gu,
+            ),
+        ].map((match) => ({ list: match[1], selector: match[2] })),
     });
     fs.renameSync(`${admissionFile}.pending`, admissionFile);
 }
 
 function metadataCatalogPending(observation, budget, decision) {
     return (
-        budget.metadataOnly &&
+        (budget.metadataOnly ||
+            budget.restrictionReadiness?.phase === "initializing") &&
         observation.verifiedHookRegistration === true &&
         decision?.reason === "register hooks once"
     );
 }
 
 function prepareNative(layout, config, corpus, helperDirectory) {
+    const artifacts = artifactDirectory(layout);
     writeJson(path.join(layout.data, "native-control-admission.json"), {
         owner: layout.owner,
         ownedRoot: layout.run,
         configPath: path.join(layout.pluginData, "config.json"),
         expectedMode: "bypass",
-        diagnosticTransitions: config.diagnosticOnly === true,
+        diagnosticTransitions: true,
+        nativeSyntheticOriginals: !config.diagnosticOnly,
     });
     writeJson(path.join(layout.pluginData, "config.json"), {
         mode: "bypass",
         powershell: { enabled: false },
     });
-    execFileSync(
-        "git",
-        ["init", "--quiet", "--template=", "--initial-branch=macro-eval"],
-        {
-            cwd: layout.workspace,
-            timeout: 10000,
-            stdio: ["ignore", "pipe", "pipe"],
-        },
-    );
+    if (!layout.approvedPhase)
+        execFileSync(
+            "git",
+            ["init", "--quiet", "--template=", "--initial-branch=macro-eval"],
+            {
+                cwd: layout.workspace,
+                timeout: 10000,
+                stdio: ["ignore", "pipe", "pipe"],
+            },
+        );
     const node = process.execPath;
     const fixture = path.join(scripts, "macro-eval-fixture.mjs");
-    const corpusPath = path.join(layout.run, "corpus.json");
+    const corpusPath = path.join(artifacts, "corpus.json");
     writeJson(corpusPath, corpus);
     const mcp = {
         mcpServers: {
@@ -837,13 +1791,14 @@ function prepareNative(layout, config, corpus, helperDirectory) {
         },
     };
     writeJson(path.join(layout.workspace, ".mcp.json"), mcp);
-    fs.writeFileSync(
-        path.join(layout.workspace, "AGENTS.md"),
-        "For a document read, return the complete fetched document title and contents. " +
-            "Clarify missing or vague titles. Never invent document identities. " +
-            "Never approve macros or change permissions. Follow the real TypeAgent handoff when present.\n",
-        { flag: "wx" },
-    );
+    if (!layout.approvedPhase)
+        fs.writeFileSync(
+            path.join(layout.workspace, "AGENTS.md"),
+            "For a document read, return the complete fetched document title and contents. " +
+                "Clarify missing or vague titles. Never invent document identities. " +
+                "Never approve macros or change permissions. Follow the real TypeAgent handoff when present.\n",
+            { flag: "wx" },
+        );
     const required = [
         config.cliExecutable,
         path.join(
@@ -867,12 +1822,14 @@ function prepareNative(layout, config, corpus, helperDirectory) {
         ),
         path.join(tsRoot, "tools", "scripts", "stageCopilotPlugin.mjs"),
         path.join(tsRoot, "tools", "scripts", "bundleUtils.mjs"),
+        path.join(scripts, "macro-eval-native-key.ps1"),
+        path.join(scripts, "macro-eval-native-pipe.ps1"),
     ];
     for (const file of required)
         if (!fs.statSync(file).isFile())
             throw new Error(`Required built runtime/helper missing: ${file}`);
     return {
-        protocol: "macro-native-rehearsal-v1",
+        ...nativeScoringDeclaration(config),
         acceptance: "unexecuted",
         sourceCommit: execFileSync("git", ["--no-pager", "rev-parse", "HEAD"], {
             cwd: tsRoot,
@@ -887,9 +1844,35 @@ function prepareNative(layout, config, corpus, helperDirectory) {
             .filter(Boolean),
         config,
         configurationHash: hash(JSON.stringify(config)),
+        ...(layout.approvedPhase
+            ? {
+                  phase: "approved-catalog-reuse-restart",
+                  canonicalOwnedRoot: layout.run,
+                  phaseId: layout.approvedPhase.phaseId,
+                  homeOffset: layout.approvedPhase.homeOffset,
+                  historicalLearning: {
+                      reference: {
+                          macroId: config.approvedCatalog.macroId,
+                          version: config.approvedCatalog.version,
+                      },
+                      pins: layout.approvedSource.pins,
+                      sourceResultStatus: layout.approvedSource.report.status,
+                      publication: layout.approvedSource.report.operatorActions,
+                  },
+                  endToEndLearningAcceptance: "not exercised; remains separate",
+              }
+            : {}),
         workspaceFiles: inventory(layout.workspace),
         corpusHash: hash(JSON.stringify(corpus)),
         node: { executable: node, version: process.version },
+        nativeKeyDriver: {
+            file: path.join(scripts, "macro-eval-native-key.ps1"),
+            sha256: hash(
+                fs.readFileSync(
+                    path.join(scripts, "macro-eval-native-key.ps1"),
+                ),
+            ),
+        },
         runtime: required.map((file) => ({
             file,
             sha256: hash(fs.readFileSync(file)),
@@ -1012,7 +1995,51 @@ export function validateOwnedServiceListener(
     );
 }
 
-function cleanServiceEnvironment(inherited, layout, config) {
+export function nativeBuildResponsePolicy(layout, config, corpus, sessionId) {
+    if (config.retainSyntheticLearningResponses !== true) return undefined;
+    validateNativeConfig(config, corpus);
+    const { training } = selectNativeCases(config, corpus);
+    const document = corpus.documents.find(
+        (entry) => entry.key === training.expectedDocument,
+    );
+    if (
+        typeof sessionId !== "string" ||
+        !sessionId.trim() ||
+        !document?.title ||
+        !document.expectedId
+    )
+        throw new NativeStop(
+            "Private build response diagnostics require an actual selected session and exact synthetic document",
+            "blocked",
+        );
+    return {
+        schemaVersion: 1,
+        kind: "native-synthetic-build-response-policy-v1",
+        owner: layout.owner,
+        ownedRoot: layout.run,
+        dataRoot: layout.data,
+        instanceName: layout.instance,
+        configPath: path.join(layout.pluginData, "config.json"),
+        expectedSessionId: sessionId,
+        expectedPrompt: training.prompt,
+        expectedToolCalls: [
+            {
+                name: "macro-eval-docs-lookup_document",
+                mcpServerName: "macro-eval-docs",
+                arguments: { title: document.title },
+            },
+            {
+                name: "macro-eval-docs-fetch_document",
+                mcpServerName: "macro-eval-docs",
+                arguments: { id: document.expectedId },
+            },
+        ],
+        maxResponseBytes: 262144,
+        maxResponses: 2,
+    };
+}
+
+export function cleanServiceEnvironment(inherited, layout, config) {
     const env = { ...inherited };
     for (const name of Object.keys(env))
         if (
@@ -1029,6 +2056,14 @@ function cleanServiceEnvironment(inherited, layout, config) {
         CLAUDE_PLUGIN_DATA: layout.pluginData,
         TYPEAGENT_CONFIG_DIR: config.configDirectory,
         INSTANCE_NAME: layout.instance,
+        ...(config.retainSyntheticLearningResponses === true
+            ? {
+                  TYPEAGENT_MACRO_BUILD_RESPONSE_DIAGNOSTIC_POLICY: path.join(
+                      layout.data,
+                      "native-build-response-policy.json",
+                  ),
+              }
+            : {}),
         ...Object.fromEntries(
             ["RECORDING", "INDUCTION", "REPLAY", "AGENT_HANDOFF"].map(
                 (name) => [`TYPEAGENT_MACRO_${name}_ENABLED`, "true"],
@@ -1039,10 +2074,68 @@ function cleanServiceEnvironment(inherited, layout, config) {
 
 export function nativeToolFilters() {
     return [
-        "mcp:macro-eval-docs-lookup_document",
-        "mcp:macro-eval-docs-fetch_document",
+        "macro-eval-docs-lookup_document",
+        "macro-eval-docs-fetch_document",
         "builtin:task",
     ];
+}
+
+export function verifyNativeFixtureCatalogs(diagnostic) {
+    const snapshots = [
+        diagnostic.initialTools,
+        ...(diagnostic.transitions ?? []).map((transition) => transition.tools),
+    ];
+    if (
+        snapshots.length !== 5 ||
+        diagnostic.workflowGates?.length !== 5 ||
+        !diagnostic.workflowGates.every((gate) => gate.passed === true)
+    )
+        throw new NativeStop(
+            "Five current exact native source/schema inventories required",
+            "blocked",
+        );
+    for (const tools of snapshots) {
+        if (
+            !Array.isArray(tools) ||
+            tools.length !== 3 ||
+            new Set(tools.map((tool) => tool.name)).size !== 3
+        )
+            throw new NativeStop(
+                "Native unfiltered inventory is not exact docs plus task",
+                "blocked",
+            );
+        for (const name of ["lookup_document", "fetch_document"]) {
+            const tool = tools.find(
+                (entry) => entry.name === `macro-eval-docs-${name}`,
+            );
+            if (
+                !tool ||
+                tool.mcpServerName !== "macro-eval-docs" ||
+                tool.mcpToolName !== name ||
+                tool.namespacedName !== `macro-eval-docs/${name}`
+            )
+                throw new NativeStop(
+                    "Native document selector lacks exact actual MCP source binding",
+                    "blocked",
+                );
+        }
+        const task = tools.find((tool) => tool.name === "task");
+        if (
+            !task ||
+            task.mcpServerName !== undefined ||
+            task.mcpToolName !== undefined
+        )
+            throw new NativeStop(
+                "Native task source binding disagrees with builtin selector",
+                "blocked",
+            );
+    }
+    return {
+        passed: true,
+        snapshots: 5,
+        selectors: nativeToolFilters(),
+        source: "actual unfiltered tools.getCurrentMetadata, exact MCP namespaced/server/tool identity and independently passed schemas",
+    };
 }
 
 export function nativeControlProof(
@@ -1130,8 +2223,19 @@ export function nativeControlProof(
 }
 
 export function consoleConfiguration(layout, config, index) {
-    const home = path.join(layout.run, `home-${index}`);
+    const home = path.join(
+        layout.run,
+        `home-${index + (layout.approvedPhase?.homeOffset ?? 0)}`,
+    );
     fs.mkdirSync(home);
+    if (config.extensionMode !== "load_only")
+        throw new NativeStop(
+            "Owned launch requires explicit Load Only",
+            "blocked",
+        );
+    writeJson(path.join(home, "settings.json"), {
+        extensions: { mode: "load_only" },
+    });
     return {
         command: config.cliExecutable,
         workspace: layout.workspace,
@@ -1150,7 +2254,7 @@ export function consoleConfiguration(layout, config, index) {
             "--available-tools",
             ...nativeToolFilters(),
             "--log-dir",
-            path.join(layout.run, `cli-logs-${index}`),
+            path.join(artifactDirectory(layout), `cli-logs-${index}`),
         ],
         environment: {
             TYPEAGENT_HOST: "127.0.0.1",
@@ -1334,6 +2438,7 @@ function stopIdentities(identities) {
 }
 
 async function makeLiveAdapter(layout, config, helperDirectory, budget) {
+    const artifacts = artifactDirectory(layout);
     const { childEnvironment } = await import(
         pathToFileURL(path.join(helperDirectory, "console-bridge.mjs"))
     );
@@ -1362,6 +2467,9 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
         home,
         consoleIdentity,
         admittedConsole;
+    let stagedNormalHook, normalHookReader;
+    const recordingSnapshots = new Map();
+    const claimedRecordings = new Map();
     const consoles = [];
     const routesDirectory = path.join(
         layout.data,
@@ -1371,7 +2479,7 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
     );
     const helper = path.join(helperDirectory, "Control-Demo.ps1");
     const expectedWorkspace = readJson(
-        path.join(layout.run, "manifest.json"),
+        nativeManifestFile(layout),
     ).workspaceFiles;
     const control = (action, text) =>
         powershell(
@@ -1386,6 +2494,7 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
             nativeControlTimeout(action, budget.remaining()),
         );
     const sessionEvents = () => {
+        if (!home) return { events: [] };
         const directory = path.join(home, "session-state");
         if (!fs.existsSync(directory)) return { events: [] };
         const sessions = fs
@@ -1450,10 +2559,21 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
                     "blocked",
                 );
             verifyNativeStagedManifest(layout.plugin, extensionSource);
+            if (!config.diagnosticOnly)
+                stagedNormalHook = stageNativeNormalHook(
+                    layout,
+                    Date.now() + budget.remaining(),
+                );
             writeJson(
-                path.join(layout.run, `staged-runtime-${consoles.length}.json`),
+                path.join(artifacts, `staged-runtime-${consoles.length}.json`),
                 inventory(layout.plugin),
             );
+            if (layout.approvedPhase)
+                fs.cpSync(
+                    layout.plugin,
+                    path.join(artifacts, `staged-plugin-${consoles.length}`),
+                    { recursive: true, errorOnExist: true, force: false },
+                );
             if (config.diagnosticOnly) {
                 // The control diagnostic never calls a fixture operation.
                 const stdout = execFileSync(
@@ -1524,7 +2644,7 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
                 },
             );
             writeJson(
-                path.join(layout.run, `cli-version-${consoles.length}.json`),
+                path.join(artifacts, `cli-version-${consoles.length}.json`),
                 {
                     ...frozen,
                     home: cliConfig.environment.COPILOT_HOME,
@@ -1540,11 +2660,11 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
             verifyNativeExecutable(frozen);
             admittedConsole = { cliConfig, frozen };
             const out = fs.openSync(
-                path.join(layout.run, `service-${consoles.length}.stdout.log`),
+                path.join(artifacts, `service-${consoles.length}.stdout.log`),
                 "wx",
             );
             const err = fs.openSync(
-                path.join(layout.run, `service-${consoles.length}.stderr.log`),
+                path.join(artifacts, `service-${consoles.length}.stderr.log`),
                 "wx",
             );
             try {
@@ -1593,7 +2713,7 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
                 config.port,
                 Math.min(120, budget.remaining() / 1000),
                 AbortSignal.timeout(budget.remaining()),
-                path.join(layout.run, `service-${consoles.length}.stderr.log`),
+                path.join(artifacts, `service-${consoles.length}.stderr.log`),
             );
             const readiness = {
                 supervisor: serviceIdentity,
@@ -1613,7 +2733,7 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
                     );
                     const listeners = probeWindowsServiceListeners(
                         config.port,
-                        path.join(layout.run, "windows-os-probe"),
+                        path.join(artifacts, "windows-os-probe"),
                         Math.min(10000, budget.remaining()),
                     );
                     const tree = processTree(
@@ -1646,7 +2766,7 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
             } finally {
                 writeJson(
                     path.join(
-                        layout.run,
+                        artifacts,
                         `service-readiness-${consoles.length}.json`,
                     ),
                     readiness,
@@ -1670,7 +2790,7 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
             budget.check();
             verifyNativeWorkspace(layout, expectedWorkspace);
             const index = consoles.length;
-            consoleRun = path.join(layout.run, `console-${index}`);
+            consoleRun = path.join(artifacts, `console-${index}`);
             if (!admittedConsole)
                 throw new NativeStop(
                     "Native console has no successful version admission",
@@ -1678,7 +2798,7 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
             verifyNativeExecutable(admittedConsole.frozen);
             const { cliConfig } = admittedConsole;
             home = cliConfig.environment.COPILOT_HOME;
-            const file = path.join(layout.run, `console-${index}.private.json`);
+            const file = path.join(artifacts, `console-${index}.private.json`);
             writeJson(file, cliConfig);
             consoles.push(consoleRun);
             // Launch creates its own fresh run directory.
@@ -1731,8 +2851,27 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
             });
             for (const action of ["Compile", "Select", "Restore", "Verify"])
                 control(action);
+            if (stagedNormalHook)
+                normalHookReader = await startNativeNormalHookReader({
+                    layout,
+                    staged: stagedNormalHook,
+                    index: index + (layout.approvedPhase?.homeOffset ?? 0),
+                    budget,
+                    probe: (pid) =>
+                        processTree(pid).find(
+                            (actor) => actor.ProcessId === pid,
+                        ),
+                    cli: {
+                        ...consoleIdentity.find(
+                            (actor) => actor.ProcessId === state.cliPid,
+                        ),
+                        sha256: admittedConsole.frozen.sha256,
+                    },
+                });
         },
         async closeConsole() {
+            normalHookReader?.stop();
+            normalHookReader = undefined;
             if (!consoleRun) return;
             const stateFile = path.join(consoleRun, "console-state.json");
             if (!fs.existsSync(stateFile)) {
@@ -1807,19 +2946,32 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
                 serviceIdentity = undefined;
             }
         },
-        setMode(mode) {
+        setMode(mode, routing) {
+            if (routing !== undefined && routing !== "mixed")
+                throw new NativeStop(
+                    "Unsupported native routing policy",
+                    "blocked",
+                );
+            const previous = readJson(
+                path.join(layout.pluginData, "config.json"),
+            );
             fs.writeFileSync(
                 path.join(layout.pluginData, "config.json"),
-                JSON.stringify({ mode, powershell: { enabled: false } }),
+                JSON.stringify({
+                    ...previous,
+                    mode,
+                    ...(routing === undefined ? {} : { mcpRouting: routing }),
+                }),
             );
             const admissionFile = path.join(
                 layout.data,
                 "native-control-admission.json",
             );
-            writeJson(admissionFile, {
+            writeJson(`${admissionFile}.pending`, {
                 ...readJson(admissionFile),
                 expectedMode: mode,
             });
+            fs.renameSync(`${admissionFile}.pending`, admissionFile);
         },
         read() {
             budget.check();
@@ -1833,7 +2985,7 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
             if (/wants elevated permissions/u.test(screen)) {
                 const expectedExtension = readJson(
                     path.join(
-                        layout.run,
+                        artifacts,
                         `staged-runtime-${consoles.length - 1}.json`,
                     ),
                 ).find(
@@ -1858,13 +3010,108 @@ async function makeLiveAdapter(layout, config, helperDirectory, budget) {
             };
         },
         submit: (text) => control("Type", text),
-        recording: (sessionId) =>
-            budget.run(connection.getMacroRecordingState(sessionId)),
+        pressKey(key) {
+            if (!["Down", "Enter"].includes(key))
+                throw new NativeStop("Unsupported owned key input", "blocked");
+            control("Verify");
+            const driver = fileURLToPath(
+                new URL("./macro-eval-native-key.ps1", import.meta.url),
+            );
+            const expected = readJson(
+                nativeManifestFile(layout),
+            ).nativeKeyDriver;
+            if (expected?.sha256 !== hash(fs.readFileSync(driver)))
+                throw new NativeStop(
+                    "Owned key driver source drift",
+                    "blocked",
+                );
+            powershell(
+                driver,
+                ["-RunDirectory", consoleRun, "-Key", key],
+                nativeControlTimeout("Type", budget.remaining()),
+            );
+        },
+        async recording(sessionId) {
+            const state = await budget.run(
+                connection.getMacroRecordingState(sessionId),
+            );
+            recordingSnapshots.set(sessionId, {
+                state,
+                observedAt: new Date().toISOString(),
+            });
+            if (state.status === "claimed")
+                claimedRecordings.set(sessionId, state);
+            return state;
+        },
+        learningPreference: () =>
+            budget.run(connection.getMacroLearningPreference(layout.workspace)),
+        setLearningPreference: (mode) =>
+            budget.run(
+                connection.setMacroLearningPreference({
+                    cwd: layout.workspace,
+                    mode,
+                }),
+            ),
+        async finalizedSourceReader(sessionId) {
+            const admittedService = { ...serviceIdentity };
+            const tokenId = claimedRecordings.get(sessionId)?.token?.id;
+            requireCapture(
+                tokenId !== undefined,
+                "actual claimed RPC snapshot missing",
+            );
+            const load = () => {
+                budget.check();
+                requireCapture(
+                    serviceIdentity?.ProcessId === admittedService.ProcessId &&
+                        serviceIdentity.StartedMs ===
+                            admittedService.StartedMs &&
+                        connection !== undefined,
+                    "admitted service generation changed",
+                );
+                const current = processTree(admittedService.ProcessId).find(
+                    (peer) => peer.ProcessId === admittedService.ProcessId,
+                );
+                requireCapture(
+                    current?.StartedMs === admittedService.StartedMs &&
+                        current.ExecutablePath ===
+                            admittedService.ExecutablePath &&
+                        current.ParentProcessId ===
+                            admittedService.ParentProcessId,
+                    "actual owned service identity no longer current",
+                );
+                const snapshot = recordingSnapshots.get(sessionId);
+                requireCapture(
+                    snapshot?.state?.trace?.sessionId === sessionId,
+                    "completed RPC session mismatch",
+                );
+                return stableSelectedTrace(layout, snapshot, {
+                    ProcessId: current.ProcessId,
+                    ParentProcessId: current.ParentProcessId,
+                    StartedMs: current.StartedMs,
+                    ExecutablePath: current.ExecutablePath,
+                });
+            };
+            return bindNativeFinalizedSourceReader({
+                sessionId,
+                tokenId,
+                load,
+            });
+        },
         inspect: (reference) => budget.run(connection.inspectMacro(reference)),
         validate: (reference) =>
             budget.run(connection.validateMacro(reference)),
         approve: (reference) => budget.run(connection.approveMacro(reference)),
         runtime: () => inventory(layout.plugin),
+        normalHookCallback(target, events) {
+            if (!normalHookReader)
+                throw new NativeStop(
+                    "Owned normal-hook reader unavailable",
+                    "blocked",
+                );
+            return normalHookReader
+                .bind(target.mode, target.configDigest)
+                .read(target, events);
+        },
         controlIdentities() {
             if (!consoleRun) return [];
             const pid = readJson(
@@ -1942,6 +3189,7 @@ async function waitNative(
         budget.check();
         const observation = adapter.read();
         onObservation?.(observation);
+        budget.check(observation.events);
         if (
             budget.metadataOnly &&
             observation.events.some((event) =>
@@ -1953,7 +3201,7 @@ async function waitNative(
             )
         )
             throw new NativeStop(
-                "Metadata diagnostic observed model-start telemetry; no workflows admitted",
+                "Read-only initialization observed model-start telemetry; no workflows admitted",
                 "blocked",
             );
         const decision = classifyNativeScreen(
@@ -1962,13 +3210,13 @@ async function waitNative(
             consent,
         );
         validateNativeObservation(observation, {
+            restrictionReadiness: budget.restrictionReadiness,
             allowMetadataCatalogPending: metadataCatalogPending(
                 observation,
                 budget,
                 decision,
             ),
         });
-        budget.check(observation.events);
         if (decision) {
             if (admitted.has(decision.reason))
                 throw new NativeStop(
@@ -1988,11 +3236,25 @@ async function waitNative(
 
 async function nativeCommand(adapter, budget, text, expectation, context) {
     const before = adapter.read().events.length;
+    const effect = await nativeCommandEffect(adapter, text);
     adapter.submit(text);
     return waitNative(
         adapter,
         budget,
-        (observed) => {
+        async (observed) => {
+            if (effect) {
+                const state = await effect.read(observed.sessionId);
+                if (effect.accept(state)) {
+                    context.commandEffects ??= [];
+                    context.commandEffects.push({
+                        command: text,
+                        observedAt: new Date().toISOString(),
+                        state,
+                    });
+                    return state;
+                }
+                return undefined;
+            }
             const evidence = extractNativeEvidence(
                 observed.events.slice(before),
                 [],
@@ -2010,12 +3272,86 @@ async function nativeCommand(adapter, budget, text, expectation, context) {
     );
 }
 
-async function observeTrial(adapter, budget, scenario, corpus, mode, context) {
+async function nativeCommandEffect(adapter, text) {
+    if (typeof adapter.learningPreference !== "function") return undefined;
+    if (text === "/typeagent-macro-learning prepare") {
+        const before = await adapter.learningPreference();
+        requireCapture(before.mode === "off", "fresh learning must start off");
+        return {
+            read: () => adapter.learningPreference(),
+            accept: (state) =>
+                state.cwd === before.cwd &&
+                state.mode === "prepare" &&
+                state.revision === before.revision + 1,
+        };
+    }
+    if (text === "/typeagent-macro-record")
+        return {
+            read: (sessionId) => adapter.recording(sessionId),
+            accept: (state) =>
+                state.status === "armed" &&
+                state.token?.status === "armed" &&
+                state.token.learning === true &&
+                state.token.promptHash === undefined,
+        };
+    throw new NativeStop(
+        "Unsupported live native administrative command",
+        "blocked",
+    );
+}
+
+async function observeSelectedCapture(adapter, observed, context) {
+    const capture = context.captureState;
+    if (!capture) return undefined;
+    const state = await adapter.recording(observed.sessionId);
+    const token = state.token;
+    if (state.status === "failed")
+        throw new NativeStop("Actual selected source capture failed", "failed");
+    if (state.status === "claimed") {
+        requireCapture(
+            token?.id === capture.before.state.token.id &&
+                token.sessionId === observed.sessionId &&
+                token.cwd === context.workspace &&
+                token.learning === true,
+            "current claimed token binding mismatch",
+        );
+        capture.after ??= { state, observedAt: new Date().toISOString() };
+    }
+    if (state.status === "completed") {
+        requireCapture(
+            capture.after !== undefined,
+            "claimed state was not observed before finalization",
+        );
+        capture.completed = state;
+    }
+    return capture.completed;
+}
+
+export async function observeTrial(
+    adapter,
+    budget,
+    scenario,
+    corpus,
+    mode,
+    context,
+) {
+    const renderingContract = context.config.renderingContract
+        ? structuredClone(context.config.renderingContract)
+        : undefined;
+    if (
+        renderingContract?.protocolVersion ===
+        "synthetic-document-similarity-v5"
+    )
+        macroGradeContract.validateSyntheticDocumentScoringContract(
+            renderingContract,
+            corpus,
+        );
     const before = adapter.read();
     const routes = new Set(
         before.routes.map((entry) => `${entry.conversationId}:${entry.seq}`),
     );
     const submittedAt = Date.now();
+    let observedTerminalAt;
     adapter.submit(scenario.prompt);
     const document = corpus.documents.find(
         (entry) => entry.key === scenario.expectedDocument,
@@ -2033,20 +3369,33 @@ async function observeTrial(adapter, budget, scenario, corpus, mode, context) {
             },
         ],
     };
-    const evidenceFor = (observed) =>
-        extractNativeEvidence(
-            observed.events.slice(before.events.length),
-            observed.backendAudit.slice(before.backendAudit.length),
-            observed.routes.filter(
-                (entry) => !routes.has(`${entry.conversationId}:${entry.seq}`),
-            ),
+    const evidenceFor = (observed) => {
+        const events = observed.events.slice(before.events.length);
+        const audit = observed.backendAudit.slice(before.backendAudit.length);
+        const currentRoutes = observed.routes.filter(
+            (entry) => !routes.has(`${entry.conversationId}:${entry.seq}`),
+        );
+        const pending = extractNativeEvidence(
+            events,
+            audit,
+            currentRoutes,
             mode,
         );
+        if (pending.terminal === "pending") return pending;
+        return extractNativeEvidence(
+            nativeSdkOriginalEvents(context, observed.sessionId, events),
+            audit,
+            currentRoutes,
+            mode,
+        );
+    };
     const result = await waitNative(
         adapter,
         budget,
-        (observed) => {
+        async (observed) => {
             const evidence = evidenceFor(observed);
+            if (evidence.terminal !== "pending")
+                observedTerminalAt ??= Date.now();
             if (
                 evidence.events.some(
                     (entry) =>
@@ -2062,10 +3411,46 @@ async function observeTrial(adapter, budget, scenario, corpus, mode, context) {
                     "Native task failed or cancelled",
                     "failed",
                 );
+            const finalized = await observeSelectedCapture(
+                adapter,
+                observed,
+                context,
+            );
+            if (evidence.terminal === "pending") return undefined;
+            if (context.captureState && !finalized) return undefined;
+            if (context.captureState) {
+                context.captureState.sourceAudit =
+                    await verifyNativeFinalizedCapture({
+                        layout: context,
+                        state: finalized,
+                        events: evidence.events,
+                        scenario,
+                        sessionId: observed.sessionId,
+                    });
+                context.captureState.readFinalizedSource ??=
+                    await adapter.finalizedSourceReader(observed.sessionId);
+                evidence.readFinalizedSource =
+                    context.captureState.readFinalizedSource;
+            }
+            if (
+                ["bypass", "mcp"].includes(mode) &&
+                typeof adapter.normalHookCallback === "function" &&
+                evidence.terminal === "root-turn"
+            )
+                await admitOrdinaryCallback(
+                    evidence,
+                    adapter,
+                    observed,
+                    scenario,
+                    context,
+                    submittedAt,
+                    budget,
+                );
             const grade = gradeDocumentTrial({
                 ...evidence,
                 scenario,
                 documents: corpus.documents,
+                ...(renderingContract ? { renderingContract } : {}),
             });
             const terminalPassed = grade.checks.find(
                 (check) => check.name === "terminal-native-completion",
@@ -2078,8 +3463,9 @@ async function observeTrial(adapter, budget, scenario, corpus, mode, context) {
                 mode,
                 evidence,
                 grade,
+                ...(renderingContract ? { renderingContract } : {}),
                 submittedAt,
-                observedTerminalAt: Date.now(),
+                observedTerminalAt,
                 timingBoundary: "controller-submit-to-observed-terminal",
             };
         },
@@ -2093,6 +3479,7 @@ async function observeTrial(adapter, budget, scenario, corpus, mode, context) {
                 submittedAt,
                 observedAt: Date.now(),
                 evidence: evidenceFor(observed),
+                ...(renderingContract ? { renderingContract } : {}),
             };
         },
     );
@@ -2111,10 +3498,152 @@ async function observeTrial(adapter, budget, scenario, corpus, mode, context) {
     return result;
 }
 
-function assertLiveAdmission(config, adapterFactory) {
-    if (!config.diagnosticOnly && !adapterFactory)
+async function admitOrdinaryCallback(
+    evidence,
+    adapter,
+    observed,
+    scenario,
+    context,
+    submittedAt,
+    budget,
+) {
+    const configPath = path.join(context.pluginData, "config.json");
+    const config = readJson(configPath);
+    const digest = hash(
+        JSON.stringify({
+            configPath,
+            dataRoot: fs.realpathSync(context.data),
+            effectiveMode: config.mode,
+            mcpRouting: config.mcpRouting ?? "delegate",
+        }),
+    );
+    const target = {
+        sessionId: observed.sessionId,
+        prompt: scenario.prompt,
+        cwd: context.workspace,
+        submittedAtMs: submittedAt,
+        deadlineMs: Date.now() + budget.remaining(),
+        mode: config.mode,
+        configDigest: digest,
+    };
+    const sessionStarts = observed.events.filter(
+        (event) =>
+            event.type === "session.start" &&
+            event.data?.sessionId === target.sessionId,
+    );
+    if (sessionStarts.length !== 1)
         throw new NativeStop(
-            "Task rehearsal blocked before models: explicit Copilot bypass is not a grammar miss. Grader route contract must admit an explicit bypass baseline/capture and current mode/data-root transition proof.",
+            "Actual exact-session native session.start missing/ambiguous",
+            "blocked",
+        );
+    evidence.events = [
+        sessionStarts[0],
+        ...evidence.events.filter((event) => event.type !== "session.start"),
+    ];
+    context.normalCallbacks ??= new Map();
+    const key = `${target.sessionId}:${submittedAt}`;
+    let callback = context.normalCallbacks.get(key);
+    if (!callback) {
+        callback = adapter.normalHookCallback(target, evidence.events);
+        context.normalCallbacks.set(key, callback);
+    }
+    const control = readJson(
+        path.join(
+            context.data,
+            "native-control",
+            `native-hook-${callback.routerPeer.ProcessId}.json`,
+        ),
+    );
+    const { redactTraceValue } = await import(
+        pathToFileURL(
+            path.join(
+                tsRoot,
+                "packages",
+                "copilot-macros",
+                "dist",
+                "redaction.js",
+            ),
+        )
+    );
+    evidence.routeEvidence = {
+        route: "ordinary-copilot",
+        receipt: {
+            schemaVersion: 1,
+            origin: "trusted-native-controller",
+            policy: context.captureState
+                ? "mcp-mixed-source-capture"
+                : "bypass-baseline",
+            expected: {
+                owner: context.owner,
+                ownedRoot: context.run,
+                sessionId: target.sessionId,
+                prompt: scenario.prompt,
+                promptHash: hash(redactTraceValue(scenario.prompt)),
+                cwd: context.workspace,
+                configPath,
+                dataRoot: context.data,
+                digest,
+                effectiveMode: config.mode,
+                routing: config.mcpRouting ?? "delegate",
+                startedAt:
+                    context.captureState?.before.observedAt ??
+                    new Date(submittedAt).toISOString(),
+                endedAt: new Date().toISOString(),
+            },
+            hook: {
+                hookInvocationId: callback.native.hookInvocationId,
+                startEventId: callback.native.hookStartEventId,
+                endEventId: callback.native.hookEndEventId,
+            },
+            control,
+            callback,
+            capture: context.captureState
+                ? {
+                      policy: "selected-source",
+                      before: context.captureState.before,
+                      after: context.captureState.after,
+                  }
+                : { policy: "none" },
+        },
+    };
+}
+
+export function assertLiveAdmission(
+    config,
+    adapterFactory,
+    contracts = macroGradeContract,
+) {
+    if (
+        config.renderingContract &&
+        !adapterFactory &&
+        contracts[
+            {
+                "synthetic-document-rendering-v2":
+                    "syntheticDocumentRenderingContract",
+                "synthetic-document-rendering-v3":
+                    "syntheticDocumentFenceRenderingContract",
+                "synthetic-document-rendering-v4":
+                    "syntheticDocumentBlockquoteRenderingContract",
+                "synthetic-document-similarity-v5":
+                    "syntheticDocumentSimilarityContract",
+            }[config.renderingContract.protocolVersion]
+        ] !== config.renderingContract.protocolVersion
+    )
+        throw new NativeStop(
+            "Rendered-content scoring blocked before models: tested versioned synthetic renderer contract unavailable",
+            "blocked",
+        );
+    if (
+        !config.diagnosticOnly &&
+        !adapterFactory &&
+        (contracts.nativeOrdinaryCallbackContract !==
+            "native-normal-hook-callback-v1" ||
+            (!config.attributionOnly &&
+                contracts.nativeSelectedSourceContract !==
+                    "native-finalized-selected-source-v1"))
+    )
+        throw new NativeStop(
+            "Task rehearsal blocked before models: original native callback and finalized selected-source grader capability must be available; lease snapshots alone do not admit capture.",
             "blocked",
         );
     if (!adapterFactory && process.platform !== "win32")
@@ -2122,6 +3651,617 @@ function assertLiveAdmission(config, adapterFactory) {
             "Live native controller requires Windows",
             "blocked",
         );
+}
+
+export async function assertNativeBuildObservability(
+    config,
+    adapterFactory,
+    load = () =>
+        import(
+            pathToFileURL(
+                path.join(
+                    tsRoot,
+                    "packages",
+                    "defaultAgentProvider",
+                    "dist",
+                    "index.js",
+                ),
+            ).href
+        ),
+) {
+    if (!config.retainSyntheticLearningResponses || adapterFactory) return;
+    let implementation;
+    try {
+        implementation = await load();
+    } catch {
+        throw new NativeStop(
+            "Private synthetic build diagnostics blocked before boot: compiled product observer unavailable",
+            "blocked",
+        );
+    }
+    if (
+        implementation.nativeSyntheticBuildResponseDiagnosticContract !==
+            "native-synthetic-build-response-policy-v1" ||
+        typeof implementation.createSyntheticMacroLearningDiagnostics !==
+            "function"
+    )
+        throw new NativeStop(
+            "Private synthetic build diagnostics blocked before boot: compiled product observer contract unavailable",
+            "blocked",
+        );
+}
+
+async function admitNormalHookBoot(adapter, budget, layout, context, ready) {
+    if (typeof adapter.normalHookCallback !== "function") return;
+    admitDiagnosticCatalog(layout, ready, adapter);
+    const file = path.join(
+        layout.data,
+        "native-control-diagnostic-result.json",
+    );
+    const result = await waitNative(
+        adapter,
+        budget,
+        (observed) => {
+            if (!fs.existsSync(file)) return undefined;
+            const value = readJson(file);
+            return value.status === "running" ||
+                value.sessionId !== observed.sessionId
+                ? undefined
+                : value;
+        },
+        undefined,
+        layout.workspace,
+        context.decisions,
+    );
+    const identities = adapter.controlIdentities?.() ?? [];
+    const controls = (result.transitions ?? []).map((transition) =>
+        nativeControlProof(
+            layout,
+            transition.mode,
+            identities,
+            transition.control,
+        ),
+    );
+    context.fixtureCatalogProof = completeNativeRestrictionReadiness(
+        budget.restrictionReadiness,
+        result,
+        controls,
+        ready.sessionId,
+    );
+    context.startupControls = result;
+    if (context.config.diagnosticOnly !== true) {
+        const original = result.toolOriginals;
+        const actor = result.transitions
+            .at(-1)
+            .control.find(
+                (entry) => entry.source.component === "native-extension-status",
+            )?.source;
+        requireCapture(
+            original?.file ===
+                path.join(
+                    layout.data,
+                    "native-sdk-originals",
+                    `${ready.sessionId}.jsonl`,
+                ) &&
+                original.source.component ===
+                    "native-sdk-synthetic-tool-originals" &&
+                original.source.pid === actor?.pid &&
+                original.source.parentPid === actor?.parentPid &&
+                original.source.executable === actor?.executable &&
+                original.source.cwd === layout.workspace &&
+                Number.isFinite(Date.parse(original.startedAt)) &&
+                Date.parse(original.startedAt) <=
+                    Date.parse(result.toolInitialization.startedAt),
+            "original SDK observer is not the admitted native extension actor",
+        );
+        context.sdkOriginalsBinding = original;
+    }
+}
+
+function requireCurrentControlProof(adapterFactory, proof) {
+    if (!adapterFactory && !proof.passed)
+        throw new NativeStop(
+            "Authoritative native mode/data-root binding is missing or mismatched; no task admitted",
+            "blocked",
+        );
+}
+
+function latestStartupControl(context) {
+    return context.startupControls?.transitions?.at(-1)?.control;
+}
+
+function nativeRestrictionState(layout, report, adapterFactory) {
+    if (adapterFactory) return undefined;
+    return {
+        phase: "initializing",
+        owner: layout.owner,
+        startedAt: report.startedAt,
+        deadlineMs: Date.parse(report.startedAt) + 180000,
+        selectors: nativeToolFilters().filter(
+            (name) => !name.startsWith("builtin:"),
+        ),
+        warnings: [],
+    };
+}
+
+function metadataDiagnosticGateError(report, diagnostic) {
+    if (
+        report.fixtureCatalogProof ||
+        diagnostic.status === "passed-metadata-only"
+    )
+        return report.diagnostic.remainingGate;
+    return (
+        diagnostic.error ??
+        "Actual native control transition diagnostic blocked"
+    );
+}
+
+export function nativePreparationState(state, report) {
+    if (state.learningJob?.status === "failed") {
+        report.learningFailure = state.learningJob;
+        throw new NativeStop("Macro preparation failed", "failed");
+    }
+    return state.learningJob?.status === "needsReview" ? state : undefined;
+}
+
+async function acquireNativeDraft({
+    adapter,
+    budget,
+    layout,
+    context,
+    selected,
+    corpus,
+    report,
+    sessionId,
+}) {
+    const nativeCapture = typeof adapter.finalizedSourceReader === "function";
+    if (context.config.retainSyntheticLearningResponses && !nativeCapture)
+        throw new NativeStop(
+            "Private build diagnostics require actual native selected capture",
+            "blocked",
+        );
+    adapter.setMode(
+        nativeCapture ? "mcp" : "direct",
+        nativeCapture ? "mixed" : undefined,
+    );
+    await nativeCommand(
+        adapter,
+        budget,
+        "/typeagent-macro-learning prepare",
+        /prepare/iu,
+        context,
+    );
+    const armed = await nativeCommand(
+        adapter,
+        budget,
+        "/typeagent-macro-record",
+        /Recording token:/u,
+        context,
+    );
+    if (nativeCapture) {
+        requireCapture(
+            armed.token.sessionId === sessionId &&
+                armed.token.cwd === layout.workspace,
+            "actual armed source workspace/session mismatch",
+        );
+        context.captureState = {
+            before: { state: armed, observedAt: new Date().toISOString() },
+        };
+        const policy = nativeBuildResponsePolicy(
+            layout,
+            context.config,
+            corpus,
+            sessionId,
+        );
+        if (policy) {
+            const file = path.join(
+                layout.data,
+                "native-build-response-policy.json",
+            );
+            writeJson(file, policy);
+            report.learningDiagnosticPolicy = {
+                file,
+                sha256: hash(fs.readFileSync(file)),
+            };
+        }
+    }
+    const training = await observeTrial(
+        adapter,
+        budget,
+        selected.training,
+        corpus,
+        nativeCapture ? "mcp" : "direct",
+        context,
+    );
+    report.trials.push({ ...training, candidate: "training" });
+    if (nativeCapture) {
+        report.selectedSourceAudit = context.captureState.sourceAudit;
+        report.selectedSourceSnapshots = {
+            before: context.captureState.before,
+            after: context.captureState.after,
+        };
+        context.captureState = undefined;
+    }
+    if (training.status !== "passed")
+        throw new NativeStop(
+            "Training correctness/completion oracle did not pass",
+            training.status,
+        );
+    return waitNative(
+        adapter,
+        budget,
+        async (observed) => {
+            const state = await adapter.recording(observed.sessionId);
+            return nativePreparationState(state, report);
+        },
+        undefined,
+        layout.workspace,
+        report.decisions,
+    );
+}
+
+function ownNativeApprovedLayout(output, config, corpus) {
+    const source = verifyApprovedCatalogSource(
+        config.approvedCatalog,
+        corpus,
+        path.resolve(scripts, ".."),
+    );
+    const layout = {
+        run: source.root,
+        owner: source.owner,
+        workspace: path.join(source.root, "workspace"),
+        plugin: path.join(source.root, "plugin"),
+        pluginData: path.join(source.root, "plugin-data"),
+        data: path.join(source.root, "data"),
+        instance: source.instance,
+        port: config.port,
+        approvedSource: source,
+    };
+    verifyNativeWorkspace(layout, source.manifest.workspaceFiles);
+    layout.approvedPhase = ownApprovedCatalogPhase(output, source);
+    layout.audit = path.join(layout.approvedPhase.artifacts, "backend.jsonl");
+    try {
+        fs.writeFileSync(layout.audit, "", { flag: "wx", mode: 0o600 });
+    } catch (error) {
+        layout.approvedPhase.restore();
+        throw error;
+    }
+    return layout;
+}
+
+function verifyNativeApprovedSourceReleased(layout) {
+    const proof = readJson(path.join(layout.run, "cleanup-verification.json"));
+    if (
+        proof.slotReleased !== true ||
+        !proof.allPersistedServiceControlIdentities?.length
+    )
+        throw new NativeStop(
+            "Prior owned service/control cleanup is not established",
+            "blocked",
+        );
+    const ids = proof.allPersistedServiceControlIdentities.map((identity) => ({
+        pid: identity.pid,
+        started: identity.expectedStartedMs,
+    }));
+    if (
+        ids.some(
+            (identity) =>
+                !Number.isSafeInteger(identity.pid) ||
+                !Number.isSafeInteger(identity.started),
+        )
+    )
+        throw new NativeStop(
+            "Prior owned process identities are incomplete",
+            "blocked",
+        );
+    const encoded = Buffer.from(JSON.stringify(ids)).toString("base64");
+    const root = Buffer.from(layout.run).toString("base64");
+    const observed = execFileSync(
+        "powershell.exe",
+        [
+            "-NoProfile",
+            "-Command",
+            `. $PROFILE; $ErrorActionPreference='Stop'; $all=@(Get-CimInstance Win32_Process); ` +
+                `$ids=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}'))|ConvertFrom-Json; ` +
+                `$live=@(foreach($i in $ids){ $p=$all|Where-Object ProcessId -eq $i.pid; ` +
+                `if($p -and ([DateTimeOffset]$p.CreationDate).ToUnixTimeMilliseconds() -eq $i.started){$i.pid} }); ` +
+                `$root=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${root}')); ` +
+                `$ours=[Collections.Generic.HashSet[int]]::new(); $pidNow=${process.pid}; ` +
+                `while($pidNow -gt 0 -and $ours.Add($pidNow)){ $p=$all|Where-Object ProcessId -eq $pidNow; $pidNow=[int]$p.ParentProcessId }; ` +
+                `$foreign=@($all|Where-Object { $_.CommandLine -and $_.CommandLine.Contains($root) -and !$ours.Contains([int]$_.ProcessId) }|ForEach-Object ProcessId); ` +
+                `ConvertTo-Json -InputObject @{owned=$live;foreign=$foreign} -Compress`,
+        ],
+        { encoding: "utf8", timeout: 10000, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    const current = JSON.parse(observed);
+    if (current.owned.length || current.foreign.length)
+        throw new NativeStop("Prior owned actors are still live", "blocked");
+    writeJson(
+        path.join(
+            artifactDirectory(layout),
+            "source-release-verification.json",
+        ),
+        {
+            checkedAt: new Date().toISOString(),
+            persistedIdentitiesAbsent: ids,
+            otherOwnedRootActorsAbsent: true,
+            stopOperationPerformed: false,
+        },
+    );
+}
+
+function requireApprovedCatalogEntry(catalog, source) {
+    const matching = catalog.filter(
+        (entry) => entry.macroId === source.macro.macroId,
+    );
+    if (
+        catalog.length !== 1 ||
+        matching.length !== 1 ||
+        matching[0].version !== source.macro.version ||
+        matching[0].state !== "approved"
+    )
+        throw new NativeStop(
+            "Exact approved catalog version is not current after owned service start",
+            "blocked",
+        );
+    verifyApprovedVersionUnchanged(source);
+}
+
+async function admitApprovedPhaseConsole({
+    adapter,
+    budget,
+    layout,
+    context,
+    report,
+    config,
+    previousSession,
+    index,
+    adapterFactory,
+}) {
+    await budget.run(adapter.openConsole());
+    const mode = await configureNativeLoadOnly(
+        adapter,
+        budget,
+        config,
+        context,
+    );
+    const proof = verifyNativeLoadOnlyEvidence(
+        layout,
+        path.join(
+            layout.run,
+            `home-${layout.approvedPhase.homeOffset + index}`,
+        ),
+        mode,
+        budget.restrictionReadiness,
+    );
+    const ready = await waitNative(
+        adapter,
+        budget,
+        (observed) =>
+            observed.sessionId !== previousSession &&
+            nativeReadyObservation(observed),
+        undefined,
+        layout.workspace,
+        report.decisions,
+    );
+    await admitNormalHookBoot(adapter, budget, layout, context, ready);
+    const control = nativeControlProof(
+        layout,
+        "bypass",
+        adapter.controlIdentities?.() ?? [],
+        latestStartupControl(context),
+    );
+    requireCurrentControlProof(adapterFactory, control);
+    report.approvedPhaseBoots ??= [];
+    report.approvedPhaseBoots.push({
+        sessionId: ready.sessionId,
+        extensionMode: proof,
+        control,
+        fixtureCatalog: context.fixtureCatalogProof,
+        startupControls: context.startupControls,
+    });
+    return ready.sessionId;
+}
+
+async function inspectApprovedPhaseMacro(adapter, layout, report) {
+    layout.approvedPhase.verifyLearningUnchanged();
+    const preference = await adapter.learningPreference();
+    if (preference.mode !== "off")
+        throw new NativeStop(
+            "Pure RUN learning preference is not off",
+            "blocked",
+        );
+    const reference = {
+        macroId: layout.approvedSource.macro.macroId,
+        version: layout.approvedSource.macro.version,
+    };
+    const macro = await adapter.inspect(reference);
+    const validation = await adapter.validate(reference);
+    reviewNativeApprovedMacro(macro, validation, layout.approvedSource);
+    report.currentCatalogValidations ??= [];
+    report.currentCatalogValidations.push({
+        reference,
+        validatedAt: new Date().toISOString(),
+        supportedValidation: validation,
+        definitionHash: hash(JSON.stringify(macro)),
+        pinnedVersionUnchanged: true,
+        learningPreference: preference,
+    });
+    return reference;
+}
+
+function requireApprovedGrammarTrial(trial, reference) {
+    if (
+        trial.status !== "passed" ||
+        trial.evidence.routeEvidence.route !== "grammar" ||
+        trial.evidence.routeEvidence.macroId !== reference.macroId ||
+        trial.evidence.routeEvidence.version !== reference.version ||
+        trial.evidence.executionEvidence.wholeMacroInvocations !== 1 ||
+        trial.evidence.executionEvidence.effects.length !== 0
+    )
+        throw new NativeStop(
+            "Pinned approved reuse must pass actual grammar/immutable version/execution evidence",
+            trial.status === "failed" ? "failed" : "blocked",
+        );
+}
+
+export function resetNativeRestartAdmission(layout) {
+    const file = path.join(layout.data, "native-control-admission.json");
+    const admission = readJson(file);
+    const configFile = path.join(layout.pluginData, "config.json");
+    const config = readJson(configFile);
+    if (
+        admission.owner !== layout.owner ||
+        admission.ownedRoot !== layout.run ||
+        admission.configPath !== path.join(layout.pluginData, "config.json") ||
+        admission.expectedMode !== "bypass" ||
+        config.mode !== "bypass"
+    )
+        throw new NativeStop(
+            "Owned restart admission roots/mode changed",
+            "blocked",
+        );
+    const {
+        diagnosticCatalogReady: _ready,
+        diagnosticCatalogSessionId: _session,
+        diagnosticActorIdentities: _actors,
+        diagnosticRestrictionWarnings: _warnings,
+        ...fresh
+    } = admission;
+    writeJson(
+        path.join(artifactDirectory(layout), "restart-admission-before.json"),
+        { admission, config },
+    );
+    const { mcpRouting: _retiredRouting, ...initialBypass } = config;
+    writeJson(`${configFile}.pending`, initialBypass);
+    fs.renameSync(`${configFile}.pending`, configFile);
+    writeJson(`${file}.pending`, fresh);
+    fs.renameSync(`${file}.pending`, file);
+}
+
+async function runNativeApprovedCatalogTrials(options) {
+    const {
+        adapter,
+        budget,
+        layout,
+        context,
+        report,
+        config,
+        corpus,
+        selected,
+        catalog,
+    } = options;
+    const source = layout.approvedSource;
+    requireApprovedCatalogEntry(catalog, source);
+    const restart = getScenarioCases(corpus).find(
+        (scenario) => scenario.id === config.approvedCatalog.restartCase,
+    );
+    if (
+        !restart ||
+        restart.kind !== "positive" ||
+        restart.familyId !== selected.reuse.familyId ||
+        restart.expectedDocument === selected.reuse.expectedDocument ||
+        restart.expectedDocument === selected.training.expectedDocument ||
+        !/^[\x20-\x7e]{1,2000}$/u.test(restart.prompt) ||
+        ["pending", "blocked", "blocked-not-accepted"].includes(restart.status)
+    )
+        throw new NativeStop(
+            "Approved restart requires a distinct current document in the same positive family",
+            "blocked",
+        );
+    report.phase = "approved-catalog-reuse-restart";
+    report.endToEndLearningAcceptance = "not exercised; remains separate";
+    report.historicalLearning = {
+        reference: {
+            macroId: source.macro.macroId,
+            version: source.macro.version,
+        },
+        pins: source.pins,
+        sourceResultStatus: source.report.status,
+        publication: source.report.operatorActions,
+    };
+    const before = await budget.run(adapter.learningPreference());
+    report.learningPreferenceBefore = before;
+    const off = await budget.run(adapter.setLearningPreference("off"));
+    if (off.mode !== "off")
+        throw new NativeStop(
+            "Pure RUN phase did not disable learning",
+            "blocked",
+        );
+    report.learningPreferenceDuring = off;
+    const reference = await inspectApprovedPhaseMacro(adapter, layout, report);
+    await admitApprovedPhaseConsole({ ...options, index: 0 });
+    adapter.setMode("direct");
+    const reuse = await observeTrial(
+        adapter,
+        budget,
+        selected.reuse,
+        corpus,
+        "direct",
+        context,
+    );
+    report.trials.push({ ...reuse, candidate: "approved-reuse" });
+    requireApprovedGrammarTrial(reuse, reference);
+    adapter.setMode("bypass");
+    await budget.run(adapter.closeConsole());
+    await budget.run(adapter.stopService());
+    resetNativeRestartAdmission(layout);
+    if (!options.adapterFactory)
+        budget.restrictionReadiness = {
+            ...nativeRestrictionState(layout, {
+                startedAt: new Date().toISOString(),
+            }),
+            deadlineMs: Date.now() + Math.min(180000, budget.remaining()),
+        };
+    const persisted = await budget.run(adapter.startService());
+    requireApprovedCatalogEntry(persisted, source);
+    await inspectApprovedPhaseMacro(adapter, layout, report);
+    await admitApprovedPhaseConsole({
+        ...options,
+        previousSession: reuse.sessionId,
+        index: 1,
+    });
+    adapter.setMode("direct");
+    const restarted = await observeTrial(
+        adapter,
+        budget,
+        restart,
+        corpus,
+        "direct",
+        context,
+    );
+    report.trials.push({ ...restarted, candidate: "approved-restart-reuse" });
+    requireApprovedGrammarTrial(restarted, reference);
+    report.runtime = adapter.runtime();
+    report.status = "passed";
+    report.acceptance =
+        "current approved-catalog Direct reuse and actual owned restart only; no new learning/publication";
+}
+
+function validateNativeInvocation(executeLive, config, helperDirectory) {
+    if (typeof executeLive !== "boolean")
+        throw new Error("executeLive must be boolean");
+    if (config.approvedCatalog && !executeLive)
+        throw new Error(
+            "Approved catalog phase requires explicit live admission",
+        );
+    if (!path.isAbsolute(helperDirectory ?? ""))
+        throw new Error(
+            "Explicit absolute --console-helper-dir required (scripts directory)",
+        );
+}
+
+function createEvaluationLayout(output, config, corpus) {
+    return config.approvedCatalog
+        ? ownNativeApprovedLayout(output, config, corpus)
+        : ownLayout(output, config);
+}
+
+function beginApprovedPhase(layout, executeLive, adapterFactory) {
+    if (!layout.approvedPhase) return;
+    if (executeLive && !adapterFactory)
+        verifyNativeApprovedSourceReleased(layout);
+    layout.approvedPhase.begin();
 }
 
 export async function runNativeEvaluation({
@@ -2134,15 +4274,10 @@ export async function runNativeEvaluation({
     adapterFactory,
 }) {
     const selected = validateNativeConfig(config, corpus);
-    if (typeof executeLive !== "boolean")
-        throw new Error("executeLive must be boolean");
-    if (!path.isAbsolute(helperDirectory ?? ""))
-        throw new Error(
-            "Explicit absolute --console-helper-dir required (scripts directory)",
-        );
-    const layout = ownLayout(output, config);
+    validateNativeInvocation(executeLive, config, helperDirectory);
+    const layout = createEvaluationLayout(output, config, corpus);
     const report = {
-        protocol: "macro-native-rehearsal-v1",
+        ...nativeScoringDeclaration(config),
         status: "unexecuted",
         trials: [],
         decisions: [],
@@ -2152,15 +4287,24 @@ export async function runNativeEvaluation({
     let adapter;
     const budget = createNativeBudget(config, signal);
     budget.metadataOnly = config.diagnosticOnly === true;
+    budget.restrictionReadiness = nativeRestrictionState(
+        layout,
+        report,
+        adapterFactory,
+    );
     const context = { ...layout, config, decisions: report.decisions };
     layout.controlStartedAt = report.startedAt;
     let controlIdentities = [];
     try {
         budget.check();
+        beginApprovedPhase(layout, executeLive, adapterFactory);
         const manifest = prepareNative(layout, config, corpus, helperDirectory);
-        writeJson(path.join(layout.run, "manifest.json"), manifest);
+        writeJson(nativeManifestFile(layout), manifest);
         if (!executeLive) return report;
         assertLiveAdmission(config, adapterFactory);
+        await budget.run(
+            assertNativeBuildObservability(config, adapterFactory),
+        );
         adapter = await (adapterFactory ?? makeLiveAdapter)(
             layout,
             config,
@@ -2168,9 +4312,36 @@ export async function runNativeEvaluation({
             budget,
         );
         const catalog = await budget.run(adapter.startService());
+        if (layout.approvedPhase) {
+            await runNativeApprovedCatalogTrials({
+                adapter,
+                budget,
+                layout,
+                context,
+                report,
+                config,
+                corpus,
+                selected,
+                catalog,
+                adapterFactory,
+            });
+            return report;
+        }
         if (catalog.length)
             throw new NativeStop("Fresh owned catalog is not empty");
         await budget.run(adapter.openConsole());
+        const modeObservation = await configureNativeLoadOnly(
+            adapter,
+            budget,
+            config,
+            context,
+        );
+        report.extensionModeProof = verifyNativeLoadOnlyEvidence(
+            layout,
+            path.join(layout.run, "home-0"),
+            modeObservation,
+            budget.restrictionReadiness,
+        );
         const readyObservation = await waitNative(
             adapter,
             budget,
@@ -2198,19 +4369,21 @@ export async function runNativeEvaluation({
                 report.decisions,
             );
             const observed = adapter.read();
-            validateNativeObservation(observed);
+            validateNativeObservation(observed, {
+                restrictionReadiness: budget.restrictionReadiness,
+            });
             budget.check(observed.events);
             report.diagnostic = {
                 kind: "metadata-only-startup",
                 toolFilters: nativeToolFilters(),
                 nativeCommandSubmitted: false,
                 commandContract:
-                    "No user/task submitted. Native extension uses commands.list/invoke for existing local mode setters and typeagent-status --control (canonical Node compiled getter); tools.getCurrentMetadata only, never send/tool execute.",
+                    "No user/task submitted. Native extension uses commands.list/invoke for existing local mode setters and canonical Node getter; session.tools.initializeAndValidate followed by unfiltered getCurrentMetadata, never send/tool execute.",
                 observedEvents: observed.events.length,
                 sessionId: observed.sessionId,
                 statusViewport: observed.screen,
                 restrictionMetadata:
-                    "source-qualified exact wire names accepted without warnings; availability is distinct from execution consent",
+                    "Required supported Load Only; exact unfiltered inventory and schemas; no unresolved selector warnings or execution grants",
                 remainingGate:
                     "Native user-prompt callback and capture lease proof remain unavailable; ordinary-route receipt must stay proof-blocked. Tool availability metadata is not execution-permission proof.",
                 transitions: transitionDiagnostic,
@@ -2229,29 +4402,44 @@ export async function runNativeEvaluation({
             report.controlProof =
                 report.controlTransitionProofs.at(-1) ??
                 nativeControlProof(layout, "bypass", controlIdentities);
+            if (budget.restrictionReadiness)
+                report.fixtureCatalogProof = completeNativeRestrictionReadiness(
+                    budget.restrictionReadiness,
+                    transitionDiagnostic,
+                    report.controlTransitionProofs,
+                    observed.sessionId,
+                );
+            validateNativeObservation(observed, {
+                restrictionReadiness: budget.restrictionReadiness,
+            });
             writeJson(
                 path.join(layout.run, "native-startup-evidence.json"),
                 report.diagnostic,
             );
             report.status = "blocked";
-            report.error =
-                transitionDiagnostic.status === "passed-metadata-only"
-                    ? report.diagnostic.remainingGate
-                    : (transitionDiagnostic.error ??
-                      "Actual native control transition diagnostic blocked");
+            report.error = metadataDiagnosticGateError(
+                report,
+                transitionDiagnostic,
+            );
             return report;
         }
+        await admitNormalHookBoot(
+            adapter,
+            budget,
+            layout,
+            context,
+            readyObservation,
+        );
+        report.startupControls = context.startupControls;
+        report.fixtureCatalogProof = context.fixtureCatalogProof;
         controlIdentities = adapter.controlIdentities?.() ?? [];
         report.controlProof = nativeControlProof(
             layout,
             "bypass",
             controlIdentities,
+            latestStartupControl(context),
         );
-        if (!adapterFactory && !report.controlProof.passed)
-            throw new NativeStop(
-                "Authoritative native mode/data-root binding is missing or mismatched; no task admitted",
-                "blocked",
-            );
+        requireCurrentControlProof(adapterFactory, report.controlProof);
         adapter.setMode("bypass");
         const baseline = await observeTrial(
             adapter,
@@ -2267,53 +4455,32 @@ export async function runNativeEvaluation({
                 "Baseline oracle did not pass",
                 baseline.status,
             );
-        adapter.setMode("direct");
-        await nativeCommand(
+        if (config.attributionOnly) {
+            report.status = "passed-attribution-only";
+            report.acceptance =
+                "one ordinary synthetic baseline only; capture/reuse/restart not admitted";
+            return report;
+        }
+        const recording = await acquireNativeDraft({
             adapter,
             budget,
-            "/typeagent-macro-learning prepare",
-            /prepare/iu,
+            layout,
             context,
-        );
-        await nativeCommand(
-            adapter,
-            budget,
-            "/typeagent-macro-record",
-            /Recording token:/u,
-            context,
-        );
-        const training = await observeTrial(
-            adapter,
-            budget,
-            selected.training,
+            selected,
             corpus,
-            "direct",
-            context,
-        );
-        report.trials.push({ ...training, candidate: "training" });
-        if (training.status !== "passed")
-            throw new NativeStop(
-                "Training correctness/completion oracle did not pass",
-                training.status,
-            );
-        const recording = await waitNative(
-            adapter,
-            budget,
-            async (observed) => {
-                const state = await adapter.recording(observed.sessionId);
-                if (state.learningJob?.status === "failed")
-                    throw new NativeStop("Macro preparation failed", "failed");
-                return state.learningJob?.status === "needsReview"
-                    ? state
-                    : undefined;
-            },
-            undefined,
-            layout.workspace,
-            report.decisions,
-        );
+            report,
+            sessionId: readyObservation.sessionId,
+        });
         const reference = recording.learningJob.macro;
         const draft = await budget.run(adapter.inspect(reference));
         reviewNativeDraft(draft, await budget.run(adapter.validate(reference)));
+        if (report.selectedSourceAudit)
+            reviewNativePublicationBinding(
+                draft,
+                recording,
+                report.selectedSourceAudit,
+                layout.workspace,
+            );
         writeJson(path.join(layout.run, "reviewed-draft.json"), draft);
         if (!config.reviewSyntheticDraft)
             throw new NativeStop(
@@ -2325,6 +4492,7 @@ export async function runNativeEvaluation({
             operation: "external bounded synthetic review/approve",
             reference: approved,
         });
+        adapter.setMode("direct");
         const reuse = await observeTrial(
             adapter,
             budget,
@@ -2336,8 +4504,18 @@ export async function runNativeEvaluation({
         report.trials.push({ ...reuse, candidate: "reuse" });
         requireGrammarTrial(reuse);
         if (config.restart) {
+            adapter.setMode("bypass");
             await budget.run(adapter.closeConsole());
             await budget.run(adapter.stopService());
+            resetNativeRestartAdmission(layout);
+            if (!adapterFactory)
+                budget.restrictionReadiness = {
+                    ...nativeRestrictionState(layout, {
+                        startedAt: new Date().toISOString(),
+                    }),
+                    deadlineMs:
+                        Date.now() + Math.min(180000, budget.remaining()),
+                };
             const persisted = await budget.run(adapter.startService());
             if (
                 !persisted.some(
@@ -2351,7 +4529,19 @@ export async function runNativeEvaluation({
                     "Approved macro missing after owned service restart",
                 );
             await budget.run(adapter.openConsole());
-            await waitNative(
+            const restartMode = await configureNativeLoadOnly(
+                adapter,
+                budget,
+                config,
+                context,
+            );
+            report.restartExtensionModeProof = verifyNativeLoadOnlyEvidence(
+                layout,
+                path.join(layout.run, "home-1"),
+                restartMode,
+                budget.restrictionReadiness,
+            );
+            const restartReady = await waitNative(
                 adapter,
                 budget,
                 (observation) =>
@@ -2362,6 +4552,20 @@ export async function runNativeEvaluation({
                 layout.workspace,
                 report.decisions,
             );
+            if (!adapterFactory) {
+                await admitNormalHookBoot(
+                    adapter,
+                    budget,
+                    layout,
+                    context,
+                    restartReady,
+                );
+                report.restartFixtureCatalogProof = context.fixtureCatalogProof;
+                report.restartStartupControls = context.startupControls;
+                report.restartRestrictionReadiness =
+                    budget.restrictionReadiness;
+            }
+            adapter.setMode("direct");
             const restarted = await observeTrial(
                 adapter,
                 budget,
@@ -2404,6 +4608,53 @@ export async function runNativeEvaluation({
     }
 }
 
+async function restoreApprovedPreference(adapter, layout, report) {
+    if (!layout.approvedPhase || !report.learningPreferenceBefore) return;
+    try {
+        const restored = await boundedNative(
+            adapter.setLearningPreference(report.learningPreferenceBefore.mode),
+            30000,
+        );
+        if (restored.mode !== report.learningPreferenceBefore.mode)
+            throw new Error(
+                "Original owned learning preference was not restored",
+            );
+        report.learningPreferenceRestored = restored;
+    } catch (error) {
+        report.cleanupErrors.push(error.message);
+    }
+}
+
+function restoreApprovedHistory(layout, report) {
+    if (!layout.approvedPhase) return;
+    if (report.ownedActorCleanupFailed) {
+        report.scopedHistoryRestored = false;
+        report.cleanupErrors.push(
+            "Owned actor shutdown failed; scoped history/phase lock retained rather than mutate a potentially live runtime",
+        );
+        report.status = "harness-invalid";
+        return;
+    }
+    for (const operation of [
+        () => verifyApprovedVersionUnchanged(layout.approvedSource),
+        () => {
+            layout.approvedPhase.restore();
+            verifyNativeWorkspace(
+                layout,
+                layout.approvedSource.manifest.workspaceFiles,
+            );
+            report.scopedHistoryRestored = true;
+            report.learningJobsAndSuppressionUnchanged = true;
+        },
+    ])
+        try {
+            operation();
+        } catch (error) {
+            report.cleanupErrors.push(error.message);
+            report.status = "harness-invalid";
+        }
+}
+
 async function finalizeNativeEvaluation({
     adapter,
     budget,
@@ -2424,26 +4675,51 @@ async function finalizeNativeEvaluation({
     } catch (error) {
         report.controlOwnershipError = error.message;
     }
-    report.controlProof = nativeControlProof(
+    report.shutdownControlSnapshot = nativeControlProof(
         layout,
-        "bypass",
+        report.trials.at(-1)?.mode ?? "bypass",
         controlIdentities,
     );
     if (context.partialTrial) report.incompleteTrial = context.partialTrial;
-    report.targetModelTurns = budget.used();
+    report.commandEffects = context.commandEffects ?? [];
+    if (context.captureState) {
+        report.selectedSourceSnapshots = {
+            before: context.captureState.before,
+            after: context.captureState.after,
+        };
+        report.selectedSourceAudit = context.captureState.sourceAudit;
+    }
+    report.restrictionReadiness = budget.restrictionReadiness;
     report.completedAt = new Date().toISOString();
     report.elapsedMs =
         Date.parse(report.completedAt) - Date.parse(report.startedAt);
     report.cleanupErrors = [];
+    await restoreApprovedPreference(adapter, layout, report);
     for (const operation of ["closeConsole", "stopService"])
         try {
             await boundedNative(adapter?.[operation](), 30000);
         } catch (error) {
             report.cleanupErrors.push(error.message);
+            report.ownedActorCleanupFailed = true;
         }
     if (report.cleanupErrors.length) report.status = "harness-invalid";
     const finalEvents = adapter?.finalEvents?.() ?? [];
+    try {
+        budget.observe(finalEvents);
+        if (budget.used() > config.maxTargetModelTurns) {
+            report.status = "blocked";
+            report.error = "Native target model turn bound exceeded";
+        }
+    } catch (error) {
+        report.status = "harness-invalid";
+        report.error = error.message;
+    }
+    report.targetModelTurns = budget.used();
     report.nativeModelTelemetry = {
+        countsScope:
+            "Latest native session only; targetModelTurns reconciles unique persisted turn identities across observed sessions",
+        accounting:
+            "Unique persisted assistant.turn_start identities, root and child, reconciled after cleanup; model-start/call telemetry is reported separately, not service usage",
         counts: Object.fromEntries(
             [
                 "assistant.turn_start",
@@ -2472,5 +4748,6 @@ async function finalizeNativeEvaluation({
         report.error =
             "Metadata-only diagnostic observed native model generation telemetry";
     }
-    writeJson(path.join(layout.run, "result.json"), report);
+    restoreApprovedHistory(layout, report);
+    writeJson(path.join(artifactDirectory(layout), "result.json"), report);
 }

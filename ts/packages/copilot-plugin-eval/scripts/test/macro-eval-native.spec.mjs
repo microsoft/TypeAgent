@@ -29,15 +29,381 @@ import {
     validateNativeStagedEntries,
     validateNativeObservation,
     nativeToolFilters,
+    verifyNativeFixtureCatalogs,
+    completeNativeRestrictionReadiness,
     consoleConfiguration,
     nativeControlTimeout,
     nativeCatalogReady,
     nativeControlProof,
     nativeReadyObservation,
+    nativeLoadOnlySelection,
+    nativeLoadOnlyControl,
+    configureNativeLoadOnly,
+    verifyNativeLoadOnlyEvidence,
+    observeTrial,
+    verifyNativeFinalizedCapture,
+    bindNativeFinalizedSourceReader,
+    assertLiveAdmission,
+    reviewNativePublicationBinding,
+    mergeNativeSyntheticOriginals,
+    nativePreparationState,
+    nativeBuildResponsePolicy,
+    cleanServiceEnvironment,
+    assertNativeBuildObservability,
+    nativeScoringDeclaration,
+    resetNativeRestartAdmission,
 } from "../macro-eval-native.mjs";
 import { gradeDocumentTrial } from "../macro-eval-grade.mjs";
+import { approvedSourceFixture } from "./approved-source-fixture.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
+
+function finalizedUnitSource(t) {
+    const run = fs.mkdtempSync(path.join(directory, ".native-finalized-unit-"));
+    t.after(() => fs.rmSync(run, { recursive: true, force: true }));
+    const owner = "11111111-2222-4333-8444-555555555555";
+    const layout = {
+        run,
+        owner,
+        workspace: path.join(run, "workspace"),
+        data: path.join(run, "data"),
+        instance: `macro-eval-${owner.slice(0, 8)}`,
+    };
+    fs.writeFileSync(
+        path.join(run, "evaluation-owner.json"),
+        JSON.stringify({ owner }),
+    );
+    const timestamp = (index) =>
+        new Date(Date.now() - 2000 + index * 100).toISOString();
+    const calls = [
+        {
+            toolCallId: "lookup",
+            name: "macro-eval-docs-lookup_document",
+            mcpServerName: "macro-eval-docs",
+            arguments: { title: "Alpha" },
+            result: { content: '{"id":"synthetic-a"}' },
+            modelResult: { id: "synthetic-a" },
+            status: "completed",
+        },
+        {
+            toolCallId: "fetch",
+            name: "macro-eval-docs-fetch_document",
+            mcpServerName: "macro-eval-docs",
+            arguments: { id: "synthetic-a" },
+            result: { content: "ALPHA FULL CONTENT" },
+            modelResult: "ALPHA FULL CONTENT",
+            status: "completed",
+        },
+    ];
+    const eventData = [
+        ["user.message", { content: "Read Alpha" }],
+        ...calls.flatMap((call) => [
+            [
+                "tool.execution_start",
+                {
+                    toolCallId: call.toolCallId,
+                    toolName: call.name,
+                    mcpServerName: call.mcpServerName,
+                    arguments: call.arguments,
+                },
+            ],
+            [
+                "tool.execution_complete",
+                {
+                    toolCallId: call.toolCallId,
+                    success: true,
+                    result: call.result,
+                },
+            ],
+        ]),
+        ["assistant.message", { content: "ALPHA FULL CONTENT", turnId: 0 }],
+        ["assistant.turn_end", { turnId: 0 }],
+    ];
+    const events = eventData.map(([type, data], index) => ({
+        id: `event-${index}`,
+        ...(index ? { parentId: `event-${index - 1}` } : {}),
+        timestamp: timestamp(index),
+        type,
+        data,
+    }));
+    const trace = {
+        schemaVersion: 1,
+        traceId: owner,
+        createdAt: timestamp(8),
+        sessionId: "unit-session",
+        cwd: layout.workspace,
+        prompt: "Read Alpha",
+        response: "ALPHA FULL CONTENT",
+        startedAt: events[0].timestamp,
+        completedAt: events[5].timestamp,
+        toolCalls: calls,
+    };
+    const state = {
+        status: "completed",
+        trace: {
+            traceId: trace.traceId,
+            sessionId: trace.sessionId,
+            createdAt: trace.createdAt,
+            toolCallCount: 2,
+        },
+    };
+    const file = path.join(
+        layout.data,
+        "profiles",
+        layout.instance,
+        "copilot-macros",
+        "traces",
+        `${trace.traceId}.json`,
+    );
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const persist = () => fs.writeFileSync(file, JSON.stringify(trace));
+    persist();
+    return {
+        layout,
+        state,
+        trace,
+        events,
+        file,
+        persist,
+        scenario: { prompt: "Read Alpha" },
+        sessionId: trace.sessionId,
+    };
+}
+
+test("generated finalized synthetic source audit is explicitly not live admission", async (t) => {
+    const fixture = finalizedUnitSource(t);
+    const result = await verifyNativeFinalizedCapture(fixture);
+    assert.equal(result.admission, false);
+    assert.equal(result.traceFile, fixture.file);
+    assert.equal(
+        result.sha256,
+        createHash("sha256")
+            .update(fs.readFileSync(fixture.file))
+            .digest("hex"),
+    );
+    assert.equal(result.native.terminalEventId, "event-6");
+    assert.deepEqual(result.native.toolCallIds, ["lookup", "fetch"]);
+});
+
+test("SDK originals replace whole actual events only after exact actor/native projection correlation", (t) => {
+    const f = finalizedUnitSource(t);
+    const source = {
+        component: "native-sdk-synthetic-tool-originals",
+        pid: 123,
+        parentPid: 12,
+        executable: "unit-only",
+        cwd: f.layout.workspace,
+    };
+    const binding = {
+        owner: f.layout.owner,
+        sessionId: f.sessionId,
+        source,
+        startedAt: new Date(Date.now() - 5000).toISOString(),
+    };
+    const rows = f.events
+        .filter((event) =>
+            ["tool.execution_start", "tool.execution_complete"].includes(
+                event.type,
+            ),
+        )
+        .map((event) => {
+            const original = structuredClone(event);
+            if (event.type === "tool.execution_complete") {
+                original.data.result.detailedContent =
+                    original.data.result.content;
+                original.data.result.contents = [
+                    { type: "text", text: original.data.result.content },
+                ];
+            }
+            return {
+                schemaVersion: 1,
+                ...binding,
+                observedAt: new Date().toISOString(),
+                event: original,
+            };
+        });
+    const merged = mergeNativeSyntheticOriginals(f.events, rows, binding);
+    assert.equal(merged[2], rows[1].event);
+    assert.equal(
+        merged[2].data.result.detailedContent,
+        f.events[2].data.result.content,
+    );
+    assert.equal(f.events[2].data.result.detailedContent, undefined);
+    const skewed = structuredClone(rows);
+    skewed[0].observedAt = new Date(
+        Date.parse(skewed[0].event.timestamp) - 1,
+    ).toISOString();
+    assert.equal(
+        mergeNativeSyntheticOriginals(f.events, skewed, binding)[1],
+        skewed[0].event,
+    );
+    assert.throws(
+        () => mergeNativeSyntheticOriginals(f.events, rows.slice(1), binding),
+        /original event missing/,
+    );
+    for (const corrupt of [
+        (row) => {
+            row.owner = "foreign";
+        },
+        (row) => {
+            row.source.pid++;
+        },
+        (row) => {
+            row.observedAt = new Date(
+                Date.parse(binding.startedAt) - 1,
+            ).toISOString();
+        },
+        (row) => {
+            row.event.parentId = "foreign";
+        },
+        (row) => {
+            row.event.data.result.content = "forged";
+        },
+        (row) => {
+            row.event.data.result.unknownField =
+                "not a documented projection omission";
+        },
+    ]) {
+        const copy = structuredClone(rows);
+        corrupt(copy[1]);
+        assert.throws(
+            () => mergeNativeSyntheticOriginals(f.events, copy, binding),
+            /actor\/session\/current native projection disagreement/,
+        );
+    }
+});
+
+for (const [name, corrupt] of [
+    [
+        "not finalized",
+        (f) => {
+            f.state.status = "claimed";
+        },
+    ],
+    [
+        "foreign session",
+        (f) => {
+            f.trace.sessionId = "foreign";
+        },
+    ],
+    [
+        "foreign workspace",
+        (f) => {
+            f.trace.cwd = f.layout.run;
+        },
+    ],
+    [
+        "different prompt",
+        (f) => {
+            f.trace.prompt = "Read Beta";
+        },
+    ],
+    [
+        "partial response",
+        (f) => {
+            f.trace.response = "ALPHA";
+        },
+    ],
+    [
+        "future completion",
+        (f) => {
+            f.trace.completedAt = new Date(Date.now() + 10000).toISOString();
+        },
+    ],
+    [
+        "unknown schema",
+        (f) => {
+            f.trace.schemaVersion = 2;
+        },
+    ],
+    [
+        "private artifact not supported by v1",
+        (f) => {
+            f.trace.toolCalls[0].resultArtifact = {};
+        },
+    ],
+    [
+        "original result mismatch",
+        (f) => {
+            f.trace.toolCalls[1].result = { content: "OTHER" };
+        },
+    ],
+    [
+        "source impersonation",
+        (f) => {
+            f.trace.toolCalls[0].mcpServerName = "foreign";
+        },
+    ],
+    [
+        "source arguments mismatch",
+        (f) => {
+            f.trace.toolCalls[0].arguments = { title: "Beta" };
+        },
+    ],
+    [
+        "failed backend tool",
+        (f) => {
+            f.events[2].data.success = false;
+        },
+    ],
+    [
+        "missing native terminal",
+        (f) => {
+            f.events.pop();
+        },
+    ],
+    [
+        "broken causality",
+        (f) => {
+            f.events[6].parentId = "foreign";
+        },
+    ],
+    [
+        "extra tool effect",
+        (f) => {
+            f.events.push({ ...f.events[1], id: "extra" });
+        },
+    ],
+]) {
+    test(`generated finalized source rejects ${name}`, async (t) => {
+        const fixture = finalizedUnitSource(t);
+        corrupt(fixture);
+        fixture.persist();
+        await assert.rejects(
+            verifyNativeFinalizedCapture(fixture),
+            /Finalized selected source/,
+        );
+    });
+}
+
+test("generated synchronous source reader binds only its selected lease and loses capability in JSON", (t) => {
+    const f = finalizedUnitSource(t);
+    const envelope = {
+        state: f.state,
+        trace: f.trace,
+        observedAt: new Date().toISOString(),
+        file: { path: f.file, sha256: "a".repeat(64) },
+        source: {
+            instanceDir: path.dirname(path.dirname(path.dirname(f.file))),
+        },
+    };
+    const reader = bindNativeFinalizedSourceReader({
+        sessionId: f.sessionId,
+        tokenId: "unit-token",
+        load: () => structuredClone(envelope),
+    });
+    const target = { sessionId: f.sessionId, tokenId: "unit-token" };
+    assert.equal(reader(target).trace.traceId, f.trace.traceId);
+    assert.throws(() => reader({ ...target, tokenId: "foreign" }), /lease/);
+    assert.throws(() => reader({ ...target, root: "foreign" }), /lease/);
+    assert.deepEqual(
+        JSON.parse(JSON.stringify({ readFinalizedSource: reader })),
+        {},
+    );
+    envelope.file.sha256 = "b".repeat(64);
+    assert.throws(() => reader(target), /changed after verification/);
+});
+
 const corpus = {
     protocolVersion: "macro-user-e2e-v1",
     status: "ready-for-rehearsal-unexecuted",
@@ -77,7 +443,269 @@ const config = {
     restart: true,
     approveSyntheticReadsOnce: false,
     reviewSyntheticDraft: true,
+    extensionMode: "load_only",
 };
+
+test("registered learning status disclaimer is not a permission dialog; actual prompts still block", () => {
+    const screen =
+        "● Macro learning: prepare\n┃ (d:\\owned\\workspace). Approval ┃\n" +
+        "  of a saved macro does not grant tool permissions. ┃\nSession: ready";
+    assert.equal(
+        classifyNativeScreen(screen, undefined, "d:\\owned\\workspace"),
+        undefined,
+    );
+    for (const prompt of [
+        "Authenticate to continue",
+        "Would you like to grant permissions?",
+        "1. Yes, allow all",
+        "Do you want to use this tool?",
+    ])
+        assert.throws(
+            () =>
+                classifyNativeScreen(
+                    `${screen}\n${prompt}`,
+                    undefined,
+                    "d:\\owned\\workspace",
+                ),
+            /Unknown native interaction|Execution permission requires exact/,
+        );
+    assert.throws(
+        () =>
+            classifyNativeScreen(
+                "Unexpected tool permissions required",
+                undefined,
+                "d:\\owned\\workspace",
+            ),
+        /Unknown native interaction/,
+    );
+});
+
+test("scrolled native status notice is informational without its heading", () => {
+    const notice =
+        "   Approval of a saved macro does not grant tool permissions.   ┃";
+    const screen =
+        "Current   Sessions   Issues   Pull requests   Gists\n" +
+        "   (d:\\owned\\workspace). ┃\n" +
+        `${notice}\n` +
+        "● Macro learning armed for the next interaction. Recording token: owned\n" +
+        "❯ Find the document titled 'Vega deployment checklist' and show its contents.\n" +
+        "● Processing command...\n○ Working esc edit prompt";
+    for (const frame of [
+        screen,
+        screen.replace(
+            notice,
+            "Approval ┃\n of a saved macro does not grant tool permissions. ┃",
+        ),
+    ]) {
+        assert.equal(
+            classifyNativeScreen(frame, "d:\\owned\\workspace"),
+            undefined,
+        );
+        for (const prompt of [
+            "Authenticate to continue",
+            "Would you like to grant permissions?",
+            "Confirm unknown interaction\n1. Yes",
+            "Do you want to use this tool?",
+        ])
+            assert.throws(
+                () =>
+                    classifyNativeScreen(
+                        `${frame}\n${prompt}`,
+                        "d:\\owned\\workspace",
+                    ),
+                /Unknown native interaction|Execution permission requires exact/,
+            );
+    }
+    for (const changed of [
+        screen.replace("does not grant", "grants"),
+        screen.replace(notice, `${notice} Would you like to continue?`),
+        screen.replace(notice, `Confirm ${notice}`),
+    ])
+        assert.throws(
+            () => classifyNativeScreen(changed, "d:\\owned\\workspace"),
+            /Unknown native interaction/,
+        );
+});
+
+function selectedUnitAdapter(f, stateFor, eventsFor = () => f.events) {
+    let submitted = false;
+    let reads = 0;
+    return {
+        read: () => ({
+            sessionId: f.sessionId,
+            screen: "Session: ready",
+            events: submitted ? eventsFor(++reads) : [],
+            backendAudit: [],
+            routes: [],
+        }),
+        submit: () => {
+            submitted = true;
+        },
+        recording: () => stateFor(reads),
+    };
+}
+
+function selectedUnitContext(f) {
+    return {
+        ...f.layout,
+        config,
+        decisions: [],
+        captureState: {
+            before: {
+                observedAt: new Date().toISOString(),
+                state: {
+                    status: "armed",
+                    token: {
+                        id: "unit-token",
+                        sessionId: f.sessionId,
+                        cwd: f.layout.workspace,
+                        learning: true,
+                        status: "armed",
+                    },
+                },
+            },
+        },
+    };
+}
+
+test("completed recording cannot reconstruct a missed claimed lease", async (t) => {
+    const f = finalizedUnitSource(t);
+    const context = selectedUnitContext(f);
+    const adapter = selectedUnitAdapter(f, () => f.state);
+    await assert.rejects(
+        observeTrial(
+            adapter,
+            createNativeBudget(config),
+            corpus.training[0],
+            corpus,
+            "mcp",
+            context,
+        ),
+        /claimed state was not observed before finalization/,
+    );
+    assert.equal(context.captureState.after, undefined);
+});
+
+test("native failed tool takes precedence over selected-source attribution", async (t) => {
+    const f = finalizedUnitSource(t);
+    f.events[2].data.success = false;
+    let queries = 0;
+    const adapter = selectedUnitAdapter(f, () => {
+        queries++;
+        return f.state;
+    });
+    await assert.rejects(
+        observeTrial(
+            adapter,
+            createNativeBudget(config),
+            corpus.training[0],
+            corpus,
+            "mcp",
+            selectedUnitContext(f),
+        ),
+        (error) =>
+            error.status === "failed" &&
+            /Native task failed/.test(error.message),
+    );
+    assert.equal(queries, 0);
+});
+
+test("generated claimed/finalized source remains non-admitting and verification is outside terminal timing", async (t) => {
+    const f = finalizedUnitSource(t);
+    const context = selectedUnitContext(f);
+    const claimed = {
+        status: "claimed",
+        token: {
+            ...context.captureState.before.state.token,
+            status: "claimed",
+            promptHash: createHash("sha256").update("Read Alpha").digest("hex"),
+        },
+    };
+    const adapter = selectedUnitAdapter(
+        f,
+        (reads) => (reads === 1 ? claimed : f.state),
+        (reads) => (reads === 1 ? f.events.slice(0, -1) : f.events),
+    );
+    let sourceVerifiedAt;
+    adapter.finalizedSourceReader = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        sourceVerifiedAt = Date.now();
+        return () => {
+            throw new Error("UNIT ONLY; no actual service loader");
+        };
+    };
+    const trial = await observeTrial(
+        adapter,
+        createNativeBudget(config),
+        corpus.training[0],
+        corpus,
+        "mcp",
+        context,
+    );
+    assert.notEqual(trial.status, "passed");
+    assert.equal(context.captureState.after.state, claimed);
+    assert.equal(context.captureState.sourceAudit.admission, false);
+    assert.ok(sourceVerifiedAt - trial.observedTerminalAt >= 30);
+    assert.equal(trial.elapsedMs, trial.observedTerminalAt - trial.submittedAt);
+});
+
+test("bounded review binds the actual selected source, learning job and immutable draft version", async (t) => {
+    const f = finalizedUnitSource(t);
+    const audit = await verifyNativeFinalizedCapture(f);
+    const d = draft();
+    const cwd = path.resolve(f.layout.workspace).toLowerCase();
+    const recording = {
+        ...f.state,
+        trace: { ...f.state.trace, learningJobId: "unit-job" },
+        learningJob: {
+            jobId: "unit-job",
+            traceId: f.trace.traceId,
+            sessionId: f.sessionId,
+            cwd,
+            mode: "prepare",
+            status: "needsReview",
+            macro: { macroId: d.macroId, version: d.version },
+        },
+    };
+    d.sourceTraceId = f.trace.traceId;
+    d.learning = { ...d.learning, jobId: "unit-job", cwd, mode: "prepare" };
+    d.steps.forEach((step, index) => {
+        step.sourceToolCallId = audit.native.toolCallIds[index];
+    });
+    assert.doesNotThrow(() =>
+        reviewNativePublicationBinding(d, recording, audit, f.layout.workspace),
+    );
+    for (const corrupt of [
+        (candidate) => {
+            candidate.sourceTraceId = "foreign";
+        },
+        (candidate) => {
+            candidate.version++;
+        },
+        (candidate) => {
+            candidate.learning.cwd = f.layout.run;
+        },
+        (candidate) => {
+            candidate.learning.jobId = "foreign";
+        },
+        (candidate) => {
+            candidate.steps[1].sourceToolCallId = "foreign";
+        },
+    ]) {
+        const candidate = structuredClone(d);
+        corrupt(candidate);
+        assert.throws(
+            () =>
+                reviewNativePublicationBinding(
+                    candidate,
+                    recording,
+                    audit,
+                    f.layout.workspace,
+                ),
+            /current selected source\/job\/immutable version/,
+        );
+    }
+});
 
 test("readiness returns the exact observed native frame/session, never a boolean admission", () => {
     const observation = {
@@ -133,8 +761,8 @@ test("zero-model diagnostic is bounded and exact source-qualified selection does
         /integer/,
     );
     assert.deepEqual(nativeToolFilters(), [
-        "mcp:macro-eval-docs-lookup_document",
-        "mcp:macro-eval-docs-fetch_document",
+        "macro-eval-docs-lookup_document",
+        "macro-eval-docs-fetch_document",
         "builtin:task",
     ]);
     const run = workspace();
@@ -150,7 +778,30 @@ test("zero-model diagnostic is bounded and exact source-qualified selection does
             diagnostic,
             0,
         ).args;
-        assert.ok(args.includes("mcp:macro-eval-docs-lookup_document"));
+        assert.ok(args.includes("macro-eval-docs-lookup_document"));
+        assert.equal(
+            args.some((arg) => arg.startsWith("mcp:")),
+            false,
+        );
+        assert.deepEqual(
+            args.slice(
+                args.indexOf("--available-tools") + 1,
+                args.indexOf("--log-dir"),
+            ),
+            nativeToolFilters(),
+        );
+        assert.equal(args.includes("--excluded-tools"), false);
+        assert.equal(args.includes("extensions_reload"), false);
+        assert.equal(args.includes("extensions_manage"), false);
+        assert.equal(
+            JSON.parse(
+                fs.readFileSync(
+                    path.join(run, "home-0", "settings.json"),
+                    "utf8",
+                ),
+            ).extensions.mode,
+            "load_only",
+        );
         assert.equal(
             args.some((value) =>
                 /--(?:allow-tool|allow-all|deny-tool)/u.test(value),
@@ -304,7 +955,7 @@ test("metadata catalog deferral never admits warnings after complete catalog or 
         'Unknown tool name in the tool allowlist: "mcp:macro-eval-docs-lookup_document"';
     assert.throws(
         () => validateNativeObservation({ screen, events: [] }),
-        /unresolved tool allowlist/u,
+        /unresolved tool restriction/u,
     );
     assert.doesNotThrow(() =>
         validateNativeObservation(
@@ -321,7 +972,7 @@ test("metadata catalog deferral never admits warnings after complete catalog or 
                 },
                 { allowMetadataCatalogPending: true },
             ),
-        /unresolved tool allowlist/u,
+        /unresolved tool restriction/u,
     );
     assert.throws(
         () =>
@@ -334,6 +985,501 @@ test("metadata catalog deferral never admits warnings after complete catalog or 
             ),
         /MCP catalog startup failed/u,
     );
+});
+
+test("bare exact documented selectors retain five unfiltered actual MCP source/schema gates", () => {
+    const tools = [
+        { name: "task" },
+        ...["lookup_document", "fetch_document"].map((name) => ({
+            name: `macro-eval-docs-${name}`,
+            namespacedName: `macro-eval-docs/${name}`,
+            mcpServerName: "macro-eval-docs",
+            mcpToolName: name,
+        })),
+    ];
+    const diagnostic = () => ({
+        initialTools: structuredClone(tools),
+        tools: structuredClone(tools),
+        transitions: Array.from({ length: 4 }, () => ({
+            tools: structuredClone(tools),
+        })),
+        workflowGates: Array.from({ length: 5 }, () => ({ passed: true })),
+    });
+    assert.equal(verifyNativeFixtureCatalogs(diagnostic()).passed, true);
+    const mutations = [
+        (d) => {
+            d.initialTools[1].mcpServerName = "impersonator";
+        },
+        (d) => {
+            delete d.initialTools[1].mcpServerName;
+        },
+        (d) => {
+            d.initialTools[1].mcpToolName = "other";
+        },
+        (d) => {
+            d.initialTools[1].namespacedName = "other/lookup_document";
+        },
+        (d) => {
+            delete d.initialTools[1].namespacedName;
+        },
+        (d) => {
+            d.initialTools[0].mcpServerName = "custom";
+        },
+        (d) => {
+            d.initialTools.push({ name: "extensions_manage" });
+        },
+        (d) => {
+            d.initialTools[2] = d.initialTools[1];
+        },
+        (d) => {
+            d.transitions[3].tools = d.transitions[3].tools.slice(1);
+        },
+        (d) => {
+            d.transitions.pop();
+        },
+        (d) => {
+            d.workflowGates[1].passed = false;
+        },
+    ];
+    for (const mutate of mutations) {
+        const changed = diagnostic();
+        mutate(changed);
+        assert.throws(
+            () => verifyNativeFixtureCatalogs(changed),
+            /Native|native/u,
+        );
+    }
+});
+
+test("unknown management exclusions fail closed independently of allowlist warnings", () => {
+    for (const name of ["extensions_reload", "extensions_manage"]) {
+        const screen = `Unknown tool name in the tool excludedlist: "${name}"\nMCP Servers reloaded: 5 servers connected`;
+        assert.throws(
+            () => validateNativeObservation({ screen, events: [] }),
+            /unresolved tool restriction/u,
+        );
+        assert.throws(
+            () =>
+                validateNativeObservation(
+                    { screen, events: [] },
+                    { allowMetadataCatalogPending: true },
+                ),
+            /unresolved tool restriction/u,
+        );
+    }
+});
+
+test("generated readiness fixtures require real initializer shape and all source/owned controls before retained startup warnings cease blocking", () => {
+    const tools = [
+        { name: "task" },
+        ...["lookup_document", "fetch_document"].map((name) => ({
+            name: `macro-eval-docs-${name}`,
+            namespacedName: `macro-eval-docs/${name}`,
+            mcpServerName: "macro-eval-docs",
+            mcpToolName: name,
+        })),
+    ];
+    const fixture = () => ({
+        state: {
+            phase: "initializing",
+            startedAt: "2026-10-13T00:00:00Z",
+            selectors: nativeToolFilters().slice(0, 2),
+            warnings: [],
+        },
+        diagnostic: {
+            status: "blocked",
+            error: "Read-only SDK inventory and pure controls collected; native restriction warnings remain unresolved",
+            sessionId: "unit-only-session",
+            toolInitialization: {
+                method: "session.tools.initializeAndValidate",
+                sessionId: "unit-only-session",
+                startedAt: "2099-01-01T00:00:00Z",
+                completedAt: "2099-01-01T00:00:01Z",
+                returnedKeys: [],
+            },
+            initialTools: structuredClone(tools),
+            transitions: Array.from({ length: 4 }, () => ({
+                tools: structuredClone(tools),
+            })),
+            workflowGates: Array.from({ length: 5 }, () => ({ passed: true })),
+        },
+        controls: Array.from({ length: 4 }, () => ({ passed: true })),
+    });
+    const warning =
+        'Unknown tool name in the tool allowlist: "macro-eval-docs-lookup_document"';
+    const observe = (f) => {
+        validateNativeObservation(
+            { screen: warning, events: [] },
+            { restrictionReadiness: f.state },
+        );
+        f.diagnostic.toolInitialization.startedAt = new Date().toISOString();
+        f.diagnostic.toolInitialization.completedAt = new Date().toISOString();
+    };
+    const good = fixture();
+    observe(good);
+    assert.equal(good.state.warnings.length, 1);
+    assert.equal(
+        completeNativeRestrictionReadiness(
+            good.state,
+            good.diagnostic,
+            good.controls,
+            "unit-only-session",
+        ).kind,
+        "native-effective-tools-readiness-v1",
+    );
+    assert.doesNotThrow(() =>
+        validateNativeObservation(
+            {
+                screen: `${warning}\nMCP Servers reloaded: 5 servers connected`,
+                events: [],
+            },
+            { restrictionReadiness: good.state },
+        ),
+    );
+    assert.throws(
+        () =>
+            validateNativeObservation(
+                {
+                    screen: `MCP Servers reloaded: 5 servers connected\n${warning}`,
+                    events: [],
+                },
+                { restrictionReadiness: good.state },
+            ),
+        /unresolved/u,
+    );
+    const changes = [
+        (f) => {
+            delete f.diagnostic.toolInitialization;
+        },
+        (f) => {
+            f.diagnostic.toolInitialization.sessionId = "other";
+        },
+        (f) => {
+            f.diagnostic.toolInitialization.returnedKeys = ["failure"];
+        },
+        (f) => {
+            f.diagnostic.toolInitialization.completedAt = "invalid";
+        },
+        (f) => {
+            f.diagnostic.initialTools[1].mcpServerName = "impersonator";
+        },
+        (f) => {
+            f.controls[0].passed = false;
+        },
+        (f) => {
+            f.diagnostic.error = "actual runtime validation failure";
+        },
+    ];
+    for (const change of changes) {
+        const f = fixture();
+        observe(f);
+        change(f);
+        assert.throws(
+            () =>
+                completeNativeRestrictionReadiness(
+                    f.state,
+                    f.diagnostic,
+                    f.controls,
+                    "unit-only-session",
+                ),
+            /unproved|source binding|failed/u,
+        );
+        assert.equal(f.state.phase, "initializing");
+    }
+    for (const selector of [
+        "extensions_manage",
+        "mcp:macro-eval-docs-lookup_document",
+        "shell",
+        "*",
+    ]) {
+        assert.throws(
+            () =>
+                validateNativeObservation(
+                    {
+                        screen: `Unknown tool name in the tool allowlist: "${selector}"`,
+                        events: [],
+                    },
+                    { restrictionReadiness: fixture().state },
+                ),
+            /unresolved/u,
+        );
+    }
+    assert.throws(
+        () =>
+            validateNativeObservation(
+                {
+                    screen: warning,
+                    events: [{ type: "assistant.turn_start" }],
+                },
+                { restrictionReadiness: fixture().state },
+            ),
+        /before admission/u,
+    );
+});
+
+test("superseded diagnostic capture cannot suppress any selector warning", () => {
+    const observed = {
+        screen: 'MCP Servers reloaded: 5 servers connected\nUnknown tool name in the tool excludedlist: "extensions_manage"',
+        events: [],
+    };
+    assert.throws(
+        () =>
+            validateNativeObservation(observed, {
+                restrictionMetadataCaptureOnly: true,
+            }),
+        /unresolved tool restriction/,
+    );
+    assert.throws(
+        () => validateNativeObservation(observed),
+        /unresolved tool restriction/,
+    );
+    for (const warning of [
+        'Unknown tool name in the tool allowlist: "macro-eval-docs-lookup_document"',
+        'Unknown tool name in the tool excludedlist: "shell"',
+        "Unknown tool name in the tool excludedlist: malformed",
+    ]) {
+        assert.throws(
+            () =>
+                validateNativeObservation(
+                    { ...observed, screen: `${observed.screen}\n${warning}` },
+                    { restrictionMetadataCaptureOnly: true },
+                ),
+            /unresolved tool restriction/,
+        );
+    }
+    const diagnostic = {
+        ...config,
+        diagnosticOnly: true,
+        maxTargetModelTurns: 0,
+        restart: false,
+        extensionMode: "load_only",
+        captureRestrictionMetadata: true,
+    };
+    assert.throws(
+        () => validateNativeConfig(diagnostic, corpus),
+        /Unsupported native option/,
+    );
+    assert.throws(
+        () =>
+            validateNativeConfig(
+                { ...diagnostic, extensionMode: undefined },
+                corpus,
+            ),
+        /Unsupported native option/,
+    );
+    assert.throws(
+        () =>
+            validateNativeConfig(
+                { ...config, captureRestrictionMetadata: true },
+                corpus,
+            ),
+        /Unsupported native option/,
+    );
+});
+
+test("Load Only control selects only an exact three-choice documented mode dialog", () => {
+    assert.equal(
+        nativeLoadOnlySelection(
+            "1. Load & Augment\n❯ 2. Load Only\n3. Disabled",
+        ),
+        "2",
+    );
+    for (const screen of [
+        "1. Load & Augment\n2. Load Only",
+        "1. Load Only\n1. Disabled\n3. Load & Augment",
+        "1. Load Only\n2. Allow All\n3. Disabled",
+        "Load & Augment\nLoad Only\nDisabled",
+    ])
+        assert.throws(
+            () => nativeLoadOnlySelection(screen),
+            /Unsupported extension mode dialog/,
+        );
+});
+
+test("owned Load Only contract rejects other modes, wrong roots, missing captions and every selector warning", () => {
+    for (const mode of [undefined, "load_and_augment", "disabled", "default"])
+        assert.throws(
+            () =>
+                validateNativeConfig(
+                    { ...config, extensionMode: mode },
+                    corpus,
+                ),
+            /load_only/,
+        );
+    const run = workspace();
+    const home = path.join(run, "home-0");
+    fs.mkdirSync(home);
+    const settings = path.join(home, "settings.json");
+    const frame = {
+        sessionId: "owned-mode",
+        events: [],
+        screen: "Session: owned-mode\nMCP Servers reloaded: 5 servers connected\nExtensions mode changed to Load Only - 1/1 extension running",
+    };
+    try {
+        fs.writeFileSync(
+            settings,
+            '// actual CLI JSONC format\n{"extensions":{"mode":"load_only"}}',
+        );
+        assert.equal(
+            verifyNativeLoadOnlyEvidence({ run }, home, frame).mode,
+            "load_only",
+        );
+        assert.throws(
+            () =>
+                verifyNativeLoadOnlyEvidence({ run }, path.dirname(run), frame),
+            /exact owned home/,
+        );
+        assert.throws(
+            () =>
+                verifyNativeLoadOnlyEvidence({ run }, home, {
+                    ...frame,
+                    screen: "Session: owned-mode\nMCP Servers reloaded: 5 servers connected",
+                }),
+            /native confirmation/,
+        );
+        for (const warning of [
+            'Unknown tool name in the tool excludedlist: "extensions_manage"',
+            'Unknown tool name in the tool allowlist: "shell"',
+        ])
+            assert.throws(
+                () =>
+                    verifyNativeLoadOnlyEvidence({ run }, home, {
+                        ...frame,
+                        screen: frame.screen + "\n" + warning,
+                    }),
+                /unresolved tool restriction/,
+            );
+        for (const mode of [undefined, "load_and_augment", "disabled"]) {
+            fs.writeFileSync(
+                settings,
+                JSON.stringify({ extensions: { mode } }),
+            );
+            assert.throws(
+                () => verifyNativeLoadOnlyEvidence({ run }, home, frame),
+                /not Load Only/,
+            );
+        }
+    } finally {
+        fs.rmSync(run, { recursive: true, force: true });
+    }
+});
+
+test("Load Only control observes model starts and cannot submit a rescue prompt", async () => {
+    const submitted = [];
+    await assert.rejects(
+        configureNativeLoadOnly(
+            {
+                read: () => ({
+                    screen: "",
+                    events: [{ type: "model.turn_started" }],
+                }),
+                submit: (text) => submitted.push(text),
+            },
+            { check() {} },
+            { extensionMode: "load_only" },
+            { workspace: directory, decisions: [] },
+        ),
+        /observed model-start/,
+    );
+    assert.deepEqual(submitted, []);
+});
+
+test("documented Load Only setup never converts pending restriction warnings into admission", async () => {
+    const ready = {
+        sessionId: "owned-mode-session",
+        events: [],
+        screen: 'Session: owned-mode-session\nMCP Servers reloaded: 5 servers connected\nUnknown tool name in the tool excludedlist: "extensions_manage"',
+    };
+    const frames = [
+        ready,
+        {
+            ...ready,
+            screen: "1. Load & Augment\n2. Load Only\n3. Disabled",
+        },
+        ready,
+    ];
+    const submitted = [];
+    await assert.rejects(
+        configureNativeLoadOnly(
+            {
+                read: () => frames.shift() ?? ready,
+                submit: (text) => submitted.push(text),
+            },
+            { check() {} },
+            { extensionMode: "load_only" },
+            { workspace: directory, decisions: [] },
+        ),
+        /unresolved tool restriction/,
+    );
+    assert.deepEqual(submitted, []);
+    assert.throws(
+        () => validateNativeObservation(ready),
+        /unresolved tool restriction/,
+    );
+});
+
+test("actual CLI radio mode layout requires exact choices and Load Only focus before Enter", () => {
+    const screen =
+        "│ Extensions Mode │\n│ ❯ ● Load & Augment │\n│   ○ Load Only │\n│   ○ Disabled │";
+    assert.deepEqual(nativeLoadOnlyControl(screen), {
+        kind: "key",
+        value: "Down",
+        complete: false,
+    });
+    const focused = screen
+        .replace("❯ ●", "●")
+        .replace("○ Load Only", "❯ ○ Load Only");
+    assert.deepEqual(nativeLoadOnlyControl(focused, true), {
+        kind: "key",
+        value: "Enter",
+        complete: true,
+    });
+    for (const invalid of [
+        screen.replace("○ Disabled", "○ Allow All"),
+        screen.replace("○ Load Only", "❯ ○ Load Only"),
+        screen.replace("● Load & Augment", "○ Load & Augment"),
+        screen.replace("❯ ●", "●").replace("○ Disabled", "❯ ○ Disabled"),
+    ])
+        assert.throws(() => nativeLoadOnlyControl(invalid), /extension radio/u);
+    assert.throws(
+        () => nativeLoadOnlyControl(screen, true),
+        /Unexpected extension radio mode focus/,
+    );
+});
+
+test("radio mode navigation uses only Down then verified Load Only Enter, never text approval", async () => {
+    const ready = {
+        sessionId: "mode-session",
+        events: [],
+        screen: "Session: mode-session\nMCP Servers reloaded: 5 servers connected",
+    };
+    const dialog =
+        "│ Extensions Mode │\n│ ❯ ● Load & Augment │\n│ ○ Load Only │\n│ ○ Disabled │";
+    const frames = [
+        ready,
+        { ...ready, screen: dialog },
+        {
+            ...ready,
+            screen: dialog
+                .replace("❯ ●", "●")
+                .replace("○ Load Only", "❯ ○ Load Only"),
+        },
+        ready,
+    ];
+    const keys = [];
+    const text = [];
+    await configureNativeLoadOnly(
+        {
+            read: () => frames.shift() ?? ready,
+            submit: (value) => text.push(value),
+            pressKey: (value) => keys.push(value),
+        },
+        { check() {} },
+        { extensionMode: "load_only" },
+        { workspace: directory, decisions: [] },
+    );
+    assert.deepEqual(text, ["/extensions mode"]);
+    assert.deepEqual(keys, ["Down", "Enter"]);
 });
 
 function workspace() {
@@ -980,11 +2126,15 @@ function modelAnswer(
     return events;
 }
 
-function hostAnswer() {
+function hostAnswer(
+    document,
+    reference = { macroId: "learned", version: 1 },
+    prompt = "Read Beta",
+) {
     const { events, append } = timeline();
     const child = { agentId: "child" };
     const data = { parentToolCallId: "host-call" };
-    const content = "Beta\nBETA FULL CONTENT";
+    const content = document?.content ?? "Beta\nBETA FULL CONTENT";
     append(
         "subagent.started",
         {
@@ -1018,7 +2168,7 @@ function hostAnswer() {
     append("session.info", {
         message: JSON.stringify({
             kind: "typeagent-macro-phases",
-            catalogValidation: { macroId: "learned", version: 1 },
+            catalogValidation: reference,
             elapsedMs: 10,
             phases: [
                 "host.dispatch",
@@ -1037,7 +2187,7 @@ function hostAnswer() {
         output: { handled: true, responseContent: content },
     });
     append("user.message", {
-        content: "Read Beta",
+        content: prompt,
         interactionId: "interaction",
     });
     append("assistant.message", {
@@ -1048,8 +2198,8 @@ function hostAnswer() {
     return events;
 }
 
-function audit(key = "b") {
-    const document = corpus.documents.find((item) => item.key === key);
+function audit(key = "b", fixtureCorpus = corpus) {
+    const document = fixtureCorpus.documents.find((item) => item.key === key);
     return [
         {
             operation: "lookup_document",
@@ -1416,36 +2566,111 @@ test("cancellation interrupts a pending operation instead of waiting for its dea
     await assert.rejects(pending, /cancelled/);
 });
 
+test("read-only tool initialization has its own bound inside a longer task budget", () => {
+    let now = 0;
+    const budget = createNativeBudget(
+        { ...config, maxDurationMs: 300000 },
+        undefined,
+        () => now,
+    );
+    budget.restrictionReadiness = { phase: "initializing", deadlineMs: 180000 };
+    budget.check();
+    now = 180000;
+    assert.throws(
+        () => budget.check(),
+        /read-only tool initialization deadline/u,
+    );
+    budget.restrictionReadiness.phase = "verified";
+    assert.doesNotThrow(() => budget.check());
+});
+
 function fakeAdapter(behavior = {}) {
     let events = [],
         index = 0,
         mode = "bypass",
-        learned = false;
+        learned = Boolean(behavior.approvedMacro),
+        learningMode = "prepare";
     const backendAudit = [];
     const routes = [];
     const operations = [];
+    let ownedLayout,
+        ownedConfig,
+        extensionMenu = false,
+        modeConfirmed = false;
     const add = (next) => {
         const prefix = `session-${index}-batch-${events.length}-`;
         events.push(
             ...next.map((event) => ({
                 ...event,
+                ...((behavior.formattedAnswer ||
+                    behavior.fencedAnswer ||
+                    behavior.blockquotedAnswer ||
+                    behavior.fixtureAnswer) &&
+                event.type === "assistant.message" &&
+                !event.agentId &&
+                [
+                    "Alpha\nALPHA FULL CONTENT",
+                    "Beta\nBETA FULL CONTENT",
+                ].includes(event.data?.content)
+                    ? {
+                          data: {
+                              ...event.data,
+                              content: behavior.fixtureAnswer
+                                  ? behavior.fixtureCorpus.documents.find(
+                                        (document) =>
+                                            document.title ===
+                                            event.data.content.split("\n")[0],
+                                    ).content
+                                  : behavior.blockquotedAnswer
+                                    ? event.data.content
+                                          .split("\n")
+                                          .map((line) => `> ${line}`)
+                                          .join("\n")
+                                    : behavior.fencedAnswer
+                                      ? `# ${event.data.content.split("\n")[0]}\n\n\`\`\`text\n${event.data.content}\n\`\`\``
+                                      : "# " +
+                                        event.data.content.replace(
+                                            "\n",
+                                            "\n\n",
+                                        ) +
+                                        "  ",
+                          },
+                      }
+                    : {}),
                 id: prefix + event.id,
                 parentId: event.parentId ? prefix + event.parentId : null,
             })),
         );
     };
     return {
+        bindLayout: (layout, config) => {
+            ownedLayout = layout;
+            ownedConfig = config;
+        },
         operations,
         startService: async () => {
             operations.push("service-start");
+            if (behavior.approvedMacro)
+                return [
+                    {
+                        macroId: behavior.approvedMacro.macroId,
+                        version:
+                            behavior.catalogVersion ??
+                            behavior.approvedMacro.version,
+                        state: "approved",
+                    },
+                ];
             return learned
                 ? [{ macroId: "learned", version: 1, state: "approved" }]
                 : [];
         },
         openConsole: async () => {
             operations.push("console-open");
+            consoleConfiguration(ownedLayout, ownedConfig, index);
             index++;
             events = [];
+            extensionMenu = false;
+            modeConfirmed = false;
         },
         closeConsole: async () => {
             operations.push("console-close");
@@ -1465,11 +2690,58 @@ function fakeAdapter(behavior = {}) {
             sessionId: `owned-session-${index}`,
             screen: behavior.unknownScreen
                 ? "Do you want an unknown install?"
-                : "Session: ready\nMCP Servers reloaded: 5 servers connected",
+                : extensionMenu
+                  ? "Extensions Mode\n● Load & Augment\n❯ ○ Load Only\n○ Disabled"
+                  : "Session: ready\nMCP Servers reloaded: 5 servers connected" +
+                    (modeConfirmed
+                        ? "\nExtensions mode changed to Load Only - 1/1 extension running"
+                        : ""),
         }),
+        pressKey: (key) => {
+            assert.equal(key, "Enter");
+            extensionMenu = false;
+            modeConfirmed = true;
+        },
         submit: (text) => {
+            if (text === "/extensions mode") {
+                extensionMenu = true;
+                return;
+            }
             operations.push(`submit:${text}`);
-            if (text.startsWith("/")) {
+            if (behavior.approvedMacro) {
+                const document = behavior.fixtureCorpus.documents.find(
+                    (item) => text === `Read ${item.title}`,
+                );
+                const reference = {
+                    macroId: behavior.approvedMacro.macroId,
+                    version: behavior.approvedMacro.version,
+                };
+                add(
+                    hostAnswer(
+                        behavior.omitApprovedBody
+                            ? { ...document, content: "Steps completed." }
+                            : document,
+                        reference,
+                        text,
+                    ),
+                );
+                backendAudit.push(
+                    ...audit(document.key, behavior.fixtureCorpus),
+                );
+                routes.push({
+                    ...route,
+                    seq: routes.length + 1,
+                    data: {
+                        fromCache: "grammar",
+                        detail: {
+                            phrase: text,
+                            action: `macros.run_${reference.macroId}_v${reference.version}`,
+                        },
+                    },
+                });
+                if (behavior.afterApprovedSubmit)
+                    behavior.afterApprovedSubmit();
+            } else if (text.startsWith("/")) {
                 const { events: next, append } = timeline();
                 const content = text.includes("record")
                     ? "Recording token: token"
@@ -1491,13 +2763,27 @@ function fakeAdapter(behavior = {}) {
                 add(next);
             } else if (text === "Read Alpha") {
                 add(modelAnswer("Read Alpha", "Alpha\nALPHA FULL CONTENT"));
-                backendAudit.push(...audit("a"));
+                backendAudit.push(...audit("a", behavior.fixtureCorpus));
             } else {
                 add(learned ? hostAnswer() : modelAnswer());
-                backendAudit.push(...audit());
+                backendAudit.push(...audit("b", behavior.fixtureCorpus));
                 if (learned) routes.push({ ...route, seq: routes.length + 1 });
                 if (behavior.taskError)
                     add([{ id: "failed", type: "session.error", data: {} }]);
+                if (behavior.hookError)
+                    add([
+                        {
+                            id: "failed-normal-hook",
+                            type: "hook.end",
+                            data: {
+                                hookType: "userPromptSubmitted",
+                                success: false,
+                                error: {
+                                    message: "Actual PowerShell ParserError",
+                                },
+                            },
+                        },
+                    ]);
             }
         },
         recording: async () => ({
@@ -1506,7 +2792,7 @@ function fakeAdapter(behavior = {}) {
                 macro: { macroId: "learned", version: 1 },
             },
         }),
-        inspect: async () => draft(),
+        inspect: async () => behavior.approvedMacro ?? draft(),
         validate: async () => ({ valid: true }),
         approve: async () => {
             learned = true;
@@ -1514,10 +2800,16 @@ function fakeAdapter(behavior = {}) {
             return { macroId: "learned", version: 1 };
         },
         runtime: () => [],
+        learningPreference: async () => ({ mode: learningMode }),
+        setLearningPreference: async (mode) => {
+            operations.push(`learning:${mode}`);
+            learningMode = mode;
+            return { mode };
+        },
     };
 }
 
-async function fakeRun(root, adapter, override = {}) {
+async function fakeRun(root, adapter, override = {}, fixtureCorpus = corpus) {
     const helpers = path.join(root, "helpers");
     fs.mkdirSync(helpers);
     for (const name of [
@@ -1527,13 +2819,16 @@ async function fakeRun(root, adapter, override = {}) {
     ])
         fs.writeFileSync(path.join(helpers, name), "offline fake helper");
     return runNativeEvaluation({
-        corpus,
+        corpus: fixtureCorpus,
         config: { ...config, ...override },
-        output: path.join(root, "run"),
+        output: override.approvedCatalog
+            ? path.join(override.approvedCatalog.artifactRoot, "current-phase")
+            : path.join(root, "run"),
         helperDirectory: helpers,
         executeLive: true,
         adapterFactory: adapter
             ? (layout) => {
+                  adapter.bindLayout(layout, { ...config, ...override });
                   if (override.diagnosticOnly)
                       fs.writeFileSync(
                           path.join(
@@ -1602,20 +2897,15 @@ test("diagnostic startup never submits a task/command, learns or publishes and r
             }
         });
 
-        test("real task entrypoint blocks the unsupported bypass/control contract before any service or model launch", async () => {
-            const root = workspace();
-            try {
-                const result = await fakeRun(root, undefined);
-                assert.equal(result.status, "blocked");
-                assert.match(
-                    result.error,
-                    /blocked before models.*explicit Copilot bypass/u,
-                );
-                assert.equal(result.targetModelTurns, 0);
-                assert.deepEqual(result.trials, []);
-            } finally {
-                fs.rmSync(root, { recursive: true, force: true });
-            }
+        test("real task entrypoint blocks unavailable finalized-source capability before any service or model launch", async () => {
+            assert.throws(
+                () =>
+                    assertLiveAdmission(config, undefined, {
+                        nativeOrdinaryCallbackContract:
+                            "native-normal-hook-callback-v1",
+                    }),
+                /blocked before models.*finalized selected-source grader capability/u,
+            );
         });
         assert.equal(result.status, "blocked", JSON.stringify(result));
         assert.equal(result.targetModelTurns, 0);
@@ -1700,6 +2990,7 @@ test("offline adapter blocks an explicit bypass baseline without an admitted gra
 for (const [name, behavior, override, expected] of [
     ["unknown interactions", { unknownScreen: true }, {}, "blocked"],
     ["native errors", { taskError: true }, {}, "failed"],
+    ["native hook errors", { hookError: true }, {}, "failed"],
     ["unapproved publication", {}, { reviewSyntheticDraft: false }, "blocked"],
     ["cleanup failures", { cleanupError: true }, {}, "harness-invalid"],
     ["turn bound", {}, { maxTargetModelTurns: 1 }, "blocked"],
@@ -1711,6 +3002,11 @@ for (const [name, behavior, override, expected] of [
             const adapter = fakeAdapter(behavior);
             const result = await fakeRun(root, adapter, override);
             assert.equal(result.status, expected, JSON.stringify(result));
+            if (behavior.hookError) {
+                assert.match(result.error, /Actual PowerShell ParserError/u);
+                assert.ok(result.targetModelTurns > 0);
+                assert.equal(result.trials.length, 0);
+            }
             if (behavior.taskError) {
                 assert.ok(
                     result.incompleteTrial.evidence.events.some(
@@ -1737,6 +3033,993 @@ for (const [name, behavior, override, expected] of [
             fs.rmSync(root, { recursive: true, force: true });
         }
     });
+
+const renderingContract = {
+    protocolVersion: "synthetic-document-rendering-v2",
+    fixtureShape: "synthetic-prose-lines-v1",
+};
+const fenceRenderingContract = {
+    ...renderingContract,
+    protocolVersion: "synthetic-document-rendering-v3",
+};
+const blockquoteRenderingContract = {
+    ...renderingContract,
+    protocolVersion: "synthetic-document-rendering-v4",
+};
+const renderingCorpus = {
+    ...corpus,
+    documents: corpus.documents.map((document) => ({
+        ...document,
+        expectedId: `synthetic-doc-${document.key}`,
+        content: `${document.title}\n${document.content}`,
+    })),
+};
+const similarityCorpus = {
+    ...renderingCorpus,
+    documents: renderingCorpus.documents.map((document) => ({
+        ...document,
+        content: [
+            document.title,
+            `${document.key.toUpperCase()}-READY-17`,
+            `Owner: Test Team ${document.title}`,
+            "Gate: staging smoke tests reviewed",
+            `${document.key.toUpperCase()}-CHECK-42`,
+        ].join("\n"),
+    })),
+};
+const similarityRenderingContract = {
+    protocolVersion: "synthetic-document-similarity-v5",
+    fixtureShape: "synthetic-prose-lines-v1",
+    fixtureId: "macro-eval-synthetic-prose-fixture-v1",
+    algorithm: "ordered-levenshtein-codepoints-v1",
+    threshold: 0.9,
+    protectedDocuments: similarityCorpus.documents.map((document) => ({
+        key: document.key,
+        title: document.title,
+        expectedId: document.expectedId,
+        contentSha256: createHash("sha256")
+            .update(document.content)
+            .digest("hex"),
+        markers: [
+            document.content.split("\n")[1],
+            document.content.split("\n").at(-1),
+        ],
+    })),
+};
+
+function approvedUnitCorpus() {
+    const gamma = {
+        key: "c",
+        title: "Gamma",
+        expectedId: "synthetic-doc-c",
+        content:
+            "Gamma\nC-READY-17\nOwner: Test Team Gamma\nGate: staging smoke tests reviewed\nC-CHECK-42",
+    };
+    return {
+        ...similarityCorpus,
+        documents: [...similarityCorpus.documents, gamma],
+        heldOutPositive: [
+            ...similarityCorpus.heldOutPositive,
+            { id: "restart", prompt: "Read Gamma", expectedDocument: "c" },
+        ],
+    };
+}
+
+function approvedUnitConfig(source, corpus) {
+    return {
+        approvedCatalog: source.config,
+        retainSyntheticLearningResponses: false,
+        renderingContract: {
+            ...similarityRenderingContract,
+            protectedDocuments: corpus.documents.map((document) => ({
+                key: document.key,
+                title: document.title,
+                expectedId: document.expectedId,
+                contentSha256: createHash("sha256")
+                    .update(document.content)
+                    .digest("hex"),
+                markers: [
+                    document.content.split("\n")[1],
+                    document.content.split("\n").at(-1),
+                ],
+            })),
+        },
+    };
+}
+
+test("restart clears only completed-session diagnostic admission after owned stop", () => {
+    const root = workspace();
+    try {
+        const layout = {
+            run: root,
+            data: path.join(root, "data"),
+            pluginData: path.join(root, "plugin-data"),
+            owner: "unit-owner",
+        };
+        fs.mkdirSync(layout.data);
+        fs.mkdirSync(layout.pluginData);
+        const configFile = path.join(layout.pluginData, "config.json");
+        const config = {
+            mode: "bypass",
+            mcpRouting: "mixed",
+            powershell: { enabled: false },
+        };
+        fs.writeFileSync(configFile, JSON.stringify(config));
+        const file = path.join(layout.data, "native-control-admission.json");
+        const before = {
+            owner: layout.owner,
+            ownedRoot: root,
+            configPath: path.join(layout.pluginData, "config.json"),
+            expectedMode: "bypass",
+            diagnosticTransitions: true,
+            nativeSyntheticOriginals: true,
+            diagnosticCatalogReady: true,
+            diagnosticCatalogSessionId: "completed-session",
+            diagnosticActorIdentities: [{ pid: 123 }],
+            diagnosticRestrictionWarnings: [{ selector: "old" }],
+        };
+        fs.writeFileSync(file, JSON.stringify(before));
+        resetNativeRestartAdmission(layout);
+        const after = JSON.parse(fs.readFileSync(file, "utf8"));
+        assert.deepEqual(after, {
+            owner: layout.owner,
+            ownedRoot: root,
+            configPath: before.configPath,
+            expectedMode: "bypass",
+            diagnosticTransitions: true,
+            nativeSyntheticOriginals: true,
+        });
+        assert.deepEqual(
+            JSON.parse(
+                fs.readFileSync(
+                    path.join(root, "restart-admission-before.json"),
+                    "utf8",
+                ),
+            ),
+            { admission: before, config },
+        );
+        assert.deepEqual(JSON.parse(fs.readFileSync(configFile, "utf8")), {
+            mode: "bypass",
+            powershell: { enabled: false },
+        });
+        fs.writeFileSync(file, JSON.stringify({ ...before, owner: "foreign" }));
+        assert.throws(
+            () => resetNativeRestartAdmission(layout),
+            /roots\/mode changed/u,
+        );
+        assert.equal(
+            JSON.parse(fs.readFileSync(file, "utf8")).owner,
+            "foreign",
+        );
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+for (const [name, behavior, expected] of [
+    ["genuine restart", {}, "passed"],
+    ["stale active version", { catalogVersion: 3 }, "blocked"],
+    ["unknown consent", { unknownScreen: true }, "blocked"],
+    ["missing requested body", { omitApprovedBody: true }, "failed"],
+    ["cleanup failure", { cleanupError: true }, "harness-invalid"],
+])
+    test(`approved-only offline phase preserves history and avoids learning: ${name}`, async () => {
+        const root = workspace();
+        try {
+            const corpus = approvedUnitCorpus();
+            const source = approvedSourceFixture(root, corpus, draft());
+            const adapter = fakeAdapter({
+                ...behavior,
+                approvedMacro: source.macro,
+                fixtureCorpus: corpus,
+            });
+            const before = fs.readFileSync(source.learningFile);
+            const result = await fakeRun(
+                root,
+                adapter,
+                approvedUnitConfig(source, corpus),
+                corpus,
+            );
+            assert.equal(result.status, expected, result.error);
+            assert.equal(result.scopedHistoryRestored, !behavior.cleanupError);
+            assert.deepEqual(fs.readFileSync(source.learningFile), before);
+            assert.equal(adapter.operations.includes("approve"), false);
+            assert.equal(
+                adapter.operations.some((operation) =>
+                    /^submit:.*(?:record|prepare|capture)/u.test(operation),
+                ),
+                false,
+            );
+            assert.equal(
+                fs.existsSync(path.join(source.root, ".approved-reuse.lock")),
+                Boolean(behavior.cleanupError),
+            );
+            if (expected === "passed") {
+                assert.equal(result.trials.length, 2);
+                assert.notEqual(
+                    result.trials[0].sessionId,
+                    result.trials[1].sessionId,
+                );
+                assert.equal(
+                    adapter.operations.filter(
+                        (operation) => operation === "service-start",
+                    ).length,
+                    2,
+                );
+                assert.equal(result.operatorActions.length, 0);
+                assert.equal(result.learningPreferenceDuring.mode, "off");
+                for (const trial of result.trials) {
+                    assert.equal(trial.grade.answerScoring.similarity, 1);
+                    assert.equal(trial.grade.grammarHit, true);
+                }
+            } else
+                assert.equal(
+                    adapter.operations.filter(
+                        (operation) => operation === "service-start",
+                    ).length,
+                    1,
+                );
+            for (const key of Object.keys(source.config.sourceHashes))
+                assert.equal(
+                    createHash("sha256")
+                        .update(fs.readFileSync(source.files[key].file))
+                        .digest("hex"),
+                    source.config.sourceHashes[key],
+                );
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+test("future similarity configuration requires explicit complete trusted-fixture metadata", () => {
+    const future = {
+        ...config,
+        renderingContract: similarityRenderingContract,
+    };
+    assert.deepEqual(nativeScoringDeclaration(future), {
+        protocol: "macro-native-rehearsal-v5",
+        renderingContract: similarityRenderingContract,
+    });
+    assert.doesNotThrow(() => validateNativeConfig(future, similarityCorpus));
+    for (const update of [
+        { threshold: 0.89 },
+        { fixtureId: "unknown" },
+        {
+            protectedDocuments:
+                similarityRenderingContract.protectedDocuments.slice(1),
+        },
+        { normalize: true },
+    ])
+        assert.throws(() =>
+            validateNativeConfig(
+                {
+                    ...future,
+                    renderingContract: {
+                        ...similarityRenderingContract,
+                        ...update,
+                    },
+                },
+                similarityCorpus,
+            ),
+        );
+    const snapshot = nativeScoringDeclaration(future).renderingContract;
+    assert.notEqual(
+        snapshot.protectedDocuments,
+        similarityRenderingContract.protectedDocuments,
+    );
+    assert.deepEqual(
+        snapshot.protectedDocuments,
+        similarityRenderingContract.protectedDocuments,
+    );
+});
+
+test("future similarity pre-model admission requires only its own tested capability", () => {
+    const future = {
+        ...config,
+        renderingContract: similarityRenderingContract,
+    };
+    const contracts = {
+        nativeOrdinaryCallbackContract: "native-normal-hook-callback-v1",
+        nativeSelectedSourceContract: "native-finalized-selected-source-v1",
+        syntheticDocumentRenderingContract: renderingContract.protocolVersion,
+        syntheticDocumentFenceRenderingContract:
+            fenceRenderingContract.protocolVersion,
+        syntheticDocumentBlockquoteRenderingContract:
+            blockquoteRenderingContract.protocolVersion,
+    };
+    for (const unsupported of [
+        contracts,
+        {
+            ...contracts,
+            syntheticDocumentBlockquoteRenderingContract:
+                similarityRenderingContract.protocolVersion,
+        },
+        { ...contracts, syntheticDocumentSimilarityContract: "unknown" },
+    ])
+        assert.throws(
+            () => assertLiveAdmission(future, undefined, unsupported),
+            /Rendered-content scoring blocked before models/u,
+        );
+    assert.doesNotThrow(() =>
+        assertLiveAdmission(future, undefined, {
+            ...contracts,
+            syntheticDocumentSimilarityContract:
+                similarityRenderingContract.protocolVersion,
+        }),
+    );
+});
+
+test("future similarity rejects stale fixture IDs/hashes/markers before native trial submission", async () => {
+    for (const update of [
+        { expectedId: "synthetic-doc-changed" },
+        {
+            content: similarityCorpus.documents[0].content.replace(
+                "reviewed",
+                "changed",
+            ),
+        },
+        {
+            content: similarityCorpus.documents[0].content.replace(
+                "READY-17",
+                "READY-18",
+            ),
+        },
+    ]) {
+        let read = false;
+        let submitted = false;
+        const changed = {
+            ...similarityCorpus,
+            documents: similarityCorpus.documents.map((document, index) =>
+                index === 0 ? { ...document, ...update } : document,
+            ),
+        };
+        await assert.rejects(
+            observeTrial(
+                {
+                    read: () => {
+                        read = true;
+                    },
+                    submit: () => {
+                        submitted = true;
+                    },
+                },
+                undefined,
+                {},
+                changed,
+                "bypass",
+                {
+                    config: {
+                        ...config,
+                        renderingContract: similarityRenderingContract,
+                    },
+                },
+            ),
+            (error) =>
+                !(error instanceof ReferenceError) &&
+                !(error instanceof TypeError),
+        );
+        assert.equal(read, false);
+        assert.equal(submitted, false);
+    }
+});
+
+test("future similarity persists the complete per-trial scoring contract without changing source metadata", async () => {
+    const root = workspace();
+    try {
+        const contract = structuredClone(similarityRenderingContract);
+        const result = await fakeRun(
+            root,
+            fakeAdapter({
+                fixtureAnswer: true,
+                fixtureCorpus: similarityCorpus,
+            }),
+            { renderingContract: contract },
+            similarityCorpus,
+        );
+        const manifest = JSON.parse(
+            fs.readFileSync(path.join(root, "run", "manifest.json"), "utf8"),
+        );
+        for (const record of [manifest, result]) {
+            assert.equal(record.protocol, "macro-native-rehearsal-v5");
+            assert.deepEqual(
+                record.renderingContract,
+                similarityRenderingContract,
+            );
+        }
+        assert.deepEqual(
+            manifest.config.renderingContract,
+            similarityRenderingContract,
+        );
+        assert.deepEqual(
+            result.trials[0].renderingContract,
+            similarityRenderingContract,
+        );
+        assert.deepEqual(contract, similarityRenderingContract);
+        assert.equal(result.trials[0].grade.taskCorrect, true);
+        assert.equal(result.status, "blocked");
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("future rendering scoring is explicit, versioned and default-verbatim", () => {
+    assert.deepEqual(nativeScoringDeclaration(config), {
+        protocol: "macro-native-rehearsal-v1",
+    });
+    assert.deepEqual(
+        nativeScoringDeclaration({ ...config, renderingContract }),
+        {
+            protocol: "macro-native-rehearsal-v2",
+            renderingContract,
+        },
+    );
+    assert.doesNotThrow(() =>
+        validateNativeConfig({ ...config, renderingContract }, corpus),
+    );
+    assert.deepEqual(
+        nativeScoringDeclaration({
+            ...config,
+            renderingContract: fenceRenderingContract,
+        }),
+        {
+            protocol: "macro-native-rehearsal-v3",
+            renderingContract: fenceRenderingContract,
+        },
+    );
+    assert.doesNotThrow(() =>
+        validateNativeConfig(
+            { ...config, renderingContract: fenceRenderingContract },
+            corpus,
+        ),
+    );
+    assert.deepEqual(
+        nativeScoringDeclaration({
+            ...config,
+            renderingContract: blockquoteRenderingContract,
+        }),
+        {
+            protocol: "macro-native-rehearsal-v4",
+            renderingContract: blockquoteRenderingContract,
+        },
+    );
+    assert.doesNotThrow(() =>
+        validateNativeConfig(
+            { ...config, renderingContract: blockquoteRenderingContract },
+            corpus,
+        ),
+    );
+    for (const value of [
+        null,
+        "synthetic-document-rendering-v2",
+        {},
+        { ...renderingContract, protocolVersion: "unknown" },
+        {
+            ...fenceRenderingContract,
+            protocolVersion: "synthetic-document-rendering-v5",
+        },
+        { ...renderingContract, fixtureShape: "raw-code" },
+        { ...renderingContract, normalize: true },
+        { ...fenceRenderingContract, allowFences: true },
+        { ...blockquoteRenderingContract, allowBlockquotes: true },
+    ])
+        assert.throws(
+            () =>
+                validateNativeConfig(
+                    { ...config, renderingContract: value },
+                    corpus,
+                ),
+            /Explicit exact synthetic-document-rendering-v2/u,
+        );
+});
+
+test("future rendering scoring blocks before models when tested grader version is missing", () => {
+    const oldContracts = {
+        nativeOrdinaryCallbackContract: "native-normal-hook-callback-v1",
+        nativeSelectedSourceContract: "native-finalized-selected-source-v1",
+    };
+    assert.throws(
+        () =>
+            assertLiveAdmission(
+                { ...config, renderingContract },
+                undefined,
+                oldContracts,
+            ),
+        /Rendered-content scoring blocked before models/u,
+    );
+    assert.doesNotThrow(() =>
+        assertLiveAdmission({ ...config, renderingContract }, undefined, {
+            ...oldContracts,
+            syntheticDocumentRenderingContract:
+                renderingContract.protocolVersion,
+        }),
+    );
+});
+
+test("future exact-fence scoring requires its own tested pre-model capability", () => {
+    const contracts = {
+        nativeOrdinaryCallbackContract: "native-normal-hook-callback-v1",
+        nativeSelectedSourceContract: "native-finalized-selected-source-v1",
+        syntheticDocumentRenderingContract: renderingContract.protocolVersion,
+    };
+    const future = {
+        ...config,
+        renderingContract: fenceRenderingContract,
+    };
+    assert.throws(
+        () => assertLiveAdmission(future, undefined, contracts),
+        /Rendered-content scoring blocked before models/u,
+    );
+    assert.throws(
+        () =>
+            assertLiveAdmission(future, undefined, {
+                ...contracts,
+                syntheticDocumentFenceRenderingContract: "unknown",
+            }),
+        /Rendered-content scoring blocked before models/u,
+    );
+    assert.doesNotThrow(() =>
+        assertLiveAdmission(future, undefined, {
+            ...contracts,
+            syntheticDocumentFenceRenderingContract:
+                fenceRenderingContract.protocolVersion,
+        }),
+    );
+});
+
+test("future exact-blockquote scoring requires its own tested pre-model capability", () => {
+    const contracts = {
+        nativeOrdinaryCallbackContract: "native-normal-hook-callback-v1",
+        nativeSelectedSourceContract: "native-finalized-selected-source-v1",
+        syntheticDocumentRenderingContract: renderingContract.protocolVersion,
+        syntheticDocumentFenceRenderingContract:
+            fenceRenderingContract.protocolVersion,
+    };
+    const future = {
+        ...config,
+        renderingContract: blockquoteRenderingContract,
+    };
+    for (const unsupported of [
+        contracts,
+        {
+            ...contracts,
+            syntheticDocumentFenceRenderingContract:
+                blockquoteRenderingContract.protocolVersion,
+        },
+        {
+            ...contracts,
+            syntheticDocumentBlockquoteRenderingContract: "unknown",
+        },
+    ])
+        assert.throws(
+            () => assertLiveAdmission(future, undefined, unsupported),
+            /Rendered-content scoring blocked before models/u,
+        );
+    assert.doesNotThrow(() =>
+        assertLiveAdmission(future, undefined, {
+            ...contracts,
+            syntheticDocumentBlockquoteRenderingContract:
+                blockquoteRenderingContract.protocolVersion,
+        }),
+    );
+});
+
+for (const [name, contract, protocol, taskCorrect] of [
+    ["default v1", undefined, "macro-native-rehearsal-v1", true],
+    ["frozen v2", renderingContract, "macro-native-rehearsal-v2", false],
+    ["future v3", fenceRenderingContract, "macro-native-rehearsal-v3", true],
+    [
+        "future v4",
+        blockquoteRenderingContract,
+        "macro-native-rehearsal-v4",
+        true,
+    ],
+])
+    test(`${name} native exact-body fence keeps its explicitly selected scoring semantics`, async () => {
+        const root = workspace();
+        try {
+            const result = await fakeRun(
+                root,
+                fakeAdapter({
+                    fencedAnswer: true,
+                    fixtureCorpus: renderingCorpus,
+                }),
+                contract ? { renderingContract: contract } : {},
+                renderingCorpus,
+            );
+            const manifest = JSON.parse(
+                fs.readFileSync(
+                    path.join(root, "run", "manifest.json"),
+                    "utf8",
+                ),
+            );
+            for (const record of [result, manifest]) {
+                assert.equal(record.protocol, protocol);
+                assert.deepEqual(record.renderingContract, contract);
+            }
+            assert.equal(result.trials[0].grade.taskCorrect, taskCorrect);
+            assert.equal(result.status, taskCorrect ? "blocked" : "failed");
+            assert.equal(
+                result.trials[0].evidence.answer,
+                "# Beta\n\n```text\nBeta\nBETA FULL CONTENT\n```",
+            );
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+for (const [name, contract, protocol, taskCorrect] of [
+    ["frozen v1", undefined, "macro-native-rehearsal-v1", false],
+    ["frozen v2", renderingContract, "macro-native-rehearsal-v2", false],
+    ["frozen v3", fenceRenderingContract, "macro-native-rehearsal-v3", false],
+    [
+        "future v4",
+        blockquoteRenderingContract,
+        "macro-native-rehearsal-v4",
+        true,
+    ],
+])
+    test(`${name} native exact blockquote retains explicit manifest/result/grade semantics`, async () => {
+        const root = workspace();
+        try {
+            const result = await fakeRun(
+                root,
+                fakeAdapter({
+                    blockquotedAnswer: true,
+                    fixtureCorpus: renderingCorpus,
+                }),
+                contract ? { renderingContract: contract } : {},
+                renderingCorpus,
+            );
+            const manifest = JSON.parse(
+                fs.readFileSync(
+                    path.join(root, "run", "manifest.json"),
+                    "utf8",
+                ),
+            );
+            for (const record of [manifest, result]) {
+                assert.equal(record.protocol, protocol);
+                assert.deepEqual(record.renderingContract, contract);
+            }
+            assert.deepEqual(manifest.config.renderingContract, contract);
+            assert.equal(result.trials[0].grade.taskCorrect, taskCorrect);
+            assert.equal(result.status, taskCorrect ? "blocked" : "failed");
+            assert.equal(
+                result.trials[0].evidence.answer,
+                "> Beta\n> BETA FULL CONTENT",
+            );
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+test("fresh rendered run declares the exact scoring version in manifest/result and passes it to grade", async () => {
+    const root = workspace();
+    try {
+        const result = await fakeRun(
+            root,
+            fakeAdapter({
+                formattedAnswer: true,
+                fixtureCorpus: renderingCorpus,
+            }),
+            {
+                renderingContract,
+            },
+            renderingCorpus,
+        );
+        const manifest = JSON.parse(
+            fs.readFileSync(path.join(root, "run", "manifest.json"), "utf8"),
+        );
+        for (const record of [result, manifest]) {
+            assert.equal(record.protocol, "macro-native-rehearsal-v2");
+            assert.deepEqual(record.renderingContract, renderingContract);
+        }
+        assert.deepEqual(manifest.config.renderingContract, renderingContract);
+        assert.equal(
+            result.trials[0].evidence.answer,
+            "# Beta\n\nBETA FULL CONTENT  ",
+        );
+        assert.equal(result.trials[0].grade.taskCorrect, true);
+        assert.equal(result.trials[0].status, "blocked");
+        assert.ok(
+            result.trials[0].grade.errors.includes(
+                "Task oracle passed, but route attribution remains unknown",
+            ),
+        );
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("default native scoring still rejects internal Markdown decoration under verbatim v1", async () => {
+    const root = workspace();
+    try {
+        const result = await fakeRun(
+            root,
+            fakeAdapter({
+                formattedAnswer: true,
+                fixtureCorpus: renderingCorpus,
+            }),
+            {},
+            renderingCorpus,
+        );
+        assert.equal(result.protocol, "macro-native-rehearsal-v1");
+        assert.equal(Object.hasOwn(result, "renderingContract"), false);
+        assert.equal(result.trials[0].grade.taskCorrect, false);
+        assert.ok(
+            result.trials[0].grade.errors.includes(
+                "full-exact-document-content",
+            ),
+        );
+        assert.equal(result.status, "failed");
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("private build observer requires a compiled capability before boot without invoking its factory", async () => {
+    let loads = 0;
+    let calls = 0;
+    const enabled = { retainSyntheticLearningResponses: true };
+    const implementation = {
+        nativeSyntheticBuildResponseDiagnosticContract:
+            "native-synthetic-build-response-policy-v1",
+        createSyntheticMacroLearningDiagnostics() {
+            calls++;
+        },
+    };
+    const load = async () => {
+        loads++;
+        return implementation;
+    };
+    await assertNativeBuildObservability({}, undefined, load);
+    await assertNativeBuildObservability(enabled, () => {}, load);
+    assert.equal(loads, 0);
+    await assertNativeBuildObservability(enabled, undefined, load);
+    assert.equal(loads, 1);
+    assert.equal(calls, 0);
+    for (const value of [
+        {},
+        {
+            ...implementation,
+            nativeSyntheticBuildResponseDiagnosticContract: "old",
+        },
+        { ...implementation, createSyntheticMacroLearningDiagnostics: null },
+    ])
+        await assert.rejects(
+            assertNativeBuildObservability(
+                enabled,
+                undefined,
+                async () => value,
+            ),
+            /blocked before boot/u,
+        );
+    await assert.rejects(
+        assertNativeBuildObservability(enabled, undefined, async () => {
+            throw new Error("missing compiled module");
+        }),
+        /blocked before boot/u,
+    );
+});
+
+test("private build-response policy binds the exact source session and corpus arguments", () => {
+    const run = path.join(directory, "unit-owned-policy");
+    const layout = {
+        run,
+        owner: "11111111-2222-4333-8444-555555555555",
+        data: path.join(run, "data"),
+        pluginData: path.join(run, "plugin-data"),
+        instance: "macro-eval-11111111",
+    };
+    const enabled = {
+        ...config,
+        restart: false,
+        retainSyntheticLearningResponses: true,
+    };
+    const policy = nativeBuildResponsePolicy(
+        layout,
+        enabled,
+        corpus,
+        "actual-source-session",
+    );
+    assert.deepEqual(policy, {
+        schemaVersion: 1,
+        kind: "native-synthetic-build-response-policy-v1",
+        owner: layout.owner,
+        ownedRoot: run,
+        dataRoot: layout.data,
+        instanceName: layout.instance,
+        configPath: path.join(layout.pluginData, "config.json"),
+        expectedSessionId: "actual-source-session",
+        expectedPrompt: "Read Alpha",
+        expectedToolCalls: [
+            {
+                name: "macro-eval-docs-lookup_document",
+                mcpServerName: "macro-eval-docs",
+                arguments: { title: "Alpha" },
+            },
+            {
+                name: "macro-eval-docs-fetch_document",
+                mcpServerName: "macro-eval-docs",
+                arguments: { id: "synthetic-a" },
+            },
+        ],
+        maxResponseBytes: 262144,
+        maxResponses: 2,
+    });
+    assert.equal(
+        nativeBuildResponsePolicy(layout, config, corpus, ""),
+        undefined,
+    );
+    assert.throws(
+        () => nativeBuildResponsePolicy(layout, enabled, corpus, ""),
+        /actual selected session/u,
+    );
+    assert.throws(
+        () =>
+            nativeBuildResponsePolicy(
+                layout,
+                enabled,
+                { ...corpus, documents: [] },
+                "actual-source-session",
+            ),
+        /documents|exact synthetic document/iu,
+    );
+    const inherited = {
+        TYPEAGENT_MACRO_BUILD_RESPONSE_DIAGNOSTIC_POLICY: "foreign-policy",
+        TYPEAGENT_UNRELATED: "foreign-value",
+        COPILOT_ALLOW_ALL: "true",
+        COPILOT_ASSISTED_APPROVAL: "true",
+        NORMAL_AUTH: "unchanged-unit-marker",
+    };
+    assert.equal(
+        cleanServiceEnvironment(inherited, layout, config)
+            .TYPEAGENT_MACRO_BUILD_RESPONSE_DIAGNOSTIC_POLICY,
+        undefined,
+    );
+    const environment = cleanServiceEnvironment(inherited, layout, enabled);
+    assert.equal(
+        environment.TYPEAGENT_MACRO_BUILD_RESPONSE_DIAGNOSTIC_POLICY,
+        path.join(layout.data, "native-build-response-policy.json"),
+    );
+    assert.equal(environment.NORMAL_AUTH, inherited.NORMAL_AUTH);
+    for (const key of [
+        "TYPEAGENT_UNRELATED",
+        "COPILOT_ALLOW_ALL",
+        "COPILOT_ASSISTED_APPROVAL",
+    ])
+        assert.equal(environment[key], undefined);
+});
+
+test("private synthetic learning diagnostics require explicit bounded full-task opt-in", () => {
+    const diagnostic = {
+        ...config,
+        restart: false,
+        maxTargetModelTurns: 20,
+        maxDurationMs: 300000,
+        retainSyntheticLearningResponses: true,
+    };
+    assert.doesNotThrow(() => validateNativeConfig(diagnostic, corpus));
+    for (const override of [
+        { retainSyntheticLearningResponses: "true" },
+        { restart: true },
+        { maxTargetModelTurns: 21 },
+        { maxDurationMs: 300001 },
+        { attributionOnly: true },
+        { diagnosticOnly: true, maxTargetModelTurns: 0 },
+    ])
+        assert.throws(
+            () => validateNativeConfig({ ...diagnostic, ...override }, corpus),
+            /diagnostic|rehearsal|boolean/iu,
+        );
+    assert.doesNotThrow(() =>
+        validateNativeConfig(
+            { ...config, retainSyntheticLearningResponses: false },
+            corpus,
+        ),
+    );
+});
+
+test("preparation failure retains the actual failed job without promoting pending or failed output", () => {
+    const report = {};
+    const learningJob = {
+        status: "failed",
+        jobId: "unit-failed-job",
+        traceId: "unit-selected-trace",
+        attempts: { extract: 1 },
+        error: "Actual recipe output uncertainty",
+    };
+    assert.throws(
+        () => nativePreparationState({ learningJob }, report),
+        /Macro preparation failed/u,
+    );
+    assert.deepEqual(report.learningFailure, learningJob);
+    assert.equal(
+        nativePreparationState({ learningJob: { status: "extracting" } }, {}),
+        undefined,
+    );
+    assert.equal(nativePreparationState({}, {}), undefined);
+    const review = { learningJob: { status: "needsReview" } };
+    assert.equal(nativePreparationState(review, {}), review);
+});
+
+test("final accounting includes late persisted native turns without calling them service usage", async () => {
+    const root = workspace();
+    try {
+        const adapter = fakeAdapter();
+        adapter.finalEvents = () => [
+            ...adapter.read().events,
+            { id: "late-native-turn", type: "assistant.turn_start", data: {} },
+        ];
+        const result = await fakeRun(root, adapter);
+        assert.equal(
+            result.targetModelTurns,
+            adapter
+                .read()
+                .events.filter((event) => event.type === "assistant.turn_start")
+                .length + 1,
+        );
+        assert.match(
+            result.nativeModelTelemetry.accounting,
+            /reconciled after cleanup/u,
+        );
+        assert.match(result.nativeModelTelemetry.serviceModelUsage, /unknown/u);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("pending native trial never asks for a callback and actual failed hook wins over absent receipt", async () => {
+    let reads = 0;
+    let callbackReads = 0;
+    const adapter = {
+        read() {
+            reads++;
+            return {
+                events:
+                    reads < 3
+                        ? []
+                        : [
+                              {
+                                  id: "native-parser-failure",
+                                  type: "hook.end",
+                                  data: {
+                                      success: false,
+                                      error: {
+                                          message:
+                                              "Actual PowerShell ParserError",
+                                      },
+                                  },
+                              },
+                          ],
+                backendAudit: [],
+                routes: [],
+                screen: "",
+            };
+        },
+        submit() {},
+        normalHookCallback() {
+            callbackReads++;
+            throw new Error("Missing physical receipt");
+        },
+    };
+    await assert.rejects(
+        observeTrial(
+            adapter,
+            createNativeBudget(config),
+            corpus.heldOutPositive[0],
+            corpus,
+            "bypass",
+            {
+                config,
+                workspace: path.resolve(directory),
+                decisions: [],
+            },
+        ),
+        /Native hook failed: Actual PowerShell ParserError/u,
+    );
+    assert.equal(callbackReads, 0);
+    assert.equal(reads, 3);
+});
 
 test("entrypoint native preflight works from external cwd without invoking CLI/helpers/services", () => {
     const root = workspace();

@@ -539,6 +539,11 @@ async function originalResult(
             "forgedModelResultView",
         );
     }
+    return readWorkiqOriginalEnvelope(value);
+}
+
+export function readWorkiqOriginalEnvelope(result) {
+    let value = result;
     if (typeof value?.content === "string") {
         record(
             value,
@@ -563,6 +568,10 @@ async function originalResult(
         "blocked",
     );
     return value;
+}
+
+export function validateWorkiqArtifactReference(reference) {
+    record(reference, referenceFields, "invalidArtifactReference");
 }
 
 function checkLookup(envelope, entity) {
@@ -830,6 +839,7 @@ export function createWorkiqEvidenceVerifier(options) {
                                 ? { path: result }
                                 : { entityUrls: [result] };
                     }
+
                     requireEvidence(
                         equal(call.arguments, expected),
                         "bindingMismatch",
@@ -895,3 +905,10 @@ export function createWorkiqEvidenceVerifier(options) {
         },
     });
 }
+
+export {
+    validateRecipe as validateWorkiqAdmission,
+    validateEntity as validateWorkiqEntity,
+    checkLookup as validateWorkiqLookup,
+    checkMetadata as validateWorkiqMetadata,
+};

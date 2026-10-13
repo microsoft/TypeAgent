@@ -407,6 +407,32 @@ describe("private lossless result evidence", () => {
         ).rejects.toThrow("size");
     });
 
+    it("preserves owner-before-file and opened-size-before-digest validation ordering", async () => {
+        const store = new PrivateResultStore(root);
+        const ref = (await store.retain(
+            "trace",
+            "trace-order",
+            "call-order",
+            "result",
+            blob().result,
+        ))!;
+        const original = await readFile(filename(ref));
+        await writeFile(
+            filename(ref),
+            original.subarray(0, original.length - 1),
+        );
+        await expect(
+            store.verify(ref, "trace", "trace-order", "call-order", "result"),
+        ).rejects.toThrow("file identity or size changed");
+        await rm(filename(ref));
+        await expect(
+            store.verify(ref, "run", "trace-order", "call-order", "result"),
+        ).rejects.toThrow("owner or source does not match");
+        await expect(
+            store.verify(ref, "trace", "trace-order", "call-order", "result"),
+        ).rejects.toThrow("missing or unreadable");
+    });
+
     it("rejects oversized raw results and oversized non-body views without truncation", async () => {
         const store = new PrivateResultStore(root);
         await expect(
