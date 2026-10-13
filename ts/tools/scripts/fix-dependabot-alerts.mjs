@@ -64,6 +64,7 @@ const KNOWN_FLAG_PREFIXES = [
     "--apply-overrides",
     "--update-parents",
     "--auto-fix",
+    "--package",
     "--show-chains",
     "--prune-overrides",
     "--skip-shell-check",
@@ -110,10 +111,31 @@ function parseFilterFlag(flagName) {
     );
 }
 
+/**
+ * Parse the package selection used to scope one invocation. Unlike the fix
+ * flags, this only limits which packages are analyzed and never grants
+ * permission to modify them.
+ */
+function parsePackageSelection({ argv = args } = {}) {
+    const arg = argv.find(
+        (a) => a === "--package" || a.startsWith("--package="),
+    );
+    if (!arg) return null;
+    if (arg === "--package") return new Set();
+    return new Set(
+        arg
+            .slice("--package=".length)
+            .split(",")
+            .map((pkg) => pkg.trim())
+            .filter(Boolean),
+    );
+}
+
 const DRY_RUN = args.includes("--dry-run");
 const AUTO_FIX = parseFilterFlag("--auto-fix");
 const _applyOverrides = parseFilterFlag("--apply-overrides");
 const _updateParents = parseFilterFlag("--update-parents");
+const PACKAGE_SELECTION = parsePackageSelection();
 
 // Merge --auto-fix into the two sub-flags
 const APPLY_OVERRIDES = mergeFilterFlags(AUTO_FIX, _applyOverrides);
@@ -155,6 +177,12 @@ if (
 ) {
     console.error(
         "Error: --alerts-file requires a path.\nRun with --help to see available options.",
+    );
+    process.exit(1);
+}
+if (IS_MAIN && PACKAGE_SELECTION !== null && PACKAGE_SELECTION.size === 0) {
+    console.error(
+        "Error: --package requires at least one package name.\nRun with --help to see available options.",
     );
     process.exit(1);
 }
@@ -229,6 +257,9 @@ Options:
   --auto-fix[=pkg1,pkg2,...]
                       Shorthand for --apply-overrides --update-parents.
                       Optionally specify package names to limit scope.
+  --package=pkg1,pkg2,...
+                      Limit alert analysis and remediation to these packages.
+                      This is selection only; combine it with a fix flag to make changes.
   --show-chains       Show full dependency chains (collapsed to 3 levels)
   --show-chains=full  Show fully expanded dependency chains
   --prune-overrides   Remove pnpm.overrides entries that are no longer needed.
@@ -2714,6 +2745,11 @@ function deduplicateAlerts(alerts) {
     return sorted;
 }
 
+function selectPackages(byPackage, packageSelection) {
+    if (packageSelection === null) return byPackage;
+    return new Map([...byPackage].filter(([pkg]) => packageSelection.has(pkg)));
+}
+
 /** Stage 3+4: Classify each vulnerable package and run fix planner. */
 async function analyzeVulnerabilities(byPackage) {
     header("Analyzing vulnerabilities");
@@ -3725,7 +3761,10 @@ async function main() {
     }
 
     const alerts = fetchAlerts();
-    const byPackage = deduplicateAlerts(alerts);
+    const byPackage = selectPackages(
+        deduplicateAlerts(alerts),
+        PACKAGE_SELECTION,
+    );
     const analyses = await analyzeVulnerabilities(byPackage);
     const results = await executeResolutions(analyses);
 
@@ -3736,7 +3775,13 @@ async function main() {
     }
 }
 
-export { assessFixMaturity, getNpmInfo, readAlertsSnapshot };
+export {
+    assessFixMaturity,
+    getNpmInfo,
+    parsePackageSelection,
+    readAlertsSnapshot,
+    selectPackages,
+};
 
 // Kick off a full run only when invoked directly (see IS_MAIN near the top),
 // so importing this module for unit tests never triggers a run.

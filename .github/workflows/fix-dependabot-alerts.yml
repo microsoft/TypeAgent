@@ -355,6 +355,7 @@ jobs:
                 esac
               done
               filtered_args+=("--auto-fix=$PKG")
+              filtered_args+=("--package=$PKG")
               filtered_args+=("--skip-install")
               filtered_args+=("--alerts-file=$DEPENDABOT_ALERTS_FILE")
               echo "Running: fix-dependabot-alerts.mjs ${filtered_args[*]}"
@@ -363,9 +364,19 @@ jobs:
               fix_exit=$?
               set -e
 
-              if [ "$fix_exit" -ne 0 ] && ! attempt_has_changes; then
-                echo "::warning::Script failed for $PKG in $WS_DIR (exit $fix_exit) with no file changes"
+              # A nonzero exit means the selected package was not fully
+              # resolved. Roll back even when the script left a dirty lockfile:
+              # a compiling partial update is not a successful remediation.
+              if [ "$fix_exit" -ne 0 ]; then
+                echo "::warning::Script failed for $PKG in $WS_DIR (exit $fix_exit) — rolling back the entire attempt"
+                rollback_attempt
+                restore_dependencies
+                ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
                 TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
+                   --argjson ts "$NOW_EPOCH" --arg reason "fix script exited $fix_exit" \
+                   '.rollbacks[$k] = {lockSha:$sha,timestamp:$ts,reason:$reason}' \
+                   "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
                 echo "::endgroup::"
                 continue
               fi
