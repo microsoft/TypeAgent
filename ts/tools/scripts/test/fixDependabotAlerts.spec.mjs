@@ -3,9 +3,15 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import {
     parsePackageSelection,
@@ -20,6 +26,19 @@ const WORKFLOW_PATH = resolve(
 
 function readWorkflow() {
     return readFileSync(WORKFLOW_PATH, "utf-8");
+}
+
+function run(command, args, options = {}) {
+    const result = spawnSync(command, args, {
+        encoding: "utf-8",
+        ...options,
+    });
+    assert.equal(
+        result.status,
+        0,
+        `${command} ${args.join(" ")} failed:\n${result.stdout}\n${result.stderr}`,
+    );
+    return result.stdout.trim();
 }
 
 test("readAlertsSnapshot reads an alert array", () => {
@@ -94,6 +113,18 @@ test("workflow rolls back dirty nonzero package attempts before verification", (
     assert.match(failureBlock, /restore_dependencies/);
     assert.match(failureBlock, /continue/);
     assert.doesNotMatch(failureBlock, /if attempt_has_changes/);
+    assert.match(workflow, /ATTEMPT_CHECKPOINT=.*write-tree/);
+    assert.match(workflow, /read-tree --reset -u "\$ATTEMPT_CHECKPOINT"/);
+    assert.match(workflow, /pnpm install --frozen-lockfile --lockfile-only/);
+    const consistencyCheck = workflow.indexOf(
+        "verify_checkpoint_consistency 2>&1",
+    );
+    const acceptedStage = workflow.indexOf(
+        'git -C "$GITHUB_WORKSPACE" add -A',
+        consistencyCheck,
+    );
+    assert.notEqual(consistencyCheck, -1);
+    assert.ok(acceptedStage > consistencyCheck);
     assert.match(workflow, /filtered_args\+=\("--package=\$PKG"\)/);
 });
 
@@ -172,4 +203,146 @@ test("workflow replaces caller package selectors with the attempt target", () =>
         workflow.match(/filtered_args\+=\("--package=\$PKG"\)/g)?.length,
         1,
     );
+});
+
+test("checkpoint rollback restores a staged manifest and lockfile pair", () => {
+    const directory = mkdtempSync(join(tmpdir(), "dependabot-checkpoint-"));
+    const appDir = join(directory, "packages", "app");
+    const libraryDir = join(directory, "packages", "checkpoint-library");
+    const packageManager = JSON.parse(
+        readFileSync(resolve(import.meta.dirname, "../../../package.json")),
+    ).packageManager;
+    const pnpmCommand =
+        process.platform === "win32" ? process.execPath : "pnpm";
+    const pnpmPrefix =
+        process.platform === "win32"
+            ? [
+                  resolve(
+                      dirname(process.execPath),
+                      "node_modules/corepack/dist/pnpm.js",
+                  ),
+              ]
+            : [];
+    const pnpmInstall = (...args) =>
+        run(pnpmCommand, [
+            ...pnpmPrefix,
+            "--dir",
+            directory,
+            "install",
+            ...args,
+        ]);
+    const git = (...args) => run("git", ["-C", directory, ...args]);
+
+    try {
+        writeFileSync(
+            join(directory, "package.json"),
+            JSON.stringify(
+                {
+                    name: "checkpoint-root",
+                    private: true,
+                    packageManager,
+                },
+                null,
+                2,
+            ),
+        );
+        writeFileSync(
+            join(directory, "pnpm-workspace.yaml"),
+            "packages:\n  - packages/*\n",
+        );
+        writeFileSync(
+            join(directory, ".gitignore"),
+            "node_modules/\npackages/*/node_modules/\n",
+        );
+        mkdirSync(appDir, { recursive: true });
+        mkdirSync(libraryDir, { recursive: true });
+        writeFileSync(
+            join(libraryDir, "package.json"),
+            JSON.stringify(
+                { name: "checkpoint-library", version: "1.0.0" },
+                null,
+                2,
+            ),
+        );
+        writeFileSync(
+            join(appDir, "package.json"),
+            JSON.stringify(
+                {
+                    name: "checkpoint-app",
+                    version: "1.0.0",
+                    dependencies: {
+                        "checkpoint-library": "workspace:^1.0.0",
+                    },
+                },
+                null,
+                2,
+            ),
+        );
+
+        pnpmInstall("--lockfile-only");
+        git("init", "--quiet");
+        git("config", "user.name", "checkpoint-test");
+        git("config", "user.email", "checkpoint@example.com");
+        git("add", "-A");
+        git("commit", "--quiet", "-m", "initial");
+
+        writeFileSync(
+            join(libraryDir, "package.json"),
+            JSON.stringify(
+                { name: "checkpoint-library", version: "1.1.0" },
+                null,
+                2,
+            ),
+        );
+        writeFileSync(
+            join(appDir, "package.json"),
+            JSON.stringify(
+                {
+                    name: "checkpoint-app",
+                    version: "1.0.0",
+                    dependencies: {
+                        "checkpoint-library": "workspace:^1.1.0",
+                    },
+                },
+                null,
+                2,
+            ),
+        );
+        pnpmInstall("--lockfile-only");
+        pnpmInstall("--frozen-lockfile", "--lockfile-only");
+        git("add", "-A");
+        const checkpoint = git("write-tree");
+
+        writeFileSync(
+            join(appDir, "package.json"),
+            JSON.stringify(
+                {
+                    name: "checkpoint-app",
+                    version: "1.0.0",
+                    dependencies: {
+                        "checkpoint-library": "workspace:^2.0.0",
+                    },
+                },
+                null,
+                2,
+            ),
+        );
+        writeFileSync(join(directory, "failed-attempt.tmp"), "dirty");
+
+        rmSync(join(directory, "failed-attempt.tmp"));
+        git("read-tree", "--reset", "-u", checkpoint);
+        pnpmInstall("--frozen-lockfile", "--lockfile-only");
+
+        const restoredApp = JSON.parse(
+            readFileSync(join(appDir, "package.json"), "utf-8"),
+        );
+        assert.equal(
+            restoredApp.dependencies["checkpoint-library"],
+            "workspace:^1.1.0",
+        );
+        assert.equal(git("diff", "--name-only"), "");
+        assert.match(git("diff", "--cached", "--name-only"), /pnpm-lock\.yaml/);
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
 });

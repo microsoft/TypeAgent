@@ -161,19 +161,24 @@ jobs:
           NOW_EPOCH=$(date -u +%s)
           COOLDOWN_SECONDS=$((ROLLBACK_COOLDOWN_DAYS * 86400))
 
-          # The index is the rollback point between package attempts. Successful
-          # fixes are staged; the current attempt remains unstaged until its
-          # clean build passes.
+          # Successful fixes remain staged for the final commit. Each attempt
+          # also records an immutable Git tree so rollback restores both the
+          # worktree and index to the exact accepted checkpoint.
           attempt_has_changes() {
             ! git -C "$GITHUB_WORKSPACE" diff --quiet ||
               [ -n "$(git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard)" ]
           }
 
+          checkpoint_attempt() {
+            git -C "$GITHUB_WORKSPACE" add -A
+            ATTEMPT_CHECKPOINT=$(git -C "$GITHUB_WORKSPACE" write-tree)
+          }
+
           rollback_attempt() {
-            git -C "$GITHUB_WORKSPACE" restore --worktree -- .
             while IFS= read -r -d '' path; do
               rm -rf -- "$GITHUB_WORKSPACE/$path"
             done < <(git -C "$GITHUB_WORKSPACE" ls-files --others --exclude-standard -z)
+            git -C "$GITHUB_WORKSPACE" read-tree --reset -u "$ATTEMPT_CHECKPOINT"
           }
 
           restore_dependencies() {
@@ -181,6 +186,14 @@ jobs:
               pnpm install --frozen-lockfile --strict-peer-dependencies
             else
               pnpm install --frozen-lockfile
+            fi
+          }
+
+          verify_checkpoint_consistency() {
+            if [ "$WS_DIR" = "ts" ]; then
+              pnpm install --frozen-lockfile --lockfile-only --strict-peer-dependencies
+            else
+              pnpm install --frozen-lockfile --lockfile-only
             fi
           }
 
@@ -337,10 +350,8 @@ jobs:
                 fi
               fi
 
-              # Stage all previously verified fixes. This makes the index the
-              # exact rollback point for this package and keeps its changes
-              # separate from the cumulative repository diff.
-              git -C "$GITHUB_WORKSPACE" add -A
+              # Capture the exact accepted tree before this package mutates it.
+              checkpoint_attempt
 
               # Build targeted args
               read -r -a extra_args <<< "$FLAGS"
@@ -432,13 +443,34 @@ jobs:
                      '.rollbacks[$k] = {lockSha:$sha,timestamp:$ts,reason:$reason}' \
                      "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
                 else
-                  echo "✅ $PKG fixed and build passed"
-                  git -C "$GITHUB_WORKSPACE" add -A
-                  ALL_APPLIED="$ALL_APPLIED $PKG"
-                  TOTAL_RESOLVED=$((TOTAL_RESOLVED + 1))
-                  # Successful upgrade — clear any stale rollback record.
-                  jq --arg k "$ROLLBACK_KEY" 'del(.rollbacks[$k])' \
-                     "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
+                  # Policy/build steps run after the first install and can
+                  # modify dependency manifests. Validate the exact tree that
+                  # will be staged without updating the lockfile or rerunning
+                  # lifecycle scripts.
+                  set +e
+                  verify_checkpoint_consistency 2>&1
+                  checkpoint_exit=$?
+                  set -e
+
+                  if [ "$checkpoint_exit" -ne 0 ]; then
+                    echo "::warning::Accepted checkpoint is not frozen-lockfile consistent after fixing $PKG in $WS_DIR — rolling back"
+                    rollback_attempt
+                    restore_dependencies
+                    ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
+                    TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                    jq --arg k "$ROLLBACK_KEY" --arg sha "$LOCK_SHA" \
+                       --argjson ts "$NOW_EPOCH" --arg reason "checkpoint lockfile mismatch" \
+                       '.rollbacks[$k] = {lockSha:$sha,timestamp:$ts,reason:$reason}' \
+                       "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
+                  else
+                    echo "✅ $PKG fixed, build passed, and checkpoint is lockfile-consistent"
+                    git -C "$GITHUB_WORKSPACE" add -A
+                    ALL_APPLIED="$ALL_APPLIED $PKG"
+                    TOTAL_RESOLVED=$((TOTAL_RESOLVED + 1))
+                    # Successful upgrade — clear any stale rollback record.
+                    jq --arg k "$ROLLBACK_KEY" 'del(.rollbacks[$k])' \
+                       "$ROLLBACK_STATE" > "$ROLLBACK_STATE.tmp" && mv "$ROLLBACK_STATE.tmp" "$ROLLBACK_STATE"
+                  fi
                 fi
               else
                 echo "No changes for $PKG (may already be fixed)"
