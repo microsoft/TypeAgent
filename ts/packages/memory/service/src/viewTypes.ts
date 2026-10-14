@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 import type { AgentEdition } from "./agentEdition.js";
+import type { MemoryTopicService } from "./topicTypes.js";
 import type { ProcedureSourceCitation } from "./types.js";
+import type {
+    ViewRedirect,
+    WikiConsolidationReceipt,
+} from "./wikiConsolidation.js";
 import type {
     ViewMaintenanceDefinition,
     ViewMaintenanceManifest,
@@ -15,6 +20,7 @@ import type {
     ViewMaintenanceUpdate,
 } from "./viewMaintenanceTypes.js";
 export type * from "./viewMaintenanceTypes.js";
+export type * from "./topicTypes.js";
 
 export type ViewKind =
     | "troubleshootingGuide"
@@ -272,6 +278,7 @@ export interface ViewDefinition {
     projectSummary?: NonNullable<ViewDefinitionInput["projectSummary"]>;
 }
 export interface ViewVersion {
+    redirect?: ViewRedirect;
     corpusId: string;
     viewId: string;
     revisionId: string;
@@ -299,6 +306,8 @@ export interface ViewVersion {
     provenance: "human" | "generated" | "merged";
     validation?: ViewPublicationProof;
     maintenance?: ViewMaintenanceManifest;
+    relatedArticles?: import("./viewEditorial.js").RelatedArticle[];
+    protectedTargets?: string[];
 }
 export interface ViewSnapshot {
     head: string | null;
@@ -342,6 +351,7 @@ export interface ViewSaveRequest {
     definition: ViewDefinitionInput;
     content: DerivedViewContent;
     relationships: ViewRelationshipInput[];
+    unlockProtection?: string[];
 }
 export interface ViewArchiveRequest {
     corpusId: string;
@@ -358,7 +368,7 @@ export interface ViewHistoryEntry {
     commitId: string;
     version: ViewVersion;
 }
-export interface MemoryViewService {
+export interface MemoryViewService extends Partial<MemoryTopicService> {
     updateViewMaintenance(
         request: ViewMaintenanceUpdate,
     ): Promise<ViewHistoryEntry>;
@@ -441,16 +451,29 @@ export interface ViewBuildSnapshot {
     expectedVersion: number;
     bounds: ViewBuildBounds;
     inputs: ViewRetainedInput[];
+    influenceSources?: Array<{ sourceId: string; revisionId: string }>;
     selectionFingerprint?: string;
+    informationalRetrieval?: {
+        readonly indexGeneration: string;
+        readonly sources: ReadonlyArray<
+            Readonly<{ sourceId: string; revisionId: string }>
+        >;
+        readonly followSources: ReadonlyArray<
+            Readonly<{ sourceId: string; revisionId: string }>
+        >;
+    };
+    topicInput?: import("./topicTypes.js").TopicBuildInput;
     pipeline:
         | "troubleshooting-v1"
         | "timeline-v1"
         | "informational-wiki-v1"
-        | "informational-project-summary-v1";
+        | "informational-project-summary-v1"
+        | "topics-v1";
     model: string;
     fingerprint: string;
     publicationPolicy?: ViewEffectivePublicationPolicy;
     maintenance?: ViewMaintenanceSnapshot;
+    editorial?: import("./viewEditorial.js").ViewEditorialContext;
     wikiContribution?: {
         candidateViewId: string;
         query: string;
@@ -571,6 +594,27 @@ export interface ViewSupportReport {
 }
 export interface ViewSynthesisAdapter {
     identity: string;
+    assessWikiConsolidation?(
+        input: ViewBuildSnapshot,
+        survivor: ViewVersion,
+        retiring: ViewVersion,
+        signal: AbortSignal,
+    ): Promise<import("./wikiConsolidation.js").WikiConsolidationScope>;
+    checkWikiConsolidation?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        assessment: import("./wikiConsolidation.js").WikiConsolidationScope,
+        signal: AbortSignal,
+    ): Promise<import("./viewEditorial.js").ViewEditorialAssessment>;
+    checkEditorial?(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        signal: AbortSignal,
+    ): Promise<import("./viewEditorial.js").ViewEditorialAssessment>;
+    generateTopics?(
+        input: ViewBuildSnapshot,
+        signal: AbortSignal,
+    ): Promise<import("./topicTypes.js").TopicSnapshot>;
     assessWikiSubject?(
         input: ViewBuildSnapshot,
         pages: WikiPagePurposeContext[],
@@ -643,11 +687,13 @@ export type ViewBuildResultState =
     | "cancelled"
     | "interrupted";
 export interface ViewBuildTargetResult {
+    wikiConsolidation?: WikiConsolidationReceipt;
     viewId: string;
     snapshot: ViewBuildSnapshot;
     state: ViewBuildResultState;
     reason: string;
     revisionId?: string;
+    topicGeneration?: string;
     conflictId?: string;
     missingEvidence?: string[];
     inventory?: ViewFactInventory;
@@ -755,6 +801,8 @@ export interface ViewEditOperation {
     newValue?: unknown;
     operation: "set" | "delete";
     status: "active" | "merged" | "conflicted" | "cleared";
+    protection?: string[];
+    unlockedTargets?: string[];
 }
 export interface ViewConflictReadRequest {
     corpusId: string;

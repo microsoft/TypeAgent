@@ -32,7 +32,7 @@ test("ordinary configured host ingests and automatically builds/answers without 
     const calls: Array<{
         endpoint: string;
         kind: string;
-        outputTokens: number | undefined;
+        uncapped: boolean;
     }> = [];
     setRuntimeConfig(
         buildConfig(
@@ -72,7 +72,6 @@ test("ordinary configured host ingests and automatically builds/answers without 
     globalThis.fetch = async (endpoint, options) => {
         const body = JSON.parse(String(options?.body)) as {
             messages: unknown[];
-            max_completion_tokens?: number;
             response_format?: { json_schema?: { name?: string } };
         };
         const kind =
@@ -83,7 +82,11 @@ test("ordinary configured host ingests and automatically builds/answers without 
         calls.push({
             endpoint: String(endpoint),
             kind,
-            outputTokens: body.max_completion_tokens,
+            uncapped: ![
+                "max_completion_tokens",
+                "max_tokens",
+                "max_output_tokens",
+            ].some((key) => key in body),
         });
         const result =
             kind === "informational_wiki"
@@ -203,20 +206,28 @@ test("ordinary configured host ingests and automatically builds/answers without 
                 expect.objectContaining({
                     endpoint: "https://synthetic.invalid/product-extraction",
                     kind: "knowledge",
-                    outputTokens: 8000,
+                    uncapped: true,
                 }),
                 expect.objectContaining({
-                    endpoint: "https://synthetic.invalid/product-view",
+                    endpoint: "https://synthetic.invalid/product-extraction",
                     kind: "informational_wiki",
-                    outputTokens: 2000,
+                    uncapped: true,
                 }),
                 expect.objectContaining({
-                    endpoint: "https://synthetic.invalid/product-view",
+                    endpoint: "https://synthetic.invalid/product-extraction",
                     kind: "indexed_answer",
-                    outputTokens: 2000,
+                    uncapped: true,
                 }),
             ]),
         );
+        expect(calls.every((call) => call.uncapped)).toBe(true);
+        expect(
+            calls.every(
+                (call) =>
+                    call.endpoint ===
+                    "https://synthetic.invalid/product-extraction",
+            ),
+        ).toBe(true);
     } finally {
         await service.close();
         globalThis.fetch = originalFetch;

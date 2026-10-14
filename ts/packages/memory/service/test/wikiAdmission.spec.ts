@@ -6,6 +6,7 @@ import {
     parseWikiAssessment,
     reusableWikiAssessment,
     wikiPurposeRules,
+    WikiAssessmentRejection,
 } from "../src/wikiAdmission.js";
 import { hydrateInformational } from "../src/informationalWiki.js";
 import { ViewBuildRunner } from "../src/viewBuilds.js";
@@ -108,6 +109,100 @@ function covered(): WikiSubjectAssessment {
     };
 }
 
+test("referential rejection diagnostics reproduce separate failures without retaining model content", () => {
+    const contexts = nominateWikiPages(input(), [page()], new Map());
+    const cases = [
+        {
+            value: { ...covered(), canonicalViewId: "private invented text" },
+            pages: contexts,
+            code: "canonical-not-supplied",
+        },
+        {
+            value: covered(),
+            pages: [
+                {
+                    ...contexts[0],
+                    sourceOverlap: { shared: 0, union: 1, subset: false },
+                },
+            ],
+            code: "canonical-no-source-overlap",
+        },
+        {
+            value: { ...covered(), sharedFragmentIds: ["private fragment"] },
+            pages: contexts,
+            code: "unsupported-shared-fragments",
+        },
+        {
+            value: { ...covered(), disposition: "distinct" },
+            pages: contexts,
+            code: "distinct-has-canonical-fields",
+        },
+    ];
+    for (const entry of cases) {
+        try {
+            parseWikiAssessment(entry.value, entry.pages);
+            throw new Error("Expected rejection");
+        } catch (error) {
+            expect(error).toBeInstanceOf(WikiAssessmentRejection);
+            expect((error as WikiAssessmentRejection).code).toBe(entry.code);
+            expect((error as Error).message).not.toContain("private");
+            expect((error as Error).message.length).toBeLessThan(400);
+        }
+    }
+});
+
+test("ordinary contribution ignores irrelevant context while suppression and critical coverage remain strict", () => {
+    const contexts = nominateWikiPages(input(), [page()], new Map());
+    contexts[0].candidateFragmentIds.push("f1");
+    const contribution = {
+        ...covered(),
+        disposition: "contribute",
+        essentialDistinctions: [
+            {
+                fragmentId: "f0",
+                statement: "Preserve the open review qualification",
+                canonicalExcerpt: "",
+            },
+        ],
+    };
+    expect(parseWikiAssessment(contribution, contexts).disposition).toBe(
+        "contribute",
+    );
+    expect(() => parseWikiAssessment(covered(), contexts)).toThrow(
+        "invalid-distinction-evidence",
+    );
+    expect(() =>
+        parseWikiAssessment(
+            {
+                ...contribution,
+                essentialDistinctions: [
+                    {
+                        ...contribution.essentialDistinctions[0],
+                        fragmentId: "f9",
+                    },
+                ],
+            },
+            contexts,
+        ),
+    ).toThrow("invalid-distinction-evidence");
+    expect(() =>
+        parseWikiAssessment(
+            covered(),
+            contexts.slice().map((context) => ({
+                ...context,
+                candidateFragmentIds: ["f0"],
+            })),
+            [
+                {
+                    fragmentId: "f0",
+                    statement: "A required number/state qualification",
+                    canonicalExcerpt: "",
+                },
+            ],
+        ),
+    ).toThrow("required-distinction-omitted");
+});
+
 test("index-evidence nomination is bounded, preserves scope/symbol distinctions, and requires exact revision/locator/excerpt", () => {
     const candidate = input();
     const canonical = page();
@@ -154,6 +249,165 @@ test("typed assessment rejects invented canonical identity/evidence, empty purpo
         expect(() => parseWikiAssessment(invalid, contexts)).toThrow();
     expect(wikiPurposeRules).toContain("independently useful");
     expect(wikiPurposeRules).toContain("units/statistics, cohorts");
+});
+
+test("one informational target timeout does not cancel independent peers", async () => {
+    const snapshot = input();
+    const job: ViewBuildJob = {
+        jobId: "timeout-job",
+        corpusId: "corpus",
+        fingerprint: "job",
+        actor: "test",
+        createdAt: "2026-10-12T00:00:00Z",
+        updatedAt: "2026-10-12T00:00:00Z",
+        request: { corpusId: "corpus", expectedHead: null, targets: [] },
+        state: "running",
+        publication: false,
+        results: ["slow", "independent"].map((viewId) => ({
+            viewId,
+            state: "pending",
+            reason: "Admitted",
+            snapshot: {
+                ...snapshot,
+                definition: { ...snapshot.definition, viewId },
+            },
+        })),
+    };
+    const runner = new ViewBuildRunner(
+        {
+            identity: "offline",
+            generate: async (input) => {
+                if (input.definition.viewId === "slow")
+                    return new Promise<never>(() => {});
+                return hydrateInformational(input, {
+                    title: "Independent",
+                    prose: input.inputs[0].content,
+                    limits: "Selected evidence",
+                    citationIds: ["f0"],
+                });
+            },
+            validate: async () => {
+                throw new Error("No universal informational check");
+            },
+        },
+        {
+            current: async () => undefined,
+            update: async (_corpusId, _jobId, update) => {
+                update(job);
+                return job;
+            },
+            materialize: async (_job, result) => {
+                result.state = "draft";
+            },
+        },
+        {
+            elapsedMs: 15,
+            inputTokens: 10000,
+            outputTokens: 4000,
+            safetyTokens: 1,
+            chatAttempts: 10,
+            reservedTokens: 100000,
+            embeddingAttempts: 10,
+            tokenizer: "offline",
+            countTokens: (text) => text.length,
+        },
+    );
+    runner.start(job);
+    for (let attempt = 0; attempt < 100 && job.state === "running"; attempt++)
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(job.state).toBe("partial");
+    expect(job.results.map((result) => result.state)).toEqual([
+        "failed",
+        "draft",
+    ]);
+    expect(job.results[0].reason).toContain("exceeded");
+    await runner.close();
+});
+
+test("forgetting read-but-not-cited nominated evidence cancels a late distinct result", async () => {
+    const snapshot = input();
+    const job: ViewBuildJob = {
+        jobId: "influence-job",
+        corpusId: "corpus",
+        fingerprint: "job",
+        actor: "test",
+        createdAt: "2026-10-12T00:00:00Z",
+        updatedAt: "2026-10-12T00:00:00Z",
+        request: { corpusId: "corpus", expectedHead: null, targets: [] },
+        state: "running",
+        publication: false,
+        results: [
+            {
+                viewId: "candidate",
+                state: "pending",
+                reason: "Admitted",
+                snapshot,
+            },
+        ],
+        maintenancePlan: {
+            corpusId: "corpus",
+            expectedHead: null,
+            targets: [],
+        },
+    };
+    const contexts = nominateWikiPages(snapshot, [page()], new Map());
+    contexts[0].contributingSources.push({
+        sourceId: "read-only-context",
+        revisionId: "read-revision",
+    });
+    let release!: (value: WikiSubjectAssessment) => void;
+    let entered!: () => void;
+    const assessed = new Promise<void>((resolve) => {
+        entered = resolve;
+    });
+    const response = new Promise<WikiSubjectAssessment>((resolve) => {
+        release = resolve;
+    });
+    const materialize = import.meta.jest.fn(async () => {});
+    const generate = import.meta.jest.fn(async () =>
+        hydrateInformational(snapshot, {
+            title: "Late result",
+            prose: snapshot.inputs[0].content,
+            limits: "Selected",
+            citationIds: ["f0"],
+        }),
+    );
+    const runner = new ViewBuildRunner(
+        {
+            identity: "offline",
+            assessWikiSubject: async () => {
+                entered();
+                return response;
+            },
+            generate,
+            validate: async () => {
+                throw new Error("No universal informational check");
+            },
+        },
+        {
+            current: async () => undefined,
+            wikiPages: async () => contexts,
+            recordWikiAssessment: async () => {},
+            update: async (_corpusId, _jobId, update) => {
+                update(job);
+                return job;
+            },
+            materialize,
+        },
+    );
+    runner.start(job);
+    await assessed;
+    runner.forget("corpus", "read-only-context");
+    release({
+        ...covered(),
+        disposition: "distinct",
+        canonicalViewId: "",
+        sharedFragmentIds: [],
+        essentialDistinctions: [],
+    });
+    await runner.close();
+    expect(generate).not.toHaveBeenCalled();
+    expect(materialize).not.toHaveBeenCalled();
 });
 
 test("real sequential runner records genuine covered skip without generating or merging; invalid output is blocked", async () => {

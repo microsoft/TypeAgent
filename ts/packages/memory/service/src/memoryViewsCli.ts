@@ -31,6 +31,9 @@ node dist/memoryViewsCli.js --store <private-store> <command> [arguments]
   events <corpusId> [continuationToken]
   event <corpusId> <eventId>
   source <corpusId> <sourceId> [revisionId]
+  synopsis <corpusId> <sourceId> [revisionId]
+  topics <request.json>
+  rebuild-topics <corpusId>
   read <corpusId> <viewId> [revisionId]
   history <corpusId> <viewId>
   save <request.json>
@@ -64,6 +67,9 @@ const argumentCounts = new Map<string, readonly [number, number]>([
     ["events", [1, 2]],
     ["event", [2, 2]],
     ["source", [2, 3]],
+    ["synopsis", [2, 3]],
+    ["topics", [1, 1]],
+    ["rebuild-topics", [1, 1]],
     ["read", [2, 3]],
     ["history", [2, 2]],
     ["save", [1, 1]],
@@ -112,6 +118,16 @@ const viewCommands = new Map<
         values: string[],
     ) => Promise<unknown>
 >([
+    [
+        "topics",
+        async (rpc, values) =>
+            rpc.queryTopics(JSON.parse(await readFile(values[0], "utf8"))),
+    ],
+    [
+        "rebuild-topics",
+        async (rpc, values) =>
+            waitForViewBuild(rpc, await rpc.rebuildTopics(values[0])),
+    ],
     [
         "plan-maintenance",
         async (rpc, values) =>
@@ -280,6 +296,12 @@ export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
         const operation = viewCommands.get(command);
         if (operation) return await operation(rpc, values);
         switch (command) {
+            case "synopsis":
+                return await rpc.getSourceSynopsis!({
+                    corpusId: values[0],
+                    sourceId: values[1],
+                    ...(values[2] ? { revisionId: values[2] } : {}),
+                });
             case "capabilities":
                 return await rpc.getCapabilities();
             case "corpora":

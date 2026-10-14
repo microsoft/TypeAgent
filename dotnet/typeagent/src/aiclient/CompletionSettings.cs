@@ -18,7 +18,6 @@ public class CompletionSettings
         ArgumentVerify.ThrowIfNull(src, nameof(src));
 
         Temperature = src.Temperature;
-        MaxTokens = src.MaxTokens;
         NumMatches = src.NumMatches;
         Format = src.Format;
         Seed = src.Seed;
@@ -26,8 +25,6 @@ public class CompletionSettings
     }
 
     public double Temperature { get; set; } = 0;
-
-    public int? MaxTokens { get; set; }
 
     public int? NumMatches { get; set; }
 

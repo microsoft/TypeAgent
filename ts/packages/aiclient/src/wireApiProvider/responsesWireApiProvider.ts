@@ -69,9 +69,6 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
         if (cs.temperature !== undefined) {
             body.temperature = cs.temperature;
         }
-        if (cs.max_completion_tokens !== undefined) {
-            body.max_output_tokens = cs.max_completion_tokens;
-        }
         if (cs.reasoning_effort !== undefined) {
             body.reasoning = { effort: cs.reasoning_effort };
         }

@@ -2,6 +2,182 @@
 
 Transport-independent durable memory corpus service.
 
+## Offline test fixtures
+
+Memory maintenance regressions use the bundled synthetic
+[`test/fixtures/memoryDemo`](test/fixtures/memoryDemo) snapshot rather than a
+separate local checkout. It contains the 33 canonical Markdown operations for
+25 logical sources, plus the profile and evaluator-only expectations/actions.
+The imported bytes are unchanged from the original synthetic fixture set.
+Evaluator metadata stays separate from content-only sources and must not be
+supplied to synthesis or extraction. Qualification-tool tests use the same
+snapshot; actual qualification runs still require an explicit fixture root.
+No generated memory stores, recordings, provider responses or run receipts are
+included in these fixtures.
+
+## Automatic maintenance foundation
+
+Wiki ordinary contributions identify relevant missing distinctions; irrelevant
+context does not require an invented assertion for every fragment. Covered
+suppression and contribution verification still require actual canonical prose,
+all supplied critical requirements, exact indexed citations and current revisions.
+Referential rejection receipts expose bounded reason codes/counts, never raw model
+responses. Technical rejections are not user approvals; actual ambiguity and human
+edit conflicts retain their separate decision reasons.
+
+Informational jobs isolate target timeouts and request budgets. Completed targets
+remain committed while unchanged semantic rejections/conflicts are parked in
+existing results. Provider/materialization failures receive one automatic retry
+before being parked; changed evidence/recipe or explicit rebuild reopens admission.
+Target timeout is a technical failure, not cancellation of its peers or a user
+decision. Job cancellation remains explicit. Job completion and family checkpoint
+share the serialized write boundary so readers cannot observe a false-idle gap.
+Startup and a 30-second reconciliation sweep repair missed source/index dirty hints.
+During a durable bulk import, automatic topic and Wiki/project maintenance remains
+pending rather than repeatedly constructing snapshots of an unfinished batch.
+Settlement of the last active batch for that corpus resumes maintenance using
+current eligible sources. Overlapping batches, retries, cancellation and startup
+recovery share this admission guard. Explicit manual builds remain available;
+privacy invalidation and late-write eligibility checks are not deferred.
+Committed informational revisions repair exact publication/index effects without
+repeating synthesis or creating a new revision. A clean restart does not create
+an unnecessary history commit.
+
+`ViewBuildSnapshot.influenceSources` records source/revision identities of nominated
+page context read during admission, including inputs not cited by the output.
+These dependencies participate in late-write/publication eligibility and privacy
+purge; ordinary retained inputs are also privacy dependencies even without citations.
+Human-authored drafts remain human; generated builds remain maintenance-authored.
+This foundation does not add an agent draft-save API or consolidation workflow.
+
+Authorized source forgetting first durably enrolls removal in the source manifest.
+Until source/index/view/history/assets/batch/context cleanup completes, corpus content reads
+and affected-source writes are withheld, including reads queued before authorization.
+Unrelated accepted ingestion can finish while reads remain denied. Job
+diagnostics are redacted while removal is pending and durably scrubbed on completion.
+Restart and reconciliation resume enrollment without an expiring preview token.
+Privacy removal outranks human edit protection and cancels late model results.
+The preview token alone does not deny access or constitute durable removal.
+
+## Automatic editorial maintenance
+
+Wiki and Projects revise complete small targets through existing family jobs.
+`ViewBuildSnapshot.editorial` supplies the current generated base as an editing
+reference, never as new evidence; generation still reads original indexed sources.
+Agent revisions use `memory-view-generator` authorship, not authenticated human saves.
+Deliberate human title/text/annotation edits are protected at existing reliable
+edit units. Genuine overlapping changes create the existing recoverable conflict;
+unrelated targets continue and routine supported corrections remain automatic.
+
+`saveViewDraft` accepts optional `unlockProtection: string[]` with unchanged
+content, definition and relationships plus the current head/version guards.
+The service authenticates the author and rejects client-supplied actors.
+Unlock records intent in existing edit records without immediately rewriting
+human text, then schedules the existing family to revise unprotected units.
+Browser **More actions** offers per-unit unlock; CLI `save`, RPC, in-process and
+MCP use the same request. Ordinary human saves alone do not cause extra synthesis.
+Current reads expose authoritative `protectedTargets`, including units inferred
+from older authenticated edit records; the browser does not guess unlock units.
+
+Consequential updates check actual merged prose for quantities/cohorts,
+command-versus-lease, project scope/state and correction/withdrawal. Invalid
+assessments and unsupported critical distinctions are bounded technical
+rejections, not requests for blanket human approval. Custom adapters must provide
+`checkEditorial` for consequential updates; missing capability fails explicitly.
+Configured topic summaries check against all supplied original evidence, including
+uncited qualifications; rejected prose is removed while independent nodes continue.
+Topic summary and editorial work uses three concurrent workers, with stable node
+ordering and timing ordinals. Failure or cancellation stops new work and drains
+already active calls before returning. Concise final-response guidance matches the
+1,600-character summary contract without limiting reasoning tokens. Summary reuse
+requires the same corpus/model, owned evidence and complete same-source/revision
+context; changed or suppressed context regenerates the summary.
+Current eligible `relatedArticles` are a bounded original-source/revision-overlap
+navigation projection, not equivalence, redirects or corroborating evidence.
+Source eligibility, influence tracking and authorized removal override protection.
+No paragraph platform, second scheduler, new Inbox or historical consolidation
+is introduced; real-model quality qualification remains separate.
+
+## Revision-bound source synopses
+
+`SourceRevision.synopsis` and source search evidence expose optional lightweight
+preview/status fields. `getSourceSynopsis({ corpusId, sourceId, revisionId? })`
+reads the inline exact-revision overview, generated version/recipe/freshness,
+original retained UTF-16 evidence and explicit scan/fidelity limitations. Lists
+never include overview/evidence payloads. Synopses are navigation aids, not
+independent citations; original UTF-16 ranges are never indexed locators.
+
+The current configured synthesis role and request constraints select direct input
+or bounded source-order sections, turns and loss-preserving table continuations.
+Temporary summaries carry distant qualifications/contrasts into bounded
+composition and are never persisted as a summary tree. Missing capacity metadata
+is unavailable, not unlimited capacity. Full scan is not exhaustive semantic
+coverage or original acquisition completeness.
+
+Synopsis prompts aim for approximately 2,000 tokens of final JSON, excluding
+reasoning. This is guidance, not an API completion cap or response truncation.
+Requests omit completion-limit parameters so reasoning can use the model's
+available output capacity. Input admission still reserves the configured full
+provider output capacity against the context window; explicit opt-in request
+budgets remain enforced locally. Required evidence, character bounds and
+governing qualifications are still validated, and overlong or invalid fields
+are rejected rather than silently shortened.
+
+All memory synthesis, topic, indexed-answer and hub-answer calls now omit
+optional OpenAI completion limits. Their prompts express approximate final-JSON
+length targets separately from reasoning; citation and coverage validators are
+unchanged. Reviewed wiki admission derives its context/output envelope from
+verified capacities of the selected models, including the Luna extraction role,
+and fails explicitly for missing capacity or incompatible strict overrides.
+The shared envelope covers the largest selected capacities, while transport
+admission still checks each actual model's own context/output limits; mixed
+roles do not combine one model's output with another model's smaller context.
+For the standard Luna capacity, each chat reserves up to 128,000 output tokens.
+The reviewed defaults still allow at most 24 chat attempts, 128 embedding
+attempts, 16,000 estimated input tokens per chat, 300,000 per embedding request,
+and 600,000 ms. Aggregate reservation is 160,000 input tokens plus 24 times the
+model output capacity (3,232,000 for Luna); the separate 160,000 cumulative-input
+guard applies to chat and embedding attempts. Reservations are worst-case
+admission estimates, not actual model usage or generation caps. Product
+maintenance remains unbudgeted unless explicitly configured.
+
+Source-owned startup/periodic reconciliation and inline attempt receipts recover
+interruption with one automatic retry, parking unchanged repeated failures.
+Semantic input freshness ignores unrelated reindexing. Exact revision/eligibility
+and read-but-not-cited influence checks reject late replaced/forgotten inputs.
+Synopsis failure never blocks source indexing or search. Hosts can set
+`sourceSynopses: false`; default enablement follows informational maintenance.
+The existing private-store CLI adds `synopsis <corpusId> <sourceId> [revisionId]`.
+
+## Complete maintained topic snapshots
+
+`queryTopics({ corpusId, topicId?, search?, depth?, pageSize?, continuationToken? })`
+browses one rebuildable `topics-v1` snapshot in the existing corpus view store.
+`rebuildTopics(corpusId)` returns an existing view build job. The `topics` family
+supports update/rebuild/pause/resume through `maintainViews`; startup, index hints
+and periodic reconciliation share existing jobs and serialized writes.
+Complete eligible occurrence/source-revision/original-indexed-citation incidence
+is persisted before narrative model work. Pending/failed summaries and generation
+limits remain explicit. Names, aliases and overlap never establish equivalence.
+Organizational parents form a multi-parent DAG; related links are separate.
+
+Response depth/count limits never truncate maintained membership. Continuations
+pin generation and query shape; responses expose omission counts and serialized
+state/snapshot byte measurements for full-state reads, not sharded IO. Scoped
+opaque IDs conservatively use original source/block scope and extracted label;
+block-boundary or label changes can change identity. Summaries use bounded original
+evidence and configured view models, never synopsis prose as new evidence.
+Source replacement withholds obsolete snapshots; source forgetting purges
+read-but-not-cited influence and late writes use source/P2 guards. Sources with
+suppressed knowledge are conservatively withheld where original indexed blocks
+cannot safely isolate forgotten influence, and queries disclose this limitation.
+Unsupported custom indexes report capability errors and are not auto-enrolled.
+
+RPC/in-process/MCP, browser RPC/gateway/extension and corpus Overview browsing
+share these operations. The private-store CLI adds `topics <request.json>` and
+`rebuild-topics <corpusId>` (waits for the existing job). Topic generations are
+not article revision IDs and topic jobs do not publish articles.
+
 ## Offline regression tests
 
 Batch cancellation tests synchronize at admission and index-entry barriers.
@@ -25,9 +201,15 @@ schema validation and recovery still run when these change. A restart loads
 the published generation again. This does not cache queries or model responses.
 
 Prepared document searches, source knowledge, corpus knowledge and
-document answering can share a per-corpus read reservation. Preparation and
-mutations remain exclusive: ingestion, reindexing, forgetting wait for existing readers, and later readers wait behind a queued
-writer. Each async read retains its snapshot until completion. Cold runtime
+document answering can share a per-corpus read reservation. Published-index
+preparation and mutations remain exclusive: commits, reindexing and forgetting
+wait for existing readers, and later readers wait behind a queued writer.
+Ingestion prepares a detached candidate index outside the corpus write reservation;
+provider calls never mutate the live index. Its serialized commit rechecks the
+captured generation and source revisions and merges current metadata. Stale,
+cancelled or forgotten candidates cannot replace the published generation.
+Forgetting also cancels and purges affected prepared candidates.
+Each async read retains its snapshot until completion. Cold runtime
 loading is single-flight, and shutdown drains the complete preparation/read
 lifetime before releasing storage.
 
@@ -45,6 +227,42 @@ tracing does not emit logs or collect timing spans.
 Queries, source excerpts, prompts, tokens and raw error messages are excluded.
 Tracing does not change retrieval limits, model selection or when the Hub
 returns its evidence and answer.
+
+Build and ingestion diagnostics reuse this opt-in timing sink. With
+`TYPEAGENT_MEMORY_SEARCH_TRACE=1`, `memory.build`, `memory.build.<pipeline>`,
+`memory.ingestion` and `memory.synopsis` scopes also report build queue waits,
+target totals, topic incidence/materialization, per-topic summary/editorial
+model calls, organization, view admission/synthesis/editorial/materialization,
+index append/rebuild, ingestion prepare/write-wait/commit and synopsis generation.
+KnowPro index preparation/persistence spans distinguish provider preparation from
+disk persistence. Build traces use the durable job
+ID; per-topic calls carry numeric node ordinals and counts, not labels or text.
+Model spans include client retry waits. Target totals and nested stages overlap;
+do not add them as independent wall time. A returned target rejection remains
+in its durable receipt even when the enclosing job runner finishes normally.
+
+## Qualified generated Wiki consolidation
+
+Existing Wiki family jobs can consolidate current generated articles when original
+indexed evidence establishes one scoped purpose and an actual-output consequential
+check passes. Shared citations only nominate a bounded comparison. Resource versus
+failure explanations, incompatible initiative scopes, exclusions, protected units
+and any historical human edits do not authorize automatic retirement.
+
+The host retains unique sections, excerpts and citations in an exact registered
+consolidation index; ordinary generation remains single-page. Existing target
+results record prepared, accepted, redirected and ready effects. Canonical
+acceptance precedes redirect activation; exact derivative readiness is separate.
+Restart hydrates the original index and resumes committed effects without synthesis
+or duplicate revisions. Changed targets park instead of entering semantic retry loops.
+
+Current old-ID reads carry `redirect` with canonical identity and anchor mappings.
+Memory Hub follows current canonical navigation; historical requests remain explicit.
+Acceptance and activation reject cyclic or over-deep alias ancestry before a new
+retirement could outrun bounded old-link reading; existing links remain navigable.
+Authorized source forget purges redirects, histories, jobs and uncited influences,
+overriding editorial protection. Existing authenticated conflict resolution handles
+human decisions; this path adds neither an approval framework nor a second ledger.
 
 ## Revision assets and acquired batches
 
@@ -238,7 +456,12 @@ and `coverage`, including precise final artifact locators and diagnostic-only ve
 fresh-evidence-required reuse eligibility. CLI status/inspection, MCP and the Hub's
 inventory inspection disclose these artifacts. Forget removes the entire dependent
 job/view/conflict/history payload, including inventory and coverage.
-The bounded evidence-first target timeout is 300 seconds for the additional stages.
+The evidence-first target timeout is temporarily 3,000 seconds, including the
+complete topic-snapshot build, for live end-to-end measurement. Informational
+Wiki/project targets also default to 3,000 seconds, including admission,
+generation, validation and corpus-write waits. Explicit informational elapsed
+envelopes still override this default, including the reviewed rehearsal budget
+of 600 seconds. Other request/input budgets and cancellation remain unchanged.
 Source-to-inventory checking is model-based and can still omit/misinterpret evidence:
 deterministic provenance/coverage is not deterministic semantic completeness.
 A saved draft or positive audit is not a live-quality qualification.
@@ -585,7 +808,7 @@ head/target guards and retries only unsuccessful targets. Changed source
 selectors require a new build. Cancellation stops future materialization even
 if a provider is still unwinding its request; already saved drafts remain.
 Limits are 32 targets, 32 exact sources per target, 120000 complete input
-characters and a 300-second per-target inventory/construction/validation deadline; there is
+characters and a 3,000-second per-target inventory/construction/validation deadline; there is
 no silent truncation or heuristic generation fallback.
 
 ### Explicit edits and conflicts

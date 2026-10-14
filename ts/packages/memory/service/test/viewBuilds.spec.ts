@@ -808,7 +808,18 @@ describe("durable draft builds and explicit edit merge", () => {
             }
         },
     );
-    test("informational cancellation uses the configured elapsed envelope and reports the actual limit", async () => {
+    test("evidence-first targets retain a 3000-second deadline", async () => {
+        const request = await fixture();
+        const timer = import.meta.jest.spyOn(globalThis, "setTimeout");
+        try {
+            await wait(await service.buildViews(request));
+            expect(timer).toHaveBeenCalledWith(expect.any(Function), 3_000_000);
+        } finally {
+            timer.mockRestore();
+        }
+    });
+
+    test("informational target failure uses the configured elapsed envelope and reports the actual limit", async () => {
         const request = await fixture();
         const job = structuredClone(
             await wait(await service.buildViews(request)),
@@ -855,13 +866,35 @@ describe("durable draft builds and explicit edit merge", () => {
                 countTokens: (text) => text.length,
             },
         );
-        runner.start(job);
-        await finished;
-        await runner.close();
-        expect(job.state).toBe("cancelled");
-        expect(job.results[0].reason).toBe(
-            "Evidence-first synthesis exceeded 0.02 second limit",
-        );
+        const traceFlag = process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+        const warn = import.meta.jest
+            .spyOn(console, "warn")
+            .mockImplementation(() => {});
+        process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = "1";
+        try {
+            runner.start(job);
+            await finished;
+            await runner.close();
+            expect(job.state).toBe("failed");
+            expect(job.results[0].reason).toBe(
+                "Evidence-first synthesis exceeded 0.02 second limit",
+            );
+            const timings = warn.mock.calls.map(([line]) =>
+                JSON.parse(String(line).replace("[memory-search-timing] ", "")),
+            );
+            expect(
+                timings.some(
+                    (entry) =>
+                        entry.stage === "build.target.total" &&
+                        entry.status === "error",
+                ),
+            ).toBe(true);
+        } finally {
+            warn.mockRestore();
+            if (traceFlag === undefined)
+                delete process.env.TYPEAGENT_MEMORY_SEARCH_TRACE;
+            else process.env.TYPEAGENT_MEMORY_SEARCH_TRACE = traceFlag;
+        }
     });
 
     test("finished runner persistence errors stay explicit and source forget erases their retained payload", async () => {

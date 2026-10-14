@@ -32,13 +32,16 @@ export function sameViewBuildEvidence(
     prior: ViewBuildSnapshot | undefined,
     next: ViewBuildSnapshot,
 ): boolean {
-    return (
-        prior !== undefined &&
-        viewHash(prior.inputs) === viewHash(next.inputs) &&
-        viewHash(prior.definition) === viewHash(next.definition) &&
-        prior.pipeline === next.pipeline &&
-        prior.model === next.model
-    );
+    const semanticInput = (input: ViewBuildSnapshot) =>
+        viewHash({
+            inputs: input.inputs,
+            definition: input.definition,
+            pipeline: input.pipeline,
+            model: input.model,
+            wikiContribution: input.wikiContribution,
+            editorialUnlocks: input.editorial?.unlockedTargets ?? [],
+        });
+    return prior !== undefined && semanticInput(prior) === semanticInput(next);
 }
 
 export function mergeProse(
