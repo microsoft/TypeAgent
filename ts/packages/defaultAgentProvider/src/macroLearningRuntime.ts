@@ -19,6 +19,7 @@ import {
     parseMacroExecutionRecipe,
     parseMacroLearningBuild,
     getRecordedArgumentDependencies,
+    verifiedLearningEvidence,
     type CopilotToolMacro,
     type MacroLearningBuild,
     type MacroLearningRuntime,
@@ -119,6 +120,18 @@ the withheld answer to be reproduced. Whether the original contents were physica
 correct is a separate validation question, not an extra operation in this recipe.
 This does not excuse missing captured results/response, failed calls, ambiguous selection,
 ranking, synthesis or transformed output; preserve those unresolved uncertainties.
+The optional verifiedRecordingEvidence is supplied only by the product's physical trace/
+private-result verifier, not by a caller JSON field or a harness verdict. Its workiqRead
+observations describe exact recorded argument bindings, requested URL/metadata identity
+agreement, unchanged metadata/library/version, and a physically verified retained original
+blob's hash/size matching recorded metadata. These observations can ground a procedure to
+retrieve, privately retain and report a title/identity/receipt without exposing file bodies.
+Use captured responseEvidence to establish only that a response exists, not that its
+wording or claims were correct. Describe reporting the new runtime metadata and receipt,
+not reproducing a withheld answer. These facts are limited to this recording: they do not
+prove permissions, approved account scope, expected frozen versions/bytes, actual model
+consumption, future retrieval correctness or physical display. Missing observations remain
+missing evidence; never invent them or discard genuine uncertainties.
 Availability and type do not establish content-dependent claims, selection,
 ranking, synthesis, completeness, or effects beyond the recorded operation.
 Preserve the exact trace ID, original request and call IDs. Describe unsupported
@@ -418,6 +431,10 @@ export function createMacroLearningRuntime(
                     {
                         traceId,
                         request: trace.prompt,
+                        verifiedRecordingEvidence: verifiedLearningEvidence(
+                            trace,
+                            traceId,
+                        ),
                         argumentDependencies:
                             getRecordedArgumentDependencies(trace),
                         responseEvidence: {

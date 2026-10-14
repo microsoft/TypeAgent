@@ -1434,7 +1434,11 @@ export class MacroManager {
                 "Recorded learning trace exceeds its 1 MiB storage limit.",
             );
         }
-        return this.readTrace(traceId);
+        const trace = await this.readTrace(traceId);
+        return new PrivateResultStore(this.rootDir).verifyLearningTrace(
+            traceId,
+            trace,
+        );
     }
 
     private async readCatalog(): Promise<MacroSummary[]> {

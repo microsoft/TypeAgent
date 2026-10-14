@@ -5,12 +5,83 @@ import { createHash } from "node:crypto";
 import type { Stats } from "node:fs";
 import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import path from "node:path";
-import type { PrivateResultReference, RecordedToolCall } from "./contracts.js";
+import type {
+    PrivateResultReference,
+    RecordedToolCall,
+    RecordedInteractionTrace,
+} from "./contracts.js";
 import { redactTraceValue } from "./redaction.js";
+import { recordedWorkiqReadObservations } from "./recordedReadEvidence.js";
 
 const maxEvidenceBytes = 16 * 1024 * 1024;
 const inlineBytes = 32 * 1024;
 const omittedValue = "[Private result body retained in lossless evidence]";
+const verifiedLearningTraces = new WeakMap<
+    RecordedInteractionTrace,
+    {
+        traceId: string;
+        digest: string;
+        evidence: {
+            schemaVersion: 1;
+            traceId: string;
+            sessionId: string;
+            sourceTraceSha256: string;
+            workiqRead?: ReturnType<typeof recordedWorkiqReadObservations>;
+        };
+    }
+>();
+
+function assertLearningTraceIdentity(trace: RecordedInteractionTrace): void {
+    const hasReferences = trace.toolCalls.some(
+        (call) => call.resultArtifact || call.modelResultArtifact,
+    );
+    if (
+        (trace.schemaVersion === 1 &&
+            (hasReferences || trace.capabilities !== undefined)) ||
+        (trace.schemaVersion === 2 &&
+            (!hasReferences ||
+                trace.capabilities?.length !== 1 ||
+                trace.capabilities[0] !== "private-result-evidence-v1")) ||
+        (trace.schemaVersion !== 1 && trace.schemaVersion !== 2) ||
+        !trace.sessionId ||
+        !trace.cwd ||
+        trace.toolCalls.length === 0 ||
+        new Set(trace.toolCalls.map((call) => call.toolCallId)).size !==
+            trace.toolCalls.length
+    )
+        throw new ResultEvidenceError(
+            "invalidReference",
+            "Unsupported learning trace identity or capabilities.",
+        );
+}
+
+export function verifiedLearningEvidence(
+    trace: RecordedInteractionTrace,
+    traceId: string,
+) {
+    const verified = verifiedLearningTraces.get(trace);
+    if (!verified) return undefined;
+    if (
+        verified.traceId !== traceId ||
+        verified.digest !== digest(JSON.stringify(trace))
+    )
+        throw new ResultEvidenceError(
+            "evidenceIntegrity",
+            "Verified learning trace identity or contents changed.",
+        );
+    return structuredClone(verified.evidence);
+}
+
+export function cloneVerifiedLearningTrace(
+    trace: RecordedInteractionTrace,
+    traceId: string,
+): RecordedInteractionTrace {
+    verifiedLearningEvidence(trace, traceId);
+    const clone = structuredClone(trace);
+    const verified = verifiedLearningTraces.get(trace);
+    if (verified) verifiedLearningTraces.set(clone, verified);
+    return clone;
+}
 
 export class ResultEvidenceError extends Error {
     constructor(
@@ -209,6 +280,106 @@ export function omittedResultPath(
 export class PrivateResultStore {
     constructor(private readonly root: string) {}
 
+    private async learningTraceBytes(traceId: string): Promise<Buffer> {
+        const filename = path.join(this.root, "traces", `${traceId}.json`);
+        await this.checkAncestors(path.dirname(filename));
+        const info = await lstat(filename);
+        if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1)
+            throw new ResultEvidenceError(
+                "unsafeEvidencePath",
+                "Unsafe recorded learning trace.",
+            );
+        if (info.size > 1024 * 1024)
+            throw new ResultEvidenceError(
+                "evidenceIntegrity",
+                "Recorded learning trace exceeds its storage bound.",
+            );
+        const bytes = await readStableEvidenceFile(filename, info, info.size);
+        await this.checkAncestors(path.dirname(filename));
+        const after = await lstat(filename);
+        if (
+            after.isSymbolicLink() ||
+            after.nlink !== 1 ||
+            after.ino !== info.ino ||
+            after.dev !== info.dev
+        )
+            throw new ResultEvidenceError(
+                "unsafeEvidencePath",
+                "Recorded learning trace identity changed.",
+            );
+        return bytes;
+    }
+
+    async verifyLearningTrace(
+        traceId: string,
+        trace: RecordedInteractionTrace,
+    ): Promise<RecordedInteractionTrace> {
+        verifiedLearningTraces.delete(trace);
+        if (!/^[a-zA-Z0-9-]+$/.test(traceId))
+            throw new ResultEvidenceError(
+                "invalidReference",
+                "Invalid learning trace owner.",
+            );
+        const bytes = await this.learningTraceBytes(traceId);
+        const sourceTrace: RecordedInteractionTrace = JSON.parse(
+            bytes.toString("utf8"),
+        );
+        if (JSON.stringify(sourceTrace) !== JSON.stringify(trace))
+            throw new ResultEvidenceError(
+                "evidenceIntegrity",
+                "Learning trace does not match its physical source.",
+            );
+        assertLearningTraceIdentity(sourceTrace);
+        const originals: unknown[] = [];
+        for (const call of sourceTrace.toolCalls) {
+            let original = call.result;
+            for (const source of ["result", "modelResult"] as const) {
+                const ref =
+                    source === "result"
+                        ? call.resultArtifact
+                        : call.modelResultArtifact;
+                if (!ref) continue;
+                const value = await this.verify(
+                    ref,
+                    "trace",
+                    traceId,
+                    call.toolCallId,
+                    source,
+                );
+                if (JSON.stringify(call[source]) !== JSON.stringify(ref.view))
+                    throw new ResultEvidenceError(
+                        "evidenceIntegrity",
+                        "Private result view does not match its recorded source.",
+                    );
+                if (source === "result") original = value;
+            }
+            originals.push(original);
+        }
+        if (
+            JSON.stringify(trace) !== JSON.stringify(sourceTrace) ||
+            !bytes.equals(await this.learningTraceBytes(traceId))
+        )
+            throw new ResultEvidenceError(
+                "evidenceIntegrity",
+                "Learning trace changed during physical verification.",
+            );
+        verifiedLearningTraces.set(trace, {
+            traceId,
+            digest: digest(JSON.stringify(trace)),
+            evidence: {
+                schemaVersion: 1,
+                traceId,
+                sessionId: sourceTrace.sessionId,
+                sourceTraceSha256: digest(bytes),
+                workiqRead: recordedWorkiqReadObservations(
+                    sourceTrace,
+                    originals,
+                ),
+            },
+        });
+        return trace;
+    }
+
     private async directory(
         owner: string,
         ownerId: string,
@@ -262,6 +433,7 @@ export class PrivateResultStore {
         toolCallId: string,
         source: "result" | "modelResult",
         value: unknown,
+        options: { forceFull?: boolean } = {},
     ): Promise<PrivateResultReference | undefined> {
         const serialized = JSON.stringify(value);
         if (serialized === undefined) return undefined;
@@ -273,6 +445,7 @@ export class PrivateResultStore {
             );
         const projection = project(value);
         if (
+            !options.forceFull &&
             bytes.byteLength <= inlineBytes &&
             projection.omittedPaths.length === 0
         )

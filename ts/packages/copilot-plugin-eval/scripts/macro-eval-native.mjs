@@ -951,6 +951,110 @@ function nativeTerminalProof(events, answerIndex, answer) {
     };
 }
 
+function hasNativeConfirmationInteraction(screen) {
+    const lines = screen.split(/\r?\n/u);
+    const dialog = lines.map(nativeDialogLine).join("\n");
+    if (
+        dialog
+            .split(/\n[ \t]*\n/u)
+            .some(
+                (block) =>
+                    /\b(?:re)?confirm(?:ation|ing|ed|s)?\b/iu.test(block) &&
+                    /^(?:please|you\s+(?:must|need\s+to|have\s+to|should|are\s+required\s+to))\s+(?:(?:re)?confirm|use|provide|supply|insert|scan|touch|hold|answer|respond|accept|allow|grant|submit|send)\b/imu.test(
+                        block,
+                    ),
+            ) ||
+        /^(?:re)?confirmation\s+(?:is\s+)?(?:required|pending|needed|requested)\b/imu.test(
+            dialog,
+        )
+    )
+        return true;
+    return lines.some((line, index) => {
+        if (!/\b(?:re)?confirm(?:ation|ing|ed|s)?\b/iu.test(line)) return false;
+        const current = nativeDialogLine(line).replace(
+            /^native\s+dialog:\s*/iu,
+            "",
+        );
+        const previous = nativeDialogLine(lines[index - 1] ?? "");
+        const text = /(?:^|\s)to[ \t]*$/iu.test(previous)
+            ? `${previous} ${current}`
+            : current;
+        return (
+            hasNativeQuestionInteraction(text) ||
+            /^(?:(?:please|you must|you need to|you have to|you should|you are required to)\s+)?(?:(?:re)?confirm|use|provide|supply|insert|scan|touch|hold|answer|respond|accept|allow|grant|submit|send)\b/iu.test(
+                text,
+            ) ||
+            /^(?:re)?confirmation(?:\s*(?::.*|(?:is\s+)?(?:required|pending|needed|requested)\b.*))?\s*$/iu.test(
+                text,
+            ) ||
+            /^(?:awaiting|waiting)\b[^\n]*\bconfirmation\b/iu.test(text) ||
+            /\b(?:can|could|would|will|should|do|must|need|want|ask|require|request)\s+you\b/iu.test(
+                text,
+            ) ||
+            /(?:^|[,;:])\s*(?:please\s+)?(?:press|enter|type|click|tap|select|choose|proceed|continue|approve|authorize)\b/iu.test(
+                text,
+            ) ||
+            /^to confirm\s+(?:please\s+)?(?:press|enter|type|click|tap|select|choose|proceed|continue|approve|authorize)\b/iu.test(
+                text,
+            ) ||
+            /^(?:please\s+)?(?:press|enter|type|click|tap|select|choose|provide|supply|scan|touch|hold|answer|respond|accept|allow|grant|submit|send|approve|authorize)\b/iu.test(
+                nativeDialogLine(lines[index + 1] ?? ""),
+            )
+        );
+    });
+}
+
+function nativeDialogLine(line) {
+    return line
+        .trim()
+        .replace(/^[❯>●]\s*/u, "")
+        .replace(/^(?:dialog|prompt|action):\s*/iu, "");
+}
+
+function hasNativeModelSelectionInteraction(screen) {
+    const lines = screen.split(/\r?\n/u).map(nativeDialogLine);
+    return lines.some((line, index) => {
+        const directive =
+            /^(?:(?:please|you must|you need to|can you|could you|would you|will you|should you)\s+)?(?:choose|select)\b/iu.test(
+                line,
+            );
+        return (
+            /^model\s+(?:selection|selector|chooser)(?:\s+(?:required|pending))?\s*[:?]?\s*$/iu.test(
+                line,
+            ) ||
+            /^model:\s*(?:please\s+)?(?:choose|select)\b/iu.test(line) ||
+            (directive &&
+                (/\bmodels?\b/iu.test(line) ||
+                    /^(?:(?:a|an|the|your|preferred|default|different|another)\s+)*models?\b/iu.test(
+                        lines[index + 1] ?? "",
+                    )))
+        );
+    });
+}
+
+function hasNativeQuestionInteraction(screen) {
+    return screen.split(/\r?\n/u).some((line) => {
+        const text = nativeDialogLine(line);
+        return (
+            /^(?:(?:are|can|could|do|would|will|should)\s+you\b|(?:what|which|who|where|when|why|how|continue|proceed|cancel|abort|stop|approve|accept|allow|grant|confirm)\b)[^?\n]*\?/iu.test(
+                text,
+            ) || /^[^/?=\n]*[\p{L}\p{N}]\?[ \t]*$/u.test(text)
+        );
+    });
+}
+
+function hasNativeUnknownInteraction(screen, interactionText) {
+    const lines = screen.replace(/[┃│]/gu, " ");
+    return (
+        hasNativeConfirmationInteraction(lines) ||
+        hasNativeModelSelectionInteraction(lines) ||
+        hasNativeQuestionInteraction(lines) ||
+        /sign in|authenticate|allow all|permission|do you want|would you like|trust this|1\.\s+Yes/iu.test(
+            interactionText,
+        )
+    );
+}
+
 export function classifyNativeScreen(screen, workspace, consent) {
     const compact = screen.replace(/[\s│┃]/gu, "");
     if (/Confirm folder trust/u.test(screen)) {
@@ -1030,11 +1134,7 @@ export function classifyNativeScreen(screen, workspace, consent) {
             "Approval of a saved macro does not grant tool permissions.",
             "",
         );
-    if (
-        /sign in|authenticate|choose.*model|select.*model|allow all|permission|do you want|would you like|confirm|trust this|1\.\s+Yes/iu.test(
-            interactionText,
-        )
-    )
+    if (hasNativeUnknownInteraction(screen, interactionText))
         throw new NativeStop(
             "Unknown native interaction; no input supplied",
             "blocked",

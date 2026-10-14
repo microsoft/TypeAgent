@@ -30,6 +30,9 @@ dist-pub/
 .scratch/
 .context/
 /ts/.runbook-markdown-quality/
+# Local macro validation runs and private evidence
+/ts/.workiq-experimental-validation/
+/ts/.workiq-offline-validation/
 .vscode
 **/.vscode/*
 **/tsconfig.debug.json

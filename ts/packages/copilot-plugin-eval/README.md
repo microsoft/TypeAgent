@@ -31,6 +31,12 @@ microbenchmark is not a substitute. Throughput/load tests, cold-start campaigns,
 Direct-hook comparisons and a broad adversarial suite are outside this initial
 scope. Weather is removed and calendar is deferred.
 
+Local WorkIQ diagnostics and private evidence belong in the ignored
+`ts/.workiq-experimental-validation/`, `ts/.workiq-offline-validation/`, or
+package-local `.native-*` run directories. Keep reusable harness scripts and
+self-contained regression tests in source control; tests must not depend on
+private session files or artifacts from a previous live run.
+
 ## Native macro evaluation - gated controller and offline tooling
 
 **Current restriction mechanism (CLI 1.0.95):** required supported
@@ -719,6 +725,218 @@ handled-hook completion contract. A fresh ordinary baseline/armed training avoid
 depending on that unsupported completion path.
 
 Native-controller offline regressions:
+
+The separate `scripts/native-workiq-pilot.mjs` entry exports
+`runNativeWorkiqPilot({output, config, admissionFile, admissionSha256, signal})`
+for the explicitly authorized, unrecorded WorkIQ experiment. It does not change
+synthetic admission or default WorkIQ denial. The exact
+`user-authorized-unverified-model-exposure` override waives only complete
+pre-model binary exposure assurance, not authentication, tool permissions,
+frozen document identities, original-result oracles, publication or cleanup.
+
+Its production runtime waits for the real SDK session before binding the private
+policy, then requires actual initialized inventory and observer registration.
+The gateway receives the existing A/B entity key before SDK bootstrap so MCP
+initialization can supply source-built scalar lookup guidance. Requests are
+never rewritten. The original admission retains strict request/output
+semantics; a separately hash-pinned, user-authorized
+`workiq-macro-correctness-v2` admission evaluates scoped document identity and
+real macro generalization rather than frozen presentation/URL signatures.
+Under that contract only, retrieve may omit `includeDeveloperCard` or supply a
+boolean `true`/`false`; invalid types, unauthorized fields, wrong document IDs
+and explicit backend denials still reject. Additive output metadata, including
+contentProtection, is not a permission grant. Full-byte/current-version/library
+and source integrity checks remain required. Historical admissions and outcomes
+are never rewritten or regraded.
+Metadata fetch requests may reorder the same unique `$select` fields under v2,
+but must retain the exact scoped URL base, one selection parameter and no
+additional fields, query parameters or fragment. This comparison never rewrites
+requests or drafts: native consent and SDK/provider/trace joins still require
+the complete actual raw arguments, including the original selection order.
+The model-facing retrieve description also carries that strict source-built
+guidance, while the original backend catalog remains separately fingerprinted.
+Before any document prompt, the controller rereads the actual current SDK
+source and checks all selected schemas and descriptions against the exposed
+descriptors. Its body-free receipt distinguishes original/exposed description
+hashes; metadata visibility is not model-consumption certification.
+The console uses only the documented ten-key scenario environment overlay.
+WorkIQ capture opt-in is an exact source-validated private control-admission
+marker, not an extra environment key or a tool-permission grant; initial and
+reset admission both retain that marker and the current owned control binding.
+When recovering an existing cached CLI, `config.cliExecutableSha256` binds its
+exact previously admitted bytes before any service launch; the actual version
+probe and executable identity checks still apply to every console launch.
+Before source-known SID publication, UI polling tolerates absent or incomplete
+SDK event files without deriving identity from directory names. Metadata-only
+policy binding also permits that pending state. The first document prompt still
+requires the physically verified current SDK source, observing inventory and
+one complete current-SID `session.start`; ambiguity, foreign SID, unsafe files
+and unknown tool/authentication questions remain blockers. Closing the owned
+console cancels its pending source/event waits without cancelling a future
+same-budget console. These startup-race regressions are offline evidence, not
+acceptance of the preserved blocked native attempts.
+Finalized capture joins the current lease SID and all four completed recording
+summary fields to the physically finalized SDK source. The manager removes the
+active token when finalizing; its completed getter returns a trace, not an
+active token. Wrong status, SID, summary fields or a contradictory token still
+reject, and pure validation does not grant native source authority.
+After current-SID event readiness, a failed selected SDK tool completion is
+terminal immediately: the runtime checks the current producer and initialized
+alias inventory before propagating a body-free failure. It does not wait for a
+successful finalized capture that the fail-closed observer can no longer
+produce. Cleanup still cancels owned source waits. Active deadline and cleanup
+tail are reported separately; raw SDK turns, API calls and host submissions are
+not interchangeable.
+The renewed attempt reached its first A prompt but aborted when ordinary
+assistant narration ("metadata to confirm the same version and complete
+receipt.") matched the generic confirmation keyword. The offline classifier
+remedy distinguishes that noninterrogative infinitive from confirmation
+headings, direct requests, action cues and questions; unknown permission and
+authentication dialogs still fail closed. Confirmation detection requires
+localized dialog headings, addressed requests, imperative action cues or
+questions, rather than a narration phrase allowlist or the confirmation word
+alone. Progress narration, including wrapped "confirming" text, is informational;
+genuine dialog cues and appended unknown questions still reject. Capture continues to reject builtin
+tasks, subagents or extra tool calls rather than hiding them from provenance.
+An immediate physical line ending in the infinitive word "to" is joined to its
+confirmation continuation before checking directives; "You need to ... confirm"
+still blocks, while line wrapping cannot invent a new imperative from narration.
+Addressed requests and required-confirmation headings also retain their grammar
+across physical whitespace. Replays of the preserved native frames exercise
+observed viewport columns, alternative widths, and every narration word boundary;
+equally wrapped directives, questions, authentication and permission prompts
+remain fail-closed. No physical-screen paragraphs are indiscriminately joined.
+The stock control proof joins the exact latest compiled getter to the
+source-written, registered-status `spawnSync` receipt and staged router hash.
+Historical getter invocations and the normal registered request hook have
+different roles; their original observations remain retained and validated.
+The selected current getter still satisfies the unchanged six-producer
+owner/mode/digest/live-actor proof, and normal callback ancestry is proved
+separately. Repeated status reads are not extra current control producers.
+
+`runNativeWorkiqLookupDiagnostic` is a separate, non-admitting diagnostic lane,
+not a shortened full pilot. It reuses the normal owned native startup, current
+SDK/schema/description/event readiness and exact consent path, submits the
+unchanged frozen A prompt, and stops at the first actual SDK lookup outcome or
+strict failure. A source gateway quota permits at most one deep-exact frozen A
+lookup upstream, rejecting and retaining extra or racing dispatches before
+authorization/dispatch. The driver never resets a failed latch or performs
+fetches, Prepare, publication, B reuse or macro grading. A normal recording arm
+with learning off is required only to claim the original prompt and select the
+existing native SDK pass-through in Direct mode; learning-off preference alone
+does not claim that route. Its actual returned token/status must name the current
+SID, and cleanup cancels that exact owned recording through the normal API,
+verifies idle state, and preserves the recording snapshots without admission.
+At most two explicitly authorized checks require separate serial owned runs,
+each with its own artifacts, port, audit and exact cleanup.
+An expired local pipe reader cannot prevent subsequent exact-owned console and
+session cleanup. Cleanup errors remain retained separately from the final OS
+release proof; post-abort SDK events are not credited as provider reproduction.
+Every console allocation is tracked before launching, separately from admitted
+SDK histories. Failed/partial startup retains private helper stdout, stderr,
+exit/signal and exact hashed owner/state receipt bytes; it never supplies SDK
+readiness or admission. Launch is cancellable and bounded by the same remaining
+active budget, with the existing startup cap unchanged. Cleanup uses the pinned
+normal helper to select a late exact-owned UUID window when its window receipt
+is absent, then closes that window with a separate bounded cleanup allowance.
+It never stops shared Windows Terminal or adopts a PID-reused/foreign bridge.
+Release checks cover all allocation titles, exact actors, scoped root commands
+and the receiver port, including failed launches.
+Current MCP controls are selected by a private source-owned Windows process
+snapshot joined to the actual bridge, CLI and SDK actor, not by desired mode or
+the newest four receipts. Each stock role requires one distinct live physical
+producer with exact staged script/role argv, PID/start/executable/parent tuple,
+owned root/config digest and bounded observation chronology. Missing or
+ambiguous roles, current conflicts, foreign actors, PID reuse and forged
+chronology reject. Physically absent older producers remain historical evidence;
+all observations and actor/selection snapshots are retained. Serialized snapshots
+cannot supply native authority, and historical replay does not regrade a failed
+trial.
+The SDK producer and Node MCP/bridge producers are distinct executable roles:
+the SDK producer may be the pinned Copilot binary. MCP executables must match
+the actual protected Node bridge, never an assumed SDK executable. Script and
+role argv are expanded from the physically pinned staged MCP manifest, preserving
+its declared spelling and case-sensitive role flags; staged script bytes and
+each producer's own OS tuple still must match.
+The hook authentication target carries the lexical owned workspace, independently
+proved mode/config digest, and original lease/submission/deadline explicitly.
+Binding a reader does not fill its authentication target. None of these expected
+values are copied from incoming hook stdin; missing or foreign context continues
+to fail the unchanged protected callback validator.
+The complete target is constructed and validated against source-proved controls
+before typing the live prompt, then checked against fresh controls before receipt
+authentication. Caller omissions therefore fail before any document reads rather
+than consuming a workflow and discovering incomplete context at finalization.
+Recording learning uses the existing boolean API contract: admitted `prepare`
+maps to `true`, and `off` maps to `false`; unknown inputs are rejected, not
+coerced. The independently read workspace preference and returned source token
+must agree before typing. Prepare requires the actual retained learning flag and
+owned cwd, then a matching finalized learning-job ID; a known missing job fails
+immediately instead of waiting out the live budget. No manual Prepare rescues a
+failed recording.
+Owned receiver cleanup uses the same exact OS identity shutdown as the other
+owned actors, without modifying the protected reader. A held process handle and
+fresh lifetime/executable checks prevent PID reuse adoption. Only a precise
+process-not-found error followed by authoritative PID absence is classified as
+an exited-before-stop race, retaining its original error in the shutdown receipt.
+Foreign/reused identities, unreadable checks, surviving actors, and genuine stop
+errors still block cleanup; failed historical cleanup is never rewritten.
+Future product lineages require an explicit native service-module-load witness.
+Only that owned service launches with its pinned staged `--import` observer and
+private spawn IPC channel; no global `NODE_OPTIONS`, product hook, or API changes
+are made. The observer returns normal Node loader results unchanged and emits
+only actual loaded-source hashes/lengths for the declared service entry and five
+qualified product modules. It does not force imports, inventory unrelated
+modules, expose source bodies, or certify module evaluation/model consumption.
+The lexical callback joins these observations to the actual current OS
+PID/birth/executable/parent/exact argv, owned root, qualified manifest, observer
+bytes, and private launch-plan digest/nonce. Missing, duplicate, stale, foreign,
+changed-byte/path/manifest, and extra-authority records fail before typing.
+Chronology uses shared OS monotonic nanosecond ticks from the real load callback
+and private receiver, not millisecond wall-clock ordering. Local Windows child
+tests observed a one-millisecond cross-process `Date.now()` inversion; no clock
+tolerance or new timeout admits it. Forged prelaunch/future monotonic ticks still
+fail. Wall-clock timestamps are display metadata only.
+Snapshots cannot mint the private receipt brand. Existing normal listener/RPC,
+SDK/current-control, recording-preference/token, and callback-target checks still
+apply separately; startup and preprompt checks use the same active budget.
+Full provider originals and all actual SDK events are retained; provider
+delivery is not falsely claimed as a proven full SDK result. An empty lookup
+still fails without inventing a binding; source error specificity distinguishes
+`emptyLookup` from multiple-hit `nonuniqueLookup`, without regrading history.
+The failed attempt and its transport
+errors remain immutable evidence, not a successful provider read or permission
+denial diagnosis. A subsequent authorized attempt passed startup and omitted
+DeveloperCard, but its changed query failed the frozen request contract; the
+observer then correctly denied a retry after that failed completion. A separate
+terminal UI false positive joined "selected document" in the echoed prompt to
+"binary/model" in the later error. The offline classifier now detects model
+choosers only from localized directive/heading evidence, including an immediate
+wrapped model label, rather than matching across unrelated viewport text.
+Confirmation narration also cannot borrow a later unrelated question mark;
+actionable questions, real choosers, authentication, unknown permissions and
+confirmation/cancellation prompts still block. These new regressions do not
+qualify a live workflow or resolve the independent frozen-query failure. The
+actual failed results remain immutable; no further live budget or recording is
+implied.
+The later user-authorized v2 contract supersedes those strict signature/omission
+rules only for new trials. Semantic request matching never changes the raw
+SDK/provider/trace joins: the native read actor and projection still compare
+complete actual arguments, including the optional diagnostic boolean, exactly.
+The admission is validated before runtime creation, and each trial records its
+evaluation contract and intentional authorization lineage. Grammar routing,
+source macro bindings, original-result provenance and actual current-SID
+readiness remain independent requirements.
+The current Agency catalog supplies schemas and read-only annotations; SDK
+aliases are independently joined. Controller trial leases are not product macro
+run IDs. A private source-branded projection preserves the complete physical
+trace and excludes only the independently proven parent macro task on reuse;
+unknown calls remain blockers. The workflow captures frozen A, awaits its real
+Prepare job, reviews the exact draft, publishes through the supported API, then
+requires current B grammar reuse. A real owned service restart is attempted only
+with remaining turn/time budget. Results are experimental functional evidence,
+never certified model-consumption proof. OBS is outside this entry and must wait
+for actual functional acceptance.
 
 ```powershell
 node --test scripts\test\macro-eval-native.spec.mjs

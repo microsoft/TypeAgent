@@ -27,6 +27,10 @@ import {
     validateWorkiqLookup,
     validateWorkiqMetadata,
     validateWorkiqArtifactReference,
+    workiqMacroCorrectnessContract,
+    workiqRequestMatches,
+    readWorkiqSdkOriginalEnvelope,
+    isWorkiqSdkStructuredResult,
 } from "./macro-eval-workiq-evidence.mjs";
 
 const operations = ["retrieve", "fetch", "fetch_blob", "fetch"];
@@ -41,6 +45,25 @@ const requireFact = (condition, code, status) => {
 };
 const identifier = (value) =>
     typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+const captureCompletionGuidance =
+    "Capture completion policy v1: finish exactly four serial WorkIQ reads: retrieve, metadata fetch, fetch_blob, final metadata fetch for the same freshly bound entity. " +
+    "Wait for each result before the next read; after fetch_blob, issue the final metadata fetch directly, then finish. " +
+    "Do not start task/subagents, parallel tool calls, terminal commands, local files, byte-count/hash checks or other tools during this capture. " +
+    "The host independently verifies the complete original bytes and version; do not delegate or perform that verification yourself. " +
+    "This is direct capture guidance, not approval or a restriction on a subsequent source-qualified host-controlled approved macro handoff.";
+
+function metadataBindingGuidance(admission) {
+    const suffix =
+        admission.workflow.recipe[1].argumentTemplate.entityUrls[0].suffix;
+    return (
+        "Metadata binding policy v1: both metadata fetches must use the freshly returned retrievalHits[0].entityUrl with the approved suffix JSON: " +
+        JSON.stringify(suffix) +
+        ". Use exactly one $select with every approved field, including lastModifiedDateTime; order and equivalent query encoding may vary, but no field may be omitted, duplicated or added. " +
+        "Do not substitute id, resourceId or display webUrl for entityUrl, and do not add other query parameters. " +
+        "Frozen version verification requires all these fields; partial metadata is not an authorized substitute. " +
+        "Copy the complete suffix for the first and final metadata reads; this guidance does not change consent, scope, arguments or permissions."
+    );
+}
 
 export async function assertWorkiqHost(callback, value) {
     requireFact(
@@ -79,7 +102,7 @@ export function workiqReadArguments(admission, entityKey, index, lookup) {
                 },
             ],
         };
-    validateWorkiqLookup(lookup, entity);
+    validateWorkiqLookup(lookup, entity, admission);
     const recipe = admission.workflow.recipe[index];
     const expression =
         index === 2
@@ -91,6 +114,90 @@ export function workiqReadArguments(admission, entityKey, index, lookup) {
         new Map([[admission.workflow.recipe[0].step, lookup]]),
     );
     return index === 2 ? { path: value } : { entityUrls: [value] };
+}
+
+export function workiqLookupBindingGuidance(admission, entityKey) {
+    const { query, strategy } = workiqReadArguments(admission, entityKey, 0);
+    requireFact(
+        typeof query === "string" &&
+            !/(?:https?:\/\/|bearer\s|(?:access[_-]?token|api[_-]?key)\s*[:=]|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.)/iu.test(
+                query,
+            ),
+        "unsafeWorkiqLookupGuidance",
+        "blocked",
+    );
+    return (
+        "Frozen lookup scalar binding JSON: " +
+        JSON.stringify({ query, strategy }) +
+        "\nCopy these scalar values exactly into retrieve; query is the literal lookup text, not the URL identity selector. " +
+        "Do not paraphrase, prepend instructions, append the document URL, or omit strategy. " +
+        "In the capabilities array, bind the OneDriveAndSharePoint entry's items_by_url only to the exact document URL already supplied in the user prompt. " +
+        "That URL belongs only in capabilities, not in query. No broader search is authorized. " +
+        (workiqMacroCorrectnessContract(admission)
+            ? "Optional diagnostics contract v2: includeDeveloperCard may be absent, true or false; no other extra argument is authorized."
+            : "No extra field is authorized.") +
+        (workiqMacroCorrectnessContract(admission) && entityKey === "A"
+            ? "\n" +
+              captureCompletionGuidance +
+              "\n" +
+              metadataBindingGuidance(admission)
+            : "")
+    );
+}
+
+export function workiqModelVisibleTools(tools, lookupGuidance) {
+    requireFact(
+        typeof lookupGuidance === "string" &&
+            lookupGuidance.startsWith("Frozen lookup scalar binding JSON: "),
+        "invalidWorkiqModelGuidance",
+        "blocked",
+    );
+    const exposed = clone(tools);
+    const matches = exposed.filter((tool) => tool.name === "retrieve");
+    requireFact(matches.length === 1, "ambiguousWorkiqGuidanceTool", "blocked");
+    matches[0].description =
+        "WorkIQ frozen request guidance; not an authorization grant. " +
+        (lookupGuidance.includes("Optional diagnostics contract v2:")
+            ? "Use query, strategy and capabilities; includeDeveloperCard is an optional boolean diagnostic argument, not a document binding. "
+            : "Use only query, strategy and capabilities; omit includeDeveloperCard entirely, including false. ") +
+        "Do not retry a failed call or delegate a rejected read.\n" +
+        lookupGuidance +
+        "\nBackend tool description:\n" +
+        (matches[0].description ?? "");
+    const captureStart = lookupGuidance.indexOf(
+        "\nCapture completion policy v1:",
+    );
+    if (captureStart !== -1)
+        for (const tool of exposed) {
+            if (tool.name === "retrieve") continue;
+            tool.description =
+                lookupGuidance.slice(captureStart + 1) +
+                "\nBackend tool description:\n" +
+                (tool.description ?? "");
+        }
+    return exposed;
+}
+
+// Pure metadata validation, not native readiness or permission authority.
+export function verifyWorkiqModelVisibleMetadata(metadata, server, expected) {
+    const mapped = Array.isArray(metadata?.tools)
+        ? metadata.tools.filter((tool) => tool.mcpServerName === server)
+        : undefined;
+    requireFact(
+        mapped?.length === expected.length,
+        "workiqModelGuidanceInventoryMismatch",
+        "blocked",
+    );
+    for (const tool of expected) {
+        const matches = mapped.filter((item) => item.mcpToolName === tool.name);
+        requireFact(
+            matches.length === 1 &&
+                isDeepStrictEqual(matches[0].input_schema, tool.inputSchema) &&
+                matches[0].description === tool.description,
+            "workiqModelGuidanceDescriptionMismatch",
+            "blocked",
+        );
+    }
 }
 
 async function safeFile(root, relative, maximum) {
@@ -211,7 +318,17 @@ async function actualAgencyClient(admission, signal) {
 
 function admittedCatalog(result, admission) {
     requireFact(
-        Array.isArray(result?.tools) && !result.nextCursor,
+        Array.isArray(result?.tools) &&
+            result.tools.length >= 3 &&
+            result.tools.length <= 128 &&
+            result.tools.every(
+                (tool) =>
+                    typeof tool?.name === "string" &&
+                    /^[a-zA-Z0-9_.:-]{1,128}$/u.test(tool.name),
+            ) &&
+            new Set(result.tools.map((tool) => tool.name)).size ===
+                result.tools.length &&
+            !result.nextCursor,
         "incompleteAgencyCatalog",
         "blocked",
     );
@@ -239,21 +356,117 @@ function admittedCatalog(result, admission) {
     });
 }
 
-async function verifyProviderBlob(store, ref, result, entity, ownerId, callId) {
+export async function discoverWorkiqAgencyCatalog(admission, signal) {
+    const context = clone(admission);
+    agencyLaunch(context);
+    const client = await actualAgencyClient(context, signal);
+    try {
+        const result = await client.listTools();
+        return {
+            tools: admittedCatalog(result, context),
+            backendCatalog: workiqBackendCatalogFacts(result),
+        };
+    } finally {
+        await client.close();
+    }
+}
+
+function workiqBackendCatalogFacts(result) {
+    return {
+        sha256: workiqJsonHash(result),
+        toolCount: result.tools.length,
+        advertisedNames: result.tools.map((tool) => tool.name),
+        exposedNames: ["retrieve", "fetch", "fetch_blob"],
+        excludedNames: result.tools
+            .filter(
+                (tool) =>
+                    !["retrieve", "fetch", "fetch_blob"].includes(tool.name),
+            )
+            .map((tool) => tool.name),
+    };
+}
+
+export async function observeWorkiqAgencyCatalog(admission, signal) {
+    const context = clone(admission);
+    agencyLaunch(context);
+    const client = await actualAgencyClient(context, signal);
+    try {
+        const result = await client.listTools();
+        const tools = Array.isArray(result?.tools) ? result.tools : [];
+        return {
+            resultType: result === null ? "null" : typeof result,
+            resultKeys: Object.keys(result ?? {}),
+            toolsType: Array.isArray(result?.tools)
+                ? "array"
+                : typeof result?.tools,
+            toolCount: tools.length,
+            hasNextCursor: Boolean(result?.nextCursor),
+            toolNames: tools
+                .slice(0, 64)
+                .map((tool) =>
+                    typeof tool.name === "string" &&
+                    /^[a-zA-Z0-9_.:-]{1,128}$/u.test(tool.name)
+                        ? tool.name
+                        : "nonstandard-name",
+                ),
+            selectedTools: context.runtime.advertisedToolSchemas.map(
+                (expected) => {
+                    const matches = tools.filter(
+                        (tool) => tool.name === expected.advertisedName,
+                    );
+                    const actual = matches.length === 1 ? matches[0] : null;
+                    return {
+                        name: expected.advertisedName,
+                        matches: matches.length,
+                        schemaMatchesFrozen:
+                            actual !== null &&
+                            isDeepStrictEqual(
+                                actual.inputSchema,
+                                expected.inputSchema,
+                            ),
+                        annotationsMatchFrozen:
+                            actual !== null &&
+                            isDeepStrictEqual(
+                                actual.annotations,
+                                expected.annotations,
+                            ),
+                        hasOutputSchema: Boolean(actual?.outputSchema),
+                        readOnlyHint: actual?.annotations?.readOnlyHint ?? null,
+                        destructiveHint:
+                            actual?.annotations?.destructiveHint ?? null,
+                    };
+                },
+            ),
+        };
+    } finally {
+        await client.close();
+    }
+}
+
+async function verifyProviderBlob(
+    store,
+    ref,
+    result,
+    entity,
+    ownerId,
+    callId,
+    admission,
+) {
     requireFact(ref, "missingAgencyOriginalArtifact", "blocked");
     await store.verify(ref, "run", ownerId, callId, "result");
-    const envelope = readWorkiqOriginalEnvelope(result);
+    const envelope = readWorkiqOriginalEnvelope(result, admission);
     const blob = envelope.structuredContent;
     requireFact(
-        Object.keys(blob).every((key) =>
-            [
-                "base64Content",
-                "blobName",
-                "contentType",
-                "sizeBytes",
-                "statusCode",
-            ].includes(key),
-        ),
+        workiqMacroCorrectnessContract(admission) ||
+            Object.keys(blob).every((key) =>
+                [
+                    "base64Content",
+                    "blobName",
+                    "contentType",
+                    "sizeBytes",
+                    "statusCode",
+                ].includes(key),
+            ),
         "unsupportedBlobOutput",
     );
     const receipt = ref.blobs.find((item) =>
@@ -267,8 +480,13 @@ async function verifyProviderBlob(store, ref, result, entity, ownerId, callId) {
         "blocked",
     );
     requireFact(
-        blob.blobName === entity.blobName &&
-            blob.contentType === entity.transportContentType &&
+        (workiqMacroCorrectnessContract(admission)
+            ? typeof blob.blobName === "string" &&
+              blob.blobName.length > 0 &&
+              typeof blob.contentType === "string" &&
+              blob.contentType.length > 0
+            : blob.blobName === entity.blobName &&
+              blob.contentType === entity.transportContentType) &&
             blob.sizeBytes === entity.oracle.sizeBytes &&
             receipt.sizeBytes === entity.oracle.sizeBytes &&
             receipt.sha256 === entity.oracle.sha256,
@@ -303,6 +521,17 @@ export function createWorkiqAgencyAdapter(options) {
     const scope = clone(options.scope);
     const entity = entityFor(admission, options.entityKey);
     checkScope(scope, entity.key);
+    const lookupOnlyDiagnostic = options.lookupOnlyDiagnostic === true;
+    requireFact(
+        options.lookupOnlyDiagnostic === undefined || lookupOnlyDiagnostic,
+        "invalidLookupDiagnostic",
+    );
+    requireFact(
+        !lookupOnlyDiagnostic ||
+            (entity.key === "A" && scope.phase === "capture-a"),
+        "foreignLookupDiagnostic",
+        "blocked",
+    );
     agencyLaunch(admission);
     requireFact(
         path.isAbsolute(options.auditRoot) &&
@@ -314,9 +543,14 @@ export function createWorkiqAgencyAdapter(options) {
     const auditRoot = options.auditRoot;
     const signal = options.signal;
     const connect = options.connect ?? actualAgencyClient;
+    let diagnosticRead;
+    let upstreamReadsStarted = 0;
+    const diagnosticRejections = [];
     let client,
         catalog,
+        backendCatalog,
         lookup,
+        pendingRead,
         busy = false,
         starting = false,
         stopped = false,
@@ -347,7 +581,9 @@ export function createWorkiqAgencyAdapter(options) {
             await safeAncestors(path.dirname(auditRoot));
             await mkdir(auditRoot, { mode: 0o700 });
             client = await connect(admission, signal);
-            catalog = admittedCatalog(await client.listTools(), admission);
+            const result = await client.listTools();
+            catalog = admittedCatalog(result, admission);
+            backendCatalog = workiqBackendCatalogFacts(result);
             await immutableJson(auditRoot, "catalog.json", {
                 schemaVersion: 1,
                 kind: "workiq-agency-current-catalog",
@@ -355,6 +591,7 @@ export function createWorkiqAgencyAdapter(options) {
                 admissionSha256: workiqJsonHash(admission),
                 createdAt: new Date().toISOString(),
                 tools: catalog,
+                backendCatalog,
             });
         } catch (error) {
             await close();
@@ -373,6 +610,11 @@ export function createWorkiqAgencyAdapter(options) {
             "blocked",
         );
         requireFact(
+            !lookupOnlyDiagnostic || index === 0,
+            "lookupDiagnosticReadLimit",
+            "blocked",
+        );
+        requireFact(
             index < 4 && name === operations[index],
             "unexpectedWorkiqOperation",
             "blocked",
@@ -384,8 +626,12 @@ export function createWorkiqAgencyAdapter(options) {
             lookup,
         );
         requireFact(
-            isDeepStrictEqual(args, expected),
-            "workiqScopeMismatch",
+            lookupOnlyDiagnostic
+                ? isDeepStrictEqual(args, expected)
+                : workiqRequestMatches(args, expected, admission, index),
+            lookupOnlyDiagnostic
+                ? "lookupDiagnosticRequestMismatch"
+                : "workiqScopeMismatch",
             "blocked",
         );
     }
@@ -397,10 +643,35 @@ export function createWorkiqAgencyAdapter(options) {
         try {
             requireFact(!currentSignal?.aborted, "workiqStopped", "blocked");
             checkCall(name, args);
+            pendingRead = { name, arguments: clone(args) };
             busy = true;
         } catch (error) {
             failed = true;
             await close();
+            if (lookupOnlyDiagnostic && catalog) {
+                const rejection = {
+                    schemaVersion: 1,
+                    kind: "workiq-lookup-diagnostic-rejected-dispatch",
+                    scope,
+                    advertisedName: name,
+                    arguments: clone(args),
+                    upstreamReadsStarted,
+                    maxUpstreamReads: 1,
+                    errorCode:
+                        error instanceof WorkiqEvidenceError
+                            ? error.code
+                            : "invalidLookupDiagnosticDispatch",
+                    observedAt: new Date().toISOString(),
+                    admission: false,
+                };
+                const file = `lookup-diagnostic-rejection-${randomUUID()}.json`;
+                await immutableJson(auditRoot, file, rejection);
+                diagnosticRejections.push({
+                    ...rejection,
+                    auditPath: path.join(auditRoot, file),
+                    auditSha256: workiqJsonHash(rejection),
+                });
+            }
             throw error;
         }
         const sequence = index++;
@@ -430,6 +701,7 @@ export function createWorkiqAgencyAdapter(options) {
                 "workiqStopped",
                 "blocked",
             );
+            upstreamReadsStarted++;
             result = await client.callTool(
                 { name, arguments: clone(args) },
                 currentSignal,
@@ -450,13 +722,13 @@ export function createWorkiqAgencyAdapter(options) {
                 "workiqStopped",
                 "blocked",
             );
-            const envelope = readWorkiqOriginalEnvelope(result);
+            const envelope = readWorkiqOriginalEnvelope(result, admission);
             if (sequence === 0) {
-                validateWorkiqLookup(envelope, entity);
+                validateWorkiqLookup(envelope, entity, admission);
                 lookup = envelope;
             }
             if (sequence === 1 || sequence === 3)
-                validateWorkiqMetadata(envelope, entity);
+                validateWorkiqMetadata(envelope, entity, admission);
             if (sequence === 2)
                 await verifyProviderBlob(
                     store,
@@ -465,6 +737,7 @@ export function createWorkiqAgencyAdapter(options) {
                     entity,
                     scope.ownerId,
                     proxyCallId,
+                    admission,
                 );
             call.status = "completed";
             return result;
@@ -485,12 +758,23 @@ export function createWorkiqAgencyAdapter(options) {
             if (reference) call.resultArtifact = reference;
             try {
                 await immutableJson(auditRoot, `call-${sequence}.json`, call);
+                if (lookupOnlyDiagnostic)
+                    diagnosticRead = {
+                        call: clone(call),
+                        originalProviderResult: clone(result),
+                        auditPath: path.join(
+                            auditRoot,
+                            `call-${sequence}.json`,
+                        ),
+                        auditSha256: workiqJsonHash(call),
+                    };
             } catch (error) {
                 failed = true;
                 await close();
                 throw error;
             } finally {
                 busy = false;
+                pendingRead = undefined;
             }
         }
     }
@@ -503,16 +787,60 @@ export function createWorkiqAgencyAdapter(options) {
             return clone(catalog);
         },
         complete: () => index === 4 && !busy && !failed,
+        lookupDiagnosticEvidence: () => {
+            requireFact(lookupOnlyDiagnostic, "notLookupDiagnostic");
+            return {
+                schemaVersion: 1,
+                kind: "workiq-identical-frozen-lookup-diagnostic-evidence-v1",
+                scope: clone(scope),
+                maxUpstreamReads: 1,
+                upstreamReadsStarted,
+                firstRead: clone(diagnosticRead),
+                rejections: clone(diagnosticRejections),
+                admission: false,
+                nativeAuthority: false,
+                modelInputExposure: "not-certified",
+            };
+        },
+        catalogObservation: () => clone(backendCatalog),
+        lookupBindingGuidance: () =>
+            workiqLookupBindingGuidance(admission, entity.key),
+        nextRead: () => {
+            if (!client || stopped || failed) return null;
+            if (busy) return clone(pendingRead);
+            if (index >= (lookupOnlyDiagnostic ? 1 : 4)) return null;
+            return {
+                name: operations[index],
+                arguments: workiqReadArguments(
+                    admission,
+                    entity.key,
+                    index,
+                    lookup,
+                ),
+            };
+        },
     });
 }
 
 export function createWorkiqMcpServer(adapter) {
+    const guidance = adapter.lookupBindingGuidance?.();
     const server = new Server(
         { name: "workiq", version: "1.0.0" },
-        { capabilities: { tools: {} } },
+        {
+            capabilities: { tools: {} },
+            instructions:
+                "This server enforces the frozen read-only workflow retrieve -> fetch -> fetch_blob -> fetch. " +
+                (guidance?.includes("Optional diagnostics contract v2:")
+                    ? "For retrieve, bind query, strategy and capabilities from the scoped request; includeDeveloperCard may be absent, true or false. No other extra argument is authorized. "
+                    : "For retrieve, supply only query, strategy and capabilities; omit includeDeveloperCard entirely, including false. Do not add optional fields. ") +
+                "Do not broaden the lookup or retry a rejected call." +
+                (guidance ? "\n" + guidance : ""),
+        },
     );
     server.setRequestHandler(ListToolsRequestSchema, () => ({
-        tools: adapter.tools(),
+        tools: guidance
+            ? workiqModelVisibleTools(adapter.tools(), guidance)
+            : adapter.tools(),
     }));
     server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
         try {
@@ -548,6 +876,7 @@ async function providerCalls(auditRoot, admission, scope) {
                 "admissionSha256",
                 "createdAt",
                 "tools",
+                "backendCatalog",
             ].includes(key),
         ) &&
             catalog.schemaVersion === 1 &&
@@ -557,6 +886,36 @@ async function providerCalls(auditRoot, admission, scope) {
         "foreignAgencyCatalog",
     );
     admittedCatalog({ tools: catalog.tools }, admission);
+    if (catalog.backendCatalog !== undefined) {
+        const facts = catalog.backendCatalog;
+        requireFact(
+            Object.keys(facts).every((key) =>
+                [
+                    "sha256",
+                    "toolCount",
+                    "advertisedNames",
+                    "exposedNames",
+                    "excludedNames",
+                ].includes(key),
+            ) &&
+                /^[a-f0-9]{64}$/u.test(facts.sha256) &&
+                Array.isArray(facts.advertisedNames) &&
+                facts.toolCount === facts.advertisedNames.length &&
+                new Set(facts.advertisedNames).size === facts.toolCount &&
+                isDeepStrictEqual(facts.exposedNames, [
+                    "retrieve",
+                    "fetch",
+                    "fetch_blob",
+                ]) &&
+                isDeepStrictEqual(
+                    facts.excludedNames,
+                    facts.advertisedNames.filter(
+                        (name) => !facts.exposedNames.includes(name),
+                    ),
+                ),
+            "invalidAgencyCatalogProjection",
+        );
+    }
     const store = new PrivateResultStore(auditRoot);
     const calls = [];
     const ids = new Set();
@@ -701,7 +1060,7 @@ function nativeCalls(events, trial, discovery) {
     return calls;
 }
 
-function correlateProvider(calls, agency, nativeStart, discovery) {
+function correlateProvider(calls, agency, nativeStart, discovery, admission) {
     requireFact(
         Date.parse(agency.catalog.createdAt) <=
             Date.parse(calls[0].startedAt) &&
@@ -722,9 +1081,19 @@ function correlateProvider(calls, agency, nativeStart, discovery) {
                     Date.parse(call.completedAt),
             "unboundAgencyNativeCall",
         );
-        const original = readWorkiqOriginalEnvelope(call.result);
+        const original = readWorkiqSdkOriginalEnvelope(
+            call.result,
+            admission,
+            call.status === "completed",
+        );
         requireFact(
-            isDeepStrictEqual(original, provider.result),
+            isWorkiqSdkStructuredResult(call.result, admission)
+                ? provider.result.isError === false &&
+                      isDeepStrictEqual(
+                          original.structuredContent,
+                          provider.result.structuredContent,
+                      )
+                : isDeepStrictEqual(original, provider.result),
             "nativeAgencyOriginalMismatch",
             "blocked",
         );
@@ -741,6 +1110,8 @@ export function createWorkiqCurrentEvidenceLoader(options) {
         options;
     const admission = clone(options.admission),
         scope = clone(options.scope);
+    const sdkCaptureDataRoot = options.sdkCaptureDataRoot;
+    const projection = options.projection;
     checkScope(scope, options.entityKey);
     requireFact(
         [artifactRoot, nativeSessionRoot, auditRoot].every(
@@ -780,6 +1151,34 @@ export function createWorkiqCurrentEvidenceLoader(options) {
         } catch {
             throw fault("invalidNativeEventSource");
         }
+        if (sdkCaptureDataRoot !== undefined) {
+            requireFact(
+                path.isAbsolute(sdkCaptureDataRoot),
+                "invalidSdkCaptureRoot",
+            );
+            const { restoreWorkiqSdkOriginals } = await import(
+                "./macro-eval-workiq-native.mjs"
+            );
+            events = await restoreWorkiqSdkOriginals(
+                { artifactRoot, sdkCaptureDataRoot, scope },
+                trial,
+                events,
+            );
+        }
+        if (projection !== undefined) {
+            const { verifyWorkiqNativeProjection } = await import(
+                "./macro-eval-workiq-native.mjs"
+            );
+            events = (
+                await verifyWorkiqNativeProjection(
+                    projection,
+                    artifactRoot,
+                    trace,
+                    trial,
+                    events,
+                )
+            ).events;
+        }
         const calls = nativeCalls(events, trial, discovery);
         const agency = await providerCalls(auditRoot, admission, scope);
         const sessionStart = events.find(
@@ -794,12 +1193,21 @@ export function createWorkiqCurrentEvidenceLoader(options) {
                 sessionStart.data.sessionId === trial.sessionId,
             "foreignNativeSession",
         );
-        correlateProvider(calls, agency, sessionStart.timestamp, discovery);
+        correlateProvider(
+            calls,
+            agency,
+            sessionStart.timestamp,
+            discovery,
+            admission,
+        );
         return {
             origin: "owned-native-session-events",
             trace,
             calls,
             discovery,
+            ...(projection === undefined
+                ? {}
+                : { nativeProjection: projection }),
         };
     };
 }

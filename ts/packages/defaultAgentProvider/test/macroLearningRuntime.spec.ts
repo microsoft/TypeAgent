@@ -2,8 +2,13 @@
 // Licensed under the MIT License.
 
 import { jest } from "@jest/globals";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import {
     induceMacroFromTrace,
+    PrivateResultStore,
+    cloneVerifiedLearningTrace,
     type MacroLearningBuild,
     type MacroLearningRuntime,
 } from "@typeagent/copilot-macros";
@@ -93,6 +98,74 @@ async function buildFixture(
 }
 
 describe("macro learning runtime", () => {
+    it("transports only physically verified recording evidence through the extraction query", async () => {
+        const root = path.resolve(".learning-input-tests", randomUUID());
+        try {
+            await mkdir(path.join(root, "traces"), { recursive: true });
+            const source = structuredClone(trace);
+            await writeFile(
+                path.join(root, "traces", "source.json"),
+                JSON.stringify(source),
+            );
+            await new PrivateResultStore(root).verifyLearningTrace(
+                "source",
+                source,
+            );
+            const captured: any[] = [];
+            const query = jest.fn<MacroLearningQuery>(async (prompt) => {
+                captured.push(JSON.parse(prompt.split("\nEVIDENCE:\n")[1]));
+                return JSON.stringify({
+                    schemaVersion: 1,
+                    traceId: "source",
+                    request: source.prompt,
+                    toolCallIds: ["call-1"],
+                    description: "Read the recorded file",
+                    uncertainties: [],
+                });
+            });
+            const runtime = createMacroLearningRuntime(query);
+            await runtime.extract(
+                cloneVerifiedLearningTrace(source, "source"),
+                "source",
+                new AbortController().signal,
+            );
+            expect(captured[0].verifiedRecordingEvidence).toEqual({
+                schemaVersion: 1,
+                traceId: "source",
+                sessionId: "test",
+                sourceTraceSha256: createHash("sha256")
+                    .update(JSON.stringify(source))
+                    .digest("hex"),
+            });
+            expect(captured[0].responseEvidence).toEqual({
+                available: true,
+                valueType: "string",
+            });
+            expect(JSON.stringify(captured[0])).not.toContain("private-body");
+            await runtime.extract(
+                Object.assign(structuredClone(source), {
+                    verifiedRecordingEvidence: { workiqRead: { passed: true } },
+                }),
+                "source",
+                new AbortController().signal,
+            );
+            expect(captured[1].verifiedRecordingEvidence).toBeUndefined();
+            const changed = cloneVerifiedLearningTrace(source, "source");
+            changed.sessionId = "foreign";
+            await expect(
+                runtime.extract(
+                    changed,
+                    "source",
+                    new AbortController().signal,
+                ),
+            ).rejects.toThrow("identity or contents changed");
+            expect(query).toHaveBeenCalledTimes(2);
+        } finally {
+            await rm(root, { recursive: true, force: true });
+            await rm(path.dirname(root)).catch(() => undefined);
+        }
+    });
+
     it.each([
         { pattern: "different words", count: 0, expected: 0 },
         { pattern: "read $(path:string) now", count: 1, expected: 0 },

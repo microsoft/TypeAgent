@@ -10,6 +10,9 @@ import {
 import {
     WorkiqEvidenceError,
     createWorkiqEvidenceVerifier,
+    workiqRequestMatches,
+    workiqMacroCorrectnessContract,
+    workiqMetadataSelectionMatches,
 } from "./macro-eval-workiq-evidence.mjs";
 import {
     workiqReadArguments,
@@ -57,13 +60,30 @@ function assertArgumentBinding(step, index, firstId, admission) {
             index === 2
                 ? recipe.argumentTemplate.path
                 : recipe.argumentTemplate.entityUrls[0];
-        check(
-            isDeepStrictEqual(bindings, [
+        const expected = {
+            path: index === 2 ? ["path"] : ["entityUrls", "0"],
+            expression: { ...source, stepId: firstId },
+        };
+        const sameMetadataSelection =
+            workiqMacroCorrectnessContract(admission) &&
+            index !== 2 &&
+            bindings.length === 1 &&
+            workiqMetadataSelectionMatches(
+                "/scoped-entity" + bindings[0]?.expression?.suffix,
+                "/scoped-entity" + source.suffix,
+            ) &&
+            isDeepStrictEqual(
                 {
-                    path: index === 2 ? ["path"] : ["entityUrls", "0"],
-                    expression: { ...source, stepId: firstId },
+                    ...bindings[0],
+                    expression: {
+                        ...bindings[0].expression,
+                        suffix: source.suffix,
+                    },
                 },
-            ]),
+                expected,
+            );
+        check(
+            sameMetadataSelection || isDeepStrictEqual(bindings, [expected]),
             "workiqDraftResultBindingMismatch",
         );
     }
@@ -142,9 +162,11 @@ export function reviewWorkiqDraftContract({
                 new Map([[draft.steps[0].id, lookup]]),
             );
             check(
-                isDeepStrictEqual(
+                workiqRequestMatches(
                     actual,
                     workiqReadArguments(admission, entity.key, index, lookup),
+                    admission,
+                    index,
                 ),
                 "workiqDraftSourceArgumentLeak",
             );

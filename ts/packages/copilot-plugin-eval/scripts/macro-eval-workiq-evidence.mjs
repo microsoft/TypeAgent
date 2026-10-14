@@ -88,6 +88,103 @@ function equal(left, right) {
     );
 }
 
+export function workiqMacroCorrectnessContract(admission) {
+    return (
+        admission?.evaluationContract?.schemaVersion === 2 &&
+        admission.evaluationContract.kind === "workiq-macro-correctness-v2"
+    );
+}
+
+export function workiqRequestMatches(actual, expected, admission, index) {
+    if (!workiqMacroCorrectnessContract(admission))
+        return equal(actual, expected);
+    if (index === 1 || index === 3)
+        return (
+            actual &&
+            typeof actual === "object" &&
+            !Array.isArray(actual) &&
+            equal(Object.keys(actual), ["entityUrls"]) &&
+            Array.isArray(actual.entityUrls) &&
+            actual.entityUrls.length === 1 &&
+            workiqMetadataSelectionMatches(
+                actual.entityUrls[0],
+                expected.entityUrls[0],
+            )
+        );
+    if (index !== 0) return equal(actual, expected);
+    if (!actual || typeof actual !== "object" || Array.isArray(actual))
+        return false;
+    const keys = ["query", "strategy", "capabilities"];
+    if (
+        !Object.keys(actual).every(
+            (key) => keys.includes(key) || key === "includeDeveloperCard",
+        ) ||
+        !keys.every((key) => equal(actual[key], expected[key]))
+    )
+        return false;
+    if (!Object.hasOwn(actual, "includeDeveloperCard")) return true;
+    const schema = admission.runtime.advertisedToolSchemas.find(
+        (tool) => tool.advertisedName === "retrieve",
+    )?.inputSchema;
+    return (
+        typeof actual.includeDeveloperCard === "boolean" &&
+        schema?.properties?.includeDeveloperCard?.type === "boolean" &&
+        !schema.required?.includes("includeDeveloperCard")
+    );
+}
+
+export function workiqMetadataSelectionMatches(actual, expected) {
+    if (typeof actual !== "string" || typeof expected !== "string")
+        return false;
+    const a = actual.split("?");
+    const e = expected.split("?");
+    if (
+        a.length !== 2 ||
+        e.length !== 2 ||
+        a[0] !== e[0] ||
+        actual.includes("#") ||
+        expected.includes("#")
+    )
+        return false;
+    const parameters = new URLSearchParams(a[1]);
+    const expectedParameters = new URLSearchParams(e[1]);
+    if (
+        !equal([...parameters.keys()], ["$select"]) ||
+        !equal([...expectedParameters.keys()], ["$select"])
+    )
+        return false;
+    const fields = parameters.get("$select").split(",");
+    const required = expectedParameters.get("$select").split(",");
+    return (
+        fields.length > 0 &&
+        new Set(fields).size === fields.length &&
+        new Set(required).size === required.length &&
+        equal(fields.slice().sort(), required.slice().sort())
+    );
+}
+
+function outputRecord(value, allowed, code, admission) {
+    if (!workiqMacroCorrectnessContract(admission)) {
+        record(value, allowed, code);
+        return;
+    }
+    requireEvidence(
+        value && typeof value === "object" && !Array.isArray(value),
+        code,
+    );
+    requireEvidence(
+        value.accessDenied !== true &&
+            value.permissionDenied !== true &&
+            value.denied !== true,
+        "providerError",
+        "failed",
+    );
+}
+
+function usableString(value) {
+    return typeof value === "string" && value.length > 0;
+}
+
 function bounded(value, maximum, code) {
     let serialized;
     try {
@@ -142,7 +239,29 @@ function grantFree(value) {
 }
 
 function validateTrial(trial) {
-    record(trial, ["sessionId", "traceId", "runId", "startedAt", "endedAt"]);
+    record(trial, [
+        "sessionId",
+        "traceId",
+        "runId",
+        "startedAt",
+        "endedAt",
+        "runIdentityKind",
+        "handoffRunId",
+    ]);
+    if (
+        trial.runIdentityKind !== undefined ||
+        trial.handoffRunId !== undefined
+    ) {
+        requireEvidence(
+            trial.runIdentityKind === "controller-trial-lease" &&
+                typeof trial.runId === "string" &&
+                trial.runId.length > 0 &&
+                (trial.handoffRunId === null ||
+                    (typeof trial.handoffRunId === "string" &&
+                        trial.handoffRunId.length > 0)),
+            "invalidTrialLeaseIdentity",
+        );
+    }
     for (const key of ["sessionId", "traceId"])
         requireEvidence(
             typeof trial[key] === "string" && trial[key].length > 0,
@@ -161,6 +280,11 @@ function validateTrial(trial) {
 
 function validateRecipe(admission) {
     requireEvidence(admission?.schemaVersion === 1, "unsupportedAdmission");
+    if (admission.evaluationContract !== undefined)
+        requireEvidence(
+            workiqMacroCorrectnessContract(admission),
+            "unsupportedEvaluationContract",
+        );
     const recipe = admission.workflow?.recipe;
     requireEvidence(
         Array.isArray(admission.entities) &&
@@ -419,8 +543,14 @@ function validateCurrentCall(call, recorded, trial, expected, previous) {
     return end;
 }
 
-function validateCurrent(current, trial, catalog) {
-    record(current, ["origin", "trace", "calls", "discovery"]);
+async function validateCurrent(current, trial, catalog, artifactRoot) {
+    record(current, [
+        "origin",
+        "trace",
+        "calls",
+        "discovery",
+        "nativeProjection",
+    ]);
     requireEvidence(
         current.origin === "owned-native-session-events",
         "unverifiedNativeOrigin",
@@ -436,10 +566,28 @@ function validateCurrent(current, trial, catalog) {
             equal(trace.capabilities, ["private-result-evidence-v1"]),
         "unsupportedTrace",
     );
+    let recordedCalls = trace.toolCalls;
+    if (
+        trial.runIdentityKind === "controller-trial-lease" ||
+        current.nativeProjection !== undefined
+    ) {
+        const { verifyWorkiqNativeProjection } = await import(
+            "./macro-eval-workiq-native.mjs"
+        );
+        recordedCalls = (
+            await verifyWorkiqNativeProjection(
+                current.nativeProjection,
+                artifactRoot,
+                trace,
+                trial,
+            )
+        ).calls;
+    }
     requireEvidence(
         trace.traceId === trial.traceId &&
             trace.sessionId === trial.sessionId &&
-            (trace.handoffRunId ?? null) === trial.runId,
+            (trial.runIdentityKind === "controller-trial-lease" ||
+                (trace.handoffRunId ?? null) === trial.runId),
         "foreignTrace",
     );
     requireEvidence(
@@ -450,11 +598,11 @@ function validateCurrent(current, trial, catalog) {
         "foreignTraceWindow",
     );
     requireEvidence(
-        calls.length >= 4 && trace.toolCalls.length >= 4,
+        calls.length >= 4 && recordedCalls.length >= 4,
         "missingCurrentCalls",
     );
     requireEvidence(
-        calls.length === 4 && trace.toolCalls.length === 4,
+        calls.length === 4 && recordedCalls.length === 4,
         "extraCalls",
         "failed",
     );
@@ -463,7 +611,7 @@ function validateCurrent(current, trial, catalog) {
     for (const [index, call] of calls.entries()) {
         previous = validateCurrentCall(
             call,
-            trace.toolCalls[index],
+            recordedCalls[index],
             trial,
             catalog.get(operations[index]),
             previous,
@@ -476,6 +624,7 @@ function validateCurrent(current, trial, catalog) {
             timestamp(trace.completedAt) >= timestamp(calls[3].completedAt),
         "foreignTraceWindow",
     );
+    return recordedCalls;
 }
 
 async function originalResult(
@@ -484,6 +633,7 @@ async function originalResult(
     call,
     trial,
     requireArtifact = false,
+    admission,
 ) {
     let value;
     if (recorded.resultArtifact) {
@@ -539,16 +689,61 @@ async function originalResult(
             "forgedModelResultView",
         );
     }
-    return readWorkiqOriginalEnvelope(value);
+    return readWorkiqSdkOriginalEnvelope(
+        value,
+        admission,
+        call.status === "completed",
+    );
 }
 
-export function readWorkiqOriginalEnvelope(result) {
+export function isWorkiqSdkStructuredResult(result, admission) {
+    return (
+        workiqMacroCorrectnessContract(admission) &&
+        typeof result?.content === "string" &&
+        result.structuredContent !== undefined
+    );
+}
+
+export function readWorkiqSdkOriginalEnvelope(
+    result,
+    admission,
+    completionSuccess,
+) {
+    if (!isWorkiqSdkStructuredResult(result, admission))
+        return readWorkiqOriginalEnvelope(result, admission);
+    requireEvidence(
+        completionSuccess === true,
+        "unsuccessfulSdkOriginal",
+        "blocked",
+    );
+    outputRecord(result, [], "unsupportedSDKResult", admission);
+    requireEvidence(
+        result.isError === undefined || result.isError === false,
+        "providerError",
+        "failed",
+    );
+    outputRecord(
+        result.structuredContent,
+        [],
+        "incompleteSDKResult",
+        admission,
+    );
+    // Semantic view only: the artifact and event retain the complete raw SDK form.
+    return {
+        content: [],
+        structuredContent: result.structuredContent,
+        isError: false,
+    };
+}
+
+export function readWorkiqOriginalEnvelope(result, admission) {
     let value = result;
     if (typeof value?.content === "string") {
-        record(
+        outputRecord(
             value,
             ["content", "detailedContent", "contents"],
             "unsupportedSDKResult",
+            admission,
         );
         try {
             value = JSON.parse(value.content);
@@ -556,10 +751,11 @@ export function readWorkiqOriginalEnvelope(result) {
             throw new WorkiqEvidenceError("blocked", "incompleteSDKResult");
         }
     }
-    record(
+    outputRecord(
         value,
         ["content", "isError", "structuredContent"],
         "unsupportedToolEnvelope",
+        admission,
     );
     requireEvidence(value.isError === false, "providerError", "failed");
     requireEvidence(
@@ -574,32 +770,58 @@ export function validateWorkiqArtifactReference(reference) {
     record(reference, referenceFields, "invalidArtifactReference");
 }
 
-function checkLookup(envelope, entity) {
-    record(
+function checkLookup(envelope, entity, admission) {
+    outputRecord(
         envelope.structuredContent,
         [retrievalKey],
         "unsupportedLookupOutput",
+        admission,
     );
     const lookup = envelope.structuredContent[retrievalKey];
-    record(
+    outputRecord(
         lookup,
         ["markdown", "resultCount", "retrievalHits", "stoppedReason"],
         "unsupportedLookupOutput",
+        admission,
     );
     requireEvidence(
         typeof lookup.markdown === "string" &&
             Array.isArray(lookup.retrievalHits),
         "incompleteLookup",
     );
+    requireEvidence(lookup.retrievalHits.length > 0, "emptyLookup", "failed");
+    return selectWorkiqUniqueLookupHit(lookup, entity, admission);
+}
+
+export function selectWorkiqUniqueLookupHit(lookup, entity, admission) {
+    outputRecord(
+        lookup,
+        ["markdown", "resultCount", "retrievalHits", "stoppedReason"],
+        "unsupportedLookupOutput",
+        admission,
+    );
+    const semantic = workiqMacroCorrectnessContract(admission);
     requireEvidence(
-        lookup.resultCount === 1 &&
-            lookup.retrievalHits.length === 1 &&
-            lookup.stoppedReason === "completed",
+        Array.isArray(lookup.retrievalHits) &&
+            lookup.retrievalHits.length > 0 &&
+            (semantic
+                ? Number.isInteger(lookup.resultCount) &&
+                  lookup.resultCount >= 1 &&
+                  usableString(lookup.stoppedReason)
+                : lookup.retrievalHits.length === 1 &&
+                  lookup.resultCount === 1 &&
+                  lookup.stoppedReason === "completed"),
         "nonuniqueLookup",
         "failed",
     );
-    const hit = lookup.retrievalHits[0];
-    record(
+    for (const hit of lookup.retrievalHits)
+        checkLookupHit(hit, entity, admission);
+    // All raw hits must resolve to the same approved binding before index zero is usable.
+    return lookup.retrievalHits[0];
+}
+
+function checkLookupHit(hit, entity, admission) {
+    outputRecord(
         hit,
         [
             "driveId",
@@ -612,42 +834,103 @@ function checkLookup(envelope, entity) {
             "resourceId",
         ],
         "unsupportedLookupHit",
+        admission,
     );
     requireEvidence(hit.driveId === entity.driveId, "wrongLibrary", "failed");
     requireEvidence(
         hit.itemId === entity.itemId &&
             hit.entityUrl === entity.entityPath &&
-            hit.webUrl === entity.canonicalWebUrl,
+            (workiqMacroCorrectnessContract(admission)
+                ? usableString(hit.webUrl) &&
+                  hit.resourceMetadata &&
+                  typeof hit.resourceMetadata === "object" &&
+                  !Array.isArray(hit.resourceMetadata)
+                : hit.webUrl === entity.canonicalWebUrl),
         "wrongDocument",
         "failed",
     );
+    if (workiqMacroCorrectnessContract(admission)) {
+        checkLookupOptionalMetadata(hit, entity, admission);
+        checkLookupOptionalMetadata(hit.resourceMetadata, entity, admission);
+        if (Object.hasOwn(hit.resourceMetadata, "web"))
+            checkLookupOptionalMetadata(
+                hit.resourceMetadata.web,
+                entity,
+                admission,
+            );
+    }
 }
 
-function checkMetadata(envelope, entity) {
-    record(
+function checkLookupOptionalMetadata(metadata, entity, admission) {
+    outputRecord(metadata, [], "unsupportedLookupHit", admission);
+    const frozen = entity.oracle.frozenVersion;
+    for (const key of ["size", "eTag", "cTag", "lastModifiedDateTime"])
+        if (Object.hasOwn(metadata, key))
+            requireEvidence(
+                metadata[key] === frozen[key],
+                "versionDrift",
+                "blocked",
+            );
+    for (const key of ["driveId", "itemId", "entityUrl"])
+        if (Object.hasOwn(metadata, key))
+            requireEvidence(
+                metadata[key] ===
+                    (key === "entityUrl" ? entity.entityPath : entity[key]),
+                key === "driveId" ? "wrongLibrary" : "wrongDocument",
+                "failed",
+            );
+    const guard = entity.oracle.libraryGuard;
+    for (const [field, keys] of [
+        ["parentReference", ["driveId"]],
+        ["sharepointIds", ["siteId", "listId"]],
+    ]) {
+        if (!Object.hasOwn(metadata, field)) continue;
+        outputRecord(metadata[field], [], "unsupportedLookupHit", admission);
+        for (const key of keys)
+            if (Object.hasOwn(metadata[field], key))
+                requireEvidence(
+                    metadata[field][key] === guard[key],
+                    "wrongLibrary",
+                    "failed",
+                );
+    }
+}
+
+function checkMetadata(envelope, entity, admission) {
+    outputRecord(
         envelope.structuredContent,
         ["results"],
         "unsupportedMetadataOutput",
+        admission,
     );
     const results = envelope.structuredContent.results;
     requireEvidence(
         Array.isArray(results) && results.length === 1,
         "incompleteMetadata",
     );
-    record(results[0], ["data", "statusCode"], "unsupportedMetadataOutput");
+    outputRecord(
+        results[0],
+        ["data", "statusCode"],
+        "unsupportedMetadataOutput",
+        admission,
+    );
     requireEvidence(results[0].statusCode === 200, "metadataError", "failed");
     const data = results[0].data;
-    record(
+    outputRecord(
         data,
         [...metadataFields, "@odata.context", "@odata.etag"],
         "unsupportedMetadataFields",
+        admission,
     );
     requireEvidence(
         metadataFields.every((field) => Object.hasOwn(data, field)),
         "incompleteMetadata",
     );
     requireEvidence(
-        data.id === entity.itemId && data.name === entity.title,
+        data.id === entity.itemId &&
+            (workiqMacroCorrectnessContract(admission)
+                ? usableString(data.name)
+                : data.name === entity.title),
         "wrongDocument",
         "failed",
     );
@@ -656,16 +939,22 @@ function checkMetadata(envelope, entity) {
     requireEvidence(
         parent &&
             parent.driveId === guard.driveId &&
-            parent.driveType === guard.driveType &&
-            parent.path === guard.parentPath &&
+            (workiqMacroCorrectnessContract(admission)
+                ? usableString(parent.driveType) && usableString(parent.path)
+                : parent.driveType === guard.driveType &&
+                  parent.path === guard.parentPath) &&
             data.sharepointIds?.siteId === guard.siteId &&
             data.sharepointIds?.listId === guard.listId,
         "wrongLibrary",
         "failed",
     );
     requireEvidence(
-        data.webUrl === entity.actualMetadataWebUrl &&
-            data.file?.mimeType === entity.metadataMimeType,
+        (workiqMacroCorrectnessContract(admission)
+            ? usableString(data.webUrl)
+            : data.webUrl === entity.actualMetadataWebUrl) &&
+            (workiqMacroCorrectnessContract(admission)
+                ? usableString(data.file?.mimeType)
+                : data.file?.mimeType === entity.metadataMimeType),
         "wrongDocument",
         "failed",
     );
@@ -674,11 +963,12 @@ function checkMetadata(envelope, entity) {
         requireEvidence(data[key] === frozen[key], "versionDrift", "blocked");
 }
 
-async function checkBlob(store, envelope, recorded, entity, trial) {
-    record(
+async function checkBlob(store, envelope, recorded, entity, trial, admission) {
+    outputRecord(
         envelope.structuredContent,
         ["base64Content", "blobName", "contentType", "sizeBytes", "statusCode"],
         "unsupportedBlobOutput",
+        admission,
     );
     const blob = envelope.structuredContent;
     requireEvidence(
@@ -734,8 +1024,10 @@ async function checkBlob(store, envelope, recorded, entity, trial) {
         "failed",
     );
     requireEvidence(
-        blob.blobName === entity.blobName &&
-            blob.contentType === entity.transportContentType,
+        workiqMacroCorrectnessContract(admission)
+            ? usableString(blob.blobName) && usableString(blob.contentType)
+            : blob.blobName === entity.blobName &&
+                  blob.contentType === entity.transportContentType,
         "wrongRepresentation",
         "failed",
     );
@@ -800,7 +1092,12 @@ export function createWorkiqEvidenceVerifier(options) {
                     admission,
                     trial,
                 );
-                validateCurrent(current, trial, catalog);
+                const recordedCalls = await validateCurrent(
+                    current,
+                    trial,
+                    catalog,
+                    options.artifactRoot,
+                );
                 const envelopes = [];
                 for (let index = 0; index < 4; index++) {
                     const call = current.calls[index];
@@ -841,28 +1138,35 @@ export function createWorkiqEvidenceVerifier(options) {
                     }
 
                     requireEvidence(
-                        equal(call.arguments, expected),
+                        workiqRequestMatches(
+                            call.arguments,
+                            expected,
+                            admission,
+                            index,
+                        ),
                         "bindingMismatch",
                         "failed",
                     );
                     const envelope = await originalResult(
                         store,
-                        current.trace.toolCalls[index],
+                        recordedCalls[index],
                         call,
                         trial,
                         index === 2,
+                        admission,
                     );
                     envelopes.push(envelope);
-                    if (index === 0) checkLookup(envelope, entity);
+                    if (index === 0) checkLookup(envelope, entity, admission);
                     if (index === 1 || index === 3)
-                        checkMetadata(envelope, entity);
+                        checkMetadata(envelope, entity, admission);
                 }
                 const receipt = await checkBlob(
                     store,
                     envelopes[2],
-                    current.trace.toolCalls[2],
+                    recordedCalls[2],
                     entity,
                     trial,
+                    admission,
                 );
                 return {
                     ...verdict,
@@ -875,6 +1179,20 @@ export function createWorkiqEvidenceVerifier(options) {
                     runId: trial.runId,
                     operations: [...operations],
                     receipt,
+                    ...(current.nativeProjection === undefined
+                        ? {}
+                        : {
+                              nativeControlProjection: {
+                                  rawTraceSha256:
+                                      current.nativeProjection.fullTraceSha256,
+                                  excludedToolCallCount:
+                                      current.nativeProjection
+                                          .excludedToolCallIds.length,
+                                  runIdentityKind: "controller-trial-lease",
+                                  handoffRunId:
+                                      current.nativeProjection.handoffRunId,
+                              },
+                          }),
                     modelResultExposure:
                         "Not certified by this oracle; captured modelResult fields do not prove model visibility or semantic consumption.",
                 };

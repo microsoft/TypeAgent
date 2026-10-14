@@ -99,6 +99,36 @@ function filename(ref: PrivateResultReference) {
     );
 }
 
+it("optionally retains a complete small SDK value without changing the inline default", async () => {
+    const store = new PrivateResultStore(root);
+    const value = { content: "{}" };
+    expect(
+        await store.retain(
+            "run",
+            "sdk-session",
+            "default-call",
+            "result",
+            value,
+        ),
+    ).toBeUndefined();
+    const ref = await store.retain(
+        "run",
+        "sdk-session",
+        "actual-call",
+        "result",
+        value,
+        { forceFull: true },
+    );
+    expect(ref).toBeDefined();
+    if (!ref) throw new Error("Missing forced private evidence");
+    expect(
+        await store.verify(ref, "run", "sdk-session", "actual-call", "result"),
+    ).toEqual(value);
+    await expect(
+        store.verify(ref, "run", "other-session", "actual-call", "result"),
+    ).rejects.toThrow();
+});
+
 describe("private lossless result evidence", () => {
     it("keeps full replay step and final results across manager restart without truncated previews", async () => {
         const generated = blob();

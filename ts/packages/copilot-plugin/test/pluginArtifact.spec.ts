@@ -327,6 +327,14 @@ describe("staged plugin artifact", () => {
         expect(bundle).toContain(
             "only after a justified successful procedure adaptation caused by actual original-tool unavailability",
         );
+        expect(bundle).toContain("TYPEAGENT_WORKIQ_SDK_ORIGINALS_POLICY");
+        expect(bundle).toContain("workiq-sdk-originals-v1");
+        expect(bundle).toContain(
+            "WorkIQ native binary/model-input exposure boundary is not admitted.",
+        );
+        expect(bundle).toContain(
+            "WorkIQ SDK capture requires an owned native control context.",
+        );
     });
 
     it("registers the structured Direct bridge in the actual bundled agent server", async () => {

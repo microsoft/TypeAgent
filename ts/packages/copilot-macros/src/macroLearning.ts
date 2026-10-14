@@ -23,7 +23,10 @@ import {
 } from "./macroLearningParsers.js";
 import { induceMacroFromTrace } from "./macroDefinition.js";
 import { redactTraceValue } from "./redaction.js";
-import { learningToolResult } from "./resultEvidence.js";
+import {
+    learningToolResult,
+    cloneVerifiedLearningTrace,
+} from "./resultEvidence.js";
 import { setMacroCapabilities } from "./resultPath.js";
 import {
     assertLearningBuild,
@@ -631,7 +634,7 @@ export class MacroLearningEngine {
             const recipe = parseMacroExecutionRecipe(
                 await this.stage(job, "extract", (signal) =>
                     this.runtime!.extract(
-                        structuredClone(trace),
+                        cloneVerifiedLearningTrace(trace, job.traceId),
                         job.traceId,
                         signal,
                     ),

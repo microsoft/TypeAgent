@@ -722,6 +722,34 @@ for (const [name, mutate, code] of mutations) {
 }
 
 const outputMutations = [
+    ...fields.map((field) => [
+        `missing required metadata ${field}`,
+        1,
+        (r) => delete r.structuredContent.results[0].data[field],
+        "incompleteMetadata",
+        "harness-invalid",
+    ]),
+    [
+        "empty lookup",
+        0,
+        (r) => {
+            r.structuredContent[key].resultCount = 0;
+            r.structuredContent[key].retrievalHits = [];
+        },
+        "emptyLookup",
+        "failed",
+    ],
+    [
+        "multiple lookup hits",
+        0,
+        (r) => {
+            const lookup = r.structuredContent[key];
+            lookup.resultCount = 2;
+            lookup.retrievalHits.push(clone(lookup.retrievalHits[0]));
+        },
+        "nonuniqueLookup",
+        "failed",
+    ],
     [
         "nonunique lookup",
         0,

@@ -480,6 +480,218 @@ test("registered learning status disclaimer is not a permission dialog; actual p
     );
 });
 
+test("confirm infinitive in preserved assistant narration is not an interaction", () => {
+    const narration =
+        "metadata to confirm the same version and complete receipt.";
+    for (const screen of [
+        narration,
+        `   ${narration}   ┃`,
+        `I will use current metadata\n  to confirm the same version and complete receipt.`,
+        `Approval of a saved macro does not grant tool permissions.\n${narration}`,
+    ])
+        assert.equal(
+            classifyNativeScreen(screen, "D:\\owned\\workspace"),
+            undefined,
+        );
+});
+
+test("confirmation words without actionable dialog cues remain informational", () => {
+    const narration =
+        "I’m now checking the downloaded byte count and\n" +
+        "confirming the item version remained unchanged.";
+    for (const screen of [
+        narration,
+        narration.replace("\n", " "),
+        "We are verifying the receipt and\n  confirming the same version.",
+        "I’m completing the receipt and\n  confirming the same version.",
+        "The metadata confirms the version and full byte count.",
+        "I confirmed the original download and will report its receipt.",
+        "Confirmation of the decoded byte count is complete.",
+        "Someone is checking the bytes and\nconfirming the version.",
+        "I’m considering whether to proceed and\nconfirming the version.",
+        "The comparison required to confirm the version is done.",
+        "I’ll bind the item, read its metadata, and re-read metadata to\n" +
+            "  confirm the same version.",
+        "The comparison reads the current source to\nconfirm its version.",
+        "│ I’m now checking the downloaded byte count and ┃\n" +
+            "│ confirming the item version remained unchang ┃",
+    ])
+        assert.equal(
+            classifyNativeScreen(screen, "D:\\owned\\workspace"),
+            undefined,
+        );
+    for (const prompt of [
+        "Confirm unknown action",
+        "Confirming unknown action?",
+        "Confirmation required",
+        "Confirmation pending",
+        "Confirmation:",
+        "Waiting for your confirmation",
+        "I need you to confirm this operation",
+        "You must confirm this operation",
+        "You need to\nconfirm this operation",
+        "You have to\nconfirm this operation",
+        "Please provide a code to\nconfirm this operation",
+        "To\nconfirm identity?",
+        "https://example.invalid/to\nConfirm unknown action",
+        "To confirm click Allow",
+        "To confirm the operation\nPress Enter",
+        "Version confirmation\nPlease supply a code",
+        "Confirming identity?",
+        "confirming the version: please click Allow",
+        "Would you like to grant more permissions?",
+        "Please authenticate",
+        "Allow all permissions",
+        "1. Yes",
+        "Continue?",
+        "Additional scope?",
+        "Select a model",
+    ])
+        assert.throws(
+            () =>
+                classifyNativeScreen(
+                    `${narration}\n${prompt}`,
+                    "D:\\owned\\workspace",
+                ),
+            /Unknown native interaction/,
+        );
+    for (const screen of [
+        "I’m now checking the bytes and\nconfirming the version?",
+        "I’m now checking the bytes and\nconfirming the version: press Enter",
+    ])
+        assert.throws(
+            () => classifyNativeScreen(screen, "D:\\owned\\workspace"),
+            /Unknown native interaction/,
+        );
+});
+
+test("confirm narration never hides actual confirmation, authentication or permission prompts", () => {
+    const narration =
+        "metadata to confirm the same version and complete receipt.";
+    for (const prompt of [
+        "Confirm unknown action",
+        "Native dialog: confirm the requested operation",
+        "Confirmation required",
+        "Reconfirm unknown action",
+        "Are you sure you want to confirm?",
+        "Press Enter to confirm",
+        "Type YES to confirm",
+        "Use the key to confirm this action",
+        "Provide a code to confirm this action",
+        "Dialog: use metadata to confirm this request",
+        "To confirm, click Allow",
+        "Could you use metadata to confirm this request?",
+        "Can you use metadata to confirm this request",
+        "metadata to confirm identity?",
+        "Would you like to grant more permissions?",
+        "Do you want to proceed?",
+        "Please authenticate",
+        "Allow all permissions",
+        "1. Yes",
+    ])
+        for (const screen of [prompt, `${narration}\n${prompt}`])
+            assert.throws(
+                () => classifyNativeScreen(screen, "D:\\owned\\workspace"),
+                /Unknown native interaction/,
+            );
+    assert.throws(
+        () =>
+            classifyNativeScreen(
+                `${narration}\nContinue?`,
+                "D:\\owned\\workspace",
+            ),
+        /Unknown native interaction/,
+    );
+});
+
+test("model selection detection cannot span echoed prose and unrelated SDK errors", () => {
+    const screen = [
+        '❯ Read metadata for the "selected document identity/location".',
+        "Report its identity and receipt, not content.",
+        "● I will choose metadata fields before reporting the receipt.",
+        "✗ retrieve (MCP: workiq): MCP error -32602: workiqScopeMismatch",
+        "● The request was rejected.",
+        "Denied by preToolUse hook: WorkIQ native binary/model-input exposure boundary is not admitted.",
+    ].join("\n");
+    for (const frame of [
+        screen,
+        screen.replace("selected document", "select document"),
+        screen.replace("selected document", "choose document"),
+        screen.replaceAll("\n", "\n│ "),
+        "● I will select the model used in the receipt.\nSession: ready",
+        "● I will choose a model for the report.\nSession: ready",
+        "Selected model: unchanged\nSession: ready",
+        "Choose document fields\n\nMCP binary/model-input error",
+        "Select document fields\n● Later output\nmodel-input error",
+    ])
+        assert.equal(
+            classifyNativeScreen(frame, "D:\\owned\\workspace"),
+            undefined,
+        );
+});
+
+test("localized model choosers and unknown actionable dialogs remain fail closed", () => {
+    const narration =
+        "metadata to confirm the same version and complete receipt.";
+    for (const dialog of [
+        "Select a model",
+        "Choose your preferred model",
+        "Please select another model",
+        "Could you select a model?",
+        "Dialog: choose a model",
+        "Model selection\n❯ default\n  other\nEsc cancel",
+        "Model chooser:",
+        "Model: please select one",
+        "Which model should we use?",
+        "Select\n  a model\n❯ default",
+        "│ Please choose │\n│ your preferred model │",
+        "Authenticate to continue",
+        "Sign in to continue",
+        "Unexpected tool permissions required",
+        "Confirm unknown action",
+        "Continue?",
+        "Cancel this operation?",
+        "Abort the request?",
+        "What additional credential should I use?",
+        "Ready?",
+        "Additional scope?",
+        "Unknown choice: option 2?",
+    ])
+        for (const frame of [dialog, `${narration}\n${dialog}`])
+            assert.throws(
+                () => classifyNativeScreen(frame, "D:\\owned\\workspace"),
+                /Unknown native interaction/,
+            );
+});
+
+test("confirmation narration cannot borrow an unrelated later question mark", () => {
+    const screen = [
+        "metadata to confirm the same version and complete receipt.",
+        "● Processing command...",
+        "MCP endpoint: https://example.invalid/tool?transport=http",
+    ].join("\n");
+    assert.equal(
+        classifyNativeScreen(screen, "D:\\owned\\workspace"),
+        undefined,
+    );
+    for (const dialog of [
+        "Continue?",
+        "Confirm unknown action",
+        "Please authenticate",
+        "Cancel this operation?",
+        "Which model should we use?",
+        "Additional scope?",
+    ])
+        assert.throws(
+            () =>
+                classifyNativeScreen(
+                    `${screen}\n${dialog}`,
+                    "D:\\owned\\workspace",
+                ),
+            /Unknown native interaction/,
+        );
+});
+
 test("scrolled native status notice is informational without its heading", () => {
     const notice =
         "   Approval of a saved macro does not grant tool permissions.   ┃";
