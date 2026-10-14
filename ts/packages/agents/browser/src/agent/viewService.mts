@@ -12,7 +12,6 @@ import type {
     ViewCallFunctions,
     ViewCancelResult,
     MemoryHubFunctions,
-    MemoryHubRunbookFunctions,
     MemoryHubRunbookImportFunctions,
 } from "@typeagent/browser-control-rpc/viewRpc";
 import { viewMethods } from "@typeagent/browser-control-rpc/viewRpc";
@@ -36,8 +35,7 @@ const pendingViewHosts = new WeakMap<
 const cancelViewHosts = new WeakMap<BrowserActionContext, () => void>();
 
 export type BrowserViewDomainFunctions = BrowserAgentInvokeFunctions &
-    MemoryHubFunctions &
-    MemoryHubRunbookFunctions & {
+    MemoryHubFunctions & {
         [M in keyof MemoryHubRunbookImportFunctions]: MemoryHubRunbookImportFunctions[M];
     } & Pick<
         ViewInvokeFunctions,

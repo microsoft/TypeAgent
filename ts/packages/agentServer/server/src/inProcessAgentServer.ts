@@ -1,18 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import type { ChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
+import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import {
     AgentServerConnection,
     createAgentServerConnection,
 } from "@typeagent/agent-server-client";
 import { UserIdentity } from "@typeagent/agent-server-protocol";
-import { DispatcherOptions } from "agent-dispatcher";
-import os from "node:os";
-import path from "node:path";
-import registerDebug from "debug";
 import { MacroManager } from "@typeagent/copilot-macros";
+import type { MemoryService } from "@typeagent/memory-service";
+import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
+import { DispatcherOptions } from "agent-dispatcher";
+import registerDebug from "debug";
 import {
     McpReplayHost,
     createMacroAppAgentProvider,
@@ -20,29 +20,24 @@ import {
     createSyntheticMacroLearningDiagnostics,
     getCurrentMcpToolCatalogs,
 } from "default-agent-provider";
-import type { SkillAcquirerOptions } from "@typeagent/skill-catalog";
-import type {
-    MemoryService,
-    PersonalHowToService,
-} from "@typeagent/memory-service";
+import os from "node:os";
+import path from "node:path";
 
-import {
-    createConversationManager,
-    ConversationManager,
-} from "./conversationManager.js";
-import { createAgentServerConnectionHandler } from "./connectionHandler.js";
-import { createLocalSkillServices } from "./skillCatalog.js";
 import {
     createAutomationSources,
     withAutomationSources,
 } from "./automationSources.js";
+import { createAgentServerConnectionHandler } from "./connectionHandler.js";
+import {
+    ConversationManager,
+    createConversationManager,
+} from "./conversationManager.js";
 import { createDurableMemoryService } from "./durableMemoryService.js";
 import {
     createRunbookHostCapabilities,
     withRunbookHostCapabilities,
 } from "./runbookCapabilities.js";
-import { createRunbookBindingValidator } from "./runbookBindingValidator.js";
-import { createRunbookBindingCatalog } from "./runbookBindingCatalog.js";
+import { createLocalSkillServices } from "./skillCatalog.js";
 
 const debug = registerDebug("agent-server:in-process");
 
@@ -117,24 +112,9 @@ export async function createInProcessAgentServer(
         memoryAgentOptions?.memoryServiceClient;
     const ownedMemoryService =
         injectedMemoryService === undefined
-            ? createDurableMemoryService(
-                  path.join(instanceDir, "memory"),
-                  createRunbookBindingValidator(
-                      createRunbookBindingCatalog(macroManager, () =>
-                          getCurrentMcpToolCatalogs(
-                              dispatcherOptions.appAgentSources ?? [],
-                          ),
-                      ),
-                  ),
-              )
+            ? createDurableMemoryService(path.join(instanceDir, "memory"))
             : undefined;
     const memoryService = injectedMemoryService ?? ownedMemoryService!;
-    const procedureService =
-        "getProcedure" in memoryService &&
-        typeof memoryService.getProcedure === "function"
-            ? (memoryService as MemoryService &
-                  Pick<PersonalHowToService, "getProcedure">)
-            : undefined;
     const { skillCatalog, skillAcquirer } = await createLocalSkillServices(
         instanceDir,
         options.skillAcquisition,
@@ -142,7 +122,6 @@ export async function createInProcessAgentServer(
     const runbookCapabilities = createRunbookHostCapabilities({
         skillCatalog,
         macroManager,
-        ...(procedureService === undefined ? {} : { procedureService }),
         readMcpCatalogs: () =>
             getCurrentMcpToolCatalogs(dispatcherOptions.appAgentSources ?? []),
     });
@@ -180,7 +159,6 @@ export async function createInProcessAgentServer(
         skillCatalog,
         runbookCapabilities,
         skillAcquirer,
-        ...(procedureService === undefined ? {} : { procedureService }),
         shutdown: options.shutdown,
         getUserIdentity: options.getUserIdentity ?? defaultUserIdentity,
         // No discovery RPC here: embedded hosts run their own discovery

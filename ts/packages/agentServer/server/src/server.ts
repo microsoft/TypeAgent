@@ -1,61 +1,59 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createWebSocketChannelServer } from "@typeagent/websocket-channel-server";
+import { DefaultAzureCredential } from "@azure/identity";
 import {
-    createConversationManager,
-    ConversationManager,
-} from "./conversationManager.js";
-import { createAgentServerConnectionHandler } from "./connectionHandler.js";
-import { startStaleBuildWatcher, isStaleBuild } from "./staleBuild.js";
-import { printConfigDriftBanner, printWarningBanner } from "./banner.js";
-import { isLoopbackHost } from "@typeagent/websocket-utils/loopback";
-import { resolveAgentServerHost } from "./listenHost.js";
-import {
-    getInstanceDirAsync,
-    getTraceIdAsync,
-} from "agent-dispatcher/helpers/data";
-import {
-    createDefaultAgentRuntime,
-    getDefaultAppAgentProviders,
-    getIndexingServiceRegistry,
-    getDefaultConstructionProvider,
-    McpReplayHost,
-    SessionMcpCredentialStore,
-    createMacroAppAgentProvider,
-    createMacroLearningRuntime,
-    createSyntheticMacroLearningDiagnostics,
-} from "default-agent-provider";
-import { getFsStorageProvider } from "dispatcher-node-providers";
+    removeServerPid,
+    writeServerPid,
+} from "@typeagent/agent-server-client";
 import {
     AGENT_SERVER_DEFAULT_PORT,
     AGENT_SERVER_DISCOVERY_NAME,
     UserIdentity,
 } from "@typeagent/agent-server-protocol";
-import { PortRegistrar, SYSTEM_SESSION_CONTEXT_ID } from "agent-dispatcher";
-import { loadConfig, computeConfigDrift } from "@typeagent/config";
-import {
-    writeServerPid,
-    removeServerPid,
-} from "@typeagent/agent-server-client";
-import registerDebug from "debug";
-import os from "node:os";
-import path from "node:path";
-import fs from "node:fs";
-import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
-import { DefaultAzureCredential } from "@azure/identity";
-import { otel } from "@typeagent/telemetry";
+import { computeConfigDrift, loadConfig } from "@typeagent/config";
 import { MacroManager } from "@typeagent/copilot-macros";
 import { MemoryServiceHost } from "@typeagent/memory-mcp-server";
 import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
-import { createDurableMemoryService } from "./durableMemoryService.js";
-import { createLocalSkillServices } from "./skillCatalog.js";
+import { otel } from "@typeagent/telemetry";
+import { createWebSocketChannelServer } from "@typeagent/websocket-channel-server";
+import { isLoopbackHost } from "@typeagent/websocket-utils/loopback";
+import { PortRegistrar, SYSTEM_SESSION_CONTEXT_ID } from "agent-dispatcher";
+import {
+    getInstanceDirAsync,
+    getTraceIdAsync,
+} from "agent-dispatcher/helpers/data";
+import registerDebug from "debug";
+import {
+    McpReplayHost,
+    SessionMcpCredentialStore,
+    createDefaultAgentRuntime,
+    createMacroAppAgentProvider,
+    createMacroLearningRuntime,
+    createSyntheticMacroLearningDiagnostics,
+    getCurrentMcpToolCatalogs,
+    getDefaultAppAgentProviders,
+    getDefaultConstructionProvider,
+    getIndexingServiceRegistry,
+} from "default-agent-provider";
+import { getFsStorageProvider } from "dispatcher-node-providers";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createAutomationSources } from "./automationSources.js";
+import { printConfigDriftBanner, printWarningBanner } from "./banner.js";
+import { createAgentServerConnectionHandler } from "./connectionHandler.js";
+import {
+    ConversationManager,
+    createConversationManager,
+} from "./conversationManager.js";
+import { createDurableMemoryService } from "./durableMemoryService.js";
+import { resolveAgentServerHost } from "./listenHost.js";
 import { createRunbookHostCapabilities } from "./runbookCapabilities.js";
-import { getCurrentMcpToolCatalogs } from "default-agent-provider";
-import type { RunbookBindingValidator } from "@typeagent/memory-service";
-import { createRunbookBindingValidator } from "./runbookBindingValidator.js";
+import { createLocalSkillServices } from "./skillCatalog.js";
+import { isStaleBuild, startStaleBuildWatcher } from "./staleBuild.js";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -359,17 +357,8 @@ async function main() {
         debugStartup("developer mode enabled at startup (--dev)");
     }
     debugStartup("starting instance memory service");
-    let bindingValidator: RunbookBindingValidator | undefined;
     const memoryService = createDurableMemoryService(
         path.join(instanceDir, "memory"),
-        (...args: Parameters<RunbookBindingValidator>) => {
-            if (bindingValidator === undefined) {
-                throw new Error(
-                    "Runbook catalog binding validation is not ready.",
-                );
-            }
-            return bindingValidator(...args);
-        },
     );
     const memoryServiceHost = await MemoryServiceHost.start(memoryService, {
         onError: (error) =>
@@ -428,11 +417,9 @@ async function main() {
     const runbookCapabilities = createRunbookHostCapabilities({
         skillCatalog,
         macroManager,
-        procedureService: memoryService,
         readMcpCatalogs: () =>
             getCurrentMcpToolCatalogs(defaultAgentRuntime.appAgentSources),
     });
-    bindingValidator = createRunbookBindingValidator(runbookCapabilities);
     await macroManager.configureLearning(
         createMacroLearningRuntime(
             undefined,
@@ -651,7 +638,6 @@ async function main() {
             skillCatalog,
             runbookCapabilities,
             skillAcquirer,
-            procedureService: memoryService,
             shutdown: shutdownServer,
             restart: restartServer,
             isStale: isStaleBuild,

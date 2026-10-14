@@ -12,17 +12,13 @@ import {
     type RunbookImportResponse,
     type RunbookImportBatch,
 } from "@typeagent/browser-control-rpc/runbookImportViewTypes";
-import type {
-    MemoryBatchImport,
-    RunbookJobResult,
-} from "@typeagent/memory-service";
+import type { MemoryBatchImport } from "@typeagent/memory-service";
 
 export interface MemoryHubRunbookImportsOptions {
     activityHost?: HTMLElement;
     scope: () => string | undefined;
     onError: (error: unknown) => void;
     onChanged: () => void | Promise<void>;
-    onOpenRunbook?: (corpusId: string, candidateId: string) => void;
 }
 function node<K extends keyof HTMLElementTagNameMap>(
     tag: K,
@@ -317,9 +313,7 @@ function observeStates<T>(
     for (const [key, snapshot] of next) known.set(key, snapshot);
     return changed;
 }
-function jobState(job: RunbookJobResult): string {
-    return JSON.stringify([job.state, [...job.candidateIds].sort()]);
-}
+
 function newImportKey(): string {
     return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
         byte.toString(16).padStart(2, "0"),
@@ -334,9 +328,9 @@ export function mountMemoryHubRunbookImports(
     root.className = "hub-runbook-imports";
     const dialog = node("dialog");
     dialog.className = "hub-runbook-import-dialog";
-    dialog.setAttribute("aria-label", "Import Runbook sources");
-    const title = node("h2", "Import Runbook sources");
-    const targetLabel = node("label", "Named target corpus");
+    dialog.setAttribute("aria-label", "Import document sources");
+    const title = node("h2", "Import document sources");
+    const targetLabel = node("label", "Target collection");
     const target = node("select");
     target.name = "runbook-import-target";
     target.required = true;
@@ -357,7 +351,7 @@ export function mountMemoryHubRunbookImports(
     urlLabel.append(urls);
     const notice = node(
         "p",
-        "Whole plain Markdown, HTML and text originals are retained. Only selected-tree PNG/JPEG/GIF/WebP references are attached; remote images, archives, host paths and authentication forwarding are unavailable. Classification/synthesis happens after commit. Configured image descriptions may be unavailable: manual review remains required. Import never executes tools or automations.",
+        "Whole plain Markdown, HTML and text originals are retained. Only selected-tree PNG/JPEG/GIF/WebP references are attached; remote images, archives, host paths and authentication forwarding are unavailable. After import, select ready sources to build views. Import never executes tools or automations.",
     );
     const status = node("pre");
     status.setAttribute("role", "status");
@@ -409,7 +403,7 @@ export function mountMemoryHubRunbookImports(
         "runbook-import-refresh",
     );
     activity.append(
-        node("h2", "Runbook import activity"),
+        node("h2", "Document import activity"),
         refresh,
         activityStatus,
         rows,
@@ -429,7 +423,7 @@ export function mountMemoryHubRunbookImports(
     let timer: ReturnType<typeof setTimeout> | undefined;
     let activityPaused = false;
     const observedBatches = new Map<string, string>();
-    const observedJobs = new Map<string, string>();
+
     const batchActions = new Set<string>();
 
     function current(epoch: number): boolean {
@@ -475,19 +469,24 @@ export function mountMemoryHubRunbookImports(
             const corpora = await invokeView("memoryListCorpora");
             if (!current(epoch)) return;
             target.replaceChildren(
-                node("option", "Choose a named target corpus"),
+                node("option", "Choose a target collection"),
             );
             target.options[0].value = "";
             for (const corpus of corpora) {
-                const option = node(
-                    "option",
-                    `${corpus.name} (${corpus.corpusId})`,
-                );
+                const option = node("option", corpus.name);
                 option.value = corpus.corpusId;
                 target.append(option);
             }
-            target.value = targetCorpus ?? "";
-            if (!target.value) targetCorpus = undefined;
+            const requestedTarget = targetCorpus;
+            target.value = requestedTarget ?? "";
+            if (!target.value) {
+                targetCorpus = undefined;
+                start.disabled = true;
+                if (requestedTarget)
+                    throw new Error(
+                        "The selected collection is unavailable. Choose another collection; no import was started.",
+                    );
+            }
             start.disabled = busy || !target.value;
         } catch (error) {
             if (current(epoch)) report(error);
@@ -726,117 +725,6 @@ export function mountMemoryHubRunbookImports(
         }
         return card;
     }
-    const synthesisActions = new Set<string>();
-    async function retrySynthesis(
-        job: RunbookJobResult,
-        control: HTMLButtonElement,
-    ): Promise<void> {
-        const key = JSON.stringify([
-            job.corpusId,
-            job.sourceId,
-            job.revisionId,
-        ]);
-        if (disposed || activityPaused || synthesisActions.has(key)) return;
-        if (targetCorpus !== job.corpusId) {
-            report(
-                new Error("Job target does not match the selected corpus."),
-                activityStatus,
-            );
-            return;
-        }
-        const epoch = generation;
-        synthesisActions.add(key);
-        control.disabled = true;
-        activityStatus.textContent =
-            "Requesting post-commit synthesis from the exact retained active revision; no sources are reacquired or re-ingested…";
-        let refreshActivity = false;
-        try {
-            const result = await invokeView("memoryHubRetryRunbookSynthesis", {
-                corpusId: job.corpusId,
-                sourceId: job.sourceId,
-                revisionId: job.revisionId,
-            });
-            if (!current(epoch) || activityPaused) return;
-            if (
-                result.corpusId !== job.corpusId ||
-                result.sourceId !== job.sourceId ||
-                result.revisionId !== job.revisionId
-            )
-                throw new Error(
-                    "Synthesis retry returned another target or source revision.",
-                );
-            observedJobs.set(result.jobId, jobState(result));
-            activityStatus.textContent = `Server synthesis job ${result.jobId}: ${result.state}.`;
-            await changed();
-            refreshActivity = true;
-        } catch (error) {
-            if (current(epoch) && !activityPaused)
-                report(error, activityStatus);
-        } finally {
-            synthesisActions.delete(key);
-            control.disabled = false;
-        }
-        if (refreshActivity && current(epoch) && !activityPaused)
-            await loadActivity();
-    }
-    function jobRow(
-        job: RunbookJobResult,
-        batches: MemoryBatchImport[],
-    ): HTMLElement {
-        const card = node("article");
-        const linked = batches
-            .filter((batch) =>
-                batch.members.some(
-                    (member) =>
-                        member.sourceId === job.sourceId &&
-                        member.revisionId === job.revisionId,
-                ),
-            )
-            .map((batch) => batch.batchId);
-        card.append(
-            node("h3", `Post-commit Runbook job ${job.jobId}: ${job.state}`),
-            node(
-                "p",
-                `Source ${job.sourceId} · revision ${job.revisionId} · batches: ${linked.join(", ") || "no acquired batch link"}`,
-            ),
-            node(
-                "p",
-                `Classification: ${job.classification ?? "pending/unavailable"}${job.confidence === undefined ? "" : ` · confidence ${job.confidence}`}`,
-            ),
-        );
-        if (job.reason) card.append(node("p", job.reason));
-        for (const warning of job.warnings) card.append(node("p", warning));
-        card.append(
-            node(
-                "p",
-                "Post-commit synthesis cancellation is unavailable. Batch retry/cancellation affects acquired ingestion members only. Synthesis retry requires this exact retained active revision and current corpus detection/agent-edition preferences; stale revisions must be compared with the current active revision.",
-            ),
-        );
-        if (["failed", "interrupted", "cancelled"].includes(job.state)) {
-            const retry = button("Retry post-commit synthesis", () => {
-                void retrySynthesis(job, retry);
-            });
-            retry.disabled = synthesisActions.has(
-                JSON.stringify([job.corpusId, job.sourceId, job.revisionId]),
-            );
-            card.append(retry);
-        }
-        for (const candidateId of job.candidateIds) {
-            if (options.onOpenRunbook)
-                card.append(
-                    button(`Review Runbook ${candidateId}`, () => {
-                        if (
-                            !disposed &&
-                            !activityPaused &&
-                            targetCorpus === job.corpusId
-                        )
-                            options.onOpenRunbook?.(job.corpusId, candidateId);
-                    }),
-                );
-            else card.append(node("p", `Detected candidate: ${candidateId}`));
-        }
-        return card;
-    }
 
     async function loadActivity(): Promise<void> {
         stopPolling();
@@ -845,38 +733,26 @@ export function mountMemoryHubRunbookImports(
         if (!corpusId) {
             rows.replaceChildren();
             activityStatus.textContent =
-                "Select a named corpus to look up durable batches and jobs.";
+                "Select a collection to look up durable import batches.";
             return;
         }
         const epoch = generation;
         const sequence = ++listSequence;
-        activityStatus.textContent = `Loading durable batches and post-commit jobs for ${corpusId}…`;
+        activityStatus.textContent = `Loading durable import batches for ${corpusId}…`;
         try {
-            const [batches, jobs] = await Promise.all([
-                invokeView("memoryHubRunbookBatches", { corpusId }),
-                invokeView("memoryHubRunbookJobs", { corpusId }),
-            ]);
+            const batches = await invokeView("memoryHubRunbookBatches", {
+                corpusId,
+            });
             if (!current(epoch) || activityPaused || sequence !== listSequence)
                 return;
-            if (
-                batches.some((batch) => batch.corpusId !== corpusId) ||
-                jobs.some((job) => job.corpusId !== corpusId)
-            )
+            if (batches.some((batch) => batch.corpusId !== corpusId))
                 throw new Error(
                     "Activity returned items from another target corpus.",
                 );
-            activityStatus.textContent = `Returned records (up to the latest 100 each for this corpus): ${batches.length} durable batches; ${jobs.length} post-commit jobs. These are bounded results, not corpus totals. Ingestion completion is distinct from classification/synthesis. Interrupted ingestion members require explicit retry.`;
-            rows.replaceChildren(
-                ...batches.map(batchRow),
-                ...jobs.map((job) => jobRow(job, batches)),
-            );
-            if (!jobs.length)
-                rows.append(
-                    node(
-                        "p",
-                        "No post-commit jobs are available. Enable corpus how-to detection and Runbook agent-edition preferences to request synthesis; image descriptions require a configured multimodal provider.",
-                    ),
-                );
+            activityStatus.textContent = `Returned records (up to the latest 100 for this collection): ${batches.length} durable import batches. These are bounded results, not collection totals. Interrupted ingestion members require explicit retry. Build views separately from ready sources.`;
+            rows.replaceChildren(...batches.map(batchRow));
+            if (!batches.length)
+                rows.append(node("p", "No document import batches yet."));
             const batchesChanged = observeStates(
                 batches,
                 observedBatches,
@@ -884,20 +760,10 @@ export function mountMemoryHubRunbookImports(
                 batchState,
                 (batch) => !ongoing(batch),
             );
-            const jobsChanged = observeStates(
-                jobs,
-                observedJobs,
-                (job) => job.jobId,
-                jobState,
-                () => true,
-            );
-            if (batchesChanged || jobsChanged) await changed();
+            if (batchesChanged) await changed();
             if (!current(epoch) || activityPaused || sequence !== listSequence)
                 return;
-            if (
-                batches.some(ongoing) ||
-                jobs.some((job) => job.state === "running")
-            )
+            if (batches.some(ongoing))
                 timer = setTimeout(() => {
                     void loadActivity();
                 }, 2000);
@@ -929,15 +795,27 @@ export function mountMemoryHubRunbookImports(
         if (dialog.open) dialog.close();
         return true;
     }
-    function open(selectedKind: RunbookImportKind): void {
+    function open(
+        selectedKind: RunbookImportKind,
+        selectedCorpusId?: string,
+    ): void {
         if (disposed) return;
         if (busy) {
             if (!dialog.open) dialog.showModal();
             return;
         }
         if (selectedKind !== kind && !discardChanges()) return;
+        if (selectedCorpusId && selectedCorpusId !== targetCorpus) {
+            if (!discardChanges()) return;
+            generation++;
+            stopPolling();
+            resetRequest();
+            observedBatches.clear();
+
+            targetCorpus = selectedCorpusId;
+        }
         kind = selectedKind;
-        title.textContent = `Import ${kind === "urls" ? "URL list" : kind === "wiki" ? "wiki export" : "selected folder"} as Runbook sources`;
+        title.textContent = `Import ${kind === "urls" ? "URL list" : kind === "wiki" ? "wiki export" : "document folder"}`;
         fileLabel.hidden = kind === "urls";
         urlLabel.hidden = kind !== "urls";
         if (kind !== "urls") files.setAttribute("webkitdirectory", "");
@@ -951,7 +829,7 @@ export function mountMemoryHubRunbookImports(
         stopPolling();
         resetRequest();
         observedBatches.clear();
-        observedJobs.clear();
+
         targetCorpus = target.value || undefined;
         start.disabled = !targetCorpus;
         if (!activity.hidden) void loadActivity();
@@ -986,7 +864,7 @@ export function mountMemoryHubRunbookImports(
             stopPolling();
             targetCorpus = options.scope();
             observedBatches.clear();
-            observedJobs.clear();
+
             request = undefined;
             idempotencyKey = newImportKey();
             files.value = "";
@@ -1005,7 +883,7 @@ export function mountMemoryHubRunbookImports(
             if (disposed) return;
             disposed = true;
             observedBatches.clear();
-            observedJobs.clear();
+
             generation++;
             stopPolling();
             target.onchange = null;

@@ -3,13 +3,14 @@
 
 import type { DerivedViewUsage } from "@typeagent/browser-control-rpc/viewRpc";
 import { invokeMemory, invokeView } from "./viewClient";
-import { rbNode, rbButton } from "./memoryHubRunbookUi";
+import { rbNode, rbButton } from "./memoryHubDocumentUi";
 import { viewContentToText } from "@typeagent/memory-service/view-text";
 
 export function renderDerivedViewUsage(
     items: DerivedViewUsage[],
     total: number,
     run: (operation: () => Promise<void>) => void,
+    onOpenView?: (corpusId: string, viewId: string, revisionId: string) => void,
 ): HTMLElement {
     const root = rbNode("section");
     root.setAttribute("aria-label", "Derived view source impact");
@@ -21,6 +22,14 @@ export function renderDerivedViewUsage(
     );
     const detail = rbNode("article");
     for (const item of items) {
+        if (item.revisionId && onOpenView) {
+            const revisionId = item.revisionId;
+            root.append(
+                rbButton(`${item.title} · open exact view revision`, () =>
+                    onOpenView(item.corpusId, item.viewId, revisionId),
+                ),
+            );
+        }
         root.append(
             rbButton(
                 `${item.title} · ${item.kind} · ${item.state} · ${item.reason}`,
@@ -72,7 +81,7 @@ export function renderDerivedViewUsage(
                                                               },
                                                           )
                                                         : await invokeView(
-                                                              "memoryHubRunbookOriginal",
+                                                              "memoryHubSourceOriginal",
                                                               {
                                                                   corpusId:
                                                                       item.corpusId,

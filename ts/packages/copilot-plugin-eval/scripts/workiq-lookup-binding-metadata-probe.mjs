@@ -242,7 +242,9 @@ async function probe() {
         }
     }
     if (dataCalls !== 0) throw new Error("metadataProbeDataCall");
-    console.log(JSON.stringify({ admissionSha256: hash, probes, dataCalls }));
+    process.stdout.write(
+        `${JSON.stringify({ admissionSha256: hash, probes, dataCalls })}\n`,
+    );
 }
 
 await probe().catch(() => {

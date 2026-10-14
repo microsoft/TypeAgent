@@ -351,9 +351,20 @@ function matchesNativeCommandLine(commandLine, args, caseSensitive = false) {
     );
 }
 
+function matchesCurrentMcpControlSource(layout, source, snapshot) {
+    const at = Date.parse(source?.observedAt);
+    return (
+        Number.isSafeInteger(source.pid) &&
+        source.parentPid === snapshot.cli.ProcessId &&
+        source.executable === snapshot.nodeExecutable &&
+        Number.isFinite(at) &&
+        at >= Date.parse(layout.controlStartedAt) &&
+        at <= snapshot.observedAtMs
+    );
+}
+
 function validateMcpControlObservation(layout, record, snapshot) {
     const source = record.source;
-    const at = Date.parse(source?.observedAt);
     requireNative(
         Object.hasOwn(nativeMcpRoles, source?.component ?? "") &&
             source.owner === layout.owner &&
@@ -371,12 +382,7 @@ function validateMcpControlObservation(layout, record, snapshot) {
             ["direct", "mcp", "dev", "bypass"].includes(record.effectiveMode) &&
             ["delegate", "mixed"].includes(source.routing) &&
             /^[a-f0-9]{64}$/u.test(record.digest ?? "") &&
-            Number.isSafeInteger(source.pid) &&
-            source.parentPid === snapshot.cli.ProcessId &&
-            source.executable === snapshot.nodeExecutable &&
-            Number.isFinite(at) &&
-            at >= Date.parse(layout.controlStartedAt) &&
-            at <= snapshot.observedAtMs &&
+            matchesCurrentMcpControlSource(layout, source, snapshot) &&
             record.digest ===
                 hash(
                     JSON.stringify({
@@ -623,6 +629,17 @@ export function resolveNativeWorkiqSignal(
     return signal;
 }
 
+function hasBoundedWorkiqBudget(config) {
+    return (
+        Number.isSafeInteger(config.maxTargetModelTurns) &&
+        config.maxTargetModelTurns > 0 &&
+        config.maxTargetModelTurns <= 20 &&
+        Number.isSafeInteger(config.maxDurationMs) &&
+        config.maxDurationMs > 0 &&
+        config.maxDurationMs <= 300000
+    );
+}
+
 export function validateWorkiqNativeRuntimeConfig(config) {
     requireNative(
         config &&
@@ -632,12 +649,7 @@ export function validateWorkiqNativeRuntimeConfig(config) {
             Number.isSafeInteger(config.port) &&
             config.port > 1024 &&
             config.port < 65536 &&
-            Number.isSafeInteger(config.maxTargetModelTurns) &&
-            config.maxTargetModelTurns > 0 &&
-            config.maxTargetModelTurns <= 20 &&
-            Number.isSafeInteger(config.maxDurationMs) &&
-            config.maxDurationMs > 0 &&
-            config.maxDurationMs <= 300000 &&
+            hasBoundedWorkiqBudget(config) &&
             config.extensionMode === "load_only" &&
             config.exposureOverride ===
                 "user-authorized-unverified-model-exposure" &&

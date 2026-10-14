@@ -6,7 +6,7 @@ import type {
     ViewCitation,
     ViewRelationshipInput,
 } from "@typeagent/memory-service";
-import { rbNode, rbButton } from "./memoryHubRunbookUi";
+import { rbNode, rbButton } from "./memoryHubDocumentUi";
 
 export function createTimelineEditor(
     original: TimelineContent,

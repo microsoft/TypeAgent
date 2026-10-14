@@ -21,6 +21,10 @@
  */
 
 import type { FlatEnv } from "../types.js";
+import {
+    MODEL_REQUEST_CONSTRAINTS_KEY,
+    parseModelRequestConstraints,
+} from "./requestConstraints.js";
 import { SIMPLE_CONFIG_MAPPINGS as MAPPING } from "../mappings.js";
 import {
     isRegion,
@@ -172,6 +176,10 @@ export function buildConfig(flat: FlatEnv): Config {
     const copilot = buildCopilot(remaining);
     const modelProvider = buildModelProvider(remaining);
     const embedding = buildEmbedding(remaining);
+    const requestConstraints = popString(
+        remaining,
+        MODEL_REQUEST_CONSTRAINTS_KEY,
+    );
 
     return {
         azureOpenAI,
@@ -190,6 +198,13 @@ export function buildConfig(flat: FlatEnv): Config {
         ...(copilot ? { copilot } : {}),
         ...(modelProvider !== undefined ? { modelProvider } : {}),
         ...(embedding ? { embedding } : {}),
+        ...(requestConstraints !== undefined
+            ? {
+                  modelRequestConstraints: parseModelRequestConstraints(
+                      JSON.parse(requestConstraints),
+                  ),
+              }
+            : {}),
         extra: new Map(remaining),
     };
 }

@@ -4,11 +4,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { viewSourceKey } from "./viewContent.js";
 import type {
-    ViewVersion,
-    ViewRelationship,
-    ViewRelationshipInput,
     ViewDefinition,
     ViewDefinitionInput,
+    ViewRelationship,
+    ViewRelationshipInput,
+    ViewVersion,
 } from "./viewTypes.js";
 
 export function preserveMaintenanceDefinition(
@@ -30,16 +30,16 @@ export function editedViewState(current?: ViewVersion): "draft" | "stale" {
 export function derivedDefinitionInput(
     version: ViewVersion,
 ): ViewDefinitionInput {
-    if (version.definition.kind === "procedure")
-        throw new Error(
-            "Procedure compatibility definitions are not maintained derived views",
-        );
     return {
         viewId: version.viewId,
         kind: version.definition.kind,
         selector: version.definition.selector,
         ...(version.definition.maintenance
             ? { maintenance: version.definition.maintenance }
+            : {}),
+        ...(version.definition.wiki ? { wiki: version.definition.wiki } : {}),
+        ...(version.definition.projectSummary
+            ? { projectSummary: version.definition.projectSummary }
             : {}),
     };
 }
@@ -53,6 +53,8 @@ export function materializeDefinition(
             definition.kind,
             definition.selector,
             definition.maintenance,
+            definition.wiki,
+            definition.projectSummary,
         ]);
     return {
         ...structuredClone(input),
@@ -81,10 +83,7 @@ export function versionRelationships(
                 family:
                     edge.predicate === "supportedBy"
                         ? "evidence"
-                        : edge.predicate === "relatedTo" ||
-                            edge.predicate === "contradicts"
-                          ? "knowledge"
-                          : "dependency",
+                        : "dependency",
                 origin:
                     generated &&
                     !version.edits?.some(

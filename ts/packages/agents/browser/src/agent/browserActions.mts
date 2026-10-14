@@ -20,7 +20,6 @@ import {
     AgentWebSocketServer,
 } from "./agentWebSocketServer.mjs";
 import { getClientType } from "@typeagent/agent-server-protocol";
-import type { RunbookHostCapabilities } from "@typeagent/agent-server-protocol";
 import type { MemoryService } from "@typeagent/memory-service";
 import type {
     AutomationCatalogService,
@@ -35,7 +34,6 @@ export type BrowserAgentInitOptions = {
     // Where the Automations page finds flows and macros owned by other
     // agents. Supplied by the agent server.
     automations?: AutomationCatalogSources;
-    runbookCapabilities?: RunbookHostCapabilities;
 };
 
 export type BrowserActionContext = {
@@ -45,7 +43,6 @@ export type BrowserActionContext = {
     useExternalBrowserControl: boolean;
     memoryServiceClient?: MemoryService;
     automationCatalog?: AutomationCatalogService;
-    runbookCapabilities?: RunbookHostCapabilities;
     browserMemoryService?: BrowserMemoryService;
     preferredClientType?: "extension" | "electron" | undefined;
     // Runtime override for the internet-lookup backend (@browser lookup ...);
@@ -100,8 +97,7 @@ export function normalizeBrowserAgentInitOptions(
         options !== null &&
         ("browserControl" in options ||
             "memoryServiceClient" in options ||
-            "automations" in options ||
-            "runbookCapabilities" in options)
+            "automations" in options)
     ) {
         return options as BrowserAgentInitOptions;
     }

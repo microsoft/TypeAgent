@@ -9,13 +9,21 @@ import type {
     ViewSynthesisOutput,
     ViewVersion,
     ViewPublicationProof,
+    WikiPagePurposeContext,
+    WikiSubjectAssessment,
 } from "./viewTypes.js";
+import { parseWikiAssessment, wikiPageContext } from "./wikiAdmission.js";
 import { publicationProof } from "./viewPublication.js";
 import { validateInventoryAudit } from "./viewInventory.js";
 import { mergeView } from "./viewMerge.js";
 import { validateConstructedGuide, validateSupport } from "./viewSynthesis.js";
 import { redactRunbookText } from "./runbookRedaction.js";
-import { validateMaintenanceConstruction } from "./viewMaintenance.js";
+import { informationalPipeline } from "./informationalView.js";
+import {
+    RequestBudget,
+    runWithRequestBudget,
+    type RequestBudgetLimits,
+} from "@typeagent/aiclient";
 
 export class ViewBuildStaleError extends Error {}
 
@@ -32,6 +40,27 @@ export interface ViewBuildOwner {
         update: (job: ViewBuildJob) => void,
     ): Promise<ViewBuildJob>;
     current(input: ViewBuildSnapshot): Promise<ViewVersion | undefined>;
+    unchanged?(input: ViewBuildSnapshot): Promise<boolean>;
+    wikiPages?(input: ViewBuildSnapshot): Promise<WikiPagePurposeContext[]>;
+    recordWikiAssessment?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        assessment: WikiSubjectAssessment,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<void>;
+    contributeWikiSubject?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        assessment: WikiSubjectAssessment,
+        pages: WikiPagePurposeContext[],
+        signal: AbortSignal,
+    ): Promise<void>;
+    resumeWikiContribution?(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<boolean>;
     materialize(
         job: ViewBuildJob,
         result: ViewBuildTargetResult,
@@ -58,6 +87,7 @@ export class ViewBuildRunner {
     public constructor(
         private readonly adapter: ViewSynthesisAdapter,
         private readonly owner: ViewBuildOwner,
+        private readonly informationalLimits?: RequestBudgetLimits,
     ) {}
 
     public assertPersistence(jobId: string): void {
@@ -88,7 +118,20 @@ export class ViewBuildRunner {
             ),
         };
         this.controllers.set(job.jobId, { ...scope, controller });
-        const task = this.tail.then(() => this.run(job, controller.signal));
+        const task = this.tail.then(() => {
+            if (
+                !job.results.some((result) =>
+                    informationalPipeline(result.snapshot.pipeline),
+                )
+            )
+                return this.run(job, controller.signal);
+            if (!this.informationalLimits)
+                return this.run(job, controller.signal);
+            return runWithRequestBudget(
+                new RequestBudget(this.informationalLimits),
+                () => this.run(job, controller.signal),
+            );
+        });
         this.tail = task
             .catch((error: unknown) => {
                 if (this.purged.has(job.jobId)) return;
@@ -152,6 +195,15 @@ export class ViewBuildRunner {
                 );
             }
         }
+    }
+
+    public trackContribution(jobId: string, input: ViewBuildSnapshot): void {
+        const scope = this.controllers.get(jobId);
+        if (!scope)
+            throw new ViewBuildStaleError(
+                "Wiki contribution no longer has an active owner",
+            );
+        for (const source of input.inputs) scope.sources.add(source.sourceId);
     }
 
     public forgetEvent(corpusId: string, eventId: string): void {
@@ -242,13 +294,16 @@ export class ViewBuildRunner {
         result: ViewBuildTargetResult,
         signal: AbortSignal,
     ): Promise<void> {
+        const timeoutMs = informationalPipeline(result.snapshot.pipeline)
+            ? (this.informationalLimits?.elapsedMs ?? 120_000)
+            : 300_000;
         const timer = setTimeout(
             () =>
                 this.cancel(
                     job.jobId,
-                    "Evidence-first synthesis exceeded 300 second limit",
+                    `Evidence-first synthesis exceeded ${timeoutMs / 1000} second limit`,
                 ),
-            300_000,
+            timeoutMs,
         );
         let validation = false;
         try {
@@ -266,7 +321,22 @@ export class ViewBuildRunner {
                 return;
             }
             validation = true;
-            const evidence = await this.prepareInventory(job, result, signal);
+            const informational = informationalPipeline(
+                result.snapshot.pipeline,
+            );
+            if (
+                (await this.skipInformationalTarget(
+                    job,
+                    result,
+                    signal,
+                    informational,
+                )) ||
+                (await this.assessWikiAdmission(job, result, signal))
+            )
+                return;
+            const evidence = informational
+                ? undefined
+                : await this.prepareInventory(job, result, signal);
             const inventory = evidence?.inventory;
             validation = false;
             await this.result(
@@ -285,12 +355,9 @@ export class ViewBuildRunner {
                 if (evidence?.inventoryAudit)
                     candidate.inventoryAudit = evidence.inventoryAudit;
             }
+
             validation = true;
             validateConstructedGuide(result.snapshot, candidate);
-            validateMaintenanceConstruction(
-                result.snapshot.maintenance,
-                candidate,
-            );
             await this.result(
                 job,
                 result.viewId,
@@ -298,13 +365,18 @@ export class ViewBuildRunner {
                 "Checking actual artifact coverage, exclusions and semantic support",
                 candidate.coverage ? { coverage: candidate.coverage } : {},
             );
-            validateSupport(
-                candidate,
-                await abortable(
-                    this.adapter.validate(result.snapshot, candidate, signal),
-                    signal,
-                ),
-            );
+            if (!informational)
+                validateSupport(
+                    candidate,
+                    await abortable(
+                        this.adapter.validate(
+                            result.snapshot,
+                            candidate,
+                            signal,
+                        ),
+                        signal,
+                    ),
+                );
             validation = false;
             const current = await this.owner.current(result.snapshot);
             const { output, conflicts } = mergeView(
@@ -316,16 +388,29 @@ export class ViewBuildRunner {
             if (!conflicts.length) {
                 validation = true;
                 validateConstructedGuide(result.snapshot, output);
-                const support = await abortable(
-                    this.adapter.validate(result.snapshot, output, signal),
+                await this.verifyContributionRefresh(
+                    result.snapshot,
+                    output,
                     signal,
                 );
-                validateSupport(output, support);
-                proof = publicationProof(
-                    result.snapshot.fingerprint,
-                    output,
-                    support,
-                );
+                const support = informational
+                    ? undefined
+                    : await abortable(
+                          this.adapter.validate(
+                              result.snapshot,
+                              output,
+                              signal,
+                          ),
+                          signal,
+                      );
+                if (support) {
+                    validateSupport(output, support);
+                    proof = publicationProof(
+                        result.snapshot.fingerprint,
+                        output,
+                        support,
+                    );
+                }
             }
             validation = false;
             signal.throwIfAborted();
@@ -354,6 +439,125 @@ export class ViewBuildRunner {
         }
     }
 
+    private async verifyContributionRefresh(
+        input: ViewBuildSnapshot,
+        output: ViewSynthesisOutput,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (!input.wikiContribution) return;
+        if (!this.adapter.assessWikiSubject)
+            throw new Error(
+                "Wiki contribution refresh lacks actual-prose coverage checker",
+            );
+        const context = wikiPageContext(
+            input,
+            {
+                viewId: input.definition.viewId,
+                revisionId: input.targetRevisionId!,
+                definition: {
+                    ...input.definition,
+                    revisionId: input.definitionRevisionId!,
+                },
+                content: output.content,
+            },
+            undefined,
+            false,
+        );
+        const coverage = parseWikiAssessment(
+            await abortable(
+                this.adapter.assessWikiSubject(input, [context], signal),
+                signal,
+            ),
+            [context],
+            input.wikiContribution.essentialDistinctions,
+        );
+        if (coverage.disposition !== "covered")
+            throw new Error(
+                "Wiki contribution refresh did not preserve essential old/new distinctions in actual prose",
+            );
+    }
+
+    private async skipInformationalTarget(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+        informational: boolean,
+    ): Promise<boolean> {
+        if (!informational) return false;
+        if (await this.owner.unchanged?.(result.snapshot)) {
+            await this.result(
+                job,
+                result.viewId,
+                "skipped",
+                "Unchanged indexed evidence and definition; no synthesis required",
+            );
+            return true;
+        }
+        return (
+            (await this.owner.resumeWikiContribution?.(job, result, signal)) ??
+            false
+        );
+    }
+
+    private async assessWikiAdmission(
+        job: ViewBuildJob,
+        result: ViewBuildTargetResult,
+        signal: AbortSignal,
+    ): Promise<boolean> {
+        if (
+            !job.maintenancePlan ||
+            result.snapshot.pipeline !== "informational-wiki-v1" ||
+            result.snapshot.expectedVersion !== 0 ||
+            !this.adapter.assessWikiSubject
+        )
+            return false;
+        if (!this.owner.wikiPages || !this.owner.recordWikiAssessment)
+            throw new Error(
+                "Wiki purpose assessment requires current-page context and guarded receipts",
+            );
+        const pages = await this.owner.wikiPages(result.snapshot);
+        if (!pages.length) return false;
+        await this.result(
+            job,
+            result.viewId,
+            "generating",
+            "Comparing standalone purpose with nominated current pages",
+        );
+        const assessment = parseWikiAssessment(
+            await abortable(
+                this.adapter.assessWikiSubject(result.snapshot, pages, signal),
+                signal,
+            ),
+            pages,
+        );
+        signal.throwIfAborted();
+        await this.owner.recordWikiAssessment(
+            job,
+            result,
+            assessment,
+            pages,
+            signal,
+        );
+        if (assessment.disposition === "contribute") {
+            if (!this.owner.contributeWikiSubject)
+                throw new Error(
+                    "Wiki contribution requires guarded canonical materialization",
+                );
+            await this.owner.contributeWikiSubject(
+                job,
+                result,
+                assessment,
+                pages,
+                signal,
+            );
+            return true;
+        }
+        return (
+            assessment.disposition === "covered" ||
+            assessment.disposition === "ambiguous"
+        );
+    }
+
     private async run(job: ViewBuildJob, signal: AbortSignal): Promise<void> {
         for (const result of job.results)
             await this.target(job, result, signal);
@@ -380,9 +584,13 @@ export class ViewBuildRunner {
         });
     }
 
-    public async close(): Promise<void> {
+    public cancelAll(): void {
         for (const item of this.controllers.values())
             item.controller.abort(new Error("Service closing"));
+    }
+
+    public async close(): Promise<void> {
+        this.cancelAll();
         await this.tail;
         for (const failure of this.failures.values()) throw failure.error;
     }
@@ -398,11 +606,11 @@ export async function abortable<T>(
     work: Promise<T>,
     signal: AbortSignal,
 ): Promise<T> {
-    signal.throwIfAborted();
     let abort: (() => void) | undefined;
     const cancelled = new Promise<never>((_resolve, reject) => {
         abort = () => reject(signal.reason);
-        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+        else signal.addEventListener("abort", abort, { once: true });
     });
     try {
         return await Promise.race([work, cancelled]);

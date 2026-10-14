@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { rm } from "node:fs/promises";
-import { resolve } from "node:path";
 import {
     agentEditionContentHash,
     canonicalizeProcedure,
@@ -11,16 +9,15 @@ import {
     prepareAgentEditionSave,
     validateAgentEdition,
     validateReviewedAgentEdition,
-    validateRunbookCatalogBindings,
     validateRunbookBinding,
+    validateRunbookCatalogBindings,
     type AgentEdition,
     type RunbookBindingValidator,
 } from "../src/agentEdition.js";
 import {
-    PersonalHowToStore,
     procedureFromMarkdown,
     procedureToMarkdown,
-} from "../src/personalHowToStore.js";
+} from "../src/procedureMarkdown.js";
 import {
     redactRunbookText,
     redactRunbookValue,
@@ -639,179 +636,5 @@ describe("canonical agent editions", () => {
                 1,
             ),
         ).rejects.toThrow("evidence");
-    });
-});
-
-describe("stored version-specific review", () => {
-    const root = resolve("test", ".agent-edition-store");
-    beforeEach(async () => rm(root, { recursive: true, force: true }));
-    afterEach(async () => rm(root, { recursive: true, force: true }));
-    const store = () => new PersonalHowToStore(root, async () => "index-1");
-
-    it.each(["query", "_query", '["operations","query"]'])(
-        "persists native MCP name %s and argument templates with declared input context across exact-version review",
-        async (targetId) => {
-            const doc = document();
-            doc.agentEdition!.steps[0].binding = {
-                kind: "mcp",
-                accepted: true,
-                serverId: "operations",
-                targetId,
-                version: "actual-schema",
-                fingerprint: "actual-schema",
-                arguments: { namespace: { $input: "namespace" }, limit: 10 },
-            };
-            let validations = 0;
-            const validator: RunbookBindingValidator = async (
-                bindings,
-                context,
-            ) => {
-                validations++;
-                expect(context.inputs).toEqual(doc.agentEdition!.inputs);
-                expect(bindings).toEqual([doc.agentEdition!.steps[0].binding]);
-                return bindings.map((binding) => ({
-                    binding,
-                    status: "accepted",
-                    argumentsValidated: true,
-                }));
-            };
-            const storage = new PersonalHowToStore(
-                root,
-                async () => "index-1",
-                validator,
-            );
-            const draft = await storage.save({
-                corpusId: "ops",
-                procedureId: "restart",
-                document: doc,
-            });
-            expect(validations).toBe(0);
-            const reviewed = await storage.save({
-                corpusId: "ops",
-                procedureId: "restart",
-                expectedVersion: 1,
-                document: draft.document,
-                reviewAgentEdition: true,
-                safetyConfirmed: true,
-            });
-            expect(validations).toBe(1);
-            validateReviewedAgentEdition(reviewed);
-            expect(reviewed.document.agentEdition!.review).toMatchObject({
-                state: "reviewed",
-                procedureVersion: 2,
-                argumentsValidation: "accepted",
-            });
-            const reopened = await new PersonalHowToStore(
-                root,
-                async () => "index-1",
-                validator,
-            ).get("ops", "restart", 2);
-            expect(reopened?.document.agentEdition!.steps[0].binding).toEqual(
-                doc.agentEdition!.steps[0].binding,
-            );
-            expect(procedureFromMarkdown(reviewed.markdown)).toEqual(
-                reviewed.document,
-            );
-            expect(await storage.get("ops", "restart", 1)).toEqual(draft);
-        },
-    );
-
-    it("persists immutable reviewed versions and invalidates stale linked-source and asset dependencies", async () => {
-        const storage = store();
-        const first = await storage.save({
-            corpusId: "ops",
-            procedureId: "restart",
-            expectedVersion: 0,
-            document: document(),
-            reviewAgentEdition: true,
-            safetyConfirmed: true,
-        });
-        validateReviewedAgentEdition(first);
-        expect(first.document.agentEdition!.review).toMatchObject({
-            state: "reviewed",
-            procedureVersion: 1,
-            contentHash: agentEditionContentHash(first.document),
-        });
-        const second = await storage.save({
-            corpusId: "ops",
-            procedureId: "restart",
-            expectedVersion: 1,
-            document: { ...first.document, summary: "A human edit" },
-        });
-        expect(second.document.agentEdition!.review.state).toBe("draft");
-        expect((await storage.get("ops", "restart", 1))!.document).toEqual(
-            first.document,
-        );
-        await expect(
-            storage.save({
-                corpusId: "ops",
-                procedureId: "restart",
-                expectedVersion: 1,
-                document: document(),
-            }),
-        ).rejects.toThrow("version conflict");
-        await storage.markStale("ops", "reference", "rev-4");
-        const stale = (await storage.get("ops", "restart"))!;
-        expect(stale.state).toBe("stale");
-        expect(stale.document.agentEdition!.review.state).toBe("draft");
-        expect(() => validateReviewedAgentEdition(stale)).toThrow(
-            "saved and reviewed",
-        );
-        const archived = await storage.archive("ops", "restart", stale.version);
-        expect(archived.document.agentEdition!.review.state).toBe("draft");
-    });
-
-    it("never trusts candidate review stamps and preserves evidence through candidate save", async () => {
-        const storage = store();
-        const reviewed = await prepareAgentEditionSave(
-            document(),
-            { reviewAgentEdition: true, safetyConfirmed: true },
-            10,
-        );
-        const candidate = await storage.createCandidate({
-            ...reviewed,
-            corpusId: "ops",
-            candidateId: "candidate-1",
-        });
-        expect(candidate.agentEdition!.review.state).toBe("draft");
-        const saved = await storage.save({
-            corpusId: "ops",
-            candidateId: candidate.candidateId,
-        });
-        expect(saved.document.agentEdition!.steps[0].humanText).toBe(
-            "Inspect the panel.",
-        );
-        expect(saved.document.agentEdition!.review.state).toBe("draft");
-        expect(saved.basedOnCandidateId).toBe("candidate-1");
-    });
-
-    it("keeps opaque canonical JSON metadata on a Markdown save and invalidates whole-version review", async () => {
-        const storage = store();
-        const initial: ProcedureDocument & { custom: { owner: string } } = {
-            ...document(),
-            custom: { owner: "Human metadata" },
-        };
-        const first = await storage.save({
-            corpusId: "ops",
-            procedureId: "restart",
-            document: initial,
-            reviewAgentEdition: true,
-            safetyConfirmed: true,
-        });
-        const edited = { ...first.document, title: "Edited title" };
-        const next = await storage.save({
-            corpusId: "ops",
-            procedureId: "restart",
-            expectedVersion: 1,
-            markdown: procedureToMarkdown(edited),
-        });
-        expect(next.document).toMatchObject({
-            custom: { owner: "Human metadata" },
-        });
-        expect(next.document.agentEdition!.review.state).toBe("draft");
-        expect(next.document.additionalSections).toEqual(
-            initial.additionalSections,
-        );
-        expect(next.document.citations).toEqual(initial.citations);
     });
 });

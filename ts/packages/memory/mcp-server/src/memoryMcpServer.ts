@@ -9,11 +9,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+    answerRequestSchema,
+    answerResultSchema,
     capabilitiesSchema,
     changeListRequestSchema,
     changePageSchema,
-    answerRequestSchema,
-    answerResultSchema,
     clearedCountSchema,
     corpusSchema,
     eventAppendRequestSchema,
@@ -24,7 +24,6 @@ import {
     eventPageSchema,
     eventSearchRequestSchema,
     eventSearchResultSchema,
-    optionalCorpusStatusSchema,
     identifierSchema,
     ingestRequestSchema,
     ingestResultSchema,
@@ -33,27 +32,11 @@ import {
     jobStatusSchema,
     knowledgeGraphSchema,
     memoryToolNames,
-    optionalJobStatusSchema,
+    optionalCorpusStatusSchema,
     optionalEventSchema,
+    optionalJobStatusSchema,
     optionalSourceSchema,
-    optionalProcedureCandidateSchema,
-    optionalProcedureVersionSchema,
-    personalHowToSettingsSchema,
-    personalHowToSettingsUpdateSchema,
-    runbookSynthesisRequestSchema,
-    runbookJobResultSchema,
-    procedureArchiveRequestSchema,
-    procedureCandidateCreateRequestSchema,
-    procedureCandidateInputSchema,
-    procedureCandidateListRequestSchema,
-    procedureCandidateSchema,
-    procedureGetRequestSchema,
-    procedureListRequestSchema,
-    procedureSaveRequestSchema,
-    procedureSearchMatchSchema,
-    procedureSearchRequestSchema,
-    procedureSummarySchema,
-    procedureVersionSchema,
+    reindexResultSchema,
     searchRequestSchema,
     searchResultSchema,
     sourceContentRequestSchema,
@@ -64,7 +47,6 @@ import {
     sourceListRequestSchema,
     sourcePageSchema,
     sourceReplaceRequestSchema,
-    reindexResultSchema,
     sourceSchema,
 } from "@typeagent/memory-client";
 import type {
@@ -78,18 +60,11 @@ import type {
     MemoryEventSearchRequest,
     MemorySearchRequest,
     MemoryService,
-    PersonalHowToService,
-    PersonalHowToSettingsUpdate,
-    ProcedureCandidateCreateRequest,
-    ProcedureListRequest,
-    ProcedureSaveRequest,
-    ProcedureSearchRequest,
     SourceContentRequest,
     SourceForgetRequest,
     SourceListRequest,
     SourceReplaceRequest,
 } from "@typeagent/memory-service";
-import { validateProcedureSaveRequest } from "@typeagent/memory-service";
 import { z } from "zod";
 import { registerViewTools } from "./viewTools.js";
 
@@ -133,9 +108,7 @@ function toolError(error: unknown): CallToolResult {
 export class MemoryMcpServer {
     public readonly server: McpServer;
 
-    public constructor(
-        private readonly service: MemoryService & PersonalHowToService,
-    ) {
+    public constructor(private readonly service: MemoryService) {
         this.server = new McpServer({
             name: "typeagent-memory",
             version: "0.0.1",
@@ -555,235 +528,6 @@ export class MemoryMcpServer {
                 this.run(() =>
                     this.service.forgetEvents(
                         request as MemoryEventForgetRequest,
-                    ),
-                ),
-        );
-        this.server.registerTool(
-            memoryToolNames.howToSettingsGet,
-            {
-                description: "Get corpus-owned personal how-to settings.",
-                inputSchema: corpusIdInputSchema,
-                outputSchema: outputSchema(personalHowToSettingsSchema),
-                annotations: { readOnlyHint: true },
-            },
-            async ({ corpusId }) =>
-                this.run(() => this.service.getPersonalHowToSettings(corpusId)),
-        );
-        this.server.registerTool(
-            memoryToolNames.howToSettingsUpdate,
-            {
-                description:
-                    "Update personal how-to settings using an expected revision.",
-                inputSchema: personalHowToSettingsUpdateSchema,
-                outputSchema: outputSchema(personalHowToSettingsSchema),
-                annotations: { destructiveHint: false },
-            },
-            async ({ corpusId, ...update }) =>
-                this.run(() =>
-                    this.service.updatePersonalHowToSettings(
-                        corpusId,
-                        update as PersonalHowToSettingsUpdate,
-                    ),
-                ),
-        );
-        this.server.registerTool(
-            memoryToolNames.runbookSynthesisRequest,
-            {
-                description:
-                    "Explicitly request durable draft runbook synthesis for an exact retained source revision. Reuses pending/completed jobs without overwriting edited candidates or saved procedures. Never executes bindings.",
-                inputSchema: runbookSynthesisRequestSchema,
-                outputSchema: outputSchema(runbookJobResultSchema),
-                annotations: { destructiveHint: false, idempotentHint: true },
-            },
-            async (request) =>
-                this.run(() => {
-                    if (this.service.requestRunbookSynthesis === undefined)
-                        throw new Error(
-                            "Memory runbook synthesis is not supported",
-                        );
-                    return this.service.requestRunbookSynthesis(request);
-                }),
-        );
-        this.server.registerTool(
-            memoryToolNames.runbookJobGet,
-            {
-                description:
-                    "Read a durable runbook synthesis job and its actual candidate IDs.",
-                inputSchema: jobInputSchema,
-                outputSchema: outputSchema(runbookJobResultSchema.nullable()),
-                annotations: { readOnlyHint: true },
-            },
-            async ({ jobId }) =>
-                this.run(async () => {
-                    if (this.service.getRunbookJob === undefined)
-                        throw new Error(
-                            "Memory runbook jobs are not supported",
-                        );
-                    return (await this.service.getRunbookJob(jobId)) ?? null;
-                }),
-        );
-        this.server.registerTool(
-            memoryToolNames.runbookJobsList,
-            {
-                description:
-                    "List the latest durable runbook synthesis jobs for a corpus.",
-                inputSchema: corpusIdInputSchema,
-                outputSchema: outputSchema(
-                    runbookJobResultSchema.array().max(100),
-                ),
-                annotations: { readOnlyHint: true },
-            },
-            async ({ corpusId }) =>
-                this.run(() => {
-                    if (this.service.listRunbookJobs === undefined)
-                        throw new Error(
-                            "Memory runbook jobs are not supported",
-                        );
-                    return this.service.listRunbookJobs(corpusId);
-                }),
-        );
-        this.server.registerTool(
-            memoryToolNames.procedureCandidateCreate,
-            {
-                description: "Create a detected or draft procedure candidate.",
-                inputSchema: procedureCandidateCreateRequestSchema,
-                outputSchema: outputSchema(procedureCandidateSchema),
-                annotations: { destructiveHint: false },
-            },
-            async (request) =>
-                this.run(() =>
-                    this.service.createProcedureCandidate(
-                        request as ProcedureCandidateCreateRequest,
-                    ),
-                ),
-        );
-        this.server.registerTool(
-            memoryToolNames.procedureCandidateGet,
-            {
-                description: "Get a procedure candidate by identifier.",
-                inputSchema: procedureCandidateInputSchema,
-                outputSchema: outputSchema(optionalProcedureCandidateSchema),
-                annotations: { readOnlyHint: true },
-            },
-            async ({ corpusId, candidateId }) =>
-                this.run(
-                    async () =>
-                        (await this.service.getProcedureCandidate(
-                            corpusId,
-                            candidateId,
-                        )) ?? null,
-                ),
-        );
-        this.server.registerTool(
-            memoryToolNames.procedureCandidateList,
-            {
-                description: "List procedure candidates with state filtering.",
-                inputSchema: procedureCandidateListRequestSchema,
-                outputSchema: outputSchema(procedureCandidateSchema.array()),
-                annotations: { readOnlyHint: true },
-            },
-            async ({ corpusId, states }) =>
-                this.run(() =>
-                    this.service.listProcedureCandidates(corpusId, states),
-                ),
-        );
-        this.server.registerTool(
-            memoryToolNames.procedureCandidateReject,
-            {
-                description: "Reject a procedure candidate.",
-                inputSchema: procedureCandidateInputSchema,
-                outputSchema: outputSchema(procedureCandidateSchema),
-                annotations: { destructiveHint: true },
-            },
-            async ({ corpusId, candidateId }) =>
-                this.run(() =>
-                    this.service.rejectProcedureCandidate(
-                        corpusId,
-                        candidateId,
-                    ),
-                ),
-        );
-        this.server.registerTool(
-            memoryToolNames.procedureSave,
-            {
-                description:
-                    "Save canonical procedure JSON or validated Markdown. Review requires explicit reviewAgentEdition and safetyConfirmed intent; client review stamps are not trusted. No tools or commands execute.",
-                inputSchema: procedureSaveRequestSchema,
-                outputSchema: outputSchema(procedureVersionSchema),
-                annotations: { destructiveHint: false },
-            },
-            async (request) =>
-                this.run(() => {
-                    validateProcedureSaveRequest(
-                        request as ProcedureSaveRequest,
-                    );
-                    return this.service.saveProcedure(
-                        request as ProcedureSaveRequest,
-                    );
-                }),
-        );
-        this.server.registerTool(
-            memoryToolNames.procedureGet,
-            {
-                description: "Get the latest or a named procedure version.",
-                inputSchema: procedureGetRequestSchema,
-                outputSchema: outputSchema(optionalProcedureVersionSchema),
-                annotations: { readOnlyHint: true },
-            },
-            async ({ corpusId, procedureId, version }) =>
-                this.run(
-                    async () =>
-                        (await this.service.getProcedure(
-                            corpusId,
-                            procedureId,
-                            version,
-                        )) ?? null,
-                ),
-        );
-        this.server.registerTool(
-            memoryToolNames.procedureList,
-            {
-                description: "List saved procedures with state filtering.",
-                inputSchema: procedureListRequestSchema,
-                outputSchema: outputSchema(procedureSummarySchema.array()),
-                annotations: { readOnlyHint: true },
-            },
-            async (request) =>
-                this.run(() =>
-                    this.service.listProcedures(
-                        request as ProcedureListRequest,
-                    ),
-                ),
-        );
-        this.server.registerTool(
-            memoryToolNames.procedureSearch,
-            {
-                description: "Search saved procedure content.",
-                inputSchema: procedureSearchRequestSchema,
-                outputSchema: outputSchema(procedureSearchMatchSchema.array()),
-                annotations: { readOnlyHint: true },
-            },
-            async (request) =>
-                this.run(() =>
-                    this.service.searchProcedures(
-                        request as ProcedureSearchRequest,
-                    ),
-                ),
-        );
-        this.server.registerTool(
-            memoryToolNames.procedureArchive,
-            {
-                description: "Create an immutable archived procedure version.",
-                inputSchema: procedureArchiveRequestSchema,
-                outputSchema: outputSchema(procedureVersionSchema),
-                annotations: { destructiveHint: true },
-            },
-            async ({ corpusId, procedureId, expectedVersion }) =>
-                this.run(() =>
-                    this.service.archiveProcedure(
-                        corpusId,
-                        procedureId,
-                        expectedVersion,
                     ),
                 ),
         );

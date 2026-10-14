@@ -475,3 +475,8 @@ ts/config.local.yaml.bak
 /ts/msi-test-stage
 /ts/msi-test-output
 /ts/packages/copilot-plugin-eval/.native-*
+/ts/.wiki-test-runtime
+/ts/.wiki-browser-owned
+/ts/.wiki-rehearsal-blocked-20261010
+/ts/packages/memory/service/.wiki-unit-owned
+/ts/.wiki-rehearsal-blocked-final-20261010

@@ -1666,6 +1666,10 @@ function isolatedMcpSelector(f) {
         "matchesNativeCommandLine",
         context,
     );
+    context.matchesCurrentMcpControlSource = lifecycleSourceFunction(
+        "matchesCurrentMcpControlSource",
+        context,
+    );
     context.validateMcpControlObservation = lifecycleSourceFunction(
         "validateMcpControlObservation",
         context,

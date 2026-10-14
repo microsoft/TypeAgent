@@ -26,6 +26,35 @@ function withoutResult(event) {
     return copied;
 }
 
+function assertWorkiqSdkCaptureIdentity(options, trial, policy, receipt) {
+    const { artifactRoot, scope } = options;
+    requireSource(
+        receipt.schemaVersion === 1 &&
+            [
+                workiqOriginalsContract,
+                workiqExperimentalOriginalsContract,
+            ].includes(receipt.kind) &&
+            receipt.kind === policy.kind &&
+            (policy.kind !== workiqExperimentalOriginalsContract ||
+                (policy.exposureOverride === workiqExposureOverride &&
+                    receipt.exposureOverride === workiqExposureOverride)) &&
+            receipt.admission === false &&
+            receipt.modelInputExposure === "not-certified" &&
+            receipt.source.component === workiqOriginalsContract &&
+            receipt.source.owner === scope.ownerId &&
+            receipt.source.sessionId === trial.sessionId &&
+            receipt.source.traceId === trial.traceId &&
+            receipt.source.runId === trial.runId &&
+            policy.owner === scope.ownerId &&
+            policy.sessionId === trial.sessionId &&
+            (policy.traceId === null || policy.traceId === trial.traceId) &&
+            policy.runId === trial.runId &&
+            policy.artifactRoot === artifactRoot &&
+            receipt.source.policySha256 === workiqJsonHash(policy),
+        "foreignWorkiqSdkCapture",
+    );
+}
+
 /**
  * Joins private actual SDK receipts to the current persisted event identities.
  * Neither backend archives nor model answers can supply missing originals.
@@ -50,31 +79,7 @@ export async function restoreWorkiqSdkOriginals(options, trial, events) {
             path.join("workiq-sdk-originals", trial.sessionId, "receipt.json"),
             256 * 1024,
         );
-        requireSource(
-            receipt.schemaVersion === 1 &&
-                [
-                    workiqOriginalsContract,
-                    workiqExperimentalOriginalsContract,
-                ].includes(receipt.kind) &&
-                receipt.kind === policy.kind &&
-                (policy.kind !== workiqExperimentalOriginalsContract ||
-                    (policy.exposureOverride === workiqExposureOverride &&
-                        receipt.exposureOverride === workiqExposureOverride)) &&
-                receipt.admission === false &&
-                receipt.modelInputExposure === "not-certified" &&
-                receipt.source.component === workiqOriginalsContract &&
-                receipt.source.owner === scope.ownerId &&
-                receipt.source.sessionId === trial.sessionId &&
-                receipt.source.traceId === trial.traceId &&
-                receipt.source.runId === trial.runId &&
-                policy.owner === scope.ownerId &&
-                policy.sessionId === trial.sessionId &&
-                (policy.traceId === null || policy.traceId === trial.traceId) &&
-                policy.runId === trial.runId &&
-                policy.artifactRoot === artifactRoot &&
-                receipt.source.policySha256 === workiqJsonHash(policy),
-            "foreignWorkiqSdkCapture",
-        );
+        assertWorkiqSdkCaptureIdentity(options, trial, policy, receipt);
         const startedAt = Date.parse(receipt.source.startedAt);
         const sessionStart = events.find(
             (event) => event.type === "session.start",

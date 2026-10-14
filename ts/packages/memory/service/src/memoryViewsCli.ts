@@ -1,27 +1,28 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
+import { loadConfigSync } from "@typeagent/config";
 import { readFile } from "node:fs/promises";
 import { FileMemoryService } from "./fileMemoryService.js";
+import { getConfiguredMemoryViewOptions } from "./viewHostOptions.js";
 import { createMemoryServiceRpcFacade } from "./rpcFacade.js";
-import { loadConfigSync } from "@typeagent/config";
-import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
 import type {
-    ViewSaveRequest,
+    MemoryViewService,
     ViewArchiveRequest,
+    ViewBuildJob,
     ViewBuildRequest,
     ViewConflictResolution,
-    ViewBuildJob,
-    MemoryViewService,
-    ViewPublishRequest,
-    ViewPublicationPolicyUpdate,
-    ViewMaintenanceRequest,
     ViewMaintenancePlanRequest,
+    ViewMaintenanceRequest,
     ViewMaintenanceUpdate,
+    ViewPublicationPolicyUpdate,
+    ViewPublishRequest,
+    ViewSaveRequest,
 } from "./viewTypes.js";
 
-const usage = `Opt-in derived views:
-node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <command> [arguments]
+const usage = `Derived Views:
+node dist/memoryViewsCli.js --store <private-store> <command> [arguments]
   corpora
   capabilities
   create-corpus <name>
@@ -52,7 +53,7 @@ node dist/memoryViewsCli.js --store <private-store> --enable-view-drafts <comman
   retry-index <request.json>
   search <corpusId> <query>
 The store must not be owned by a running server. Actor comes from the local OS identity.
-Build accepts troubleshootingGuide, projectBrief, timeline or wiki definitions and uses configured synthesis. Wikis use bounded concept/system/project pages with stable identities and exact page/source proof; renames preserve identity and merges retain facts and citations. Timelines use timelineEvidence selectors with exact document revisions and canonical event IDs, with host-enforced knowledge/occurrence bounds. Fixed readers have no execution/skill controls. Eligible artifacts can publish and index; live synthesis remains unqualified. No reset, source deletion, skill approval or execution is performed.`;
+Build accepts troubleshootingGuide, projectBrief, timeline or wiki definitions and uses configured synthesis. Project summaries require a projectSummary selector with construction informational-project-summary-v1, query, aliases and excludedSourceIds; an empty source selector searches all eligible indexed sources. Automatic wiki/projects family update, rebuild, pause and resume requests use maintain with corpusId and expectedHead, without source selection. Wikis use bounded concept/system/project pages with stable identities and exact citations; editorial renames preserve identity. Timelines use timelineEvidence selectors with exact document revisions and canonical event IDs, with host-enforced knowledge/occurrence bounds. Fixed readers have no execution/skill controls. Eligible artifacts can publish and index. No reset, source deletion, skill approval or execution is performed.`;
 
 const argumentCounts = new Map<string, readonly [number, number]>([
     ["corpora", [0, 0]],
@@ -260,23 +261,17 @@ const viewCommands = new Map<
 ]);
 
 export async function runMemoryViewsCli(args: string[]): Promise<unknown> {
-    const [storeFlag, store, capability, command, ...values] = args;
-    if (
-        storeFlag !== "--store" ||
-        !store ||
-        capability !== "--enable-view-drafts" ||
-        !command
-    )
-        throw new Error(usage);
+    const [storeFlag, store, command, ...values] = args;
+    if (storeFlag !== "--store" || !store || !command) throw new Error(usage);
     const counts = argumentCounts.get(command);
     if (!counts || values.length < counts[0] || values.length > counts[1])
         throw new Error(usage);
     const service = new FileMemoryService(store, {
-        viewDrafts: true,
-        ...(process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT
+        ...getConfiguredMemoryViewOptions(),
+        ...(process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT
             ? {
-                  runbookModelEndpoint:
-                      process.env.TYPEAGENT_RUNBOOK_MODEL_ENDPOINT,
+                  viewModelEndpoint:
+                      process.env.TYPEAGENT_MEMORY_VIEW_MODEL_ENDPOINT,
               }
             : {}),
     });

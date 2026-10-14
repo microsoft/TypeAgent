@@ -15,8 +15,10 @@ import type {
     ViewCitation,
     ViewSynthesisOutput,
     ViewVersion,
+    ViewBuildSnapshot,
 } from "./viewTypes.js";
 import { authoredRelationships, edgeIdentity } from "./viewRelationships.js";
+import { informationalView } from "./informationalView.js";
 import { wikiIndex } from "./viewContent.js";
 export { edgeIdentity } from "./viewRelationships.js";
 
@@ -24,6 +26,19 @@ export function viewHash(value: unknown): string {
     return createHash("sha256")
         .update(canonicalizeProcedure(value ?? null))
         .digest("hex");
+}
+
+export function sameViewBuildEvidence(
+    prior: ViewBuildSnapshot | undefined,
+    next: ViewBuildSnapshot,
+): boolean {
+    return (
+        prior !== undefined &&
+        viewHash(prior.inputs) === viewHash(next.inputs) &&
+        viewHash(prior.definition) === viewHash(next.definition) &&
+        prior.pipeline === next.pipeline &&
+        prior.model === next.model
+    );
 }
 
 export function mergeProse(
@@ -165,7 +180,11 @@ function mergeSection(
     human: ViewSection,
     generated: ViewSection,
 ): ViewSection | undefined {
-    const heading = mergeValue(base.heading, human.heading, generated.heading);
+    const heading =
+        generated.details?.kind === "page" &&
+        "construction" in generated.details
+            ? human.heading
+            : mergeValue(base.heading, human.heading, generated.heading);
     const body = mergeValue(base.body, human.body, generated.body);
     const role = mergeValue(base.role, human.role, generated.role);
     const details =
@@ -216,37 +235,7 @@ function mergeWikiDetails(
         generated?.kind !== "page"
     )
         return undefined;
-    const fields = mergeBriefFields(base, human, generated, [
-        "inventoryIds",
-        "mergedPageIds",
-    ]);
-    const inventoryIds = mergeIdentifierItems(
-        base.inventoryIds,
-        human.inventoryIds,
-        generated.inventoryIds,
-    );
-    const mergedPageIds = mergeIdentifierItems(
-        base.mergedPageIds,
-        human.mergedPageIds,
-        generated.mergedPageIds,
-    );
-    return fields && inventoryIds && mergedPageIds
-        ? { ...fields, inventoryIds, mergedPageIds }
-        : undefined;
-}
-
-function mergeIdentifierItems(
-    base: string[],
-    human: string[],
-    generated: string[],
-): string[] | undefined {
-    const entries = (values: string[]) =>
-        values.map((inventoryId) => ({ inventoryId }));
-    return mergeBriefEntries(
-        entries(base),
-        entries(human),
-        entries(generated),
-    )?.map((entry) => entry.inventoryId);
+    return { ...generated, taxonomy: human.taxonomy, note: human.note };
 }
 
 function mergeTimelineDetails(
@@ -289,19 +278,19 @@ function mergeBriefFields<T extends object>(
     return result;
 }
 
-function mergeBriefEntries<T extends { inventoryId: string }>(
+function mergeBriefEntries<T extends { id: string }>(
     base: T[],
     human: T[],
     generated: T[],
 ): T[] | undefined {
     const result: T[] = [];
     const ids = new Set(
-        [...generated, ...human, ...base].map((entry) => entry.inventoryId),
+        [...generated, ...human, ...base].map((entry) => entry.id),
     );
     for (const id of ids) {
-        const old = base.find((entry) => entry.inventoryId === id);
-        const edited = human.find((entry) => entry.inventoryId === id);
-        const proposed = generated.find((entry) => entry.inventoryId === id);
+        const old = base.find((entry) => entry.id === id);
+        const edited = human.find((entry) => entry.id === id);
+        const proposed = generated.find((entry) => entry.id === id);
         if (!edited && (!proposed || viewHash(old) === viewHash(proposed)))
             continue;
         if (!proposed && viewHash(old) === viewHash(edited)) continue;
@@ -356,9 +345,11 @@ function mergeProjectDetails(
     }
 }
 
-function mergeBriefItemDetails<
-    D extends { items: Array<{ inventoryId: string }> },
->(base: D, human: D, generated: D): D | undefined {
+function mergeBriefItemDetails<D extends { items: Array<{ id: string }> }>(
+    base: D,
+    human: D,
+    generated: D,
+): D | undefined {
     const fields = mergeBriefFields(base, human, generated, ["items"]);
     const items = mergeBriefEntries(base.items, human.items, generated.items);
     if (!fields || !items) return undefined;
@@ -401,6 +392,13 @@ export function mergeView(
     const edits =
         current.edits?.filter((edit) => edit.status !== "cleared") ?? [];
     const output = structuredClone(candidate);
+    if (
+        current.content.kind === "wiki" &&
+        candidate.content.kind === "wiki" &&
+        current.content.construction === "informational-wiki-v1"
+    ) {
+        output.content.title = current.content.title;
+    }
     const conflicts: string[] = [];
     const base = values(
         current.generation.content as DerivedViewContent,
@@ -548,6 +546,14 @@ function mergeContent(
     const old = base.get(target);
     const edited = human.get(target);
     const proposed = next.get(target);
+    if (
+        target === "title" &&
+        informationalView(output.content) &&
+        typeof edited === "string"
+    ) {
+        output.content.title = edited;
+        return;
+    }
     let merged = mergeValue(old, edited, proposed);
     if (target.startsWith("section:") && old && edited && proposed)
         merged = mergeSection(

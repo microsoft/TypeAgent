@@ -153,6 +153,9 @@ export function azureApiSettingsFromConfig(
     }
 
     const auth = authToken(endpoint.auth);
+    const requestConstraints = config.modelRequestConstraints?.get(
+        `azure:${modelType}:${deploymentName !== undefined && ao.deployments.has(deploymentName) ? deploymentName : ""}`,
+    );
     const settings: AzureApiSettings = {
         provider: "azure",
         modelType,
@@ -162,6 +165,7 @@ export function azureApiSettingsFromConfig(
         maxConcurrency: ao.maxConcurrency,
         timeout: ao.maxTimeoutMs,
         maxRetryAttempts: ao.maxRetryAttempts,
+        ...(requestConstraints ? { requestConstraints } : {}),
         ...(ao.maxPromptChars !== undefined
             ? { maxPromptChars: ao.maxPromptChars }
             : {}),
@@ -193,6 +197,9 @@ export function openAIApiSettingsFromConfig(
     }
     const endpoint =
         modelType === ModelType.Chat ? oai.endpoint : oai.endpointEmbedding;
+    const requestConstraints = config.modelRequestConstraints?.get(
+        `openai:${modelType}:`,
+    );
     if (!endpoint) {
         throw new Error(
             `No OpenAI endpoint configured for ${modelType === ModelType.Chat ? "chat" : "embedding"}`,
@@ -217,6 +224,7 @@ export function openAIApiSettingsFromConfig(
         maxConcurrency: oai.maxConcurrency,
         timeout: oai.maxTimeoutMs,
         maxRetryAttempts: oai.maxRetryAttempts,
+        ...(requestConstraints ? { requestConstraints } : {}),
     };
     return settings;
 }

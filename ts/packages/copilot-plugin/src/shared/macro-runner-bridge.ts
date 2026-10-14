@@ -3,6 +3,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { createConnection, createServer, type Socket } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { getConfigDir } from "./plugin-config.js";
@@ -127,7 +128,15 @@ function endpoint(sessionId: string): string {
     const key = createHash("sha256").update(sessionId).digest("hex");
     return process.platform === "win32"
         ? `\\\\.\\pipe\\typeagent-macro-${key}`
-        : join(hostDirectory(), `${key.slice(0, 32)}.sock`);
+        : join(
+              tmpdir(),
+              `ta-${createHash("sha256")
+                  .update(getConfigDir())
+                  .update("\0")
+                  .update(sessionId)
+                  .digest("hex")
+                  .slice(0, 32)}.sock`,
+          );
 }
 
 function readMessage(socket: Socket): Promise<unknown> {
