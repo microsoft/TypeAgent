@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { replaceFirstLineBreak } from "./line-break-fixture.mjs";
 import {
     gradeDocumentTrial,
     nativeSelectedSourceContract,
@@ -177,7 +178,7 @@ test("future rendering-v2 fails losses, substitutions, reordered or extra intern
         document.content.replace("\nOwner:", " \n\nOwner:"),
         document.content.replace("\nOwner:", "\n \nOwner:"),
         document.content.replace("\nOwner:", "\n\t\nOwner:"),
-        document.content.replace("\n", "\r\n"),
+        replaceFirstLineBreak(document.content, "\r\n"),
         document.content.replace(
             "Owner: Test Team Vega",
             "**Owner: Test Team Vega**",
@@ -198,8 +199,8 @@ test("future rendering-v2 fails losses, substitutions, reordered or extra intern
         "####### " + document.content,
         "##  " + document.content,
         "##\t" + document.content,
-        "# " + document.content.replace("\n", " #\n"),
-        document.content.replace("\n", "\n---\n"),
+        "# " + replaceFirstLineBreak(document.content, " #\n"),
+        replaceFirstLineBreak(document.content, "\n---\n"),
         lines.map((line) => "> " + line).join("\n"),
         lines.map((line) => "- " + line).join("\n"),
         lines.map((line) => "    " + line).join("\n"),
@@ -289,8 +290,8 @@ test("rendering-v2 explicitly blocks raw whitespace, code/table/Markdown and non
         { content: document.content.replace("Owner:", "| Owner: |") },
         { content: "# " + document.content },
         { content: document.content.replace("Owner:", "**Owner:**") },
-        { content: document.content.replace("\n", "\n```text\n") },
-        { content: document.content.replace("\n", "\r\n") },
+        { content: replaceFirstLineBreak(document.content, "\n```text\n") },
+        { content: replaceFirstLineBreak(document.content, "\r\n") },
         { expectedId: "original-file-doc-vega" },
         { expectedId: "workiq-document-vega" },
         { title: "Different title" },
@@ -1167,13 +1168,13 @@ test("future v3 does not normalize even allowed prose formatting inside a fence 
         document.content.replace("Vega", "vega"),
         document.content.replace("VEGA-CHECK-58", "VEGA-CHECK-59"),
         document.content.replace("Test Team", "Test  Team"),
-        document.content.replace("\n", "\n\n"),
-        document.content.replace("\n", "  \n"),
+        replaceFirstLineBreak(document.content, "\n\n"),
+        replaceFirstLineBreak(document.content, "  \n"),
         "# " + document.content,
         "\n" + document.content,
         document.content + "\n",
         document.content + "  ",
-        document.content.replace("\n", "\r\n"),
+        replaceFirstLineBreak(document.content, "\r\n"),
         lines.map((line) => "    " + line).join("\n"),
         lines.map((line) => "| " + line + " |").join("\n"),
     ];
@@ -1204,7 +1205,7 @@ test("future v3 keeps exact contract validation and unsupported synthetic/raw fi
         { expectedId: "workiq-doc-vega" },
         { content: document.content.replace("\nOwner:", "\n    Owner:") },
         { content: document.content.replace("Owner:", "| Owner: |") },
-        { content: document.content.replace("\n", "\n```text\n") },
+        { content: replaceFirstLineBreak(document.content, "\n```text\n") },
         { content: document.content + " " },
     ]) {
         const changed = { ...document, ...fields };
@@ -1218,7 +1219,8 @@ test("future v3 keeps exact contract validation and unsupported synthetic/raw fi
 test("future v3 fence output never weakens source originals, permission, audit, lease, root or callback identity", () => {
     withFinalizedSource(
         (value, source, write) => {
-            assert.equal(gradeDocumentTrial(value).status, "passed");
+            const grade = gradeDocumentTrial(value);
+            assert.equal(grade.status, "passed", JSON.stringify(grade));
             assert.equal(gradeDocumentTrial(value).grammarHit, false);
             const original = structuredClone(source);
             for (const mutate of [
@@ -1383,8 +1385,8 @@ test("future v4 exact quote rejects mixed/nested/indented wrappers, missing titl
         lines
             .map((line, index) => (index === 2 ? " > " : "> ") + line)
             .join("\n"),
-        quote(lines).replace("\n", "\n\n"),
-        quote(lines).replace("\n", "\r\n"),
+        replaceFirstLineBreak(quote(lines), "\n\n"),
+        replaceFirstLineBreak(quote(lines), "\r\n"),
         "Prefix on same line " + quote(lines),
         quote(lines) + " changed suffix",
         "```text\n" + quote(lines) + "\n```",
@@ -1425,7 +1427,7 @@ test("future v4 explicit contract rejects unknown/loose values and cannot admit 
         { content: document.content.replace("\nOwner", "\n    Owner") },
         { content: document.content.replace("Owner:", "| Owner: |") },
         { content: "> " + document.content },
-        { content: document.content.replace("\n", "\n```text\n") },
+        { content: replaceFirstLineBreak(document.content, "\n```text\n") },
         { content: document.content + " " },
     ]) {
         const changed = { ...document, ...fields };

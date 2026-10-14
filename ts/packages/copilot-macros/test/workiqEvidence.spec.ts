@@ -506,6 +506,51 @@ describe("private lossless result evidence", () => {
             store.verify(ref, "trace", "trace-1", "call", "result"),
         ).rejects.toThrow("Unsafe");
     });
+
+    it("accepts trusted parent aliases while verifying sidecars and learning traces", async () => {
+        const parent = path.join(root, "physical-parent");
+        const alias = path.join(root, "parent-alias");
+        await mkdir(parent);
+        await symlink(parent, alias, "junction");
+        const store = new PrivateResultStore(path.join(alias, "store"));
+        const result = blob().result;
+        const ref = (await store.retain(
+            "trace",
+            "trace-alias",
+            "call",
+            "result",
+            result,
+        ))!;
+        await expect(
+            store.verify(ref, "trace", "trace-alias", "call", "result"),
+        ).resolves.toEqual(result);
+
+        const traces = path.join(parent, "store", "traces");
+        await mkdir(traces);
+        const trace = sourceTrace({ content: "small inline result" });
+        await writeFile(
+            path.join(traces, "trace-alias.json"),
+            JSON.stringify(trace),
+        );
+        await expect(
+            store.verifyLearningTrace("trace-alias", trace),
+        ).resolves.toBe(trace);
+    });
+
+    it("rejects an aliased storage root even when its parent is trusted", async () => {
+        const target = path.join(root, "physical-store");
+        const alias = path.join(root, "store-alias");
+        await mkdir(target);
+        await mkdir(path.join(target, "traces"));
+        await symlink(target, alias, "junction");
+        const store = new PrivateResultStore(alias);
+        await expect(
+            store.retain("trace", "trace-1", "call", "result", blob().result),
+        ).rejects.toThrow("Unsafe private evidence directory");
+        await expect(
+            store.verifyLearningTrace("trace-1", sourceTrace({})),
+        ).rejects.toThrow("Unsafe private evidence ancestor");
+    });
 });
 
 describe("bounded result-derived WorkIQ paths", () => {

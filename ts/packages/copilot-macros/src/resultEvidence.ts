@@ -280,9 +280,18 @@ export function omittedResultPath(
 export class PrivateResultStore {
     constructor(private readonly root: string) {}
 
+    private async storageRoot(): Promise<string> {
+        const root = path.resolve(this.root);
+        return path.join(
+            await realpath(path.dirname(root)),
+            path.basename(root),
+        );
+    }
+
     private async learningTraceBytes(traceId: string): Promise<Buffer> {
-        const filename = path.join(this.root, "traces", `${traceId}.json`);
-        await this.checkAncestors(path.dirname(filename));
+        const root = await this.storageRoot();
+        const filename = path.join(root, "traces", `${traceId}.json`);
+        await this.checkAncestors(path.dirname(filename), root);
         const info = await lstat(filename);
         if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1)
             throw new ResultEvidenceError(
@@ -295,7 +304,7 @@ export class PrivateResultStore {
                 "Recorded learning trace exceeds its storage bound.",
             );
         const bytes = await readStableEvidenceFile(filename, info, info.size);
-        await this.checkAncestors(path.dirname(filename));
+        await this.checkAncestors(path.dirname(filename), root);
         const after = await lstat(filename);
         if (
             after.isSymbolicLink() ||
@@ -385,14 +394,16 @@ export class PrivateResultStore {
         ownerId: string,
         create: boolean,
     ): Promise<string> {
+        const root = await this.storageRoot();
         const directories = [
-            this.root,
-            path.join(this.root, "evidence"),
-            path.join(this.root, "evidence", owner),
-            path.join(this.root, "evidence", owner, ownerId),
+            root,
+            path.join(root, "evidence"),
+            path.join(root, "evidence", owner),
+            path.join(root, "evidence", owner, ownerId),
         ];
         for (const directory of directories) {
-            await this.checkAncestors(path.dirname(directory));
+            if (directory !== root)
+                await this.checkAncestors(path.dirname(directory), root);
             if (create) {
                 try {
                     await mkdir(directory, { mode: 0o700 });
@@ -405,8 +416,7 @@ export class PrivateResultStore {
             if (
                 !info.isDirectory() ||
                 info.isSymbolicLink() ||
-                path.resolve(await realpath(directory)).toLowerCase() !==
-                    path.resolve(directory).toLowerCase()
+                path.relative(await realpath(directory), directory) !== ""
             )
                 throw new ResultEvidenceError(
                     "unsafeEvidencePath",
@@ -416,7 +426,10 @@ export class PrivateResultStore {
         return directories.at(-1)!;
     }
 
-    private async checkAncestors(directory: string): Promise<void> {
+    private async checkAncestors(
+        directory: string,
+        root: string,
+    ): Promise<void> {
         const info = await lstat(directory);
         if (!info.isDirectory() || info.isSymbolicLink())
             throw new ResultEvidenceError(
@@ -424,7 +437,7 @@ export class PrivateResultStore {
                 "Unsafe private evidence ancestor.",
             );
         const parent = path.dirname(directory);
-        if (parent !== directory) await this.checkAncestors(parent);
+        if (directory !== root) await this.checkAncestors(parent, root);
     }
 
     async retain(
@@ -507,8 +520,7 @@ export class PrivateResultStore {
                 !info.isFile() ||
                 info.isSymbolicLink() ||
                 info.nlink !== 1 ||
-                path.resolve(await realpath(filename)).toLowerCase() !==
-                    path.resolve(filename).toLowerCase()
+                path.relative(await realpath(filename), filename) !== ""
             )
                 throw new ResultEvidenceError(
                     "unsafeEvidencePath",

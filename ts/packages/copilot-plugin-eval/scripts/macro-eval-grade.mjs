@@ -1106,17 +1106,19 @@ function gradeCompletion(events, answer, routeEvidence, check) {
     check("no-session-error", !hasExecutionError(events));
 }
 
+function nativePaths(value) {
+    return /^[a-z]:[\\/]|^\\\\/iu.test(value) ? path.win32 : path.posix;
+}
+
 function insideOwnedRoot(root, value) {
-    if (
-        !path.win32.isAbsolute(root ?? "") ||
-        !path.win32.isAbsolute(value ?? "")
-    )
+    const paths = nativePaths(root);
+    if (!paths.isAbsolute(root ?? "") || !paths.isAbsolute(value ?? ""))
         return false;
-    const relative = path.win32.relative(root, value);
+    const relative = paths.relative(root, value);
     return (
         relative !== ".." &&
-        !relative.startsWith("..\\") &&
-        !path.win32.isAbsolute(relative)
+        !relative.startsWith(`..${paths.sep}`) &&
+        !paths.isAbsolute(relative)
     );
 }
 
@@ -1311,7 +1313,7 @@ function ordinaryControlSourceValid(source) {
         Number.isInteger(source.parentPid) &&
         source.parentPid > 0 &&
         isText(source.executable) &&
-        path.win32.isAbsolute(source.executable) &&
+        nativePaths(source.executable).isAbsolute(source.executable) &&
         ["TYPEAGENT_PLUGIN_DATA", "CLAUDE_PLUGIN_DATA", "default"].includes(
             source.config,
         ) &&
@@ -1334,7 +1336,11 @@ function ordinaryCurrentControlMatches(control, expected) {
         source?.expectedMode === expected.effectiveMode &&
         source?.expectedConfigPath === expected.configPath &&
         source?.readableOwnedConfig === true &&
-        source?.cwd === path.win32.join(expected.ownedRoot, "plugin") &&
+        source?.cwd ===
+            nativePaths(expected.ownedRoot).join(
+                expected.ownedRoot,
+                "plugin",
+            ) &&
         source?.routing === expected.routing
     );
 }
@@ -1475,17 +1481,18 @@ function ordinaryCallbackHooksUnique(callback, expected, events) {
 
 function ordinaryCallbackOwnedPaths(callback, expected) {
     if (!isText(expected.ownedRoot)) return false;
+    const paths = nativePaths(expected.ownedRoot);
     const { staged, trustedReceipt, reader } = callback;
     return (
         callback.owner === expected.owner &&
         staged.wrapper.file ===
-            path.win32.join(
+            paths.join(
                 expected.ownedRoot,
                 "plugin",
                 "macro-eval-native-hook.mjs",
             ) &&
         staged.router.file ===
-            path.win32.join(
+            paths.join(
                 expected.ownedRoot,
                 "plugin",
                 "dist",
@@ -1493,11 +1500,9 @@ function ordinaryCallbackOwnedPaths(callback, expected) {
                 "hook-router.js",
             ) &&
         ordinaryCallbackPolicyMatches(staged.policy, expected.ownedRoot) &&
-        path.win32.dirname(trustedReceipt.file) ===
-            path.win32.join(expected.ownedRoot, "normal-hook") &&
-        /^receipt-\d{4}\.json$/u.test(
-            path.win32.basename(trustedReceipt.file),
-        ) &&
+        paths.dirname(trustedReceipt.file) ===
+            paths.join(expected.ownedRoot, "normal-hook") &&
+        /^receipt-\d{4}\.json$/u.test(paths.basename(trustedReceipt.file)) &&
         [
             staged.wrapper.sha256,
             staged.router.sha256,
@@ -1514,7 +1519,11 @@ function ordinaryCallbackPolicyMatches(policy, root) {
     return (
         policy === null ||
         (policy.file ===
-            path.win32.join(root, "plugin", "native-normal-hook-config.json") &&
+            nativePaths(root).join(
+                root,
+                "plugin",
+                "native-normal-hook-config.json",
+            ) &&
             isDigest(policy.sha256))
     );
 }
@@ -1670,7 +1679,8 @@ function selectedTraceShape(trace) {
 }
 
 function selectedStoreBinding(source, expected) {
-    const root = path.win32.join(
+    const paths = nativePaths(expected.dataRoot);
+    const root = paths.join(
         expected.dataRoot,
         "profiles",
         `macro-eval-${expected.owner.slice(0, 8)}`,
@@ -1679,11 +1689,7 @@ function selectedStoreBinding(source, expected) {
     return (
         source.storeRoot === root &&
         source.file.path ===
-            path.win32.join(
-                root,
-                "traces",
-                `${source.state.trace.traceId}.json`,
-            ) &&
+            paths.join(root, "traces", `${source.state.trace.traceId}.json`) &&
         insideOwnedRoot(expected.ownedRoot, root)
     );
 }
@@ -1696,7 +1702,7 @@ function selectedPhysicalPath(file, ownedRoot) {
             fs.realpathSync(current) !== current
         )
             throw new Error("Selected trace path is linked or relocated");
-        const parent = path.win32.dirname(current);
+        const parent = nativePaths(ownedRoot).dirname(current);
         if (parent === current)
             throw new Error("Selected trace path escaped its owned root");
         current = parent;

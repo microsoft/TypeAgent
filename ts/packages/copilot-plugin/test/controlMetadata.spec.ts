@@ -11,6 +11,7 @@ import {
     unwatchFile,
 } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import {
     publishControlMetadata,
     readControlledMode,
@@ -435,18 +436,19 @@ describe("owned control metadata", () => {
             join(root, "plugin-data", "config.json"),
             JSON.stringify({ mode: "mcp", mcpRouting: "mixed" }),
         );
-        await new Promise((resolve) => setTimeout(resolve, 450));
-        const receipt = JSON.parse(
-            readFileSync(
-                join(
-                    root,
-                    "data",
-                    "native-control",
-                    `mcp-agent-${process.pid}.json`,
-                ),
-                "utf8",
-            ),
+        const receiptFile = join(
+            root,
+            "data",
+            "native-control",
+            `mcp-agent-${process.pid}.json`,
         );
+        const readReceipt = () => JSON.parse(readFileSync(receiptFile, "utf8"));
+        const deadline = Date.now() + 5000;
+        let receipt = readReceipt();
+        while (receipt.effectiveMode !== "mcp" && Date.now() < deadline) {
+            await delay(20);
+            receipt = readReceipt();
+        }
         expect(receipt.effectiveMode).toBe("mcp");
         expect(receipt.source.routing).toBe("mixed");
         expect(receipt.source.request).toBeNull();

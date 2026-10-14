@@ -36,6 +36,9 @@ Local WorkIQ diagnostics and private evidence belong in the ignored
 package-local `.native-*` run directories. Keep reusable harness scripts and
 self-contained regression tests in source control; tests must not depend on
 private session files or artifacts from a previous live run.
+Offline grading accepts host-native physical fixture paths as well as Windows
+path identities. Live native evaluation remains Windows-only; Unix test runs
+use a private executable fixture and do not launch the authenticated Copilot CLI.
 
 ## Native macro evaluation - gated controller and offline tooling
 

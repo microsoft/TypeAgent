@@ -549,58 +549,61 @@ test("next consent read is exact scoped data, not a permission grant", async (t)
         arguments: workiqReadArguments(f.admission, "A", 1, f.results[0]),
     });
 
-    test("larger real backend catalog exposes only the three frozen read tools", async (t) => {
-        const f = await fixture(t);
-        const connect = f.options.connect;
-        const excluded = [
-            "ask",
-            "list_agents",
-            "delete_entity",
-            "do_action",
-            "create_entity",
-            "get_schema",
-            "search_paths",
-            "call_function",
-            "update_entity",
-        ];
-        const adapter = createWorkiqAgencyAdapter({
-            ...f.options,
-            connect: async (...args) => {
-                const client = await connect(...args);
-                return {
-                    ...client,
-                    listTools: async () => {
-                        const result = await client.listTools();
-                        return {
-                            tools: [
-                                ...result.tools,
-                                ...excluded.map((name) => ({
-                                    name,
-                                    inputSchema: { type: "object" },
-                                })),
-                            ],
-                        };
-                    },
-                };
-            },
-        });
-        const exposed = await adapter.start();
-        assert.deepEqual(exposed.map((tool) => tool.name).sort(), [
-            "fetch",
-            "fetch_blob",
-            "retrieve",
-        ]);
-        const facts = adapter.catalogObservation();
-        assert.equal(facts.toolCount, 12);
-        assert.deepEqual(facts.excludedNames, excluded);
-        assert.match(facts.sha256, /^[a-f0-9]{64}$/u);
-        await assert.rejects(
-            adapter.call("update_entity", {}),
-            (error) => error.code === "unexpectedWorkiqOperation",
-        );
-        assert.equal(f.stats.calls.length, 0);
-        assert.equal(f.stats.authorized.length, 0);
-    });
+    await t.test(
+        "larger real backend catalog exposes only the three frozen read tools",
+        async (t) => {
+            const f = await fixture(t);
+            const connect = f.options.connect;
+            const excluded = [
+                "ask",
+                "list_agents",
+                "delete_entity",
+                "do_action",
+                "create_entity",
+                "get_schema",
+                "search_paths",
+                "call_function",
+                "update_entity",
+            ];
+            const adapter = createWorkiqAgencyAdapter({
+                ...f.options,
+                connect: async (...args) => {
+                    const client = await connect(...args);
+                    return {
+                        ...client,
+                        listTools: async () => {
+                            const result = await client.listTools();
+                            return {
+                                tools: [
+                                    ...result.tools,
+                                    ...excluded.map((name) => ({
+                                        name,
+                                        inputSchema: { type: "object" },
+                                    })),
+                                ],
+                            };
+                        },
+                    };
+                },
+            });
+            const exposed = await adapter.start();
+            assert.deepEqual(exposed.map((tool) => tool.name).sort(), [
+                "fetch",
+                "fetch_blob",
+                "retrieve",
+            ]);
+            const facts = adapter.catalogObservation();
+            assert.equal(facts.toolCount, 12);
+            assert.deepEqual(facts.excludedNames, excluded);
+            assert.match(facts.sha256, /^[a-f0-9]{64}$/u);
+            await assert.rejects(
+                adapter.call("update_entity", {}),
+                (error) => error.code === "unexpectedWorkiqOperation",
+            );
+            assert.equal(f.stats.calls.length, 0);
+            assert.equal(f.stats.authorized.length, 0);
+        },
+    );
     await f.adapter.close();
     assert.equal(f.adapter.nextRead(), null);
 });

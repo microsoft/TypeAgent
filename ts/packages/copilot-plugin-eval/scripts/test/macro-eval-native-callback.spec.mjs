@@ -463,30 +463,10 @@ test("compiled router requires a unique actual OS child of the pipe-authenticate
     }
 });
 
-test("actual Windows safe pipe handle reports connecting Node PID, not packet identity", async () => {
-    const root = fs.mkdtempSync(path.join(scripts, "test", ".normal-hook-os-"));
-    const pipe = `typeagent-native-${randomUUID()}`;
-    const child = spawn(
-        "powershell.exe",
-        [
-            "-NoProfile",
-            "-File",
-            path.join(scripts, "macro-eval-native-pipe.ps1"),
-            "-Directory",
-            root,
-            "-PipeName",
-            pipe,
-            "-DeadlineMs",
-            String(Date.now() + 30000),
-        ],
-        { stdio: ["ignore", "pipe", "pipe"] },
-    );
-    let stderr = "";
-    child.stderr.on("data", (value) => {
-        stderr += value;
-    });
-
-    test("actual staged wrapper holds real compiled-router OS child until stdin association", async () => {
+test(
+    "actual staged wrapper holds real compiled-router OS child until stdin association",
+    { skip: process.platform !== "win32" },
+    async () => {
         const root = fs.mkdtempSync(
             path.join(scripts, "test", ".normal-hook-wrapper-"),
         );
@@ -562,6 +542,7 @@ test("actual Windows safe pipe handle reports connecting Node PID, not packet id
         server.stderr.on("data", (value) => {
             stderr += value;
         });
+
         let wrapper;
         try {
             const until = Date.now() + 15000;
@@ -671,58 +652,88 @@ test("actual Windows safe pipe handle reports connecting Node PID, not packet id
                     );
             fs.rmSync(root, { recursive: true, force: true });
         }
-    });
-    try {
-        const until = Date.now() + 15000;
-        while (
-            !fs.existsSync(path.join(root, "ready.json")) &&
-            Date.now() < until &&
-            child.exitCode === null
-        )
-            await delay(50);
-        assert.ok(fs.existsSync(path.join(root, "ready.json")), stderr);
-        await new Promise((resolve, reject) => {
-            const client = net.createConnection(`\\\\.\\pipe\\${pipe}`);
-            client.on("error", reject);
-            client.on("connect", () =>
-                client.write(
-                    JSON.stringify({
-                        protocol: "native-hook-stdin-v1",
-                        stdin: "synthetic",
-                        pid: 999999,
-                    }) + "\n",
-                ),
-            );
-            client.on("data", (reply) => {
-                assert.equal(reply.toString(), "associated\n");
-                client.end();
-                resolve();
-            });
+    },
+);
+
+test(
+    "actual Windows safe pipe handle reports connecting Node PID, not packet identity",
+    { skip: process.platform !== "win32" },
+    async () => {
+        const root = fs.mkdtempSync(
+            path.join(scripts, "test", ".normal-hook-os-"),
+        );
+        const pipe = `typeagent-native-${randomUUID()}`;
+        const child = spawn(
+            "powershell.exe",
+            [
+                "-NoProfile",
+                "-File",
+                path.join(scripts, "macro-eval-native-pipe.ps1"),
+                "-Directory",
+                root,
+                "-PipeName",
+                pipe,
+                "-DeadlineMs",
+                String(Date.now() + 30000),
+            ],
+            { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        let stderr = "";
+        child.stderr.on("data", (value) => {
+            stderr += value;
         });
-        const receipt = JSON.parse(
-            fs
-                .readFileSync(path.join(root, "receipt-0000.json"), "utf8")
-                .replace(/^\uFEFF/u, ""),
-        );
-        assert.equal(receipt.peer.ProcessId, process.pid);
-        assert.equal(receipt.peerAfter.ProcessId, process.pid);
-        assert.equal(receipt.packet.pid, 999999);
-        assert.equal(receipt.serverPid, child.pid);
-        assert.equal(
-            receipt.osApi,
-            "GetNamedPipeClientProcessId/SafePipeHandle",
-        );
-    } finally {
-        if (child.exitCode === null)
-            execFileSync(
-                "powershell.exe",
-                [
-                    "-NoProfile",
-                    "-Command",
-                    `Stop-Process -Id ${child.pid} -Force`,
-                ],
-                { stdio: "ignore" },
+        try {
+            const until = Date.now() + 15000;
+            while (
+                !fs.existsSync(path.join(root, "ready.json")) &&
+                Date.now() < until &&
+                child.exitCode === null
+            )
+                await delay(50);
+            assert.ok(fs.existsSync(path.join(root, "ready.json")), stderr);
+            await new Promise((resolve, reject) => {
+                const client = net.createConnection(`\\\\.\\pipe\\${pipe}`);
+                client.on("error", reject);
+                client.on("connect", () =>
+                    client.write(
+                        JSON.stringify({
+                            protocol: "native-hook-stdin-v1",
+                            stdin: "synthetic",
+                            pid: 999999,
+                        }) + "\n",
+                    ),
+                );
+                client.on("data", (reply) => {
+                    assert.equal(reply.toString(), "associated\n");
+                    client.end();
+                    resolve();
+                });
+            });
+            const receipt = JSON.parse(
+                fs
+                    .readFileSync(path.join(root, "receipt-0000.json"), "utf8")
+                    .replace(/^\uFEFF/u, ""),
             );
-        fs.rmSync(root, { recursive: true, force: true });
-    }
-});
+            assert.equal(receipt.peer.ProcessId, process.pid);
+            assert.equal(receipt.peerAfter.ProcessId, process.pid);
+            assert.equal(receipt.packet.pid, 999999);
+            assert.equal(receipt.serverPid, child.pid);
+            assert.equal(
+                receipt.osApi,
+                "GetNamedPipeClientProcessId/SafePipeHandle",
+            );
+        } finally {
+            if (child.exitCode === null)
+                execFileSync(
+                    "powershell.exe",
+                    [
+                        "-NoProfile",
+                        "-Command",
+                        `Stop-Process -Id ${child.pid} -Force`,
+                    ],
+                    { stdio: "ignore" },
+                );
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    },
+);

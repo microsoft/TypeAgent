@@ -331,6 +331,9 @@ missing/invalid evidence fail, never truncate or return success-shaped metadata.
 References carry no caller filesystem path or public read capability. Loading
 checks ownership, supported encoding, canonical JSON/base64, declared size,
 digests, projected view/receipts, ancestor containment, symlinks and hard links.
+The configured storage root's parent is canonicalized to support system path
+aliases (including macOS temporary directories and Windows short paths).
+The storage root itself and every descendant must remain unlinked.
 All references are verified again when loading after restart. Callers cannot
 submit artifact references as capture evidence. Replay step/final results use
 the same lossless retention rather than oversized-result previews.

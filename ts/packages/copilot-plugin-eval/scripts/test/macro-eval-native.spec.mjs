@@ -4,11 +4,13 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { createHash } from "node:crypto";
-import { test } from "node:test";
+import { after, test } from "node:test";
+import { replaceFirstLineBreak } from "./line-break-fixture.mjs";
 import {
     classifyNativeScreen,
     createNativeBudget,
@@ -57,6 +59,18 @@ import { gradeDocumentTrial } from "../macro-eval-grade.mjs";
 import { approvedSourceFixture } from "./approved-source-fixture.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
+const cliFixture =
+    process.platform === "win32"
+        ? undefined
+        : fs.mkdtempSync(path.join(tmpdir(), "typeagent-native-cli-"));
+const cliExecutable =
+    cliFixture === undefined
+        ? process.execPath
+        : path.join(cliFixture, "copilot.exe");
+if (cliFixture !== undefined) {
+    fs.copyFileSync(process.execPath, cliExecutable);
+    after(() => fs.rmSync(cliFixture, { recursive: true, force: true }));
+}
 
 function finalizedUnitSource(t) {
     const run = fs.mkdtempSync(path.join(directory, ".native-finalized-unit-"));
@@ -430,7 +444,7 @@ const corpus = {
     contextualConversations: [],
 };
 const config = {
-    cliExecutable: process.execPath,
+    cliExecutable,
     cliVersion: "1.0.89",
     configDirectory: path.resolve(directory, "..", "..", "..", ".."),
     port: 19001,
@@ -445,6 +459,12 @@ const config = {
     reviewSyntheticDraft: true,
     extensionMode: "load_only",
 };
+
+function assertPlatformAdmission(config, contracts) {
+    const admit = () => assertLiveAdmission(config, undefined, contracts);
+    if (process.platform === "win32") assert.doesNotThrow(admit);
+    else assert.throws(admit, /Live native controller requires Windows/u);
+}
 
 test("registered learning status disclaimer is not a permission dialog; actual prompts still block", () => {
     const screen =
@@ -501,7 +521,7 @@ test("confirmation words without actionable dialog cues remain informational", (
         "confirming the item version remained unchanged.";
     for (const screen of [
         narration,
-        narration.replace("\n", " "),
+        replaceFirstLineBreak(narration, " "),
         "We are verifying the receipt and\n  confirming the same version.",
         "I’m completing the receipt and\n  confirming the same version.",
         "The metadata confirms the version and full byte count.",
@@ -1682,7 +1702,11 @@ test("radio mode navigation uses only Down then verified Load Only Enter, never 
     const text = [];
     await configureNativeLoadOnly(
         {
-            read: () => frames.shift() ?? ready,
+            read: () => {
+                const frame = frames.shift();
+                assert.ok(frame, "Unexpected extra native radio observation");
+                return frame;
+            },
             submit: (value) => text.push(value),
             pressKey: (value) => keys.push(value),
         },
@@ -2534,7 +2558,7 @@ test("does not confuse causal parentId, child answers, pending tools or wrong tu
     assert.equal(extractNativeEvidence(events, []).answer, "");
 });
 
-test("execution evidence includes unexpected native tools, inspections and backend effects", () => {
+test("execution evidence includes unexpected native tools, inspections and backend effects", async (t) => {
     const events = modelAnswer();
     events.push({
         id: "extra",
@@ -2542,31 +2566,35 @@ test("execution evidence includes unexpected native tools, inspections and backe
         data: { toolName: "typeagent-macros-inspect_macro" },
     });
 
-    test("host evidence rejects model drift and procedure execution outside the owned child", () => {
-        const events = hostAnswer();
-        events[0].data.model = "other";
-        events.find((entry) => entry.type === "tool.execution_start").agentId =
-            "root-other";
-        const evidence = extractNativeEvidence(events, audit(), [route]);
-        assert.ok(
-            evidence.executionEvidence.effects.includes(
-                "unexpected-host-runner-model",
-            ),
-        );
-        assert.ok(
-            evidence.executionEvidence.effects.includes(
-                "procedure-outside-host-child",
-            ),
-        );
-        assert.equal(
-            gradeDocumentTrial({
-                ...evidence,
-                scenario,
-                documents: corpus.documents,
-            }).status,
-            "failed",
-        );
-    });
+    await t.test(
+        "host evidence rejects model drift and procedure execution outside the owned child",
+        () => {
+            const events = hostAnswer();
+            events[0].data.model = "other";
+            events.find(
+                (entry) => entry.type === "tool.execution_start",
+            ).agentId = "root-other";
+            const evidence = extractNativeEvidence(events, audit(), [route]);
+            assert.ok(
+                evidence.executionEvidence.effects.includes(
+                    "unexpected-host-runner-model",
+                ),
+            );
+            assert.ok(
+                evidence.executionEvidence.effects.includes(
+                    "procedure-outside-host-child",
+                ),
+            );
+            assert.equal(
+                gradeDocumentTrial({
+                    ...evidence,
+                    scenario,
+                    documents: corpus.documents,
+                }).status,
+                "failed",
+            );
+        },
+    );
     const evidence = extractNativeEvidence(events, [
         { operation: "rejected_tool_call" },
     ]);
@@ -2841,8 +2869,8 @@ function fakeAdapter(behavior = {}) {
                                     : behavior.fencedAnswer
                                       ? `# ${event.data.content.split("\n")[0]}\n\n\`\`\`text\n${event.data.content}\n\`\`\``
                                       : "# " +
-                                        event.data.content.replace(
-                                            "\n",
+                                        replaceFirstLineBreak(
+                                            event.data.content,
                                             "\n\n",
                                         ) +
                                         "  ",
@@ -3059,7 +3087,7 @@ async function fakeRun(root, adapter, override = {}, fixtureCorpus = corpus) {
     });
 }
 
-test("diagnostic startup never submits a task/command, learns or publishes and remains blocked on native negative permission proof", async () => {
+test("diagnostic startup never submits a task/command, learns or publishes and remains blocked on native negative permission proof", async (t) => {
     const root = workspace();
     try {
         const adapter = fakeAdapter();
@@ -3079,46 +3107,54 @@ test("diagnostic startup never submits a task/command, learns or publishes and r
             adapter.read().sessionId,
         );
 
-        test("late auxiliary model telemetry invalidates metadata-only startup despite zero target turns", async () => {
-            const root = workspace();
-            try {
-                const adapter = fakeAdapter();
-                adapter.finalEvents = () => [
-                    {
-                        type: "model.turn_started",
-                        data: { model: "gpt-4o-mini" },
-                    },
-                ];
-                const result = await fakeRun(root, adapter, {
-                    diagnosticOnly: true,
-                    maxTargetModelTurns: 0,
-                    restart: false,
-                });
-                assert.equal(result.status, "harness-invalid");
-                assert.equal(result.targetModelTurns, 0);
-                assert.equal(
-                    result.nativeModelTelemetry.counts["model.turn_started"],
-                    1,
-                );
-                assert.match(
-                    result.nativeModelTelemetry.serviceModelUsage,
-                    /unknown/u,
-                );
-            } finally {
-                fs.rmSync(root, { recursive: true, force: true });
-            }
-        });
+        await t.test(
+            "late auxiliary model telemetry invalidates metadata-only startup despite zero target turns",
+            async () => {
+                const root = workspace();
+                try {
+                    const adapter = fakeAdapter();
+                    adapter.finalEvents = () => [
+                        {
+                            type: "model.turn_started",
+                            data: { model: "gpt-4o-mini" },
+                        },
+                    ];
+                    const result = await fakeRun(root, adapter, {
+                        diagnosticOnly: true,
+                        maxTargetModelTurns: 0,
+                        restart: false,
+                    });
+                    assert.equal(result.status, "harness-invalid");
+                    assert.equal(result.targetModelTurns, 0);
+                    assert.equal(
+                        result.nativeModelTelemetry.counts[
+                            "model.turn_started"
+                        ],
+                        1,
+                    );
+                    assert.match(
+                        result.nativeModelTelemetry.serviceModelUsage,
+                        /unknown/u,
+                    );
+                } finally {
+                    fs.rmSync(root, { recursive: true, force: true });
+                }
+            },
+        );
 
-        test("real task entrypoint blocks unavailable finalized-source capability before any service or model launch", async () => {
-            assert.throws(
-                () =>
-                    assertLiveAdmission(config, undefined, {
-                        nativeOrdinaryCallbackContract:
-                            "native-normal-hook-callback-v1",
-                    }),
-                /blocked before models.*finalized selected-source grader capability/u,
-            );
-        });
+        await t.test(
+            "real task entrypoint blocks unavailable finalized-source capability before any service or model launch",
+            async () => {
+                assert.throws(
+                    () =>
+                        assertLiveAdmission(config, undefined, {
+                            nativeOrdinaryCallbackContract:
+                                "native-normal-hook-callback-v1",
+                        }),
+                    /blocked before models.*finalized selected-source grader capability/u,
+                );
+            },
+        );
         assert.equal(result.status, "blocked", JSON.stringify(result));
         assert.equal(result.targetModelTurns, 0);
         assert.deepEqual(result.trials, []);
@@ -3552,13 +3588,11 @@ test("future similarity pre-model admission requires only its own tested capabil
             () => assertLiveAdmission(future, undefined, unsupported),
             /Rendered-content scoring blocked before models/u,
         );
-    assert.doesNotThrow(() =>
-        assertLiveAdmission(future, undefined, {
-            ...contracts,
-            syntheticDocumentSimilarityContract:
-                similarityRenderingContract.protocolVersion,
-        }),
-    );
+    assertPlatformAdmission(future, {
+        ...contracts,
+        syntheticDocumentSimilarityContract:
+            similarityRenderingContract.protocolVersion,
+    });
 });
 
 test("future similarity rejects stale fixture IDs/hashes/markers before native trial submission", async () => {
@@ -3738,12 +3772,13 @@ test("future rendering scoring blocks before models when tested grader version i
             ),
         /Rendered-content scoring blocked before models/u,
     );
-    assert.doesNotThrow(() =>
-        assertLiveAdmission({ ...config, renderingContract }, undefined, {
+    assertPlatformAdmission(
+        { ...config, renderingContract },
+        {
             ...oldContracts,
             syntheticDocumentRenderingContract:
                 renderingContract.protocolVersion,
-        }),
+        },
     );
 });
 
@@ -3769,13 +3804,11 @@ test("future exact-fence scoring requires its own tested pre-model capability", 
             }),
         /Rendered-content scoring blocked before models/u,
     );
-    assert.doesNotThrow(() =>
-        assertLiveAdmission(future, undefined, {
-            ...contracts,
-            syntheticDocumentFenceRenderingContract:
-                fenceRenderingContract.protocolVersion,
-        }),
-    );
+    assertPlatformAdmission(future, {
+        ...contracts,
+        syntheticDocumentFenceRenderingContract:
+            fenceRenderingContract.protocolVersion,
+    });
 });
 
 test("future exact-blockquote scoring requires its own tested pre-model capability", () => {
@@ -3806,13 +3839,11 @@ test("future exact-blockquote scoring requires its own tested pre-model capabili
             () => assertLiveAdmission(future, undefined, unsupported),
             /Rendered-content scoring blocked before models/u,
         );
-    assert.doesNotThrow(() =>
-        assertLiveAdmission(future, undefined, {
-            ...contracts,
-            syntheticDocumentBlockquoteRenderingContract:
-                blockquoteRenderingContract.protocolVersion,
-        }),
-    );
+    assertPlatformAdmission(future, {
+        ...contracts,
+        syntheticDocumentBlockquoteRenderingContract:
+            blockquoteRenderingContract.protocolVersion,
+    });
 });
 
 for (const [name, contract, protocol, taskCorrect] of [
