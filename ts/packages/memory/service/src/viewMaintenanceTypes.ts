@@ -71,9 +71,14 @@ export interface WikiFamilyMaintenanceRequest {
     family: "wiki" | "projects";
     operation: "update" | "rebuild" | "pause" | "resume";
 }
+export interface TopicFamilyMaintenanceRequest
+    extends Omit<WikiFamilyMaintenanceRequest, "family"> {
+    family: "topics";
+}
 export type ViewMaintenanceRequest =
     | ExplicitViewMaintenanceRequest
-    | WikiFamilyMaintenanceRequest;
+    | WikiFamilyMaintenanceRequest
+    | TopicFamilyMaintenanceRequest;
 
 export interface ViewMaintenanceResult {
     receiptId: string;

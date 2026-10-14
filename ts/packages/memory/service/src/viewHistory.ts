@@ -98,10 +98,7 @@ export class ViewHistory<T> {
         oid?: string,
         bypassGate = false,
     ): Promise<HistorySnapshot<T>> {
-        if (!bypassGate && (await exists(this.gate)))
-            throw new Error(
-                "View history is quarantined pending privacy purge",
-            );
+        if (!bypassGate) await this.assertReadable();
         const head = oid ?? (await this.head());
         if (!head) {
             return { head: null, state: this.empty() };
@@ -111,10 +108,25 @@ export class ViewHistory<T> {
             oid: head,
             filepath: "state.json",
         });
+        if (!bypassGate) await this.assertReadable();
         return {
             head,
             state: JSON.parse(Buffer.from(blob.blob).toString("utf8")) as T,
         };
+    }
+
+    public async assertReadable(): Promise<void> {
+        if (await exists(this.gate))
+            throw new Error(
+                "View history is quarantined pending privacy purge",
+            );
+    }
+
+    public async assertHead(expected: string | null): Promise<void> {
+        await this.assertReadable();
+        if ((await this.head()) !== expected)
+            throw new Error("View history changed during read operation");
+        await this.assertReadable();
     }
 
     public async commit(

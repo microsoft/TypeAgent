@@ -12,6 +12,8 @@ import {
 } from "@typeagent/conversation-memory";
 import * as kp from "@typeagent/knowpro";
 import { isInitiativeSubject } from "./initiativeDiscovery.js";
+import { indexedTopicOccurrence } from "./topicIncidence.js";
+import type { TopicOccurrence } from "./topicTypes.js";
 import { symbolicIdentity, usefulWikiSubject } from "./wikiGrouping.js";
 import { access } from "node:fs/promises";
 import path from "node:path";
@@ -142,7 +144,10 @@ function collectPostingScores(
         for (const posting of memory.semanticRefIndex.lookupTerm(term)) {
             const ref = memory.semanticRefs.get(posting.semanticRefOrdinal);
             const start = ref.range.start.messageOrdinal;
-            const end = ref.range.end?.messageOrdinal ?? start;
+            const end = ref.range.end
+                ? ref.range.end.messageOrdinal -
+                  ((ref.range.end.chunkOrdinal ?? 0) === 0 ? 1 : 0)
+                : start;
             if (typedQuery && ref.knowledgeType === "entity") {
                 const entity = ref.knowledge as EntityKnowledge;
                 if (
@@ -248,6 +253,33 @@ function parseSourceUri(
 
 export class KnowProCorpusIndex implements CorpusIndex {
     private memory: DocMemory | undefined;
+    private sourceMessages = new Map<
+        string,
+        Array<{
+            revisionId: string;
+            messageOrdinal: number;
+        }>
+    >();
+
+    private refreshSourceMessages(memory?: DocMemory): void {
+        this.sourceMessages.clear();
+        for (
+            let ordinal = 0;
+            memory && ordinal < memory.messages.length;
+            ordinal++
+        ) {
+            const source = parseSourceUri(
+                memory.messages.get(ordinal).metadata.sourceUrl,
+            );
+            if (!source) continue;
+            const messages = this.sourceMessages.get(source.sourceId) ?? [];
+            messages.push({
+                revisionId: source.revisionId,
+                messageOrdinal: ordinal,
+            });
+            this.sourceMessages.set(source.sourceId, messages);
+        }
+    }
 
     public constructor(
         private readonly corpusId: string,
@@ -270,6 +302,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
                 indexBaseName,
                 this.settingsFactory?.(),
             );
+            this.refreshSourceMessages(this.memory);
             if (hasSemanticIndex && this.memory?.messages.length === 0) {
                 throw new Error(
                     `KnowPro semantic index has no messages: '${semanticIndexPath}'`,
@@ -416,6 +449,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
             requested,
             request.query !== undefined,
         );
+        const followed = this.sourceFollowingScores(request, scores);
         if (request.query) {
             const options = kp.createLanguageSearchOptionsTypical();
             options.maxMessageMatches = 8;
@@ -480,12 +514,55 @@ export class KnowProCorpusIndex implements CorpusIndex {
         const highest = Math.max(0, ...scores.values());
         for (const ordinal of preferred)
             scores.set(ordinal, highest + (scores.get(ordinal) ?? 0));
-        return selectIndexedFragments(
+        const selection = selectIndexedFragments(
             [...this.indexedBlocks(memory, scores)].sort(
                 (a, b) => b.score - a.score,
             ),
             request,
         );
+        selection.limited ||= followed.limited;
+        return selection;
+    }
+
+    private sourceFollowingScores(
+        request: IndexedFragmentRequest,
+        scores: Map<number, number>,
+    ): { limited: boolean } {
+        const allowed = new Set(request.sourceIds);
+        const sources = (request.followSources ?? []).flatMap((source) => {
+            if (!allowed.has(source.sourceId)) return [];
+            const messages = (
+                this.sourceMessages.get(source.sourceId) ?? []
+            ).filter((entry) => entry.revisionId === source.revisionId);
+            if (messages.some((entry) => scores.has(entry.messageOrdinal)))
+                return [];
+            return messages.length ? [messages] : [];
+        });
+        const score = Math.max(0, ...scores.values()) + 1;
+        let admitted = 0;
+        let limited = false;
+        // Reanchor only known current dependencies, with one shared read budget.
+        for (let rank = 0; rank < 4; rank++) {
+            for (const messages of sources) {
+                const entry = [
+                    messages[0],
+                    messages[messages.length - 1],
+                    messages[Math.floor(messages.length / 2)],
+                    messages[Math.floor(messages.length / 4)],
+                ][rank];
+                if (!entry || scores.has(entry.messageOrdinal)) continue;
+                if (admitted === 4) {
+                    limited = true;
+                    continue;
+                }
+                scores.set(entry.messageOrdinal, score);
+                admitted++;
+            }
+        }
+        limited ||= sources.some((messages) =>
+            messages.some((entry) => !scores.has(entry.messageOrdinal)),
+        );
+        return { limited };
     }
 
     public async resolveIndexedLocator(
@@ -531,6 +608,7 @@ export class KnowProCorpusIndex implements CorpusIndex {
         if (documents.length === 0) {
             await kp.removeConversationData(this.indexDirectory, indexBaseName);
             this.memory = undefined;
+            this.refreshSourceMessages();
             await onProgress({
                 completed: parts.length,
                 total: parts.length,
@@ -572,13 +650,16 @@ export class KnowProCorpusIndex implements CorpusIndex {
             progressTail = progressTail.then(() => onProgress(progress));
             return true;
         };
-        const result = await memory.buildIndex({
-            onKnowledgeExtracted: () =>
-                report("Extracting knowledge", "extracting-knowledge"),
-            onEmbeddingsCreated: () =>
-                report("Creating embeddings", "embedding"),
-            onTextIndexed: () => report("Indexing text", "building-indexes"),
-        });
+        const result = await kp.timeSearchStage("knowpro.index.prepare", () =>
+            memory.buildIndex({
+                onKnowledgeExtracted: () =>
+                    report("Extracting knowledge", "extracting-knowledge"),
+                onEmbeddingsCreated: () =>
+                    report("Creating embeddings", "embedding"),
+                onTextIndexed: () =>
+                    report("Indexing text", "building-indexes"),
+            }),
+        );
         if (signal.aborted) {
             throw signal.reason ?? new Error("Ingestion cancelled");
         }
@@ -600,8 +681,11 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
-        await memory.writeToFile(this.indexDirectory, indexBaseName);
+        await kp.timeSearchStage("knowpro.index.persist", () =>
+            memory.writeToFile(this.indexDirectory, indexBaseName),
+        );
         this.memory = memory;
+        this.refreshSourceMessages(memory);
         await onProgress({
             completed: total,
             total,
@@ -664,13 +748,17 @@ export class KnowProCorpusIndex implements CorpusIndex {
             progressTail = progressTail.then(() => onProgress(progress));
             return true;
         };
-        const result = await this.memory.addToIndex({
-            onKnowledgeExtracted: () =>
-                report("Extracting knowledge", "extracting-knowledge"),
-            onEmbeddingsCreated: () =>
-                report("Creating embeddings", "embedding"),
-            onTextIndexed: () => report("Indexing text", "building-indexes"),
-        });
+        const memory = this.memory;
+        const result = await kp.timeSearchStage("knowpro.index.prepare", () =>
+            memory.addToIndex({
+                onKnowledgeExtracted: () =>
+                    report("Extracting knowledge", "extracting-knowledge"),
+                onEmbeddingsCreated: () =>
+                    report("Creating embeddings", "embedding"),
+                onTextIndexed: () =>
+                    report("Indexing text", "building-indexes"),
+            }),
+        );
         if (signal.aborted) {
             throw signal.reason ?? new Error("Ingestion cancelled");
         }
@@ -692,7 +780,10 @@ export class KnowProCorpusIndex implements CorpusIndex {
             documentCount: documents.length,
             docPartCount: parts.length,
         });
-        await this.memory.writeToFile(this.indexDirectory, indexBaseName);
+        await kp.timeSearchStage("knowpro.index.persist", () =>
+            memory.writeToFile(this.indexDirectory, indexBaseName),
+        );
+        this.refreshSourceMessages(this.memory);
         await onProgress({
             completed: total,
             total,
@@ -850,6 +941,71 @@ export class KnowProCorpusIndex implements CorpusIndex {
             answer: answers.length === 0 ? undefined : answers.join("\n\n"),
             whyNoAnswer: reasons.length === 0 ? undefined : reasons.join(" "),
         };
+    }
+
+    public async getTopicOccurrences(
+        sourceIds: ReadonlySet<string>,
+    ): Promise<TopicOccurrence[]> {
+        if (!this.memory) return [];
+        const blocks = [...this.indexedBlocks(this.memory)];
+        const bySource = new Map(
+            blocks.map((block) => [
+                `${block.sourceId}\n${block.revisionId}\n${block.blockOrdinal}`,
+                block,
+            ]),
+        );
+        const messageBlocks = new Map<number, IndexedBlock>();
+        const ordinals = new Map<string, number>();
+        for (
+            let ordinal = 0;
+            ordinal < this.memory.messages.length;
+            ordinal++
+        ) {
+            const source = parseSourceUri(
+                this.memory.messages.get(ordinal).metadata.sourceUrl,
+            );
+            if (!source) continue;
+            const key = `${source.sourceId}\n${source.revisionId}`;
+            const blockOrdinal = ordinals.get(key) ?? 0;
+            ordinals.set(key, blockOrdinal + 1);
+            const block = bySource.get(`${key}\n${blockOrdinal}`);
+            if (block) messageBlocks.set(ordinal, block);
+        }
+        const occurrences: TopicOccurrence[] = [];
+        const occurrenceOrdinals = new Map<string, number>();
+        for (const ref of this.memory.semanticRefs ?? []) {
+            if (ref.knowledgeType !== "topic") continue;
+            const label = (ref.knowledge as TopicKnowledge).text.trim();
+            if (!label) continue;
+            const start = ref.range.start.messageOrdinal;
+            const end = ref.range.end
+                ? ref.range.end.messageOrdinal -
+                  (ref.range.end.chunkOrdinal ? 0 : 1)
+                : start;
+            for (
+                let messageOrdinal = start;
+                messageOrdinal <= end;
+                messageOrdinal++
+            ) {
+                const block = messageBlocks.get(messageOrdinal);
+                if (
+                    !block ||
+                    !sourceIds.has(block.sourceId) ||
+                    !block.text.length
+                )
+                    continue;
+                const key = JSON.stringify([
+                    block.sourceId,
+                    block.revisionId,
+                    block.blockOrdinal,
+                    label.toLowerCase(),
+                ]);
+                const ordinal = occurrenceOrdinals.get(key) ?? 0;
+                occurrenceOrdinals.set(key, ordinal + 1);
+                occurrences.push(indexedTopicOccurrence(block, label, ordinal));
+            }
+        }
+        return occurrences;
     }
 
     public async getKnowledgeGraph(

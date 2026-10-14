@@ -9,6 +9,7 @@ import {
     McpMemoryServiceClient,
     changeReceiptSchema,
     memoryToolNames,
+    topicToolNames,
     viewToolNames,
 } from "@typeagent/memory-client";
 import type {
@@ -409,6 +410,7 @@ describe("MemoryMcpServer", () => {
         expect(tools.tools.map((tool) => tool.name).sort()).toEqual(
             [
                 ...Object.values(memoryToolNames),
+                ...Object.values(topicToolNames),
                 ...Object.values(viewToolNames),
             ].sort(),
         );

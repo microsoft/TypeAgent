@@ -61,51 +61,65 @@ export function validateWikiSelector(definition: ViewDefinitionInput): void {
         throw new Error("Invalid informational wiki retrieval definition");
 }
 
+function validateConsolidationIndex(content: WikiContent): void {
+    const merged = content.sections[0]?.details.mergedPageIds ?? [];
+    const children = content.sections.slice(1).map((section) => section.id);
+    if (
+        !content.sections.length ||
+        content.sections.length > 32 ||
+        content.index.length !== content.sections.length ||
+        merged.length !== children.length ||
+        new Set(merged).size !== merged.length ||
+        !children.every((id) => merged.includes(id))
+    )
+        throw new Error(
+            "An informational wiki record contains exactly one page or an exact accepted consolidation index",
+        );
+}
+
 export function validateInformationalContent(content: WikiContent): void {
-    if (content.sections.length !== 1 || content.index.length !== 1)
-        throw new Error(
-            "An informational wiki record contains exactly one page",
-        );
-    const page = content.sections[0];
-    if (
-        page.details.kind !== "page" ||
-        !("construction" in page.details) ||
-        page.details.construction !== "informational-wiki-v1" ||
-        Object.keys(page.details).some(
-            (key) =>
-                ![
-                    "kind",
-                    "construction",
-                    "taxonomy",
-                    "note",
-                    "mergedPageIds",
-                ].includes(key),
-        ) ||
-        !["concept", "system", "project"].includes(page.details.taxonomy) ||
-        typeof page.details.note !== "string" ||
-        page.details.note.length > 4000 ||
-        page.details.mergedPageIds.length !== 0 ||
-        !content.summary?.startsWith(
-            "Limited summary: selected indexed fragments only;",
+    validateConsolidationIndex(content);
+    for (const [position, page] of content.sections.entries()) {
+        if (
+            page.details.kind !== "page" ||
+            !("construction" in page.details) ||
+            page.details.construction !== "informational-wiki-v1" ||
+            Object.keys(page.details).some(
+                (key) =>
+                    ![
+                        "kind",
+                        "construction",
+                        "taxonomy",
+                        "note",
+                        "mergedPageIds",
+                    ].includes(key),
+            ) ||
+            !["concept", "system", "project"].includes(page.details.taxonomy) ||
+            typeof page.details.note !== "string" ||
+            page.details.note.length > 4000 ||
+            (position > 0 && page.details.mergedPageIds.length !== 0) ||
+            !content.summary?.startsWith(
+                "Limited summary: selected indexed fragments only;",
+            )
         )
-    )
-        throw new Error(
-            "Invalid informational wiki page or missing explicit coverage limit",
-        );
-    const expected = wikiIndex(content.sections)[0];
-    const actual = content.index[0];
-    if (
-        !actual ||
-        actual.pageId !== expected.pageId ||
-        actual.title !== expected.title ||
-        actual.taxonomy !== expected.taxonomy ||
-        Object.keys(actual).some(
-            (key) => !["pageId", "title", "taxonomy"].includes(key),
+            throw new Error(
+                "Invalid informational wiki page or missing explicit coverage limit",
+            );
+        const expected = wikiIndex(content.sections)[position];
+        const actual = content.index[position];
+        if (
+            !actual ||
+            actual.pageId !== expected.pageId ||
+            actual.title !== expected.title ||
+            actual.taxonomy !== expected.taxonomy ||
+            Object.keys(actual).some(
+                (key) => !["pageId", "title", "taxonomy"].includes(key),
+            )
         )
-    )
-        throw new Error(
-            "Informational index must match the exact current page",
-        );
+            throw new Error(
+                "Informational index must match the exact current page",
+            );
+    }
 }
 
 export function validateInformationalOutput(
@@ -211,7 +225,7 @@ export function hydrateInformational(
         kind: "wiki",
         construction: "informational-wiki-v1",
         title: value.title,
-        summary: `Limited summary: selected indexed fragments only; ${value.limits}. Updated ${new Date().toISOString()}. Search sources or retry a deeper bounded refresh.`,
+        summary: `Limited summary: selected indexed fragments only; ${value.limits}. Search sources or retry a deeper bounded refresh.`,
         sections: [
             {
                 id: viewId,

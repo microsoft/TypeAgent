@@ -1,0 +1,134 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import type { TopicQueryPage } from "@typeagent/memory-service";
+import { mountTopicBrowser } from "./memoryHubTopics";
+
+function page(): TopicQueryPage {
+    return {
+        generation: "g1",
+        nodes: [
+            {
+                id: "topic:one",
+                identity: "scoped",
+                label: "held lease",
+                scope: "source",
+                aliases: [],
+                occurrenceIds: ["occurrence:one"],
+                summary: "Command lifetime is not lease lifetime.",
+                summaryState: "ready",
+                summaryAuthorship: "generated",
+                citations: [
+                    {
+                        sourceId: "original",
+                        revisionId: "r2",
+                        locator: "indexed:0:hash:0-4",
+                        excerpt: "text",
+                    },
+                ],
+                limits: ["Bounded summary evidence"],
+                authorship: "generated",
+                occurrenceCount: 30,
+                citationCount: 12,
+                omittedOccurrences: 29,
+                omittedCitations: 11,
+            },
+        ],
+        parents: [],
+        related: [],
+        neighborhoods: [],
+        totalNodes: 250,
+        matchingNodes: 250,
+        omittedNodes: 249,
+        omittedParents: 7,
+        omittedRelated: 2,
+        omittedNeighborhoods: 1,
+        nextContinuationToken: "next",
+        limits: ["Complete snapshot, bounded display"],
+        io: { stateBytes: 50000, snapshotBytes: 25000, elapsedMs: 2 },
+    };
+}
+async function settle() {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+test("topic browser shows scoped identity, original evidence, generation and omission/IO honesty", async () => {
+    const query = jest.fn(async () => page());
+    const onOpenSource = jest.fn();
+    const onError = jest.fn();
+    const view = mountTopicBrowser(document.body, {
+        corpusId: () => "corpus",
+        query,
+        onOpenSource,
+        onError,
+        rebuild: async () => {
+            throw new Error("unused");
+        },
+    });
+    try {
+        const root = document.querySelector(
+            'section[aria-label="Maintained topics"]',
+        )!;
+        root.querySelector<HTMLButtonElement>("button")!.click();
+        await settle();
+        expect(query).toHaveBeenCalledWith({
+            corpusId: "corpus",
+            search: "",
+            pageSize: 24,
+        });
+        expect(root.textContent).toContain("250 maintained topics");
+        expect(root.textContent).toContain("249 omitted");
+        expect(root.textContent).toContain("Generation g1");
+        expect(root.textContent).toContain("50000 bytes");
+        expect(root.textContent).toContain("30 occurrences");
+        expect(root.textContent).toContain("revision r2");
+        const source = [...root.querySelectorAll("button")].find((button) =>
+            button.textContent?.startsWith("Source original"),
+        )!;
+        source.click();
+        expect(onOpenSource).toHaveBeenCalledWith("corpus", "original");
+        const next = [...root.querySelectorAll("button")].find(
+            (button) => button.textContent === "Next topic page",
+        )!;
+        next.click();
+        await settle();
+        expect(query).toHaveBeenLastCalledWith({
+            corpusId: "corpus",
+            search: "",
+            pageSize: 24,
+            continuationToken: "next",
+        });
+        expect(onError).not.toHaveBeenCalled();
+    } finally {
+        view.dispose();
+    }
+});
+
+test("topic browser surfaces stale continuation errors and discards old results after scope refresh", async () => {
+    const onError = jest.fn();
+    const query = jest.fn(async () => {
+        throw new Error("Topic continuation is stale");
+    });
+    const view = mountTopicBrowser(document.body, {
+        corpusId: () => "corpus",
+        query,
+        onError,
+        onOpenSource: jest.fn(),
+        rebuild: async () => {
+            throw new Error("unused");
+        },
+    });
+    try {
+        const root = document.querySelector(
+            'section[aria-label="Maintained topics"]',
+        )!;
+        root.querySelector<HTMLButtonElement>("button")!.click();
+        await settle();
+        expect(root.textContent).toContain("Topic continuation is stale");
+        expect(onError).toHaveBeenCalled();
+        view.refresh();
+        expect(root.textContent).not.toContain("Topic continuation is stale");
+    } finally {
+        view.dispose();
+    }
+});

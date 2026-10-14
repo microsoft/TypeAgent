@@ -12,6 +12,10 @@ import type { CommonApiSettings } from "./openai.js";
 import { azureApiSettingsFromConfig } from "./apiSettingsFromConfig.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 import registerDebug from "debug";
+import {
+    applyChatModelRequestDefaults,
+    DEFAULT_AZURE_CHAT_DEPLOYMENT,
+} from "./chatModelDefaults.js";
 
 const debugSettings = registerDebug("typeagent:aiclient:azureSettings");
 
@@ -62,6 +66,11 @@ export function azureApiSettingsFromEnv(
                 endpointName?.toLowerCase(),
             );
         } catch (e) {
+            if (
+                modelType === ModelType.Chat &&
+                endpointName?.toUpperCase() === DEFAULT_AZURE_CHAT_DEPLOYMENT
+            )
+                throw e;
             debugSettings(
                 "typed-config lookup failed for %s/%s, falling back to env: %s",
                 modelType,
@@ -95,6 +104,7 @@ export function azureApiSettingsFromEnv(
         settings.tokenProvider = azureTokenProvider;
     }
 
+    applyChatModelRequestDefaults(settings);
     return settings;
 }
 
@@ -120,6 +130,8 @@ function azureChatApiSettingsFromEnv(
             env,
             EnvVars.AZURE_OPENAI_ENDPOINT,
             endpointName,
+            undefined,
+            endpointName?.toUpperCase() === DEFAULT_AZURE_CHAT_DEPLOYMENT,
         ),
         supportsResponseFormat:
             getEnvSetting(

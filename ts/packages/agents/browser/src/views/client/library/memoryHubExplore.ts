@@ -15,6 +15,7 @@ import {
 } from "./memoryKnowledgeCollection";
 import { mountFlyout, type FlyoutView } from "./memoryHubFlyout";
 import "./memoryHubPhase2.css";
+import { mountTopicBrowser } from "./memoryHubTopics";
 
 export type MemoryHubExploreOptions = {
     scope: () => string | undefined;
@@ -53,6 +54,13 @@ export function mountMemoryHubExplore(
     const lists = text("div", undefined, "phase2-lists");
     root.append(controls, status, warning, counts, note, lists);
     host.append(root);
+    const topics = mountTopicBrowser(root, {
+        corpusId: options.scope,
+        query: (request) => invokeView("memoryQueryTopics", request),
+        rebuild: (corpusId) => invokeView("memoryRebuildTopics", { corpusId }),
+        onOpenSource: options.onOpenSource,
+        onError: options.onError,
+    });
     let cached: MemoryHubExploreResult | undefined;
     let version = 0;
     let disposed = false;
@@ -262,6 +270,7 @@ export function mountMemoryHubExplore(
         renderControls();
     }
     async function load() {
+        topics.refresh();
         const requestVersion = ++version;
         const scope = options.scope();
         loading = true;
@@ -310,6 +319,7 @@ export function mountMemoryHubExplore(
             else await load();
         },
         scopeChanged() {
+            topics.refresh();
             version++;
             cached = undefined;
             clearCollections();
@@ -326,6 +336,7 @@ export function mountMemoryHubExplore(
             flyout.close();
         },
         dispose() {
+            topics.dispose();
             disposed = true;
             version++;
             clearCollections();

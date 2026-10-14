@@ -132,6 +132,7 @@ export async function createDiscoveryPageTranslator(
         | "GPT_4"
         | "GPT_v"
         | "GPT_4_O"
+        | "GPT_6_LUNA"
         | "GPT_5_MINI"
         | "GPT_5_2",
 ) {

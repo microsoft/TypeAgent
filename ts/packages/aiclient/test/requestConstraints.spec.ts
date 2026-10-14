@@ -6,7 +6,6 @@ import { success } from "typechat";
 import {
     ModelType,
     getChatModelPool,
-    getChatModelOutputLimit,
     createChatModel,
     createEmbeddingModel,
 } from "../src/openai.js";
@@ -16,11 +15,70 @@ import { RequestAdmissionError } from "../src/requestBudget.js";
 import { callJsonApiWithPool } from "../src/restClient.js";
 import type { EndpointPool } from "../src/endpointPool.js";
 
+test("uncapped chat reserves provider output capacity without adding a wire limit", async () => {
+    const originalFetch = globalThis.fetch;
+    const settings = {
+        provider: "azure" as const,
+        modelType: ModelType.Chat,
+        apiKey: "synthetic-key",
+        endpoint: "https://synthetic.invalid/uncapped",
+        supportsResponseFormat: true,
+        requestConstraints: { contextTokens: 10000, outputTokens: 4000 },
+    };
+    const bodies: object[] = [];
+    try {
+        globalThis.fetch = async (_url, options) => {
+            bodies.push(JSON.parse(String(options?.body)) as object);
+            return new Response(
+                JSON.stringify({ choices: [{ message: { content: "{}" } }] }),
+                { status: 200 },
+            );
+        };
+        const model = createChatModel(settings, {
+            response_format: { type: "json_object" },
+        });
+        expect((await model.complete("bounded")).success).toBe(true);
+        expect(bodies[0]).not.toHaveProperty("max_completion_tokens");
+        expect(bodies[0]).not.toHaveProperty("max_tokens");
+        expect(bodies[0]).not.toHaveProperty("max_output_tokens");
+        expect(
+            checkSerializedRequestConstraints(
+                JSON.stringify(bodies[0]),
+                settings.requestConstraints,
+            ).outputTokens,
+        ).toBe(4000);
+        await expect(model.complete("x".repeat(6000))).rejects.toBeInstanceOf(
+            RequestAdmissionError,
+        );
+        expect(bodies).toHaveLength(1);
+        expect(
+            (await createChatModel(settings).complete("bounded")).success,
+        ).toBe(true);
+        expect(bodies[1]).not.toHaveProperty("max_completion_tokens");
+        expect(bodies[1]).not.toHaveProperty("max_tokens");
+        expect(bodies[1]).not.toHaveProperty("max_output_tokens");
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test("uncapped admission requires known provider output capacity and rejects invalid native Messages limits", () => {
+    const request = JSON.stringify({ messages: [] });
+    expect(() =>
+        checkSerializedRequestConstraints(request, { contextTokens: 10000 }),
+    ).toThrow(RequestAdmissionError);
+    expect(() =>
+        checkSerializedRequestConstraints(
+            JSON.stringify({ messages: [], max_tokens: 0 }),
+            { outputTokens: 4000 },
+        ),
+    ).toThrow(RequestAdmissionError);
+});
+
 const chat = (text = "bounded") =>
     JSON.stringify({
         messages: [{ role: "user", content: text }],
         response_format: { schema: { description: "schema counts too" } },
-        max_completion_tokens: 4000,
     });
 
 test("missing provider metadata is explicit, not a guessed input or lifetime ceiling", () => {
@@ -35,7 +93,7 @@ test("missing provider metadata is explicit, not a guessed input or lifetime cei
     ).toThrow(RequestAdmissionError);
     expect(() =>
         checkSerializedRequestConstraints(chat(), { outputTokens: 3999 }),
-    ).toThrow(RequestAdmissionError);
+    ).not.toThrow();
     expect(() =>
         checkSerializedRequestConstraints(
             JSON.stringify({ input: ["x".repeat(11)] }),
@@ -53,6 +111,7 @@ test("missing provider metadata is explicit, not a guessed input or lifetime cei
     expect(
         checkSerializedRequestConstraints(serialized, {
             contextTokens: boundary,
+            outputTokens: 4000,
         }),
     ).toMatchObject({
         metadata: "configured",
@@ -62,11 +121,13 @@ test("missing provider metadata is explicit, not a guessed input or lifetime cei
     expect(() =>
         checkSerializedRequestConstraints(serialized, {
             contextTokens: boundary - 1,
+            outputTokens: 4000,
         }),
     ).toThrow(RequestAdmissionError);
     expect(() =>
         checkSerializedRequestConstraints(chat("x".repeat(20000)), {
             contextTokens: 128000,
+            outputTokens: 4000,
         }),
     ).not.toThrow();
 });
@@ -196,10 +257,6 @@ test("normal typed model selection carries constraints to chat and embedding tra
         expect(pool.members[0].settings.endpoint).toBe(
             "https://synthetic.invalid/selected",
         );
-        expect(getChatModelOutputLimit(4000, "azure:constraint_role")).toBe(
-            2000,
-        );
-        expect(getChatModelOutputLimit(4000)).toBe(4000);
         globalThis.fetch = async (url) => {
             urls.push(String(url));
             return new Response(
@@ -211,11 +268,8 @@ test("normal typed model selection carries constraints to chat and embedding tra
             );
         };
         expect(
-            (
-                await createChatModel("azure:constraint_role", {
-                    max_completion_tokens: 2000,
-                }).complete("bounded")
-            ).success,
+            (await createChatModel("azure:constraint_role").complete("bounded"))
+                .success,
         ).toBe(true);
         await expect(
             createEmbeddingModel().generateEmbedding("x".repeat(21)),

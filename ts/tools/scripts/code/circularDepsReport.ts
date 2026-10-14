@@ -114,6 +114,35 @@ function madgeOptions(includeTests: boolean): Record<string, unknown> {
 
 const norm = (p: string) => p.replace(/\\/g, "/");
 
+function sourceFiles(root: string): string[] {
+    const files: string[] = [];
+    function visit(directory: string): void {
+        for (const entry of fs.readdirSync(directory, {
+            withFileTypes: true,
+        })) {
+            if (entry.name === "node_modules" || entry.name === ".git") {
+                continue;
+            }
+            const file = path.join(directory, entry.name);
+            if (entry.isDirectory()) {
+                visit(file);
+            } else if (
+                entry.isFile() &&
+                FILE_EXTENSIONS.includes(path.extname(entry.name).slice(1))
+            ) {
+                files.push(file);
+            }
+        }
+    }
+    for (const directory of SCAN_SUBDIRS) {
+        const target = path.join(root, directory);
+        if (fs.existsSync(target)) {
+            visit(target);
+        }
+    }
+    return files;
+}
+
 /** Run madge from `cwd` over the existing SCAN_SUBDIRS; return cycles + file count. */
 async function runMadge(
     cwd: string,
@@ -123,11 +152,16 @@ async function runMadge(
     const prev = process.cwd();
     process.chdir(cwd);
     try {
-        const targets = SCAN_SUBDIRS.filter((d) => fs.existsSync(d));
-        if (targets.length === 0) {
+        // Madge's directory walker deduplicates numeric inodes, which lose
+        // precision on Windows and can silently omit unrelated source directories.
+        const files = sourceFiles(cwd);
+        if (files.length === 0) {
             return { cycles: [], files: 0 };
         }
-        const res = await madge(targets, madgeOptions(includeTests));
+        const res = await madge(files, {
+            ...madgeOptions(includeTests),
+            baseDir: cwd,
+        });
         const cycles = res.circular().map((c) => c.map(norm));
         return { cycles, files: Object.keys(res.obj()).length };
     } finally {

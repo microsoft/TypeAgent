@@ -6,7 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import { TypedViewStore } from "../src/viewStore.js";
 import { ViewHistory } from "../src/viewHistory.js";
-import type { ViewSaveRequest } from "../src/viewTypes.js";
+import type {
+    ViewBuildSnapshot,
+    ViewSaveRequest,
+    ViewVersion,
+} from "../src/viewTypes.js";
 
 describe("derived-only View persistence", () => {
     let root: string;
@@ -154,10 +158,59 @@ describe("derived-only View persistence", () => {
             autoPublish: false,
             views: {},
         });
+
         expect(await store.getViewIndexCleanup(corpusId)).toEqual([]);
         expect((await history.read()).state.publications).toEqual({});
         const head = (await history.read()).head;
         await store.clearDerivedViews(corpusId);
         expect((await history.read()).head).toBe(head);
+    });
+
+    test("privacy removal purges protected human text influenced by read-but-not-cited evidence", async () => {
+        const saved = await store.saveViewDraft({
+            ...request,
+            definition: {
+                ...request.definition,
+                selector: { kind: "sources", sources: [] },
+            },
+        });
+        expect(saved.version.provenance).toBe("human");
+        const history = new ViewHistory<{
+            views: Record<string, ViewVersion[]>;
+        }>(path.join(root, corpusId, "views"), () => ({ views: {} }));
+        const { head, state } = await history.read();
+        const snapshot: ViewBuildSnapshot = {
+            corpusId,
+            actor: "memory-view-generator",
+            definition: request.definition,
+            expectedVersion: 0,
+            bounds: {},
+            inputs: [],
+            influenceSources: [
+                { sourceId: "not-cited", revisionId: "read-revision" },
+            ],
+            pipeline: "troubleshooting-v1",
+            model: "offline",
+            fingerprint: "captured",
+        };
+        state.views.guide[0].generation = {
+            candidateId: "synthetic-candidate",
+            fingerprint: snapshot.fingerprint,
+            input: snapshot,
+            content: saved.version.content,
+            relationships: [],
+        };
+        await history.commit(
+            head,
+            state,
+            {},
+            "owner",
+            "Capture non-citation influence",
+        );
+        await store.forgetSource(corpusId, "not-cited");
+        expect((await store.listViews(corpusId)).views).toEqual([]);
+        expect(
+            await store.getViewHistory({ corpusId, viewId: "guide" }),
+        ).toEqual([]);
     });
 });
