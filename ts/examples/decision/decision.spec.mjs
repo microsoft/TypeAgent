@@ -379,3 +379,67 @@ test("uses AI Client transport with the deployment name and API-key auth", async
         /No endpoints match/,
     );
 });
+
+test("Azure Decision-1 preserves native question maps, structured state, and all three answers", async (context) => {
+    const endpoint =
+        "https://example-eastus.services.ai.azure.com/providers/microsoft/v1/systemone";
+    const config = buildConfig({
+        AZURE_OPENAI_ENDPOINT_DECISION_1_EASTUS: endpoint,
+        AZURE_OPENAI_API_KEY: "test-key",
+    });
+    const state = { message: "Checkout failed again", contact_count: 3 };
+    const questions = {
+        team: {
+            type: "choice",
+            instructions: "Which team supports this task?",
+            criteria: { billing: "Invoices", technical: "Bugs" },
+        },
+        repeat: {
+            type: "noul",
+            instructions: "Is this a repeat contact?",
+            criteria: { true: "More than one contact", false: "First contact" },
+        },
+        severity: {
+            type: "score",
+            instructions: "How severe is this issue?",
+            criteria: ["Minor", "Major", "Critical"],
+        },
+    };
+    const response = {
+        model: "microsoft-decision-1",
+        usage: { input_tokens: 100, output_tokens: 10 },
+        answers: {
+            team: {
+                type: "choice",
+                choice: "technical",
+                probabilities: { billing: 0.1, technical: 0.9 },
+            },
+            repeat: { type: "noul", noul: 0.9 },
+            severity: {
+                type: "score",
+                score: 1.8,
+                probabilities: { 0: 0, 1: 0.2, 2: 0.8 },
+            },
+        },
+    };
+    let requests = 0;
+    context.mock.method(globalThis, "fetch", async (url, init) => {
+        requests++;
+        assert.equal(url, endpoint);
+        assert.equal(init.headers["api-key"], "test-key");
+        assert.deepEqual(JSON.parse(init.body), {
+            model: "deployed-decision-instance",
+            state,
+            questions,
+        });
+        return new Response(JSON.stringify(response), { status: 200 });
+    });
+    const client = createDecisionClient(
+        config,
+        "decision_1",
+        "deployed-decision-instance",
+        "eastus",
+    );
+    assert.deepEqual(await client.decide(state, questions), response);
+    assert.equal(requests, 1);
+});

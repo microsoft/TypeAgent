@@ -81,7 +81,7 @@ pnpm --filter decision-model-example start --dry-run
 pnpm --filter decision-model-example start
 pnpm --filter decision-model-example start --sample support --repeat 5
 pnpm --filter decision-model-example start --sample combined
-pnpm --filter decision-model-example start --provider azure --model microsoft-decision-1 --region eastus
+pnpm --filter decision-model-example start --provider azure --model decision-1 --region eastus
 ```
 
 `--provider` defaults to `copilot`, with `--model gpt-6-luna-decisions`.
@@ -148,6 +148,22 @@ AI Client's `discoverEndpointPoolFromConfig` resolves regional endpoints and use
 including a Cognitive Services token provider for identity auth. The existing
 transport supplies timeouts, throttling, and transient retries.
 
+The [Foundry Decision-1 guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision)
+defines a different wire contract from Copilot:
+
+| Field                      | Azure Decision-1                      | Copilot Luna decisions           |
+| -------------------------- | ------------------------------------- | -------------------------------- |
+| Endpoint path              | `/providers/microsoft/v1/systemone`   | `/v1/decisions`                  |
+| Model selection            | Actual Azure deployment name          | Copilot model ID                 |
+| Input                      | `state`, text or JSON                 | `input`, text                    |
+| Questions                  | Object keyed by question name         | Array with `name` fields         |
+| Binary question            | `noul`, optional true/false criteria  | `predicate`                      |
+| Choice options             | `criteria` object                     | `choices` array                  |
+| Score levels               | `criteria` array                      | `levels` array                   |
+| Answers                    | Object keyed by question name         | Array with `name` fields         |
+| Binary result              | `noul` probability                    | `probability`                    |
+| Choice/score probabilities | Object keyed by choice or level index | Array of value/probability pairs |
+
 The local `decision_1` config resolves East US and Sweden Central endpoints, each
 declaring capacity 30 and inheriting **identity** auth. Their full
 `/providers/microsoft/v1/systemone` URLs match the Foundry documentation. Capacity
@@ -157,6 +173,42 @@ is declared metadata, not an enforced request-per-minute limiter.
 Responses, or Messages requests and expect generated content. Decision-1 instead
 accepts `{ model, state, questions }` and returns `answers`. This example reuses
 the lower-level AI Client transport and leaves shared chat APIs unchanged.
+
+### Opt-In Azure Test Variant
+
+From `ts/`, using the installed credentials and local config:
+
+```powershell
+$env:AZURE_DECISION_DEPLOYMENT = 'decision-1'
+pnpm --filter decision-model-example test:azure
+# To test only one configured region:
+$env:AZURE_DECISION_REGION = 'eastus'
+pnpm --filter decision-model-example test:azure
+Remove-Item Env:AZURE_DECISION_REGION
+```
+
+`AZURE_DECISION_DEPLOYMENT` is required and is not a secret. Read-only Azure
+deployment metadata confirmed the East US deployment name `decision-1`; the
+response reports underlying model `microsoft-decision-1`. Using that model ID
+as the deployment name returned HTTP 404 after successful authentication.
+`AZURE_DECISION_CONFIG_KEY` optionally overrides `decision_1`. Without a region
+override, the suite tests each configured region serially, pinning its client
+so a healthy endpoint cannot mask a broken deployment in another region.
+
+The separate [live suite](decision.azure.test.mjs) checks choice, Noul and score
+over structured state, a text-input classification, both guarded shopping
+actions, and Crossword 2 clue reading, supplied-answer fills, and crossing
+conflict rejection. It permits at most eight `decide` calls per region. The
+conflict attempt selects a clue before the host rejects it without typing.
+AI Client transport retries can add HTTP attempts for transient failures;
+authentication and schema failures do not trigger another provider.
+
+The suite uses synthetic input and localhost fixtures only. It makes no
+generative calls, records no video, changes no permissions, and does not print
+credentials. Exolve's pinned local renderer cache must be prepared with
+`node examples/decision/crossword-2/fixture.mjs --setup` before the browser tests.
+`test:local` remains offline and excludes this live test file. These smoke
+checks do not establish calibration, broad accuracy, or comparative speedup.
 
 ### Copilot Live Check: 2026-10-12
 
@@ -173,7 +225,7 @@ the successful run used `--cli-path` with the installed native executable.
 
 ### Azure Live Check: 2026-10-12
 
-Both regional URLs were called with the configured Azure identity. Both returned
+Historically, both regional URLs were called with the configured Azure identity. Both returned
 HTTP 401 `PermissionDenied`: the current principal lacks
 `Microsoft.CognitiveServices/accounts/AIServices/providers/action` for the
 provider endpoint. This establishes endpoint reachability, **not successful model
@@ -185,6 +237,12 @@ that data action (the Foundry documentation recommends Cognitive Services User
 for inference), or configure an authorized API key locally on the decision
 endpoints. Do not put keys in this example, committed config, or command output.
 Then rerun both regional samples and confirm the deployment name.
+
+On 2026-10-14, after the permission fix, East US and Sweden Central each passed
+the new native-schema, shopping and Crossword 2 smoke variant using deployment
+`decision-1` and identity authentication. Each successful regional run made
+eight decision calls and reported `microsoft-decision-1`; no question or fit
+threshold was retuned. The affected build and all 107 offline tests passed.
 
 ## Research and Next Experiments
 
