@@ -1178,18 +1178,22 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             releaseSynthesis = resolve;
         });
         beforeGeneration = () => synthesisGate;
+        const admit = TypedViewStore.prototype.admitViewBuild;
+        const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const admission = clock
+            .spyOn(TypedViewStore.prototype, "admitViewBuild")
+            .mockImplementation(async function (
+                this: TypedViewStore,
+                ...args: Parameters<typeof admit>
+            ) {
+                discovered();
+                await discoveryGate;
+                return admit.apply(this, args);
+            });
         service = new FileMemoryService(root, {
             viewSynthesisAdapter: adapter,
-            indexFactory: (_corpusId, directory) => {
-                const index = new MockIndexedCorpus(directory);
-                const listSubjects = index.listSubjects.bind(index);
-                index.listSubjects = async () => {
-                    discovered();
-                    await discoveryGate;
-                    return listSubjects();
-                };
-                return index;
-            },
+            indexFactory: (_corpusId, directory) =>
+                new MockIndexedCorpus(directory),
         });
         const { corpusId } = await service.createCorpus("Closing admission");
         await add(
@@ -1207,10 +1211,47 @@ describe("informational wiki lifecycle (mock extraction and synthesis)", () => {
             );
             expect(jobs.map((job) => job.state)).toEqual(["cancelled"]);
         } finally {
+            admission.mockRestore();
             releaseDiscovery();
             releaseSynthesis();
         }
     }, 10000);
+
+    test("queued automatic maintenance waits for authorized removal recovery without failing close", async () => {
+        const { corpusId } = await service.createCorpus("Queued removal");
+        await add(corpusId, "source", "Acquisition qualification.");
+        const clock = (import.meta as ImportMeta & { jest: typeof jest }).jest;
+        const rebuild = clock
+            .spyOn(MockIndexedCorpus.prototype, "rebuild")
+            .mockRejectedValue(new Error("Injected purge failure"));
+        try {
+            const preview = await service.previewForgetSource(
+                corpusId,
+                "source",
+            );
+            await expect(
+                service.forgetSource({
+                    corpusId,
+                    sourceId: "source",
+                    confirmationToken: preview.confirmationToken,
+                }),
+            ).rejects.toThrow("Injected purge failure");
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            await expect(service.listViews(corpusId)).rejects.toThrow(
+                "pending purge recovery",
+            );
+            await expect(service.close()).resolves.toBeUndefined();
+            expect(
+                (await new TypedViewStore(root).getWikiFamily(corpusId)).error,
+            ).toBeUndefined();
+        } finally {
+            rebuild.mockRestore();
+        }
+        service = open();
+        await expect(
+            service.getSource(corpusId, "source"),
+        ).resolves.toBeUndefined();
+    });
 
     test("failed synthesis retries the same identity and completed retry does not rerun", async () => {
         const corpusId = (await service.createCorpus("Retry mocks")).corpusId;

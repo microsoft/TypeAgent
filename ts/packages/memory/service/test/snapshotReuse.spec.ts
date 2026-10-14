@@ -3,6 +3,7 @@
 
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { FileMemoryService } from "../src/fileMemoryService.js";
 import { ViewHistory } from "../src/viewHistory.js";
 import { TypedViewStore } from "../src/viewStore.js";
@@ -20,6 +21,7 @@ describe("operation-scoped committed view snapshots", () => {
     let root: string;
     let store: TypedViewStore;
     let reads: number;
+    const operationReads = new AsyncLocalStorage<{ count: number }>();
     const original = ViewHistory.prototype.read;
 
     beforeEach(async () => {
@@ -28,6 +30,8 @@ describe("operation-scoped committed view snapshots", () => {
         reads = 0;
         ViewHistory.prototype.read = async function (...args) {
             reads++;
+            const operation = operationReads.getStore();
+            if (operation) operation.count++;
             return original.apply(this, args);
         };
     });
@@ -310,11 +314,10 @@ describe("operation-scoped committed view snapshots", () => {
             expect(oldNominationReads).toBeGreaterThan(1);
             const nominationMs: number[] = [];
             for (let attempt = 0; attempt < 2; attempt++) {
-                reads = 0;
+                const operation = { count: 0 };
                 const started = performance.now();
-                const pairs = await nomination.readConsolidationPairs(
-                    corpusId,
-                    target.viewId,
+                const pairs = await operationReads.run(operation, () =>
+                    nomination.readConsolidationPairs(corpusId, target.viewId),
                 );
                 nominationMs.push(performance.now() - started);
                 expect(pairs).toEqual(oldPairs);
@@ -324,11 +327,13 @@ describe("operation-scoped committed view snapshots", () => {
                         pair.some((view) => view.viewId === target.viewId),
                     ),
                 ).toBe(true);
-                expect(reads).toBe(1);
+                expect(operation.count).toBe(1);
             }
-            reads = 0;
-            await service.listViews(corpusId);
-            expect(reads).toBe(1);
+            const operation = { count: 0 };
+            await operationReads.run(operation, () =>
+                service.listViews(corpusId),
+            );
+            expect(operation.count).toBe(1);
             console.warn(
                 JSON.stringify({
                     snapshotReuse: {

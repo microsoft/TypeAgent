@@ -2264,6 +2264,7 @@ export class FileMemoryService
         delete complete.authorizedSourceRemoval;
         await writeJsonAtomic(this.manifestPath(corpusId), complete);
         runtime.manifest = complete;
+        this.resumeBatchMaintenance(corpusId);
         return {
             corpusId,
             sourceId,
@@ -5209,38 +5210,51 @@ export class FileMemoryService
             this.wikiTimers.delete(key);
             if (this.closed || this.batchStore.hasActiveImports(corpusId))
                 return;
-            const work = this.enqueueWrite(corpusId, async () => {
-                if (this.closed || this.batchStore.hasActiveImports(corpusId))
-                    return;
-                const runtime = await this.getCorpusRuntime(corpusId);
-                const family = await this.viewStore.getWikiFamily(
-                    corpusId,
-                    kind,
-                );
-                if (!family.enabled || !family.dirty || family.error) return;
-                const snapshot = await this.viewStore.listViews(corpusId);
-                if (this.batchStore.hasActiveImports(corpusId)) return;
-                try {
-                    await this.maintainWikiFamily(
-                        runtime,
-                        {
-                            corpusId,
-                            expectedHead: snapshot.head,
-                            family: kind,
-                            operation: "update",
-                        },
-                        true,
-                    );
-                } catch (error) {
+            const work = this.enqueueWrite(
+                corpusId,
+                async () => {
+                    if (
+                        this.closed ||
+                        this.batchStore.hasActiveImports(corpusId)
+                    )
+                        return;
+                    const runtime = await this.getCorpusRuntime(corpusId, true);
+                    if (runtime.manifest.authorizedSourceRemoval) return;
                     const family = await this.viewStore.getWikiFamily(
                         corpusId,
                         kind,
                     );
-                    family.dirty = true;
-                    family.error = safeError(error);
-                    await this.viewStore.saveWikiFamily(corpusId, family, kind);
-                }
-            });
+                    if (!family.enabled || !family.dirty || family.error)
+                        return;
+                    const snapshot = await this.viewStore.listViews(corpusId);
+                    if (this.batchStore.hasActiveImports(corpusId)) return;
+                    try {
+                        await this.maintainWikiFamily(
+                            runtime,
+                            {
+                                corpusId,
+                                expectedHead: snapshot.head,
+                                family: kind,
+                                operation: "update",
+                            },
+                            true,
+                        );
+                    } catch (error) {
+                        const family = await this.viewStore.getWikiFamily(
+                            corpusId,
+                            kind,
+                        );
+                        family.dirty = true;
+                        family.error = safeError(error);
+                        await this.viewStore.saveWikiFamily(
+                            corpusId,
+                            family,
+                            kind,
+                        );
+                    }
+                },
+                true,
+            );
             this.indexedReads.add(work);
             void work.then(
                 () => this.indexedReads.delete(work),
@@ -6167,35 +6181,43 @@ export class FileMemoryService
             this.wikiTimers.delete(key);
             if (this.closed || this.batchStore.hasActiveImports(corpusId))
                 return;
-            const work = this.enqueueWrite(corpusId, async () => {
-                if (this.closed || this.batchStore.hasActiveImports(corpusId))
-                    return;
-                const state = await this.viewStore.getTopicState(corpusId);
-                const family = reconcileTopicFamily(
-                    state.family,
-                    runtime.manifest.indexGeneration,
-                );
-                if (!topicFamilyCanSchedule(family)) return;
-                if (this.batchStore.hasActiveImports(corpusId)) return;
-                try {
-                    await this.maintainTopics(
-                        runtime,
-                        {
-                            corpusId,
-                            expectedHead: state.head,
-                            family: "topics",
-                            operation: "update",
-                        },
-                        true,
+            const work = this.enqueueWrite(
+                corpusId,
+                async () => {
+                    if (
+                        this.closed ||
+                        this.batchStore.hasActiveImports(corpusId) ||
+                        runtime.manifest.authorizedSourceRemoval
+                    )
+                        return;
+                    const state = await this.viewStore.getTopicState(corpusId);
+                    const family = reconcileTopicFamily(
+                        state.family,
+                        runtime.manifest.indexGeneration,
                     );
-                } catch (error) {
-                    await this.viewStore.saveTopicFamily(corpusId, {
-                        ...family,
-                        dirty: true,
-                        error: safeError(error),
-                    });
-                }
-            });
+                    if (!topicFamilyCanSchedule(family)) return;
+                    if (this.batchStore.hasActiveImports(corpusId)) return;
+                    try {
+                        await this.maintainTopics(
+                            runtime,
+                            {
+                                corpusId,
+                                expectedHead: state.head,
+                                family: "topics",
+                                operation: "update",
+                            },
+                            true,
+                        );
+                    } catch (error) {
+                        await this.viewStore.saveTopicFamily(corpusId, {
+                            ...family,
+                            dirty: true,
+                            error: safeError(error),
+                        });
+                    }
+                },
+                true,
+            );
             this.indexedReads.add(work);
             void work.then(
                 () => this.indexedReads.delete(work),

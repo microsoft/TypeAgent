@@ -345,7 +345,10 @@ test("actual P0 C7 authenticated title/annotation and historical human edits pro
                 inputFingerprint: "a".repeat(64),
             }),
         ).rejects.toThrow();
-        const saved = await service.resolveViewConflict(resolution);
+        const saved = await service.resolveViewConflict({
+            ...resolution,
+            expectedHead: (await service.listViews(corpusId)).head!,
+        });
         expect(saved.version.content.title).toBe(content.title);
         expect(saved.version.actor).not.toBe("memory-view-generator");
         expect(saved.version.redirect).toBeUndefined();

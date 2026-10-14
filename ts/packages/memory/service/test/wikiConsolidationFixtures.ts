@@ -207,8 +207,11 @@ export async function settleConsolidation(
             );
         if (
             !jobs.some((job) => job.state === "running") &&
-            (!snapshot.wikiFamily?.pending || decision) &&
-            !snapshot.projectFamily?.pending
+            (!snapshot.wikiFamily?.enabled ||
+                !snapshot.wikiFamily.pending ||
+                decision) &&
+            (!snapshot.projectFamily?.enabled ||
+                !snapshot.projectFamily.pending)
         )
             return snapshot;
         await new Promise((resolve) => setTimeout(resolve, 20));

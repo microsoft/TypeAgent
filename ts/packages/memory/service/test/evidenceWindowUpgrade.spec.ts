@@ -158,6 +158,13 @@ test.each([false, true])(
             const { corpusId } = await service.createCorpus(
                 "Actual pre-policy P0 upgrade",
             );
+            for (const family of ["projects", "topics"] as const)
+                await service.maintainViews({
+                    corpusId,
+                    family,
+                    operation: "pause",
+                    expectedHead: (await service.listViews(corpusId)).head,
+                });
             await changeFamily(service, corpusId, "pause");
             const original = await readFile(
                 path.join(originalFixtureRoot(), "initial", "document-020.md"),

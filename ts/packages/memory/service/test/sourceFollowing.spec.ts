@@ -33,6 +33,12 @@ async function initial(root: string) {
     const host = sourceFollowingHost(root);
     const service = host.open();
     const { corpusId } = await service.createCorpus("Real KnowPro C5");
+    await service.maintainViews({
+        corpusId,
+        family: "topics",
+        operation: "pause",
+        expectedHead: (await service.listViews(corpusId)).head,
+    });
     await changeFamily(service, corpusId, "pause");
     await sourceFollowingStage(service, corpusId, "initial");
     await changeFamily(service, corpusId, "resume");
