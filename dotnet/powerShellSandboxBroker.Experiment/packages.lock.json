@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net8.0-windows10.0.19041": {
+      "Microsoft.Mxc.Sdk": {
+        "type": "Direct",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "3gLupZbnt4YnDTqjuM5M0Cj3NEpGlRHddPPoBYHJ1mDMvEe5h4OhgjsVos+A7kus/LLEFxWJlPoqL7JGhGQJmg=="
+      },
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[8.0.32, )",
+        "resolved": "8.0.32",
+        "contentHash": "FQXkG87JK9+SEbF6vRcWmevk0Pjqgehhz+9e1hHATDh7U8EvgmVQQcEUJTXj1IKi8VqLrdi/c1QHOpVjZcd9ng=="
+      }
+    },
+    "net8.0-windows10.0.19041/win-arm64": {
+      "Microsoft.Mxc.Sdk": {
+        "type": "Direct",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "3gLupZbnt4YnDTqjuM5M0Cj3NEpGlRHddPPoBYHJ1mDMvEe5h4OhgjsVos+A7kus/LLEFxWJlPoqL7JGhGQJmg=="
+      }
+    },
+    "net8.0-windows10.0.19041/win-x64": {
+      "Microsoft.Mxc.Sdk": {
+        "type": "Direct",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "3gLupZbnt4YnDTqjuM5M0Cj3NEpGlRHddPPoBYHJ1mDMvEe5h4OhgjsVos+A7kus/LLEFxWJlPoqL7JGhGQJmg=="
+      }
+    }
+  }
+}
