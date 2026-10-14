@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test, { before, after, beforeEach } from "node:test";
 import { fileURLToPath } from "node:url";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { executor, openBrowser, startFixture } from "./browser.mjs";
 import {
     assertFresh,
@@ -10,6 +13,12 @@ import {
     requireLocal,
 } from "./observer.mjs";
 import { offlineClient, options, runShopping } from "./run.mjs";
+import {
+    options as recordingOptions,
+    recordAll,
+    runnerArguments,
+    scenarios,
+} from "../record-demos.mjs";
 
 let fixture;
 let browser;
@@ -23,6 +32,46 @@ after(async () => {
 });
 beforeEach(async () => {
     await browser.page.goto(`${fixture.url}/shopping`);
+});
+
+test("recording is opt-in and refuses invalid or preexisting output directories", async () => {
+    assert.equal(browser.page.video(), null);
+    assert.equal(browser.videoPath, undefined);
+    await assert.rejects(
+        openBrowser({ recordDirectory: "" }),
+        /invalid_record_directory/,
+    );
+    const directory = await mkdtemp(join(tmpdir(), "decision-recording-test-"));
+    try {
+        await assert.rejects(
+            openBrowser({ recordDirectory: directory }),
+            /EEXIST/,
+        );
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});
+
+test("recording batch previews eight bounded scenarios without launching or writing", async () => {
+    const values = recordingOptions([
+        "--output-dir",
+        "not-created",
+        "--dry-run",
+        "--live",
+    ]);
+    const report = await recordAll(values);
+    assert.equal(report.recording, false);
+    assert.equal(report.scenarios.length, 8);
+    assert.equal(new Set(scenarios.map((item) => item.id)).size, 8);
+    for (const scenario of scenarios) {
+        const args = runnerArguments(scenario, values);
+        assert.ok(args.includes("--demo"));
+        assert.ok(args.includes("--record-dir"));
+        assert.ok(args.includes("--live"));
+        assert.ok([1, 2].includes(scenario.limit));
+    }
+    assert.equal(recordingOptions(["--output-dir", "example"]).live, false);
+    assert.throws(() => options(["--demo"]), /requires --record-dir/);
 });
 
 test("Playwright explicit fill/search/filter/detail uses the bounded executor", async () => {

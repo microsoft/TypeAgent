@@ -82,6 +82,24 @@ test("decision receives evidence and IDs, not executable selectors", async () =>
                     false,
                 );
                 assert.ok(questions.target.criteria.no_fit);
+                assert.ok(
+                    questions.fit.instructions.endsWith(
+                        JSON.stringify(
+                            observed.candidates.map(({ id, evidence }) => ({
+                                id,
+                                evidence,
+                            })),
+                        ),
+                    ),
+                );
+                assert.equal(
+                    questions.fit.instructions.includes(action.selector),
+                    false,
+                );
+                assert.match(
+                    questions.fit.instructions,
+                    /wording need not be identical/,
+                );
                 return answer(observed.candidates[0].id);
             },
         },

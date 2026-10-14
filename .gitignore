@@ -477,3 +477,6 @@ ts/config.local.yaml.bak
 /ts/packages/memory/service/.wiki-unit-owned
 /ts/.wiki-rehearsal-blocked-final-20261010
 /ts/tmp/decision-pilot-lint
+/ts/examples/decision/results
+/ts/tmp/decision-*-complexity/
+/ts/examples/decision/**/*-evidence.json

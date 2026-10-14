@@ -13,6 +13,8 @@ import {
 } from "./fixtures.mjs";
 import {
     buildCategoryQuestions,
+    buildCategoryToolQuestions,
+    buildFlatQuestions,
     gatedToolChoice,
     lexicalBaseline,
     run,
@@ -38,6 +40,39 @@ test("host policy strictly filters denied and disabled tools before candidate co
         eligibleIds.has(getMcpToolIdentity("m365_mail", "send_mail")),
         true,
     );
+});
+
+test("fit predicates carry the eligible catalog independently of choice questions", () => {
+    const eligible = getEligibleMcpTools(rawToolCatalog);
+    for (const tools of [eligible, eligible.slice(0, 3)]) {
+        for (const questions of [
+            buildFlatQuestions(tools),
+            buildCategoryToolQuestions(tools),
+        ]) {
+            assert.ok(
+                questions.fit.instructions.endsWith(
+                    JSON.stringify(
+                        tools.map(({ id, description }) => ({
+                            id,
+                            description,
+                        })),
+                    ),
+                ),
+            );
+            assert.equal(
+                questions.fit.instructions.includes("delete_database"),
+                false,
+            );
+            assert.equal(
+                questions.fit.instructions.includes("run_bash"),
+                false,
+            );
+            assert.match(
+                questions.fit.instructions,
+                /routing only, not execution/,
+            );
+        }
+    }
 });
 
 test("fixtures cover 32 independent cases across all required categories", () => {

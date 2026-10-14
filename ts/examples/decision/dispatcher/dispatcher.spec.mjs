@@ -35,6 +35,23 @@ test("26 labels and manifest-grounded schemas", () => {
     );
 });
 
+test("fit predicates independently describe eligible schemas and categories", () => {
+    const schemas = eligibleSchemas(catalog).slice(0, 2);
+    for (const category of [false, true]) {
+        const questions = buildQuestions(schemas, category);
+        const criteria = { ...questions.route.criteria };
+        delete criteria[CLARIFY];
+        delete criteria[NO_FIT];
+        assert.ok(
+            questions.fit.instructions.endsWith(JSON.stringify(criteria)),
+        );
+        assert.match(
+            questions.fit.instructions,
+            /schema routing, not action execution/,
+        );
+    }
+});
+
 test("exact members, missing answers, fit gate and clarification", () => {
     const questions = buildQuestions(catalog);
     assert.equal(checkedSelection(answer("email"), questions), "email");

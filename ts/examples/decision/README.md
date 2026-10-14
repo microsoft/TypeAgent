@@ -4,6 +4,72 @@ Runs `gpt-6-luna-decisions` through TypeAgent AI Client's Copilot provider by
 default. Microsoft-Decision-1 on Azure remains an optional comparison backend.
 This is an isolated experiment, not a change to dispatcher behavior.
 
+## Latest Results
+
+The local 2026-10-13 live collection (`results/2026-10-13/`) ran all 12
+supported lanes: 147 planned cases, 298 decision-call attempts and 3 chat-call
+attempts. Raw outputs, a source-hashed manifest, per-variant metrics and mismatch
+IDs are retained together. All shopping instances and both crossword actions
+passed their local readback checks; MCP flat/two-stage matched 32/32 fixture
+labels. Dispatcher ambiguity, verification/workflow evidence handling and
+commerce binding still need work. These are single-pass development results,
+not calibration or speedup benchmarks. Older observations below are historical.
+
+Run evidence JSON, result collections, complexity reports and media are generated
+artifacts, not source-controlled fixtures. Existing local copies are retained;
+fresh checkouts can recreate outputs with the documented runner commands.
+
+Git LFS was already configured globally but its executable was missing. The
+official portable 3.8.0 binary was SHA256-verified, installed per-user and added
+to the user PATH; repository hooks were initialized. Profile-loaded circular
+analysis now passes, including baseline worktree creation. Existing VS Code
+processes may need a restart to inherit the updated user PATH.
+
+## Browser Demo Recordings
+
+Shopping, generative shopping, hybrid shopping and crossword accept
+`--record-dir <fresh-directory>`. Recording is opt-in, uses an isolated
+non-persistent context, captures a silent 1100 x 800 viewport, and preserves
+finalized `scenario.webm`, raw video, case screenshots and `evidence.json`.
+Normal runs retain their existing unrecorded context behavior. `--demo` adds
+explicitly labeled pacing/captions; its timings are not benchmark measurements.
+
+The small [recording batch](record-demos.mjs) calls those existing runners for
+eight scenarios: each shopping variant's filter/details and crossword read/fill.
+Detail/fill clips include their prerequisite step. It defaults to offline mocks;
+`--live` performs real model calls. A dry-run validates options and lists scope
+without creating output or launching browsers.
+
+```powershell
+if (Test-Path $PROFILE) { . $PROFILE }
+pnpm -C ts --filter decision-model-example exec playwright install --dry-run ffmpeg
+# After approving missing pinned recording assets:
+pnpm -C ts --filter decision-model-example exec playwright install ffmpeg
+$output = Join-Path $env:USERPROFILE 'OneDrive - Microsoft/Videos/web-videos/decision-browser-new-run'
+node ts/examples/decision/record-demos.mjs --output-dir $output --dry-run --live
+# After approving recording and live calls, optionally supply --cli-path:
+node ts/examples/decision/record-demos.mjs --output-dir $output --live --chat-model gpt-5-mini
+```
+
+Run these commands from the repository root. Do not reuse an existing output
+directory. The batch writes a source-hashed manifest and fails if any scenario
+does not pass; it does not silently retry or lower fit thresholds. Capture
+success is not media acceptance: independently decode, inspect and test seeking.
+Keep recordings outside Git. For inline review, copy selected generated media
+into a fresh `.scratch/` directory, which is already ignored and workspace-trusted.
+
+The local recording collection (`results/2026-10-13/browser-recordings.md`) retains eight
+completion demos plus one abstention take. All nine videos fully decode and
+play/seek in installed Edge. The current integrated browser rejects their WebM
+demuxing even from trusted copies; decoded frame sheets remain accessible there.
+No MP4/H.264 encoder, extension or native recorder was installed.
+
+The realistic successor is [Crossword 2](crossword-2/README.md): a locally
+served 15x15 Exolve puzzle with 36 real clues, native keyboard entry, host-issued
+clue references, crossing guards, and rendered-cell readback. Its four
+[live recording scenarios](crossword-2/recordings.md) passed
+with seven decision calls. The original 3x3 example and evidence are preserved.
+
 ## Run
 
 From `ts/` after the normal workspace setup:
@@ -218,6 +284,68 @@ ratchets pass for tracked changes, but exclude the new untracked pilot files.
 The historical 66-test run and pinned formatting check included those files.
 This migration leaves the current full repository gates to the parent.
 
+## Separate Generative and Hybrid Comparisons
+
+The generative baseline is feasible with existing AI Client APIs, with no new
+provider SDK, key, or dependency. `generative/client.mjs` uses
+`openai.createChatModel(...).complete(...)` through configured Copilot auth.
+Following the reviewed NanoTests pattern, schema descriptions are visible in
+the prompt as well as supplied as a structured-output constraint. Callers
+validate exact fields and choice membership before host execution.
+
+These comparison instances were initially added separately from the seven
+approved pilots. Subsequent routing/shopping fit-question changes are documented
+in the latest collection, without changing production behavior or gate thresholds.
+
+| Instance                                                 | Design                                                                                                                                 | Live observation, 2026-10-13                                                                                                       |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| [Generative shopping](web-shopping-generative/README.md) | Chat selects an issued ID or no-fit; same fixture, tasks, host guards, and readback as decision shopping.                              | Requested `gpt-5-mini`: 2/2 tasks verified, two generative calls, zero decision/executor model calls.                              |
+| [Hybrid shopping](web-shopping-hybrid/README.md)         | Decision first at unchanged fit 0.8; semantic abstention permits fresh observation and chat fallback. Provider/validation errors stop. | Process exited without a report; attempted/completed model counts unknown. Offline tests verify fast-path and fallback separately. |
+| [Decision commerce](webmcp-commerce/README.md)           | Schema-derived tool/enums/predicates plus exact original-input spans, local read-only catalog.                                         | One decision call chose expected search/filters/span; fit 0.13 below 0.5, so no execution.                                         |
+| [Hybrid commerce](webmcp-commerce/README.md)             | Generative bounded read-only plan, then the same decision binder and deterministic executor.                                           | One chat call produced two valid intents; first decision call fit 0.39 below 0.5 stopped the plan. No execution.                   |
+
+Shopping lanes share the same two tasks. Commerce live lanes currently use
+different development requests (single intent versus search-plus-details), so
+their smoke results are not a paired quality or latency comparison. None of
+these observations establishes speedup or calibration. Thresholds were not
+retuned to pass smoke cases. The initial shopping hybrid process failure was not
+diagnosed; subsequent invocations checkpoint attempted counts. The latest
+collection completed both hybrid tasks through the decision fast path, but did
+not exercise live generative fallback.
+
+The System One explainer illustrates Jev-style routing with simulated
+probabilities/timing. Basketful's actual hosted bundle registers WebMCP tools
+through `document.modelContext`, with schemas and consequence annotations, and
+its own voice assistant uses Gemini. The local commerce pilot adopts the
+bounded binding pattern, not the hosted implementation, catalog, or secrets.
+Only its owned local registry executes, and only read-only tools are eligible.
+Native WebMCP invocation, hosted-site integration, native Stagehand observation,
+other generative baselines, and real retailer sessions remain deferred.
+
+From the repository root:
+
+```powershell
+node ts/examples/decision/web-shopping-generative/run.mjs
+node ts/examples/decision/web-shopping-hybrid/run.mjs
+node ts/examples/decision/webmcp-commerce/main.mjs
+node ts/examples/decision/webmcp-commerce/hybrid.mjs
+npm --prefix ts/examples/decision run test:local
+```
+
+Shopping defaults to explicit fixture mocks with browser readback; commerce
+defaults to zero-model dry execution, not a fabricated plan. Each README has
+capped live commands and evidence caveats. The existing provider dependency
+graph and lockfile are unchanged by these additions.
+
+Validation: **99 tests pass**, zero skips/failures; affected package build,
+all-module syntax, and pinned formatting pass. New comparison folders have no
+lint violations and meet cyclomatic 25/cognitive 30 limits. Desktop/mobile
+commerce checks verified image loading, no horizontal overflow, and read-only
+search. Full repository gates remain blocked by five original runner console
+violations, three over-complex functions in the earlier MCP/dispatcher/workflow
+pilots, and missing Git LFS for circular analysis. The debt gate passes.
+Git ratchets exclude untracked additions, so focused checks covered those files.
+
 ## Sources
 
 - [OpenAI Decisions API guide](https://developers.openai.com/api/docs/guides/decisions)
@@ -226,3 +354,5 @@ This migration leaves the current full repository gates to the parent.
 - [TypeSafe Jev introduction](https://docs.typesafe.ai/)
 - [Jev Choice](https://docs.typesafe.ai/primitives/choice), [Score](https://docs.typesafe.ai/primitives/score), [Noul](https://docs.typesafe.ai/primitives/noul)
 - [Independent JevBench methodology and results](https://benchmarkheaven.com/jev-models)
+- [System One explainer](https://system-one-explainer.netlify.app/)
+- [Basketful WebMCP demo](https://shopping-webmcp-demo.netlify.app/)

@@ -1,8 +1,8 @@
 import { createServer } from "node:http";
-import { readFile, mkdtemp, rm } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { readFile, mkdtemp, mkdir, copyFile, rm } from "node:fs/promises";
+import { existsSync, constants } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { chromium } from "playwright";
 
 export const executor = {
@@ -27,6 +27,20 @@ export const executor = {
         return { success: true };
     },
 };
+
+export async function verifyShopping(page, request) {
+    return page.evaluate(
+        (request) =>
+            request === "Show only cordless tools"
+                ? document.querySelector('[data-fixture-id="cordless-filter"]')
+                      .checked &&
+                  document.querySelector('[data-name="corded saw"]').hidden
+                : document.querySelector("dialog").open &&
+                  document.querySelector("#detail-title").innerText ===
+                      "Cordless Drill",
+        request,
+    );
+}
 
 export async function startFixture() {
     const routes = new Map([
@@ -61,7 +75,18 @@ export async function startFixture() {
     };
 }
 
-export async function openBrowser() {
+export async function openBrowser({ recordDirectory, demo = false } = {}) {
+    if (demo && !recordDirectory)
+        throw new Error("demo_requires_record_directory");
+    let videoPath;
+    if (recordDirectory !== undefined) {
+        if (typeof recordDirectory !== "string" || !recordDirectory.trim())
+            throw new Error("invalid_record_directory");
+        recordDirectory = resolve(recordDirectory);
+        await mkdir(dirname(recordDirectory), { recursive: true });
+        await mkdir(recordDirectory);
+        videoPath = join(recordDirectory, "scenario.webm");
+    }
     const executablePath = [
         chromium.executablePath(),
         join(
@@ -79,22 +104,94 @@ export async function openBrowser() {
         );
     const profile = await mkdtemp(join(tmpdir(), "decision-owned-"));
     let context;
+    let recordingBrowser;
     try {
-        context = await chromium.launchPersistentContext(profile, {
+        const launchOptions = {
             executablePath,
             headless: true,
-            viewport: null,
+            slowMo: demo ? 600 : 0,
             args: ["--disable-background-networking", "--no-first-run"],
-        });
+        };
+        if (recordDirectory) {
+            recordingBrowser = await chromium.launch(launchOptions);
+            context = await recordingBrowser.newContext({
+                viewport: { width: 1100, height: 800 },
+                recordVideo: {
+                    dir: join(recordDirectory, "raw"),
+                    size: { width: 1100, height: 800 },
+                },
+                serviceWorkers: "block",
+            });
+        } else {
+            context = await chromium.launchPersistentContext(profile, {
+                ...launchOptions,
+                viewport: null,
+            });
+        }
         const page = context.pages()[0] ?? (await context.newPage());
         await page.setViewportSize({ width: 1100, height: 800 });
+        const video = recordDirectory ? page.video() : undefined;
+        if (recordDirectory && !video) throw new Error("video_unavailable");
         return {
             executor,
             context,
             page,
+            videoPath,
+            recording: videoPath
+                ? {
+                      file: videoPath,
+                      capture: "page-viewport",
+                      audio: false,
+                      demoPaced: demo,
+                      mediaValidated: false,
+                  }
+                : undefined,
+            async caption(text) {
+                if (!video) return;
+                await page.evaluate((text) => {
+                    let caption = document.querySelector(
+                        "[data-recording-caption]",
+                    );
+                    if (!caption) {
+                        caption = document.createElement("aside");
+                        caption.dataset.recordingCaption = "true";
+                        Object.assign(caption.style, {
+                            position: "fixed",
+                            bottom: "0",
+                            left: "0",
+                            right: "0",
+                            padding: "16px 24px",
+                            background: "#192922",
+                            color: "white",
+                            font: "17px Georgia, serif",
+                            whiteSpace: "pre-line",
+                            pointerEvents: "none",
+                            zIndex: "2147483647",
+                        });
+                        document.body.style.paddingBottom = "96px";
+                        document.body.append(caption);
+                    }
+                    caption.textContent = text;
+                }, text);
+            },
             async close() {
                 try {
-                    await context.close();
+                    let source;
+                    try {
+                        if (video) source = await video.path();
+                    } finally {
+                        try {
+                            await context.close();
+                        } finally {
+                            await recordingBrowser?.close();
+                        }
+                    }
+                    if (source)
+                        await copyFile(
+                            source,
+                            videoPath,
+                            constants.COPYFILE_EXCL,
+                        );
                 } finally {
                     await rm(profile, { recursive: true, force: true });
                 }
@@ -102,6 +199,7 @@ export async function openBrowser() {
         };
     } catch (error) {
         await context?.close().catch(() => {});
+        await recordingBrowser?.close().catch(() => {});
         await rm(profile, { recursive: true, force: true });
         throw error;
     }

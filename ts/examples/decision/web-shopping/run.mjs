@@ -1,7 +1,8 @@
 import { parseArgs } from "node:util";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { writeFile } from "node:fs/promises";
-import { openBrowser, startFixture } from "./browser.mjs";
+import { join } from "node:path";
+import { openBrowser, startFixture, verifyShopping } from "./browser.mjs";
 import { decisionObserve, explicitAct, observeHost } from "./observer.mjs";
 
 export function offlineClient(match) {
@@ -66,6 +67,8 @@ export function options(args = process.argv.slice(2)) {
             model: { type: "string", default: "gpt-6-luna-decisions" },
             variant: { type: "string", default: "host" },
             "native-model": { type: "string" },
+            "record-dir": { type: "string" },
+            demo: { type: "boolean", default: false },
         },
     });
     values.limit = Number(values.limit);
@@ -79,7 +82,21 @@ export function options(args = process.argv.slice(2)) {
         throw new Error("--variant must be host, native, or rerank");
     if (values["dry-run"] && values.live)
         throw new Error("--dry-run and --live are mutually exclusive");
+    if (values.demo && !values["record-dir"])
+        throw new Error("--demo requires --record-dir");
     return values;
+}
+
+function recordingSettings(values) {
+    return {
+        evidenceFile: values["record-dir"]
+            ? join(values["record-dir"], "evidence.json")
+            : new URL(
+                  `./${values.live ? "live" : "offline"}-${values.variant}-evidence.json`,
+                  import.meta.url,
+              ),
+        label: `Decision shopping | ${values.live ? "Live decision model" : "Offline fixture selector"} | Local fixture${values.demo ? " | Demo paced, not benchmark" : ""}`,
+    };
 }
 
 export async function runShopping(values = options()) {
@@ -116,8 +133,12 @@ export async function runShopping(values = options()) {
     let decisions;
     const cases = [];
     let decisionCalls = 0;
+    const { evidenceFile, label } = recordingSettings(values);
     try {
-        browser = await openBrowser();
+        browser = await openBrowser({
+            recordDirectory: values["record-dir"],
+            demo: values.demo,
+        });
         decisions = await decisionClient(values);
         const countedClient = {
             async decide(...args) {
@@ -127,6 +148,7 @@ export async function runShopping(values = options()) {
         };
         await browser.page.goto(`${fixture.url}/shopping`);
         for (const request of tasks) {
+            await browser.caption(`${label}\nRequest: ${request}`);
             const start = performance.now();
             const snapshot = await observeHost(browser.page);
             const selection = await decisionObserve(
@@ -154,19 +176,7 @@ export async function runShopping(values = options()) {
                 chosen,
             );
             if (!action.success) throw new Error("explicit_act_failed");
-            const verified = await browser.page.evaluate(
-                (request) =>
-                    request.includes("cordless tools")
-                        ? document.querySelector(
-                              '[data-fixture-id="cordless-filter"]',
-                          ).checked &&
-                          document.querySelector('[data-name="corded saw"]')
-                              .hidden
-                        : document.querySelector("dialog").open &&
-                          document.querySelector("#detail-title").innerText ===
-                              "Cordless Drill",
-                request,
-            );
+            const verified = await verifyShopping(browser.page, request);
             if (!verified) throw new Error("shopping_readback_failed");
             cases.push({
                 request,
@@ -175,6 +185,14 @@ export async function runShopping(values = options()) {
                 explicitActModelCalls: 0,
                 decision: selection?.response,
             });
+            await browser.caption(`${label}\nVerified: ${request}`);
+            if (browser.videoPath)
+                await browser.page.screenshot({
+                    path: join(
+                        values["record-dir"],
+                        `case-${cases.length}.png`,
+                    ),
+                });
         }
         const report = {
             lane: "shopping",
@@ -191,14 +209,9 @@ export async function runShopping(values = options()) {
             selectorCalls: decisionCalls,
             decisionModelCalls: values.live ? decisionCalls : 0,
             benchmark: false,
+            recording: browser.recording,
         };
-        await writeFile(
-            new URL(
-                `./${values.live ? "live" : "offline"}-${values.variant}-evidence.json`,
-                import.meta.url,
-            ),
-            `${JSON.stringify(report, null, 2)}\n`,
-        );
+        await writeFile(evidenceFile, `${JSON.stringify(report, null, 2)}\n`);
         process.stdout.write(`${JSON.stringify(report)}\n`);
         return report;
     } catch (error) {
@@ -212,19 +225,24 @@ export async function runShopping(values = options()) {
             selectorCalls: decisionCalls,
             decisionModelCalls: values.live ? decisionCalls : 0,
             benchmark: false,
+            recording: browser?.recording,
         };
-        await writeFile(
-            new URL(
-                `./${values.live ? "live" : "offline"}-${values.variant}-evidence.json`,
-                import.meta.url,
-            ),
-            `${JSON.stringify(report, null, 2)}\n`,
-        );
+        if (!values["record-dir"] || browser)
+            await writeFile(
+                evidenceFile,
+                `${JSON.stringify(report, null, 2)}\n`,
+            );
         throw error;
     } finally {
-        await decisions?.close();
-        await browser?.close();
-        await fixture.close();
+        try {
+            await decisions?.close();
+        } finally {
+            try {
+                await browser?.close();
+            } finally {
+                await fixture.close();
+            }
+        }
     }
 }
 

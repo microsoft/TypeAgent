@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Local grocery tools</title>
+  <style>
+    :root {
+      font-family: Georgia, serif;
+      color: #202421;
+      background: #f4f6f3;
+    }
+    body {
+      margin: 0;
+    }
+    header {
+      padding: 20px 24px;
+      background: #244e3f;
+      color: white;
+    }
+    h1 {
+      margin: 0;
+      font-size: 26px;
+    }
+    main {
+      max-width: 960px;
+      margin: auto;
+      padding: 24px;
+    }
+    p,
+    li {
+      line-height: 1.4;
+    }
+    form,
+    .tools {
+      display: grid;
+      gap: 12px;
+      margin: 20px 0;
+    }
+    label {
+      display: grid;
+      gap: 6px;
+    }
+    input,
+    select,
+    button {
+      font: inherit;
+      padding: 8px;
+      border: 1px solid #536a5a;
+      border-radius: 3px;
+      background: white;
+    }
+    button {
+      width: max-content;
+      cursor: pointer;
+    }
+    .products {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 20px;
+    }
+    article {
+      border-bottom: 1px solid #bcc9be;
+      padding-bottom: 12px;
+    }
+    h2 {
+      font-size: 20px;
+      margin: 8px 0;
+    }
+    img {
+      display: block;
+    }
+    pre {
+      white-space: pre-wrap;
+      background: white;
+      border: 1px solid #bcc9be;
+      padding: 12px;
+    }
+  </style>
+  <header>
+    <h1>Local grocery tools</h1>
+  </header>
+  <main>
+    <p>
+      Fictional Lane &amp; Rye catalog. Nothing is sold or delivered. Cart and
+      checkout are mocked and denied before a model sees them.
+    </p>
+    <p>
+      Registry adapter:
+      <strong id="adapter" data-adapter="pending">pending</strong>. Native
+      registration depends on browser support. Invocation compatibility is
+      unverified.
+    </p>
+    <ul id="tools" class="tools"></ul>
+    <form>
+      <label>Query<input id="query" type="search" maxlength="48" /></label>
+      <label>Department<select id="department"></select></label>
+      <label
+        ><input data-dietary="gluten-free" type="checkbox" />gluten-free</label
+      >
+      <label><input data-dietary="vegan" type="checkbox" />vegan</label>
+      <label><input data-dietary="nut-free" type="checkbox" />nut-free</label>
+      <label
+        >Organic
+        <select id="organic">
+          <option value="">unspecified</option>
+          <option value="true">true</option>
+          <option value="false">false</option>
+        </select>
+      </label>
+      <button id="search" type="button">Search catalog</button>
+      <label
+        >Catalog name
+        <input
+          id="product-name"
+          type="text"
+          value="Millet Roll"
+          maxlength="48"
+        />
+      </label>
+      <button id="details" type="button">Read details</button>
+      <button id="denied" type="button">Checkout denied</button>
+    </form>
+    <div id="products" class="products"></div>
+    <pre id="result" role="status">No tool call yet.</pre>
+  </main>
+  <script type="module" src="/page.mjs"></script>
+</html>
