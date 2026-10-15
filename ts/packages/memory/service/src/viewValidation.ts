@@ -316,9 +316,25 @@ export function validateViewDraft(request: ViewSaveRequest): void {
             "definition",
             "content",
             "relationships",
+            "unlockProtection",
         ],
         "view request",
     );
+    if (
+        request.unlockProtection !== undefined &&
+        (!Array.isArray(request.unlockProtection) ||
+            !request.unlockProtection.length ||
+            request.unlockProtection.length > 32 ||
+            request.unlockProtection.some(
+                (target) =>
+                    typeof target !== "string" ||
+                    !target ||
+                    target.length > 240,
+            ) ||
+            new Set(request.unlockProtection).size !==
+                request.unlockProtection.length)
+    )
+        throw new Error("Invalid editorial protection unlock targets");
     assertViewIdentifier("view ID", request.viewId);
     if (
         !Number.isSafeInteger(request.expectedVersion) ||

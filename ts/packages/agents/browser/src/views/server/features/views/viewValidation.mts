@@ -18,6 +18,8 @@ import {
     viewMaintenanceRequestSchema,
     viewMaintenanceUpdateSchema,
     viewMaintenanceReadSchema,
+    sourceSynopsisRequestSchema,
+    topicQueryRequestSchema,
 } from "@typeagent/memory-client";
 import type {
     ViewMethod,
@@ -82,6 +84,10 @@ function protocolInput(schema: {
 // Each entry is an explicitly exposed domain operation, never a browser-control method.
 const schemas: Record<ViewMethod, z.ZodType> = {
     memoryViewCapabilities: empty,
+    memoryQueryTopics: protocolInput(topicQueryRequestSchema),
+    memoryRebuildTopics: z.strictObject({
+        corpusId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/),
+    }),
     memoryListViews: z.strictObject(corpus),
     memoryGetView: protocolInput(viewReadRequestSchema),
     memorySaveViewDraft: protocolInput(viewSaveRequestSchema),
@@ -234,6 +240,9 @@ const schemas: Record<ViewMethod, z.ZodType> = {
             .optional(),
     }),
     memoryGetSource: z.strictObject(source),
+    memoryGetSourceSynopsis: protocolInput(
+        sourceSynopsisRequestSchema.strict(),
+    ),
     memoryGetSourceContent: z.strictObject({
         ...source,
         revisionId: optionalText,

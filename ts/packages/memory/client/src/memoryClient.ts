@@ -46,6 +46,8 @@ import type {
     RevisionAssetRequest,
     SourceContent,
     SourceContentRequest,
+    SourceSynopsis,
+    SourceSynopsisRequest,
     SourceForgetPreview,
     SourceForgetRequest,
     SourceForgetResult,
@@ -79,6 +81,11 @@ import type {
     ViewVersion,
 } from "@typeagent/memory-service";
 import { waitForMemoryJob } from "@typeagent/memory-service/rpc";
+import type {
+    TopicQueryRequest,
+    TopicQueryPage,
+} from "@typeagent/memory-service";
+import { topicQueryPageSchema, topicToolNames } from "./topicProtocol.js";
 import type { z } from "zod";
 import {
     answerResultSchema,
@@ -102,6 +109,7 @@ import {
     reindexResultSchema,
     searchResultSchema,
     sourceContentSchema,
+    sourceSynopsisSchema,
     sourceForgetPreviewSchema,
     sourceForgetResultSchema,
     sourcePageSchema,
@@ -132,6 +140,8 @@ export interface MemoryClientCallOptions {
 }
 
 export interface MemoryServiceClient extends MemoryService, MemoryViewService {
+    queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage>;
+    rebuildTopics(corpusId: string): Promise<ViewBuildJob>;
     ingestDocument(
         request: DocumentIngestRequest,
         signal?: AbortSignal,
@@ -144,6 +154,18 @@ export interface MemoryServiceClient extends MemoryService, MemoryViewService {
 }
 
 export class InProcessMemoryServiceClient implements MemoryServiceClient {
+    public queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage> {
+        return (
+            this.service.queryTopics?.(request) ??
+            unsupportedCapability("topic queries")
+        );
+    }
+    public rebuildTopics(corpusId: string): Promise<ViewBuildJob> {
+        return (
+            this.service.rebuildTopics?.(corpusId) ??
+            unsupportedCapability("topic rebuilds")
+        );
+    }
     public getSourceViewUsage(
         request: ViewSourceUsageRequest,
     ): Promise<ViewSourceUsagePage> {
@@ -386,6 +408,16 @@ export class InProcessMemoryServiceClient implements MemoryServiceClient {
         return this.service.getSourceContent(request);
     }
 
+    public getSourceSynopsis(
+        request: SourceSynopsisRequest,
+    ): Promise<SourceSynopsis> {
+        if (!this.service.getSourceSynopsis)
+            return Promise.reject(
+                new Error("Source synopses are not supported"),
+            );
+        return this.service.getSourceSynopsis(request);
+    }
+
     public getSourceKnowledge(
         corpusId: string,
         sourceId: string,
@@ -503,6 +535,20 @@ export type MemoryMcpTransportConfig =
 type MemoryMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
 
 export class McpMemoryServiceClient implements MemoryServiceClient {
+    public queryTopics(request: TopicQueryRequest): Promise<TopicQueryPage> {
+        return this.invoke(
+            topicToolNames.queryTopics,
+            request,
+            topicQueryPageSchema,
+        );
+    }
+    public rebuildTopics(corpusId: string): Promise<ViewBuildJob> {
+        return this.invoke(
+            topicToolNames.rebuildTopics,
+            { corpusId },
+            viewBuildJobSchema,
+        );
+    }
     public getSourceViewUsage(
         request: ViewSourceUsageRequest,
     ): Promise<ViewSourceUsagePage> {
@@ -807,6 +853,16 @@ export class McpMemoryServiceClient implements MemoryServiceClient {
             memoryToolNames.sourceContentGet,
             request,
             sourceContentSchema,
+        );
+    }
+
+    public getSourceSynopsis(
+        request: SourceSynopsisRequest,
+    ): Promise<SourceSynopsis> {
+        return this.invoke(
+            memoryToolNames.sourceSynopsisGet,
+            request,
+            sourceSynopsisSchema,
         );
     }
 

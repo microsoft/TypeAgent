@@ -29,6 +29,11 @@ import type {
     ViewSearchMatch,
     MemoryEvent,
     MemoryEventListRequest,
+    SourceSynopsisPreview,
+    SourceSynopsis,
+    SourceSynopsisRequest,
+    TopicQueryRequest,
+    TopicQueryPage,
 } from "@typeagent/memory-service";
 
 // =============================================
@@ -62,6 +67,7 @@ export type MemoryCenterRevision = {
     capturedAt?: string;
     sourceModifiedAt?: string;
     indexedAt?: string;
+    synopsis?: SourceSynopsisPreview;
     pipelineVersion: string;
     pipeline?: {
         mode: "basic" | "summary" | "content" | "full";
@@ -233,6 +239,8 @@ export type MemoryCenterInvokeFunctions = {
     ): Promise<ViewPublicationStatus>;
     memorySearchViews(params: ViewSearchRequest): Promise<ViewSearchMatch[]>;
     memoryViewCapabilities(params: {}): Promise<MemoryServiceCapabilities>;
+    memoryQueryTopics(params: TopicQueryRequest): Promise<TopicQueryPage>;
+    memoryRebuildTopics(params: { corpusId: string }): Promise<ViewBuildJob>;
     memoryListViews(params: { corpusId: string }): Promise<ViewSnapshot>;
     memoryGetView(params: ViewReadRequest): Promise<ViewVersion | undefined>;
     memorySaveViewDraft(params: ViewSaveRequest): Promise<ViewHistoryEntry>;
@@ -293,6 +301,9 @@ export type MemoryCenterInvokeFunctions = {
         maxChars?: number;
         indexedLocator?: string;
     }): Promise<MemoryCenterContent>;
+    memoryGetSourceSynopsis(
+        params: SourceSynopsisRequest,
+    ): Promise<SourceSynopsis>;
     memoryGetSourceKnowledge(params: {
         corpusId: string;
         sourceId: string;

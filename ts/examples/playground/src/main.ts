@@ -186,7 +186,10 @@ async function runPlayground(): Promise<void> {
             content: userInput,
         };
         const context: PromptSection[] = [
-            { role: "system", content: instructions },
+            {
+                role: "system",
+                content: `${instructions}\nAim for approximately 1000 tokens in the final answer only, excluding reasoning. Preserve required content even when that needs a longer answer.`,
+            },
             ...getContextFromHistory(
                 chatHistory,
                 maxContextLength,
@@ -219,7 +222,10 @@ async function runPlayground(): Promise<void> {
             content: userInput,
         };
         const context: PromptSection[] = [
-            { role: "system", content: instructions },
+            {
+                role: "system",
+                content: `${instructions}\nAim for approximately 1000 tokens in the final answer only, excluding reasoning. Preserve required content even when that needs a longer answer.`,
+            },
             ...getContextFromHistory(
                 chatHistory,
                 maxContextLength,
@@ -274,7 +280,6 @@ async function runPlayground(): Promise<void> {
         }
         const completionSettings: CompletionSettings = {
             temperature: 0.8,
-            max_tokens: 1000, // Max response tokens
             response_format: { type: "json_object" }, // createChatModel will remove it if the model doesn't support it
         };
         const chatModel = openai.createChatModel(

@@ -49,6 +49,13 @@ Run any of these from `ts/`. All accept `--help`, `--root <path>`,
   For local CI-parity runs, use `npm run code-complexity:ci`.
 - **code-deadcode:** `--config` (defaults to [`knip.jsonc`](./knip.jsonc)).
 
+The circular scanner enumerates source files before invoking madge and fixes
+module paths relative to `--root`. This avoids Windows inode rounding in madge's
+directory walker, which can silently omit distinct source directories. Build
+outputs and dependencies are excluded, and tests are included only with
+`--include-tests`. Ratchet worktrees are created under `--out-dir` and removed
+after analysis.
+
 ### Suppressing a known offender
 
 Usually you don't need to. The complexity and lint ratchets are **stateless** —
@@ -138,6 +145,13 @@ so only what the PR actually touches is judged. Two flavors:
 | 4   | **Test debt gate** (`code-debt`)                  | **gate** | contains **any** focused test (`.only`/`.only.each`/`fit`/`fdescribe`), or newly skips a test (`.skip`/`.skip.each`/`xit`/`xdescribe`) in a changed file. TODO/FIXME/`@deprecated` are reported by this tool but not gated.                                                                                                    |
 
 ### Reproduce a gate locally
+
+The circular scanner enumerates source files under `packages`, `examples`,
+`extensions` and `tools` before invoking madge, using the same selection for HEAD
+and the merge base. It does not use madge's directory walker: on Windows, distinct
+64-bit file IDs can round to the same JavaScript numeric inode and silently omit
+source directories. Explicit file enumeration avoids this incomplete-graph
+comparison without changing cycle exceptions or dependency resolution.
 
 Run the same command against your base branch (usually `main`). Complexity has a
 canned parity script; the rest just take `--base`:

@@ -9,12 +9,15 @@ export interface RecordedToolCall {
     result?: unknown;
     // Parsed model-facing tool text, distinct from the raw event/UI result.
     modelResult?: unknown;
+    resultArtifact?: PrivateResultReference;
+    modelResultArtifact?: PrivateResultReference;
     status: "completed" | "failed" | "denied";
     permission?: unknown;
 }
 
 export interface RecordedInteractionTrace {
-    schemaVersion: 1;
+    schemaVersion: 1 | 2;
+    capabilities?: ["private-result-evidence-v1"];
     sessionId: string;
     cwd: string;
     prompt: string;
@@ -76,6 +79,7 @@ export type ValueExpression =
     | { kind: "literal"; value: unknown }
     | { kind: "input"; name: string }
     | { kind: "stepResult"; stepId: string; path?: string[] }
+    | { kind: "resultPath"; stepId: string; path: string[]; suffix: string }
     | {
           kind: "template";
           value: unknown;
@@ -117,7 +121,8 @@ export interface MacroStep {
 }
 
 export interface CopilotToolMacro {
-    schemaVersion: 1;
+    schemaVersion: 1 | 2;
+    capabilities?: ["result-path-v1"];
     macroId: string;
     version: number;
     name: string;
@@ -253,6 +258,8 @@ export interface MacroVersionRef {
 export interface InspectMacroRequest {
     macroId: string;
     version?: number;
+    /** Also require the current approved, unsuppressed execution route. */
+    requireRunnable?: boolean;
 }
 
 export interface ValidateMacroRequest extends InspectMacroRequest {}
@@ -376,6 +383,7 @@ export interface MacroRunStep {
     mcpServerName?: string;
     status: "completed" | "failed" | "cancelled";
     result?: unknown;
+    resultArtifact?: PrivateResultReference;
     error?: string;
     startedAt: string;
     completedAt: string;
@@ -392,7 +400,30 @@ export interface MacroRunRecord {
     startedAt: string;
     completedAt?: string;
     result?: unknown;
+    resultArtifact?: PrivateResultReference;
     error?: { code: string; message: string };
+}
+
+export interface PrivateResultReference {
+    schemaVersion: 1;
+    capability: "private-result-evidence-v1";
+    owner: "trace" | "run";
+    ownerId: string;
+    toolCallId: string;
+    source: "result" | "modelResult";
+    id: string;
+    encoding: "json-utf8";
+    sha256: string;
+    sizeBytes: number;
+    sensitive: true;
+    view: unknown;
+    omittedPaths: string[][];
+    blobs: Array<{
+        path: string[];
+        encoding: "base64";
+        sha256: string;
+        sizeBytes: number;
+    }>;
 }
 
 export type RunMacroResponse =

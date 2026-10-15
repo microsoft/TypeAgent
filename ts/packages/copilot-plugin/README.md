@@ -31,6 +31,59 @@ Registered alongside routing (calls are disabled in bypass mode):
 
 The hook output fields `handled`, `responseContent`, and `handledBy` are supported in current Copilot CLI behavior, allowing the hook to skip the agentic loop entirely when TypeAgent handles a request. For local runtime debugging against the runtime repo, use `pnpm copilot:dev`.
 
+### Owned native control metadata
+
+The evaluator can opt in with an owned `TYPEAGENT_USER_DATA_DIR/native-control-admission.json`
+paired with its parent `evaluation-owner.json`. Normal sessions are unchanged.
+The registered pure `/typeagent-status --control` getter reports only effective
+mode, resolved config/data paths, public source/actor provenance and a digest of
+the mode/routing binding. It also executes the compiled hook's read-only
+`--control-metadata` branch; it does not send a task. Opted-in extension, MCP and
+hook startup receipts refuse to read configuration outside the admitted owner
+root. No credentials or raw settings are returned.
+
+Config precedence remains `TYPEAGENT_PLUGIN_DATA`, `CLAUDE_PLUGIN_DATA`, then
+the home fallback; valid `TYPEAGENT_MODE` overrides the file mode. A requested
+overlay or a status viewport alone is not proof that all actors use it.
+Hook getter metadata is not a native user-prompt invocation, route attribution
+or terminal evidence. MCP startup snapshots do not prove subsequent transitions.
+An optional admitted `expectedMode` binds each guarded user-prompt request.
+The compiled router rereads the same authoritative mode getter after parsing
+input and rejects config-path/mode disagreement before any service translation.
+The status getter remains read-only and reports disagreement instead of hiding
+it. Without admission, existing routing and permission behavior are unchanged.
+
+The native extension registers `onPreToolUse`; the plugin's `hooks.json` registers
+the separate compiled router for `userPromptSubmitted`. That router reads mode
+per request, bypasses ordinary Copilot requests, and claims selected recordings
+before MCP/dev/Direct dispatch. No stale native callback mode bug has been
+demonstrated. Actual native per-invocation receipts are still required.
+
+An owned diagnostic admission can set `diagnosticTransitions: true` to exercise
+only registered local mode/status commands through the native SDK. Actual MCP
+actors then watch the owned config and republish public mode/routing receipts.
+Normal sessions do not watch or run diagnostics. The fixed bypass/delegate →
+MCP/mixed → Direct/mixed sequence checks the exact synthetic tool metadata and
+canonical Node status child without submitting prompts or executing tools.
+Normal parsed hook input projects `source.request: {sessionId,timestamp,cwd}`;
+startup/status metadata has a null request and never proves a native callback.
+
+Owned diagnostics guard the exact current config/data root before any setter,
+verify the initial registered status getter, then restore bypass after the
+bypass/MCP mixed/Direct sequence. The status getter records its actual public
+`spawnSync` PID and compiled script hash; this is read-only getter provenance,
+not normal-hook authentication. Safe tool schema projections are retained before
+validation; missing model-visible task availability never substitutes for or
+disproves the separate authenticated host task API.
+
+One actual CLI 1.0.95 metadata-only diagnostic proved the initial owned Node
+getter and bypass/MCP mixed/Direct/restored-bypass controls. It remained blocked
+because the safe SDK inventory also reported `extensions_reload` and
+`extensions_manage`; diagnostics retain the unexpected names rather than
+silently excluding them. Metadata presence does not establish executability or
+permission. This control-plane evidence is not normal user-prompt callback
+authentication, capture verification or workflow acceptance.
+
 ## Guarded GHCP evaluation harness
 
 The harness, corpus, grading, credit probe, tests, and maintained methodology
@@ -572,6 +625,63 @@ even when their steps are technically replayable. If `run_macro` returns
 `agentRequired`, the skill hands the
 complete launch payload to the runner, which executes the whole macro through
 Copilot's live tool and permission surface.
+The runner executes the steps itself and must not delegate the launch or its
+steps to another agent, including another copy of the macro runner.
+Its agent profile selects `gpt-6-luna` rather than inheriting the caller's
+reasoning model. This does not change the models used for task reasoning or
+background macro extraction/building. The runner may submit an adapted
+procedure as a new draft but cannot approve it.
+
+`inspect_macro` declares read-only, non-destructive, idempotent, local-catalog
+MCP annotations for explicit catalog inspection and draft review without
+the unnecessary mutating-tool consent prompt. It is not an execution
+prerequisite: `run_macro` validates the macro and supplies its complete
+immutable definition in the handoff. Neither the caller nor either runner
+performs another model-driven inspection. Recorded steps, publication, adaptation,
+and backend access retain their existing permission enforcement.
+
+### Native host-controlled reuse
+
+Direct macro handoffs always use the native host. This path requires
+the native TypeAgent extension (`--experimental` on tested CLI 1.0.89), its
+normal hook-registration approval, and the SDK `session.rpc.tools.execute`
+surface. Keep the existing macro agent-handoff feature enabled.
+
+After grammar selects an approved macro, an authenticated session-local IPC
+bridge passes the launch from the command-hook process to the persistent
+extension. The extension invokes one synchronous `task` through the native
+offered-tool pipeline with the packaged Luna runner. There is no root-model
+turn to regenerate the launch JSON or reformat the completed child answer.
+The Direct hook displays the child's actual full answer only after its
+correlated completion event. No permission handler grants execution access.
+
+Before launching the child, the host reads the exact catalog version with
+`requireRunnable: true`, checking approval, suppression, and the current
+approved route. It rejects any difference between the complete catalog macro
+and the handoff. The host then supplies a matching `hostValidation` marker
+to the dedicated `typeagent-macro-runner-host` Luna profile. This profile starts
+with the first recorded step, without a model-driven `inspect_macro` call.
+The live pre-tool hook rejects all calls from this profile unless its native
+child is correlated to the host's actual catalog verification; a prompt marker
+alone grants nothing. The caller-launched `typeagent-macro-runner` profile
+executes the complete server-validated caller/MCP handoff without inspection.
+Catalog errors are terminal and never trigger
+another launch.
+
+The extension marks runner sessions from native events, so their structured
+prompts are not routed or translated again. A pre-tool hook denies nested
+agent/workflow delegation from runners; an attempted delegation makes the
+host execution fail and blocks further calls in that child. Ordinary tools
+retain live permissions. Cancellation/disconnection cancels the exact owned
+child, and the host respects the launch timeout with a 270-second transport
+ceiling. Failures never fall back to another runner or rerun the user request.
+
+The extension emits payload-free `typeagent-macro-phases` timeline records
+for dispatch, catalog validation, child startup/completion, model turns, inspection, tool calls,
+and permission events. These are diagnostic timings, not a speed benchmark.
+MCP-originated handoffs retain the caller launch path, without an inspection
+prerequisite. Runner routing/delegation protection applies in both paths.
+There is no host-execution flag or Direct fallback to a caller launch.
 
 Agent-guided adaptations may be saved only through
 `submit_macro_candidate`. The server validates handoff provenance, execution

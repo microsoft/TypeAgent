@@ -3,6 +3,7 @@
 
 import {
     induceMacroFromTrace,
+    getRecordedArgumentDependencies,
     validateMacro,
     type RecordedInteractionTrace,
     type ReplayToolHost,
@@ -50,6 +51,126 @@ function trace(
 }
 
 describe("macro induction and validation", () => {
+    it("projects only argument paths and source call identities from existing binding inference", () => {
+        const source = trace({
+            result: { secretResultKey: "raw-only" },
+            modelResult: { id: "generated-id", content: "private-body" },
+        });
+        source.toolCalls.push({
+            toolCallId: "call-2",
+            name: "fetch",
+            arguments: { id: "generated-id" },
+            status: "completed",
+            result: { content: "private-answer" },
+        });
+        const projection = getRecordedArgumentDependencies(source);
+        expect(projection).toEqual([
+            { toolCallId: "call-1", dependencies: [] },
+            {
+                toolCallId: "call-2",
+                dependencies: [
+                    {
+                        argumentPath: ["id"],
+                        sourceToolCallId: "call-1",
+                        expressionKind: "stepResult",
+                    },
+                ],
+            },
+        ]);
+        const encoded = JSON.stringify(projection);
+        for (const value of [
+            "generated-id",
+            "private-body",
+            "private-answer",
+            "secretResultKey",
+        ])
+            expect(encoded).not.toContain(value);
+    });
+    it.each([
+        "missing",
+        "failed",
+        "different",
+        "redacted",
+        "raw-only",
+        "future",
+    ])("does not invent an earlier-result dependency (%s)", (condition) => {
+        const source = trace({
+            result: { id: "generated-id" },
+            modelResult: { id: "generated-id" },
+        });
+        source.toolCalls.push({
+            toolCallId: "call-2",
+            name: "fetch",
+            arguments: { id: "generated-id" },
+            status: "completed",
+            result: {},
+        });
+        if (condition === "missing") {
+            delete source.toolCalls[0].result;
+            delete source.toolCalls[0].modelResult;
+        }
+        if (condition === "failed") source.toolCalls[0].status = "failed";
+        if (condition === "different")
+            source.toolCalls[1].arguments = { id: "different-id" };
+        if (condition === "redacted") {
+            source.toolCalls[0].modelResult = { id: "[REDACTED]" };
+            source.toolCalls[1].arguments = { id: "[REDACTED]" };
+        }
+        if (condition === "raw-only")
+            source.toolCalls[0].modelResult = { id: "different-model-id" };
+        if (condition === "future") source.toolCalls.reverse();
+        expect(
+            getRecordedArgumentDependencies(source).every(
+                (call) => call.dependencies.length === 0,
+            ),
+        ).toBe(true);
+    });
+    it("validates template target paths before nested expressions without changing first-error messages", async () => {
+        const macro = await induceMacroFromTrace(
+            "trace-order",
+            trace(),
+            "macro-order",
+            "Template ordering",
+            "",
+            "2026-10-12T00:00:00Z",
+            replayHost,
+        );
+        const expression = {
+            kind: "template" as const,
+            value: { path: "package.json" },
+            bindings: [
+                {
+                    path: ["missing"],
+                    expression: { kind: "input" as const, name: "unknown" },
+                },
+            ],
+        };
+        macro.steps[0].arguments = expression;
+        expect(
+            validateMacro(macro).issues.find(
+                (issue) => issue.code === "invalidExpression",
+            )?.message,
+        ).toBe("Template binding path is unavailable: missing");
+        expression.bindings[0].path = ["path"];
+        expect(
+            validateMacro(macro).issues.find(
+                (issue) => issue.code === "invalidExpression",
+            )?.message,
+        ).toBe("Unknown input: unknown");
+        expression.bindings[0].path = [];
+        expect(
+            validateMacro(macro).issues.find(
+                (issue) => issue.code === "invalidExpression",
+            )?.message,
+        ).toBe("A template binding requires a non-empty path.");
+        expression.bindings = [];
+        expect(
+            validateMacro(macro).issues.find(
+                (issue) => issue.code === "invalidExpression",
+            )?.message,
+        ).toBe("A template expression requires at least one binding.");
+    });
+
     it("uses model-facing guards and references throughout a mixed agent procedure", async () => {
         const source = trace({
             result: {

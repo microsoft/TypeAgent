@@ -282,6 +282,16 @@ const boundValueExpressionSchema = z.discriminatedUnion("kind", [
         stepId: z.string().min(1),
         path: z.array(z.string()).optional(),
     }),
+    z.object({
+        kind: z.literal("resultPath"),
+        stepId: z.string().min(1),
+        path: z.array(z.string()),
+        suffix: z
+            .string()
+            .regex(
+                /^(?:\/content|\?\$select=[A-Za-z][A-Za-z0-9]*(?:,[A-Za-z][A-Za-z0-9]*){0,19})(?![\s\S])/,
+            ),
+    }),
 ]);
 
 const valueExpressionSchema = z.discriminatedUnion("kind", [
@@ -366,8 +376,14 @@ export class TypeAgentMacroMcpServer {
         );
         this.server.tool(
             "inspect_macro",
-            "Inspect one immutable macro version.",
+            "Inspect one immutable macro version for catalog or draft review. Running a macro does not require this tool.",
             macroRefSchema,
+            {
+                readOnlyHint: true,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: false,
+            },
             (request) => adapter.inspectMacro(request),
         );
         this.server.tool(
@@ -412,7 +428,7 @@ export class TypeAgentMacroMcpServer {
         );
         this.server.tool(
             "run_macro",
-            "Run an approved macro by replaying its captured MCP tool calls.",
+            "Validate and run an approved macro, or return its complete validated agentRequired launch for typeagent-macro-runner. Execute the returned handoff without another inspect_macro call.",
             {
                 macroId: z.string().min(1),
                 version: z.number().int().positive().optional(),

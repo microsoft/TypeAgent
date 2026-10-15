@@ -68,7 +68,7 @@ function createModel(
         apiSettings = openai.apiSettingsFromEnv(
             openai.ModelType.Chat,
             undefined,
-            "GPT_4_O",
+            "GPT_6_LUNA",
         );
     }
     const chatModel = openai.createJsonChatModel(apiSettings, [

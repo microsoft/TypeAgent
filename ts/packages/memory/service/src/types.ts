@@ -89,7 +89,46 @@ export interface SourceRevision {
     };
     embeddingIdentity?: string;
     assets?: RevisionAssetDescriptor[];
+    synopsis?: SourceSynopsisPreview;
     state: "accepted" | "processing" | "ready" | "failed" | "deleted";
+}
+
+export interface SourceSynopsisPreview {
+    status: "pending" | "ready" | "failed" | "unavailable";
+    freshness: "fresh" | "stale";
+    preview?: string;
+    generatedVersion: number;
+    recipe: string;
+    inputHash: string;
+    generatedAt?: string;
+    reason?: string;
+}
+
+export interface SourceSynopsis extends SourceSynopsisPreview {
+    corpusId: string;
+    sourceId: string;
+    revisionId: string;
+    overview?: string;
+    evidence: {
+        coordinateSpace: "retained-utf16";
+        start: number;
+        end: number;
+        excerpt: string;
+    }[];
+    influenceSources: { sourceId: string; revisionId: string }[];
+    coverage: {
+        method: "direct" | "source-order-sections";
+        scannedChars: number;
+        totalChars: number;
+        sectionCount: number;
+    };
+    limitations: string[];
+}
+
+export interface SourceSynopsisRequest {
+    corpusId: string;
+    sourceId: string;
+    revisionId?: string;
 }
 
 export interface MemorySource extends SourceDocument {
@@ -293,6 +332,7 @@ export interface MemoryEvidence {
     sourceType: SourceType;
     capturedAt?: string;
     indexedAt: string;
+    synopsis?: SourceSynopsisPreview;
 }
 
 export interface MemorySearchResult {
@@ -518,6 +558,7 @@ export interface MemoryServiceCapabilities {
         exactSearch: boolean;
         management: boolean;
         groundedAnswer: boolean;
+        sourceSynopses?: boolean;
     };
     warnings: string[];
 }
@@ -593,6 +634,7 @@ export interface MemoryService {
         sourceId: string,
     ): Promise<MemorySource | undefined>;
     getSourceContent(request: SourceContentRequest): Promise<SourceContent>;
+    getSourceSynopsis?(request: SourceSynopsisRequest): Promise<SourceSynopsis>;
     getSourceKnowledge(
         corpusId: string,
         sourceId: string,
@@ -702,6 +744,7 @@ export interface IndexedFragmentRequest {
     terms: string[];
     query?: string;
     sourceIds: string[];
+    followSources?: Array<{ sourceId: string; revisionId: string }>;
     maxFragments?: number;
     maxCharsPerFragment?: number;
     maxReadChars?: number;

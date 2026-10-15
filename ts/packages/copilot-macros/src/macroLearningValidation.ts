@@ -18,6 +18,8 @@ import {
 } from "./deterministicReplay.js";
 import { validateMacro } from "./macroDefinition.js";
 import { redactTraceValue } from "./redaction.js";
+import { learningToolResult, omittedResultPath } from "./resultEvidence.js";
+import { assertMacroCapabilities, validateResultSuffix } from "./resultPath.js";
 
 export function learningValuesEqual(left: unknown, right: unknown): boolean {
     // Runtime adapters can return JSON objects from a different JavaScript realm.
@@ -102,7 +104,15 @@ export function assertLearningValue(value: unknown): void {
 export function assertLearningTrace(trace: RecordedInteractionTrace): void {
     assertLearningValue(trace);
     if (
-        trace.schemaVersion !== 1 ||
+        (trace.schemaVersion !== 1 && trace.schemaVersion !== 2) ||
+        (trace.schemaVersion === 1 &&
+            (trace.capabilities !== undefined ||
+                trace.toolCalls.some(
+                    (call) => call.resultArtifact || call.modelResultArtifact,
+                ))) ||
+        (trace.schemaVersion === 2 &&
+            (trace.capabilities?.length !== 1 ||
+                trace.capabilities[0] !== "private-result-evidence-v1")) ||
         !trace.cwd ||
         !trace.sessionId ||
         !trace.prompt.trim() ||
@@ -121,7 +131,8 @@ export function assertLearningTrace(trace: RecordedInteractionTrace): void {
                 !call.name ||
                 call.status !== "completed" ||
                 call.arguments === undefined ||
-                call.result === undefined,
+                (call.result === undefined &&
+                    call.resultArtifact === undefined),
         )
     ) {
         throw new Error(
@@ -194,6 +205,7 @@ function inspectExpression(
     if (!expression || typeof expression !== "object") {
         throw new Error("Invalid learning expression.");
     }
+
     switch (expression.kind) {
         case "literal":
             assertLearningValue(expression.value);
@@ -204,10 +216,15 @@ function inspectExpression(
             inputs.add(expression.name);
             return;
         case "stepResult":
+        case "resultPath":
             if (typeof expression.stepId !== "string")
                 throw new Error("Invalid result reference.");
             if (expression.path !== undefined)
                 assertPath(expression.path, true);
+            if (expression.kind === "resultPath") {
+                assertPath(expression.path, true);
+                validateResultSuffix(expression.suffix);
+            }
             return;
         case "template": {
             if (
@@ -243,6 +260,25 @@ function inspectExpression(
         }
         default:
             throw new Error("Unsupported learning expression kind.");
+    }
+}
+
+function assertAvailableBindings(
+    expression: ValueExpression,
+    calls: Map<string, RecordedToolCall>,
+): void {
+    if (expression.kind === "template") {
+        for (const binding of expression.bindings)
+            assertAvailableBindings(binding.expression, calls);
+    } else if (
+        expression.kind === "stepResult" ||
+        expression.kind === "resultPath"
+    ) {
+        const call = calls.get(expression.stepId);
+        if (!call || omittedResultPath(call, expression.path ?? []))
+            throw new Error(
+                "Bindings to archived result bodies or missing steps are unsupported.",
+            );
     }
 }
 
@@ -397,6 +433,7 @@ export function assertLearningProcedure(
     macro: CopilotToolMacro,
     trace: RecordedInteractionTrace,
 ): void {
+    assertMacroCapabilities(macro);
     if (
         !Array.isArray(build.inputs) ||
         build.inputs.length > 100 ||
@@ -415,10 +452,12 @@ export function assertLearningProcedure(
     const inputNames = inspectLearningInputs(build.inputs);
     const usedInputs = new Set<string>();
     const results = new Map<string, unknown>();
+    const calls = new Map<string, RecordedToolCall>();
     for (const [index, step] of build.steps.entries()) {
         const call = trace.toolCalls[index];
         assertSourceStep(step, call);
         inspectExpression(step.arguments, usedInputs);
+        assertAvailableBindings(step.arguments, calls);
         const resolved = resolveMacroExpression(
             step.arguments,
             build.exampleInputs,
@@ -429,10 +468,18 @@ export function assertLearningProcedure(
                 "Example inputs do not reconstruct exact recorded arguments.",
             );
         }
-        const result =
-            call.modelResult !== undefined ? call.modelResult : call.result;
+        const result = learningToolResult(call);
         assertResultGuards(step, result);
+        for (const guard of step.postconditions ?? [])
+            if (
+                guard.kind === "resultPathExists" &&
+                omittedResultPath(call, guard.path)
+            )
+                throw new Error(
+                    "Guards on archived result bodies are unsupported.",
+                );
         results.set(step.id, result);
+        calls.set(step.id, call);
     }
     if (
         inputNames.size !== usedInputs.size ||

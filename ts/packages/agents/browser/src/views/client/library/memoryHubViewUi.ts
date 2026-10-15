@@ -56,3 +56,12 @@ export function viewTimestamp(value: string): string | undefined {
         throw new Error("Enter a valid calendar date and clock time");
     return new Date(timestamp).toISOString();
 }
+
+export function viewRevisionTime(value: string | undefined): HTMLTimeElement[] {
+    if (value === undefined) return [];
+    const timestamp = viewTimestamp(value);
+    if (!timestamp) throw new Error("View revision timestamp is missing");
+    const time = rbNode("time", `Revision created: ${timestamp}`);
+    time.dateTime = timestamp;
+    return [time];
+}

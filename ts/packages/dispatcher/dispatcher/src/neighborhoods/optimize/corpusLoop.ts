@@ -34,7 +34,7 @@ import {
 import type { CaseResult, EvaluationResult, OptimizationRun } from "./types.js";
 import { DEFAULT_CONCURRENCY, ensureDir, pmap } from "./util.js";
 
-import { openai, type ChatModel } from "@typeagent/aiclient";
+import { openai } from "@typeagent/aiclient";
 import { schemaGuidelines } from "../../translation/schemaGuidelines.js";
 
 // =============================================================================
@@ -344,159 +344,32 @@ export async function runCorpusLoop(
 
 function buildProposeCtx(caseDir: string, runRoot: string): ProposeContext {
     return {
-        createModel: (name) => createProposeModel(name, 16384),
+        createModel: (name) => {
+            const model = openai.createChatModel(name);
+            const complete = model.complete.bind(model);
+            return {
+                ...model,
+                complete: (...[prompt, ...args]: Parameters<typeof complete>) =>
+                    complete(
+                        [
+                            {
+                                role: "system",
+                                content:
+                                    "Aim for approximately 16384 tokens in the final JSON only, excluding reasoning. Preserve the complete required schema and examples even when that needs a longer answer.",
+                            },
+                            ...(typeof prompt === "string"
+                                ? [{ role: "user" as const, content: prompt }]
+                                : prompt),
+                        ],
+                        ...args,
+                    ),
+            };
+        },
         pmap,
         workdir: runRoot,
         outDir: caseDir,
         schemaGuidelines,
     };
-}
-
-/**
- * Build a ChatModel for the lever propose path with an enlarged response
- * cap. Bumping the cap matters because propose prompts emit verbose JSON
- * (schema rewrites with WRONG/RIGHT example blocks, K hypotheses per call).
- * The default cap (~4k tokens) truncates responses and fails the whole
- * batch's JSON parse.
- *
- * The cap parameter migrated from `max_tokens` to `max_completion_tokens`
- * between GPT-4 and GPT-5/reasoning-model APIs:
- *   - GPT-4 family: accepts `max_tokens`; may not recognize the newer
- *     parameter.
- *   - GPT-5 / reasoning models: reject `max_tokens` with a 400 error;
- *     require `max_completion_tokens`.
- *
- * The caller can't tell which family the resolved endpoint belongs to at
- * createChatModel time, so this wrapper probes: try the modern parameter
- * first, fall back to the legacy one on a 400 that names the parameter.
- * The choice is cached per logical endpoint name so subsequent calls
- * skip the probe.
- */
-interface TokenParamChoice {
-    param: "max_completion_tokens" | "max_tokens";
-    cap: number;
-}
-const tokenParamCache = new Map<string, TokenParamChoice>();
-
-function createProposeModel(
-    endpointName: string,
-    preferredCap: number,
-): ChatModel {
-    // The right (param, cap) pair varies by deployment:
-    //   - GPT-5 / reasoning models: max_completion_tokens up to 16k+
-    //   - GPT-4 / GPT-4o family: max_tokens (or its alias) capped at
-    //     4096 output tokens
-    //   - Some endpoints reject max_tokens outright (must use the
-    //     newer parameter name); others accept either name but enforce
-    //     a small per-response cap.
-    //
-    // The wrapper below tries the preferred (param, cap) first, then
-    // retries with progressively more conservative choices when the
-    // endpoint signals which constraint it's enforcing. The working
-    // pair is cached per endpoint name so subsequent calls in the
-    // same run skip the probe.
-
-    const buildModel = (choice: TokenParamChoice) =>
-        openai.createChatModel(
-            endpointName,
-            choice.param === "max_completion_tokens"
-                ? { max_completion_tokens: choice.cap }
-                : { max_tokens: choice.cap },
-        );
-
-    const cached = tokenParamCache.get(endpointName);
-    if (cached) {
-        return buildModel(cached);
-    }
-
-    const preferred: TokenParamChoice = {
-        param: "max_completion_tokens",
-        cap: preferredCap,
-    };
-    const model = buildModel(preferred);
-    const originalComplete = model.complete.bind(model);
-    const wrapped: ChatModel = {
-        ...model,
-        complete: async (...args: Parameters<typeof originalComplete>) => {
-            const result = await originalComplete(...args);
-            if (result.success) {
-                tokenParamCache.set(endpointName, preferred);
-                return result;
-            }
-            const fallback = decideFallback(result.message ?? "", preferred);
-            if (!fallback) {
-                return result;
-            }
-            tokenParamCache.set(endpointName, fallback);
-            const retry = buildModel(fallback);
-            return retry.complete(...args);
-        },
-    };
-    return wrapped;
-}
-
-/**
- * Inspect a 400 message and decide whether to retry with a different
- * (param, cap) choice. Returns the new choice on a match, undefined
- * when the error isn't recognized as a token-cap issue.
- *
- * Three patterns we know about:
- *   - "max_tokens is too large: X. This model supports at most N":
- *     the endpoint accepted the param but the value exceeds its cap.
- *     Retry with cap = N (or 4096 fallback).
- *   - "Setting 'max_tokens' is not supported" / "unsupported parameter
- *     'max_tokens'": GPT-5/reasoning model rejects the legacy name.
- *     Retry with max_completion_tokens.
- *   - "Setting 'max_completion_tokens'" / "unknown parameter
- *     'max_completion_tokens'": legacy model rejects the modern name.
- *     Retry with max_tokens at a conservative cap.
- */
-function decideFallback(
-    message: string,
-    previous: TokenParamChoice,
-): TokenParamChoice | undefined {
-    if (!/400/.test(message)) return undefined;
-
-    // Value-too-large — endpoint enforces a per-response cap.
-    const tooLarge = message.match(
-        /supports? at most (\d+) (?:completion )?tokens/i,
-    );
-    if (tooLarge) {
-        const reportedCap = parseInt(tooLarge[1]!, 10);
-        if (
-            Number.isFinite(reportedCap) &&
-            reportedCap > 0 &&
-            reportedCap < previous.cap
-        ) {
-            return { param: previous.param, cap: reportedCap };
-        }
-        // Reported cap is missing or not smaller — fall through to a
-        // conservative 4096.
-        return { param: previous.param, cap: 4096 };
-    }
-
-    // Param-name rejection.
-    const rejectsMaxCompletionTokens =
-        /max_completion_tokens/i.test(message) &&
-        (/unsupported parameter/i.test(message) ||
-            /unknown parameter/i.test(message) ||
-            /not supported/i.test(message));
-    if (
-        rejectsMaxCompletionTokens &&
-        previous.param === "max_completion_tokens"
-    ) {
-        return { param: "max_tokens", cap: 4096 };
-    }
-    const rejectsMaxTokens =
-        /max_tokens/i.test(message) &&
-        (/unsupported parameter/i.test(message) ||
-            /unknown parameter/i.test(message) ||
-            /not supported/i.test(message)) &&
-        !/max_completion_tokens/i.test(message);
-    if (rejectsMaxTokens && previous.param === "max_tokens") {
-        return { param: "max_completion_tokens", cap: previous.cap };
-    }
-    return undefined;
 }
 
 function buildApplyCtx(

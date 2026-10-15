@@ -134,6 +134,12 @@ export function createAgentInvokeHandlers(
             getMemoryService().getSource(corpusId, sourceId),
         memoryGetSourceContent: (params) =>
             getMemoryService().getSourceContent(params),
+        memoryGetSourceSynopsis: (params) => {
+            const service = getMemoryService();
+            if (!service.getSourceSynopsis)
+                throw new Error("Source synopses are not supported");
+            return service.getSourceSynopsis(params);
+        },
         memoryGetSourceKnowledge: ({ corpusId, sourceId }) =>
             getMemoryService().getSourceKnowledge(corpusId, sourceId),
         memoryListSourceKnowledgeSuppressions: ({ corpusId, sourceId }) => {

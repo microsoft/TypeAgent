@@ -1,7 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    jest,
+} from "@jest/globals";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -84,31 +91,42 @@ describe("translationBench rateLimiter", () => {
     });
 
     it("does not sleep past the maximum wait", async () => {
-        const waits: number[] = [];
-        const limiter = createRateLimiter(
-            { "azure/m": 100 },
-            {
-                dbPath,
-                maxWaitMs: 25,
-                onWait: (_model, _waitedMs, waitMs) => waits.push(waitMs),
-            },
-        );
-        limiters.push(limiter);
-        await limiter.run("azure/m", 100, async () => ({
-            result: "first",
-            actualTokens: 100,
-        }));
+        jest.useFakeTimers();
+        try {
+            const waits: number[] = [];
+            const limiter = createRateLimiter(
+                { "azure/m": 100 },
+                {
+                    dbPath,
+                    maxWaitMs: 25,
+                    onWait: (_model, _waitedMs, waitMs) => waits.push(waitMs),
+                },
+            );
+            limiters.push(limiter);
+            await limiter.run("azure/m", 100, async () => ({
+                result: "first",
+                actualTokens: 100,
+            }));
 
-        const startedAt = Date.now();
-        await expect(
-            limiter.run("azure/m", 100, async () => ({
+            const execute = jest.fn(async () => ({
                 result: "blocked",
                 actualTokens: 100,
-            })),
-        ).rejects.toThrow(/max wait/);
-        expect(Date.now() - startedAt).toBeLessThan(500);
-        expect(waits).toEqual([expect.any(Number)]);
-        expect(waits[0]).toBeLessThanOrEqual(25);
+            }));
+            const rejection = expect(
+                limiter.run("azure/m", 100, execute),
+            ).rejects.toThrow(/max wait/);
+            await jest.advanceTimersByTimeAsync(24);
+            expect(waits).toEqual([25]);
+            expect(jest.getTimerCount()).toBe(1);
+            expect(execute).not.toHaveBeenCalled();
+            await jest.advanceTimersByTimeAsync(1);
+            await rejection;
+            expect(waits).toEqual([25]);
+            expect(jest.getTimerCount()).toBe(0);
+            expect(execute).not.toHaveBeenCalled();
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     it("settles claims to the measured actual token count", async () => {

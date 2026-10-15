@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MacroManager } from "@typeagent/copilot-macros";
+import { MacroManager, type TraceSummary } from "@typeagent/copilot-macros";
 import {
     SessionCapture,
     type SessionCaptureDependencies,
@@ -37,6 +37,84 @@ function dependencies(
 }
 
 describe("extension session capture", () => {
+    it("awaits the actual finalized summary before exposing learning completion", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "capture-finalized-"));
+        try {
+            const manager = new MacroManager(directory);
+            manager.armRecording({
+                sessionId: "session-finalized",
+                learning: false,
+            });
+            const summaryCallback = jest.fn(async (summary: TraceSummary) => {
+                expect(summary.sessionId).toBe("session-finalized");
+                expect(summary.traceId).toBeTruthy();
+                expect(summary.toolCallCount).toBe(1);
+            });
+            const deps = dependencies(async () => ({
+                getMacroRecordingState: async () =>
+                    manager.getRecordingState("session-finalized"),
+                finalizeMacroRecording: async (request) =>
+                    manager.finalizeRecording(request),
+                failMacroRecording: async () => {},
+                close: async () => {},
+            }));
+            const capture = new SessionCapture(
+                "session-finalized",
+                directory,
+                () => {},
+                deps,
+                async () => {},
+                summaryCallback,
+            );
+            capture.enqueue(
+                event("user.message", {
+                    content: "Read the selected generated document",
+                }),
+            );
+            const token = manager.claimRecording({
+                sessionId: "session-finalized",
+                cwd: directory,
+                promptHash: createHash("sha256")
+                    .update("Read the selected generated document")
+                    .digest("hex"),
+            });
+            expect(token).toBeTruthy();
+            capture.enqueue(
+                event(
+                    "tool.execution_start",
+                    {
+                        toolCallId: "generated-child-call",
+                        toolName: "workiq-fetch",
+                        mcpServerName: "workiq",
+                        arguments: {},
+                    },
+                    "generated-child",
+                ),
+            );
+            capture.enqueue(
+                event(
+                    "tool.execution_complete",
+                    {
+                        toolCallId: "generated-child-call",
+                        success: true,
+                        result: { content: "{}" },
+                    },
+                    "generated-child",
+                ),
+            );
+            capture.enqueue(
+                event("assistant.message", {
+                    content: "Completed generated read",
+                }),
+            );
+            capture.enqueue(event("assistant.turn_end", {}));
+            capture.enqueue(event("session.idle", {}));
+            await capture.flush();
+            expect(summaryCallback).toHaveBeenCalledTimes(1);
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    });
     it("does not fail a newly claimed recording while finishing an earlier turn", async () => {
         const directory = await mkdtemp(join(tmpdir(), "capture-binding-"));
         try {

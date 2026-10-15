@@ -328,6 +328,7 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
             subtitle.className = "item-subtitle";
             subtitle.textContent = `${source.sourceType} · ${source.revisions.find((revision) => revision.revisionId === source.activeRevisionId)?.state ?? "unknown revision state"} · ${host.corpusName?.(source.corpusId) ?? source.corpusId} · ${source.revisions.length} revision(s)`;
             button.append(title, subtitle);
+            appendSourceSynopsis(button, source);
             button.addEventListener("click", () => {
                 host.openSource(source.corpusId, source.sourceId);
             });
@@ -385,6 +386,23 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
             !sourcePage.nextContinuationToken;
     }
 
+    function appendSourceSynopsis(
+        button: HTMLElement,
+        source: MemoryCenterSource,
+    ): void {
+        const synopsis = source.revisions.find(
+            (revision) => revision.revisionId === source.activeRevisionId,
+        )?.synopsis;
+        if (!synopsis) return;
+        const description = document.createElement("div");
+        description.className = "item-subtitle";
+        description.textContent =
+            synopsis.freshness === "fresh" && synopsis.preview
+                ? synopsis.preview
+                : `Synopsis ${synopsis.status} · ${synopsis.freshness}`;
+        button.append(description);
+    }
+
     function renderSource(): void {
         const hasSource = selectedSource !== undefined;
         element<HTMLButtonElement>("reindexSourceButton").disabled = !hasSource;
@@ -411,6 +429,15 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
         appendDefinition("Source ID", selectedSource.sourceId);
         appendDefinition("Type", selectedSource.sourceType);
         appendDefinition("Active revision", selectedSource.activeRevisionId);
+        const synopsis = selectedSource.revisions.find(
+            (revision) =>
+                revision.revisionId === selectedSource!.activeRevisionId,
+        )?.synopsis;
+        if (synopsis)
+            appendDefinition(
+                "Generated synopsis",
+                `${synopsis.status} · ${synopsis.freshness}${synopsis.reason ? ` · ${synopsis.reason}` : ""}`,
+            );
         if (selectedSource.canonicalUri) {
             appendDefinition("URI", selectedSource.canonicalUri);
         }
@@ -964,6 +991,57 @@ export function mountMemoryManagement(host: MemoryManagementHost) {
             maxChars: CONTENT_PAGE_SIZE,
         });
         renderContent();
+        await loadSourceSynopsis(
+            corpusId,
+            sourceId,
+            selectedSource.activeRevisionId,
+        );
+    }
+
+    async function loadSourceSynopsis(
+        corpusId: string,
+        sourceId: string,
+        revisionId: string,
+    ): Promise<void> {
+        if (
+            !selectedSource?.revisions.find(
+                (revision) => revision.revisionId === revisionId,
+            )?.synopsis
+        )
+            return;
+        const version = requestVersion;
+        try {
+            const synopsis = await invoke("memoryGetSourceSynopsis", {
+                corpusId,
+                sourceId,
+                revisionId,
+            });
+            if (version !== requestVersion) return;
+            if (synopsis.freshness === "fresh" && synopsis.overview)
+                appendDefinition(
+                    "Source overview (generated)",
+                    synopsis.overview,
+                );
+            appendDefinition(
+                "Synopsis provenance",
+                `Retained revision ${synopsis.revisionId}; generated v${synopsis.generatedVersion}; ${synopsis.recipe}; ${synopsis.coverage.method}; scanned ${synopsis.coverage.scannedChars}/${synopsis.coverage.totalChars} UTF-16 characters`,
+            );
+            appendDefinition(
+                "Synopsis limitations",
+                synopsis.limitations.join(" "),
+            );
+            for (const evidence of synopsis.evidence)
+                appendDefinition(
+                    `Original retained UTF-16 ${evidence.start}-${evidence.end} (not indexed locator)`,
+                    evidence.excerpt,
+                );
+        } catch (error) {
+            if (version === requestVersion)
+                appendDefinition(
+                    "Synopsis unavailable",
+                    error instanceof Error ? error.message : String(error),
+                );
+        }
     }
 
     async function loadContentPage(offset: number): Promise<void> {

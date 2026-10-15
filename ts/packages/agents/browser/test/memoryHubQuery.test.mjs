@@ -2,7 +2,14 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, before, test } from "node:test";
+import {
+    configFromEnvRecord,
+    getActiveModelProvider,
+    getRuntimeConfig,
+    setActiveModelProvider,
+    setRuntimeConfig,
+} from "@typeagent/aiclient";
 import {
     createMemoryHubQueryFunctions,
     fuseEvidence,
@@ -19,6 +26,23 @@ import {
 import { createHash } from "node:crypto";
 
 const time = "2026-10-02T00:00:00.000Z";
+const savedConfig = getRuntimeConfig();
+const savedProvider = getActiveModelProvider();
+before(() => {
+    setRuntimeConfig(
+        configFromEnvRecord({
+            AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS:
+                "https://memory-hub-test.invalid/openai/deployments/gpt-6-luna/chat/completions",
+            AZURE_OPENAI_API_KEY_GPT_6_LUNA_EASTUS: "test-key",
+        }),
+    );
+    setActiveModelProvider("azure");
+});
+after(() => {
+    setRuntimeConfig(savedConfig);
+    setActiveModelProvider(savedProvider);
+});
+
 test("source-plus-informational-view answer preserves derivative lineage through the normal browser workflow", async () => {
     const { service } = fixture();
     const text =

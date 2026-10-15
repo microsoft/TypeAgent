@@ -303,7 +303,7 @@ async function callFetch(
                 requestConstraints,
             );
         }
-        reserveSerializedRequest(safeOptions);
+        reserveSerializedRequest(safeOptions, requestConstraints?.outputTokens);
         return fetchWithTimeout(url, safeOptions, timeout);
     });
     return throttler ? throttler(send) : send();

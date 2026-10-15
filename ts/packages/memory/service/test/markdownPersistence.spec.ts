@@ -41,6 +41,7 @@ describe("Markdown source persistence with stubbed KnowPro", () => {
 
     function openService(): FileMemoryService {
         return new FileMemoryService(root, {
+            informationalViews: false,
             indexFactory: (corpusId, directory) =>
                 createKnowProCorpusIndex(corpusId, directory, () => {
                     const settings = createDocMemorySettings(64, undefined, {

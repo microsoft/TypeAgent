@@ -57,6 +57,8 @@ import {
 import { induceMacroFromTrace, validateMacro } from "./macroDefinition.js";
 
 import { redactTraceValue } from "./redaction.js";
+import { PrivateResultStore } from "./resultEvidence.js";
+import { assertMacroCapabilities, setMacroCapabilities } from "./resultPath.js";
 import {
     MacroLearningEngine,
     type MacroLearningTarget,
@@ -312,13 +314,24 @@ export class MacroManager {
 
         const traceId = randomUUID();
         const createdAt = new Date().toISOString();
-        const storedTrace = redactTraceValue({
-            ...request.trace,
-            traceId,
-            createdAt,
-        }) as RecordedInteractionTrace & { traceId: string; createdAt: string };
-        const tracesDir = path.join(this.rootDir, "traces");
+        let storedTrace: RecordedInteractionTrace & {
+            traceId: string;
+            createdAt: string;
+        };
         try {
+            storedTrace = redactTraceValue({
+                ...(await this.retainTraceEvidence(traceId, request.trace)),
+                traceId,
+                createdAt,
+            }) as typeof storedTrace;
+            if (
+                Buffer.byteLength(JSON.stringify(storedTrace, undefined, 2)) >
+                1024 * 1024
+            )
+                throw new Error(
+                    "Recorded learning trace exceeds its 1 MiB storage limit.",
+                );
+            const tracesDir = path.join(this.rootDir, "traces");
             await mkdir(tracesDir, { recursive: true });
             const destination = path.join(tracesDir, `${traceId}.json`);
             const temporary = `${destination}.${randomUUID()}.tmp`;
@@ -355,6 +368,32 @@ export class MacroManager {
             summary.learningJobId = job.jobId;
         }
         return summary;
+    }
+
+    private async retainTraceEvidence(
+        traceId: string,
+        trace: RecordedInteractionTrace,
+    ): Promise<RecordedInteractionTrace> {
+        const evidence = new PrivateResultStore(this.rootDir);
+        const boundedTrace = structuredClone(trace);
+        for (const call of boundedTrace.toolCalls) {
+            for (const source of ["result", "modelResult"] as const) {
+                const ref = await evidence.retain(
+                    "trace",
+                    traceId,
+                    call.toolCallId,
+                    source,
+                    call[source],
+                );
+                if (!ref) continue;
+                if (source === "result") call.resultArtifact = ref;
+                else call.modelResultArtifact = ref;
+                call[source] = ref.view;
+                boundedTrace.schemaVersion = 2;
+                boundedTrace.capabilities = ["private-result-evidence-v1"];
+            }
+        }
+        return boundedTrace;
     }
 
     async createMacroFromTrace(
@@ -477,10 +516,17 @@ export class MacroManager {
         const version =
             request.version ??
             (await this.getLatestSummary(request.macroId)).version;
-        return this.readJson<CopilotToolMacro>(
+        const macro = await this.readJson<CopilotToolMacro>(
             this.versionPath(request.macroId, version),
             `Macro version not found: ${request.macroId}@${version}`,
         );
+        assertMacroCapabilities(macro);
+        if (request.requireRunnable) {
+            await this.validateRunRoute(macro, {
+                requireLatestApproved: true,
+            });
+        }
+        return macro;
     }
 
     async getMacroRequirements(
@@ -778,6 +824,7 @@ export class MacroManager {
             sourceTraceId: request.traceId,
             warnings: [],
         };
+        setMacroCapabilities(proposed);
         assertLearningProcedure(
             {
                 inputs: request.inputs,
@@ -854,6 +901,7 @@ export class MacroManager {
                     submittedAt: createdAt,
                 },
             };
+            setMacroCapabilities(candidate);
             const report = validateMacro(
                 candidate,
                 await this.readTrace(source.sourceTraceId),
@@ -1213,6 +1261,9 @@ export class MacroManager {
         macro: CopilotToolMacro,
         options: MacroRunOptions,
     ): Promise<void> {
+        assertMacroCapabilities(macro);
+        if (!validateMacro(macro).valid)
+            throw new Error("Invalid approved macro procedure.");
         if (macro.state !== "approved") {
             throw new Error("Only approved macros can run.");
         }
@@ -1242,10 +1293,46 @@ export class MacroManager {
 
     async getMacroRun(runId: string): Promise<MacroRunRecord> {
         this.validateMacroId(runId);
-        return this.readJson<MacroRunRecord>(
+        const run = await this.readJson<MacroRunRecord>(
             this.runPath(runId),
             `Macro run not found: ${runId}`,
         );
+        const evidence = new PrivateResultStore(this.rootDir);
+        for (const step of run.steps) {
+            if (step.resultArtifact) {
+                await evidence.verify(
+                    step.resultArtifact,
+                    "run",
+                    runId,
+                    step.stepId,
+                    "result",
+                );
+                if (
+                    JSON.stringify(step.result) !==
+                    JSON.stringify(step.resultArtifact.view)
+                )
+                    throw new Error(
+                        "Private run result view does not match its source.",
+                    );
+            }
+        }
+        if (run.resultArtifact) {
+            await evidence.verify(
+                run.resultArtifact,
+                "run",
+                runId,
+                "$final",
+                "result",
+            );
+            if (
+                JSON.stringify(run.result) !==
+                JSON.stringify(run.resultArtifact.view)
+            )
+                throw new Error(
+                    "Private final run view does not match its source.",
+                );
+        }
+        return run;
     }
 
     private removeExpired(sessionId: string): void {
@@ -1261,6 +1348,10 @@ export class MacroManager {
     ): void {
         if (
             trace.schemaVersion !== 1 ||
+            trace.capabilities !== undefined ||
+            trace.toolCalls.some(
+                (call) => call.resultArtifact || call.modelResultArtifact,
+            ) ||
             trace.sessionId !== token.sessionId ||
             trace.cwd !== token.cwd ||
             createHash("sha256")
@@ -1282,10 +1373,51 @@ export class MacroManager {
         traceId: string,
     ): Promise<RecordedInteractionTrace> {
         this.validateMacroId(traceId);
-        return this.readJson<RecordedInteractionTrace>(
+        const trace = await this.readJson<RecordedInteractionTrace>(
             path.join(this.rootDir, "traces", `${traceId}.json`),
             `Trace not found: ${traceId}`,
         );
+        const hasEvidence = trace.toolCalls.some(
+            (call) => call.resultArtifact || call.modelResultArtifact,
+        );
+        if (
+            (trace.schemaVersion === 1 &&
+                (hasEvidence || trace.capabilities !== undefined)) ||
+            (trace.schemaVersion === 2 &&
+                (!hasEvidence ||
+                    trace.capabilities?.length !== 1 ||
+                    trace.capabilities[0] !== "private-result-evidence-v1")) ||
+            (trace.schemaVersion !== 1 && trace.schemaVersion !== 2)
+        )
+            throw new Error(
+                "Unsupported recorded trace schema or capabilities.",
+            );
+        const evidence = new PrivateResultStore(this.rootDir);
+        for (const call of trace.toolCalls) {
+            for (const source of ["result", "modelResult"] as const) {
+                const ref =
+                    source === "result"
+                        ? call.resultArtifact
+                        : call.modelResultArtifact;
+                if (ref) {
+                    await evidence.verify(
+                        ref,
+                        "trace",
+                        traceId,
+                        call.toolCallId,
+                        source,
+                    );
+                    if (
+                        JSON.stringify(call[source]) !==
+                        JSON.stringify(ref.view)
+                    )
+                        throw new Error(
+                            "Private result view does not match its recorded source.",
+                        );
+                }
+            }
+        }
+        return trace;
     }
 
     private async readLearningTrace(
@@ -1302,7 +1434,11 @@ export class MacroManager {
                 "Recorded learning trace exceeds its 1 MiB storage limit.",
             );
         }
-        return this.readTrace(traceId);
+        const trace = await this.readTrace(traceId);
+        return new PrivateResultStore(this.rootDir).verifyLearningTrace(
+            traceId,
+            trace,
+        );
     }
 
     private async readCatalog(): Promise<MacroSummary[]> {
@@ -1461,13 +1597,43 @@ export class MacroManager {
         run: MacroRunRecord,
         macro: CopilotToolMacro,
     ): Promise<MacroRunRecord> {
+        const evidence = new PrivateResultStore(this.rootDir);
+        const boundedRun = structuredClone(run);
+        if (run.resultArtifact || run.steps.some((step) => step.resultArtifact))
+            throw new Error(
+                "Caller-submitted run evidence references are not supported.",
+            );
+        for (const step of boundedRun.steps) {
+            const ref = await evidence.retain(
+                "run",
+                run.runId,
+                step.stepId,
+                "result",
+                step.result,
+            );
+            if (ref) {
+                step.resultArtifact = ref;
+                step.result = ref.view;
+            }
+        }
+        const resultRef = await evidence.retain(
+            "run",
+            run.runId,
+            "$final",
+            "result",
+            run.result,
+        );
+        if (resultRef) {
+            boundedRun.resultArtifact = resultRef;
+            boundedRun.result = resultRef.view;
+        }
         const secretInputs = new Set(
             macro.inputs
                 .filter((input) => input.secret)
                 .map((input) => input.name),
         );
         const sanitized = redactTraceValue({
-            ...run,
+            ...boundedRun,
             inputs: Object.fromEntries(
                 Object.entries(run.inputs).map(([name, value]) => [
                     name,
@@ -1476,15 +1642,15 @@ export class MacroManager {
                         : sanitizeRunValue(value),
                 ]),
             ),
-            steps: run.steps.map((step) => ({
+            steps: boundedRun.steps.map((step) => ({
                 ...step,
                 ...(step.result === undefined
                     ? {}
-                    : { result: sanitizeRunValue(step.result) }),
+                    : { result: redactTraceValue(step.result) }),
             })),
-            ...(run.result === undefined
+            ...(boundedRun.result === undefined
                 ? {}
-                : { result: sanitizeRunValue(run.result) }),
+                : { result: redactTraceValue(boundedRun.result) }),
         }) as MacroRunRecord;
         const destination = this.runPath(run.runId);
         await mkdir(path.dirname(destination), { recursive: true });

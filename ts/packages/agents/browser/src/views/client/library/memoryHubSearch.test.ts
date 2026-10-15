@@ -219,6 +219,47 @@ test("Search/Ask evidence preserves exact indexed locators", async () => {
     });
 });
 
+test("citation cards show generated source navigation without substituting synopsis for exact evidence", async () => {
+    invoke.mockImplementation(async (method: string) =>
+        method === "memoryHubSearch"
+            ? result([
+                  {
+                      ...source,
+                      synopsis: {
+                          status: "ready",
+                          freshness: "fresh",
+                          preview: "<img src=x> Local review only.",
+                          generatedVersion: 1,
+                          recipe: "source-synopsis-v1",
+                          inputHash: "semantic",
+                      },
+                  },
+              ])
+            : {
+                  title: "Exact source",
+                  content: "Original evidence",
+                  truncated: false,
+              },
+    );
+    await mounted.show("worker");
+    expect(host.querySelector(".phase2-results")!.textContent).toContain(
+        "Local review only.",
+    );
+    expect(host.querySelector(".phase2-results")!.textContent).toContain(
+        "not citation evidence",
+    );
+    expect(host.querySelector("img")).toBeNull();
+    button(source.title).click();
+    await settle();
+    expect(invoke).toHaveBeenLastCalledWith("memoryHubEvidence", {
+        corpusId: "a",
+        kind: "source",
+        objectId: "source",
+        revisionId: "r3",
+        offset: 0,
+    });
+});
+
 test("mixed evidence is answer-first, safely rendered, and exact citations never guess by excerpt", async () => {
     await mounted.show("worker");
     expect(host.querySelector(".phase2-answer")!.textContent).toContain(

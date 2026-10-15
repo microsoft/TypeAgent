@@ -42,6 +42,7 @@ export type MemoryHubEvidence = {
     sourceId?: string;
     revisionId?: string;
     sourceType?: MemoryCenterSource["sourceType"];
+    synopsis?: MemoryCenterSource["revisions"][number]["synopsis"];
     locator?: string;
     canonicalUri?: string;
     viewKind?: "troubleshootingGuide" | "projectBrief" | "timeline" | "wiki";
@@ -402,6 +403,8 @@ export const viewMethods = [
     "memoryHubSources",
     "memoryCreateCorpus",
     "memoryViewCapabilities",
+    "memoryQueryTopics",
+    "memoryRebuildTopics",
     "memoryListViews",
     "memoryGetView",
     "memorySaveViewDraft",
@@ -430,6 +433,7 @@ export const viewMethods = [
     "memoryListSources",
     "memoryGetSource",
     "memoryGetSourceContent",
+    "memoryGetSourceSynopsis",
     "memoryGetSourceKnowledge",
     "memoryListSourceKnowledgeSuppressions",
     "memorySuppressSourceKnowledge",

@@ -8,4 +8,6 @@
   },
   "include": ["partialCompletion/**/*.ts"],
   "references": [{ "path": "../src" }, { "path": "./renderer" }]
+  "include": ["partialCompletion/**/*.ts", "shellTestModel.ts"],
+  "references": [{ "path": "../src" }]
 }

@@ -109,6 +109,7 @@ describe("macro MCP catalog adapter", () => {
                 },
             },
         }));
+        const inspectMacro = jest.fn<AgentServerConnection["inspectMacro"]>();
         const client = connection({
             getMacroRequirements: jest.fn(async () => ({
                 macroId: "macro-1",
@@ -118,6 +119,7 @@ describe("macro MCP catalog adapter", () => {
                 tools: [],
             })),
             runMacro,
+            inspectMacro,
         });
         const adapter = new MacroCatalogAdapter({
             connect: jest.fn(async () => client),
@@ -134,6 +136,15 @@ describe("macro MCP catalog adapter", () => {
 
         expect(response.isError).toBeUndefined();
         expect(runMacro).toHaveBeenCalledTimes(1);
+        expect(inspectMacro).not.toHaveBeenCalled();
+        expect(response).toMatchObject({
+            content: [
+                {
+                    type: "text",
+                    text: expect.stringContaining('"launch"'),
+                },
+            ],
+        });
     });
 
     it("blocks agent handoff independently of replay", async () => {

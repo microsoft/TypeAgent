@@ -38,6 +38,13 @@ trace is redacted before it is persisted.
 cannot run. `approveMacro()` validates the draft and writes a new immutable
 approved version rather than changing the draft in place.
 
+`inspectMacro()` normally reads an immutable version, including historical
+draft or disabled versions. With `requireRunnable: true`, it also applies the
+execution-route checks: the requested version must be approved, unsuppressed,
+and the current approved version. Native host-controlled execution uses this
+read-only preflight immediately before launching its runner. Ordinary catalog
+inspection is unchanged; this does not grant tool or backend permissions.
+
 ## Core model
 
 The public contracts in `src/contracts.ts` include:
@@ -304,6 +311,64 @@ Failures are inspectable and persisted; a saved catalog whose refresh fails is
 reported as saved-but-not-refreshed, not success. Storage failures are surfaced
 on status reads. The service should configure one manager per storage directory;
 cross-process worker leases are not provided.
+
+### Private full-result evidence and derived item paths
+
+Selected capture submits original result values to the manager; ordinary histories
+and inline small v1 evidence remain redacted. The manager privately retains large
+results and any inline `base64Content` in exclusive, lossless UTF-8 JSON sidecars
+under its existing instance root. A v2 trace declares exactly
+`["private-result-evidence-v1"]`; each source reference binds owner ID, call ID,
+`result` versus actual captured `modelResult`, JSON digest/size, sensitive status,
+bounded redacted view, omitted paths and decoded original-blob digest/size.
+The original base64 (including all DOCX media) is preserved, not replaced with
+extracted text. This is an audit representation, not a DOCX semantic parser.
+
+Each sidecar is capped at 16 MiB; each projected result view at 32 KiB. Base64
+bodies and strings over 4,096 characters are explicitly archived. The existing
+256-KiB learning and 1-MiB stored-trace caps remain unchanged. Oversized views or
+missing/invalid evidence fail, never truncate or return success-shaped metadata.
+References carry no caller filesystem path or public read capability. Loading
+checks ownership, supported encoding, canonical JSON/base64, declared size,
+digests, projected view/receipts, ancestor containment, symlinks and hard links.
+The configured storage root's parent is canonicalized to support system path
+aliases (including macOS temporary directories and Windows short paths).
+The storage root itself and every descendant must remain unlinked.
+All references are verified again when loading after restart. Callers cannot
+submit artifact references as capture evidence. Replay step/final results use
+the same lossless retention rather than oversized-result previews.
+
+The local-only `PrivateResultStore.verify` returns original JSON for an independent
+audit oracle; no MCP inspection tool returns its bodies. The caller supplies only
+host-owned identity, not a filename. Retention follows existing private instance
+storage and ACL ownership; immutable trace/run evidence is not automatically
+evicted. Review retention before admitting sensitive captures.
+
+Learning uses explicitly identified projections, not invented model-visible
+receipts. It cannot bind to archived body paths or their ancestors, or infer body
+guards from omitted data. Actual SDK model-facing content and raw tool results
+are retained separately when observed. This does **not** change upstream CLI tool
+rendering, prove the SDK delivered full bytes, prevent pre-capture model exposure,
+or claim a model semantically read a binary. Those native gates require real
+verification.
+
+New macros needing derived remote item paths declare schema 2 and exactly
+`["result-path-v1"]`. `resultPath` selects an earlier step's string by `stepId`
+and `path`, then appends the frozen literal `suffix`. Only `/content` or
+`?$select=` with 1–20 comma-separated alphanumeric field names starting with a
+letter is supported. The base must exactly match a relative
+`/drives/<drive-id>/items/<item-id>` path; schemes, encoded separators, queries,
+traversal and arbitrary interpolation/eval are rejected. Definition induction,
+strict parsing, exact captured-argument validation, deterministic replay, native
+host and ordinary server handoffs share capability validation. Both runner
+profiles document the same operation without execution-time `inspect_macro`.
+Input/tool permission and immutable approval checks remain unchanged; this
+construction grants no scope or remote permissions.
+
+Legacy v1 traces and the four original expression forms retain their behavior.
+Only manager-produced artifact traces and macros using the new operation are v2;
+unknown schema/capabilities fail closed. Deploy matched package/plugin versions;
+do not send v2 definitions to an older v1-only runner or reinterpret old approvals.
 
 Idempotency is workspace + source trace, with equivalent observed operations
 deduplicated by canonical request and ordered tool identities/arguments before

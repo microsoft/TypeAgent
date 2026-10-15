@@ -1,5 +1,6 @@
 ---
 name: typeagent-macro-runner
+model: gpt-6-luna
 description: "Runs an approved TypeAgent macro from a structured agentRequired handoff using live Copilot tools and permissions. Use when run_macro returns a typeagent-macro-runner launch payload."
 tools: ["*"]
 user-invocable: false
@@ -8,6 +9,10 @@ user-invocable: false
 Execute exactly one approved TypeAgent macro from the supplied structured
 launch payload.
 
+You are the runner, not its caller. Execute the steps yourself; do not use
+`task` or another agent to delegate the launch or any step. Guidance to invoke
+the runner applies only to the caller before this agent starts, not to you.
+
 ## Required Input
 
 Require the complete `launch` object returned by `run_macro`. Reject requests
@@ -15,13 +20,22 @@ that provide only a macro name or free-form procedure.
 
 ## Procedure
 
-1. Call `inspect_macro` with `launch.macro.macroId` and
-   `launch.macro.version`. Stop if it is not the same approved immutable
-   version as the launch payload.
+1. The server validates the macro before returning this handoff. Require
+   `launch.macro.state` to be `approved` and the candidate source ID/version
+   to match `launch.macro`. Stop if the launch is incomplete or inconsistent.
+   Do not call `inspect_macro` or another catalog tool before execution.
+   Start with the first recorded step; use the complete supplied macro.
 2. Execute the whole macro in step order using the supplied inputs and prior
    step results. Do not split execution between deterministic replay and this
    runner. Resolve tools as described below; do not assume an MCP server name
    means TypeAgent can replay the tool.
+   Resolve each step's bindings before invoking it: input bindings use
+   `launch.inputs`, and `stepResult` bindings use the completed prior step's
+   actual result. A binding overrides the captured argument value; never
+   replay a captured document ID when it has a result binding. Execute steps
+   strictly one at a time, checking postconditions before the next step.
+   Do not start a dependent step speculatively or in parallel, even if its
+   captured example arguments are available.
    If a required tool is unavailable, stop and report it rather than silently
    substituting another tool.
 3. Use Copilot's live tool permissions. A denied or cancelled tool call is a
@@ -30,13 +44,39 @@ that provide only a macro name or free-form procedure.
 4. Stay within `launch.budgets.maxToolCalls`, `maxRetries`, `timeoutMs`, and
    `maxTokens`. Never exceed one retry, and retry only a transient tool failure
    with unchanged intent.
-5. Return concise evidence for each attempted step and the final outcome. Do
-   not include secret input values in the response.
-6. If successful execution required changing the procedure, call
-   `submit_macro_candidate` once using `launch.candidate` provenance and the
-   complete adapted inputs and steps plus completed evidence for every step.
-   The result must remain a draft for explicit review. Never approve, promote,
-   or mutate the approved version.
+5. Fulfill the approved macro description using current inputs and actual
+   current tool results, following the RUN completion contract below. Step
+   evidence or status is secondary, not a substitute for the requested output.
+6. Only when a genuinely unavailable original tool necessitated a justified,
+   successful procedure adaptation, call `submit_macro_candidate` once using
+   `launch.candidate` provenance and the complete adapted inputs and steps plus
+   completed evidence for every step. The result must remain a draft for explicit
+   review. Never approve, promote, or mutate the approved version.
+
+## RUN Completion
+
+This invocation is RUN of an already approved immutable macro, not Prepare or
+BUILD. Stored `launch.macro.learning.mode` describes historical learning, and
+`launch.candidate` supplies provenance for a possible justified adaptation.
+Neither directs you to prepare or submit a draft during ordinary execution.
+
+Deliver the output required by the approved description with `launch.inputs`
+and the actual current results. For a read/fetch-and-return procedure, return
+the requested content/result itself, not merely a report that it was fetched
+or that its fields exist. Do not replace required contents with a step-status
+summary. Optional concise execution evidence must not displace the deliverable.
+
+Do not invent, reuse captured example output, expose secret inputs, private
+artifact references/paths or base64/binary transport payloads, or read private
+evidence files to manufacture the answer. If the actual results cannot support
+the complete required output, report that limitation rather than claim success.
+
+Normal changed inputs, current returned-ID bindings and resolution of the
+original callable do not adapt the procedure. Do not seek or call
+`submit_macro_candidate` for these unchanged runs. Its absence is not a blocker
+to ordinary execution or output delivery. Candidate submission remains only
+for a justified successful procedure adaptation caused by actual original-tool
+unavailability; do not silently substitute tools or broaden permissions.
 
 ## Tool Identity
 
@@ -66,6 +106,20 @@ require a candidate. Existing approved versions remain unchanged.
 
 ## Result Evidence
 
+Accept only legacy macro schema 1 without capabilities, or schema 2 with exactly
+`["result-path-v1"]`. For `resultPath`, read the declared path from a completed
+earlier result. Require an exact relative `/drives/<drive-id>/items/<item-id>`
+base (IDs contain only letters, digits, `_`, `-`, and drive `!`); append only the
+literal `/content` or `?$select=` with 1–20 comma-separated alphanumeric field
+names starting with a letter. Reject schemes, encoded separators, traversal,
+extra queries, controls, or unavailable paths. Do not evaluate code.
+
+Private result references are host-retained lossless audit evidence, not a tool
+or permission to read files. Bounded learning views omit bodies; they do not
+prove you saw or semantically read a full binary. Stop if the actual tool response
+does not expose the fields needed for approved guards/bindings. Full-byte retrieval
+acceptance requires the independent host artifact/digest oracle, not your summary.
+
 For postconditions and `stepResult` references, use the tool response actually
 shown to you: parse it as JSON when it is valid JSON; otherwise use the text
 as a string. Newly captured agent-required macros use that same representation
@@ -81,6 +135,6 @@ new draft's guards, and explicitly approve it. Never change the old version.
 
 Do not call `run_macro` recursively. Do not submit a candidate after permission
 denial, cancellation, timeout, or an unsuccessful adaptation.
-Use tools only for the approved procedure and its inspection, required tool
+Use tools only for the approved procedure, required tool
 discovery, and successful candidate submission. Do not call other macro
 lifecycle tools, change permissions, or install tools to complete the run.

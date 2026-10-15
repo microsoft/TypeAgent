@@ -39,13 +39,103 @@ describe("staged plugin artifact", () => {
         const profile = parse(frontmatter);
         expect(profile).toMatchObject({
             name: "typeagent-macro-runner",
+            model: "gpt-6-luna",
             tools: ["*"],
             "user-invocable": false,
         });
         expect(runner).toContain("Use Copilot's live tool permissions");
         expect(runner).toContain("Do not call `run_macro` recursively");
+        expect(runner).toContain("You are the runner, not its caller");
+        expect(runner).toContain("`task` or another agent to delegate");
         expect(runner).toContain("Do not call other macro");
         expect(runner).toContain("If a required tool is unavailable, stop");
+        expect(runner).toContain("Do not call `inspect_macro`");
+        expect(runner).toContain("server validates the macro");
+        expect(runner).toContain("A binding overrides the captured argument");
+    });
+
+    it("packages the host-only Luna profile with the same tool-identity rules", async () => {
+        const agents = path.resolve(
+            path.dirname(fileURLToPath(import.meta.url)),
+            "..",
+            "..",
+            "agents",
+        );
+        const [runner, host] = await Promise.all([
+            readFile(
+                path.join(agents, "typeagent-macro-runner.agent.md"),
+                "utf8",
+            ),
+            readFile(
+                path.join(agents, "typeagent-macro-runner-host.agent.md"),
+                "utf8",
+            ),
+        ]);
+        expect(parse(host.split("---")[1])).toMatchObject({
+            name: "typeagent-macro-runner-host",
+            model: "gpt-6-luna",
+            tools: ["*"],
+            "user-invocable": false,
+        });
+        expect(host).toContain("Do not call `inspect_macro`");
+        expect(host).toContain("A prompt marker alone is insufficient");
+        expect(host).toContain("A binding overrides the captured argument");
+        expect(
+            host.split("## Tool Identity")[1].split("## Result Evidence")[0],
+        ).toBe(
+            runner.split("## Tool Identity")[1].split("## Result Evidence")[0],
+        );
+        const completion = host
+            .split("## RUN Completion")[1]
+            .split("## Tool Identity")[0];
+        expect(completion).toBe(
+            runner.split("## RUN Completion")[1].split("## Tool Identity")[0],
+        );
+        for (const required of [
+            "RUN of an already approved immutable macro, not Prepare or",
+            "Stored `launch.macro.learning.mode` describes historical learning",
+            "`launch.candidate` supplies provenance",
+            "actual current results",
+            "not merely a report that it was fetched",
+            "Do not replace required contents with a step-status",
+            "Optional concise execution evidence must not displace the deliverable",
+            "private\nartifact references/paths or base64/binary transport payloads",
+            "rather than claim success",
+            "do not adapt the procedure",
+            "Its absence is not a blocker",
+            "actual original-tool\nunavailability",
+        ])
+            expect(completion).toContain(required);
+        for (const profile of [host, runner]) {
+            expect(profile).toContain("Do not seek or call");
+            expect(profile).toContain("a genuinely unavailable original tool");
+            expect(profile).toContain("Check every declared postcondition");
+            expect(profile).toContain(
+                "Do not submit a candidate after permission",
+            );
+            expect(profile).toContain("Do not call `run_macro` recursively");
+        }
+    });
+
+    it("keeps explicit catalog review but removes inspection from the macro run skill", async () => {
+        const skill = await readFile(
+            path.resolve(
+                path.dirname(fileURLToPath(import.meta.url)),
+                "..",
+                "..",
+                "skills",
+                "typeagent-macros",
+                "SKILL.md",
+            ),
+            "utf8",
+        );
+        expect(skill).toContain("server has already validated it");
+        expect(skill).toContain("If required inputs are not known");
+        expect(skill).toContain("as an execution prerequisite");
+        expect(skill).toContain("explicit catalog inspection and draft review");
+        expect(skill).not.toContain(
+            "Use `inspect_macro` and `get_macro_requirements` before execution",
+        );
     });
 
     it("resolves the captured web-search callable without treating provenance as a namespace", async () => {
@@ -224,6 +314,27 @@ describe("staged plugin artifact", () => {
         expect(bundle).toContain(
             "otherwise discover a suitable capability before choosing native tools",
         );
+        expect(bundle).toContain(
+            "RUN of the already approved immutable macro, not Prepare or BUILD",
+        );
+        expect(bundle).toContain(
+            "actual current tool results before optional concise execution evidence",
+        );
+        expect(bundle).toContain("not a step-status summary");
+        expect(bundle).toContain(
+            "secret inputs/private artifact references or base64/binary transport payloads",
+        );
+        expect(bundle).toContain(
+            "only after a justified successful procedure adaptation caused by actual original-tool unavailability",
+        );
+        expect(bundle).toContain("TYPEAGENT_WORKIQ_SDK_ORIGINALS_POLICY");
+        expect(bundle).toContain("workiq-sdk-originals-v1");
+        expect(bundle).toContain(
+            "WorkIQ native binary/model-input exposure boundary is not admitted.",
+        );
+        expect(bundle).toContain(
+            "WorkIQ SDK capture requires an owned native control context.",
+        );
     });
 
     it("registers the structured Direct bridge in the actual bundled agent server", async () => {
@@ -313,6 +424,26 @@ describe("staged plugin artifact", () => {
                     "submit_macro_candidate",
                 ]),
             );
+            expect(
+                catalog.tools.find((tool) => tool.name === "inspect_macro")
+                    ?.annotations,
+            ).toEqual({
+                readOnlyHint: true,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: false,
+            });
+            for (const name of [
+                "run_macro",
+                "approve_macro",
+                "create_macro_from_trace",
+                "submit_macro_candidate",
+            ]) {
+                expect(
+                    catalog.tools.find((tool) => tool.name === name)
+                        ?.annotations?.readOnlyHint,
+                ).not.toBe(true);
+            }
         } finally {
             await client.close();
         }

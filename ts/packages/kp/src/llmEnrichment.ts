@@ -84,7 +84,10 @@ async function enrichBatchWithModel(
     const userPrompt = `Enrich these ${keywords.length} keywords:\n\n${termList}`;
 
     const messages: PromptSection[] = [
-        { role: "system", content: ENRICHMENT_SYSTEM_PROMPT },
+        {
+            role: "system",
+            content: `${ENRICHMENT_SYSTEM_PROMPT}\nAim for approximately 16384 tokens in the final JSON only, excluding reasoning. Include every required dictionary entry even when that needs a longer answer.`,
+        },
         { role: "user", content: userPrompt },
     ];
 
@@ -245,7 +248,6 @@ export async function enrichVocabulary(
     const enrichStart = Date.now();
 
     const model = openai.createChatModel(modelName);
-    model.completionSettings.max_completion_tokens = 16384;
     onProgress?.(`Enrichment model: ${modelName}`);
     debug("Using %s", modelName);
 

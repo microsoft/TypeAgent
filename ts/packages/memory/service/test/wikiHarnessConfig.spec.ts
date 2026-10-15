@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { loadRuntimeConfigSync } from "@typeagent/config";
 import {
@@ -18,7 +17,7 @@ import { resolveReviewedWikiBudget } from "../src/wikiBudget.js";
 test("YAML-only configuration stays pinned and normal model defaults require no wiki declarations", async () => {
     const original = getRuntimeConfig();
     const originalFetch = globalThis.fetch;
-    const root = await mkdtemp(path.join(os.tmpdir(), "wiki-yaml-config-"));
+    const root = await mkdtemp(path.join(process.cwd(), ".wiki-yaml-config-"));
     try {
         await writeFile(
             path.join(root, "config.local.yaml"),
@@ -38,11 +37,16 @@ azureOpenAI:
           auth: synthetic-test-key
     gpt_6_luna:
       endpoints:
-        - endpoint: https://synthetic.invalid/translation
+        - endpoint: https://synthetic.invalid/openai/deployments/gpt-6-luna/chat/completions
           region: eastus
           auth: synthetic-test-key
 reasoning:
   copilotModel: configured-reasoning
+modelRequestConstraints:
+  "azure:chat:custom_reasoning":
+    contextTokens: 50000
+    inputTokens: 20000
+    outputTokens: 12000
 `,
         );
         const { config } = loadRuntimeConfigSync({
@@ -55,33 +59,44 @@ reasoning:
             "configured-reasoning",
         );
         expect(openai.getChatModelSettings().endpoint).toBe(
-            "https://synthetic.invalid/default",
+            "https://synthetic.invalid/openai/deployments/gpt-6-luna/chat/completions",
         );
         expect(openai.getChatModelSettings(openai.GPT_6_LUNA).endpoint).toBe(
-            "https://synthetic.invalid/translation",
+            "https://synthetic.invalid/openai/deployments/gpt-6-luna/chat/completions",
         );
-        const limits = resolveReviewedWikiBudget({});
-        const defaults = createWikiModels(limits.outputTokens);
+        const limits = resolveReviewedWikiBudget({}, "azure:custom_reasoning");
+        expect(limits).toMatchObject({
+            contextTokens: 1050000,
+            inputTokens: 16000,
+            outputTokens: 128000,
+        });
+        const defaults = createWikiModels();
         expect(defaults.provider).toBe("azure");
         expect(defaults.extractionModel.completionSettings).toMatchObject({
             response_format: { type: "json_object" },
-            max_completion_tokens: 4000,
         });
-        expect(defaults.languageModel.completionSettings).toMatchObject({
-            max_completion_tokens: 4000,
-        });
-        expect(
-            createWikiModels(2000, "azure:custom_reasoning").languageModel
-                .completionSettings.max_completion_tokens,
-        ).toBe(2000);
+        for (const model of [defaults.languageModel, defaults.extractionModel])
+            for (const key of [
+                "max_completion_tokens",
+                "max_tokens",
+                "max_output_tokens",
+            ])
+                expect(model.completionSettings).not.toHaveProperty(key);
         expect(
             openai.getChatModelSettings("azure:custom_reasoning").endpoint,
         ).toBe("https://synthetic.invalid/reasoning");
         expect(getRuntimeConfig()).toBe(config);
         expect(new RequestBudget(limits).receipts).toEqual([]);
         const requested: string[] = [];
-        globalThis.fetch = async (input) => {
+        globalThis.fetch = async (input, options) => {
             requested.push(String(input));
+            const body: unknown = JSON.parse(String(options?.body));
+            for (const key of [
+                "max_completion_tokens",
+                "max_tokens",
+                "max_output_tokens",
+            ])
+                expect(body).not.toHaveProperty(key);
             return new Response(
                 JSON.stringify({
                     choices: [
@@ -96,7 +111,7 @@ reasoning:
         };
         // Synthetic transports exercise normal YAML routing, not authentication.
         const budget = new RequestBudget(limits);
-        const roles = createWikiModels(2000, "azure:custom_reasoning");
+        const roles = createWikiModels("azure:custom_reasoning");
         await runWithRequestBudget(budget, async () => {
             expect(
                 (await roles.extractionModel.complete("synthetic extraction"))
@@ -108,10 +123,13 @@ reasoning:
             ).toBe(true);
         });
         expect(requested).toEqual([
-            "https://synthetic.invalid/translation",
+            "https://synthetic.invalid/openai/deployments/gpt-6-luna/chat/completions",
             "https://synthetic.invalid/reasoning",
         ]);
         expect(budget.receipts).toHaveLength(2);
+        expect(budget.receipts.map((receipt) => receipt.outputTokens)).toEqual([
+            128000, 12000,
+        ]);
         expect(
             budget.receipts.map((receipt) => receipt.tokenAccounting),
         ).toEqual(["estimate", "estimate"]);

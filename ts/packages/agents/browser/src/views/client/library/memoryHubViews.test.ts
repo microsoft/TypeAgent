@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { mountMemoryHubViews } from "./memoryHubViews";
-import { viewTimestamp } from "./memoryHubViewUi";
+import { viewRevisionTime, viewTimestamp } from "./memoryHubViewUi";
 import { invokeMemory } from "./viewClient";
 
 jest.mock("./viewClient", () => ({
@@ -290,6 +290,33 @@ describe("Memory Center preview-first views", () => {
         expect(
             host.querySelector('[aria-label="Troubleshooting guide editor"]'),
         ).not.toBeNull();
+    });
+
+    test("detail displays the selected revision timestamp outside unchanged summary", async () => {
+        const original = invoke.getMockImplementation()!;
+        const summary = "Substantive scope warning, not a host clock";
+        invoke.mockImplementation((method, params) =>
+            method === "memoryListViews"
+                ? Promise.resolve({
+                      ...snapshot,
+                      views: [
+                          {
+                              ...view,
+                              createdAt: "2026-10-13T16:00:00Z",
+                              content: { ...content, summary },
+                          },
+                      ],
+                  })
+                : original(method, params),
+        );
+        await panel.refresh();
+        click(host, "Guide");
+        await settle();
+        expect(host.querySelector("time")?.dateTime).toBe(
+            "2026-10-13T16:00:00.000Z",
+        );
+        expect(host.textContent).toContain(summary);
+        expect(content).not.toHaveProperty("summary");
     });
     test("reader keeps only Back and Edit direct and disclosure actions retain keyboard and dialog focus", async () => {
         await panel.refresh();
@@ -1086,6 +1113,21 @@ describe("timeline timezone validation", () => {
         "not a time",
     ])("rejects %s", (value) => {
         expect(() => viewTimestamp(value)).toThrow();
+    });
+
+    describe("revision freshness is separate from semantic summary", () => {
+        test("uses actual version metadata and does not invent a legacy timestamp", () => {
+            const [time] = viewRevisionTime("2026-10-13T09:00:00-07:00");
+            expect(time.dateTime).toBe("2026-10-13T16:00:00.000Z");
+            expect(time.textContent).toBe(
+                "Revision created: 2026-10-13T16:00:00.000Z",
+            );
+            expect(viewRevisionTime(undefined)).toEqual([]);
+        });
+        test.each(["", " ", "not a time", "2026-02-30T00:00:00Z"])(
+            "rejects invalid stored metadata %j rather than replacing it with now",
+            (value) => expect(() => viewRevisionTime(value)).toThrow(),
+        );
     });
     test("normalizes explicit offsets and allows unbounded empty input", () => {
         expect(viewTimestamp("2026-10-09T09:30:00-07:00")).toBe(

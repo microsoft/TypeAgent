@@ -11,6 +11,8 @@ import { createMemoryServiceRpcFacade } from "@typeagent/memory-service/rpc";
 type ViewMethods = Pick<
     MemoryCenterInvokeFunctions,
     | "memoryViewCapabilities"
+    | "memoryQueryTopics"
+    | "memoryRebuildTopics"
     | "memoryListViews"
     | "memoryGetView"
     | "memorySaveViewDraft"
@@ -41,6 +43,8 @@ export function createMemoryViewFunctions(
     const views = () => createMemoryServiceRpcFacade(service());
     return {
         memoryViewCapabilities: () => service().getCapabilities(),
+        memoryQueryTopics: (request) => views().queryTopics(request),
+        memoryRebuildTopics: ({ corpusId }) => views().rebuildTopics(corpusId),
         memoryListViews: ({ corpusId }) => views().listViews(corpusId),
         memoryGetView: (request) => views().getView(request),
         memorySaveViewDraft: (request) => views().saveViewDraft(request),
