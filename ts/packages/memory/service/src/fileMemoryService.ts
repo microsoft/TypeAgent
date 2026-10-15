@@ -8439,68 +8439,78 @@ export class FileMemoryService
         const ids = runtime.manifest.sources.map((source) => source.sourceId);
         for (const sourceId of ids) {
             if (this.closed) return;
-            const capture = await this.enqueueWrite(corpusId, async () => {
-                const current = await this.getCorpusRuntime(corpusId, true);
-                if (current.manifest.authorizedSourceRemoval) return undefined;
-                const candidate = structuredClone(current.manifest);
-                const source = candidate.sources.find(
-                    (item) => item.sourceId === sourceId,
-                );
-                const revision = source?.revisions.find(
-                    (item) => item.revisionId === source.activeRevisionId,
-                );
-                if (
-                    !source ||
-                    !revision ||
-                    !this.synopsisEligible(source, revision)
-                )
-                    return undefined;
-                const inputHash = synopsisInputHash(
-                    source,
-                    revision,
-                    this.sourceSynopsisIdentity(),
-                    true,
-                );
-                const prior = revision.synopsis;
-                if (
-                    prior?.inputHash === inputHash &&
-                    prior.status === "pending" &&
-                    prior.attempts >= 2
-                ) {
+            const capture = await this.enqueueWrite(
+                corpusId,
+                async () => {
+                    const current = await this.getCorpusRuntime(corpusId, true);
+                    if (current.manifest.authorizedSourceRemoval)
+                        return undefined;
+                    const candidate = structuredClone(current.manifest);
+                    const source = candidate.sources.find(
+                        (item) => item.sourceId === sourceId,
+                    );
+                    const revision = source?.revisions.find(
+                        (item) => item.revisionId === source.activeRevisionId,
+                    );
+                    if (
+                        !source ||
+                        !revision ||
+                        !this.synopsisEligible(source, revision)
+                    )
+                        return undefined;
+                    const inputHash = synopsisInputHash(
+                        source,
+                        revision,
+                        this.sourceSynopsisIdentity(),
+                        true,
+                    );
+                    const prior = revision.synopsis;
+                    if (
+                        prior?.inputHash === inputHash &&
+                        prior.status === "pending" &&
+                        prior.attempts >= 2
+                    ) {
+                        revision.synopsis = {
+                            ...prior,
+                            status: "failed",
+                            reason: "Interrupted synopsis exhausted its automatic retry; waiting for changed input",
+                        };
+                        await writeJsonAtomic(
+                            this.manifestPath(corpusId),
+                            candidate,
+                        );
+                        current.manifest = candidate;
+                        return undefined;
+                    }
+                    if (
+                        prior?.inputHash === inputHash &&
+                        (prior.status === "ready" ||
+                            prior.status === "unavailable" ||
+                            prior.attempts >= 2)
+                    )
+                        return undefined;
+                    const pending = this.emptySourceSynopsis(source, revision);
                     revision.synopsis = {
-                        ...prior,
-                        status: "failed",
-                        reason: "Interrupted synopsis exhausted its automatic retry; waiting for changed input",
+                        ...pending,
+                        generatedVersion: prior?.generatedVersion ?? 0,
+                        attempts:
+                            prior?.inputHash === inputHash
+                                ? prior.attempts + 1
+                                : 1,
                     };
                     await writeJsonAtomic(
                         this.manifestPath(corpusId),
                         candidate,
                     );
                     current.manifest = candidate;
-                    return undefined;
-                }
-                if (
-                    prior?.inputHash === inputHash &&
-                    (prior.status === "ready" ||
-                        prior.status === "unavailable" ||
-                        prior.attempts >= 2)
-                )
-                    return undefined;
-                const pending = this.emptySourceSynopsis(source, revision);
-                revision.synopsis = {
-                    ...pending,
-                    generatedVersion: prior?.generatedVersion ?? 0,
-                    attempts:
-                        prior?.inputHash === inputHash ? prior.attempts + 1 : 1,
-                };
-                await writeJsonAtomic(this.manifestPath(corpusId), candidate);
-                current.manifest = candidate;
-                return {
-                    source: structuredClone(source),
-                    revision: structuredClone(revision),
-                    inputHash,
-                };
-            });
+                    return {
+                        source: structuredClone(source),
+                        revision: structuredClone(revision),
+                        inputHash,
+                    };
+                },
+                true,
+            );
             const synopsisModel = this.synopsisModel;
             if (!capture || !synopsisModel) continue;
             const controller = new AbortController();
@@ -8547,55 +8557,63 @@ export class FileMemoryService
                 this.controllers.delete(key);
             }
             if (this.closed) return;
-            await this.enqueueWrite(corpusId, async () => {
-                const current = await this.getCorpusRuntime(corpusId, true);
-                if (current.manifest.authorizedSourceRemoval) return;
-                const candidate = structuredClone(current.manifest);
-                const source = candidate.sources.find(
-                    (item) => item.sourceId === sourceId,
-                );
-                const revision = source?.revisions.find(
-                    (item) => item.revisionId === capture.revision.revisionId,
-                );
-                if (
-                    !source ||
-                    !revision ||
-                    !this.synopsisEligible(source, revision) ||
-                    synopsisInputHash(
-                        source,
-                        revision,
-                        this.sourceSynopsisIdentity(),
-                        true,
-                    ) !== capture.inputHash
-                )
-                    return;
-                await this.assertInfluenceEligible({
-                    corpusId,
-                    influenceSources:
-                        capture.revision.synopsis!.influenceSources,
-                });
-                const detail = revision.synopsis!;
-                if (generated)
-                    revision.synopsis = {
-                        ...detail,
-                        ...generated,
-                        status: "ready",
-                        generatedAt: now(),
-                        generatedVersion: detail.generatedVersion + 1,
-                    };
-                else
-                    revision.synopsis = {
-                        ...detail,
-                        status: "failed",
-                        reason: failure ?? "Synopsis generation failed",
-                        coverage: failedCoverage,
-                        limitations: [
-                            "Generation failed; scan counts describe submitted input, not accepted semantic coverage.",
-                        ],
-                    };
-                await writeJsonAtomic(this.manifestPath(corpusId), candidate);
-                current.manifest = candidate;
-            });
+            await this.enqueueWrite(
+                corpusId,
+                async () => {
+                    const current = await this.getCorpusRuntime(corpusId, true);
+                    if (current.manifest.authorizedSourceRemoval) return;
+                    const candidate = structuredClone(current.manifest);
+                    const source = candidate.sources.find(
+                        (item) => item.sourceId === sourceId,
+                    );
+                    const revision = source?.revisions.find(
+                        (item) =>
+                            item.revisionId === capture.revision.revisionId,
+                    );
+                    if (
+                        !source ||
+                        !revision ||
+                        !this.synopsisEligible(source, revision) ||
+                        synopsisInputHash(
+                            source,
+                            revision,
+                            this.sourceSynopsisIdentity(),
+                            true,
+                        ) !== capture.inputHash
+                    )
+                        return;
+                    await this.assertInfluenceEligible({
+                        corpusId,
+                        influenceSources:
+                            capture.revision.synopsis!.influenceSources,
+                    });
+                    const detail = revision.synopsis!;
+                    if (generated)
+                        revision.synopsis = {
+                            ...detail,
+                            ...generated,
+                            status: "ready",
+                            generatedAt: now(),
+                            generatedVersion: detail.generatedVersion + 1,
+                        };
+                    else
+                        revision.synopsis = {
+                            ...detail,
+                            status: "failed",
+                            reason: failure ?? "Synopsis generation failed",
+                            coverage: failedCoverage,
+                            limitations: [
+                                "Generation failed; scan counts describe submitted input, not accepted semantic coverage.",
+                            ],
+                        };
+                    await writeJsonAtomic(
+                        this.manifestPath(corpusId),
+                        candidate,
+                    );
+                    current.manifest = candidate;
+                },
+                true,
+            );
         }
     }
 

@@ -12,6 +12,8 @@ module.exports = {
         "^../src/(.*)$": "<rootDir>/dist/$1",
     },
     testTimeout: 90000,
+    // pnpm runs three packages at once; each Jest pool otherwise uses all CPUs.
+    ...(process.env.CI === "true" ? { maxWorkers: 1 } : {}),
     // Retry from a clean module cache. Reusing the first ESM run's cache can
     // expose stale synthetic exports for CommonJS dependencies.
     ...(process.env.TYPEAGENT_JEST_NO_CACHE === "true" ? { cache: false } : {}),

@@ -20,6 +20,7 @@ import type {
 } from "../src/types.js";
 import { FakeSemanticCorpusIndex } from "./fakeSemanticCorpusIndex.js";
 import { originalFixtureRoot } from "./wikiConsolidationFixtures.js";
+import { TypedViewStore } from "../src/viewStore.js";
 
 class DeterministicModel implements SourceSynopsisModel {
     identity = "offline-source-synopsis";
@@ -557,6 +558,54 @@ describe("inline synopsis production lifecycle", () => {
         expect(output.overview).toContain("withdrawn");
         expect(output.overview).not.toContain("38 ms");
         expect(output.revisionId).not.toBe(old.revisionId);
+    });
+
+    test("authorized purge recovery discards an in-flight synopsis without failing shutdown", async () => {
+        const complete = model.complete.bind(model);
+        let release!: () => void;
+        let entered!: () => void;
+        const started = new Promise<void>((resolve) => {
+            entered = resolve;
+        });
+        const pending = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        model.complete = async (prompt) => {
+            entered();
+            await pending;
+            return complete(prompt);
+        };
+        const corpus = await service.createCorpus("Pending purge synopsis");
+        await ingest(corpus.corpusId, "Private source awaiting synopsis.");
+        await started;
+        const preview = await service.previewForgetSource(
+            corpus.corpusId,
+            "worksheet",
+        );
+        const fault = import.meta.jest
+            .spyOn(TypedViewStore.prototype, "markSourceRevisionStale")
+            .mockRejectedValueOnce(new Error("Injected purge interruption"));
+        try {
+            await expect(
+                service.forgetSource({
+                    corpusId: corpus.corpusId,
+                    sourceId: "worksheet",
+                    confirmationToken: preview.confirmationToken,
+                }),
+            ).rejects.toThrow("Injected purge interruption");
+            release();
+            await expect(
+                service.getSource(corpus.corpusId, "worksheet"),
+            ).rejects.toThrow("pending purge recovery");
+            await expect(service.close()).resolves.toBeUndefined();
+        } finally {
+            release();
+            fault.mockRestore();
+        }
+        service = open();
+        await expect(
+            service.getSource(corpus.corpusId, "worksheet"),
+        ).resolves.toBeUndefined();
     });
 
     test("restart recovers interrupted inline work without a new retained revision", async () => {
