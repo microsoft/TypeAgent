@@ -242,8 +242,9 @@ jobs:
       # pwsh gives consistent single-quote argument grouping on Windows and
       # Linux. Authenticates to Azure OpenAI via the AZURE_* WIF variables the
       # login step published.
+      # The -- separator prevents npm from consuming the CLI's --model flag.
       - pwsh: |
-          npm run start:dev 'prompt' 'why is the sky blue' '--model' 'GPT_4_O'
+          npm run start:dev -- 'prompt' 'why is the sky blue' '--model' 'GPT_4_O'
         displayName: Test CLI - smoke
         timeoutInMinutes: 5
         workingDirectory: $(buildDirectory)/packages/cli
