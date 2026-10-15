@@ -496,7 +496,6 @@ export function createChatModel(
             ...completionSettings,
             max_completion_tokens: settings.requestConstraints.outputTokens,
         };
-
     // GPT-5+ models only support the default temperature; other values are
     // rejected. Check resolved settings because callers often use an alias.
     if (

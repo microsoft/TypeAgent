@@ -30,6 +30,9 @@ dist-pub/
 .scratch/
 .context/
 /ts/.runbook-markdown-quality/
+# Local macro validation runs and private evidence
+/ts/.workiq-experimental-validation/
+/ts/.workiq-offline-validation/
 .vscode
 **/.vscode/*
 **/tsconfig.debug.json
@@ -471,6 +474,7 @@ ts/config.local.yaml.bak
 /ts/tmp/bundled-agent-server
 /ts/msi-test-stage
 /ts/msi-test-output
+/ts/packages/copilot-plugin-eval/.native-*
 /ts/.wiki-test-runtime
 /ts/.wiki-browser-owned
 /ts/.wiki-rehearsal-blocked-20261010

@@ -66,6 +66,7 @@ export class ExtensionTraceAssembler {
     public constructor(
         private readonly sessionId: string,
         private readonly cwd: string,
+        private readonly retainPrivateResults = false,
     ) {}
 
     public record(event: ExtensionSessionEvent): void {
@@ -181,10 +182,15 @@ export class ExtensionTraceAssembler {
         const call = turn.calls.get(key);
         if (!call || turn.completedCalls.has(key)) return;
 
-        call.result = redactTraceValue(event.data.result ?? event.data.error);
+        const actualResult = event.data.result ?? event.data.error;
+        call.result = this.retainPrivateResults
+            ? structuredClone(actualResult)
+            : redactTraceValue(actualResult);
         const modelResult = getModelResult(event.data.result);
         if (modelResult !== undefined) {
-            call.modelResult = redactTraceValue(modelResult);
+            call.modelResult = this.retainPrivateResults
+                ? modelResult
+                : redactTraceValue(modelResult);
         }
         if (call.status !== "denied") {
             call.status = event.data.success === false ? "failed" : "completed";

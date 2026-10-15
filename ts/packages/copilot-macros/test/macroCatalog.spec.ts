@@ -679,7 +679,7 @@ describe("MacroManager draft catalog", () => {
         });
     });
 
-    it("bounds persisted results without changing replay completion", async () => {
+    it("bounds persisted result views with lossless evidence without changing replay completion", async () => {
         const instanceDir = await mkdtemp(path.join(os.tmpdir(), "catalog-"));
         const manager = new MacroManager(instanceDir, {
             inspectTool: async (mcpServerName, toolName) => ({
@@ -704,7 +704,17 @@ describe("MacroManager draft catalog", () => {
         ).resolves.toMatchObject({
             status: "completed",
             run: {
-                result: { truncated: true, originalBytes: expect.any(Number) },
+                result: {
+                    content:
+                        "[Private result body retained in lossless evidence]",
+                },
+                resultArtifact: {
+                    capability: "private-result-evidence-v1",
+                    owner: "run",
+                    ownerId: "run-large",
+                    sizeBytes: expect.any(Number),
+                    sensitive: true,
+                },
             },
         });
     });
