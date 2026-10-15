@@ -7,7 +7,7 @@
 
 import { PromptSection } from "typechat";
 import { MessageSourceRole } from "./message.js";
-import { dateTime } from "./index.js";
+import type * as dateTime from "./dateTime.js";
 
 /**
  * Prompt that tells the model about the current date and time.

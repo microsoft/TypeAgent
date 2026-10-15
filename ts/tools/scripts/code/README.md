@@ -49,6 +49,13 @@ Run any of these from `ts/`. All accept `--help`, `--root <path>`,
   For local CI-parity runs, use `npm run code-complexity:ci`.
 - **code-deadcode:** `--config` (defaults to [`knip.jsonc`](./knip.jsonc)).
 
+The circular scanner enumerates source files before invoking madge and fixes
+module paths relative to `--root`. This avoids Windows inode rounding in madge's
+directory walker, which can silently omit distinct source directories. Build
+outputs and dependencies are excluded, and tests are included only with
+`--include-tests`. Ratchet worktrees are created under `--out-dir` and removed
+after analysis.
+
 ### Suppressing a known offender
 
 Usually you don't need to. The complexity and lint ratchets are **stateless** —

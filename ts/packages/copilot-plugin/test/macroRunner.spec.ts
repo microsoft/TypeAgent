@@ -30,7 +30,13 @@ import type { CopilotSession, SessionEvent } from "@github/copilot-sdk";
 
 const launch = {
     agent: "typeagent-macro-runner",
-    macro: { macroId: "approved", version: 2, state: "approved" },
+    macro: {
+        macroId: "approved",
+        version: 2,
+        state: "approved",
+        schemaVersion: 1,
+        steps: [],
+    },
     inputs: { topic: "Vega" },
     budgets: {
         maxToolCalls: 10,
@@ -47,43 +53,47 @@ const launch = {
 const handoff = { agentName: "typeagent-macro-runner", payload: launch };
 
 function runnerDependencies(observer: MacroRunnerObserver, answer?: string) {
-    const execute = jest.fn(async () => {
-        {
-            const base = {
-                id: "event",
-                parentId: null,
-                timestamp: new Date().toISOString(),
-                agentId: "runner",
-            };
-            observer.record({
-                ...base,
-                type: "subagent.started",
-                data: {
-                    toolCallId: "typeagent-macro-run",
-                    agentName: "typeagent:typeagent-macro-runner-host",
-                    agentDisplayName: "Macro runner",
-                    agentDescription: "Runner",
-                    model: "gpt-6-luna",
-                },
-            });
-            if (answer)
+    const execute = jest.fn(
+        async (
+            _request?: Parameters<CopilotSession["rpc"]["tools"]["execute"]>[0],
+        ) => {
+            {
+                const base = {
+                    id: "event",
+                    parentId: null,
+                    timestamp: new Date().toISOString(),
+                    agentId: "runner",
+                };
                 observer.record({
                     ...base,
-                    type: "assistant.message",
-                    data: { messageId: "answer", content: answer },
+                    type: "subagent.started",
+                    data: {
+                        toolCallId: "typeagent-macro-run",
+                        agentName: "typeagent:typeagent-macro-runner-host",
+                        agentDisplayName: "Macro runner",
+                        agentDescription: "Runner",
+                        model: "gpt-6-luna",
+                    },
                 });
-            observer.record({
-                ...base,
-                type: "subagent.completed",
-                data: {
-                    toolCallId: "typeagent-macro-run",
-                    agentName: "typeagent:typeagent-macro-runner",
-                    agentDisplayName: "Macro runner",
-                },
-            });
-        }
-        return "Task returned";
-    });
+                if (answer)
+                    observer.record({
+                        ...base,
+                        type: "assistant.message",
+                        data: { messageId: "answer", content: answer },
+                    });
+                observer.record({
+                    ...base,
+                    type: "subagent.completed",
+                    data: {
+                        toolCallId: "typeagent-macro-run",
+                        agentName: "typeagent:typeagent-macro-runner",
+                        agentDisplayName: "Macro runner",
+                    },
+                });
+            }
+            return "Task returned";
+        },
+    );
     return {
         inspect: jest.fn(async () => launch.macro),
         execute,
@@ -104,6 +114,78 @@ describe("host-controlled macro runner", () => {
         if (originalDataDir === undefined)
             delete process.env.TYPEAGENT_PLUGIN_DATA;
         else process.env.TYPEAGENT_PLUGIN_DATA = originalDataDir;
+    });
+    it("assembles active RUN output instructions without changing historical learning or candidate provenance", async () => {
+        const approved = {
+            ...launch,
+            macro: {
+                ...launch.macro,
+                description:
+                    "Read a document by title and return its contents.",
+                learning: {
+                    mode: "prepare",
+                    exampleInputs: { topic: "Old title" },
+                },
+            },
+        };
+        const before = structuredClone(approved);
+        const observer = new MacroRunnerObserver();
+        const dependencies = runnerDependencies(
+            observer,
+            "Generated current contents.",
+        );
+        dependencies.inspect.mockResolvedValue(approved.macro);
+        expect(
+            await executeNativeMacro(
+                approved,
+                Date.now(),
+                new AbortController().signal,
+                observer,
+                dependencies,
+            ),
+        ).toBe("Generated current contents.");
+        const task = dependencies.execute.mock.calls[0][0];
+        const args = task?.arguments;
+        if (
+            args === null ||
+            typeof args !== "object" ||
+            Array.isArray(args) ||
+            typeof args.prompt !== "string"
+        ) {
+            throw new Error("Expected an assembled task prompt");
+        }
+        const [instructions, payload] = args.prompt.split("\n\n");
+        expect(JSON.parse(payload).launch).toEqual(before);
+        expect(approved).toEqual(before);
+        expect(instructions).toContain(
+            "RUN of the already approved immutable macro, not Prepare or BUILD",
+        );
+        expect(instructions).toContain(
+            "learning.mode and launch.candidate are provenance",
+        );
+        expect(instructions).toContain(
+            "actual current tool results before optional concise execution evidence",
+        );
+        expect(instructions).toContain("not a step-status summary");
+        expect(instructions).toContain(
+            "absence does not block output delivery",
+        );
+        expect(instructions).toContain(
+            "only after a justified successful procedure adaptation caused by actual original-tool unavailability",
+        );
+        expect(instructions).toContain(
+            "secret inputs/private artifact references or base64/binary transport payloads",
+        );
+        expect(instructions).toContain(
+            "Keep all tool discovery, budgets, guards, and postconditions",
+        );
+        expect(instructions).toContain(
+            "If current results cannot support the complete output, report the limitation",
+        );
+        expect(instructions).not.toContain("Generated current contents.");
+        expect(instructions).not.toContain("Old title");
+        expect(dependencies.inspect).toHaveBeenCalledTimes(1);
+        expect(dependencies.execute).toHaveBeenCalledTimes(1);
     });
     it("validates the catalog before launching Luna once and returns its full answer", async () => {
         const observer = new MacroRunnerObserver();
@@ -139,7 +221,7 @@ describe("host-controlled macro runner", () => {
                 description: "Execute approved macro",
                 mode: "sync",
                 prompt:
-                    "The native TypeAgent host has already inspected and validated the exact approved catalog macro below. Do not call inspect_macro or perform another catalog lookup. Execute strictly one recorded step at a time under live permissions. Resolve bindings from current inputs and completed actual step results; a binding overrides any captured example argument. Never start a dependent step speculatively or in parallel. Keep all tool discovery, budgets, guards, and postconditions.\n\n" +
+                    "The native TypeAgent host has already inspected and validated the exact approved catalog macro below. Do not call inspect_macro or perform another catalog lookup. Execute strictly one recorded step at a time under live permissions. Resolve bindings from current inputs and completed actual step results; a binding overrides any captured example argument. Never start a dependent step speculatively or in parallel. Keep all tool discovery, budgets, guards, and postconditions. This invocation is RUN of the already approved immutable macro, not Prepare or BUILD; stored learning.mode and launch.candidate are provenance, not draft-submission directives. Fulfill the approved macro description using current inputs and actual current tool results before optional concise execution evidence. For read/fetch-and-return, deliver the requested contents/result, not a step-status summary or a report that fields exist. Do not invent output, reuse captured examples, expose secret inputs/private artifact references or base64/binary transport payloads, or read private evidence files. If current results cannot support the complete output, report the limitation. Changed inputs, returned-ID bindings and resolving the original callable are not adaptations; do not seek or call submit_macro_candidate for an unchanged run, and its absence does not block output delivery. Candidate submission applies only after a justified successful procedure adaptation caused by actual original-tool unavailability; never silently substitute tools, broaden permissions or mutate the approved version.\n\n" +
                     JSON.stringify({
                         status: "agentRequired",
                         launch,
@@ -228,6 +310,16 @@ describe("host-controlled macro runner", () => {
 
     it.each([
         { ...launch, macro: { ...launch.macro, state: "draft" } },
+        { ...launch, macro: { ...launch.macro, schemaVersion: 99 } },
+        { ...launch, macro: { ...launch.macro, capabilities: ["unknown"] } },
+        {
+            ...launch,
+            macro: {
+                ...launch.macro,
+                schemaVersion: 2,
+                capabilities: ["result-path-v1"],
+            },
+        },
         { ...launch, candidate: { ...launch.candidate, sourceVersion: 3 } },
         { ...launch, budgets: { ...launch.budgets, maxRetries: -1 } },
     ])(

@@ -5,7 +5,11 @@ import type { CopilotSession, SessionEvent } from "@github/copilot-sdk";
 import type { PreToolUseOutput } from "@typeagent/agent-harness-hooks/copilot-cli";
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
-import type { InspectMacroRequest } from "@typeagent/copilot-macros";
+import {
+    assertMacroCapabilities,
+    type CopilotToolMacro,
+    type InspectMacroRequest,
+} from "@typeagent/copilot-macros";
 import {
     markMacroRunnerSession,
     clearMacroRunnerSession,
@@ -53,6 +57,7 @@ export async function executeNativeMacro(
     dependencies: MacroRunnerDependencies,
 ): Promise<string> {
     const launch = launchSchema.parse(payload);
+    assertMacroCapabilities(launch.macro as unknown as CopilotToolMacro);
     if (
         launch.candidate.sourceMacroId !== launch.macro.macroId ||
         launch.candidate.sourceVersion !== launch.macro.version
@@ -121,7 +126,7 @@ export async function executeNativeMacro(
                 name: "macro-runner",
                 description: "Execute approved macro",
                 prompt:
-                    "The native TypeAgent host has already inspected and validated the exact approved catalog macro below. Do not call inspect_macro or perform another catalog lookup. Execute strictly one recorded step at a time under live permissions. Resolve bindings from current inputs and completed actual step results; a binding overrides any captured example argument. Never start a dependent step speculatively or in parallel. Keep all tool discovery, budgets, guards, and postconditions.\n\n" +
+                    "The native TypeAgent host has already inspected and validated the exact approved catalog macro below. Do not call inspect_macro or perform another catalog lookup. Execute strictly one recorded step at a time under live permissions. Resolve bindings from current inputs and completed actual step results; a binding overrides any captured example argument. Never start a dependent step speculatively or in parallel. Keep all tool discovery, budgets, guards, and postconditions. This invocation is RUN of the already approved immutable macro, not Prepare or BUILD; stored learning.mode and launch.candidate are provenance, not draft-submission directives. Fulfill the approved macro description using current inputs and actual current tool results before optional concise execution evidence. For read/fetch-and-return, deliver the requested contents/result, not a step-status summary or a report that fields exist. Do not invent output, reuse captured examples, expose secret inputs/private artifact references or base64/binary transport payloads, or read private evidence files. If current results cannot support the complete output, report the limitation. Changed inputs, returned-ID bindings and resolving the original callable are not adaptations; do not seek or call submit_macro_candidate for an unchanged run, and its absence does not block output delivery. Candidate submission applies only after a justified successful procedure adaptation caused by actual original-tool unavailability; never silently substitute tools, broaden permissions or mutate the approved version.\n\n" +
                     JSON.stringify({
                         status: "agentRequired",
                         launch,

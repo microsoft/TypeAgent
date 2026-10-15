@@ -11,6 +11,7 @@ import type {
     MacroValueType,
     ValueExpression,
 } from "./contracts.js";
+import { assertMacroCapabilities, constructResultPath } from "./resultPath.js";
 
 export class ReplayValidationError extends Error {
     constructor(
@@ -73,6 +74,11 @@ export function resolveMacroExpression(
             `Step result is unavailable: ${expression.stepId}`,
         );
     }
+    if (expression.kind !== "stepResult" && expression.kind !== "resultPath")
+        throw new ReplayValidationError(
+            "unsupportedExpression",
+            "Unsupported macro expression.",
+        );
     let value = results.get(expression.stepId);
     for (const segment of expression.path ?? []) {
         if (value === null || typeof value !== "object") {
@@ -90,7 +96,9 @@ export function resolveMacroExpression(
         }
         value = record[segment];
     }
-    return value;
+    return expression.kind === "resultPath"
+        ? constructResultPath(value, expression.suffix)
+        : value;
 }
 
 function getValueType(value: unknown): MacroValueType {
@@ -189,6 +197,7 @@ export async function inspectReplayTools(
     context: ReplayToolContext = {},
     inputs: Record<string, unknown> = {},
 ): Promise<Map<string, ReplayToolDescriptor>> {
+    assertMacroCapabilities(macro);
     if (macro.state !== "approved") {
         throw new ReplayValidationError(
             "macroNotApproved",

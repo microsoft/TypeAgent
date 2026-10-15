@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=a1165871a62e6af30045c7741872ef5fd2a8d8df1775cd76cdde46ff74a50186 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d49ffcf47d60b4ebafd0049dbb44d272d353b84940c5136cf397a6411b12dff6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-macros — AI-generated documentation
@@ -38,10 +38,10 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/index.ts`, `./src/contracts.ts`, `./src/deterministicReplay.ts`, …and 8 more under `./src/`.
+`./src/index.ts`, `./src/contracts.ts`, `./src/deterministicReplay.ts`, …and 11 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `0946022143a033b57949e44be16f3b0075f1b2bf` on `2026-10-01T15:54:16.662Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-macros docs:verify-links` to spot-check._
+_Auto-generated against commit `b71c8d25eaffc803ee70a6bae420a683d73ff15a` on `2026-10-14T18:52:26.984Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-macros docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
