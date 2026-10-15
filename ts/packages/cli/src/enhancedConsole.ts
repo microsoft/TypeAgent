@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/// <reference path="./types/marked-terminal.d.ts" />
+
 /**
  * Enhanced Console with Terminal UI Features
  *
