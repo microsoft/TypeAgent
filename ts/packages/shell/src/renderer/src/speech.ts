@@ -115,6 +115,7 @@ export function recognizeOnce(
 ) {
     if (useLocalWhisper) {
         const reco = new WhisperRecognizer();
+        reco.onError((error) => onError(`[ERROR: ${error.message}]`));
 
         reco.onRecognizing((data) => {
             onRecognizing(data.text);
@@ -183,6 +184,9 @@ export class ContinousSpeechRecognizer {
 
         if (useWhisper) {
             this.whisperRecognizer = new WhisperRecognizer();
+            this.whisperRecognizer.onError((error) =>
+                this.onError(`[ERROR: ${error.message}]`),
+            );
 
             this.whisperRecognizer.onRecognizing((data) => {
                 this.onRecognizing(data.text);
