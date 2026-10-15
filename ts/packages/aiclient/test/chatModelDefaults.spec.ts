@@ -16,7 +16,9 @@ import {
     getChatModelPool,
     getChatModelSettings,
     createChatModel,
+    type ApiSettings,
 } from "../src/openai.js";
+import type { FunctionCallingJsonSchema } from "../src/models.js";
 import { checkSerializedRequestConstraints } from "../src/requestConstraints.js";
 
 const bare = "https://example.test/openai/deployments/gpt-4o/chat/completions";
@@ -109,6 +111,212 @@ describe("Luna runtime chat defaults", () => {
             globalThis.fetch = originalFetch;
         }
     });
+
+    for (const provider of ["azure", "openai"] as const) {
+        for (const stream of [false, true]) {
+            const settings: ApiSettings =
+                provider === "azure"
+                    ? {
+                          provider,
+                          modelType: ModelType.Chat,
+                          endpoint: luna,
+                          apiKey: "identity",
+                          tokenProvider: {
+                              getAccessToken: async () => ({
+                                  success: true,
+                                  data: "fixture-token",
+                              }),
+                              refreshToken: async () => ({
+                                  success: true,
+                                  data: "fixture-token",
+                              }),
+                          },
+                      }
+                    : {
+                          provider,
+                          modelType: ModelType.Chat,
+                          endpoint: "https://example.test/chat/completions",
+                          modelName: "gpt-6-luna",
+                          apiKey: "fixture-key",
+                      };
+            const tools: FunctionCallingJsonSchema[] = [
+                {
+                    type: "function",
+                    function: {
+                        name: "answer",
+                        parameters: {
+                            type: "object",
+                            properties: { color: { type: "string" } },
+                        },
+                    },
+                },
+            ];
+            test.each(["gpt-4o", "gpt-4o-3", "gpt-4.1"])(
+                `${provider} %s omits inherited reasoning effort (stream=${stream})`,
+                async (modelName) => {
+                    const originalFetch = globalThis.fetch;
+                    let body: Record<string, unknown> | undefined;
+                    globalThis.fetch = async (_url, init) => {
+                        body = JSON.parse(String(init?.body));
+                        const message = { content: "Blue light scatters." };
+                        return body?.stream
+                            ? new Response(
+                                  `data: ${JSON.stringify({
+                                      choices: [{ delta: message }],
+                                  })}\n\ndata: [DONE]\n\n`,
+                                  {
+                                      headers: {
+                                          "content-type": "text/event-stream",
+                                      },
+                                  },
+                              )
+                            : new Response(
+                                  JSON.stringify({
+                                      choices: [{ message }],
+                                  }),
+                              );
+                    };
+                    try {
+                        const completionSettings = {
+                            reasoning_effort: "medium" as const,
+                        };
+                        const legacySettings =
+                            provider === "azure"
+                                ? {
+                                      ...settings,
+                                      endpoint: `https://example.test/openai/deployments/${modelName}/chat/completions`,
+                                  }
+                                : { ...settings, modelName };
+                        const model = createChatModel(
+                            legacySettings,
+                            completionSettings,
+                        );
+                        let text = "";
+                        if (stream) {
+                            const result =
+                                await model.completeStream("sky blue");
+                            if (!result.success) throw Error(result.message);
+                            for await (const chunk of result.data)
+                                text += chunk;
+                        } else {
+                            const result = await model.complete("sky blue");
+                            if (!result.success) throw Error(result.message);
+                            text = result.data;
+                        }
+                        expect(text).toBe("Blue light scatters.");
+                        expect(body).not.toHaveProperty("reasoning_effort");
+                        expect(completionSettings.reasoning_effort).toBe(
+                            "medium",
+                        );
+                    } finally {
+                        globalThis.fetch = originalFetch;
+                    }
+                },
+            );
+            test(`${provider} Luna function calling sets none per request (stream=${stream})`, async () => {
+                const originalFetch = globalThis.fetch;
+                let body: Record<string, unknown> | undefined;
+                let headers: Headers | undefined;
+                const call = {
+                    id: "call-1",
+                    type: "function",
+                    function: {
+                        name: "answer",
+                        arguments: '{"color":"blue"}',
+                    },
+                };
+                globalThis.fetch = async (_url, init) => {
+                    body = JSON.parse(String(init?.body));
+                    headers = new Headers(init?.headers);
+                    return body?.stream
+                        ? new Response(
+                              `data: ${JSON.stringify({
+                                  choices: [
+                                      {
+                                          delta: {
+                                              tool_calls: [
+                                                  { index: 0, ...call },
+                                              ],
+                                          },
+                                      },
+                                  ],
+                              })}\n\ndata: [DONE]\n\n`,
+                              {
+                                  headers: {
+                                      "content-type": "text/event-stream",
+                                  },
+                              },
+                          )
+                        : new Response(
+                              JSON.stringify({
+                                  choices: [
+                                      {
+                                          message: {
+                                              content: "Blue light scatters.",
+                                              tool_calls: [call],
+                                          },
+                                      },
+                                  ],
+                              }),
+                          );
+                };
+                try {
+                    const model = createChatModel(settings);
+                    const result = stream
+                        ? await model.completeStream(
+                              "sky blue",
+                              undefined,
+                              tools,
+                          )
+                        : await model.complete("sky blue", undefined, tools);
+                    expect(result.success).toBe(true);
+                    if (!result.success) throw new Error(result.message);
+                    let output = "";
+                    if (typeof result.data === "string") output = result.data;
+                    else for await (const chunk of result.data) output += chunk;
+                    expect(JSON.parse(output)).toEqual({
+                        name: "answer",
+                        arguments: { color: "blue" },
+                    });
+                    expect(body?.reasoning_effort).toBe("none");
+                    expect(body?.tools).toEqual(tools);
+                    expect(body?.tool_choice).toBe("required");
+                    expect(body?.parallel_tool_calls).toBe(false);
+                    expect(body?.temperature).toBe(1);
+                    expect(headers?.get("Authorization")).toBe(
+                        provider === "azure"
+                            ? "Bearer fixture-token"
+                            : "Bearer fixture-key",
+                    );
+                    expect(
+                        model.completionSettings.reasoning_effort,
+                    ).toBeUndefined();
+                    const plain = await model.complete("plain text");
+                    expect(plain).toEqual({
+                        success: true,
+                        data: "Blue light scatters.",
+                    });
+                    expect(body).not.toHaveProperty("reasoning_effort");
+                    expect(body).not.toHaveProperty("tools");
+                    expect(body).not.toHaveProperty("max_tokens");
+                    expect(body).not.toHaveProperty("max_completion_tokens");
+                } finally {
+                    globalThis.fetch = originalFetch;
+                }
+            });
+            test(`${provider} Luna rejects explicit reasoning for Chat Completions tools (stream=${stream})`, async () => {
+                const model = createChatModel(settings, {
+                    reasoning_effort: "high",
+                });
+                const result = stream
+                    ? model.completeStream("sky blue", undefined, tools)
+                    : model.complete("sky blue", undefined, tools);
+                await expect(result).rejects.toThrow(
+                    "Luna Chat Completions function calling requires reasoning_effort 'none'",
+                );
+            });
+        }
+    }
 
     test.each(["azure", "azure:GPT_4_O"])(
         "retains explicit legacy selector %s",

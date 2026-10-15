@@ -16,15 +16,33 @@ const LUNA_REQUEST_CONSTRAINTS: ModelRequestConstraints = Object.freeze({
 });
 
 export function applyChatModelRequestDefaults(settings: ApiSettings): void {
+    if (settings.requestConstraints !== undefined || !isLunaChatModel(settings))
+        return;
+    settings.requestConstraints = LUNA_REQUEST_CONSTRAINTS;
+}
+
+function getOpenAIChatModelIdentifier(
+    settings: ApiSettings,
+): string | undefined {
     if (
         settings.modelType !== ModelType.Chat ||
-        settings.requestConstraints !== undefined ||
         (settings.provider !== "azure" && settings.provider !== "openai")
     )
-        return;
-    const model =
+        return undefined;
+    return (
         settings.modelName ??
-        /\/deployments\/([^/]+)\//i.exec(settings.endpoint)?.[1];
-    if (model?.toLowerCase() === DEFAULT_OPENAI_CHAT_MODEL)
-        settings.requestConstraints = LUNA_REQUEST_CONSTRAINTS;
+        /\/deployments\/([^/]+)\//i.exec(settings.endpoint)?.[1]
+    );
+}
+
+export function isLunaChatModel(settings: ApiSettings): boolean {
+    return (
+        getOpenAIChatModelIdentifier(settings)?.toLowerCase() ===
+        DEFAULT_OPENAI_CHAT_MODEL
+    );
+}
+
+export function isGpt4ChatModel(settings: ApiSettings): boolean {
+    const model = getOpenAIChatModelIdentifier(settings);
+    return model !== undefined && /^gpt[-_.]?4(?:o|$|[-_.])/i.test(model);
 }

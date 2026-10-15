@@ -15,6 +15,15 @@ const telemetrySource = ts.transpileModule(
     readFileSync(new URL("src/telemetry.ts", cliRoot), "utf8"),
     { compilerOptions: { module: ts.ModuleKind.ESNext } },
 ).outputText;
+const promptSource = ts.transpileModule(
+    readFileSync(new URL("src/commands/prompt.ts", cliRoot), "utf8"),
+    {
+        compilerOptions: {
+            module: ts.ModuleKind.ESNext,
+            target: ts.ScriptTarget.ES2022,
+        },
+    },
+).outputText;
 
 for (const entry of ["run.js", "dev.js"]) {
     for (const scenario of [
@@ -23,6 +32,8 @@ for (const entry of ["run.js", "dev.js"]) {
         "stop-error",
         "init-error",
         "signal",
+        "model-error",
+        "stream-error",
     ]) {
         test(`${entry} cleans up its SDK client and telemetry on ${scenario}`, () => {
             const source = readFileSync(
@@ -33,14 +44,20 @@ for (const entry of ["run.js", "dev.js"]) {
                 const { SourceTextModule } = require("node:vm");
                 const modules = new Map();
                 function moduleFor(name, source) {
-                    const module = new SourceTextModule(source, { identifier: name });
+                    const module = new SourceTextModule(source, {
+                        identifier: name,
+                        importModuleDynamically: async (name) => modules.get(name)
+                    });
                     modules.set(name, module);
                     return module;
                 }
                 globalThis.scenario = ${JSON.stringify(scenario)};
                 moduleFor("@typeagent/config", "export function loadConfigSync() {}");
                 moduleFor("debug", "export default function debug() {}");
+                moduleFor("node:fs", "export default { existsSync: () => false };");
+                moduleFor("chalk", "export default { grey: x => x, gray: x => x, green: x => x };");
                 moduleFor("@typeagent/telemetry", \`
+                    export function createPromptLogger() { return {}; }
                     export const otel = {
                         async initTelemetry() {
                             if (scenario === "init-error") throw Error("init failed");
@@ -51,9 +68,13 @@ for (const entry of ["run.js", "dev.js"]) {
                 moduleFor("@typeagent/aiclient", \`
                     let timer;
                     export async function getChatModelNames() {
-                        timer = setInterval(() => {}, 1000);
+                        timer ??= setInterval(() => {}, 1000);
                         return [];
                     }
+                    export const openai = { createChatModel() {
+                        const fail = async () => ({ success: false, message: "fixture 401 PermissionDenied" });
+                        return { complete: fail, completeStream: fail };
+                    } };
                     export async function stopCopilotClient() {
                         clearInterval(timer);
                         console.log("client stopped");
@@ -64,7 +85,21 @@ for (const entry of ["run.js", "dev.js"]) {
                 const core = moduleFor("@oclif/core", \`
                     import { getChatModelNames } from "@typeagent/aiclient";
                     export const settings = {};
+                    export const Args = { string: () => ({}) };
+                    export const Flags = { string: () => ({}), boolean: () => ({}) };
+                    export class Command {
+                        async parse() {
+                            return { args: { request: "why is the sky blue" },
+                                flags: { stream: scenario === "stream-error" } };
+                        }
+                        error(message) { throw Error(message); }
+                    }
                     export async function run() {
+                        if (scenario === "model-error" || scenario === "stream-error") {
+                            const { default: Prompt } = await import("prompt");
+                            await new Prompt().run();
+                            return;
+                        }
                         await getChatModelNames();
                         if (scenario === "run-error") throw Error("run failed");
                         console.log("Full GPT response: fixture");
@@ -87,6 +122,11 @@ for (const entry of ["run.js", "dev.js"]) {
                     await lifecycle.evaluate();
                     await core.link(linker);
                     await core.evaluate();
+                    if (scenario === "model-error" || scenario === "stream-error") {
+                        const prompt = moduleFor("prompt", ${JSON.stringify(promptSource)});
+                        await prompt.link(linker);
+                        await prompt.evaluate();
+                    }
                     const entry = new SourceTextModule(${JSON.stringify(source)}, {
                         importModuleDynamically: async (name) => modules.get(name)
                     });
@@ -103,6 +143,11 @@ for (const entry of ["run.js", "dev.js"]) {
             const expectedCode =
                 scenario === "success" || scenario === "signal" ? 0 : 1;
             assert.equal(result.status, expectedCode, result.stderr);
+            if (scenario === "model-error" || scenario === "stream-error")
+                assert.match(
+                    result.stderr,
+                    /GPT error: fixture 401 PermissionDenied/,
+                );
             assert.match(result.stdout, /client stopped/);
             assert.match(result.stdout, /telemetry stopped/);
             assert.equal(result.stdout.match(/client stopped/g).length, 1);

@@ -75,6 +75,8 @@ import { instrumentChatModel } from "./otelChatModel.js";
 import {
     applyChatModelRequestDefaults,
     DEFAULT_AZURE_CHAT_DEPLOYMENT,
+    isLunaChatModel,
+    isGpt4ChatModel,
 } from "./chatModelDefaults.js";
 
 export { azureApiSettingsFromEnv, openAIApiSettingsFromEnv };
@@ -501,6 +503,16 @@ export function createChatModel(
     for (const member of pool.members)
         applyChatModelRequestDefaults(member.settings);
 
+    // Session reasoning defaults must not reach GPT-4 deployments, which reject
+    // reasoning_effort. Preserve the caller's settings for subsequent models.
+    if (
+        isGpt4ChatModel(settings) &&
+        completionSettings?.reasoning_effort !== undefined
+    ) {
+        completionSettings = { ...completionSettings };
+        delete completionSettings.reasoning_effort;
+    }
+
     // GPT-5+ models only support the default temperature; other values are
     // rejected. Check resolved settings because callers often use an alias.
     if (
@@ -606,10 +618,25 @@ function createAzureOpenAIChatModel(
         streamOptions?: Record<string, unknown>,
     ): ModelRequest {
         rejectCompletionLimits(completionSettings);
+        let requestSettings = completionSettings!;
+        if (
+            adapter.wireApi === "chat_completions" &&
+            isLunaChatModel(settings) &&
+            Array.isArray(jsonSchema)
+        ) {
+            if (
+                requestSettings.reasoning_effort !== undefined &&
+                requestSettings.reasoning_effort !== "none"
+            )
+                throw new Error(
+                    "GPT-6 Luna Chat Completions function calling requires reasoning_effort 'none'",
+                );
+            requestSettings = { ...requestSettings, reasoning_effort: "none" };
+        }
         return {
             messages,
             jsonSchema,
-            completionSettings: completionSettings!,
+            completionSettings: requestSettings,
             providerOutputTokens: settings.requestConstraints?.outputTokens,
             defaultParams,
             disableResponseFormat,
