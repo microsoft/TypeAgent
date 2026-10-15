@@ -38,7 +38,7 @@
     "async": "^3.2.5",
     "debug": "^4.4.0",
     "gpt-tokenizer": "^2.9.0",
-    "mailparser": "3.9.6",
+    "mailparser": "3.9.36",
     "typechat": "^0.1.1",
     "webvtt-parser": "2.2.0"
   },
