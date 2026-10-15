@@ -29,7 +29,7 @@ it("posts the audio file and returns the transcription text", async () => {
     expect(request?.body).toBeInstanceOf(FormData);
 });
 
-it.each([400, 413, 422, 503])(
+it.each([400, 408, 413, 422, 503])(
     "reports the service message for HTTP %s",
     async (status) => {
         respond({ error: "Please retry." }, status);

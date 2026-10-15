@@ -29,6 +29,7 @@ MAX_UPLOAD_BYTES = 30 * 1024 * 1024
 MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + 64 * 1024
 MAX_AUDIO_SECONDS = 300
 SAMPLE_RATE = 16000
+UPLOAD_TIMEOUT_SECONDS = 30
 DECODE_TIMEOUT_SECONDS = 30
 READ_CHUNK_BYTES = 64 * 1024
 
@@ -75,8 +76,16 @@ class TranscriptionInputMiddleware:
             async with self.lock:
                 with tempfile.SpooledTemporaryFile(max_size=1024 * 1024) as body:
                     size = 0
+                    loop = asyncio.get_running_loop()
+                    upload_deadline = loop.time() + UPLOAD_TIMEOUT_SECONDS
                     while True:
-                        message = await receive()
+                        try:
+                            message = await asyncio.wait_for(
+                                receive(), timeout=upload_deadline - loop.time()
+                            )
+                        except asyncio.TimeoutError:
+                            await reject(408, "The audio upload exceeded the time limit.")
+                            return
                         if message["type"] == "http.disconnect":
                             return
                         if message["type"] != "http.request":
