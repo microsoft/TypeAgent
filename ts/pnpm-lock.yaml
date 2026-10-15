@@ -6035,6 +6035,9 @@ importers:
       '@typeagent/knowpro':
         specifier: workspace:*
         version: link:../../knowPro
+      '@typeagent/textpro':
+        specifier: workspace:*
+        version: link:../../textPro
       isomorphic-git:
         specifier: 1.37.4
         version: 1.37.4
@@ -6645,6 +6648,12 @@ importers:
         specifier: 16.0.0
         version: 16.0.0
     devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@26.4.1)(ts-node@10.9.2(@types/node@26.4.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3

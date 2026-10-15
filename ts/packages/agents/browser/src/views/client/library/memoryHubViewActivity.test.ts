@@ -157,6 +157,45 @@ test("successful draft counts do not imply publication or search readiness", () 
     expect(viewBuildSummary(value)).toBe("1 of 1 targets saved");
 });
 
+test("topic generations are not presented as openable Wiki article revisions", async () => {
+    const value = job("complete");
+    value.results[0].snapshot.pipeline = "topics-v1";
+    value.results[0].state = "draft";
+    value.results[0].topicGeneration = "topic-generation";
+    value.results[0].reason = "Complete topic snapshot, not an article";
+    const previous = invoke.getMockImplementation()!;
+    invoke.mockImplementation((method: string, request: unknown) =>
+        method === "memoryGetViewBuild"
+            ? Promise.resolve(value)
+            : previous(method, request),
+    );
+    const host = document.createElement("div");
+    const onOpenView = jest.fn();
+    const mounted = mountMemoryHubViewActivity(
+        host,
+        document.createElement("div"),
+        {
+            scope: () => "alpha",
+            onError: jest.fn(),
+            onOpenView,
+            onOpenBuild: jest.fn(),
+        },
+    );
+    try {
+        await mounted.show({ corpusId: "alpha", jobId: "job-1" });
+        expect(host.textContent).toContain("Maintained topics");
+        expect(host.textContent).toContain("Topic generation topic-generation");
+        expect(
+            [...host.querySelectorAll("button")].some(
+                (button) => button.textContent === "Open view",
+            ),
+        ).toBe(false);
+        expect(onOpenView).not.toHaveBeenCalled();
+    } finally {
+        mounted.dispose();
+    }
+});
+
 test("current indexing attention is counted once and maintenance plans respect the 32-view bound", async () => {
     const views: ViewVersion[] = Array.from({ length: 33 }, (_, index) => ({
         corpusId: "alpha",

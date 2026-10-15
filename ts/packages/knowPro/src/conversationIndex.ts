@@ -499,7 +499,7 @@ export function createKnowledgeModel() {
     const chatModelSettings = openai.apiSettingsFromEnv(
         openai.ModelType.Chat,
         undefined,
-        "GPT_4_O",
+        "GPT_6_LUNA",
     );
     chatModelSettings.retryPauseMs = 10000;
     const chatModel = openai.createJsonChatModel(chatModelSettings, [

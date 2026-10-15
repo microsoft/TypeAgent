@@ -17,47 +17,80 @@ import {
 import type { ChatModel } from "@typeagent/aiclient";
 import type { MemoryEvidence } from "../src/types.js";
 
-test("wiki budgeting does not require capability declarations and enforces optional tighter limits", () => {
-    expect(resolveConfiguredWikiBudget({})).toBeUndefined();
-    expect(
-        resolveConfiguredWikiBudget({ MEMORY_WIKI_OUTPUT_TOKENS: "2000" }),
-    ).toMatchObject({ outputTokens: 2000, contextTokens: undefined });
-    expect(resolveReviewedWikiBudget({})).toMatchObject({
-        contextTokens: undefined,
-        inputTokens: 16000,
-        outputTokens: 4000,
-        tokenizer: "o200k_base-estimate",
-        chatAttempts: 24,
-        reservedTokens: 160000,
-        elapsedMs: 600000,
-    });
-
-    expect(
-        resolveReviewedWikiBudget({ MEMORY_WIKI_CONTEXT_TOKENS: "128000" }),
-    ).toMatchObject({ contextTokens: 128000, inputTokens: 16000 });
-    const declared = {
-        MEMORY_WIKI_CONTEXT_TOKENS: "21000",
-        MEMORY_WIKI_OUTPUT_TOKENS: "4000",
-        MEMORY_WIKI_TOKENIZER: "o200k_base",
-    };
-    expect(resolveReviewedWikiBudget(declared)).toMatchObject({
-        contextTokens: 21000,
-        inputTokens: 16000,
-        outputTokens: 4000,
-    });
-    expect(
-        resolveReviewedWikiBudget({
-            ...declared,
-            MEMORY_WIKI_CONTEXT_TOKENS: "6000",
-            MEMORY_WIKI_OUTPUT_TOKENS: "2000",
+test("wiki budgets reserve selected model capacity and reject incompatible strict overrides", () => {
+    const previous = getRuntimeConfig();
+    setRuntimeConfig(
+        configFromEnvRecord({
+            AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS:
+                "https://synthetic.invalid/openai/deployments/gpt-6-luna/chat/completions",
+            AZURE_OPENAI_API_KEY: "unit-test-key",
+            AZURE_OPENAI_ENDPOINT_CUSTOM_EASTUS:
+                "https://synthetic.invalid/custom",
         }),
-    ).toMatchObject({ inputTokens: 3000, outputTokens: 2000 });
-    expect(() =>
-        resolveReviewedWikiBudget({
-            ...declared,
-            MEMORY_WIKI_TOKENIZER: "unknown",
-        }),
-    ).toThrow("MEMORY_WIKI_TOKENIZER");
+    );
+    try {
+        expect(resolveConfiguredWikiBudget({})).toBeUndefined();
+        expect(() =>
+            resolveConfiguredWikiBudget({ MEMORY_WIKI_OUTPUT_TOKENS: "2000" }),
+        ).toThrow("incompatible with uncapped provider capacity");
+        expect(resolveReviewedWikiBudget({})).toMatchObject({
+            contextTokens: 1050000,
+            inputTokens: 16000,
+            outputTokens: 128000,
+            tokenizer: "o200k_base-estimate",
+            chatAttempts: 24,
+            embeddingAttempts: 128,
+            embeddingInputTokens: 300000,
+            inputReservedTokens: 160000,
+            reservedTokens: 3232000,
+            elapsedMs: 600000,
+        });
+        expect(
+            resolveReviewedWikiBudget({ MEMORY_WIKI_CONTEXT_TOKENS: "150000" }),
+        ).toMatchObject({ contextTokens: 150000, inputTokens: 16000 });
+        expect(
+            resolveReviewedWikiBudget({ MEMORY_WIKI_CONTEXT_TOKENS: "132000" }),
+        ).toMatchObject({
+            contextTokens: 132000,
+            inputTokens: 3000,
+        });
+        expect(() =>
+            resolveReviewedWikiBudget({ MEMORY_WIKI_CONTEXT_TOKENS: "128000" }),
+        ).toThrow("positive context/output");
+        expect(() =>
+            resolveReviewedWikiBudget({
+                MEMORY_WIKI_CONTEXT_TOKENS: "2000000",
+            }),
+        ).toThrow("incompatible");
+        expect(() => resolveReviewedWikiBudget({}, "azure:custom")).toThrow(
+            "verified context and output capacity",
+        );
+        expect(() =>
+            resolveReviewedWikiBudget({ MEMORY_WIKI_TOKENIZER: "unknown" }),
+        ).toThrow("MEMORY_WIKI_TOKENIZER");
+        setRuntimeConfig(
+            configFromEnvRecord({
+                AZURE_OPENAI_ENDPOINT_GPT_6_LUNA_EASTUS:
+                    "https://synthetic.invalid/openai/deployments/gpt-6-luna/chat/completions",
+                AZURE_OPENAI_API_KEY: "unit-test-key",
+                TYPEAGENT_MODEL_REQUEST_CONSTRAINTS: JSON.stringify({
+                    "azure:chat:gpt_6_luna": {
+                        contextTokens: 22000,
+                        inputTokens: 16000,
+                        outputTokens: 1000,
+                    },
+                }),
+            }),
+        );
+        expect(resolveReviewedWikiBudget({})).toMatchObject({
+            contextTokens: 22000,
+            inputTokens: 16000,
+            outputTokens: 1000,
+            reservedTokens: 184000,
+        });
+    } finally {
+        setRuntimeConfig(previous);
+    }
 });
 
 test("indexed answer serializes the strict citation schema on Azure chat completions", async () => {
@@ -110,7 +143,7 @@ test("indexed answer serializes the strict citation schema on Azure chat complet
             evidence,
             4000,
             "gpt_4_o",
-            createIndexedAnswerModel(4000, "gpt_4_o"),
+            createIndexedAnswerModel("gpt_4_o"),
         );
         expect(serialized).toMatchObject({
             response_format: {

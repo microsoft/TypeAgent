@@ -12,6 +12,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { FileMemoryService } from "../src/fileMemoryService.js";
+import { TypedViewStore } from "../src/viewStore.js";
 import {
     procedureFromMarkdown,
     procedureToMarkdown,
@@ -1129,6 +1130,135 @@ describe("FileMemoryService", () => {
         expect((await waitForTerminalJob(service, stale.jobId)).state).toBe(
             "failed",
         );
+    });
+
+    test("authorized removal denies reads after a failed purge and restarts without the expired preview", async () => {
+        const { corpusId } = await service.createCorpus("Removal recovery");
+        const accepted = await service.ingestDocument({
+            corpusId,
+            source: {
+                sourceId: "private-source",
+                sourceType: "markdown",
+                title: "Synthetic privacy evidence",
+                markdown:
+                    "Synthetic private fact must not survive authorized removal.",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+        const preview = await service.previewForgetSource(
+            corpusId,
+            "private-source",
+        );
+        index.failNextRebuild = true;
+        await expect(
+            service.forgetSource({
+                corpusId,
+                sourceId: "private-source",
+                confirmationToken: preview.confirmationToken,
+            }),
+        ).rejects.toThrow("Expected index failure");
+        await expect(
+            service.getSource(corpusId, "private-source"),
+        ).rejects.toThrow("Authorized source removal");
+        await expect(
+            service.getSourceContent({ corpusId, sourceId: "private-source" }),
+        ).rejects.toThrow("Authorized source removal");
+        await expect(service.listViews(corpusId)).rejects.toThrow(
+            "Authorized source removal",
+        );
+        const manifestPath = path.join(
+            rootDirectory,
+            corpusId,
+            "manifest.json",
+        );
+        const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+        expect(manifest.authorizedSourceRemoval.sourceId).toBe(
+            "private-source",
+        );
+        expect(manifest.pendingSourceForget).toBeUndefined();
+        await service.close();
+        index = new FakeCorpusIndex();
+        service = new FileMemoryService(rootDirectory, {
+            informationalViews: false,
+            indexFactory: (_id, directory) => {
+                index.indexDirectory = directory;
+                return index;
+            },
+        });
+        await service.initialize();
+        await expect(
+            service.getSource(corpusId, "private-source"),
+        ).resolves.toBeUndefined();
+        expect(index.documents).toEqual([]);
+        expect(
+            JSON.parse(await readFile(manifestPath, "utf8"))
+                .authorizedSourceRemoval,
+        ).toBeUndefined();
+    });
+
+    test("removal recovery after committed withdrawal preserves the exact source index generation", async () => {
+        const { corpusId } = await service.createCorpus(
+            "Committed removal recovery",
+        );
+        const accepted = await service.ingestDocument({
+            corpusId,
+            source: {
+                sourceId: "withdrawn",
+                sourceType: "text",
+                title: "Synthetic",
+                text: "Synthetic removed context.",
+            },
+        });
+        await waitForTerminalJob(service, accepted.jobId);
+        const preview = await service.previewForgetSource(
+            corpusId,
+            "withdrawn",
+        );
+        const fault = import.meta.jest
+            .spyOn(TypedViewStore.prototype, "markSourceRevisionStale")
+            .mockRejectedValueOnce(
+                new Error("Synthetic crash after source withdrawal"),
+            );
+        const manifestPath = path.join(
+            rootDirectory,
+            corpusId,
+            "manifest.json",
+        );
+        let generation: string;
+        try {
+            await expect(
+                service.forgetSource({
+                    corpusId,
+                    sourceId: "withdrawn",
+                    confirmationToken: preview.confirmationToken,
+                }),
+            ).rejects.toThrow("Synthetic crash after source withdrawal");
+            const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+            expect(manifest.sources).toEqual([]);
+            expect(manifest.authorizedSourceRemoval).toBeDefined();
+            generation = manifest.indexGeneration;
+        } finally {
+            fault.mockRestore();
+        }
+        await service.close();
+        index = new FakeCorpusIndex();
+        service = open(false);
+        const rebuild = import.meta.jest.spyOn(index, "rebuild");
+        try {
+            await service.initialize();
+            expect(rebuild).not.toHaveBeenCalled();
+            const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+            expect(manifest.indexGeneration).toBe(generation);
+            expect(manifest.authorizedSourceRemoval).toBeUndefined();
+            await expect(
+                service.getSource(corpusId, "withdrawn"),
+            ).resolves.toBeUndefined();
+            expect(
+                (await service.getJob(accepted.jobId))?.trace,
+            ).toBeUndefined();
+        } finally {
+            rebuild.mockRestore();
+        }
     });
 
     test("persists deletion confirmation and removes source-derived indexes after restart", async () => {

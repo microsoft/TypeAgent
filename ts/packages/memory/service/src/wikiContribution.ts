@@ -151,6 +151,10 @@ export function wikiContributionInput(
         expectedVersion: canonical.version,
         bounds: incoming.bounds,
         inputs,
+        influenceSources: [
+            ...(prior.influenceSources ?? []),
+            ...(incoming.influenceSources ?? []),
+        ],
         pipeline: "informational-wiki-v1",
         model: incoming.model,
         selectionFingerprint: viewHash(passages),

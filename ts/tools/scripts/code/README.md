@@ -146,6 +146,13 @@ so only what the PR actually touches is judged. Two flavors:
 
 ### Reproduce a gate locally
 
+The circular scanner enumerates source files under `packages`, `examples`,
+`extensions` and `tools` before invoking madge, using the same selection for HEAD
+and the merge base. It does not use madge's directory walker: on Windows, distinct
+64-bit file IDs can round to the same JavaScript numeric inode and silently omit
+source directories. Explicit file enumeration avoids this incomplete-graph
+comparison without changing cycle exceptions or dependency resolution.
+
 Run the same command against your base branch (usually `main`). Complexity has a
 canned parity script; the rest just take `--base`:
 

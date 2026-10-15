@@ -13,6 +13,7 @@ import {
     VideoModel,
     VideoGenerationJob,
     ImageInPaintItem,
+    rejectCompletionLimits,
 } from "./models.js";
 import {
     BuildPoolRequest,
@@ -71,6 +72,12 @@ import {
     usesProviderDefault,
 } from "./providerMode.js";
 import { instrumentChatModel } from "./otelChatModel.js";
+import {
+    applyChatModelRequestDefaults,
+    DEFAULT_AZURE_CHAT_DEPLOYMENT,
+    isLunaChatModel,
+    isGpt4ChatModel,
+} from "./chatModelDefaults.js";
 
 export { azureApiSettingsFromEnv, openAIApiSettingsFromEnv };
 
@@ -163,12 +170,18 @@ export function apiSettingsFromEnv(
         return azureApiSettingsFromEnv(modelType, env, target);
     }
 
-    env ??= process.env;
-    if (EnvVars.OPENAI_API_KEY in env) {
+    if (EnvVars.OPENAI_API_KEY in (env ?? process.env)) {
         return openAIApiSettingsFromEnv(modelType, env, endpointName);
     }
 
-    return azureApiSettingsFromEnv(modelType, env, endpointName);
+    return azureApiSettingsFromEnv(
+        modelType,
+        env,
+        modelType === ModelType.Chat &&
+            (!endpointName || endpointName.toUpperCase() === "DEFAULT")
+            ? DEFAULT_AZURE_CHAT_DEPLOYMENT
+            : endpointName,
+    );
 }
 
 /**
@@ -202,7 +215,7 @@ export function localOpenAIApiSettingsFromEnv(
 
 // Parse the endpoint name with the following naming conventions
 //
-// - By default, if endpoint name is not specified, it defaults to `OPENAI_ENDPOINT` if it exists, and `AZURE_OPENAI_ENDPOINT` otherwise.
+// - With no endpoint name, select the configured provider default or named Azure Luna pool.
 // - Endpoint names `azure` and `openai` refers to `AZURE_OPENAI_ENDPOINT` and `OPENAI_ENDPOINT`
 // - Endpoint names `azure:<name>` and `openai:<name>` refers to `AZURE_OPENAI_ENDPOINT_<name>` and `OPENAI_ENDPOINT_<name>`
 // - Endpoint names without the `azure:` or `openai:` prefix will assume it is prefixed with `azure:` and uses `AZURE_OPENAI_ENDPOINT_<name>`
@@ -219,10 +232,9 @@ function parseEndPointName(endpoint?: string): {
             }
             return { provider: mode, name: resolveTarget(mode, "DEFAULT") };
         }
-        return {
-            provider:
-                EnvVars.OPENAI_ENDPOINT in process.env ? "openai" : "azure",
-        };
+        return EnvVars.OPENAI_ENDPOINT in process.env
+            ? { provider: "openai" }
+            : { provider: "azure", name: DEFAULT_AZURE_CHAT_DEPLOYMENT };
     }
     if (
         endpoint === "openai" ||
@@ -257,7 +269,13 @@ function parseEndPointName(endpoint?: string): {
     if (EnvVars.OPENAI_ENDPOINT in process.env) {
         return { provider: "openai", name: endpoint };
     }
-    return { provider: "azure", name: endpoint };
+    return {
+        provider: "azure",
+        name:
+            endpoint.toUpperCase() === "DEFAULT"
+                ? DEFAULT_AZURE_CHAT_DEPLOYMENT
+                : endpoint,
+    };
 }
 
 // Cache of per-model endpoint pools. Keyed by
@@ -321,7 +339,12 @@ function buildModelPool(
                 modelType,
                 typedName,
             );
-        } catch {
+        } catch (e) {
+            if (
+                provider === "azure" &&
+                endpointName?.toUpperCase() === DEFAULT_AZURE_CHAT_DEPLOYMENT
+            )
+                throw e;
             // Fall through to legacy.
         }
     }
@@ -388,17 +411,6 @@ export function getChatModelPool(endpoint?: string): EndpointPool {
 export function getChatModelSettings(endpoint?: string): ApiSettings {
     const pool = getChatModelPool(endpoint);
     return pool.members[0].settings;
-}
-
-export function getChatModelOutputLimit(
-    applicationLimit: number,
-    endpoint?: string,
-): number {
-    const constraints = getChatModelSettings(endpoint).requestConstraints;
-    return Math.min(
-        applicationLimit,
-        constraints?.outputTokens ?? applicationLimit,
-    );
 }
 
 /**
@@ -473,6 +485,7 @@ export function createChatModel(
     completionCallback?: (request: any, response: any) => void,
     tags?: string[],
 ): ChatModelWithStreaming {
+    rejectCompletionLimits(completionSettings);
     // Tag calls with the active mode so TokenCounter rollups can slice
     // by provider. Pre-resolved ApiSettings bypass mode override, so
     // only tag when the override is in effect AND the caller went
@@ -487,15 +500,19 @@ export function createChatModel(
             : getChatModelPool(endpoint);
     const settings = pool.members[0].settings;
 
+    for (const member of pool.members)
+        applyChatModelRequestDefaults(member.settings);
+
+    // Session reasoning defaults must not reach GPT-4 deployments, which reject
+    // reasoning_effort. Preserve the caller's settings for subsequent models.
     if (
-        settings.requestConstraints?.outputTokens !== undefined &&
-        completionSettings?.max_completion_tokens === undefined &&
-        completionSettings?.max_tokens === undefined
-    )
-        completionSettings = {
-            ...completionSettings,
-            max_completion_tokens: settings.requestConstraints.outputTokens,
-        };
+        isGpt4ChatModel(settings) &&
+        completionSettings?.reasoning_effort !== undefined
+    ) {
+        completionSettings = { ...completionSettings };
+        delete completionSettings.reasoning_effort;
+    }
+
     // GPT-5+ models only support the default temperature; other values are
     // rejected. Check resolved settings because callers often use an alias.
     if (
@@ -564,18 +581,6 @@ function createAzureOpenAIChatModel(
     completionSettings.n ??= 1;
     completionSettings.temperature ??= 0;
 
-    // Normalize max_tokens → max_completion_tokens.  Newer models (GPT-5,
-    // o3, o4, GPT-4.1, etc.) reject the legacy `max_tokens` parameter.
-    // Promote it unconditionally — all supported models accept the new name.
-    if (
-        completionSettings.max_tokens !== undefined &&
-        completionSettings.max_completion_tokens === undefined
-    ) {
-        completionSettings.max_completion_tokens =
-            completionSettings.max_tokens;
-    }
-    delete completionSettings.max_tokens;
-
     const disableResponseFormat =
         !settings.supportsResponseFormat &&
         completionSettings.response_format !== undefined;
@@ -612,10 +617,27 @@ function createAzureOpenAIChatModel(
         stream: boolean,
         streamOptions?: Record<string, unknown>,
     ): ModelRequest {
+        rejectCompletionLimits(completionSettings);
+        let requestSettings = completionSettings!;
+        if (
+            adapter.wireApi === "chat_completions" &&
+            isLunaChatModel(settings) &&
+            Array.isArray(jsonSchema)
+        ) {
+            if (
+                requestSettings.reasoning_effort !== undefined &&
+                requestSettings.reasoning_effort !== "none"
+            )
+                throw new Error(
+                    "GPT-6 Luna Chat Completions function calling requires reasoning_effort 'none'",
+                );
+            requestSettings = { ...requestSettings, reasoning_effort: "none" };
+        }
         return {
             messages,
             jsonSchema,
-            completionSettings: completionSettings!,
+            completionSettings: requestSettings,
+            providerOutputTokens: settings.requestConstraints?.outputTokens,
             defaultParams,
             disableResponseFormat,
             modelName,

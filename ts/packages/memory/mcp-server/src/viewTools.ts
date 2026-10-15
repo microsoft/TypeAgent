@@ -31,6 +31,9 @@ import {
     viewSourceUsagePageSchema,
     viewToolNames,
     viewVersionSchema,
+    topicQueryRequestSchema,
+    topicQueryPageSchema,
+    topicToolNames,
 } from "@typeagent/memory-client";
 import type {
     MemoryService,
@@ -58,6 +61,46 @@ export function registerViewTools(
 ): void {
     const views = createMemoryServiceRpcFacade(service);
     const corpus = z.strictObject({ corpusId: z.string().min(1).max(200) });
+    server.registerTool(
+        topicToolNames.queryTopics,
+        {
+            description:
+                "Browse the complete maintained topic snapshot with generation-bound pagination, original evidence, incidence neighborhoods and explicit omissions. Response bounds do not bound store IO.",
+            inputSchema: topicQueryRequestSchema,
+            outputSchema: z.object({ result: topicQueryPageSchema }),
+        },
+        (request) =>
+            run(() =>
+                views.queryTopics({
+                    corpusId: request.corpusId,
+                    ...(request.topicId !== undefined
+                        ? { topicId: request.topicId }
+                        : {}),
+                    ...(request.search !== undefined
+                        ? { search: request.search }
+                        : {}),
+                    ...(request.depth !== undefined
+                        ? { depth: request.depth }
+                        : {}),
+                    ...(request.pageSize !== undefined
+                        ? { pageSize: request.pageSize }
+                        : {}),
+                    ...(request.continuationToken !== undefined
+                        ? { continuationToken: request.continuationToken }
+                        : {}),
+                }),
+            ),
+    );
+    server.registerTool(
+        topicToolNames.rebuildTopics,
+        {
+            description:
+                "Rebuild complete eligible topic incidence and grounded summaries using existing corpus view maintenance jobs; no article or execution authority.",
+            inputSchema: corpus,
+            outputSchema: z.object({ result: viewBuildJobSchema }),
+        },
+        ({ corpusId }) => run(() => views.rebuildTopics(corpusId)),
+    );
     server.registerTool(
         viewToolNames.getSourceViewUsage,
         {

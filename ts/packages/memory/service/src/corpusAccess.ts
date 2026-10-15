@@ -5,8 +5,13 @@ export class CorpusAccess {
     private writeTail: Promise<void> = Promise.resolve();
     private readonly readers = new Set<Promise<void>>();
 
+    public constructor(private readonly assertReadable?: () => void) {}
+
     public read<T>(operation: () => Promise<T>): Promise<T> {
-        const result = this.writeTail.then(operation);
+        const result = this.writeTail.then(() => {
+            this.assertReadable?.();
+            return operation();
+        });
         const settled = result.then(
             () => undefined,
             () => undefined,

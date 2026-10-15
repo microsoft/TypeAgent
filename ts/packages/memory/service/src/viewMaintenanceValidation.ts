@@ -12,12 +12,15 @@ import { viewHash } from "./viewMerge.js";
 import { ViewBuildStaleError } from "./viewBuilds.js";
 
 function validateWikiFamilyRequest(
-    request: Extract<ViewMaintenanceRequest, { family: "wiki" | "projects" }>,
+    request: Extract<
+        ViewMaintenanceRequest,
+        { family: "wiki" | "projects" | "topics" }
+    >,
     writing: boolean,
 ): void {
     if (
         !writing ||
-        !["wiki", "projects"].includes(request.family) ||
+        !["wiki", "projects", "topics"].includes(request.family) ||
         !["update", "rebuild", "pause", "resume"].includes(request.operation) ||
         Object.keys(request).some(
             (key) =>

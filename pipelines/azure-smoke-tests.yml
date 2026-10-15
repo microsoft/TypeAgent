@@ -73,7 +73,7 @@ trigger:
       # status checks to run against them. Azure Pipelines has no merge_group
       # event, so include the queue branches in the CI trigger to make this
       # pipeline run (and report back) while a PR sits in the queue for main.
-      - gh-readonly-queue/main/*      
+      - gh-readonly-queue/main/*
   # No `paths` filter: this pipeline is a required status check, so it must run
   # (and report back) for every push — including merge-queue candidates that
   # touch only non-ts files. Whether the expensive tests actually run is decided
@@ -242,9 +242,11 @@ jobs:
       # pwsh gives consistent single-quote argument grouping on Windows and
       # Linux. Authenticates to Azure OpenAI via the AZURE_* WIF variables the
       # login step published.
+      # The -- separator prevents npm from consuming the CLI's --model flag.
       - pwsh: |
-          npm run start:dev 'prompt' 'why is the sky blue'
+          npm run start:dev -- 'prompt' 'why is the sky blue' '--model' 'GPT_4_O'
         displayName: Test CLI - smoke
+        timeoutInMinutes: 5
         workingDirectory: $(buildDirectory)/packages/cli
 
       # Long-running suite: it can run past the shared login's ~15-min token
@@ -256,6 +258,8 @@ jobs:
       # this task's fresh AzureCliCredential. Clearing them makes it fall through.
       - task: AzureCLI@2
         displayName: Shell Tests - full (Windows)
+        env:
+          TYPEAGENT_SHELL_TEST_MODEL: GPT_4_O
         timeoutInMinutes: 60
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
         inputs:
@@ -271,6 +275,8 @@ jobs:
       # rationale as "Shell Tests - full" above.
       - task: AzureCLI@2
         displayName: Shell Tests - smoke (Linux)
+        env:
+          TYPEAGENT_SHELL_TEST_MODEL: GPT_4_O
         timeoutInMinutes: 60
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
         inputs:
