@@ -243,6 +243,12 @@ test("actual P0 C7 authenticated title/annotation and historical human edits pro
         const { corpusId } = await service.createCorpus(
             "Actual P0 C7 protected review",
         );
+        await service.maintainViews({
+            corpusId,
+            family: "projects",
+            operation: "pause",
+            expectedHead: (await service.listViews(corpusId)).head,
+        });
         await changeFamily(service, corpusId, "pause");
         await ingestFixture(
             service,
@@ -318,6 +324,12 @@ test("actual P0 C7 authenticated title/annotation and historical human edits pro
         );
         await changeFamily(service, corpusId, "resume");
         await settleConsolidation(service, corpusId, true);
+        await changeFamily(service, corpusId, "pause");
+        const resolutionSnapshot = await settleConsolidation(
+            service,
+            corpusId,
+            true,
+        );
         const failed = (await service.listViewBuilds(corpusId))
             .flatMap((job) => job.results)
             .find(
@@ -333,7 +345,7 @@ test("actual P0 C7 authenticated title/annotation and historical human edits pro
         const resolution = {
             corpusId,
             conflictId: conflict!.conflictId,
-            expectedHead: (await service.listViews(corpusId)).head!,
+            expectedHead: resolutionSnapshot.head!,
             expectedVersion: conflict!.human.version,
             expectedRevisionId: conflict!.expectedRevisionId,
             inputFingerprint: conflict!.input.fingerprint,
@@ -344,11 +356,13 @@ test("actual P0 C7 authenticated title/annotation and historical human edits pro
                 ...resolution,
                 inputFingerprint: "a".repeat(64),
             }),
-        ).rejects.toThrow();
-        const saved = await service.resolveViewConflict({
-            ...resolution,
-            expectedHead: (await service.listViews(corpusId)).head!,
-        });
+        ).rejects.toThrow(
+            "Conflict resolution head/target/input guard changed",
+        );
+        expect((await service.listViews(corpusId)).head).toBe(
+            resolution.expectedHead,
+        );
+        const saved = await service.resolveViewConflict(resolution);
         expect(saved.version.content.title).toBe(content.title);
         expect(saved.version.actor).not.toBe("memory-view-generator");
         expect(saved.version.redirect).toBeUndefined();
