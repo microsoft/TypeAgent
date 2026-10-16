@@ -619,7 +619,9 @@ Should show `typeagent` under the plugins section.
 ## Tool-Composed Macros
 
 Checkpoint A uses TypeAgent to record, author, validate, store, match, and run
-checked code-first programs. Both server entry points configure this by default;
+checked code-first programs. Checkpoint B moves selected native Copilot learning
+authorship into restricted children; TypeAgent retains validation and execution.
+Both server entry points configure the shared program runtime by default;
 there is no program rollout flag or legacy step/runner execution path.
 Restart agent-server and reload the built plugin after updating.
 Development-only old macros are discarded, not converted.
@@ -638,8 +640,33 @@ remain enforced. There is no extra recipe-layer execution consent prompt.
 
 `@typeagent recipe status` inspects a separate experimental plugin-local catalog
 without connecting to TypeAgent. It requires Node.js 22.13+ for SQLite; normal
-startup does not load SQLite. Plugin-local execution, Copilot child authorship,
-and standalone inference remain future work, not implied by A.
+startup does not load SQLite. Plugin-local execution and standalone inference
+remain separate Checkpoint C work.
+
+### Native Copilot child authoring
+
+For a selected learning turn, the router asks the parent to call the metadata-only
+`typeagent_recorded_task_succeeded` tool only after actual task success and before
+the final answer. Receipt, prompt hash, final output, and recording token must
+correlate. Failed/denied/aborted work cannot queue child authorship; ordinary idle
+events do not certify success. The original answer never waits for authoring.
+
+After durable finalization, a background worker services TypeAgent's scoped
+authoring requests using tools-disabled native `task` children. Each phase gets
+explicit context, a bounded lifetime, and an exact correlated result. No business
+tools, recursive agents, blanket permission grants, model pin, or fallback author
+are added. Native context isolation is not assumed: the source-blind independent
+verifier stays in TypeAgent, whose real compiler/fixtures and existing publication
+policy decide whether a candidate is runnable.
+
+New user tasks preempt authorship. Off/Cancel aborts the active child; closing the
+host leaves durable `awaitingAuthor` work for a later compatible session after
+lease expiry. Inspect `/typeagent-macro-status` for waiting/failure; no child
+authorship is promised while Copilot is closed. Reload the rebuilt plugin and restart agent-server.
+The supported host seam is the pinned native CLI/SDK, not an unproved VS Code
+child API. [B lifecycle details](../copilot-macros/README.md#checkpoint-b-copilot-child-authorship)
+describe context, leases, recovery, and the explicit TypeAgent-only compatibility
+client path.
 
 See [runtime limits](../copilot-macros/README.md#checkpoint-a-typeagent-hosted-programs),
 [phase status](../../docs/plans/copilot-fastActions/STATUS.md), and the

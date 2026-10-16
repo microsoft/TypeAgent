@@ -36,6 +36,11 @@ export type MacroLearningQuery = (
     signal: AbortSignal,
 ) => Promise<string>;
 
+export type MacroVerifierCache = (
+    prompt: string,
+    execute: () => Promise<string>,
+) => Promise<string>;
+
 export type MacroBuildResponseContext = {
     phase: "initial" | "grounding-correction";
     traceId: string;
@@ -428,6 +433,24 @@ export function createMacroLearningRuntime(
     }
 
     return {
+        withAuthorQuery(authorQuery, cacheVerifier?: MacroVerifierCache) {
+            return {
+                ...createMacroLearningRuntime(
+                    authorQuery,
+                    loadApprovedMacros,
+                    options,
+                    programAuthor,
+                ),
+                buildProgram: (macro, trace, signal) =>
+                    programAuthor(
+                        macro,
+                        trace,
+                        signal,
+                        authorQuery,
+                        cacheVerifier,
+                    ),
+            };
+        },
         buildProgram: programAuthor,
         async extract(trace, traceId, signal) {
             signal.throwIfAborted();
@@ -532,6 +555,7 @@ export function createMacroLearningRuntime(
                 const rules = await Promise.all(
                     requests.map(async (request, index) => {
                         const namespace = `${actionName}_example${index}_`;
+                        let queryFailure: { error: unknown } | undefined;
                         const generator = new LearningGrammarGenerator(
                             async (prompt) => {
                                 batchSignal.throwIfAborted();
@@ -539,10 +563,16 @@ export function createMacroLearningRuntime(
                                     batchSignal,
                                     AbortSignal.timeout(60_000),
                                 ]);
-                                const text = await query(
-                                    `${prompt}\n${grammarInstructions}\nEvery additionalRules name and actual declaration must start with ${namespace}. Each ruleText declares exactly that one name, without imports.`,
-                                    bounded,
-                                );
+                                let text: string;
+                                try {
+                                    text = await query(
+                                        `${prompt}\n${grammarInstructions}\nEvery additionalRules name and actual declaration must start with ${namespace}. Each ruleText declares exactly that one name, without imports.`,
+                                        bounded,
+                                    );
+                                } catch (error) {
+                                    queryFailure ??= { error };
+                                    throw error;
+                                }
                                 bounded.throwIfAborted();
                                 validateGrammarIsolation(
                                     parseResponse(text),
@@ -566,6 +596,7 @@ export function createMacroLearningRuntime(
                             generator,
                         );
                         if (!result.success || !result.generatedRule) {
+                            if (queryFailure) throw queryFailure.error;
                             throw new Error(
                                 `Macro grammar rejected (stage=generation; requestIndex=${index + 1}/${requests.length}; requestSha256=${createHash("sha256").update(request).digest("hex")}; matchCount=unknown; reason=${grammarGenerationReason(result.rejectionReason)}).`,
                             );

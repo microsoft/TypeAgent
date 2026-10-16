@@ -14,6 +14,9 @@ import type {
     InspectMacroRequest,
     ListMacrosRequest,
     MacroLearningJob,
+    MacroAuthoringClaim,
+    MacroAuthoringRequest,
+    MacroAuthoringSubmission,
     MacroLearningMode,
     MacroLearningPreference,
     MacroMatch,
@@ -50,6 +53,9 @@ import type { RunbookHostCapabilities } from "./runbookCapabilities.js";
 export type { MacroDraftResult } from "@typeagent/procedure-artifacts";
 
 export type {
+    MacroAuthoringClaim,
+    MacroAuthoringRequest,
+    MacroAuthoringSubmission,
     ApproveMacroRequest,
     ArmRecordingRequest,
     ClaimRecordingRequest,
@@ -299,6 +305,12 @@ export type AgentServerInvokeFunctions = {
         traceId: string;
     }) => Promise<MacroLearningJob>;
     getMacroLearningJob: (jobId: string) => Promise<MacroLearningJob>;
+    claimMacroAuthoringRequest: (
+        claim: MacroAuthoringClaim,
+    ) => Promise<MacroAuthoringRequest | undefined>;
+    submitMacroAuthoringResponse: (
+        submission: MacroAuthoringSubmission,
+    ) => Promise<void>;
     cancelMacroLearningJob: (jobId: string) => Promise<MacroLearningJob>;
     armMacroRecording: (
         request: ArmRecordingRequest,

@@ -14,6 +14,12 @@ import { getPowerShellHookOutput } from "./powershell-guidance.js";
 import { SessionCapture } from "./session-capture.js";
 import { joinTypeAgentSession } from "./session-host.js";
 import {
+    macroAuthorChildAgent,
+    createMacroAuthorChildLauncher,
+} from "./macro-author-child.js";
+import { MacroAuthoringWorker } from "./macro-authoring.js";
+import { createMacroTaskReceiptTool } from "./macro-task-receipt.js";
+import {
     initializeWorkiqNativeSession,
     publishWorkiqFinalizedCapture,
     publishWorkiqNativeRecord,
@@ -28,6 +34,8 @@ let workiqOriginals: Awaited<ReturnType<typeof observeWorkiqToolOriginals>>;
 
 let sessionLog: ((message: string) => Promise<void>) | undefined;
 let sessionSend: ((task: string) => Promise<void>) | undefined;
+let authoring: MacroAuthoringWorker | undefined;
+const reportCaptureError = (message: string) => console.error(message);
 const commands = createExtensionCommands(
     async (message) => {
         if (!sessionLog) throw new Error("TypeAgent extension is not ready.");
@@ -44,6 +52,19 @@ assertControlBinding(initialControl);
 const workiqPolicy = await workiqCapturePolicyPath(initialControl);
 
 const lifecycle = await joinTypeAgentSession({
+    customAgents: [macroAuthorChildAgent],
+    tools: [
+        createMacroTaskReceiptTool(async () => {
+            const connection = await connectToAgentServer();
+            try {
+                return await connection.getMacroRecordingState(
+                    session.sessionId,
+                );
+            } finally {
+                await connection.close();
+            }
+        }),
+    ],
     requestedEnvironmentVariables: ["TYPEAGENT_TUNNEL_TOKEN"],
     commands,
     hooks: {
@@ -91,8 +112,18 @@ if (workiqOriginals) {
     });
     process.once("exit", () => workiqOriginals?.close());
 }
-process.once("SIGINT", () => void lifecycle.close());
-process.once("SIGTERM", () => void lifecycle.close());
+const close = async () => {
+    await authoring?.close();
+    await lifecycle.close();
+};
+process.once(
+    "SIGINT",
+    () => void close().catch((error) => reportCaptureError(String(error))),
+);
+process.once(
+    "SIGTERM",
+    () => void close().catch((error) => reportCaptureError(String(error))),
+);
 process.once("exit", () => lifecycle.closeSync());
 if (
     initialControl &&
@@ -129,10 +160,25 @@ sessionSend = async (task) => {
     await session.send({ prompt: task });
 };
 
+const launchAuthor = createMacroAuthorChildLauncher(session);
+authoring = new MacroAuthoringWorker({
+    cwd: process.cwd(),
+    sessionId: session.sessionId,
+    connect: connectToAgentServer,
+    launch: launchAuthor,
+    report: (message) => {
+        void session
+            .log(message)
+            .catch((error) => reportCaptureError(String(error)));
+    },
+});
+session.on("session.shutdown", () => {
+    void authoring?.close().catch((error) => reportCaptureError(String(error)));
+});
 const capture = new SessionCapture(
     session.sessionId,
     process.cwd(),
-    (message) => console.error(message),
+    reportCaptureError,
     workiqOriginals
         ? {
               connectAgentServer: connectToAgentServer,
@@ -142,6 +188,7 @@ const capture = new SessionCapture(
         : undefined,
     (message) => session.log(message),
     async (summary) => {
+        if (summary.learningJobId) authoring?.kick();
         if (workiqOriginals && initialControl) {
             const receipt = await workiqOriginals.finalize(summary.traceId);
             await publishWorkiqFinalizedCapture(
@@ -152,15 +199,20 @@ const capture = new SessionCapture(
             );
         }
     },
+    true,
 );
 
 await capture.failInterruptedRecording();
-session.on((event: SessionEvent) =>
+authoring.kick();
+session.on((event: SessionEvent) => {
+    if (launchAuthor.isAuthoringEvent(event)) return;
+    if (!event.agentId && event.type === "user.message") authoring?.pause();
     capture.enqueue({
         id: event.id,
         type: event.type,
         timestamp: event.timestamp,
         data: event.data as unknown as Record<string, unknown>,
         ...(event.agentId ? { agentId: event.agentId } : {}),
-    }),
-);
+    });
+    if (!event.agentId && event.type === "session.idle") authoring?.kick();
+});

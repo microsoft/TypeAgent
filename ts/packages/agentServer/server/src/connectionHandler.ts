@@ -366,6 +366,10 @@ export function createAgentServerConnectionHandler(
                 macroManager.prepareMacroLearning(request),
             getMacroLearningJob: (jobId) =>
                 macroManager.getMacroLearningJob(jobId),
+            claimMacroAuthoringRequest: (claim) =>
+                macroManager.claimMacroAuthoringRequest(claim),
+            submitMacroAuthoringResponse: (submission) =>
+                macroManager.submitMacroAuthoringResponse(submission),
             cancelMacroLearningJob: (jobId) =>
                 macroManager.cancelMacroLearningJob(jobId),
             armMacroRecording: async (request) =>

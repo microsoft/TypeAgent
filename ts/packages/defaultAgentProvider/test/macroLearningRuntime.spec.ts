@@ -17,6 +17,7 @@ import {
     validateMacroGrammar,
     replayMacroGrammarDiagnostic,
     type MacroLearningQuery,
+    type MacroVerifierCache,
 } from "../src/macroLearningRuntime.js";
 
 const trace: Parameters<MacroLearningRuntime["extract"]>[0] = {
@@ -98,6 +99,251 @@ async function buildFixture(
 }
 
 describe("macro learning runtime", () => {
+    it("routes extraction, corrected builds, grammar and the supplied program author through an isolated override", async () => {
+        const { recording, baseline, recipe, build } = await buildFixture(
+            "package.json",
+            "Read package.json now",
+        );
+        const invalid = structuredClone(build);
+        invalid.requests[2] = "Open the workspace configuration for me";
+        const original = jest.fn<MacroLearningQuery>(async () => {
+            throw new Error("Original provider must not run");
+        });
+        const override = jest
+            .fn<MacroLearningQuery>()
+            .mockResolvedValueOnce(JSON.stringify(recipe))
+            .mockResolvedValueOnce(JSON.stringify(invalid))
+            .mockResolvedValueOnce(JSON.stringify(build))
+            .mockResolvedValueOnce(
+                JSON.stringify({
+                    shouldGenerateGrammar: true,
+                    requestAnalysis: { sentences: [] },
+                    parameterMappings: [
+                        {
+                            parameterName: "step_1_path",
+                            sourceText: "package.json",
+                            targetValue: "package.json",
+                            isWildcard: true,
+                        },
+                    ],
+                    fixedPhrases: ["Read", "now"],
+                    grammarPattern: {
+                        matchPattern: "Read $(step_1_path:string) now",
+                        actionParameters: [
+                            {
+                                parameterName: "step_1_path",
+                                parameterValue: "step_1_path",
+                            },
+                        ],
+                    },
+                    reasoning: "Preserve fixed request boundaries.",
+                }),
+            );
+        const programAuthor = jest.fn<MacroLearningRuntime["buildProgram"]>(
+            async () => {
+                throw new Error("program author reached");
+            },
+        );
+        const loadApproved = jest.fn(async () => []);
+        const assertSource = jest.fn(async () => undefined);
+        const retainResponse = jest.fn(async () => undefined);
+        const cacheVerifier = jest.fn<MacroVerifierCache>(
+            async (_prompt, execute) => execute(),
+        );
+        const runtime = createMacroLearningRuntime(
+            original,
+            loadApproved,
+            { buildResponseEvidence: { assertSource, retainResponse } },
+            programAuthor,
+        ).withAuthorQuery!(override, cacheVerifier);
+        const signal = new AbortController().signal;
+        await expect(
+            runtime.extract(recording, recipe.traceId, signal),
+        ).resolves.toEqual(recipe);
+        await expect(
+            runtime.build(recipe, recording, baseline, signal),
+        ).resolves.toEqual(build);
+        const macro = { ...baseline, inputs: build.inputs, steps: build.steps };
+        await expect(
+            runtime.generateGrammar(
+                macro,
+                build.exampleInputs,
+                [recording.prompt],
+                signal,
+            ),
+        ).resolves.toHaveLength(1);
+        await expect(
+            runtime.buildProgram(macro, recording, signal),
+        ).rejects.toThrow("program author reached");
+        expect(programAuthor).toHaveBeenCalledWith(
+            macro,
+            recording,
+            signal,
+            override,
+            cacheVerifier,
+        );
+        expect(override).toHaveBeenCalledTimes(4);
+        expect(original).not.toHaveBeenCalled();
+        expect(loadApproved).toHaveBeenCalledTimes(1);
+        expect(assertSource).toHaveBeenCalledTimes(2);
+        expect(retainResponse).toHaveBeenCalledTimes(2);
+        expect(override.mock.calls[0][1]).not.toBe(signal);
+        expect(override.mock.calls[3][1].aborted).toBe(true);
+        expect(override.mock.calls[0][0]).not.toContain("private-body");
+    });
+
+    it("does not mutate the original runtime or retain a previous author query when rebound", async () => {
+        const { recording, recipe } = await buildFixture();
+        const original = jest.fn<MacroLearningQuery>(async () =>
+            JSON.stringify(recipe),
+        );
+        const first = jest.fn<MacroLearningQuery>(async () => "{}");
+        const second = jest.fn<MacroLearningQuery>(async () =>
+            JSON.stringify(recipe),
+        );
+        const programAuthor = jest.fn<MacroLearningRuntime["buildProgram"]>(
+            async () => {
+                throw new Error("program author reached");
+            },
+        );
+        const runtime = createMacroLearningRuntime(
+            original,
+            undefined,
+            undefined,
+            programAuthor,
+        );
+        const rebound =
+            runtime.withAuthorQuery!(first).withAuthorQuery!(second);
+        const signal = new AbortController().signal;
+        await runtime.extract(recording, recipe.traceId, signal);
+        await rebound.extract(recording, recipe.traceId, signal);
+        await expect(
+            rebound.buildProgram(
+                (await buildFixture()).baseline,
+                recording,
+                signal,
+            ),
+        ).rejects.toThrow("program author reached");
+        expect(programAuthor.mock.calls[0][3]).toBe(second);
+        expect(original).toHaveBeenCalledTimes(1);
+        expect(second).toHaveBeenCalledTimes(1);
+        expect(first).not.toHaveBeenCalled();
+        expect(runtime.buildProgram).toBe(programAuthor);
+    });
+
+    it("validates external extraction and build responses without provider fallback", async () => {
+        const { recording, recipe, baseline } = await buildFixture();
+        const original = jest.fn<MacroLearningQuery>();
+        const override = jest.fn<MacroLearningQuery>(async () => "{}");
+        const runtime =
+            createMacroLearningRuntime(original).withAuthorQuery!(override);
+        const signal = new AbortController().signal;
+        await expect(
+            runtime.extract(recording, recipe.traceId, signal),
+        ).rejects.toThrow();
+        await expect(
+            runtime.build(recipe, recording, baseline, signal),
+        ).rejects.toThrow();
+        expect(override).toHaveBeenCalledTimes(2);
+        expect(original).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ["invalid JSON", "not JSON", 3],
+        [
+            "shared grammar mutation",
+            JSON.stringify({ phrasesToAdd: [{ name: "shared", phrases: [] }] }),
+            1,
+        ],
+        [
+            "foreign helper declarations",
+            JSON.stringify({
+                additionalRules: [
+                    { name: "Shared", ruleText: "<Shared> = read;" },
+                ],
+            }),
+            1,
+        ],
+    ])(
+        "rejects external grammar %s without provider fallback",
+        async (_name, response, attempts) => {
+            const { baseline, build } = await buildFixture(
+                "package.json",
+                "Read package.json now",
+            );
+            const original = jest.fn<MacroLearningQuery>();
+            const override = jest.fn<MacroLearningQuery>(async () => response);
+            await expect(
+                createMacroLearningRuntime(original).withAuthorQuery!(
+                    override,
+                ).generateGrammar(
+                    { ...baseline, inputs: build.inputs, steps: build.steps },
+                    build.exampleInputs,
+                    ["Read package.json now"],
+                    new AbortController().signal,
+                ),
+            ).rejects.toThrow();
+            expect(override).toHaveBeenCalledTimes(attempts);
+            expect(original).not.toHaveBeenCalled();
+        },
+    );
+
+    it("preserves cancellation and grammar request bounds with external queries", async () => {
+        const { recording, recipe, baseline, build } = await buildFixture();
+        const original = jest.fn<MacroLearningQuery>();
+        const controller = new AbortController();
+        const override = jest.fn<MacroLearningQuery>(
+            async (_prompt, signal) => {
+                controller.abort(new Error("external author cancelled"));
+                expect(signal.aborted).toBe(true);
+                return JSON.stringify(recipe);
+            },
+        );
+        const runtime =
+            createMacroLearningRuntime(original).withAuthorQuery!(override);
+        await expect(
+            runtime.generateGrammar(
+                baseline,
+                build.exampleInputs,
+                [],
+                controller.signal,
+            ),
+        ).rejects.toThrow("1-6 grounded requests");
+        expect(override).not.toHaveBeenCalled();
+        await expect(
+            runtime.extract(recording, recipe.traceId, controller.signal),
+        ).rejects.toThrow("external author cancelled");
+        await expect(
+            runtime.extract(recording, recipe.traceId, controller.signal),
+        ).rejects.toThrow("external author cancelled");
+        expect(override).toHaveBeenCalledTimes(1);
+        expect(original).not.toHaveBeenCalled();
+    });
+
+    it("preserves the original external pending-query error through grammar generation", async () => {
+        const { baseline, build } = await buildFixture(
+            "package.json",
+            "Read package.json now",
+        );
+        const pending = new Error("external authoring pending");
+        const original = jest.fn<MacroLearningQuery>();
+        const override = jest.fn<MacroLearningQuery>(async () => {
+            throw pending;
+        });
+        await expect(
+            createMacroLearningRuntime(original).withAuthorQuery!(
+                override,
+            ).generateGrammar(
+                { ...baseline, inputs: build.inputs, steps: build.steps },
+                build.exampleInputs,
+                ["Read package.json now"],
+                new AbortController().signal,
+            ),
+        ).rejects.toBe(pending);
+        expect(override).toHaveBeenCalledTimes(1);
+        expect(original).not.toHaveBeenCalled();
+    });
+
     it("transports only physically verified recording evidence through the extraction query", async () => {
         const root = path.resolve(".learning-input-tests", randomUUID());
         try {
